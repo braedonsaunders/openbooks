@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import { activeStorageKind, getS3Blob, putS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { add, cmp, sum } from "../money/money.ts";
 import { assertPayRunApprovalReleased, payRunApprovalState } from "./approval.ts";
@@ -21,8 +21,8 @@ import {
 } from "./scope.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
-import { businessTimeZone } from "../platform/business-date.ts";
-import { nachaFileIdModifierForSequence } from "../payments/rail-nacha.ts";
+import { businessTimeZone, formatInZone } from "../platform/business-date.ts";
+import { lowestFreeNachaModifier, nachaModifierExhaustionRefusal } from "../payments/rail-nacha.ts";
 
 /**
  * Payroll direct-deposit artifacts — the lifecycle.
@@ -545,27 +545,6 @@ function payrollFileCreationNumberFor(
   }
 }
 
-function payrollFileIdModifierFor(
-  format: PayRunBankFileFormat,
-  sequenceValue: number,
-): string | null {
-  switch (format) {
-    case "nacha":
-      return nachaFileIdModifierForSequence(sequenceValue);
-    case "cpa005":
-    case "sepa":
-    case "cemtex":
-    case "bacs":
-    case "zengin":
-    case "cnab240":
-      return null;
-    default: {
-      const _exhaustive: never = format;
-      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
-    }
-  }
-}
-
 function payrollMessageIdFor(format: PayRunBankFileFormat, fileNumber: string): string | undefined {
   switch (format) {
     case "sepa":
@@ -700,6 +679,51 @@ function payrollFilenameLabelFor(format: PayRunBankFileFormat): string {
 }
 
 /**
+ * NACHA File ID Modifier allocation for one payroll bank file (I2-money-06).
+ * Lowest free letter for the bank profile's creation day (the civil day of
+ * `now` in the org's zone — the same instant the artifact's generated_at
+ * stamps, so the counted day is the filed day). Call inside the generation
+ * transaction BEFORE the run/document locks: the profile-row lock
+ * serializes concurrent generations for one profile, and profile-then-run
+ * order (shared with the AP allocator) cannot deadlock.
+ *
+ * Every stored same-day artifact occupies its letter — generated, released
+ * and superseded alike (any of them may already be at the bank). No self
+ * exclusion: the old files supersede only after the new insert, and both
+ * may reach the bank, so a replacement needs its own letter. Rows with no
+ * pinned letter predate per-day allocation and cannot be placed — they
+ * occupy nothing.
+ */
+export async function allocatePayrollNachaModifier(
+  exec: SqlExecutor,
+  input: { orgId: string; bankProfileId: string; now: Date },
+): Promise<string> {
+  const profileLock = (await exec.execute<{ id: string }>(sql`
+    select id from payment_bank_profiles
+     where id = ${input.bankProfileId} and org_id = ${input.orgId}
+     for update
+  `)).rows[0];
+  if (!profileLock) {
+    throw new PayrollError(
+      "the payment bank profile is gone — reselect it in Setup → Payment operations before generating",
+    );
+  }
+  const zone = await businessTimeZone(input.orgId);
+  const day = formatInZone(input.now, zone);
+  const used = (await exec.execute<{ modifier: string | null }>(sql`
+    select file_id_modifier as "modifier" from pay_run_bank_files
+     where org_id = ${input.orgId} and format = 'nacha'
+       and payment_bank_profile_id = ${input.bankProfileId}
+       and (generated_at at time zone ${zone})::date = ${day}::date
+  `)).rows;
+  const letter = lowestFreeNachaModifier(
+    used.map((row) => row.modifier).filter((modifier): modifier is string => modifier !== null),
+  );
+  if (!letter) throw new PayrollError(nachaModifierExhaustionRefusal(day));
+  return letter;
+}
+
+/**
  * Produce a new, immutable bank-file artifact for a committed pay run.
  *
  * Reads used to prepare the file happen before the transaction; the transaction
@@ -765,6 +789,15 @@ export async function generatePayRunBankFile(
   }
 
   return await db.transaction(async (tx) => {
+    // NACHA File ID Modifier allocates FIRST, under the bank-profile lock
+    // (profile-then-run order, shared with the AP allocator, so the two
+    // rails cannot deadlock): the bank keys same-day duplicates on
+    // (origin, creation date, modifier), so this profile's creation day
+    // needs a fresh letter per file. Lowest free wins; all 36 in use
+    // refuses instead of wrapping onto a live letter.
+    const nachaModifier = format === "nacha"
+      ? await allocatePayrollNachaModifier(tx, { orgId, bankProfileId: config.paymentBankProfileId, now })
+      : null;
     // Serialize against a concurrent generate for the same run: without this,
     // two operators pressing the button at once each see "no live file" and
     // each produce one the other does not know about.
@@ -835,7 +868,10 @@ export async function generatePayRunBankFile(
     const fileNumber = `${seq.prefix}${String(sequenceValue).padStart(seq.padding, "0")}`;
 
     // CPA-005 carries a 4-digit file creation number (1–9999) unique per
-    // originator; NACHA carries a single-character file ID modifier; SEPA
+    // originator; NACHA carries a single-character file ID modifier
+    // allocated lowest-free per profile per creation day at the top of this
+    // transaction (never the sequence mod 36 — same-day files would share
+    // the bank's duplicate identity); SEPA
     // carries a message identification the bank deduplicates on. Cemtex
     // carries no per-file bank number: its reel sequence is the literal "01"
     // (multi-file batches, which would advance it, are refused — a run past
@@ -846,7 +882,7 @@ export async function generatePayRunBankFile(
     // produces a file the operator can trace to a sequence value that never
     // repeats.
     const fileCreationNumber = payrollFileCreationNumberFor(format, sequenceValue);
-    const fileIdModifier = payrollFileIdModifierFor(format, sequenceValue);
+    const fileIdModifier = nachaModifier;
     const bacsVolSerial = payrollBacsVolSerialFor(format, sequenceValue);
     const bacsFileNumber = payrollBacsFileNumberFor(format, sequenceValue);
     const cnabNsa = payrollCnabNsaFor(format, sequenceValue);

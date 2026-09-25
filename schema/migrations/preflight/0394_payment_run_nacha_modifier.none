@@ -1,0 +1,1 @@
+Single nullable file_id_modifier column with a shape CHECK that admits null; legacy rows keep null and readers fall back to the run-number derivation, while the writer pins a real letter on next generation, so no existing row needs a value.

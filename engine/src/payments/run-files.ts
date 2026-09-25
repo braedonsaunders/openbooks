@@ -30,6 +30,13 @@ import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
 export interface RunFileOptions {
   fileCreatedAt?: Date;
   allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  /**
+   * Allocated File ID Modifier (single character A–Z, 0–9) for NACHA
+   * renders. Generation allocates lowest-free per profile per creation day
+   * and pins it on the run; direct renders without an allocation fall back
+   * to the legacy run-number derivation.
+   */
+  fileIdModifier?: string;
 }
 
 /**
@@ -158,17 +165,18 @@ export async function loadNachaRunFile(
   // The effective date is the run's pay date — already a civil day, never
   // rebuilt as a host-local midnight.
   const effectiveDate = run.scheduledFor ?? today;
-  // The modifier is allocated from the run number (shared with payroll's
-  // derivation), so a second file the same day carries the next letter
-  // instead of colliding on "A" and drawing a bank duplicate-file rejection.
-  // The creation stamp is the run's stamped first-file instant in the org's
-  // zone — never wall-clock time — so a re-download reproduces the header.
+  // The modifier arrives allocated (lowest free letter per profile per
+  // creation day, pinned on the run by generation) so a second file the
+  // same day carries the next letter instead of colliding and drawing a
+  // bank duplicate-file rejection. The creation stamp is the run's stamped
+  // first-file instant in the org's zone — never wall-clock time — so a
+  // re-download reproduces the header.
   const stamp = await creationStamp(orgId, new Date(), opts?.fileCreatedAt);
   const content = buildNachaFile({
     settings: settings.settings,
     effectiveDate,
     creationDateTime: stamp.stamp,
-    fileIdModifier: nachaFileIdModifierForRunNumber(run.runNumber),
+    fileIdModifier: opts?.fileIdModifier ?? nachaFileIdModifierForRunNumber(run.runNumber),
     entries,
   });
   return { filename: `NACHA-${run.runNumber}.ach`, content, runNumber: run.runNumber };

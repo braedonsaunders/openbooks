@@ -9,13 +9,19 @@ import {
 } from "../platform/db.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { businessTimeZone, businessToday, formatInZone } from "../platform/business-date.ts";
 import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { assertSafePaymentFilename } from "./payment-filenames.ts";
 import { decryptAccountNumber, isValidBic, isValidIban } from "./rail-settings.ts";
 import { assertPaymentPartiesInScope, lockRunBankEvidence } from "./run-readiness.ts";
-import { validateNachaSettings, type NachaSettings } from "./rail-nacha.ts";
+import {
+  lowestFreeNachaModifier,
+  nachaFileIdModifierForRunNumber,
+  nachaModifierExhaustionRefusal,
+  validateNachaSettings,
+  type NachaSettings,
+} from "./rail-nacha.ts";
 import { validateSepaSettings, type SepaSettings } from "./rail-sepa.ts";
 import { loadRunFile, type RunFileOptions } from "./run-files.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
@@ -650,8 +656,20 @@ export function nachaOriginator(secrets: Record<string, unknown>): NachaSettings
   };
 }
 
-function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content: string; contentType: string } {
+function nachaDebit(
+  ctx: FormatContext,
+  now: Date,
+  fileIdModifier?: string,
+): { filename: string; content: string; contentType: string } {
   const s = nachaOriginator(ctx.profile.secrets);
+  // Every debit file used to carry a hardcoded "A": two debit runs generated
+  // the same day shared the bank's same-day identity and the second drew a
+  // duplicate-file rejection. The modifier allocates per run like the credit
+  // rail (or arrives allocated from generation).
+  const modifier = fileIdModifier ?? nachaFileIdModifierForRunNumber(String(ctx.run.run_number));
+  if (!/^[A-Z0-9]$/.test(modifier)) {
+    throw new PaymentError("NACHA file requires an allocated file ID modifier (single character A–Z, 0–9)");
+  }
   const field = (v: unknown, n: number, right = false, pad = " ") => (right ? String(v ?? "").slice(0, n).padStart(n, pad) : String(v ?? "").slice(0, n).padEnd(n, pad));
   const yymmdd = (d: Date) => `${String(d.getUTCFullYear() % 100).padStart(2, "0")}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
   const hhmm = (d: Date) => `${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;
@@ -659,7 +677,7 @@ function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content:
   const created = new Date(String(ctx.businessDate) + "T00:00:00Z");
   const effective = new Date(String(ctx.run.scheduled_for ?? ctx.businessDate) + "T00:00:00Z");
   const lines = [
-    "1" + "01" + field(s.immediateDestination, 10, true) + field(s.immediateOrigin, 10, true) + yymmdd(created) + hhmm(now) + "A094101" + field(s.destinationName, 23) + field(s.originName, 23) + field("", 8),
+    "1" + "01" + field(s.immediateDestination, 10, true) + field(s.immediateOrigin, 10, true) + yymmdd(created) + hhmm(now) + modifier + "094" + "10" + "1" + field(s.destinationName, 23) + field(s.originName, 23) + field("", 8),
     "5" + "225" + field(s.companyName, 16) + field("", 20) + field(s.companyId, 10) + field(s.entryClassCode ?? "CCD", 3) + field(s.entryDescription ?? "COLLECT", 10) + field("", 6) + yymmdd(effective) + field("", 3) + "1" + odfi8 + "0000001",
   ];
   let hash = 0n;
@@ -772,7 +790,9 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date, f
   // bank evidence: hold the payee party rows and fail a caller outside any
   // payee's scope before a byte renders, uniformly with the evidence rails.
   await assertPaymentPartiesInScope(orgId, scoped.payments.map((p) => p.partyId), allowedSubsidiaryIds);
-  if (scoped.format.rail === "nacha_debit") return { ...nachaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
+  if (scoped.format.rail === "nacha_debit") {
+    return { ...nachaDebit(scoped, now, fileOpts?.fileIdModifier), runNumber: String(scoped.run.run_number) };
+  }
   if (scoped.format.rail === "sepa_debit") {
     // Same locked-evidence mechanism as the credit writers: debtor bank
     // details are resolved from rows that were approved and active under
@@ -893,6 +913,86 @@ async function findLiveRunArtifact(
   return { id: row.id, filename: row.filename, contentType: row.content_type, content: row.bytes };
 }
 
+/**
+ * NACHA File ID Modifier allocation for one AP run (I2-money-06).
+ *
+ * The bank keys same-day duplicate-file detection on (origin, creation
+ * date, modifier): every NACHA file a bank profile generates on one civil
+ * day needs its own letter. Run numbers cannot supply that — they advance
+ * across every payment method and wrap mod 36, so two same-day runs can
+ * share a letter and past 36 files the alphabet wraps silently. The lowest
+ * free letter for the profile's creation day pins onto the run, so renders
+ * reuse it and downloads stay byte-identical from the stored artifact. A
+ * run that already pinned one keeps it: reprocessing reuses the run's
+ * identity exactly like an accidental re-upload, which is what the bank
+ * must deduplicate.
+ *
+ * Serialization is the bank-profile row: concurrent first generations for
+ * one profile queue on its lock, so two runs never read the same free set.
+ * Lock order is profile-then-run everywhere (payroll allocates the same
+ * way), so allocation cannot deadlock with generation. Every stamped
+ * same-day run occupies its letter — cancelled and rolled-back runs
+ * included (their files may already be at the bank), legacy rows
+ * recomputed from the run number. Over-occupying fails safe toward the
+ * exhaustion refusal, never toward a shared bank identity.
+ */
+export async function allocateNachaRunModifier(input: {
+  runId: string;
+  orgId: string;
+  bankProfileId: string;
+  creationDay: string;
+  timeZone: string;
+}): Promise<string> {
+  return withOrgTransaction(input.orgId, async () => {
+    const pinned = (await db.execute<{ modifier: string | null }>(sql`
+      select file_id_modifier as "modifier" from payment_runs
+       where id = ${input.runId} and org_id = ${input.orgId}
+    `)).rows[0];
+    if (!pinned) throw new PaymentError("payment run not found");
+    if (pinned.modifier) {
+      if (!/^[A-Z0-9]$/.test(pinned.modifier)) {
+        throw new PaymentError(
+          `payment run carries an invalid NACHA file ID modifier — clear it before generating`,
+        );
+      }
+      return pinned.modifier;
+    }
+    const profile = (await db.execute<{ id: string }>(sql`
+      select id from payment_bank_profiles
+       where id = ${input.bankProfileId} and org_id = ${input.orgId}
+       for update
+    `)).rows[0];
+    if (!profile) {
+      throw new PaymentError("the run's bank profile is gone — reassign a bank profile before generating its file");
+    }
+    const siblings = (await db.execute<{ runNumber: string; modifier: string | null }>(sql`
+      select run_number as "runNumber", file_id_modifier as "modifier"
+        from payment_runs
+       where org_id = ${input.orgId} and payment_bank_profile_id = ${input.bankProfileId}
+         and method in ('ach', 'direct_debit')
+         and file_created_at is not null
+         and (file_created_at at time zone ${input.timeZone})::date = ${input.creationDay}::date
+         and id <> ${input.runId}
+    `)).rows;
+    const letter = lowestFreeNachaModifier(
+      siblings.map((sibling) => sibling.modifier ?? nachaFileIdModifierForRunNumber(sibling.runNumber)),
+    );
+    if (!letter) throw new PaymentError(nachaModifierExhaustionRefusal(input.creationDay));
+    const stamped = (await db.execute(sql`
+      update payment_runs set file_id_modifier = ${letter}
+       where id = ${input.runId} and org_id = ${input.orgId} and file_id_modifier is null
+    `)).rowCount ?? 0;
+    if (stamped === 1) return letter;
+    // A concurrent allocation for this same run won the pin: reread it.
+    const reread = (await db.execute<{ modifier: string | null }>(sql`
+      select file_id_modifier as "modifier" from payment_runs
+       where id = ${input.runId} and org_id = ${input.orgId}
+    `)).rows[0]?.modifier;
+    if (!reread) throw new PaymentError("payment run not found");
+    return reread;
+  });
+}
+
 export async function generatePaymentFileArtifact(
   runId: string,
   orgId: string,
@@ -926,7 +1026,25 @@ export async function generatePaymentFileArtifact(
   if (Number.isNaN(fileCreatedAt.getTime())) {
     throw new PaymentError("payment run file creation stamp is not a valid timestamp");
   }
-  const rendered = await renderPaymentFile(ctx, orgId, now, { fileCreatedAt }, opts?.allowedSubsidiaryIds);
+  // NACHA rails allocate the run's File ID Modifier before rendering (the
+  // letter is baked into the bytes): lowest free per profile per creation
+  // day, pinned on the run. Every other rail renders unmodified.
+  const timeZone = ["nacha_credit", "nacha_debit"].includes(ctx.format.rail)
+    ? await businessTimeZone(orgId)
+    : null;
+  const nachaModifier = timeZone
+    ? await allocateNachaRunModifier({
+        runId,
+        orgId,
+        bankProfileId: ctx.profile.id,
+        creationDay: formatInZone(fileCreatedAt, timeZone),
+        timeZone,
+      })
+    : null;
+  const rendered = await renderPaymentFile(ctx, orgId, now, {
+    fileCreatedAt,
+    ...(nachaModifier ? { fileIdModifier: nachaModifier } : {}),
+  }, opts?.allowedSubsidiaryIds);
   // File names are attacker-influenced (a custom formatter returns an
   // arbitrary string) and later concatenated onto the SFTP outbound folder,
   // so the merged name of EVERY rail is validated here — before anything is

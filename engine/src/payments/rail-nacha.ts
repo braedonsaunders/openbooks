@@ -85,10 +85,15 @@ function nachaNumeric(v: string, len: number, field: string): string {
 }
 
 /**
- * File ID modifier alphabet shared with payroll (bank-file-artifact.ts):
- * one derivation, not two. Consecutive files advance A→B→…→Z→0→…→9 and wrap;
- * the header's creation date disambiguates across days, and a second file to
- * the same bank the same day is exactly what the next letter is for.
+ * File ID modifier alphabet: the bank keys same-day duplicate-file
+ * detection on (origin, creation date, modifier), so every NACHA file a
+ * bank profile generates on one civil day needs its own letter. Allocation
+ * is lowest-free-letter per profile per creation day (see
+ * lowestFreeNachaModifier), pinned on the run/artifact — never recomputed
+ * from a count at download time. The sequence derivation below survives
+ * only as the ordinal→letter mapping and the legacy fallback for rows
+ * written before per-day allocation; a global counter mod 36 wraps and
+ * collides same-day files, which is why generation no longer uses it.
  */
 export const NACHA_FILE_ID_MODIFIERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -100,9 +105,40 @@ export function nachaFileIdModifierForSequence(sequenceValue: number): string {
 }
 
 /**
- * Derive an AP run file's modifier from its run number — the same
- * sequence-derivation payroll uses for its artifact numbers, so two runs
- * never share a modifier and re-downloading one run reproduces its bytes.
+ * Lowest free File ID Modifier for one bank profile's creation day, or
+ * null when every letter is in use. Used letters compare case-insensitively
+ * (modifiers are stored uppercase); an unknown token occupies nothing, so
+ * a corrupt entry can never wedge the alphabet — it is simply skipped.
+ */
+export function lowestFreeNachaModifier(usedModifiers: Iterable<string>): string | null {
+  const used = new Set<string>();
+  for (const modifier of usedModifiers) used.add(modifier.toUpperCase());
+  for (const letter of NACHA_FILE_ID_MODIFIERS) {
+    if (!used.has(letter)) return letter;
+  }
+  return null;
+}
+
+/**
+ * The exhaustion refusal: 36 files already carry every letter for this
+ * profile today, so a 37th would necessarily share the bank's same-day
+ * identity with another file. The remedy is real — fewer files (combine
+ * runs) or the next civil day — never a silent wrap onto a live letter.
+ */
+export function nachaModifierExhaustionRefusal(creationDay: string): string {
+  return (
+    `all 36 NACHA file ID modifiers (A–Z, 0–9) are already used for this bank profile on ${creationDay} — ` +
+    `another file today would share the bank's same-day duplicate-file identity with one of them. ` +
+    `Combine these payments into fewer files, or generate after midnight.`
+  );
+}
+
+/**
+ * Legacy fallback: derive an AP run file's modifier from its run number.
+ * Kept for rows pinned before per-day allocation (and for direct renders
+ * that never allocate) — it does NOT prevent same-day collisions, which is
+ * why generation allocates instead. Re-downloads reproduce bytes from the
+ * stored artifact, never from this function.
  */
 export function nachaFileIdModifierForRunNumber(runNumber: string): string {
   const sequenceValue = Number(runNumber.replace(/\D/g, "") || "1");
@@ -139,8 +175,8 @@ export function buildNachaFile(opts: {
   if (opts.entries.length === 0) throw new PaymentError("run has no payments to export");
   // The modifier is the bank's same-day duplicate-file key: a silent default
   // would hand every file the same identity. Every caller allocates one
-  // explicitly (payroll from its artifact sequence, AP from its run number —
-  // both through nachaFileIdModifierForSequence above).
+  // explicitly (lowest free letter per profile per creation day) and pins
+  // it — the bytes on disk carry the allocation, never a recomputation.
   const modifier = opts.fileIdModifier ?? "";
   if (!/^[A-Z0-9]$/.test(modifier)) {
     throw new PaymentError("NACHA file requires an allocated file ID modifier (single character A–Z, 0–9)");

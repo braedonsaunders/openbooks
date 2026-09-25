@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCpa005File, type Cpa005Run } from "./rail-cpa005.ts";
-import { buildNachaFile, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "./rail-nacha.ts";
+import { buildNachaFile, lowestFreeNachaModifier, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "./rail-nacha.ts";
 import { buildSepaFile } from "./rail-sepa.ts";
 import { carryingAmountForSettlement, persistPaymentFxRate, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
 import { type EftSettings, validateEftSettings } from "./rail-settings.ts";
@@ -343,7 +343,7 @@ test("the NACHA credit file carries its allocated modifier and real creation tim
   assert.ok(header.includes("2603031405B094"), `header carries date, time and modifier: ${header}`);
 });
 
-test("the NACHA modifier allocator advances one letter per file and wraps the alphabet", () => {
+test("the NACHA sequence derivation is the legacy fallback, not same-day safety", () => {
   assert.equal(nachaFileIdModifierForSequence(1), "A");
   assert.equal(nachaFileIdModifierForSequence(2), "B");
   assert.equal(nachaFileIdModifierForSequence(26), "Z");
@@ -352,12 +352,12 @@ test("the NACHA modifier allocator advances one letter per file and wraps the al
   assert.equal(nachaFileIdModifierForSequence(37), "A");
   assert.equal(nachaFileIdModifierForRunNumber("PR-0001"), "A");
   assert.equal(nachaFileIdModifierForRunNumber("PR-0002"), "B");
-  // Consecutive runs never share a modifier, so a second file the same day
-  // to the same bank cannot collide on "A".
-  assert.notEqual(
-    nachaFileIdModifierForRunNumber("PR-0002"),
-    nachaFileIdModifierForRunNumber("PR-0001"),
-  );
+  // I2-money-06's defect: run numbers advance across methods and wrap mod
+  // 36, so same-day runs can share a letter (RUN-41 reuses RUN-5's).
+  // Generation allocates per-day instead; this mapping is legacy fallback.
+  assert.equal(nachaFileIdModifierForRunNumber("RUN-41"), nachaFileIdModifierForRunNumber("RUN-5"));
+  // The per-day allocator hands out the lowest free letter for the profile day.
+  assert.equal(lowestFreeNachaModifier(["A", "C"]), "B");
 });
 
 test("the NACHA creation stamp renders the caller's zoned stamp verbatim", () => {
