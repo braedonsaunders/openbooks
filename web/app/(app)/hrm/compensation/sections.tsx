@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 import {
   CompensationSettingsForm,
   CycleCreateForm,
@@ -116,7 +117,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
   if (!drawer.open || !drawer.line) return null
   const line = drawer.line
   return (
-    <UrlDrawer open closeHref={drawer.closeHref} title={drawer.title}>
+    <DirtyUrlDrawer open closeHref={drawer.closeHref} title={drawer.title}>
       <div className="flex flex-col gap-6">
         {drawer.canPropose ? (
           <div>
@@ -175,7 +176,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
           )}
         </div>
       </div>
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }
 
@@ -221,13 +222,12 @@ export function DialogRefusal({
 export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
   if (!dialog.open) return null
   return (
-    <UrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
+    <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
         <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
       ) : (
         <CycleCreateForm
           labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
-          closeHref={dialog.closeHref}
           defaultCurrency={dialog.defaultCurrency}
           kinds={dialog.kinds}
           kindLabel={dialog.kindLabel}
@@ -236,45 +236,43 @@ export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
           currencyLabel={dialog.currencyLabel}
         />
       )}
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }
 
 export function CompPlanDialog({ dialog }: { dialog: PlanDialogData }) {
   if (!dialog.open) return null
   return (
-    <UrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
+    <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
         <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
       ) : (
         <PlanCreateForm
           labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
-          closeHref={dialog.closeHref}
           nameLabel={dialog.nameLabel}
           fromLabel={dialog.fromLabel}
           toLabel={dialog.toLabel}
         />
       )}
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }
 
 export function CompEquityDialog({ dialog }: { dialog: EquityDialogData }) {
   if (!dialog.open) return null
   return (
-    <UrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
+    <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
         <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
       ) : (
         <EquityGenerateForm
           labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
-          closeHref={dialog.closeHref}
           asOfLabel={dialog.asOfLabel}
           groupALabel={dialog.groupALabel}
           groupBLabel={dialog.groupBLabel}
         />
       )}
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }
 

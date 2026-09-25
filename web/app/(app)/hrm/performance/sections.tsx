@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Button, UrlDrawer } from '@openbooks/ui'
+import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 import { CycleActions } from './CycleActions'
 import { CycleCreateForm } from './CycleCreateForm'
 import { GoalForm } from './GoalForm'
@@ -186,7 +187,7 @@ export function ReviewDrawer({
 }) {
   if (!review && !missingReview && !loadError) return null
   return (
-    <UrlDrawer
+    <DirtyUrlDrawer
       open
       closeHref={review?.closeHref ?? '/hrm/performance'}
       title={review?.kindLabel ?? ''}
@@ -198,7 +199,7 @@ export function ReviewDrawer({
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingReview}</p>
       )}
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }
 
@@ -206,9 +207,9 @@ export function ReviewDrawer({
 export function CycleDialog({ create }: { create: PerformancePageData['create'] }) {
   if (!create) return null
   return (
-    <UrlDrawer open closeHref={create.closeHref} title={create.title}>
+    <DirtyUrlDrawer open closeHref={create.closeHref} title={create.title}>
       <CycleCreateForm {...create} />
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }
 
@@ -235,7 +236,7 @@ export function ExitDrawer({
 }) {
   if (!exit && !missingExit && !loadError) return null
   return (
-    <UrlDrawer open closeHref={exit?.closeHref ?? '/hrm/performance'} title={exit?.title ?? ''}>
+    <DirtyUrlDrawer open closeHref={exit?.closeHref ?? '/hrm/performance'} title={exit?.title ?? ''}>
       {loadError && !exit ? (
         <DrawerLoadError error={loadError} />
       ) : exit ? (
@@ -259,6 +260,6 @@ export function ExitDrawer({
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingExit}</p>
       )}
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }

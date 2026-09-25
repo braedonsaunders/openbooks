@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 
 const REASONS = [
   'resignation',
@@ -59,6 +60,15 @@ export function ExitRecordForm({
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  useDirtyUrlDrawer(
+    reason !== (existing?.reasonKind ?? 'resignation') ||
+      voluntary !== (existing?.isVoluntary ?? true) ||
+      interviewDate !== (existing?.interviewHeldOn ?? '') ||
+      interviewerId !== (existing?.interviewerPartyId ?? '') ||
+      destination !== (existing?.destination ?? '') ||
+      notes !== (existing?.notes ?? ''),
+    busy,
+  )
 
   // The interviewer picker loads with the form: directory people holding
   // an employment, keyed by party — the record names its interviewer by
@@ -140,7 +150,7 @@ export function ExitRecordForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} className="space-y-3" inert={busy}>
       <div>
         <Label htmlFor="exit-reason">{t('performance.exitReason')}</Label>
         <Select id="exit-reason" value={reason} onChange={(e) => setReason(e.target.value)}>

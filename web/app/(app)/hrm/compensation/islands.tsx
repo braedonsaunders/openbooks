@@ -6,6 +6,7 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { useAppAction } from '@/lib/use-app-action'
+import { useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
 
 /**
  * Compensation client islands — one drawer/dialog per mutation, each
@@ -22,14 +23,8 @@ export interface CompLabels {
   cancel: string
 }
 
-function useClose(closeHref: string) {
-  const router = useRouter()
-  return () => router.push(closeHref)
-}
-
 export function CycleCreateForm({
   labels,
-  closeHref,
   defaultCurrency,
   kinds,
   kindLabel,
@@ -38,7 +33,6 @@ export function CycleCreateForm({
   currencyLabel,
 }: {
   labels: CompLabels
-  closeHref: string
   defaultCurrency: string
   kinds: { value: string; label: string }[]
   kindLabel: string
@@ -47,7 +41,6 @@ export function CycleCreateForm({
   currencyLabel: string
 }) {
   const router = useRouter()
-  const close = useClose(closeHref)
   const [name, setName] = useState('')
   const [kind, setKind] = useState(kinds[0]?.value ?? 'merit')
   const [effectiveOn, setEffectiveOn] = useState('')
@@ -56,6 +49,7 @@ export function CycleCreateForm({
   // Shared action path: the refusal pins and toasts through the hook, and
   // busy always releases — a dead network can never wedge the button.
   const { busy, execute } = useAppAction()
+  const close = useDirtyUrlDrawer(name !== '' || kind !== (kinds[0]?.value ?? 'merit') || effectiveOn !== '' || currency !== defaultCurrency, busy)
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -115,7 +109,7 @@ export function CycleCreateForm({
         <Button type="submit" disabled={busy}>
           {labels.submit}
         </Button>
-        <Button type="button" variant="outline" onClick={close}>
+        <Button type="button" variant="outline" onClick={() => void close()}>
           {labels.cancel}
         </Button>
       </div>
@@ -144,13 +138,13 @@ export function LineProposeForm({
   closeHref: string
 }) {
   const router = useRouter()
-  const close = useClose(closeHref)
   const [mode, setMode] = useState<'pct' | 'rate'>('pct')
   const [pct, setPct] = useState('')
   const [rate, setRate] = useState('')
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
+  const close = useDirtyUrlDrawer(mode !== 'pct' || pct !== '' || rate !== '' || reason !== '', busy)
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -221,7 +215,7 @@ export function LineProposeForm({
         <Button type="submit" disabled={busy}>
           {labels.submit}
         </Button>
-        <Button type="button" variant="outline" onClick={close}>
+        <Button type="button" variant="outline" onClick={() => void close()}>
           {labels.cancel}
         </Button>
       </div>
@@ -372,24 +366,22 @@ export function CycleMoveButtons({
 
 export function PlanCreateForm({
   labels,
-  closeHref,
   nameLabel,
   fromLabel,
   toLabel,
 }: {
   labels: CompLabels
-  closeHref: string
   nameLabel: string
   fromLabel: string
   toLabel: string
 }) {
   const router = useRouter()
-  const close = useClose(closeHref)
   const [name, setName] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
+  const close = useDirtyUrlDrawer(name !== '' || from !== '' || to !== '', busy)
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -436,7 +428,7 @@ export function PlanCreateForm({
         <Button type="submit" disabled={busy}>
           {labels.submit}
         </Button>
-        <Button type="button" variant="outline" onClick={close}>
+        <Button type="button" variant="outline" onClick={() => void close()}>
           {labels.cancel}
         </Button>
       </div>
@@ -491,24 +483,22 @@ export function PlanLineApproveButton({
 
 export function EquityGenerateForm({
   labels,
-  closeHref,
   asOfLabel,
   groupALabel,
   groupBLabel,
 }: {
   labels: CompLabels
-  closeHref: string
   asOfLabel: string
   groupALabel: string
   groupBLabel: string
 }) {
   const router = useRouter()
-  const close = useClose(closeHref)
   const [asOf, setAsOf] = useState('')
   const [groupA, setGroupA] = useState('')
   const [groupB, setGroupB] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
+  const close = useDirtyUrlDrawer(asOf !== '' || groupA !== '' || groupB !== '', busy)
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -554,7 +544,7 @@ export function EquityGenerateForm({
         <Button type="submit" disabled={busy}>
           {labels.submit}
         </Button>
-        <Button type="button" variant="outline" onClick={close}>
+        <Button type="button" variant="outline" onClick={() => void close()}>
           {labels.cancel}
         </Button>
       </div>
