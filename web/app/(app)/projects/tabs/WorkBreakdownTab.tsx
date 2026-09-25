@@ -7,6 +7,8 @@ import { Pencil, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
+import { promptDialog } from '../../../../lib/prompt'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { useMoney } from '@/components/money-provider'
 
 export interface WorkBreakdownTask {
@@ -136,10 +138,37 @@ export function WorkBreakdownTab({
       setError(t('drawer.taskNameRequired'))
       return
     }
+    // Reopening a closed task, or changing its estimates while it stays
+    // closed, requires a reason server-side: collect it before saving so the
+    // PATCH does not refuse after the fact. Budgets compare canonically, so
+    // a text-only change ('10' vs '10.0000') prompts nothing.
+    const creating = !editor.id
+    const original = creating ? null : (tasks.find((task) => task.id === editor.id) ?? null)
+    const wasClosed = original?.status === 'complete' || original?.status === 'cancelled'
+    const sameBudget = (before: string, after: string) => {
+      const normalize = (value: string) => (value.trim() === '' ? null : canonicalDecimal(value, 4))
+      return normalize(before) === normalize(after)
+    }
+    const reasonRequired =
+      !!original &&
+      wasClosed &&
+      (editor.status === 'open' ||
+        !sameBudget(original.estimatedHours, editor.estimatedHours) ||
+        !sameBudget(original.estimatedCost, editor.estimatedCost))
+    let reason: string | null = null
+    if (reasonRequired) {
+      reason = await promptDialog({
+        title: t('drawer.editTask'),
+        label: tCommon('amendment.reason'),
+        placeholder: tCommon('amendment.placeholder'),
+        confirmLabel: tCommon('actions.save'),
+      })
+      // Cancel or empty writes nothing: back to the still-open editor.
+      if (!reason) return
+    }
     setBusy(true)
     setError(null)
     try {
-      const creating = !editor.id
       const response = await fetch(
         creating
           ? `/api/projects/${projectId}/tasks`
@@ -154,6 +183,7 @@ export function WorkBreakdownTab({
             estimatedHours: editor.estimatedHours,
             estimatedCost: editor.estimatedCost,
             ...(creating ? {} : { expectedUpdatedAt: editor.updatedAt }),
+            ...(reason ? { reason } : {}),
           }),
         },
       )
