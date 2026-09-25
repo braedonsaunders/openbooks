@@ -81,7 +81,7 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
           }
         }
         if (boundary === 'setup page') await assert.rejects(CloseSetupPage({orgId:org.orgId,searchParams:{},canReopen:true}), /NEXT_HTTP_ERROR_FALLBACK;404/)
-        if (boundary === 'cockpit') assert.equal((await accountingHome(org.orgId,new Set([org.subsidiaryId]))).close.runId,null)
+        if (boundary === 'cockpit') assert.equal((await accountingHome(org.orgId,new Set([org.subsidiaryId]), { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })).close.runId,null)
         if (boundary === 'assistant') {
           const authz = (await getAuthz())!
           const output = await READ_TOOLS.find((tool)=>tool.name === 'financial_periods')!.execute({completedOnly:false},authz)

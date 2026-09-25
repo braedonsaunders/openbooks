@@ -100,7 +100,7 @@ function reset(emptyScope = false): void {
 
 test('unrestricted Accounting home remains tenant-wide', async () => {
   reset()
-  const home = await accountingHome('org-1', null)
+  const home = await accountingHome('org-1', null, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
   assert.equal(home.draftJournals, 2)
   assert.equal(home.badges.assets, 3)
   assert.ok(state.calls.every((query) => !query.includes('and false')))
@@ -109,7 +109,7 @@ test('unrestricted Accounting home remains tenant-wide', async () => {
 
 test('restricted Accounting home scopes legal-entity metrics and fails closed for unscoped badges', async () => {
   reset()
-  const home = await accountingHome('org-1', new Set(['sub-a', 'sub-b']))
+  const home = await accountingHome('org-1', new Set(['sub-a', 'sub-b']), { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
   assert.equal(home.draftJournals, 2)
   assert.equal(home.badges.assets, 3)
   const all = state.calls.join('\n')
@@ -123,7 +123,7 @@ test('restricted Accounting home scopes legal-entity metrics and fails closed fo
 
 test('empty subsidiary scope returns no Accounting home metrics', async () => {
   reset(true)
-  const home = await accountingHome('org-1', new Set())
+  const home = await accountingHome('org-1', new Set(), { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
   assert.equal(home.close.runId, null)
   assert.equal(home.draftJournals, 0)
   assert.equal(home.postedJournals7d, 0)
@@ -137,7 +137,7 @@ test('draft journals count draft journal documents, not journal entries (F-t06-0
   // list reads documents, so the hub tile must too. Counting
   // journal_entries with status draft always reads 0 for manual drafts.
   reset()
-  await accountingHome('org-1', null)
+  await accountingHome('org-1', null, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
   const all = state.calls.join('\n')
   assert.match(all, /from documents[\s\S]*kind = 'journal'[\s\S]*status = 'draft'/)
   assert.ok(

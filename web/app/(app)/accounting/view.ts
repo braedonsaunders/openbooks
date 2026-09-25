@@ -40,6 +40,7 @@ import type { AttentionItem, HealthCategoryRow, HealthRatioRow } from './section
 type Tabs = Awaited<ReturnType<typeof groupTabs>>
 
 export interface AccountingData {
+  access: { reports: boolean; close: boolean; gl: boolean; findings: boolean }
   title: string
   description: string
   tabs: Tabs
@@ -82,6 +83,7 @@ export interface AccountingData {
   directory: DirectoryItem[]
   attentionTitle: string
   attentionAllClear: string
+  hasAttention: boolean
   attention: AttentionItem[]
 }
 
@@ -98,9 +100,19 @@ export async function loadAccounting(): Promise<AccountingData> {
 
   // Same default period as the analytics dashboard, so the score matches it.
   const period = await resolvePeriod(null, { orgId: authz.user.orgId })
-  const [data, health, navGroups] = await Promise.all([
-    accountingHome(authz.user.orgId),
-    financialHealth({ from: period.from, to: period.to, label: period.label }, undefined, authz.user.orgId, authz.allowedSubsidiaryIds),
+  const access = {
+    gl: can(authz, 'gl.read'),
+    close: can(authz, 'close.read'),
+    findings: can(authz, 'close.read'),
+    accounts: can(authz, 'gl.read'),
+    budgets: can(authz, 'budgets.read'),
+    assets: can(authz, 'assets.read'),
+  }
+  const [data, healthResult, navGroups] = await Promise.all([
+    accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access),
+    can(authz, 'reports.read')
+      ? financialHealth({ from: period.from, to: period.to, label: period.label }, undefined, authz.user.orgId, authz.allowedSubsidiaryIds)
+      : Promise.resolve(null),
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),
@@ -121,6 +133,13 @@ export async function loadAccounting(): Promise<AccountingData> {
       },
     ),
   ])
+  const health = healthResult ?? {
+    overallScore: 0,
+    scoreLabel: 'needs-attention' as const,
+    figures: { netIncome: 0 },
+    ratios: {},
+    categoryScores: [],
+  } as unknown as Awaited<ReturnType<typeof financialHealth>>
 
   // close.read/gl.read callers see the ratios but must never be deep-linked
   // into financial-health, which requires reports.read.
@@ -186,6 +205,7 @@ export async function loadAccounting(): Promise<AccountingData> {
   }
 
   return {
+    access: { reports: can(authz, 'reports.read'), close: access.close, gl: access.gl, findings: access.findings },
     title: t('home.title'),
     description: t('home.description'),
     tabs,
@@ -243,6 +263,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     directory,
     attentionTitle: t('home.attention.title'),
     attentionAllClear: t('home.attention.allClear'),
+    hasAttention: can(authz, 'reports.read') || access.gl || access.findings,
     // Capped where the native call site caps it: the rail shows six.
     attention: attention.slice(0, 6),
   }
@@ -274,6 +295,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
             value: f('healthScoreValue'),
             sub: f('healthScoreSub'),
             tone: f('healthScoreTone'),
+            when: f('access.reports'),
           }),
           statTile({
             iconKey: 'trending-up',
@@ -282,6 +304,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
             value: f('netIncomeValue'),
             sub: f('netIncomeSub'),
             tone: f('netIncomeTone'),
+            when: f('access.reports'),
           }),
           statTile({
             iconKey: 'check-circle',
@@ -289,6 +312,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
             label: f('closeLabel'),
             value: f('closeValue'),
             sub: f('closeSub'),
+            when: f('access.close'),
           }),
           statTile({
             iconKey: 'list-checks',
@@ -297,6 +321,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
             value: f('draftValue'),
             sub: f('draftSub'),
             tone: f('draftTone'),
+            when: f('access.gl'),
           }),
           statTile({
             iconKey: 'triangle-alert',
@@ -305,6 +330,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
             value: f('findingsValue'),
             sub: f('findingsSub'),
             tone: f('findingsTone'),
+            when: f('access.findings'),
           }),
         ]),
 
@@ -315,6 +341,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
             hint: f('heroHint'),
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-[24rem] lg:col-span-2',
+            when: f('access.reports'),
             blocks: [
               // The hero body (gauge + category bars + ratio table + deep
               // link) is one widget: its table is a plain hand-styled
@@ -342,6 +369,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
               iconKey: 'triangle-alert',
               bodyClassName: 'p-0',
               className: 'shrink-0',
+              when: f('hasAttention'),
               blocks: [
                 widgetBlock('attention-list', {
                   items: data.attention,

@@ -78,7 +78,7 @@ test('purchasing cockpit translates every payable functional to presentation', {
   try {
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
-        const home = await purchasingHome(org.orgId)
+        const home = await purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true })
         assert.equal(home.apOutstanding, 235)
         assert.equal(home.spend30d, 235)
         assert.equal(home.badges.paid7dValue, 235)
@@ -100,7 +100,7 @@ test('purchasing cockpit fails closed when a functional has no spot coverage', {
     })
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
-        await assert.rejects(purchasingHome(org.orgId), /no spot rate for USD/)
+        await assert.rejects(purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true }), /no spot rate for USD/)
       })
     })
   } finally {

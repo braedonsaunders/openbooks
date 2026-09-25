@@ -53,8 +53,10 @@ export interface PurchasingHome {
   expensesEnabled: boolean
   /** False when the caller lacks ap.read — hide every AP-derived figure rather
    * than show zeros (a parties.read-only vendor-directory clerk must not see
-   * AP money). The vendors count stays readable: it is parties-derived. */
+   * AP money). */
   apAllowed: boolean
+  /** The per-section grants the figures above were computed under. */
+  grants: { ap: boolean; orders: boolean; expenses: boolean; parties: boolean }
 }
 
 const TREND_WEEKS = 13
@@ -134,15 +136,23 @@ export async function purchasingHome(
    */
   includeNullSubsidiary?: boolean,
   /**
-   * Per-section grant using the family's source permission. Without ap.read
+   * Per-section grants using each family's source permission (fail-closed:
+   * a caller that omits grants reads no section figures). Without ap.read
    * the AP money queries below never run — the figures are omitted, not
    * zero-shaped — and the loader hides their vitals via `apAllowed`.
+   * Orders, expenses and the vendors count are gated the same way on
+   * their own family's grant.
    */
-  grants: { ap: boolean } = { ap: true },
+  grants: { ap: boolean; orders: boolean; expenses: boolean; parties: boolean } = {
+    ap: false,
+    orders: false,
+    expenses: false,
+    parties: false,
+  },
 ): Promise<PurchasingHome> {
   const [ordersOn, expensesOn] = await Promise.all([
-    isFeatureEnabled(orgId, 'orders'),
-    isFeatureEnabled(orgId, 'expenses'),
+    grants.ap && grants.orders ? isFeatureEnabled(orgId, 'orders') : false,
+    grants.expenses ? isFeatureEnabled(orgId, 'expenses') : false,
   ])
   const today = await businessToday(orgId)
   const ago7 = addCalendarDays(today, -7)
@@ -172,10 +182,11 @@ export async function purchasingHome(
   // showed two different Talent figures.
   // Without the AP grant every money query below is skipped outright: a
   // parties.read-only caller loads no open items, trends, payments, spend or
-  // purchase orders. The badges query still runs — its vendors count is
-  // parties-derived and stays visible; the AP badges it also carries are
-  // hidden loader-side via `apAllowed`. Each skipped leg resolves the same
-  // row shape it would have returned, so the shared tail needs no branch.
+  // purchase orders. The badges query still runs, but its vendors count is
+  // gated on the parties grant like every other family figure; the AP
+  // badges it also carries are hidden loader-side via `apAllowed`. Each
+  // skipped leg resolves the same row shape it would have returned, so the
+  // shared tail needs no branch.
   type TrendRow = { wk: string; func: string | null; late: string | null; spend: string | number }
   type FlowRow = { dt: string; func: string | null; amt: string | number }
   const noTrend = Promise.resolve({ rows: [] as TrendRow[] })
@@ -210,9 +221,9 @@ export async function purchasingHome(
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as payments_7d,
         ${expensesOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
           and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as unposted_expenses,
-        (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
+        ${grants.parties ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)
-          ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as vendors
+          ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as vendors
     `),
     // 7-day payment value per (date, functional) for presentation translation.
     grants.ap ? db.execute(sql`
@@ -248,8 +259,10 @@ export async function purchasingHome(
          where d.org_id = ${orgId} and d.kind = 'purchase_order'
            and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}`)
       : noPos,
-    db.execute<{ baseCurrency: string }>(sql`
-      select base_currency as "baseCurrency" from orgs where id = ${orgId}`),
+    ordersOn
+      ? db.execute<{ baseCurrency: string }>(sql`
+      select base_currency as "baseCurrency" from orgs where id = ${orgId}`)
+      : Promise.resolve({ rows: [] as { baseCurrency: string }[] }),
   ]))
 
   // Presentation: flows translate at their document-date spot. Balances
@@ -257,29 +270,29 @@ export async function purchasingHome(
   // Missing coverage fails closed.
   // Each week bucket translates at its latest document date, so the rate
   // lookup never runs ahead of the data it translates.
-  const trendCtx = await flowRates(
+  const trendCtx = grants.ap ? await flowRates(
     orgId,
     trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
-  )
+  ) : null
   const byWeek = new Map<string, number>()
   for (const r of trendRes.rows) {
     const wk = String(r.wk).slice(0, 10)
     const late = String(r.late ?? r.wk).slice(0, 10)
-    const spend = Number(mulDecimal(String(r.spend ?? 0), trendCtx.rateAt((r.func ?? null) as string | null, late)))
+    const spend = Number(mulDecimal(String(r.spend ?? 0), trendCtx!.rateAt((r.func ?? null) as string | null, late)))
     byWeek.set(wk, (byWeek.get(wk) ?? 0) + spend)
   }
-  const paid7dValue = Number(await translateFlows(
+  const paid7dValue = grants.ap ? Number(await translateFlows(
     orgId,
     paidRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
-  ))
-  const spend30d = Number(await translateFlows(
+  )) : 0
+  const spend30d = grants.ap ? Number(await translateFlows(
     orgId,
     spendRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
-  ))
+  )) : 0
 
   const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
-  if (!orgCurrency) throw new Error('organization currency is not configured')
-  const po = await openPoValueInOrgCurrency(orgId, orgCurrency, today, poRowsRes.rows)
+  if (ordersOn && !orgCurrency) throw new Error('organization currency is not configured')
+  const po = ordersOn ? await openPoValueInOrgCurrency(orgId, orgCurrency, today, poRowsRes.rows) : { byParty: new Map(), total: '0' }
 
   // Hero roster — vendor commitments merged from the SAME as-of open items
   // as the pulse (F-t03-009) with translated open POs, ranked by combined
@@ -368,5 +381,6 @@ export async function purchasingHome(
     ordersEnabled: ordersOn,
     expensesEnabled: expensesOn,
     apAllowed: grants.ap,
+    grants,
   }
 }
