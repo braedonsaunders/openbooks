@@ -77,34 +77,41 @@ export function ProcessTemplateDrawer({
 
   async function saveTemplate() {
     if (!name.trim()) return
+    // A transport failure rejects instead of resolving: without the
+    // finally the drawer strands busy with no error shown.
     setBusy(true)
-    const response = await fetch(
-      creating ? '/api/hrm/process-templates' : `/api/hrm/process-templates/${template!.id}`,
-      {
-        method: creating ? 'POST' : 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...(creating ? { kind } : {}),
-          name: name.trim(),
-          ...(creating ? {} : { isActive: active }),
-          appliesTo: {
-            employerSubsidiaryId: subsidiaryId || null,
-            departmentId: departmentId || null,
-          },
-        }),
-      },
-    )
-    setBusy(false)
-    if (!response.ok) {
-      toast.error(await readApiErrorMessage(response, t('saveFailed')))
-      return
+    try {
+      const response = await fetch(
+        creating ? '/api/hrm/process-templates' : `/api/hrm/process-templates/${template!.id}`,
+        {
+          method: creating ? 'POST' : 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ...(creating ? { kind } : {}),
+            name: name.trim(),
+            ...(creating ? {} : { isActive: active }),
+            appliesTo: {
+              employerSubsidiaryId: subsidiaryId || null,
+              departmentId: departmentId || null,
+            },
+          }),
+        },
+      )
+      if (!response.ok) {
+        toast.error(await readApiErrorMessage(response, t('saveFailed')))
+        return
+      }
+      const payload = (await response.json()) as { template?: { id?: string } }
+      toast.success(creating ? t('created') : t('updated'))
+      if (creating && payload.template?.id) {
+        router.replace(`/hrm/processes/templates?template=${payload.template.id}` as never)
+      }
+      router.refresh()
+    } catch {
+      toast.error(t('saveFailed'))
+    } finally {
+      setBusy(false)
     }
-    const payload = (await response.json()) as { template?: { id?: string } }
-    toast.success(creating ? t('created') : t('updated'))
-    if (creating && payload.template?.id) {
-      router.replace(`/hrm/processes/templates?template=${payload.template.id}` as never)
-    }
-    router.refresh()
   }
 
   async function saveStep() {
@@ -121,29 +128,34 @@ export function ProcessTemplateDrawer({
     }
     setBusy(true)
     const editing = Boolean(stepDraft.id)
-    const response = await fetch(
-      editing
-        ? `/api/hrm/process-templates/${template.id}/steps/${stepDraft.id}`
-        : `/api/hrm/process-templates/${template.id}/steps`,
-      {
-        method: editing ? 'PATCH' : 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...stepDraft,
-          title: stepDraft.title.trim(),
-          description: stepDraft.description?.trim() || null,
-          ownerPartyId: stepDraft.ownerKind === 'named_party' ? stepDraft.ownerPartyId : null,
-        }),
-      },
-    )
-    setBusy(false)
-    if (!response.ok) {
-      toast.error(await readApiErrorMessage(response, t('stepSaveFailed')))
-      return
+    try {
+      const response = await fetch(
+        editing
+          ? `/api/hrm/process-templates/${template.id}/steps/${stepDraft.id}`
+          : `/api/hrm/process-templates/${template.id}/steps`,
+        {
+          method: editing ? 'PATCH' : 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ...stepDraft,
+            title: stepDraft.title.trim(),
+            description: stepDraft.description?.trim() || null,
+            ownerPartyId: stepDraft.ownerKind === 'named_party' ? stepDraft.ownerPartyId : null,
+          }),
+        },
+      )
+      if (!response.ok) {
+        toast.error(await readApiErrorMessage(response, t('stepSaveFailed')))
+        return
+      }
+      toast.success(editing ? t('stepUpdated') : t('stepCreated'))
+      setStepDraft(null)
+      router.refresh()
+    } catch {
+      toast.error(t('stepSaveFailed'))
+    } finally {
+      setBusy(false)
     }
-    toast.success(editing ? t('stepUpdated') : t('stepCreated'))
-    setStepDraft(null)
-    router.refresh()
   }
 
   async function removeStep(step: Step) {
@@ -157,15 +169,20 @@ export function ProcessTemplateDrawer({
     )
       return
     setBusy(true)
-    const response = await fetch(`/api/hrm/process-templates/${template.id}/steps/${step.id}`, { method: 'DELETE' })
-    setBusy(false)
-    if (!response.ok) {
-      toast.error(await readApiErrorMessage(response, t('stepDeleteFailed')))
-      return
+    try {
+      const response = await fetch(`/api/hrm/process-templates/${template.id}/steps/${step.id}`, { method: 'DELETE' })
+      if (!response.ok) {
+        toast.error(await readApiErrorMessage(response, t('stepDeleteFailed')))
+        return
+      }
+      if (stepDraft?.id === step.id) setStepDraft(null)
+      toast.success(t('stepDeleted'))
+      router.refresh()
+    } catch {
+      toast.error(t('stepDeleteFailed'))
+    } finally {
+      setBusy(false)
     }
-    if (stepDraft?.id === step.id) setStepDraft(null)
-    toast.success(t('stepDeleted'))
-    router.refresh()
   }
 
   const nextPosition = template ? Math.max(-1, ...template.steps.map((step) => step.position)) + 1 : 0
