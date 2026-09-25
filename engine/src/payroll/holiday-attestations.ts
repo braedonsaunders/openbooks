@@ -302,7 +302,7 @@ export function demandingHolidaysForJurisdiction(
     const rule = statutoryHolidayPayRule(jurisdiction, holiday.date);
     if (!rule) continue;
     const basis = holidayPayLookbackBasis(rule.basis);
-    const needsCommissionStatus = basis.kind === "fixed_divisor" && basis.commission !== undefined;
+    const needsCommissionStatus = basis?.kind === "fixed_divisor" && basis.commission !== undefined;
     const needsAbsenceAssertion = rule.qualifying.lastAndFirstScheduledShift === true;
     const needsEntitlementDayAssessment = rule.qualifying.minDaysWorkedInWindow?.counting === "entitled_to_pay";
     const needsOccupationClass = ruleDeclaresOccupationArms(rule);

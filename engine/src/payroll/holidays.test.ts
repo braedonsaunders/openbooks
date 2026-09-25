@@ -1378,20 +1378,18 @@ test("Prince Edward Island's Act changed mid-2026, and the date decides which", 
   // SPEI 2024 c 66 came into force 2026-06-30 and replaced a regular day's pay
   // with five per cent of four weeks. Canada Day 2026 is under the new Act.
   assert.equal(computeStatutoryHolidayPay(ruleFor("CA-PE", "2026-07-01"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+    earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
   })).holidayPay, "200.0000");
-  // Good Friday 2026 (April 3) is not, and the repealed RSPEI 1988 c E-6.2 has
-  // not been transcribed. The engine REFUSES and names the gap rather than
-  // applying a formula that was not the law that day — which is exactly what
-  // it did before editions existed, silently, for every pre-July PEI period.
-  assert.throws(
-    () => statutoryHolidayPayRule("CA-PE", "2026-04-03"),
-    (error: unknown) =>
-      error instanceof PayrollHolidayError
-      && /no statutory holiday-pay formula in force on 2026-04-03/.test((error as Error).message)
-      && /has not been transcribed/.test((error as Error).message),
+  // Good Friday 2026 (April 3) is under the repealed RSPEI 1988 c E-6.2,
+  // transcribed as the pre-2026-06-30 edition: a regular day's pay, never
+  // the new five per cent and never a refusal. The boundary is exact —
+  // 2026-06-29 belongs to the old measure, 2026-06-30 to the new.
+  assert.match(
+    ruleFor("CA-PE", "2026-04-03").citation, /RSPEI 1988/,
   );
-  assert.throws(() => statutoryHolidayPayRule("CA-PE", "2026-06-29"), PayrollHolidayError);
+  assert.match(
+    ruleFor("CA-PE", "2026-06-29").citation, /RSPEI 1988/,
+  );
   assert.ok(statutoryHolidayPayRule("CA-PE", "2026-06-30"), "in force on the day it commenced");
 });
 

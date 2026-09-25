@@ -572,14 +572,10 @@ const NU_HOLIDAY_PAY: PayrollHolidayPayRule = {
  * THE ACT TRANSCRIBED HERE STARTS ON 2026-06-30. It replaced RSPEI 1988
  * c E-6.2 (repealed by s. 105) and CHANGED the measure: the old Act paid a
  * regular day's pay, the new one pays a percentage. This declaration is
- * therefore an EDITION with `effectiveFrom: "2026-06-30"` and no earlier
- * sibling, so a Prince Edward Island holiday before that date resolves to no
- * edition at all and the run REFUSES by name. That is the correct answer and
- * not a gap being papered over: the repealed Act has not been transcribed, and
- * computing a June 2026 period on a formula that did not yet exist is wrong
- * money that nobody would ever see. Transcribing RSPEI 1988 c E-6.2 as a second
- * edition, `effectiveTo: "2026-06-29"`, is the whole of the fix when someone
- * has the repealed text in front of them.
+ * therefore an EDITION with `effectiveFrom: "2026-06-30"`, beside the
+ * repealed Act's own edition (`effectiveTo: "2026-06-29"`), so a June 2026
+ * period never computes on a formula that did not yet exist — wrong money
+ * that nobody would ever see.
  *
  * s. 28(1)(a): five per cent of the employee's wages, not including overtime
  * pay, earned in the four weeks before the paid holiday. s. 28(2) expressly
@@ -603,6 +599,56 @@ const NU_HOLIDAY_PAY: PayrollHolidayPayRule = {
  * s. 27(3)(b) offers the employer the alternative of straight time plus a lieu
  * holiday, which is a scheduling election, not an amount.
  */
+/**
+ * Prince Edward Island BEFORE 2026-06-30: RSPEI 1988 c E-6.2, ss. 6–10, as
+ * consolidated 2013 (1992 c.18; 2003 c.35, s.2; 2008 c.48, s.2; 2009 c.5,
+ * ss.10–11), repealed by SPEI 2024 c 66 s. 105. Verified against the archived
+ * office consolidation and the province's own guidance restating the
+ * qualifiers through 2020.
+ *
+ * s. 10(2)–(3): a regular day's pay — the regular rate for the employee's
+ * normal hours (daily/hourly) or normal working day (any other basis);
+ * s. 10(1): weekly/monthly wages simply not reduced. A `normal_day` basis
+ * with NO `whenIrregular`: s. 10(4) leaves the varying-hours rate to an
+ * inspector's discretion, which is not a computable arm, so varying-hours
+ * employees refuse by name instead of taking a formula the Act never wrote.
+ * No earnings lookback exists, so no inclusions are declared.
+ *
+ * s. 7(1)(a)–(b): 30 calendar days of employment and pay received on at
+ * least 15 of the 30 days before — "received", so `worked_or_earned_wages`,
+ * the narrower predicate, not Nova Scotia's "entitled to receive".
+ * s. 7(1)(c): without reasonable cause, missing BOTH the last scheduled day
+ * before and the first after — conjunctive, the employer's to apply through
+ * the asserted denial. s. 7(1)(d) (agreed to work, then no-showed) rides the
+ * same unconsented-absence assertion. s. 7(1)(e) (elect-to-work contracts)
+ * needs the statutory occupation classification the engine does not yet
+ * capture; an on-call employee computed here would be overpaid, and that
+ * boundary is named rather than hidden.
+ * s. 7(2): employer-directed non-reporting excuses (c) — again the
+ * employer's application, not the engine's inference.
+ *
+ * s. 9(a): time and a half for the hours worked plus the day's regular pay.
+ * s. 9(b) (straight time plus an agreed alternate day before the next
+ * vacation) and s. 8 (non-working-day holiday moved to the next working day,
+ * post-vacation, or an agreed day) are scheduling elections, not amounts —
+ * the engine's normal-day arm already pays one day's wages either way.
+ */
+const PE_HOLIDAY_PAY_REPEALED: PayrollHolidayPayRule = {
+  citation: "Employment Standards Act (Prince Edward Island), RSPEI 1988 c E-6.2, ss. 6–10 "
+    + "(as consolidated 2013; repealed by SPEI 2024 c 66 s. 105 — governs holidays through 2026-06-29)",
+  basis: { kind: "normal_day" },
+  // No lookback exists, so the Act states no inclusions.
+  include: { overtime: false, vacationPay: false, holidayPay: false },
+  qualifying: {
+    minEmploymentDays: 30,
+    minDaysWorkedInWindow: { days: 15, ofDays: 30, counting: "worked_or_earned_wages" },
+    lastAndFirstScheduledShift: true,
+  },
+  premium: { multiplier: "1.5", plusHolidayPay: true },
+  // Inert: no lookback arm exists. Required by the shape, never read.
+  lookbackEnds: ENDS_DAY_BEFORE,
+};
+
 const PE_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "Employment Standards Act (Prince Edward Island), SPEI 2024 c 66, ss. 27–28 "
     + "(in force 2026-06-30; earlier periods are governed by the repealed RSPEI 1988 c E-6.2 "
@@ -617,13 +663,13 @@ const PE_HOLIDAY_PAY: PayrollHolidayPayRule = {
 
 /**
  * Prince Edward Island's editions — the one jurisdiction in the country whose
- * holiday-pay measure changed inside this product's lifetime.
- *
- * There is deliberately NO edition before 2026-06-30. A PEI holiday earlier
- * than that resolves to nothing and refuses, naming the repealed Act; it does
- * not fall back to the new percentage, and it does not pay zero.
+ * holiday-pay measure changed inside this product's lifetime: a regular day's
+ * pay under the repealed Act, five per cent of earnings under the new one.
+ * The boundary is exact — 2026-06-29 belongs to the old measure, 2026-06-30
+ * to the new — so neither edition prices a holiday the other governs.
  */
 const PE_HOLIDAY_PAY_EDITIONS: readonly PayrollHolidayPayEdition[] = [
+  { effectiveFrom: null, effectiveTo: "2026-06-29", rule: PE_HOLIDAY_PAY_REPEALED },
   { effectiveFrom: "2026-06-30", effectiveTo: null, rule: PE_HOLIDAY_PAY },
 ];
 
