@@ -178,6 +178,7 @@ export async function loadBudgetScenario(
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<BudgetScenario | null> {
+  if (allowedSubsidiaryIds?.size === 0) return null
   const result = (await db.execute<BudgetScenarioRow>(sql`
     select bs.id, bs.name, bs.description, bs.fiscal_year, bs.kind, bs.status,
            bs.revision, bs.book_id, b.name as book_name, b.code as book_code,

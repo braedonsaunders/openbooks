@@ -142,18 +142,15 @@ test('budget workspace read reuses the page loader; writes are revision-checked'
       );
     });
 
-    // A restricted-subsidiary caller reads the same planning cells the page
-    // shows (the page applies no subsidiary scoping to budgets).
+    // An empty subsidiary scope must not expose the org-wide planning workspace.
     const restricted = {
       user: userFor(org.orgId, actors.adminId),
       permissions: new Set(['assistant.use', 'budgets.read', 'budgets.manage']),
-      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      allowedSubsidiaryIds: new Set<string>(),
     };
     await withOrgContext(org.orgId, async () => {
       const workspace = await executeAssistantTool(restricted, 'get_budget_workspace', { scenarioId });
-      assert.equal(workspace.ok, true, JSON.stringify(workspace));
-      assert.ok(workspace.ok);
-      assert.equal((workspace.data as { cells: unknown[] }).cells.length, 2);
+      assert.equal(workspace.ok, false);
     });
   } finally {
     await dropScratchOrg(org.orgId);

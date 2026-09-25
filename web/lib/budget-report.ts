@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { flowRates } from './fx-presentation'
 import type { BudgetDimensions } from './budgets'
+import { scenarioOutOfScopeSubsidiaryNames } from './budget-scope'
 import {
   combineTotals,
   recomputeVariance,
@@ -42,14 +43,23 @@ export type BudgetScenarioOption = {
   status: string
 }
 
-export async function budgetScenarioOptions(orgId: string): Promise<BudgetScenarioOption[]> {
+export async function budgetScenarioOptions(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<BudgetScenarioOption[]> {
+  if (allowedSubsidiaryIds?.size === 0) return []
   const r = (await db.execute<{ id: string; name: string; fiscal_year: number; kind: string; status: string }>(sql`
     select id, name, fiscal_year, kind, status
       from budget_scenarios
      where org_id = ${orgId} and status <> 'archived'
      order by fiscal_year desc, name
   `))
-  return r.rows.map((x) => ({ id: x.id, name: x.name, fiscalYear: x.fiscal_year, kind: x.kind, status: x.status }))
+  const visible: BudgetScenarioOption[] = []
+  for (const x of r.rows) {
+    if ((await scenarioOutOfScopeSubsidiaryNames(x.id, orgId, allowedSubsidiaryIds)).length > 0) continue
+    visible.push({ id: x.id, name: x.name, fiscalYear: x.fiscal_year, kind: x.kind, status: x.status })
+  }
+  return visible
 }
 
 export type BudgetLabels = {
