@@ -68,6 +68,7 @@ export interface EstimateDrawer {
 export interface EstimatesData {
   title: string
   description: string
+  baseCurrencyConfigured: boolean
   canManage: boolean
   currentParams: Record<string, string | string[] | undefined>
   newOrder: {
@@ -100,6 +101,11 @@ export async function loadEstimates(
   // Save. ?estimate=new deep links keep working through the redirect widget.
   const creating = pickString(sp[CREATE_PARAM]) === '1' && canManage
   const opening = (openId && openId !== 'new') || creating
+  // The draft currency is the org's base currency — never invented. The New
+  // button needs it on every render: without a configured currency it keeps
+  // the draft-API path (which refuses by name with the setup remedy) instead
+  // of opening an unsaved drawer, and a direct create URL opens no draft.
+  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`)).rows[0]?.base_currency ?? null
 
   const [openOrder, pickers] = await Promise.all([
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
@@ -160,16 +166,10 @@ export async function loadEstimates(
   // (allocated inside the Save transaction), no lines, no links, and the
   // org's currency/today so totals and date fields render before Save.
   const createDefaults = creating
-    ? await (async () => {
-        const [orgRow, today] = await Promise.all([
-          db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`),
-          businessToday(authz.user.orgId),
-        ])
-        return { currency: orgRow.rows[0]?.base_currency ?? 'CAD', today }
-      })()
+    ? { currency: baseCurrency, today: await businessToday(authz.user.orgId) }
     : null
   const unsavedOrder: Record<string, unknown> | null =
-    creating && createDefaults
+    creating && createDefaults?.currency
       ? {
           doc: {
             id: '',
@@ -235,6 +235,7 @@ export async function loadEstimates(
   return {
     title: t('list.title'),
     description: t('list.description'),
+    baseCurrencyConfigured: baseCurrency !== null,
     canManage,
     currentParams: sp,
     newOrder: {
@@ -260,7 +261,7 @@ export function estimatesSpec(data: EstimatesData): PageSpec {
       apiPath: data.newOrder.apiPath,
       base: data.newOrder.base,
       param: data.newOrder.param,
-      createParam: CREATE_PARAM,
+      createParam: data.baseCurrencyConfigured ? CREATE_PARAM : undefined,
       label: data.newOrder.label,
       createFailedMessage: data.newOrder.createFailedMessage,
     },

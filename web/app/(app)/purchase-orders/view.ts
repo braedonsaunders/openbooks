@@ -50,6 +50,7 @@ export interface PurchaseOrdersData {
   canManage: boolean
   currentParams: Record<string, string | string[] | undefined>
   newOrderButtonLabel: string
+  baseCurrencyConfigured: boolean
   createFailedMessage: string
   showNewRedirect: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
@@ -72,6 +73,11 @@ export async function loadPurchaseOrders(
   // Save. ?order=new deep links keep working through the redirect widget.
   const creating = pickString(sp[CREATE_PARAM]) === '1' && canManage
   const opening = (openId && openId !== 'new') || creating
+  // The draft currency is the org's base currency — never invented. The New
+  // button needs it on every render: without a configured currency it keeps
+  // the draft-API path (which refuses by name with the setup remedy) instead
+  // of opening an unsaved drawer, and a direct create URL opens no draft.
+  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`)).rows[0]?.base_currency ?? null
 
   const [openOrder, pickers] = await Promise.all([
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
@@ -124,16 +130,10 @@ export async function loadPurchaseOrders(
   // (allocated inside the Save transaction), no lines, no links, and the
   // org's currency/today so totals and date fields render before Save.
   const createDefaults = creating
-    ? await (async () => {
-        const [orgRow, today] = await Promise.all([
-          db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`),
-          businessToday(authz.user.orgId),
-        ])
-        return { currency: orgRow.rows[0]?.base_currency ?? 'CAD', today }
-      })()
+    ? { currency: baseCurrency, today: await businessToday(authz.user.orgId) }
     : null
   const unsavedOrder: OrderDrawerProps['order'] | null =
-    creating && createDefaults
+    creating && createDefaults?.currency
       ? ({
           doc: {
             id: '',
@@ -165,6 +165,7 @@ export async function loadPurchaseOrders(
     canManage,
     currentParams: sp,
     newOrderButtonLabel: t('list.newButton'),
+    baseCurrencyConfigured: baseCurrency !== null,
     createFailedMessage: t('list.createDraftFailed'),
     showNewRedirect: openId === 'new' && canManage,
     drawer:
@@ -206,7 +207,7 @@ export function purchaseOrdersSpec(data: PurchaseOrdersData): PageSpec {
       apiPath: API,
       base: BASE,
       param: PARAM,
-      createParam: CREATE_PARAM,
+      createParam: data.baseCurrencyConfigured ? CREATE_PARAM : undefined,
       label: data.newOrderButtonLabel,
       createFailedMessage: data.createFailedMessage,
     },
