@@ -32,6 +32,12 @@ import type { PayrollOpeningYtdField } from "../packs.ts";
  * without its own carry-in the RL-1 Box E reconciles to the committed
  * stubs alone and understates the year's Québec tax by exactly the prior
  * provider's amount.
+ *
+ * Employer CPP/CPP2/EI ride it for a fifth reason: the T4 Summary's
+ * employer share. The employee-side columns are T4 boxes 16/16A/18, so
+ * without their own carry-in the Summary's employer share reconciles to
+ * the committed stubs alone and understates the year's employer levies by
+ * exactly the prior provider's amounts.
  */
 export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
   {
@@ -71,5 +77,23 @@ export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
     column: "qc_tax_ytd",
     label: "Québec income tax withheld before adoption",
     help: "Québec income tax already withheld this year before adoption, as the prior provider's year-to-date report shows it (RL-1 Box E year-to-date). Distinct from federal tax withheld: do not copy the T4-box-22 figure here.",
+  },
+  {
+    key: "employerCppYtd",
+    column: "employer_cpp_ytd",
+    label: "Employer CPP contributions before adoption",
+    help: "Employer CPP contributions already paid this year before adoption, as the prior provider's year-to-date report shows them (T4 Summary employer-share year-to-date). Distinct from the employee CPP: do not copy the T4-box-16 figure here.",
+  },
+  {
+    key: "employerCpp2Ytd",
+    column: "employer_cpp2_ytd",
+    label: "Employer CPP2 contributions before adoption",
+    help: "Employer second additional CPP contributions already paid this year before adoption, as the prior provider's year-to-date report shows them (T4 Summary employer-share year-to-date). Distinct from the employee CPP2: do not copy the T4-box-16A figure here.",
+  },
+  {
+    key: "employerEiYtd",
+    column: "employer_ei_ytd",
+    label: "Employer EI premiums before adoption",
+    help: "Employer EI premiums already paid this year before adoption, as the prior provider's year-to-date report shows them (T4 Summary employer-share year-to-date). Distinct from the withheld EI premiums: do not copy the T4-box-18 figure here.",
   },
 ];

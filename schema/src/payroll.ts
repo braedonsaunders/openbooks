@@ -1017,6 +1017,18 @@ export const payrollOpeningBalances = pgTable(
      */
     qcTaxYtd: money("qc_tax_ytd").notNull().default("0"),
     /**
+     * Employer-side CPP/CPP2/EI history (migration 0396). Same declaration
+     * pattern as the history above: the CA pack declares each one and this
+     * model only stores what the declarations name. The T4 Summary's
+     * employer share reconciles to the committed stubs alone without them,
+     * understating the year's employer CPP/CPP2/EI by exactly the prior
+     * provider's amounts; the carry-in reads these columns, never the
+     * employee-side ones.
+     */
+    employerCppYtd: money("employer_cpp_ytd").notNull().default("0"),
+    employerCpp2Ytd: money("employer_cpp2_ytd").notNull().default("0"),
+    employerEiYtd: money("employer_ei_ytd").notNull().default("0"),
+    /**
      * DEPRECATED (2026-08-17). No pay run reads this any more: an opening
      * vacation balance is an `entitlement_ledger` row with `kind = 'opening'`
      * against the org's vacation plan, loaded through
