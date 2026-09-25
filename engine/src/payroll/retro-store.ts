@@ -805,6 +805,7 @@ export interface RetroStubEarningLine {
   /** The PACK's declared retroactive treatment, resolved by the caller. */
   nonPeriodic: boolean;
   supplementalWageCategory: UsSupplementalWageCategory | null;
+  statutoryReportingCategory?: string | null;
   sequence: number;
 }
 
@@ -841,11 +842,13 @@ export async function retroEarningLinesForStub(
       project_id: string | null; department_id: string | null; amount: string;
       vacationable: boolean | null; is_active: boolean | null; component_name: string | null;
       supplemental_wage_category: string | null;
+      statutory_reporting_category: string | null;
       source_period_start: string; source_period_end: string; delta: string;
     }>(sql`
     select st.id as settlement_id,
            a.component_id, a.description, a.project_id, a.department_id, a.amount,
            c.vacationable, c.is_active, c.name as component_name, ec.supplemental_wage_category,
+           ec.statutory_reporting_category,
            st.source_period_start::text as source_period_start,
            st.source_period_end::text as source_period_end,
            st.delta
@@ -886,6 +889,7 @@ export async function retroEarningLinesForStub(
       vacationable: row.vacationable === true,
       nonPeriodic: input.nonPeriodic,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
+      statutoryReportingCategory: row.statutory_reporting_category,
       sequence: sequence++,
     });
   }

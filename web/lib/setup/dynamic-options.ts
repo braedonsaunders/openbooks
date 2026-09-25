@@ -103,6 +103,19 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
       }
       return union
     }
+    case 'payroll-statutory-reporting-categories': {
+      const options = new Map<string, SetupOption>()
+      for (const pack of installablePayrollPacks()) {
+        // The list projection carries (country, name) only — the declaration
+        // itself is read off the pack, like the treatment picker above.
+        for (const entry of payrollPack(pack.country).statutoryReportingCodes ?? []) {
+          if (!options.has(entry.category)) {
+            options.set(entry.category, { value: entry.category, label: `${pack.name}: ${entry.label}` })
+          }
+        }
+      }
+      return [...options.values()]
+    }
   }
 }
 

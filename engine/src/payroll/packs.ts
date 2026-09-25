@@ -204,6 +204,20 @@ export interface PayrollDeductionTreatment {
   reduces: readonly PayrollTaxBaseKey[];
 }
 
+/** An effective-dated tax-form code for a classified pay component. */
+export interface PayrollStatutoryReportingCode {
+  category: string;
+  componentKind?: string;
+  taxTreatment?: string;
+  formCode: string;
+  boxCode: string;
+  code: string;
+  label: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  source: string;
+}
+
 /**
  * What an employer-aggregate levy's base accumulates. The generic layer sums
  * non-accrual earning lines by flag — `gross` is every earning, `taxable` is
@@ -711,6 +725,8 @@ export interface PayrollCountryPack {
    * silence is not a statement.
    */
   deductionTreatments: readonly PayrollDeductionTreatment[];
+  /** Tax-form reporting mappings keyed by component classification category. */
+  statutoryReportingCodes?: readonly PayrollStatutoryReportingCode[];
   /**
    * The ONE currency the pack's statutory engine computes, remits and files
    * in. T4127 produces CAD and Pub 15-T produces USD; there is no currency
@@ -1681,6 +1697,27 @@ export function payrollPack(country: string): PayrollCountryPack {
     );
   }
   return pack;
+}
+
+/** Resolve a component reporting category on its pay date; no current-year fallback. */
+export function resolvePayrollStatutoryReportingCode(
+  country: string,
+  category: string | null | undefined,
+  payDate: string,
+): PayrollStatutoryReportingCode | null {
+  if (category == null) return null;
+  const matches = (payrollPack(country).statutoryReportingCodes ?? []).filter((entry) =>
+    entry.category === category
+      && entry.effectiveFrom <= payDate
+      && (entry.effectiveTo == null || payDate < entry.effectiveTo));
+  if (matches.length !== 1) {
+    throw new PayrollPackError(
+      `pay component reporting category "${category}" has ${matches.length === 0 ? "no" : "multiple"} `
+      + `tax-form code mappings in the ${country} pack effective on ${payDate}; update the pack's `
+      + "effective-dated statutory reporting declaration before calculating this payroll",
+    );
+  }
+  return matches[0]!;
 }
 
 /** Narrow a stored country string to a pack, refusing anything else. */

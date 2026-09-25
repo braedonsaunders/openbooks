@@ -230,6 +230,9 @@ async function w2Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
       { code: "4", label: "Social security tax withheld", value: slip.box4SsTax },
       { code: "5", label: "Medicare wages and tips", value: slip.box5MedicareWages },
       { code: "6", label: "Medicare tax withheld", value: slip.box6MedicareTax },
+      ...(slip.box12Lines ?? []).map((line) => ({
+        code: `${line.boxCode}${line.code}`, label: line.label, value: line.value,
+      })),
       ...slip.stateLines.flatMap((line) =>
         w2StateBoxes(
           line.state, line.employerStateId,

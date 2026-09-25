@@ -150,6 +150,7 @@ export type SetupDynamicOptionsSource =
   | 'payroll-component-countries'
   | 'payroll-deduction-treatments'
   | 'payroll-contribution-programs'
+  | 'payroll-statutory-reporting-categories'
 
 export interface SetupField {
   key: string
@@ -2073,6 +2074,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
         key: 'supplementalWageCategory', kind: 'select',
         options: PAY_SUPPLEMENTAL_WAGE_CATEGORIES,
         showWhen: { field: 'kind', in: ['earning'] },
+      },
+      {
+        key: 'statutoryReportingCategory', kind: 'select',
+        optionsSource: 'payroll-statutory-reporting-categories',
       },
       // Pre-tax treatments THE COMPONENT'S PACK declares, resolved per
       // country at render time (`scopedOptions`): an AU component offers

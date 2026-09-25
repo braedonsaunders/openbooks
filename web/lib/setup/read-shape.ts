@@ -7,11 +7,15 @@ export function setupReadProjection(entity: SetupEntity, columns?: readonly stri
     return sql.raw(columns?.length ? columns.join(', ') : '*')
   }
   const base = columns?.length
-    ? columns.filter((column) => column !== 'supplemental_wage_category').map((column) => `c.${column}`).join(', ')
+    ? columns.filter((column) => column !== 'supplemental_wage_category'
+      && column !== 'statutory_reporting_category').map((column) => `c.${column}`).join(', ')
     : 'c.*'
   return sql.raw(`${base}, (select ec.supplemental_wage_category
     from pay_component_earning_classifications ec
-    where ec.org_id = c.org_id and ec.pay_component_id = c.id) as supplemental_wage_category`)
+    where ec.org_id = c.org_id and ec.pay_component_id = c.id) as supplemental_wage_category,
+    (select ec.statutory_reporting_category
+       from pay_component_earning_classifications ec
+      where ec.org_id = c.org_id and ec.pay_component_id = c.id) as statutory_reporting_category`)
 }
 
 export function setupReadSource(entity: SetupEntity) {

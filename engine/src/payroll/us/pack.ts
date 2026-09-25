@@ -236,6 +236,22 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   // Post-tax under the IRC: union dues stopped being deductible for
   // employees with the TCJA (2018). No treatment.
   employeeUnionDuesTaxTreatment: null,
+  // IRS General Instructions for Forms W-2 and W-3 (2026), Box 12 Code D:
+  // 401(k) elective deferrals are reported with code D.
+  // https://www.irs.gov/instructions/iw2w3
+  statutoryReportingCodes: [
+    {
+      category: "us_401k_elective_deferral",
+      componentKind: "deduction",
+      taxTreatment: "pension_f",
+      formCode: "US_W2",
+      boxCode: "12",
+      code: "D",
+      label: "Elective deferrals under a section 401(k) plan",
+      effectiveFrom: "2026-01-01",
+      source: "https://www.irs.gov/instructions/iw2w3",
+    },
+  ],
   deductionTreatments: [
     // §125 cafeteria and 401(k) elective deferrals reduce FIT-able wages but
     // NOT Social Security or Medicare wages. NE, ND and NC also exclude these
