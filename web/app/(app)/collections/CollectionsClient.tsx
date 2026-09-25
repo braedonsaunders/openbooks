@@ -190,7 +190,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
             <option value="">{t("defaultIncomeAccount")}</option>
             {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
           </Select>
-          <Button size="sm" disabled={!planForm.name || !planForm.amount} onClick={async () => { await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>{t("addPlan")}</Button>
+          <Button size="sm" disabled={!planForm.name || !planForm.amount} onClick={async () => { const r = await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); if (!r) return; setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>{t("addPlan")}</Button>
         </div>
       </Card>
 
@@ -260,7 +260,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
           <label className="flex items-center gap-1 text-sm">{t("firstFullBill")} <Input type="date" value={subForm.firstBillOn} onChange={(e) => setSubForm({ ...subForm, firstBillOn: e.target.value })} className="h-8" /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.prorateFirstPeriod} onChange={(e) => setSubForm({ ...subForm, prorateFirstPeriod: e.target.checked })} /> {t("prorateFirstPeriod")}</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.autoPost} onChange={(e) => setSubForm({ ...subForm, autoPost: e.target.checked })} /> {t("autoPostInvoices")}</label>
-          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if (((r))?.proration?.documentNumber) setMsg(t("toasts.firstInvoiceProrated", { documentNumber: ((r)).proration.documentNumber, amount: money(((r)).proration.amount) })); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>{t("addSubscription")}</Button>
+          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if (!r) return; if (r.proration?.documentNumber) setMsg(t("toasts.firstInvoiceProrated", { documentNumber: r.proration.documentNumber, amount: money(r.proration.amount) })); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>{t("addSubscription")}</Button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{t("prorateHint")}</p>
       </Card>
