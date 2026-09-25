@@ -122,7 +122,6 @@ test("a restricted HR drafts manager reviews only inside their legal-entity scop
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    // B-side worker with a calibrated prior, reviewed by their manager.
     const worker = await createScratchUser(org.orgId, "Review Worker", "draft_worker");
     await grant(org.orgId, worker, ["hrm.self.read"]);
     const workerParty = await linkPerson(org.orgId, worker);
@@ -133,15 +132,17 @@ test("a restricted HR drafts manager reviews only inside their legal-entity scop
     const reviewB = await mkManagerReview(
       org.orgId, manager, workerEmployment, workerParty, managerParty, "4.7500",
     );
-    // HR-A holds the manage and retention grants but covers A only.
     const hrA = await createScratchUser(org.orgId, "Scoped HR A", "draft_hr_a");
-    await grant(org.orgId, hrA, ["hrm.performance.manage", "hrm.retention.read"]);
+    await grant(org.orgId, hrA, ["hrm.performance.manage", "hrm.retention.read", "hrm.recruiting.read"]);
     await linkPerson(org.orgId, hrA);
     await restrictRole(org.orgId, "draft_hr_a", [org.subsidiaryId]);
 
-    // The cross-subsidiary draft refuses whole, names the remedy, and
-    // writes no decision row — B's calibrated priors never reach A.
     const before = await decisionCount(org.orgId);
+    const requisitionB = (await db.execute<{ id: string }>(sql`insert into hrm_requisitions (org_id, requisition_number, title, employer_subsidiary_id, headcount, created_by, updated_by) values (${org.orgId}, ${`AI-${randomUUID()}`}, 'B-side role', ${subB}, 1, ${manager}, ${manager}) returning id`)).rows[0]!.id;
+    await assert.rejects(
+      draftFromEvidence(db, { orgId: org.orgId, actorId: hrA, kind: "job_description", subjectId: requisitionB }),
+      (error: unknown) => error instanceof AiRailsError && error.code === "ai_subject_missing",
+    );
     await assert.rejects(
       draftFromEvidence(db, {
         orgId: org.orgId, actorId: hrA, kind: "review_manager", subjectId: reviewB,
@@ -156,8 +157,7 @@ test("a restricted HR drafts manager reviews only inside their legal-entity scop
     );
     assert.equal(await decisionCount(org.orgId), before, "a refused draft writes no decision row");
 
-    // The assigned reviewer still drafts their own report's review, and
-    // the outline carries the calibrated prior as evidence.
+    // The assigned reviewer drafts their report with the calibrated prior.
     const draft = await draftFromEvidence(db, {
       orgId: org.orgId, actorId: manager, kind: "review_manager", subjectId: reviewB,
     });

@@ -4,7 +4,14 @@ import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries
 import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { loadOwnEmploymentIds } from "../authorization.ts";
+import {
+  HrmAuthorizationError,
+  loadOwnEmploymentIds,
+  requireHrmProcessRead,
+  requireHrmRecruitingManage,
+  requireHrmRecruitingRead,
+} from "../authorization.ts";
+import { employerSubsidiaryScope } from "../performance/subsidiary-scope.ts";
 import { actorPartyOf } from "../self-service/actor.ts";
 import { AiRailsError, aiSubjectRefused } from "./errors.ts";
 import { logDecision } from "./governance.ts";
@@ -94,6 +101,43 @@ async function requirePerm(
   throw aiSubjectRefused(`drafting needs ${perm}`, remedy);
 }
 
+async function requireRecruitingSubject(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requisitionId: string,
+  permission: "hrm.recruiting.read" | "hrm.recruiting.manage",
+  remedy: string,
+  notFoundMessage = "recruiting subject is missing or outside your organization and subsidiary scope — reload and retry",
+): Promise<string> {
+  await requirePerm(exec, orgId, actorId, permission, remedy);
+  try {
+    const subject = permission === "hrm.recruiting.manage"
+      ? await requireHrmRecruitingManage(exec, orgId, actorId, requisitionId)
+      : await requireHrmRecruitingRead(exec, orgId, actorId, requisitionId);
+    return subject.employerSubsidiaryId;
+  } catch (error) {
+    if (error instanceof HrmAuthorizationError) {
+      throw new AiRailsError("ai_subject_missing", notFoundMessage);
+    }
+    throw error;
+  }
+}
+
+async function requireProcessSubject(
+  exec: SqlExecutor, orgId: string, actorId: string, employmentId: string,
+): Promise<void> {
+  await requirePerm(exec, orgId, actorId, "hrm.process.read", "ask an HR administrator to draft this onboarding plan");
+  try {
+    await requireHrmProcessRead(exec, orgId, actorId, employmentId);
+  } catch (error) {
+    if (error instanceof HrmAuthorizationError) {
+      throw new AiRailsError("ai_subject_missing", "onboarding subject is missing, inactive or outside your organization and subsidiary scope — reload and retry");
+    }
+    throw error;
+  }
+}
+
 function excerptOf(row: Record<string, unknown>, fields: readonly string[], max = 240): string {
   const bits = fields
     .map((f) => {
@@ -108,7 +152,7 @@ function excerptOf(row: Record<string, unknown>, fields: readonly string[], max 
 async function collectJobDescription(
   exec: SqlExecutor, orgId: string, actorId: string, requisitionId: string,
 ): Promise<DraftSource[]> {
-  await requirePerm(exec, orgId, actorId, "hrm.recruiting.read",
+  const employerSubsidiaryId = await requireRecruitingSubject(exec, orgId, actorId, requisitionId, "hrm.recruiting.read",
     "ask a recruiter or hiring manager to draft this description");
   const rows = (await exec.execute<Record<string, unknown>>(sql`
     select r.id::text as id, r.title, r.employment_kind as "employmentKind",
@@ -118,12 +162,13 @@ async function collectJobDescription(
            r.compensation_basis as "compensationBasis",
            r.description, r.position_id::text as "positionId"
       from hrm_requisitions r
-     where r.org_id = ${orgId}::uuid and r.id = ${requisitionId}::uuid`)).rows;
+     where r.org_id = ${orgId}::uuid and r.id = ${requisitionId}::uuid
+       and r.employer_subsidiary_id = ${employerSubsidiaryId}::uuid`)).rows;
   const req = rows[0];
   if (!req) {
     throw new AiRailsError(
       "ai_subject_missing",
-      `requisition ${requisitionId} matched no row — it is missing or outside this organization; reload and retry`,
+      "recruiting subject is missing or outside your organization and subsidiary scope — reload and retry",
     );
   }
   const sources: DraftSource[] = [{
@@ -137,15 +182,20 @@ async function collectJobDescription(
         from position_versions v
        where v.org_id = ${orgId}::uuid and v.position_id = ${String(req.positionId)}::uuid
          and v.recorded_until is null
+         and v.employer_subsidiary_id = ${employerSubsidiaryId}::uuid
        order by v.version_no desc
        limit 1`)).rows[0];
-    if (pos) {
-      sources.push({
-        kind: "position_version",
-        id: String(req.positionId),
-        excerpt: excerptOf(pos, ["title", "jobGrade"]),
-      });
+    if (!pos) {
+      throw new AiRailsError(
+        "ai_subject_missing",
+        "recruiting subject is missing or outside your organization and subsidiary scope — reload and retry",
+      );
     }
+    sources.push({
+      kind: "position_version",
+      id: String(req.positionId),
+      excerpt: excerptOf(pos, ["title", "jobGrade"]),
+    });
   }
   return sources;
 }
@@ -274,31 +324,27 @@ async function collectReview(
 async function collectOnboardingPlan(
   exec: SqlExecutor, orgId: string, actorId: string, subjectId: string,
 ): Promise<DraftSource[]> {
-  await requirePerm(exec, orgId, actorId, "hrm.process.read",
-    "ask an HR administrator to draft this onboarding plan");
-  // The subject is a template, or a process whose template resolves it.
+  // Resolve only the process's template and employment identity first; do
+  // not collect template steps or precedent evidence until its scope passes.
   let templateId = subjectId;
-  const direct = (await exec.execute<Record<string, unknown>>(sql`
+  const process = (await exec.execute<{ templateId: string; employmentId: string }>(sql`
+    select template_id::text as "templateId", employment_id::text as "employmentId"
+      from hrm_processes where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+  if (process) {
+    await requireProcessSubject(exec, orgId, actorId, process.employmentId);
+    templateId = process.templateId;
+  } else {
+    await requirePerm(exec, orgId, actorId, "hrm.process.read",
+      "ask an HR administrator to draft this onboarding plan");
+  }
+  const template = (await exec.execute<Record<string, unknown>>(sql`
     select id::text as id, kind, name
       from hrm_process_templates
-     where org_id = ${orgId}::uuid and id = ${subjectId}::uuid and is_active`)).rows[0];
-  let template = direct ?? null;
-  if (!template) {
-    const viaProcess = (await exec.execute<{ templateId: string }>(sql`
-      select template_id::text as "templateId" from hrm_processes
-       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
-    if (viaProcess) {
-      templateId = viaProcess.templateId;
-      template = (await exec.execute<Record<string, unknown>>(sql`
-        select id::text as id, kind, name
-          from hrm_process_templates
-         where org_id = ${orgId}::uuid and id = ${templateId}::uuid and is_active`)).rows[0] ?? null;
-    }
-  }
+     where org_id = ${orgId}::uuid and id = ${templateId}::uuid and is_active`)).rows[0] ?? null;
   if (!template) {
     throw new AiRailsError(
       "ai_subject_missing",
-      `onboarding subject ${subjectId} matched no active template or process — it is missing, inactive or outside this organization; pick the template from the onboarding form`,
+      "onboarding subject is missing, inactive or outside your organization and subsidiary scope — reload and retry",
     );
   }
   const sources: DraftSource[] = [{
@@ -317,13 +363,16 @@ async function collectOnboardingPlan(
   }
   // Precedent: the last three completed processes from the same template,
   // so the plan learns from what actually happened.
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   const priors = (await exec.execute<Record<string, unknown>>(sql`
-    select id::text as id, employment_id::text as "employmentId",
-           effective_date::text as "effectiveDate", completed_at::text as "completedAt"
-      from hrm_processes
-     where org_id = ${orgId}::uuid and template_id = ${templateId}::uuid
-       and status = 'completed'
-     order by completed_at desc
+    select p.id::text as id, p.employment_id::text as "employmentId",
+           p.effective_date::text as "effectiveDate", p.completed_at::text as "completedAt"
+      from hrm_processes p
+      join worker_employments e on e.org_id = p.org_id and e.id = p.employment_id
+     where p.org_id = ${orgId}::uuid and p.template_id = ${templateId}::uuid
+       and p.status = 'completed'
+       ${allowed === null ? sql`` : sql`and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}`}
+     order by p.completed_at desc
      limit 3`)).rows;
   for (const p of priors) {
     sources.push({ kind: "hrm_process", id: String(p.id), excerpt: excerptOf(p, ["employmentId", "effectiveDate", "completedAt"]) });
@@ -334,8 +383,17 @@ async function collectOnboardingPlan(
 async function collectOfferClauses(
   exec: SqlExecutor, orgId: string, actorId: string, offerId: string,
 ): Promise<DraftSource[]> {
-  await requirePerm(exec, orgId, actorId, "hrm.recruiting.manage",
-    "only the hiring team drafts offer clauses — ask a recruiter or hiring manager");
+  const reference = (await exec.execute<{ requisitionId: string }>(sql`
+    select a.requisition_id::text as "requisitionId"
+      from hrm_offers o
+      join hrm_applications a on a.org_id = o.org_id and a.id = o.application_id
+     where o.org_id = ${orgId}::uuid and o.id = ${offerId}::uuid`)).rows[0];
+  if (!reference) {
+    throw new AiRailsError("ai_subject_missing", "offer is missing or outside your organization and subsidiary scope — reload and retry");
+  }
+  const employerSubsidiaryId = await requireRecruitingSubject(exec, orgId, actorId, reference.requisitionId, "hrm.recruiting.manage",
+    "only the hiring team drafts offer clauses — ask a recruiter or hiring manager",
+    "offer is missing or outside your organization and subsidiary scope — reload and retry");
   const offer = (await exec.execute<Record<string, unknown>>(sql`
     select id::text as id, job_title as "jobTitle",
            employment_kind as "employmentKind",
@@ -344,11 +402,12 @@ async function collectOfferClauses(
            compensation_currency as "compensationCurrency",
            compensation_basis as "compensationBasis"
       from hrm_offers
-     where org_id = ${orgId}::uuid and id = ${offerId}::uuid`)).rows[0];
+     where org_id = ${orgId}::uuid and id = ${offerId}::uuid
+       and employer_subsidiary_id = ${employerSubsidiaryId}::uuid`)).rows[0];
   if (!offer) {
     throw new AiRailsError(
       "ai_subject_missing",
-      `offer ${offerId} matched no row — it is missing or outside this organization; reload and retry`,
+      "offer is missing or outside your organization and subsidiary scope — reload and retry",
     );
   }
   const sources: DraftSource[] = [{
