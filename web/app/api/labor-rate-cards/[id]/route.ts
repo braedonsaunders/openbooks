@@ -474,6 +474,33 @@ export async function PUT(
               .filter(Boolean),
           ),
         ];
+        const storedProjectIds = (await tx.execute<{ target_value_id: string }>(sql`
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='project' and at.target_value_id is not null`));
+        const storedCustomerIds = (await tx.execute<{ target_value_id: string }>(sql`
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='customer' and at.target_value_id is not null`));
+        const projectLockIds = [...new Set([
+          ...newProjectIds,
+          ...storedProjectIds.rows.map((row) => row.target_value_id),
+        ])];
+        const customerLockIds = [...new Set([
+          ...customerIds,
+          ...storedCustomerIds.rows.map((row) => row.target_value_id),
+        ])];
+        // Match the canonical lock order (party before project), while
+        // selecting only live stored references so dangling legacy targets
+        // keep their documented no-op behavior.
+        if (customerLockIds.length) {
+          await tx.execute(sql`
+            select p.id from parties p
+             where p.org_id=${orgId} and p.id=any(${uuidArray(customerLockIds)}::uuid[])
+             order by p.id for share of p`);
+        }
+        if (projectLockIds.length) {
+          await tx.execute(sql`
+            select p.id from projects p
+             where p.org_id=${orgId} and p.id=any(${uuidArray(projectLockIds)}::uuid[])
+             order by p.id for share of p`);
+        }
         if (newProjectIds.length) {
           const rows = (await tx.execute<{ id: string; subsidiary_id: string | null }>(
             sql`select id, subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(newProjectIds)}::uuid[])`,
@@ -511,15 +538,11 @@ export async function PUT(
              and not (id=any(${uuidArray([...allowed])}::uuid[])) limit 1`));
           if (live.rows.length) throw new Error("notFound");
         }
-        const storedProjectIds = (await tx.execute<{ target_value_id: string }>(sql`
-          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='project' and at.target_value_id is not null`));
         if (storedProjectIds.rows.length) {
           const rows = (await tx.execute<{ subsidiary_id: string | null }>(sql`
             select subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(storedProjectIds.rows.map((row) => row.target_value_id))}::uuid[])`));
           if (rows.rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id))) throw new Error("notFound");
         }
-        const storedCustomerIds = (await tx.execute<{ target_value_id: string }>(sql`
-          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='customer' and at.target_value_id is not null`));
         if (storedCustomerIds.rows.length) {
           const rows = (await tx.execute<{ subsidiary_id: string | null }>(sql`
             select subsidiary_id from parties where org_id=${orgId} and id=any(${uuidArray(storedCustomerIds.rows.map((row) => row.target_value_id))}::uuid[])`));
