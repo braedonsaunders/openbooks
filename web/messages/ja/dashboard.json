@@ -226,6 +226,7 @@
     "attentionPayrollSetup": "給与設定に統制勘定が必要",
     "attentionBankLines": "未照合の銀行明細行",
     "attentionCloseRuns": "未完了の決算",
+    "unavailable": "利用不可",
     "calendarPayrollRemittance": "給与納付待ち",
     "nothingWaiting": "待つものはありません。",
     "noBalances": "計算可能な残高がありません。",

@@ -226,6 +226,7 @@
     "attentionPayrollSetup": "La nómina necesita cuentas de control",
     "attentionBankLines": "Líneas bancarias sin conciliar",
     "attentionCloseRuns": "Cierres abiertos",
+    "unavailable": "No disponible",
     "calendarPayrollRemittance": "Remesa de nómina pendiente",
     "nothingWaiting": "Nada le espera.",
     "noBalances": "Sin saldos computables.",

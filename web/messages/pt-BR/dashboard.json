@@ -226,6 +226,7 @@
     "attentionPayrollSetup": "A folha precisa de contas de controle",
     "attentionBankLines": "Linhas bancárias sem conciliação",
     "attentionCloseRuns": "Fechamentos em aberto",
+    "unavailable": "Indisponível",
     "calendarPayrollRemittance": "Remessa de folha pendente",
     "nothingWaiting": "Nada aguarda você.",
     "noBalances": "Sem saldos computáveis.",
