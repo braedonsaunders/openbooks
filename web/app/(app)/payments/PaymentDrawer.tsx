@@ -461,12 +461,19 @@ export function PaymentDrawer({
 
   /** Reset every field back to the loaded document (used by Cancel). */
   function resetForm() {
-    setPartyId(doc.party_id ?? '')
+    const restoredParty = doc.party_id ?? ''
+    setPartyId(restoredParty)
     setBankAccountId(payment.bankAccountId ?? '')
     setDocumentDate(doc.document_date ?? '')
     setReferenceNumber(doc.reference_number ?? '')
     setMemo(doc.memo ?? '')
     setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])))
+    // Restoring the party must not trip the party-change reset on the next
+    // render: sync its tracking and bring back the loaded open items, or the
+    // wipe clears the restored applications and a later save deletes them.
+    setPrevPartyKeys({ partyId: restoredParty, side, isDraft })
+    setOpenItems(initialOpenItems)
+    setLoadingItems(false)
   }
 
   /**
