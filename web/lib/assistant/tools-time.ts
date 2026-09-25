@@ -23,7 +23,7 @@ import {
 } from "../../app/api/timesheets/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { dateInput, uuidInput, num, capList } from "./tools-shared";
+import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
 
 /**
  * Time-tracking and field-ticket read/search tools for the agentic assistant.
@@ -328,8 +328,8 @@ const unbilledTime: AssistantToolDef = {
       ok: true,
       data: {
         projectId: a.projectId,
-        revenue: num(unbilled.revenue),
-        cost: num(unbilled.cost),
+        revenue: decimalText(unbilled.revenue),
+        cost: decimalText(unbilled.cost),
         hours: num(unbilled.hours),
         timeEntryCount: unbilled.timeEntryCount,
         costLineCount: unbilled.costLineCount,
@@ -413,7 +413,7 @@ const listFieldTickets: AssistantToolDef = {
         documentNumber: r.document_number,
         status: r.status,
         documentDate: r.document_date,
-        total: num(r.total),
+        total: decimalText(r.total),
         period: r.period,
         periodStart: r.period_start,
         periodEnd: r.period_end,
@@ -483,7 +483,7 @@ const getFieldTicket: AssistantToolDef = {
         taskName: l.project_task_name,
         workedOn: l.worked_on,
         hours: num(l.hours),
-        billRate: l.bill_rate == null ? null : num(l.bill_rate),
+        billRate: l.bill_rate == null ? null : decimalText(l.bill_rate),
         status: l.status,
       })),
       100,
@@ -494,9 +494,9 @@ const getFieldTicket: AssistantToolDef = {
         description: l.description == null ? null : truncateText(l.description, 200),
         quantity: num(l.quantity),
         unit: l.unit,
-        unitPrice: num(l.unit_price),
-        amount: num(l.amount),
-        billAmount: l.bill_amount == null ? null : num(l.bill_amount),
+        unitPrice: decimalText(l.unit_price),
+        amount: decimalText(l.amount),
+        billAmount: l.bill_amount == null ? null : decimalText(l.bill_amount),
       })),
       20,
     );
@@ -522,8 +522,8 @@ const getFieldTicket: AssistantToolDef = {
           periodEnd: ticket.periodEnd,
           rejectionReason: ticket.rejectionReason ?? null,
           chargeDocumentId: ticket.chargeDocumentId ?? null,
-          laborTotal: num(loaded.laborTotal),
-          linesTotal: num(loaded.linesTotal),
+          laborTotal: decimalText(loaded.laborTotal),
+          linesTotal: decimalText(loaded.linesTotal),
           grandTotal: num(loaded.grandTotal),
         },
         labor: labor.items,

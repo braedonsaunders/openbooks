@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { PERIOD_PRESET_IDS, type DateRange } from "@openbooks/reports";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { canonicalDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { fiscalStartMonth } from "../fiscal";
 import { resolveRangeArgs, type RangeArgs } from "./period-range";
 
@@ -9,7 +10,7 @@ import { resolveRangeArgs, type RangeArgs } from "./period-range";
  * Shared input atoms and result-shaping helpers for the domain tool files
  * (tools-analytics, tools-reports, tools-banking, tools-payroll, tools-files,
  * tools-setup). Same contracts as the originals in tools.ts: capped lists,
- * 2-dp money, ISO dates.
+ * exact-decimal money, ISO dates.
  */
 
 /**
@@ -70,6 +71,20 @@ export function num(v: unknown): number {
   // equal everywhere except Object.is, but the wire (JSON "0") cannot tell
   // them apart, so tool output should not either.
   return rounded === 0 ? 0 : rounded;
+}
+
+/** Preserve financial decimal text in assistant results. A fractional JS
+ * number has already lost its original decimal spelling, so fail closed. */
+export function decimalText(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const raw = typeof v === "string"
+    ? v
+    : typeof v === "number" && Number.isSafeInteger(v)
+      ? String(v)
+      : null;
+  const exact = raw === null ? null : canonicalDecimal(raw, 8);
+  if (exact === null) throw new Error("assistant financial results must be exact decimal strings");
+  return exact;
 }
 
 export const MAX_LIST_ROWS = 200;

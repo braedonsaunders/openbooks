@@ -22,7 +22,7 @@ import {
   crmSharedScope,
 } from "../crm-scope";
 import { type AssistantToolDef, type ToolResult, truncateText } from "./types";
-import { dateInput, uuidInput, num, capList } from "./tools-shared";
+import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
 
 /**
  * CRM read/search tools for the agentic assistant. Every tool is gated with
@@ -101,8 +101,8 @@ function opportunityRow(r: Record<string, unknown>) {
     forecastCategory: r.forecast_category,
     probability: r.probability,
     currency: r.currency,
-    projectedAmount: num(r.projected_amount),
-    weightedAmount: num(r.weighted_amount),
+    projectedAmount: decimalText(r.projected_amount),
+    weightedAmount: decimalText(r.weighted_amount),
     expectedCloseDate: r.expected_close_date,
     isActive: r.is_active,
   };
@@ -163,8 +163,8 @@ const searchOpportunities: AssistantToolDef = {
         totalsByCurrency: totals.rows.map((r) => ({
           currency: r.currency,
           count: Number(r.count ?? 0),
-          projectedAmount: num(r.projected),
-          weightedAmount: num(r.weighted),
+          projectedAmount: decimalText(r.projected),
+          weightedAmount: decimalText(r.weighted),
         })),
         byStage: stages.rows.map((r) => ({
           statusName: r.status_name,
@@ -172,8 +172,8 @@ const searchOpportunities: AssistantToolDef = {
           isWon: r.is_won,
           currency: r.currency,
           count: Number(r.count ?? 0),
-          projectedAmount: num(r.projected),
-          weightedAmount: num(r.weighted),
+          projectedAmount: decimalText(r.projected),
+          weightedAmount: decimalText(r.weighted),
         })),
         href: "/crm/opportunities",
       },
@@ -203,9 +203,9 @@ const getOpportunity: AssistantToolDef = {
         description: truncateText(l.description as string | null, 200),
         quantity: num(l.quantity),
         unit: l.unit,
-        unitPrice: num(l.unit_price),
-        amount: num(l.amount),
-        expectedAmount: num(l.expected_amount),
+        unitPrice: decimalText(l.unit_price),
+        amount: decimalText(l.amount),
+        expectedAmount: decimalText(l.expected_amount),
       })),
       50,
     );
@@ -226,7 +226,7 @@ const getOpportunity: AssistantToolDef = {
         documentDate: d.document_date,
         status: d.status,
         currency: d.currency,
-        total: num(d.total),
+        total: decimalText(d.total),
       })),
       20,
     );
@@ -270,8 +270,8 @@ const getOpportunity: AssistantToolDef = {
           forecastCategory: head.forecast_category,
           probability: head.probability,
           currency: head.currency,
-          projectedAmount: num(head.projected_amount),
-          weightedAmount: num(head.weighted_amount),
+          projectedAmount: decimalText(head.projected_amount),
+          weightedAmount: decimalText(head.weighted_amount),
           rangeLow: head.range_low == null ? null : num(head.range_low),
           rangeHigh: head.range_high == null ? null : num(head.range_high),
           expectedCloseDate: head.expected_close_date,
@@ -422,8 +422,8 @@ const getCrmAccount: AssistantToolDef = {
         forecastCategory: o.forecast_category,
         probability: o.probability,
         currency: o.currency,
-        projectedAmount: num(o.projected_amount),
-        weightedAmount: num(o.weighted_amount),
+        projectedAmount: decimalText(o.projected_amount),
+        weightedAmount: decimalText(o.weighted_amount),
         expectedCloseDate: o.expected_close_date,
         ownerName: o.owner_name,
       })),
@@ -442,7 +442,7 @@ const getCrmAccount: AssistantToolDef = {
           leadSourceName: profile.lead_source_name,
           industry: profile.industry,
           category: profile.category,
-          annualRevenue: profile.annual_revenue == null ? null : num(profile.annual_revenue),
+          annualRevenue: profile.annual_revenue == null ? null : decimalText(profile.annual_revenue),
           employeeCount: profile.employee_count,
           qualificationScore: profile.qualification_score,
           nextActionAt: profile.next_action_at,
@@ -651,12 +651,12 @@ const crmForecast: AssistantToolDef = {
         periodEnd,
         forecast: forecast.map((row) => ({
           currency: row.currency,
-          pipelineAmount: num(row.pipeline_amount),
-          weightedAmount: num(row.weighted_amount),
-          worstCaseAmount: num(row.worst_case_amount),
-          mostLikelyAmount: num(row.most_likely_amount),
-          upsideAmount: num(row.upside_amount),
-          closedAmount: num(row.closed_amount),
+          pipelineAmount: decimalText(row.pipeline_amount),
+          weightedAmount: decimalText(row.weighted_amount),
+          worstCaseAmount: decimalText(row.worst_case_amount),
+          mostLikelyAmount: decimalText(row.most_likely_amount),
+          upsideAmount: decimalText(row.upside_amount),
+          closedAmount: decimalText(row.closed_amount),
         })),
         quotas: capList(quotas.rows, 50).items,
         snapshots: capList(snapshots.rows, 10).items,

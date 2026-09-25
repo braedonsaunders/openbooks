@@ -9,7 +9,7 @@ import { expensesDashboard } from "../expenses-dashboard";
 import { loadExpenseReport } from "../expenses";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { dateInput, uuidInput, num, capList } from "./tools-shared";
+import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
 
 /**
  * Expense-report read/search tools for the agentic assistant. Every tool
@@ -104,8 +104,8 @@ const listExpenseReports: AssistantToolDef = {
         status: r.status,
         employeeName: r.employee_name,
         currency: r.currency,
-        total: num(r.total),
-        openBalance: num(r.open_balance),
+        total: decimalText(r.total),
+        openBalance: decimalText(r.open_balance),
         reimbursed: r.status === "posted" && Number(r.open_balance ?? 0) === 0,
         postingDate: r.posting_date,
         voided: r.voided_at != null,
@@ -123,8 +123,8 @@ const listExpenseReports: AssistantToolDef = {
           status: r.status,
           currency: r.currency,
           count: Number(r.count ?? 0),
-          total: num(r.total),
-          openBalance: num(r.open_balance),
+          total: decimalText(r.total),
+          openBalance: decimalText(r.open_balance),
         })),
         href: "/expenses/reports",
       },
@@ -157,12 +157,12 @@ const getExpenseReport: AssistantToolDef = {
         lineNumber: l.line_number,
         accountId: l.account_id,
         description: l.description == null ? null : truncateText(String(l.description), 200),
-        amount: num(l.amount),
+        amount: decimalText(l.amount),
         // Who fronted the money (0171); null = settlement not recorded (history).
         settlementType: (l.settlement_type as string | null) ?? null,
         taxCodeId: l.tax_code_id,
         taxGroupId: l.tax_group_id,
-        taxAmount: l.tax_amount == null ? null : num(l.tax_amount),
+        taxAmount: l.tax_amount == null ? null : decimalText(l.tax_amount),
         departmentId: l.department_id,
         projectId: l.project_id,
         locationId: l.location_id,
@@ -182,9 +182,9 @@ const getExpenseReport: AssistantToolDef = {
           employeeName: doc.employee_name,
           currency: doc.currency,
           subtotal: num(doc.subtotal),
-          taxTotal: num(doc.tax_total),
-          total: num(doc.total),
-          openBalance: num(doc.open_balance),
+          taxTotal: decimalText(doc.tax_total),
+          total: decimalText(doc.total),
+          openBalance: decimalText(doc.open_balance),
           reimbursed: doc.status === "posted" && Number(doc.open_balance ?? 0) === 0,
           postingDate: doc.posting_date,
           postedEntryId: doc.posted_entry_id,
@@ -252,7 +252,7 @@ const expenseApprovals: AssistantToolDef = {
           documentNumber: item.documentNumber,
           status: item.status,
           currency: item.currency,
-          total: num(item.total),
+          total: decimalText(item.total),
           documentDate: item.documentDate,
           employeeName: item.partyName,
           submittedBy: item.submittedBy,

@@ -6,7 +6,7 @@ import { reconciliationTotals } from "@openbooks/engine/src/banking/banking.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { uuidInput, num, capList } from "./tools-shared";
+import { uuidInput, capList, decimalText } from "./tools-shared";
 
 /**
  * Banking read/search tools for the agentic assistant. Every tool is
@@ -53,7 +53,7 @@ const listBankReconciliations: AssistantToolDef = {
           accountNumber: r.account_number,
           accountName: r.account_name,
           throughDate: r.through_date,
-          statementBalance: num(r.statement_balance),
+          statementBalance: decimalText(r.statement_balance),
           status: r.status,
           signedOffAt: r.signed_off_at,
           createdAt: r.created_at,
@@ -104,9 +104,9 @@ const getBankReconciliation: AssistantToolDef = {
         status: recon.status,
         signedOffAt: recon.signed_off_at,
         createdAt: recon.created_at,
-        statementBalance: num(totals.statementBalance),
-        clearedBalance: num(totals.clearedBalance),
-        difference: num(totals.difference),
+        statementBalance: decimalText(totals.statementBalance),
+        clearedBalance: decimalText(totals.clearedBalance),
+        difference: decimalText(totals.difference),
         matchedStatementLines: totals.matchedStatementLines,
         unmatchedStatementLines: totals.unmatchedStatementLines,
         matchedJournalLines: totals.matchedJournalLines,
@@ -158,7 +158,7 @@ const listUnmatchedBankLines: AssistantToolDef = {
         date: l.posted_on,
         description: l.description,
         counterpartyRef: l.counterparty_ref,
-        amount: num(l.amount),
+        amount: decimalText(l.amount),
         accountId: l.account_id,
         accountNumber: l.account_number,
         accountName: l.account_name,

@@ -14,7 +14,7 @@ import {
 } from "../../app/api/payroll/subsidiary-scope";
 import { scopedRemittanceSummary, scopedYearEndFilings } from "../payroll-scoped-views";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, uuidInput, num, capList, orgToday } from "./tools-shared";
+import { dateInput, uuidInput, num, capList, orgToday, decimalText } from "./tools-shared";
 
 /**
  * Payroll read/search tools for the agentic assistant. Every tool is
@@ -52,9 +52,9 @@ function payRunRow(r: Record<string, unknown>) {
     payDate: r.pay_date,
     taxYear: r.tax_year,
     runStatus: r.run_status,
-    grossTotal: num(r.gross_total),
-    netTotal: num(r.net_total),
-    employerCostTotal: num(r.employer_cost_total),
+    grossTotal: decimalText(r.gross_total),
+    netTotal: decimalText(r.net_total),
+    employerCostTotal: decimalText(r.employer_cost_total),
     employeeCount: r.employee_count == null ? null : Number(r.employee_count),
   };
 }
@@ -320,11 +320,11 @@ const payrollEntitlements: AssistantToolDef = {
         planName: b.plan.name,
         unit: b.plan.unit,
         direction: b.plan.direction,
-        balance: num(b.balance),
-        balanceMoney: b.balanceMoney == null ? null : num(b.balanceMoney),
+        balance: decimalText(b.balance),
+        balanceMoney: b.balanceMoney == null ? null : decimalText(b.balanceMoney),
         balanceHours: b.balanceHours == null ? null : num(b.balanceHours),
         wage: b.wage == null ? null : num(b.wage),
-        maxBalance: b.limit?.maxBalance == null ? null : num(b.limit.maxBalance),
+        maxBalance: b.limit?.maxBalance == null ? null : decimalText(b.limit.maxBalance),
         overLimit: b.overLimit,
         nearLimit: b.nearLimit,
         lastMovementDate: b.lastMovementDate,
@@ -371,7 +371,7 @@ const payrollRemittances: AssistantToolDef = {
             name: c.name,
             kind: c.kind,
             accountLabel: c.accountLabel,
-            amount: num(c.amount),
+            amount: decimalText(c.amount),
             currency: c.currency,
           })),
           50,
@@ -388,7 +388,7 @@ const payrollRemittances: AssistantToolDef = {
           // assume the org currency.
           currency: g.currency,
           translated: g.translated,
-          total: num(g.total),
+          total: decimalText(g.total),
           grossPayroll: num(g.grossPayroll),
           employeeCount: g.employeeCount,
           components: components.items,
@@ -397,7 +397,7 @@ const payrollRemittances: AssistantToolDef = {
             documentId: b.documentId,
             documentNumber: b.documentNumber,
             status: b.status,
-            total: num(b.total),
+            total: decimalText(b.total),
           })),
         };
       }),

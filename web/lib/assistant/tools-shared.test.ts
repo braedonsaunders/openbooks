@@ -27,7 +27,7 @@ registerHooks({
   },
 });
 
-const { compactRows, capList, num, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
+const { compactRows, capList, num, decimalText, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
 
 test("num rounds to cents and normalizes negative zero", () => {
   assert.equal(num("12.345"), 12.35);
@@ -95,4 +95,8 @@ test("compactRows never mutates class instances", () => {
 test("capList keeps its existing contract", () => {
   assert.deepEqual(capList([1, 2, 3], 2), { items: [1, 2], truncated: true });
   assert.deepEqual(capList([1], 2), { items: [1], truncated: false });
+});
+
+test("decimalText preserves exact decimal strings", () => {
+  assert.equal(decimalText("9007199254740993.1234"), "9007199254740993.1234");
 });
