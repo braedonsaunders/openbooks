@@ -4,6 +4,8 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalPositiveLeaseCharge } from './property-money'
 import {
   activatePropertyLease,
@@ -438,7 +440,11 @@ function depositOpeningResource(orgId: string): DataResource {
         const offsetAccountId = await resolver.resolveId({ resource: 'accounts', by: 'number' }, src.offsetAccount)
         if (!lease.rows[0] || !offsetAccountId) throw new Error('leaseNumber or offsetAccount was not found')
         const occurredOn = String(src.occurredOn)
-        const amount = String(src.amount)
+        const exactAmount = canonicalDecimal(src.amount, 4)
+        if (exactAmount === null) {
+          throw new Error(decimalNullRefusal('amount', 'a monetary amount', src.amount, 4))
+        }
+        const amount = normalizeMoney(exactAmount)
         const memo = src.memo ? String(src.memo) : 'Imported security deposit opening balance'
         if (existing.rows[0]) {
           if (mode === 'insert') throw new Error(`already exists (externalKey=${externalKey})`)
