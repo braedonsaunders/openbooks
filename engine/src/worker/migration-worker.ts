@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   MIGRATION_QUEUE,
   enqueueMigration,
+  getMigrationQueue,
   getBlockingConnection,
   type MigrationJobData,
 } from "@openbooks/jobs";
@@ -15,6 +16,7 @@ import {
   runTargetedRepair,
   SyncRunAlreadyActiveError,
   claimSyncRun,
+  syncConnectionRunLockKey,
 } from "../sync/sync.ts";
 import { syncProjectFinancialInputs } from "../sync/project-financial-inputs.ts";
 import {
@@ -280,21 +282,61 @@ const MIRROR_TICK_MS = 5 * 60_000;
  * connection, a permanent stall that merely LOOKS like a live run. Sweep rows
  * that can no longer have a live owner: well past BullMQ's lock + stalled
  * recovery window (5 min lockDuration, 30 s stalledInterval) for incremental
- * and attachment runs, hours for full migrations. A rare false positive is
- * self-correcting: the still-running attempt writes its final status by id
- * when it finishes, overwriting the reaper's mark.
+ * and attachment runs, hours for full migrations. An active queue job is
+ * authoritative evidence that its connection still has a live worker, so age
+ * alone never revokes its claim. The final status update takes the same
+ * connection lock as claimSyncRun to close the claim/reaper race.
  */
 export async function reapStaleSyncRuns(): Promise<number> {
-  const res = (await withBypassContext(() => db.execute(sql`
-    update sync_runs
-       set status = 'failed', finished_at = now(),
-           error_message = 'Run never finished: the worker was interrupted (deploy, crash, or restart). Marked failed by the stale-run reaper.'
+  const stale = await withBypassContext(() => db.execute<{
+    id: string;
+    orgId: string;
+    connectionId: string | null;
+  }>(sql`
+    select id, org_id as "orgId", connection_id as "connectionId"
+      from sync_runs
      where status = 'running'
        and started_at < now() - case
          when kind = 'full_migration' then interval '6 hours'
          else interval '30 minutes'
-       end`))) as unknown as { rowCount?: number };
-  return res.rowCount ?? 0;
+       end
+  `));
+  if (stale.rows.length === 0) return 0;
+
+  // A full migration can legitimately exceed the age threshold. BullMQ's
+  // active state, together with its worker lock/stall recovery, distinguishes
+  // that live execution from an abandoned ledger claim.
+  const activeJobs = await getMigrationQueue().getJobs(["active"]);
+  const activeConnections = new Set(activeJobs.map((job) => job.data.connectionId));
+  let reaped = 0;
+  for (const run of stale.rows) {
+    if (run.connectionId && activeConnections.has(run.connectionId)) continue;
+    const changed = await withBypassContext(() => db.transaction(async (tx) => {
+      if (run.connectionId) {
+        await tx.execute(sql`
+          select pg_advisory_xact_lock(
+            hashtext(${run.orgId}),
+            hashtext(${syncConnectionRunLockKey(run.connectionId)})
+          )
+        `);
+      }
+      return tx.execute(sql`
+        update sync_runs
+           set status = 'failed', finished_at = now(),
+               error_message = 'Run never finished: the worker was interrupted (deploy, crash, or restart). Marked failed by the stale-run reaper.'
+         where id = ${run.id} and org_id = ${run.orgId}
+           and connection_id is not distinct from ${run.connectionId}
+           and status = 'running'
+           and started_at < now() - case
+             when kind = 'full_migration' then interval '6 hours'
+             else interval '30 minutes'
+           end
+         returning id
+      `);
+    }));
+    if (changed.rows.length > 0) reaped += 1;
+  }
+  return reaped;
 }
 
 export type MirrorCandidate = {
