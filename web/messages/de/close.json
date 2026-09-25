@@ -806,6 +806,7 @@
     "assign": "{count, plural, one {# Periode zuordnen} other {# Perioden zuordnen}}",
     "blockedNote": "{count, plural, one {# Dokument ist} other {# Dokumente sind}} blockiert und wird übersprungen.",
     "refusedNote": "{count, plural, one {# Dokument wurde} other {# Dokumente wurden}} bei der Übernahme abgelehnt.",
+    "skippedNote": "{count, plural, one {# Dokument wurde} other {# Dokumente wurden}} inzwischen anderweitig zugewiesen und aus dieser Vorschau entfernt.",
     "previewFailed": "Vorschau konnte nicht geladen werden.",
     "commitFailed": "Buchungsperioden konnten nicht zugeordnet werden.",
     "committed": "{count, plural, one {# Buchungsperiode zugeordnet} other {# Buchungsperioden zugeordnet}}.",

@@ -806,6 +806,7 @@
     "assign": "Assign {count, plural, one {# period} other {# periods}}",
     "blockedNote": "{count, plural, one {# document is} other {# documents are}} blocked and will be skipped.",
     "refusedNote": "{count, plural, one {# document was} other {# documents were}} refused at commit.",
+    "skippedNote": "{count, plural, one {# document was} other {# documents were}} assigned by someone else and removed from this preview.",
     "previewFailed": "Could not load the preview.",
     "commitFailed": "Could not assign posting periods.",
     "committed": "Assigned {count, plural, one {# posting period} other {# posting periods}}.",

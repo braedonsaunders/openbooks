@@ -806,6 +806,7 @@
     "assign": "{count, plural, one {Atribuir # período} other {Atribuir # períodos}}",
     "blockedNote": "{count, plural, one {# documento está bloqueado e será ignorado.} other {# documentos estão bloqueados e serão ignorados.}}",
     "refusedNote": "{count, plural, one {# documento foi recusado na confirmação.} other {# documentos foram recusados na confirmação.}}",
+    "skippedNote": "{count, plural, one {# documento foi} other {# documentos foram}} atribuído(s) por outra pessoa e removido(s) desta prévia.",
     "previewFailed": "Não foi possível carregar a prévia.",
     "commitFailed": "Não foi possível atribuir períodos contábeis.",
     "committed": "{count, plural, one {# período contábil atribuído.} other {# períodos contábeis atribuídos.}}",

@@ -806,6 +806,7 @@
     "assign": "{count, plural, one {指定 # 个期间} other {指定 # 个期间}}",
     "blockedNote": "{count, plural, one {有 # 张单据受阻，将被跳过。} other {有 # 张单据受阻，将被跳过。}}",
     "refusedNote": "{count, plural, one {有 # 张单据在提交时被拒绝。} other {有 # 张单据在提交时被拒绝。}}",
+    "skippedNote": "{count}张单据已被其他用户分配，因此已从此预览中移除。",
     "previewFailed": "无法加载预览。",
     "commitFailed": "无法指定记账期间。",
     "committed": "{count, plural, one {已指定 # 个记账期间。} other {已指定 # 个记账期间。}}",

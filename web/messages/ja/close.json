@@ -806,6 +806,7 @@
     "assign": "{count, plural, one {# 件の期間を割り当て} other {# 件の期間を割り当て}}",
     "blockedNote": "{count, plural, one {# 件のドキュメントがブロックされており、スキップされます。} other {# 件のドキュメントがブロックされており、スキップされます。}}",
     "refusedNote": "{count, plural, one {# 件のドキュメントが確定時に拒否されました。} other {# 件のドキュメントが確定時に拒否されました。}}",
+    "skippedNote": "{count}件のドキュメントは他のユーザーが割り当てたため、このプレビューから削除しました。",
     "previewFailed": "プレビューを読み込めませんでした。",
     "commitFailed": "記帳期間を割り当てられませんでした。",
     "committed": "{count, plural, one {# 件の記帳期間を割り当てました。} other {# 件の記帳期間を割り当てました。}}",

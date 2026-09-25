@@ -806,6 +806,7 @@
     "assign": "Asignar {count, plural, one {# período} other {# períodos}}",
     "blockedNote": "{count, plural, one {# documento está} other {# documentos están}} bloqueado(s) y se omitirá(n).",
     "refusedNote": "{count, plural, one {# documento fue} other {# documentos fueron}} rechazado(s) al confirmar.",
+    "skippedNote": "{count, plural, one {# documento fue} other {# documentos fueron}} asignado(s) por otra persona y se quitaron de esta vista previa.",
     "previewFailed": "No se pudo cargar la vista previa.",
     "commitFailed": "No se pudieron asignar los períodos contables.",
     "committed": "{count, plural, one {# período contable asignado} other {# períodos contables asignados}}.",

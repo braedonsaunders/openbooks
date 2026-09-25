@@ -806,6 +806,7 @@
     "assign": "Affecter {count, plural, one {# période} other {# périodes}}",
     "blockedNote": "{count, plural, one {# document est} other {# documents sont}} bloqué(s) et sera(ont) ignoré(s).",
     "refusedNote": "{count, plural, one {# document a été} other {# documents ont été}} refusé(s) à la validation.",
+    "skippedNote": "{count, plural, one {# document a été} other {# documents ont été}} attribué(s) entre-temps par une autre personne et retiré(s) de cet aperçu.",
     "previewFailed": "Impossible de charger l'aperçu.",
     "commitFailed": "Impossible d'affecter les périodes comptables.",
     "committed": "{count, plural, one {# période comptable affectée} other {# périodes comptables affectées}}.",

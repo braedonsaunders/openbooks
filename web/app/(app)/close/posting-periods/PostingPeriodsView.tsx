@@ -91,7 +91,8 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
       toast.success(t('postingPeriods.committed', { count: payload.assigned.length }))
       setRows((current) =>
         (current ?? []).filter(
-          (row) => !payload.assigned.some((item) => item.documentId === row.documentId),
+          (row) => !payload.assigned.some((item) => item.documentId === row.documentId)
+            && !payload.skipped.some((item) => item.documentId === row.documentId),
         ),
       )
     } catch {
@@ -197,6 +198,11 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
           {result && result.refused.length > 0 ? (
             <p className="mt-2 text-sm text-slate-500">
               {t('postingPeriods.refusedNote', { count: result.refused.length })}
+            </p>
+          ) : null}
+          {result && result.skipped.length > 0 ? (
+            <p className="mt-2 text-sm text-slate-500">
+              {t('postingPeriods.skippedNote', { count: result.skipped.length })}
             </p>
           ) : null}
         </CardContent>
