@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { removeRequirement } from "@openbooks/engine/src/hrm/qualifications/requirements.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
@@ -15,11 +15,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   try {
-    await removeRequirement(db, {
+    const { id } = await params;
+    await withOrgTransaction(gate.user.orgId, () => removeRequirement(db, {
       orgId: gate.user.orgId,
       actorId: gate.user.id,
-      requirementId: (await params).id,
-    });
+      requirementId: id,
+    }));
     return NextResponse.json({ ok: true });
   } catch (e) {
     return qualificationErrorResponse(e);

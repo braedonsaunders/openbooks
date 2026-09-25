@@ -287,10 +287,10 @@ test("qualification alerts, requirements, and public gate honor the actor's subs
     );
 
     await assertNotFound(
-      checkAssignment(db, {
+      withOrgTransaction(f.org.orgId, () => checkAssignment(db, {
         orgId: f.org.orgId, actorId: f.hrId, employmentId: f.empB,
         subjectKind: "project", subjectId: projectA,
-      }),
+      })),
       "check an out-of-scope employment",
     );
     await assertNotFound(

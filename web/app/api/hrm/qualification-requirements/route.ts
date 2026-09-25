@@ -1,6 +1,6 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import {
   listRequirements,
   setRequirement,
@@ -52,11 +52,11 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, setRequirementBody);
   if (!parsedBody.ok) return parsedBody.response;
   try {
-    const requirement = await setRequirement(db, {
+    const requirement = await withOrgTransaction(gate.user.orgId, () => setRequirement(db, {
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       ...parsedBody.data,
-    });
+    }));
     return NextResponse.json({ requirement }, { status: 201 });
   } catch (e) {
     return qualificationErrorResponse(e);

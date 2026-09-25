@@ -1,6 +1,6 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { checkAssignment } from "@openbooks/engine/src/hrm/qualifications/gating.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
@@ -19,11 +19,11 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, checkAssignmentBody);
   if (!parsedBody.ok) return parsedBody.response;
   try {
-    const verdict = await checkAssignment(db, {
+    const verdict = await withOrgTransaction(gate.user.orgId, () => checkAssignment(db, {
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       ...parsedBody.data,
-    });
+    }));
     return NextResponse.json({ verdict });
   } catch (e) {
     return qualificationErrorResponse(e);
