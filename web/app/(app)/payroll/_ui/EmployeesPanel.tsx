@@ -1033,10 +1033,18 @@ export function ProfileEditor(props: {
     const roFieldValue = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField): string => {
       const column = columnOf(field)
       if (field.kind === 'flag') {
-        const checked = column
-          ? (columnFlag[column]?.[0] ?? false)
-          : rowAnswers[certificate.key]?.[field.key] === 'true'
-        return checked ? tc('labels.yes') : tc('labels.no')
+        if (column) {
+          const bespoke = columnFlag[column]?.[0]
+          if (bespoke !== undefined) return bespoke ? tc('labels.yes') : tc('labels.no')
+          // Generic text-backed column flag: the same extra-column resolver
+          // edit mode binds — untouched is unanswered, never a defaulted "No".
+          const raw = extraValue(column)
+          if (raw === '' && field.required) return tc('labels.notSet')
+          return raw === 'true' ? tc('labels.yes') : tc('labels.no')
+        }
+        const raw = rowAnswers[certificate.key]?.[field.key] ?? ''
+        if (raw === '' && field.required) return tc('labels.notSet')
+        return raw === 'true' ? tc('labels.yes') : tc('labels.no')
       }
       const raw = column
         ? (columnText[column]?.[0] ?? '')
