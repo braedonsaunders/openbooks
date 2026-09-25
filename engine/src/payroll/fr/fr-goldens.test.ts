@@ -261,3 +261,16 @@ test("an eligible filing account prices the reduced 3.45% family rate through th
   } as never;
   assert.equal((await computeFrStatutory(ctx)).FAM_ER, "69.0000");
 });
+
+test("a declared short contract without a transmitted rate refuses by name", async () => {
+  // I6-payroll-14: the €748/€766 contrats-courts abatement is transcribed but
+  // never applied, so the default grid would over-withhold. A minimal context
+  // reaches the short-contract branch with only the pay date and answers.
+  const ctx = {
+    taxYear: 2026,
+    region: "FR",
+    run: { pay_date: "2026-06-15" },
+    certificateFor: () => ({ answers: { domicile: "metropole", short_contract: "true" } }),
+  } as never;
+  await assert.rejects(computeFrStatutory(ctx), /declared short contract.*abattement.*is not computed/);
+});

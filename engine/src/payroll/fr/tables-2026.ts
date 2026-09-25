@@ -182,9 +182,9 @@ export const FR_PASS_2026 = {
  * courts en vigueur à compter de cette même date est égal à 748 euros
  * (1 495,04 / 2)" (-20260407), then "s'élève, au 1er juin 2026, à 1 531,12
  * euros … est égal à 766 euros (1 531,12 / 2)" (-20260706, arrêté du
- * 22 mai 2026). Applying it needs contract start/end dates no pack channel
- * carries, so the engine refuses it by name (FR_REFUSED_2026) instead of
- * guessing.
+ * 22 mai 2026). The allowance itself is not calculated: a DECLARED short
+ * contract (fr_pas_option short_contract) without a transmitted DGFiP rate
+ * refuses by name (FR_REFUSED_2026) instead of guessing.
  */
 export const FR_CONTRATS_COURTS_ABATTEMENT_2026 = {
   from2026_01_01: "748",
