@@ -1413,28 +1413,43 @@ test("an ownership fault after the prior reversal rolls back entries, run status
     // post — reversal posts carry the 'Ownership consolidation reversal'
     // memo and pass untouched — i.e. strictly after every prior reversal has
     // executed inside the run's transaction.
+    //
+    // The arm is a row, not a session GUC: the run executes on the runtime
+    // pool while this test arms from the bypass pool, so a session flag can
+    // never reach the run's connection. A committed arm row is visible to
+    // every connection, which is exactly what makes the abort deterministic.
     await db.execute(sql`
       create or replace function consol_slice_fault_injector() returns trigger language plpgsql as $fn$
       begin
-        if coalesce(current_setting('openbooks.consol_slice_fault', true), 'off') = 'on'
+        if exists (select 1 from audit_log arm
+                    where arm.org_id = new.org_id
+                      and arm.table_name = 'consolidation_fault'
+                      and arm.changes->>'mode' = 'consol_fault_arm'
+                      and arm.action = 'insert')
            and new.memo like 'Ownership consolidation %'
            and new.memo <> 'Ownership consolidation reversal' then
           raise exception 'injected consolidation fault during replacement';
         end if;
         return new;
       end $fn$`);
+    await db.execute(sql`drop trigger if exists consolidation_slice_fault on journal_entries`);
     await db.execute(sql`
       create trigger consolidation_slice_fault
         before insert on journal_entries
         for each row execute function consol_slice_fault_injector()`);
     try {
-      await db.execute(sql`select set_config('openbooks.consol_slice_fault', 'on', false)`);
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${org.orgId}, 'consolidation_fault', ${randomUUID()}, 'insert',
+                '{"mode":"consol_fault_arm"}'::jsonb, ${actorId})`);
       await assert.rejects(
         runOwnershipConsolidation(org.orgId, org.periodId, actorId),
         (error: unknown) => /injected consolidation fault during replacement/.test(errorText(error)),
       );
     } finally {
-      await db.execute(sql`select set_config('openbooks.consol_slice_fault', 'off', false)`);
+      // No arm-row cleanup: audit_log is append-only, and the row is scoped
+      // to this scratch org (arm.org_id = new.org_id), so it cannot arm any
+      // other test — dropScratchOrg takes it with the org.
       await db.execute(sql`drop trigger if exists consolidation_slice_fault on journal_entries`);
       await db.execute(sql`drop function if exists consol_slice_fault_injector()`);
     }
