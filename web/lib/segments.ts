@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { loadSubsidiaryContext, restrictionAdmits, uuidArray } from '@openbooks/engine/src/organization/subsidiaries.ts'
 
 export type SegmentValueOption = {
   id: string
@@ -143,4 +144,50 @@ export function validateExtraDims(
     }
   }
   return { ok: true, cleaned: sanitizeExtraDims(source, registry) }
+}
+
+/** Refuse segment values whose legal-entity restriction excludes a posting subsidiary. */
+export async function extraDimsSubsidiaryError(
+  orgId: string,
+  value: Record<string, string>,
+  subsidiaryId: string,
+  registry: SegmentDefinitionOption[],
+  executor: Pick<typeof db, 'execute'> = db,
+): Promise<string | null> {
+  const segments = new Map(registry.filter((segment) => segment.sourceKind === 'custom').map((segment) => [segment.key, segment]))
+  const selected = Object.entries(value).flatMap(([key, id]) => {
+    const segment = segments.get(key)
+    return segment && id ? [{ key, id, segment }] : []
+  })
+  if (selected.length === 0) return null
+  if (selected.some((entry) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id))) {
+    return 'invalid custom segment assignment'
+  }
+
+  const context = await loadSubsidiaryContext(executor, orgId)
+  const target = context.byId.get(subsidiaryId)
+  if (!target) return 'invalid subsidiary for custom segment assignments'
+  const ids = [...new Set(selected.map((entry) => entry.id))]
+  const values = (await executor.execute<{
+    id: string
+    name: string
+    segment_id: string
+    subsidiary_id: string | null
+    subsidiary_include_children: boolean
+    is_active: boolean
+  }>(sql`
+    select id, name, segment_id, subsidiary_id, subsidiary_include_children, is_active
+      from segment_values
+     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])
+     for share
+  `)).rows
+  const byId = new Map(values.map((row) => [row.id, row]))
+  for (const assignment of selected) {
+    const row = byId.get(assignment.id)
+    if (!row?.is_active) return `inactive value for custom segment ${assignment.segment.name}`
+    if (row.subsidiary_id && !restrictionAdmits(context, row.subsidiary_id, row.subsidiary_include_children, subsidiaryId)) {
+      return `custom segment value "${row.name}" is restricted to another subsidiary`
+    }
+  }
+  return null
 }
