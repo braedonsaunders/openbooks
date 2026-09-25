@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
 import { db, pool } from "../platform/db.ts";
-import { tick } from "./overhead-scheduler.ts";
+import { resetOverheadPublishRetryForTest, tick } from "./overhead-scheduler.ts";
 import { renderReportPdf } from "./render-client.ts";
 
 const redirectStatuses = [301, 302, 303, 307, 308] as const;
@@ -124,6 +124,10 @@ test("worker internal-token requests refuse every redirect class at both call si
       } catch {
         refusedRenderStatuses.push(status);
       }
+      // C-55 backoff would skip later ticks after consecutive POST failures
+      // against the same org+period; this test proves redirect refusal, not
+      // backoff, so each tick attempts its POST through the sanctioned seam.
+      resetOverheadPublishRetryForTest();
       await tick();
     }
 
