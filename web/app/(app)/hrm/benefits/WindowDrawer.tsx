@@ -45,18 +45,26 @@ export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; 
 
   async function transition(path: 'open' | 'close', body: Record<string, string>) {
     setWorking(true)
-    const res = await fetch(`/api/hrm/enrollment-windows/${window.id}/${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    setWorking(false)
-    if (!res.ok) {
-      toast.error(await readApiErrorMessage(res, t('benefits.windowFailed')))
-      return
+    try {
+      const res = await fetch(`/api/hrm/enrollment-windows/${window.id}/${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('benefits.windowFailed')))
+        return
+      }
+      setClosing(false)
+      close()
+    } catch {
+      // Offline or another transport failure rejects instead of resolving:
+      // the refusal toast is the only evidence, and working must reset so
+      // the drawer controls do not strand disabled.
+      toast.error(t('benefits.windowFailed'))
+    } finally {
+      setWorking(false)
     }
-    setClosing(false)
-    close()
   }
 
   return (
