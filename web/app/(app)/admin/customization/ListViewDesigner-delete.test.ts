@@ -83,11 +83,6 @@ globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
   return new Response(JSON.stringify({}), { headers: { 'content-type': 'application/json' } })
 }) as typeof fetch
 
-/**
- * F-t05-011 — deleting a saved list view fired on one click with no
- * confirmation. Like the banking rule drawer, remove() confirms first, and
- * nothing is sent until the operator accepts.
- */
 test('deleting a saved view confirms before the DELETE goes out', async () => {
   document.body.innerHTML = ''
   calls.length = 0
@@ -186,6 +181,8 @@ test('column move buttons expose translated names with their column context', as
 
   const moveUp = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Previous: "]')]
   const moveDown = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Next: "]')]
+  const lockedBadge = [...document.querySelectorAll('span')].find((node) => node.textContent === 'Locked')
+  assert.equal(lockedBadge?.parentElement?.querySelector('button[aria-label="Shown"]')?.hasAttribute('disabled'), true)
   assert.ok(moveUp.length > 0, 'each column has a named move-up control')
   assert.equal(moveDown.length, moveUp.length, 'each column has a named move-down control')
   assert.ok(moveUp.every((button) => button.getAttribute('aria-label')!.length > 'Previous: '.length))

@@ -699,13 +699,13 @@ function FieldRow({
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={onMoveUp} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={16} /></button>
           <button type="button" onClick={onMoveDown} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={16} /></button>
-          <button type="button" onClick={onToggleVisible} className={cn('text-slate-400 hover:text-slate-600', !field.visible && 'text-red-500')} aria-pressed={field.visible} aria-label={field.visible ? t('designer.forms.visible') : t('designer.forms.hidden')}>
+          <button type="button" onClick={onToggleVisible} disabled={locked} className={cn('text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40', !field.visible && 'text-red-500')} aria-pressed={field.visible} aria-label={field.visible ? t('designer.forms.visible') : t('designer.forms.hidden')}>
             {field.visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 pl-6">
-        <Input value={field.labelOverride ?? ''} onChange={(e) => onLabel(e.target.value)} placeholder={t('designer.forms.renamePlaceholder', { label })} className="h-8 w-44" />
+        <Input value={field.labelOverride ?? ''} onChange={(e) => onLabel(e.target.value)} placeholder={t('designer.forms.renamePlaceholder', { label })} className="h-8 w-44" disabled={locked} />
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-slate-400">{t('designer.forms.colSpan')}</span>
           <Select value={field.colSpan ? String(field.colSpan) : '1'} onChange={(e) => onColSpan(e.target.value)} triggerClassName="h-8 w-20" aria-label={t('designer.forms.colSpan')}>
@@ -761,13 +761,13 @@ function ColumnRow({ col, label, kindLabel, locked, onToggleVisible, onLabel, on
         <div className="ml-auto flex items-center gap-1">
           <button type="button" onClick={onMoveUp} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={16} /></button>
           <button type="button" onClick={onMoveDown} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={16} /></button>
-          <button type="button" onClick={onToggleVisible} className={cn('text-slate-400 hover:text-slate-600', !col.visible && 'text-red-500')} aria-label={t('designer.list.visible')}>
+          <button type="button" onClick={onToggleVisible} disabled={locked} className={cn('text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40', !col.visible && 'text-red-500')} aria-label={t('designer.list.visible')}>
             {col.visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 pl-6">
-        <Input value={col.labelOverride ?? ''} onChange={(e) => onLabel(e.target.value)} placeholder={t('designer.forms.renamePlaceholder', { label })} className="h-8 w-44" />
+        <Input value={col.labelOverride ?? ''} onChange={(e) => onLabel(e.target.value)} placeholder={t('designer.forms.renamePlaceholder', { label })} className="h-8 w-44" disabled={locked} />
         <Input value={col.width ?? ''} onChange={(e) => onWidth(e.target.value)} placeholder="minmax(120px,1fr)" className="h-8 w-44 font-mono text-xs" aria-label={t('designer.forms.width')} />
       </div>
     </div>
