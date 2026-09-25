@@ -163,28 +163,27 @@ test("subledger-gl-tieout holds across governed voids on both sides of the cutof
     }
 
     // Red-proof for the void-mirror backstop: hiding the pair must not hide a
-    // mis-posted reversal. Shift 100 from bill A's mirror AP leg onto its
-    // expense leg: the reversal entry still balances (every balance guard
-    // stays green) but the hidden pair no longer nets to zero on AP, so only
-    // the backstop can see it. Posted lines are immutable except through the
-    // engine's amend flag, so the corruption rides that same path.
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`set local openbooks.amend = on`);
-      await tx.execute(sql`
-        update journal_lines
-           set amount = amount + 100, txn_amount = txn_amount + 100
-         where org_id = ${org.orgId}
-           and entry_id = ${voidA.reversalEntryId}
-           and account_id = ${org.accounts.ap}
-      `);
-      await tx.execute(sql`
-        update journal_lines
-           set amount = amount - 100, txn_amount = txn_amount - 100
-         where org_id = ${org.orgId}
-           and entry_id = ${voidA.reversalEntryId}
-           and account_id = ${org.accounts.cogs}
-      `);
-    });
+    // mis-posted reversal. Post a follow-on correction against bill A's
+    // mirror that shifts 100 onto AP and off expense: the entry still
+    // balances (every balance guard stays green) but the chain no longer
+    // nets to zero on AP, so only the backstop can see it. Posted lines are
+    // immutable since 0380 with no amend escape, so the corruption is staged
+    // as its own posted entry, never an edit.
+    const mirrorPeriod = (await db.execute<{ period_id: string }>(sql`
+      select period_id from journal_entries where id = ${voidA.reversalEntryId} and org_id = ${org.orgId}`)).rows[0]!.period_id;
+    const corruptId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, custom, reverses_entry_id)
+      values (${corruptId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`TIE-VOID-R2-${corruptId.slice(0, 8)}`},
+              '2026-07-20', ${mirrorPeriod}, 'mis-posted follow-on', 'draft', 'manual', '{}'::jsonb, ${voidA.reversalEntryId})`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
+      values (${org.orgId}, ${corruptId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, '100.0000', 'CAD', '100.0000', 1, 'mis-posted'),
+             (${org.orgId}, ${corruptId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', 1, 'mis-posted')`);
+    await db.execute(sql`
+      update journal_entries set status = 'posted', posted_at = now() where id = ${corruptId}`);
     const corrupt = await runScenario(org.orgId, { at: org.date });
     const corruptTie = check(corrupt, "subledger-gl-tieout");
     assert.equal(corruptTie.ok, false, `a mis-posted void mirror must fail the tie-out: ${corruptTie.detail}`);
