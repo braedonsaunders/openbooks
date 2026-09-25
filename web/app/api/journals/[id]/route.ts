@@ -346,6 +346,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
              for update
           `)).rows
           for (const [index, line] of existingDims.entries()) {
+            // Header-only rehome keeps every stored leg: an explicit line
+            // subsidiary the caller cannot see would otherwise ride along
+            // under the newly visible header. Refuse with the uniform
+            // not-found answer; null legs inherit the rehomed header.
+            if (
+              line.subsidiary_id !== null &&
+              !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, line.subsidiary_id)
+            ) {
+              throw new ScopeNotFoundError()
+            }
             const lineSubsidiaryId = line.subsidiary_id ?? targetSubsidiaryId
             if (!lineSubsidiaryId) throw new DocumentEditError(422, 'journal line requires a subsidiary')
             const error = await extraDimsSubsidiaryError(user.orgId, line.extra_dims ?? {}, lineSubsidiaryId, segments, tx)

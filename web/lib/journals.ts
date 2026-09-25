@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { nextDocumentNumber } from "./bills.ts";
 import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -146,6 +146,16 @@ export async function loadJournalDoc(
        where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
        order by l.line_number
     `)
+    // Every leg carries its own legal entity: a null line subsidiary falls
+    // back to the authorized header, but an explicit one outside the
+    // caller's scope refuses the whole detail (uniform null, never a
+    // silently partial journal that implies a complete editable record).
+    for (const line of lines.rows) {
+      const lineSubsidiary = line.subsidiary_id as string | null
+      if (lineSubsidiary !== null && !subsidiaryScopeAllows(allowedSubsidiaryIds, lineSubsidiary)) {
+        return null
+      }
+    }
     return { doc: doc.rows[0], lines: lines.rows }
   })
 }
