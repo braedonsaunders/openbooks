@@ -72,7 +72,7 @@ for (const method of ['POST','PATCH'] as const) for (const [scenario, body] of i
 const valid: [string, string, Record<string, unknown>, Record<string, unknown>][] = [
   ['exact currency', 'currency', { min: '900000000000000.1234', max: '900000000000000.1235', defaultValue: '900000000000000.1234' }, { min: '900000000000000.1234', max: '900000000000000.1235', defaultValue: '900000000000000.1234' }],
   ['canonical bounds', 'number', { min: ' +0002.1000 ', max: '0003.0000', defaultValue: '2.1000' }, { min: '2.1', max: '3', defaultValue: '2.1000' }],
-  ['zero default', 'number', { min: 0, max: 100, defaultValue: 0 }, { min: '0', max: '100', defaultValue: 0 }],
+  ['zero default', 'number', { min: '0', max: '100', defaultValue: '0' }, { min: '0', max: '100', defaultValue: '0' }],
   ['false default', 'boolean', { defaultValue: false }, { defaultValue: false }],
   ['leap date', 'date', { defaultValue: '2024-02-29' }, { defaultValue: '2024-02-29' }],
   ['single selection', 'select', { options: ['One','Two'], defaultValue: 'Two' }, { options: ['One','Two'], defaultValue: 'Two' }],

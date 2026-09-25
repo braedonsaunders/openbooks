@@ -32,7 +32,7 @@ registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') {
-      return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
+      return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}; export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}}')
     }
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__closeRunBranch.user}')

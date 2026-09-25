@@ -79,7 +79,7 @@ const PROFILE = {
 const script = {
   postStatus: 500,
   postBody: { error: 'sample-company-clone-failed', stage: 'clone' },
-  resources: [] as { key: string; label: string; group: string }[],
+  resources: [] as { key: string; label: string; group: string; supportsImport?: boolean }[],
   importRequests: [] as { mode?: string }[],
   importFailureMode: null as string | null,
 }
@@ -248,7 +248,7 @@ test('a subsequent success clears the error and enters the new company', async (
 })
 
 test('the wizard does not send a commit when retry-key session storage cannot persist', async (t) => {
-  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
+  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data', supportsImport: true }]
   const original = Object.getOwnPropertyDescriptor(window, 'sessionStorage')
   Object.defineProperty(window, 'sessionStorage', {
     configurable: true,
@@ -262,18 +262,7 @@ test('the wizard does not send a commit when retry-key session storage cannot pe
   })
   await mountWizard(t)
 
-  const resourceSelect = ([...document.querySelectorAll('select')] as HTMLSelectElement[]).find((candidate) =>
-    [...candidate.options].some((option) => option.value === 'customers'),
-  )
-  assert.ok(resourceSelect, 'an import resource is available')
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set?.call(resourceSelect, 'customers')
-    resourceSelect.dispatchEvent(new window.Event('change', { bubbles: true }))
-    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
-    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, 'Name\nAcme')
-    textarea.dispatchEvent(new window.Event('input', { bubbles: true }))
-    textarea.dispatchEvent(new window.Event('change', { bubbles: true }))
-  })
+  await chooseImportSource()
 
   const button = (label: string) => [...document.querySelectorAll('button')].find((candidate) =>
     (candidate.textContent ?? '').includes(label),
@@ -306,7 +295,7 @@ for (const stage of [
   { mode: 'preview' as const, clicks: ['Continue', 'Preview'], requests: ['parse', 'preview'], error: /Could not preview this import\. \(status 502\)/ },
 ]) {
   test(`a non-JSON ${stage.mode} refusal is shown by name instead of a JSON syntax error`, async (t) => {
-    script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
+    script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data', supportsImport: true }]
     await mountWizard(t)
     script.importFailureMode = stage.mode
     await chooseImportSource()

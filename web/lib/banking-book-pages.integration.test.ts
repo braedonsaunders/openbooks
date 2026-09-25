@@ -89,7 +89,7 @@ for (const page of ['match', 'reconcile'] as const) {
       })
       // Statement import and reconciliation are the product paths: they take
       // an explicit org ctx and must work under enforcement.
-      const ctx = { orgId: org.orgId, userId: actor }
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null }
       const { reconId } = await withOrgContext(org.orgId, async () => {
         await importStatement({ accountId: org.accounts.bank, source: 'manual', currency: 'USD', statementDate: org.date,
           lines: [{ postedOn: org.date, amount: '100', description: 'Deposit', bankTransactionId: 'usd-deposit' }] }, ctx)

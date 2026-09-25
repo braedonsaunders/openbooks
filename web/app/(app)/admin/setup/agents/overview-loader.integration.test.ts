@@ -22,6 +22,7 @@ const mockAuthz = `
     if (!permissionSetCovers(state.permissions, permission)) throw new Error('NEXT_REDIRECT:/');
     return { user: state.user, permissions: state.permissions, allowedSubsidiaryIds: null };
   }
+  export async function guardRootSubsidiaryScope() { return null; }
 `;
 
 // getTranslations echoes `namespace:key` (ignoring interpolation values) so

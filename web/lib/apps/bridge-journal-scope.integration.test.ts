@@ -70,7 +70,7 @@ const HANDLER = `function handler(request) {
     memo: 'bridge scope proof',
     lines: [
       { accountCode: '1000', amount: request.body.amount },
-      { accountCode: '5000', amount: -request.body.amount }
+      { accountCode: '5000', amount: '-' + request.body.amount }
     ]
   };
   if (request.body.subsidiaryId) input.subsidiaryId = request.body.subsidiaryId;
