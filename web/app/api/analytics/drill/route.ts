@@ -287,7 +287,7 @@ export async function GET(req: Request) {
         e.id as entry_id, ${docLeg} as func_amount, ${docFunc} as func,
         coalesce(d.memo, '') as memo
       from documents d
-      left join journal_entries e on e.source_document_id = d.id and e.org_id = d.org_id
+      left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id and e.source_document_id = d.id
       ${docJoins}
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and ${docDate} >= ${from}
