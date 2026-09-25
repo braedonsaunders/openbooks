@@ -238,12 +238,9 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   employeeUnionDuesTaxTreatment: null,
   deductionTreatments: [
     // §125 cafeteria and 401(k) elective deferrals reduce FIT-able wages but
-    // NOT Social Security or Medicare wages — so only `income` is named.
-    // Engine coverage, stated exactly: FIT prices the reduced income leg
-    // (`reducedBases.income` in compute-statutory.ts); the state path honors
-    // these via `deduction()` (tax-qualified deductions, e.g. the Nebraska
-    // minimum measured on gross wages after qualified deductions) because
-    // state conformity differs by state; FICA/FUTA price their own legs.
+    // NOT Social Security or Medicare wages. NE, ND and NC also exclude these
+    // deferrals from their declared state wage bases; other state treatment is
+    // not inferred from federal conformity. FICA/FUTA price their own legs.
     // The W-2 and Form 941 federal-wage queries (yearend.ts) subtract
     // deduction lines that actually reduce federal wages, so Box 1 and 941 line 2
     // agree with the withholding. State boxes 16/18 still report taxable
@@ -255,7 +252,13 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       key: "pension_f",
       label: "Pension (401(k) elective deferral)",
       help: "401(k) elective deferrals: reduce FIT-able wages, not Social Security or Medicare wages.",
-      reduces: ["income"],
+      reduces: [
+        "income",
+        // NE Circular EN, ND IRC §3401 and NC-30 use federal wage exclusions.
+        "state:US:NE:income", "state:US:NE:nonPeriodic",
+        "state:US:ND:income", "state:US:ND:nonPeriodic",
+        "state:US:NC:income", "state:US:NC:nonPeriodic",
+      ],
     },
     {
       key: "union_dues",

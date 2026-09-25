@@ -357,5 +357,8 @@ export const NC_WITHHOLDING: UsStateWithholdingEngine = {
   // and nothing else. A quarterly payroll is refused rather than scaled; the
   // exported annualized method is the state's own answer for one.
   printedPeriods: NC_PERIODS,
+  taxableWageBases: {
+    income: "state:US:NC:income", nonPeriodic: "state:US:NC:nonPeriodic",
+  },
   compute,
 };

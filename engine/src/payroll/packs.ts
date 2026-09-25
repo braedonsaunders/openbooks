@@ -157,14 +157,12 @@ export type PayrollRemittanceTreatment = "tax_authority" | "external" | "interna
  */
 export type PayrollRetroactiveTreatment = "non_periodic" | "periodic";
 
-/**
- * Which of the generic engine's handed bases a pre-tax deduction reduces.
- * The generic layer sums earning lines into four bases — `income` (taxable
- * periodic earnings), `nonPeriodic` (taxable bonuses and back pay),
- * `pensionable` and `insurable` (the pack's two contributory accumulators) —
- * and a treatment's `reduces` names the legs a line carrying it comes off.
- */
-export type PayrollTaxBaseKey = "income" | "nonPeriodic" | "pensionable" | "insurable";
+/** A treatment's declared tax base, including jurisdiction-specific wage bases. */
+export type PayrollCoreTaxBaseKey = "income" | "nonPeriodic" | "pensionable" | "insurable";
+export type PayrollStateTaxBaseKey = `state:${string}:${"income" | "nonPeriodic"}`;
+export type PayrollTaxBaseKey = PayrollCoreTaxBaseKey | PayrollStateTaxBaseKey;
+export type PayrollTaxBases = Record<PayrollCoreTaxBaseKey, string>
+  & Partial<Record<PayrollStateTaxBaseKey, string>>;
 
 /**
  * One pre-tax treatment in a pack's vocabulary: a `pay_components.tax_treatment`

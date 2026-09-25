@@ -8,6 +8,7 @@ import {
 import { PAYROLL_COUNTRY_PACKS } from '../packs.ts'
 import { computeUsWithholding, US_SEPARATE_SUPPLEMENTAL_METHODS } from './withholding.ts'
 import { US_STATES } from './rates.ts'
+import { reduceTaxBases } from '../treatment-bases.ts'
 import { AL_WITHHOLDING } from './states/al.ts'
 import { OR_WITHHOLDING } from './states/or.ts'
 import {
@@ -21,8 +22,6 @@ const PERIOD_END = '2026-07-18'
 const CURRENT_FIT = '35.1900'
 const STALE_FIT = '1000.0000'
 
-// Materialize the built-in certificate declarations exactly as the pay-run
-// pack does before resolving a stored certificate in this pure adapter test.
 void PAYROLL_COUNTRY_PACKS
 
 function certificate(
@@ -57,8 +56,6 @@ function adapterInput(
     supplemental: '0.0000',
     certificateFor: (key) => key === certificateKey ? stale : null,
     tenantRates: () => undefined,
-    // This is the paycheck's computed FIT. Before the fix the adapter silently
-    // dropped it because the state input contract had no current-FIT field.
     federalIncomeTax: CURRENT_FIT,
   } as Parameters<typeof computeUsWithholding>[0]
 }
@@ -99,6 +96,10 @@ test('AL and OR state withholding use computed current-period FIT, not stale cer
   assert.notEqual(or?.tax, OR_WITHHOLDING.compute({
     ...common, certificate: orStale, federalIncomeTax: STALE_FIT,
   } as Parameters<typeof OR_WITHHOLDING.compute>[0]).tax)
+
+  const neBases = reduceTaxBases([{ kind: 'deduction', amount: '300.0000', taxTreatment: 'pension_f' }, { kind: 'deduction', amount: '200.0000', taxTreatment: 'union_dues' }], { income: '805.0000', nonPeriodic: '0.0000', pensionable: '805.0000', insurable: '805.0000', 'state:US:NE:income': '805.0000', 'state:US:NE:nonPeriodic': '0.0000' }, PAYROLL_COUNTRY_PACKS.US!.deductionTreatments)
+  // Circular EN §8: 1.5% of $505 state wages; dues are post-tax.
+  assert.equal(computeUsWithholding({ ...adapterInput('NE', 'us_ne_w4n', certificate('us_ne_w4n', { filing_status: 'single', allowances: '100' })), periodsPerYear: 52, wages: '805.0000', taxableWageBases: neBases, employerEmployeeCount: 25 })?.tax, '7.5800')
 })
 
 function subRegionLevy(
@@ -343,7 +344,7 @@ test('North Dakota and Nebraska separate supplementals use their published flat 
   // ND 2026 Rates and Instructions, Supplemental Wages, Option 1: 1.50%.
   const nd = computeUsWithholding({
     levy: levy('ND', 'us_nd_w4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
-    periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
+    periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000', taxableWageBases: { income: '0.0000', nonPeriodic: '500.0000', pensionable: '0.0000', insurable: '0.0000', 'state:US:ND:income': '0.0000', 'state:US:ND:nonPeriodic': '500.0000' },
     supplementalPaymentTiming: 'separate', federalIncomeTax: '0.00',
     certificateFor: (key) => key === 'us_nd_w4' ? certificate('us_nd_w4', {}) : null, tenantRates: () => undefined,
   })
@@ -353,7 +354,7 @@ test('North Dakota and Nebraska separate supplementals use their published flat 
   // Nebraska Circular EN 2026, Bonuses and Supplemental Wages: elected 3.5%.
   const ne = computeUsWithholding({
     levy: levy('NE', 'us_ne_w4n'), payDate: '2026-06-01', periodEnd: PERIOD_END,
-    periodsPerYear: 26, employerEmployeeCount: 2, wages: '0.0000', supplemental: '500.0000',
+    periodsPerYear: 26, employerEmployeeCount: 2, wages: '0.0000', supplemental: '500.0000', taxableWageBases: { income: '0.0000', nonPeriodic: '500.0000', pensionable: '0.0000', insurable: '0.0000', 'state:US:NE:income': '0.0000', 'state:US:NE:nonPeriodic': '500.0000' },
     supplementalPaymentTiming: 'separate', federalIncomeTax: '0.00',
     certificateFor: (key) => key === 'us_ne_w4n' ? certificate('us_ne_w4n', {}) : null, tenantRates: () => undefined,
   })

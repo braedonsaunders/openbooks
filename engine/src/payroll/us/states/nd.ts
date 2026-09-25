@@ -254,6 +254,9 @@ export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   editions: ND_TAX_YEAR_EDITIONS,
   printedPeriods: ND_PERIODS,
   supportingCertificateKeys: ["us_nd_ndwm"],
+  taxableWageBases: {
+    income: "state:US:ND:income", nonPeriodic: "state:US:ND:nonPeriodic",
+  },
   compute,
 };
 

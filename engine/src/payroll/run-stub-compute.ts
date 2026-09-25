@@ -12,7 +12,7 @@ import { PayrollError } from "./error.ts";
 import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { add, cmp, mulRatio, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
-import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext } from "./packs.ts";
+import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
@@ -439,11 +439,18 @@ export async function calculateStub(
   // the protection fixpoint re-derives treatment-sensitive levies from the
   // deductions each pass actually takes.
   const packTreatments = pack.deductionTreatments;
-  const reducedBases = () => reduceTaxBases(
-    lines,
-    { income, nonPeriodic, pensionable, insurable },
-    packTreatments,
-  );
+  const reducedBases = () => {
+    const stateBases = Object.fromEntries(
+      [...new Set(packTreatments.flatMap((treatment) => treatment.reduces)
+        .filter((base): base is PayrollTaxBaseKey => base.startsWith("state:")))]
+        .map((base) => [base, base.endsWith(":nonPeriodic") ? nonPeriodic : income]),
+    );
+    return reduceTaxBases(
+      lines,
+      { income, nonPeriodic, pensionable, insurable, ...stateBases },
+      packTreatments,
+    );
+  };
 
   // ---- Employer-aggregate levies: pack declares, generic computes --------
   // The pack's `employerAggregateLevies` for this tax year (absent on both
