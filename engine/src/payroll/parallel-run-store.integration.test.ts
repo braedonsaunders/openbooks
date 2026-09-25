@@ -21,8 +21,8 @@ import {
 } from "./parallel-run-store.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { seedCanadianPayrollComponentsForTest as seedPayrollComponents, seedHiredEmployee } from "./filing-test-fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -502,34 +502,20 @@ async function cleanComparisonFixture() {
     insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom)
     values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-A', 'Job A', 'active', true, '{}'::jsonb)`);
 
-  const employeePartyId = await seedEmployee(org.orgId, "Robin Field");
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
-                                  effective_from, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeePartyId}, 'CAD', '30', 'hour', '2025-06-01', true,
-            ${actorId}, ${actorId})`);
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                pay_date_offset_days, is_active, created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
             ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_percent, vacation_method, is_active,
-                                           created_by, updated_by)
-    values (${org.orgId}, ${employeePartyId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
-            '4', 'accrue', true, ${actorId}, ${actorId})`);
-
-  for (const day of ["2026-07-06", "2026-07-13"]) {
-    await db.execute(sql`
-      insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id,
-                                status, is_billable, billing_status, costing_basis,
-                                created_by, updated_by)
-      values (${org.orgId}, ${employeePartyId}, ${day}, 40, ${projectId}, 'approved',
-              false, 'unbilled', 'actual', ${actorId}, ${actorId})`);
-  }
+  const { employeeId: employeePartyId } = await seedHiredEmployee(org.orgId, actorId, {
+    scheduleId, subsidiaryId: org.subsidiaryId, name: "Robin Field", country: "CA",
+    province: "ON", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
+    rateEffectiveFrom: "2025-06-01", federalClaimCode: 1, provincialClaimCode: 1,
+    vacationPercent: "4", vacationMethod: "accrue",
+    timeEntries: ["2026-07-06", "2026-07-13"]
+      .map((workedOn) => ({ workedOn, hours: "40", projectId })),
+  });
 
   const run = await createPayRun({
     orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -627,6 +613,11 @@ test("a comparison whose findings cannot be stored files nothing at all", { skip
     // die between the header insert and the findings insert.
     const huge = "900000000000000.0000";
     const otherPartyId = await seedEmployee(f.orgId, "Casey Lin");
+    // Direct-seeded stubs still carry the HRM employment 0374 requires.
+    const employments = new Map<string, string>();
+    for (const partyId of [f.employeePartyId, otherPartyId]) {
+      employments.set(partyId, await seedWorkerEmployment(f.orgId, partyId, f.org.subsidiaryId));
+    }
     for (const [employeePartyId, sign] of [
       [f.employeePartyId, ""],
       [otherPartyId, "-"],
@@ -667,10 +658,11 @@ test("a comparison whose findings cannot be stored files nothing at all", { skip
     ] as const) {
       const stubId = randomUUID();
       await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
-                               periods_per_year, pay_date, tax_year, currency_code,
+        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+                               province, periods_per_year, pay_date, tax_year, currency_code,
                                gross, net_pay, employer_cost)
-        values (${stubId}, ${f.orgId}, ${documentId}, ${employeePartyId}, 'ON', 26,
+        values (${stubId}, ${f.orgId}, ${documentId}, ${employeePartyId},
+                ${employments.get(employeePartyId)}, 'ON', 26,
                 '2026-07-21', 2026, 'CAD', ${sign + huge}, '0', '0')`);
       await db.execute(sql`
         insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount)

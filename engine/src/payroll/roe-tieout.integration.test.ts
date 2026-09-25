@@ -23,9 +23,8 @@ test(
   async () => {
     const fx = await seedAdoption();
     try {
-      await db.execute(sql`insert into payroll_statutory_rates
-        (org_id, country, rate_key, region, tax_year, rate_values, created_by, updated_by)
-        values (${fx.orgId}, 'CA', 'ca_eht', 'ON', 2026, '{"rate":"0","annualExemption":"0"}', ${fx.actorId}, ${fx.actorId})`);
+      // No EHT insert here: seedAdoption already carries the decided ON EHT
+      // rate, and a second row for the same key conflicts.
       await db.execute(sql`
         update employee_roles set terminated_on = '2026-08-10'
          where org_id = ${fx.orgId} and party_id = ${fx.employeeId}`);

@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import pg from "pg";
-import { db, env } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
 import { calculatePub15T } from "./us/pub15t.ts";
 import { setPackSlotAccount, uninstallPayrollPack } from "./packs.ts";
+import { upsertStatutoryRate } from "./statutory-rates.ts";
+import { US_PACK_RATES } from "./us/rates.ts";
 import { payRunBankFileEntitlement } from "./bank-file-artifact.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -323,10 +325,16 @@ test(
       assert.equal(factors.A, expected.factors.A);
       assert.equal(factors.T, expected.periodicTax);
 
-      // Pension: $5/h split by project — 120.00 on Job A, 80.00 on Job B
+      // Pension: $5/h split by project — 120.00 on Job A, 80.00 on Job B.
+      // Earning lines carry day evidence, so the allocator posts one split
+      // per dated earning line (60/60 on A, 40/40 on B); the project totals
+      // are what the fund is owed.
       const pension = stubLines.filter((l) => l.description === "Pension fund");
-      assert.equal(pension.length, 2);
-      const byProject = new Map(pension.map((l) => [l.project_id, l.amount]));
+      assert.equal(pension.length, 4);
+      const byProject = new Map<string, string>();
+      for (const line of pension) {
+        byProject.set(line.project_id!, add(byProject.get(line.project_id!) ?? "0", line.amount!));
+      }
       assert.equal(byProject.get(projectA), "120.0000");
       assert.equal(byProject.get(projectB), "80.0000");
 
@@ -534,6 +542,14 @@ test(
       // its own payable — never the federal one the FIT rides.
       await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
       await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
+      // The CA hire calculates, so its ETT leg needs the UI reserve balance.
+      // A deficit account is exempt: no leg posts, and this test (FICA/FUTA/
+      // SUI, never ETT) asserts none of it.
+      await upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_ca_ett",
+        region: "CA", filingAccountId: null, taxYear: 2026,
+        values: { reserveBalance: "-100.00" },
+      });
 
       // The US employees are paid BY a US entity. The pay run is denominated in
       // its subsidiary's functional currency and the wage rows are USD, so
@@ -708,11 +724,11 @@ test(
       );
 
       // A pack with no dependents uninstalls cleanly: CA was never used here.
-      // 13 statutory components: TAX, QCTAX, CPP, CPP2, CPP-ER, EI, EI-ER,
-      // QPIP, QPIP-ER, VAC, WCB, EHT, HSF.
+      // 14 statutory components: TAX, QCTAX, CPP, CPP2, CPP-ER, EI, EI-ER,
+      // QPIP, QPIP-ER, VAC, WCB, EHT, HSF, CNT.
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
       const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
-      assert.equal(removed.componentsRemoved, 13);
+      assert.equal(removed.componentsRemoved, 14);
       const caLeft = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_components
          where org_id = ${org.orgId} and country = 'CA'`));
@@ -1403,10 +1419,15 @@ async function ytdFenceHalves(
  * commit — the rendezvous that turns concurrency into an ordering.
  */
 async function openLockSession(): Promise<pg.Client> {
-  const client = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  // Row locks must actually hold rows: the runtime login is RLS-fenced and
+  // the set_config bypass GUC is dead, so lock sessions connect as the
+  // test-admin login — same scratch database, privileged role. Without it
+  // the holder locks zero rows and racing commits sail straight through.
+  const adminBase = process.env.OPENBOOKS_TEST_ADMIN_DB_URL;
+  assert.ok(adminBase, "race lock sessions require OPENBOOKS_TEST_ADMIN_DB_URL");
+  const client = new pg.Client({ connectionString: adminBase });
   await client.connect();
   await client.query("begin");
-  await client.query("select set_config('app.bypass_rls', 'on', true)");
   return client;
 }
 

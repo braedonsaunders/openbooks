@@ -7,7 +7,7 @@ import {
   projectedBalances,
 } from "../../../scripts/migrate-vacation-to-entitlements.ts";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import {
   computePlanMovement,
   entitlementMoneyValue,
@@ -591,11 +591,14 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
 
+      // Stubs carry the HRM employment 0374 requires: one per hire, linked below.
+      const employments = new Map<string, string>();
       const employee = async (name: string): Promise<string> => {
         const id = randomUUID();
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
           values (${id}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+        employments.set(id, await seedWorkerEmployment(org.orgId, id, org.subsidiaryId));
         return id;
       };
       // Converted: conversion-year opening balance, following-year stubs.
@@ -625,10 +628,11 @@ test(
         for (const row of rows) {
           const stubId = randomUUID();
           await db.execute(sql`
-            insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
-                                   periods_per_year, pay_date, tax_year, currency_code,
+            insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+                                   province, periods_per_year, pay_date, tax_year, currency_code,
                                    vacation_accrued, created_by, updated_by)
-            values (${stubId}, ${org.orgId}, ${documentId}, ${row.employeePartyId}, 'ON', 26,
+            values (${stubId}, ${org.orgId}, ${documentId}, ${row.employeePartyId},
+                    ${employments.get(row.employeePartyId)}, 'ON', 26,
                     ${payDate}, 2026, 'CAD', ${row.accrued}, ${actorId}, ${actorId})`);
           if (row.payout !== "0") {
             await db.execute(sql`

@@ -12,6 +12,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { seedHiredEmployee } from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -73,25 +74,12 @@ test(
                 ${actorId}, ${actorId})`);
 
       const hire = async (name: string, hiredOn: string) => {
-        const id = randomUUID();
-        await db.execute(sql`
-          insert into parties (id, org_id, kind, display_name, is_active, custom)
-          values (${id}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-        await db.execute(sql`
-          insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                        effective_from, is_active, created_by, updated_by)
-          values (${org.orgId}, ${id}, 'CAD', '78000', 'year', '2080', '2026-01-01', true,
-                  ${actorId}, ${actorId})`);
-        await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                                 pay_basis, federal_claim_code, provincial_claim_code,
-                                                 is_active, created_by, updated_by)
-          values (${org.orgId}, ${id}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1, true,
-                  ${actorId}, ${actorId})`);
-        await db.execute(sql`
-          insert into employee_roles (org_id, party_id, hired_on, is_active)
-          values (${org.orgId}, ${id}, ${hiredOn}, true)`);
-        return id;
+        const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
+          scheduleId, subsidiaryId: org.subsidiaryId, name, country: "CA", province: "ON",
+          payBasis: "salary", currency: "CAD", rate: "78000", rateBasis: "year",
+          annualHours: "2080", federalClaimCode: 1, provincialClaimCode: 1, hiredOn,
+        });
+        return employeeId;
       };
 
       // Pieter is on staff; the Aug 16–29 run posts with only him on it.

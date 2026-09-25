@@ -11,6 +11,7 @@ import { createPayRun, discardPayRun, payScheduleSubsidiaryProblem, rescopePaySc
 import { PayrollError } from "./error.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { seedHiredEmployee } from "./filing-test-fixtures.ts";
 
 /**
  * The frozen-entity defect: a run freezes its paying entity and currency at
@@ -85,15 +86,6 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
     values (${usSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
             '{}'::jsonb, false, true, '{}'::jsonb)`);
 
-  const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values (${employeeId}, ${org.orgId}, 'person', 'Tex Worker', ${usSubsidiaryId}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                  effective_from, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, 'USD', '104000', 'year', 2080, '2026-01-01', true,
-            ${actorId}, ${actorId})`);
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -101,12 +93,19 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3,
             ${options.scopedSchedule ? usSubsidiaryId : null}, true, ${actorId}, ${actorId})`);
+  const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
+    scheduleId, subsidiaryId: usSubsidiaryId, name: "Tex Worker", country: "US",
+    province: "TX", payBasis: "salary", currency: "USD", rate: "104000", rateBasis: "year",
+    annualHours: "2080", partySubsidiaryId: usSubsidiaryId, filingStatus: "married_joint",
+  });
+  // Federal withholding distinguishes nonresident aliens before Pub. 15-T.
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                           province, pay_basis, filing_status, is_active,
+    insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                           region, sub_region, answers, effective_from,
                                            created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'US', 'TX', 'salary', 'married_joint',
-            true, ${actorId}, ${actorId})`);
+    values (${org.orgId}, ${employeeId}, 'US', 'us_w4_tax_residency', null, null,
+            '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+            ${actorId}, ${actorId})`);
   return {
     orgId: org.orgId, actorId, rootSubsidiaryId: org.subsidiaryId,
     usSubsidiaryId, scheduleId, employeeId,
