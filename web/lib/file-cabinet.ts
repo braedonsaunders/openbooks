@@ -1469,6 +1469,27 @@ export async function purgeFolder(
           where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
        )
     `)
+    // Subtree before-state inventory for the purge event: purged rows are
+    // unrecoverable, so the audit carries folder/file identities (and
+    // per-file version/attachment counts) alongside the permanent flag.
+    // Read after the row locks above, inside the same transaction.
+    const beforeFolders = audit ? await tx.execute<{ id: string; name: string }>(sql`
+      select f.id, f.name from folders f
+       where f.id in (${descendants}) and f.org_id = ${orgId}
+       order by f.id
+       for update
+    `) : null
+    const beforeFiles = audit ? await tx.execute<{
+      id: string; folderId: string; name: string; contentType: string; sizeBytes: number; versions: number; attachments: number
+    }>(sql`
+      select fi.id, fi.folder_id as "folderId", fi.name, fi.content_type as "contentType",
+             fi.size_bytes as "sizeBytes",
+             (select count(*)::int from file_versions fv where fv.file_id = fi.id) as versions,
+             (select count(*)::int from file_attachments fa where fa.file_id = fi.id and fa.org_id = ${orgId}) as attachments
+        from files fi
+       where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
+       order by fi.id
+    `) : null
     await tx.execute(sql`
       delete from files where folder_id in (${descendants}) and org_id = ${orgId}
     `)
@@ -1480,7 +1501,7 @@ export async function purgeFolder(
         table: 'folders',
         rowId: id,
         action: 'delete',
-        changes: { permanent: true },
+        changes: { permanent: true, before: { folders: beforeFolders!.rows, files: beforeFiles!.rows } },
         executor: tx,
       })
     }
