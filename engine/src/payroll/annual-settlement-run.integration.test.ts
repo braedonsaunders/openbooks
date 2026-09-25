@@ -183,14 +183,12 @@ async function seedEmployee(
   return employeeId;
 }
 
-/** Seed one 0393 assessed-saldo row (zeros declare no prior-year liability). */
 async function seedSurtaxSaldo(fx: Harness, employeeId: string, regionale: string, comunale: string): Promise<void> {
   await db.execute(sql`
     insert into it_addizionali_opening_balances
       (org_id, employee_party_id, tax_year, regionale_saldo, comunale_saldo, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, 2026, ${regionale}, ${comunale}, ${fx.actorId}, ${fx.actorId})`);
 }
-
 async function addLineAdjustment(
   fx: Harness, documentId: string, employeeId: string, amount: string,
 ): Promise<void> {
@@ -275,9 +273,8 @@ test(
         const dust = await seedEmployee(fx, "Livia Livello", "24000");
         const bonus = await seedEmployee(fx, "Bruno Bonus", "30000");
         const credit = await seedEmployee(fx, "Tina Trattamento", "18200");
-        // Assessed saldi (the bonus 300/200 withholds in-year as installments).
         await seedSurtaxSaldo(fx, dust, "0.0000", "0.0000");
-        await seedSurtaxSaldo(fx, bonus, "300.0000", "200.0000");
+        await seedSurtaxSaldo(fx, bonus, "300.0000", "200.0000"); // nonzero: December must net priced installments
         await seedSurtaxSaldo(fx, credit, "0.0000", "0.0000");
         for (let month = 0; month < 6; month++) await calculateMonthly(fx, month);
         const joiner = await seedEmployee(fx, "Giulia Joiner", "48000", { eft: true });
@@ -296,10 +293,6 @@ test(
             "no settlement factor outside December",
           );
         }
-
-        // The bonus December delta below holds only because the year priced
-        // the 300/200 assessment in installments and netted it: the combined
-        // position settles exact.
 
         // A calculated-but-uncommitted December bonus draft for the joiner: its
         // withholding must NOT enter the settlement's year-to-date, or an
@@ -404,14 +397,12 @@ test(
 
         await commitPayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
 
-        // Next year's channel reads this December's assessment, not the rows.
         const nextYear = await resolveItSurtaxAssessed(db, {
           orgId: org.orgId, employeePartyId: bonus, taxYear: 2027,
         });
         assert.equal(nextYear.source, "december_settlement");
         assert.equal(nextYear.regionale, bonusFactors["CONG_ADDREG_ANNUAL"]);
         assert.equal(nextYear.comunale, bonusFactors["CONG_ADDCOM_ANNUAL"]);
-
         // The run balances: net is gross less deductions plus credits on every
         // December stub, and the journal projection sums to zero.
         for (const employeeId of [dust, bonus, credit, joiner]) {
