@@ -103,6 +103,7 @@ async function seedHarness(orgId: string, actorId: string): Promise<void> {
         eiPayableAccountId: craPayable,
         taxPayableAccountId: craPayable,
         wagesTo: "expense",
+        ca: { eht: { enabled: true, rate: "1.95", annualExemption: "1000" } },
       },
     })}::jsonb where id = ${orgId}`);
   await seedPayrollComponents(orgId, actorId, "CA");
