@@ -68,6 +68,11 @@ export function GenerateDialog({
       }
       close()
       router.refresh()
+    } catch {
+      // Offline or another transport failure rejects instead of
+      // resolving: without the catch the finally releases busy silently
+      // and the operator never learns the report was not generated.
+      toast.error(t('actionFailed'))
     } finally {
       setBusy(false)
     }
