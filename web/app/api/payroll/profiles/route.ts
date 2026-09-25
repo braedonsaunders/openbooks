@@ -87,6 +87,7 @@ const profileBodySchema = z.looseObject({
   esAnoNacimiento: optionalPackCount,
   esGrupoCotizacion: optionalPackCount,
   esSituacionLaboral: z.string().nullable().optional(),
+  esContratoTemporal: z.string().nullable().optional(),
   jpHyojunHoshu: optionalPackCount,
   jpKaigoDainigou: z.string().nullable().optional(),
   brDependentes: optionalPackCount,
@@ -111,6 +112,7 @@ const PROFILE_AUDIT_COLUMNS = sql`
   filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
   w4_pre_2020, w4_allowances, fica_exempt, futa_exempt, sui_exempt,
   pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
+  es_contrato_temporal,
   jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal, br_salario_familia_filhos,
   (sin_encrypted is not null) as sin_present, sin_last3,
   filing_account_id, stub_delivery, payment_method, paid_on_commission,
@@ -412,7 +414,8 @@ export async function GET(req: Request) {
                prof.other_income_annual, prof.deductions_annual,
                prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt, prof.sui_exempt,
                prof.pl_rok_urodzenia, prof.es_ano_nacimiento, prof.es_grupo_cotizacion,
-               prof.es_situacion_laboral, prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
+               prof.es_situacion_laboral, prof.es_contrato_temporal,
+               prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
                prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
                prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3,
                prof.filing_account_id, fa.account_number as filing_account_number,
@@ -494,7 +497,8 @@ export async function GET(req: Request) {
            prof.other_income_annual, prof.deductions_annual,
            prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt, prof.sui_exempt,
            prof.pl_rok_urodzenia, prof.es_ano_nacimiento, prof.es_grupo_cotizacion,
-           prof.es_situacion_laboral, prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
+           prof.es_situacion_laboral, prof.es_contrato_temporal,
+           prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
            prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
            prof.vacation_percent, prof.vacation_method, prof.is_active,
            prof.filing_account_id, fa.account_number as filing_account_number,
@@ -669,6 +673,9 @@ export async function POST(req: Request) {
   const situacionParsed = packFactChoice(country, 'es_situacion_laboral', body.esSituacionLaboral)
   if (!situacionParsed.ok) return NextResponse.json({ error: situacionParsed.error }, { status: 422 })
   factValues['es_situacion_laboral'] = situacionParsed.value
+  const contratoParsed = packFactFlag(country, 'es_contrato_temporal', body.esContratoTemporal)
+  if (!contratoParsed.ok) return NextResponse.json({ error: contratoParsed.error }, { status: 422 })
+  factValues['es_contrato_temporal'] = contratoParsed.value
   const kaigoParsed = packFactFlag(country, 'jp_kaigo_dainigou', body.jpKaigoDainigou)
   if (!kaigoParsed.ok) return NextResponse.json({ error: kaigoParsed.error }, { status: 422 })
   factValues['jp_kaigo_dainigou'] = kaigoParsed.value
@@ -939,6 +946,7 @@ export async function POST(req: Request) {
          w4_pre_2020, w4_allowances, fica_exempt, futa_exempt, sui_exempt,
          cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
          pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
+         es_contrato_temporal,
          jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal, br_salario_familia_filhos,
          sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
          paid_on_commission,
@@ -956,6 +964,7 @@ export async function POST(req: Request) {
               ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
               ${factValues['pl_rok_urodzenia'] ?? null}, ${factValues['es_ano_nacimiento'] ?? null},
               ${factValues['es_grupo_cotizacion'] ?? null}, ${factValues['es_situacion_laboral'] ?? null},
+              ${factValues['es_contrato_temporal'] ?? null},
               ${factValues['jp_hyojun_hoshu'] ?? null}, ${factValues['jp_kaigo_dainigou'] ?? null},
               ${factValues['br_dependentes'] ?? null}, ${factValues['br_pensao_mensal'] ?? null},
               ${factValues['br_salario_familia_filhos'] ?? null},
@@ -991,6 +1000,7 @@ export async function POST(req: Request) {
                     es_ano_nacimiento = excluded.es_ano_nacimiento,
                     es_grupo_cotizacion = excluded.es_grupo_cotizacion,
                     es_situacion_laboral = excluded.es_situacion_laboral,
+                    es_contrato_temporal = excluded.es_contrato_temporal,
                     jp_hyojun_hoshu = excluded.jp_hyojun_hoshu,
                     jp_kaigo_dainigou = excluded.jp_kaigo_dainigou,
                     br_dependentes = excluded.br_dependentes,

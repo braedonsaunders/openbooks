@@ -166,10 +166,10 @@ test("ES foral territories are refused by name, never covered by AEAT", () => {
 
 test("ES certificates keep Modelo 145 distinct from payer-held facts", () => {
   assert.equal(ES_CERTIFICATES.country, "ES");
-  // Profile columns supply SITUPER/grupo/año; separate certificate rows carry
-  // the zone facts and fiscal residence (IRPF vs IRNR, which no agency form
-  // states on its own). Modelo 145 remains the government form, and its
-  // situación familiar is distinct from SITUPER.
+  // Profile columns supply SITUPER/grupo/año/contrato; separate certificate
+  // rows carry the zone facts and fiscal residence (IRPF vs IRNR, which no
+  // agency form states on its own). Modelo 145 remains the government form,
+  // and its situación familiar is distinct from SITUPER.
   assert.deepEqual(
     ES_CERTIFICATES.certificates.map((entry) => [entry.key, entry.storage]),
     [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"], ["es_contrato", "certificate_rows"], ["es_residencia_fiscal", "certificate_rows"]],
@@ -257,7 +257,7 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
     taxYear: 2026,
     region: "MD",
     run: { pay_date: "2026-03-15" },
-    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990" },
+    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990", es_contrato_temporal: "false" },
     income: "2000.00",
     nonPeriodic: "",
     pensionable: "2000.00",
@@ -321,7 +321,7 @@ test("ES employee facts refuse absence as missing and bad values as out-of-band"
     taxYear: 2026,
     region: "MD",
     run: { pay_date: "2026-03-15" },
-    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990" },
+    emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990", es_contrato_temporal: "false" },
     income: "2000.00",
     nonPeriodic: "",
     pensionable: "2000.00",
@@ -335,6 +335,7 @@ test("ES employee facts refuse absence as missing and bad values as out-of-band"
     ["es_situacion_laboral", /es_situacion_laboral is missing/, /is not activo\/pensionista\/desempleado/],
     ["es_grupo_cotizacion", /es_grupo_cotizacion is missing/, /is not an integer 1–11/],
     ["es_ano_nacimiento", /es_ano_nacimiento is missing/, /is out of range 1906–2026/],
+    ["es_contrato_temporal", /es_contrato_temporal is missing/, /is not "true"\/"false"/],
   ] as const;
   for (const [fact, missing, band] of factCases) {
     await assert.rejects(

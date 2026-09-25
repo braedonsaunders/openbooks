@@ -1,0 +1,1 @@
+Adding a nullable text column with no backfill is safe for existing profiles: null reads as an undeclared contract type, which the engine refuses by name instead of pricing as indefinite, and requires no operator data repair.

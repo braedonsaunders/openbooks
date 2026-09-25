@@ -63,6 +63,7 @@ function esAdapterContext(
       es_situacion_laboral: "activo",
       es_grupo_cotizacion: "7",
       es_ano_nacimiento: "1990",
+      es_contrato_temporal: "false",
     },
     income: "2000.00",
     nonPeriodic: "",

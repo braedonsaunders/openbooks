@@ -264,8 +264,18 @@ export async function computeEsStatutory(
   if (!Number.isInteger(ano) || ano < 1906 || ano > 2026) {
     fail(`employee es_ano_nacimiento "${anoRaw}" is out of range 1906–2026`);
   }
+  // The contract type is never defaulted: absence priced the indefinite
+  // 7,05% desempleo rate for what may be a temporary contract (8,30%),
+  // so a missing value refuses and a foreign one keeps the band message.
   const temporal = empFact("ES", emp, "es_contrato_temporal");
-  if (temporal !== undefined && temporal !== null && temporal !== "true" && temporal !== "false") {
+  if (temporal == null || temporal === "") {
+    fail(
+      "employee es_contrato_temporal is missing: the temporal/indefinido contract type selects the "
+      + "desempleo rate split (7,05% indefinite vs 8,30% temporary, Orden PJC/297/2026 art. 33.2.a), "
+      + "so it is never defaulted to indefinite",
+    );
+  }
+  if (temporal !== "true" && temporal !== "false") {
     fail(`employee es_contrato_temporal "${temporal}" is not "true"/"false"`);
   }
   // Orden PJC/297/2026 art. 28: a fixed-term contract under thirty days owes

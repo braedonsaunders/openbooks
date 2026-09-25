@@ -125,6 +125,7 @@ function render(
           es_ano_nacimiento: null,
           es_grupo_cotizacion: null,
           es_situacion_laboral: null,
+          es_contrato_temporal: null,
           jp_hyojun_hoshu: null,
           jp_kaigo_dainigou: null,
           br_dependentes: null,

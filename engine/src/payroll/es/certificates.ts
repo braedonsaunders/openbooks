@@ -85,8 +85,9 @@ const MODELO_145: PayrollCertificate = {
 
 /**
  * The payer-held employment facts the AEAT retention algorithm prices:
- * SITUPER (the labour status), the TGSS contribution group and the birth
- * year (AÑOPER).
+ * SITUPER (the labour status), the TGSS contribution group, the birth
+ * year (AÑOPER) and the contract type (temporal vs indefinido, selecting
+ * the desempleo rate split).
  *
  * This is NOT the Modelo 145: that form's situación familiar (art. 81
  * RIRPF) is a FAMILY status, while SITUPER is the LABOUR status the
@@ -106,10 +107,10 @@ const MODELO_145: PayrollCertificate = {
  */
 const ES_DATOS_PERCEPTOR: PayrollCertificate = {
   key: "es_datos_perceptor",
-  // Not a numbered form: no single agency form carries these three facts, so
+  // Not a numbered form: no single agency form carries these four facts, so
   // the form names the declaration itself instead of inventing a code.
   form: "Datos laborales del perceptor",
-  label: "Employment facts for IRPF/Seguridad Social (SITUPER, grupo, año)",
+  label: "Employment facts for IRPF/Seguridad Social (SITUPER, grupo, año, contrato)",
   scope: { level: "country" },
   purpose: "withholding",
   citation:
@@ -157,6 +158,20 @@ const ES_DATOS_PERCEPTOR: PayrollCertificate = {
       storage: { kind: "column", column: "es_ano_nacimiento" },
       required: true,
       help: "The AÑOPER the age-banded rule reads. An unknown age never falls through to standard pricing.",
+    },
+    {
+      key: "contrato_temporal",
+      label: "Contrato temporal",
+      kind: "flag",
+      storage: { kind: "column", column: "es_contrato_temporal" },
+      // Required: the contract type selects the desempleo rate split
+      // (7,05% indefinite vs 8,30% temporary, Orden PJC/297/2026 art.
+      // 33.2.a), so an unanswered profile still saves while readiness
+      // names the gap before calculation — exactly like SITUPER above.
+      required: true,
+      help: "Whether the contract is temporal (fixed-term): \"true\" prices the temporary-contract "
+        + "desempleo rate (8,30% in 2026), \"false\" the indefinite rate (7,05%). An undeclared "
+        + "contract never falls through to indefinite pricing.",
     },
   ],
 };

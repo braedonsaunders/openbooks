@@ -534,7 +534,8 @@ test('profile POST validates pack-declared employee facts against the declaratio
       ['PL birth year', { country: 'PL', province: 'PL', plRokUrodzenia: 1990 }, 200, null],
       ['PL birth year band', { country: 'PL', province: 'PL', plRokUrodzenia: 1850 }, 422, /Birth year \(rok urodzenia\) must be 1900–2026/],
       ['PL birth year unreadable', { country: 'PL', province: 'PL', plRokUrodzenia: 'sometime' }, 422, /Birth year \(rok urodzenia\) must be 1900–2026/],
-      ['ES trio', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990 }, 200, null],
+      ['ES trio', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990, esContratoTemporal: 'false' }, 200, null],
+      ['ES contrato closed', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990, esContratoTemporal: 'yes' }, 422, /Contrato temporal must be answered "true" or "false"/],
       ['ES grupo band', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 12, esAnoNacimiento: 1990 }, 422, /Grupo de cotización \(1–11\) must be 1–11/],
       ['ES grupo zero', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 0, esAnoNacimiento: 1990 }, 422, /Grupo de cotización \(1–11\) must be 1–11/],
       ['ES situacion closed', { country: 'ES', province: 'MD', esSituacionLaboral: 'casado', esGrupoCotizacion: 3, esAnoNacimiento: 1990 }, 422, /Situación laboral \(SITUPER\) must be one of activo, pensionista, desempleado/],
@@ -553,7 +554,7 @@ test('profile POST validates pack-declared employee facts against the declaratio
       if (message) {
         const error = ((await response.json()) as { error: string }).error
         assert.match(error, message)
-        assert.doesNotMatch(error, /pl_rok_urodzenia|es_grupo_cotizacion|es_situacion_laboral|es_ano_nacimiento|jp_hyojun_hoshu|jp_kaigo_dainigou|br_dependentes|br_pensao_mensal/, `${label} names an engine key`)
+        assert.doesNotMatch(error, /pl_rok_urodzenia|es_grupo_cotizacion|es_situacion_laboral|es_ano_nacimiento|es_contrato_temporal|jp_hyojun_hoshu|jp_kaigo_dainigou|br_dependentes|br_pensao_mensal/, `${label} names an engine key`)
       }
     }
     // The last accepted save (BR dependentes 0, pensão refused) leaves the
