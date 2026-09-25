@@ -122,6 +122,10 @@ async function runBootstrap(databaseUrl: string): Promise<void> {
         NODE_ENV: "test",
         OPENBOOKS_DB_URL: databaseUrl,
         OPENBOOKS_RUNTIME_DB_URL: "",
+        // The bypass pool resolves by URL chain (bypass, admin, migration,
+        // runtime): point its head at the scratch database or the child
+        // migrates whichever database the ambient admin URL names.
+        OPENBOOKS_BYPASS_DB_URL: databaseUrl,
         // Same reason as the 0064 replay suite: this spawns a bootstrap for a
         // throwaway database, so CI's shared-database harness flag must not
         // ride in on ...process.env. bootstrap refuses ownership transfer

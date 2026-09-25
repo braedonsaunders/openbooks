@@ -23,6 +23,7 @@ registerHooks({
 const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { setPackSlotAccount } = await import('@openbooks/engine/src/payroll/packs.ts')
+const { upsertPayrollEmployerFact } = await import('@openbooks/engine/src/payroll/employer-fact-store.ts')
 const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts"), { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts"), { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route')
@@ -86,6 +87,9 @@ async function gbPayrollOrg() {
                                 is_elimination, is_active, custom)
       values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'GB Entity', 'GBP', 'GB',
               '{}'::jsonb, false, true, '{}'::jsonb)`)
+    await upsertPayrollEmployerFact({ orgId: org.orgId, actorId: state.actorId, subsidiaryId,
+      country: "GB", factKey: "gb_apprenticeship_levy_allowance", effectiveFrom: "2026-04-06",
+      value: "15000.00", changeReason: "standalone employer holds the full annual allowance" });
     const scheduleId = randomUUID()
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,

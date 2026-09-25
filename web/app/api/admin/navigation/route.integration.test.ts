@@ -107,7 +107,9 @@ test("saving a nav config with multiple app items round-trips and audits against
 
     const res = await PUT(putRequest(config));
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true });
+    const saved = (await res.json()) as { ok: boolean; revision: string };
+    assert.equal(saved.ok, true);
+    assert.match(saved.revision, /^\d{4}-\d{2}-\d{2}T/);
 
     const stored = (await db.execute<{ config: NavConfigLike }>(sql`
       select config from org_nav_configs where org_id = ${org.orgId}`));

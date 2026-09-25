@@ -102,7 +102,9 @@ test("a holder of admin.nav.manage can save the nav config", async () => {
     asUser(orgId, userId, ["admin.nav.manage"]);
     const res = await PUT(putRequest(CONFIG));
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true });
+    const saved = (await res.json()) as { ok: boolean; revision: string };
+    assert.equal(saved.ok, true);
+    assert.match(saved.revision, /^\d{4}-\d{2}-\d{2}T/);
     const stored = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from org_nav_configs where org_id = ${orgId}`));
     assert.equal(stored.rows[0]!.count, 1);
