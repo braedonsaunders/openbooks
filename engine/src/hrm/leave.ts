@@ -27,6 +27,7 @@ import {
   type CarryoverRule,
 } from "./leave-math.ts";
 import { LeaveError } from "./leave-errors.ts";
+import { isUniqueViolation } from "./field-time/errors.ts";
 import {
   applicablePolicy,
   policiesInRange,
@@ -1114,7 +1115,7 @@ async function writeApprovalEffects(
         returning id
       `)).rows[0];
     } catch (error) {
-      if ((error as { code?: string }).code === "23505") {
+      if (isUniqueViolation(error)) {
         throw new LeaveError(
           "REFUSED",
           `absence day ${days[index]} was just recorded by another approval — reload the request and decide again`,

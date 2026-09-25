@@ -6,6 +6,7 @@ import {
   requireHrmLeaveRead,
 } from "./authorization.ts";
 import { LeaveError } from "./leave-errors.ts";
+import { isUniqueViolation } from "./field-time/errors.ts";
 import { addHours, formatCents, parseHoursToCents } from "./leave-math.ts";
 import { parseCivilDate } from "./temporal.ts";
 
@@ -116,7 +117,7 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
         returning id
       `)).rows[0];
     } catch (error) {
-      if ((error as { code?: string }).code === "23505") {
+      if (isUniqueViolation(error)) {
         throw new LeaveError(
           "REFUSED",
           `an absence is already recorded for ${onDate} — reload the day before recording`,
