@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { deriveEmailDeliveryKey, sendVia, isValidEmailAddress } from '@openbooks/emails'
-import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransport } from '@openbooks/engine/src/delivery/email-config.ts'
+import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransportDetailed } from '@openbooks/engine/src/delivery/email-config.ts'
 
 export const runtime = 'nodejs'
 
@@ -26,8 +26,14 @@ export async function POST(req: Request) {
   }
   if (!isValidEmailAddress(to)) return NextResponse.json({ error: 'Enter a valid recipient email.' }, { status: 422 })
 
-  const transport = await resolveOrgEmailTransport(orgId)
-  if (!transport) return NextResponse.json({ error: 'Configure and enable an email provider first.' }, { status: 422 })
+  const resolution = await resolveOrgEmailTransportDetailed(orgId)
+  if (resolution.state === 'unconfigured') {
+    return NextResponse.json({ error: 'Configure and enable an email provider first.' }, { status: 422 })
+  }
+  if (resolution.state === 'unusable') {
+    return NextResponse.json({ error: resolution.reason }, { status: 422 })
+  }
+  const transport = resolution.transport
 
   const subject = 'OpenBooks email test'
   const logId = await insertEmailLog({

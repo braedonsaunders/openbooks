@@ -38,6 +38,7 @@ interface EmailRouteState {
   permissions: Set<string>
   engineCalls: Array<Record<string, unknown>>
   sendCalls: Array<Record<string, unknown>>
+  transportResolution: Record<string, unknown>
   /** Handed to the authz mock through the state bag: mock modules must stay import-free. */
   NextResponse: typeof NextResponse
 }
@@ -48,6 +49,7 @@ const emailState: EmailRouteState = {
   permissions: new Set(),
   engineCalls: [],
   sendCalls: [],
+  transportResolution: { state: 'ready', transport: { provider: 'smtp', from: 'noreply@example.com', replyTo: null } },
   NextResponse,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = emailState
@@ -108,9 +110,9 @@ const mockSources = new Map<string, string>([
         state.engineCalls.push({ fn: 'saveOrgEmailConfig', orgId, input })
         return view
       }
-      export async function resolveOrgEmailTransport(orgId) {
-        state.engineCalls.push({ fn: 'resolveOrgEmailTransport', orgId })
-        return { provider: 'smtp', from: 'noreply@example.com', replyTo: null }
+      export async function resolveOrgEmailTransportDetailed(orgId) {
+        state.engineCalls.push({ fn: 'resolveOrgEmailTransportDetailed', orgId })
+        return state.transportResolution
       }
       export async function insertEmailLog(row) {
         state.engineCalls.push({ fn: 'insertEmailLog', row })
@@ -185,6 +187,7 @@ function resetEmailAuthority(permissions: string[]): void {
   emailState.permissions = new Set(permissions)
   emailState.engineCalls.length = 0
   emailState.sendCalls.length = 0
+  emailState.transportResolution = { state: 'ready', transport: { provider: 'smtp', from: 'noreply@example.com', replyTo: null } }
 }
 
 async function putConfig(body: Record<string, unknown>): Promise<Response> {
@@ -546,12 +549,25 @@ test('setup authority reaches every email handler without holding users-manage',
     [
       'readOrgEmailConfigView', // GET
       'saveOrgEmailConfig', // PUT persist
-      'resolveOrgEmailTransport', // POST transport resolve
+      'resolveOrgEmailTransportDetailed', // POST transport resolve
       'insertEmailLog', // POST email_log row
       'markEmailSent', // POST success marker
     ],
   )
   assert.equal(emailState.sendCalls.length, 1)
+})
+
+test('test-send names unusable email configuration instead of treating it as unconfigured', async () => {
+  resetEmailAuthority(['admin.setup.manage'])
+  const reason = 'the stored email configuration is incomplete: SMTP sender is missing'
+  emailState.transportResolution = { state: 'unusable', reason }
+
+  const response = await postTestSend('colleague@example.com')
+
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: reason })
+  assert.deepEqual(emailState.engineCalls.map((call) => call.fn), ['resolveOrgEmailTransportDetailed'])
+  assert.deepEqual(emailState.sendCalls, [], 'an unusable transport is never sent through')
 })
 
 test('built-in roles split email transport authority from user administration', () => {
