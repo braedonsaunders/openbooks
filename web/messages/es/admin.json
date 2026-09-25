@@ -5529,7 +5529,61 @@
     "sendTest": "Enviar prueba",
     "sending": "Enviando…",
     "testSent": "Prueba enviada vía {provider} ({messageId})",
-    "testFailed": "No se pudo enviar el correo de prueba"
+    "testFailed": "No se pudo enviar el correo de prueba",
+    "providers":     {
+      "resend": {
+        "label": "Resend",
+        "secretLabel": "Clave de API",
+        "keyHint": "re_…"
+      },
+      "sendgrid": {
+        "label": "SendGrid",
+        "secretLabel": "Clave de API",
+        "keyHint": "SG.…"
+      },
+      "mailgun": {
+        "label": "Mailgun",
+        "secretLabel": "Clave de API",
+        "keyHint": "Su clave de envío de Mailgun"
+      },
+      "postmark": {
+        "label": "Postmark",
+        "secretLabel": "Token del servidor",
+        "keyHint": "Su token del servidor de Postmark"
+      },
+      "smtp": {
+        "label": "SMTP (personalizado)",
+        "secretLabel": "Contraseña",
+        "keyHint": "Contraseña SMTP (déjela en blanco para un relay sin autenticación)",
+        "docsHint": "Se requiere un nombre DNS público y el certificado TLS debe coincidir con ese nombre. Se bloquean las direcciones IP."
+      },
+      "fields": {
+        "mailgunDomain": {
+          "label": "Dominio de envío",
+          "placeholder": "mg.suempresa.com"
+        },
+        "mailgunRegion": {
+          "label": "Región"
+        },
+        "smtpHost": {
+          "label": "Host",
+          "placeholder": "smtp.suproveedor.com",
+          "help": "Nombre DNS público incluido en el certificado del proveedor. Se bloquean las direcciones IP."
+        },
+        "smtpPort": {
+          "label": "Puerto",
+          "placeholder": "Automático (465 o 587)",
+          "help": "En blanco usa 465 con TLS implícito o 587 con STARTTLS obligatorio."
+        },
+        "smtpSecure": {
+          "label": "Usar TLS implícito (puerto 465)"
+        },
+        "smtpUsername": {
+          "label": "Nombre de usuario",
+          "placeholder": "apikey o correo electrónico completo"
+        }
+      }
+    }
   },
   "aiLedger": {
     "title": "Gobernanza de IA",

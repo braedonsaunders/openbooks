@@ -5529,7 +5529,61 @@
     "sendTest": "发送测试",
     "sending": "发送中…",
     "testSent": "已通过{provider}发送测试 ({messageId})",
-    "testFailed": "测试邮件发送失败"
+    "testFailed": "测试邮件发送失败",
+    "providers":     {
+      "resend": {
+        "label": "Resend",
+        "secretLabel": "API 密钥",
+        "keyHint": "re_…"
+      },
+      "sendgrid": {
+        "label": "SendGrid",
+        "secretLabel": "API 密钥",
+        "keyHint": "SG.…"
+      },
+      "mailgun": {
+        "label": "Mailgun",
+        "secretLabel": "API 密钥",
+        "keyHint": "Mailgun 发送密钥"
+      },
+      "postmark": {
+        "label": "Postmark",
+        "secretLabel": "服务器令牌",
+        "keyHint": "Postmark 服务器令牌"
+      },
+      "smtp": {
+        "label": "SMTP（自定义）",
+        "secretLabel": "密码",
+        "keyHint": "SMTP 密码（未认证的中继可留空）",
+        "docsHint": "需要可公开解析且 TLS 证书名称匹配的 DNS 主机。禁止使用 IP 地址。"
+      },
+      "fields": {
+        "mailgunDomain": {
+          "label": "发送域名",
+          "placeholder": "mg.example.com"
+        },
+        "mailgunRegion": {
+          "label": "区域"
+        },
+        "smtpHost": {
+          "label": "主机",
+          "placeholder": "smtp.example.com",
+          "help": "与服务商证书匹配的公共 DNS 名称。禁止使用 IP 地址。"
+        },
+        "smtpPort": {
+          "label": "端口",
+          "placeholder": "自动（465 或 587）",
+          "help": "留空时使用隐式 TLS 的 465，或要求 STARTTLS 的 587。"
+        },
+        "smtpSecure": {
+          "label": "使用隐式 TLS（端口 465）"
+        },
+        "smtpUsername": {
+          "label": "用户名",
+          "placeholder": "apikey 或完整电子邮件地址"
+        }
+      }
+    }
   },
   "aiLedger": {
     "title": "AI 治理",

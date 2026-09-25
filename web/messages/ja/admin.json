@@ -5529,7 +5529,61 @@
     "sendTest": "テストを送信",
     "sending": "送信中…",
     "testSent": "{provider} 経由でテストを送信しました ({messageId})",
-    "testFailed": "テストメールを送信できませんでした"
+    "testFailed": "テストメールを送信できませんでした",
+    "providers":     {
+      "resend": {
+        "label": "Resend",
+        "secretLabel": "API キー",
+        "keyHint": "re_…"
+      },
+      "sendgrid": {
+        "label": "SendGrid",
+        "secretLabel": "API キー",
+        "keyHint": "SG.…"
+      },
+      "mailgun": {
+        "label": "Mailgun",
+        "secretLabel": "API キー",
+        "keyHint": "Mailgun の送信キー"
+      },
+      "postmark": {
+        "label": "Postmark",
+        "secretLabel": "サーバートークン",
+        "keyHint": "Postmark のサーバートークン"
+      },
+      "smtp": {
+        "label": "SMTP（カスタム）",
+        "secretLabel": "パスワード",
+        "keyHint": "SMTP パスワード（認証なしのリレーでは空欄）",
+        "docsHint": "公開 DNS で解決でき、TLS 証明書名が一致するホストが必要です。IP アドレスは使用できません。"
+      },
+      "fields": {
+        "mailgunDomain": {
+          "label": "送信ドメイン",
+          "placeholder": "mg.example.com"
+        },
+        "mailgunRegion": {
+          "label": "リージョン"
+        },
+        "smtpHost": {
+          "label": "ホスト",
+          "placeholder": "smtp.example.com",
+          "help": "プロバイダー証明書に一致する公開 DNS 名。IP アドレスは使用できません。"
+        },
+        "smtpPort": {
+          "label": "ポート",
+          "placeholder": "自動（465 または 587）",
+          "help": "空欄の場合、暗黙的 TLS の 465 または STARTTLS 必須の 587 を使用します。"
+        },
+        "smtpSecure": {
+          "label": "暗黙的 TLS を使用（ポート 465）"
+        },
+        "smtpUsername": {
+          "label": "ユーザー名",
+          "placeholder": "apikey または完全なメールアドレス"
+        }
+      }
+    }
   },
   "aiLedger": {
     "title": "AIガバナンス",

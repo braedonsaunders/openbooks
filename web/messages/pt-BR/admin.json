@@ -5529,7 +5529,61 @@
     "sendTest": "Enviar teste",
     "sending": "Enviando…",
     "testSent": "Teste enviado via {provider} ({messageId})",
-    "testFailed": "Não foi possível enviar o e-mail de teste"
+    "testFailed": "Não foi possível enviar o e-mail de teste",
+    "providers":     {
+      "resend": {
+        "label": "Resend",
+        "secretLabel": "Chave de API",
+        "keyHint": "re_…"
+      },
+      "sendgrid": {
+        "label": "SendGrid",
+        "secretLabel": "Chave de API",
+        "keyHint": "SG.…"
+      },
+      "mailgun": {
+        "label": "Mailgun",
+        "secretLabel": "Chave de API",
+        "keyHint": "Chave de envio do Mailgun"
+      },
+      "postmark": {
+        "label": "Postmark",
+        "secretLabel": "Token do servidor",
+        "keyHint": "Token do servidor Postmark"
+      },
+      "smtp": {
+        "label": "SMTP (personalizado)",
+        "secretLabel": "Senha",
+        "keyHint": "Senha SMTP (deixe em branco para um relay sem autenticação)",
+        "docsHint": "Requer um host DNS público cujo certificado TLS corresponda ao nome. Endereços IP são bloqueados."
+      },
+      "fields": {
+        "mailgunDomain": {
+          "label": "Domínio de envio",
+          "placeholder": "mg.suaempresa.com"
+        },
+        "mailgunRegion": {
+          "label": "Região"
+        },
+        "smtpHost": {
+          "label": "Host",
+          "placeholder": "smtp.seuprovedor.com",
+          "help": "Nome DNS público presente no certificado do provedor. Endereços IP são bloqueados."
+        },
+        "smtpPort": {
+          "label": "Porta",
+          "placeholder": "Automática (465 ou 587)",
+          "help": "Em branco usa 465 com TLS implícito ou 587 com STARTTLS obrigatório."
+        },
+        "smtpSecure": {
+          "label": "Usar TLS implícito (porta 465)"
+        },
+        "smtpUsername": {
+          "label": "Nome de usuário",
+          "placeholder": "apikey ou e-mail completo"
+        }
+      }
+    }
   },
   "aiLedger": {
     "title": "Governança de IA",

@@ -5529,7 +5529,61 @@
     "sendTest": "Send test",
     "sending": "Sending…",
     "testSent": "Test sent via {provider} ({messageId})",
-    "testFailed": "The test email could not be sent"
+    "testFailed": "The test email could not be sent",
+    "providers":     {
+      "resend": {
+        "label": "Resend",
+        "secretLabel": "API key",
+        "keyHint": "re_…"
+      },
+      "sendgrid": {
+        "label": "SendGrid",
+        "secretLabel": "API key",
+        "keyHint": "SG.…"
+      },
+      "mailgun": {
+        "label": "Mailgun",
+        "secretLabel": "API key",
+        "keyHint": "Your Mailgun sending key"
+      },
+      "postmark": {
+        "label": "Postmark",
+        "secretLabel": "Server token",
+        "keyHint": "Your Postmark server token"
+      },
+      "smtp": {
+        "label": "SMTP (custom)",
+        "secretLabel": "Password",
+        "keyHint": "SMTP password (leave blank for an unauthenticated relay)",
+        "docsHint": "Requires a publicly resolvable DNS host whose TLS certificate matches that name. IP literals are blocked."
+      },
+      "fields": {
+        "mailgunDomain": {
+          "label": "Sending domain",
+          "placeholder": "mg.yourcompany.com"
+        },
+        "mailgunRegion": {
+          "label": "Region"
+        },
+        "smtpHost": {
+          "label": "Host",
+          "placeholder": "smtp.yourprovider.com",
+          "help": "Public DNS name on the provider certificate. IP literals are blocked."
+        },
+        "smtpPort": {
+          "label": "Port",
+          "placeholder": "Automatic (465 or 587)",
+          "help": "Blank defaults to 465 with implicit TLS, or 587 with required STARTTLS."
+        },
+        "smtpSecure": {
+          "label": "Use implicit TLS (port 465)"
+        },
+        "smtpUsername": {
+          "label": "Username",
+          "placeholder": "apikey or full email"
+        }
+      }
+    }
   },
   "aiLedger": {
     "title": "AI governance",
