@@ -196,7 +196,7 @@
     "kiosksTitle": "终端设备",
     "noKiosks": "尚未注册终端。",
     "retired": "已停用",
-    "tokenIssued": "{name}的设备链接 — 请立即复制，不会再次显示：",
+    "tokenIssued": "{name}的设备链接 — 请立即复制，不会再次显示：", "acknowledgeToken": "我已复制此设备链接",
     "kioskNamePlaceholder": "终端名称（工地或门口）…",
     "registerKiosk": "注册终端",
     "pinWorkerPlaceholder": "工人party id…",
