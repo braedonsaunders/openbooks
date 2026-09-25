@@ -1,9 +1,7 @@
 /**
  * DE payroll pack tests (installable for 2026).
  *
- * The skeleton guards inverted in the commit that transcribed 2026 (per the
- * payroll-live rule: invert, never delete): 2026 IS published, all Länder
- * ARE supported, withholding IS implemented, computeStatutory COMPUTES.
+ * 2026 tax and social-insurance rules compute for all Länder.
  * Every OTHER year is still refused by name.
  */
 import assert from "node:assert/strict";
@@ -11,6 +9,7 @@ import test from "node:test";
 import { resolveCertificate } from "../certificates.ts";
 import { DE_PAYROLL_PACK } from "./pack.ts";
 import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
+import { statutoryHolidayPayRule } from "../holidays.ts";
 
 const LAENDER = [
   "BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV",
@@ -183,5 +182,6 @@ test("jurisdictions list all Länder with untranscribed calendars", () => {
     assert.ok(jurisdiction.key.startsWith("DE-"), jurisdiction.key);
     assert.equal(jurisdiction.scope, "employment");
     assert.deepEqual(jurisdiction.holidays, []);
+    assert.throws(() => statutoryHolidayPayRule(jurisdiction.key, "2026-12-25"), /public-holiday calendar.*not transcribed/);
   }
 });

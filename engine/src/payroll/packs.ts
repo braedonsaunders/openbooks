@@ -1377,7 +1377,9 @@ export interface PayrollHolidayPayEdition {
  * declare — that one throws. Silence and "no entitlement" must never be the
  * same value, because one of them is a bug and the other is the law.
  *
- * Anything else is a LIST OF EDITIONS in force over date ranges, resolved
+ * An empty edition list declares an untranscribed mandate and refuses payroll
+ * by name before an incomplete calendar can suppress the holiday entirely.
+ * A nonempty list carries editions in force over date ranges, resolved
  * against the holiday's own date. A jurisdiction whose formula has never been
  * amended within this pack's knowledge declares exactly one, with
  * `effectiveFrom: null`.

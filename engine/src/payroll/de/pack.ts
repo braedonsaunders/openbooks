@@ -76,14 +76,12 @@ function deJurisdiction(code: string, name: string): PayrollJurisdiction {
     key: `DE-${code}`,
     name: `Deutschland — ${name}`,
     scope: "employment",
-    // The statute family is named; the calendar itself is not transcribed.
-    // Feiertagsvergütung (continued pay on holidays) is mandated federally by
-    // §2 EFZG (Entgeltfortzahlungsgesetz) — `holidayPay: null` here is a
-    // skeleton refusal, not a "no mandate" declaration.
-    citation:
-      `Feiertagsgesetz des Landes ${name} (holiday calendar not yet transcribed)`,
+    // An empty edition list marks an untranscribed mandate. The generic
+    // resolver refuses this jurisdiction before an empty calendar can hide
+    // continued remuneration owed under EFZG §2.
+    citation: `Feiertagsgesetz des Landes ${name}; Entgeltfortzahlungsgesetz §2`,
     holidays: [],
-    holidayPay: null,
+    holidayPay: [],
   };
 }
 

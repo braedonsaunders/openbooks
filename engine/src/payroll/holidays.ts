@@ -542,6 +542,11 @@ export function statutoryHolidayPayRule(
   const declaration = payrollJurisdiction(jurisdiction);
   const editions = declaration.holidayPay;
   if (editions === null) return null;
+  if (editions.length === 0) {
+    throw new PayrollHolidayError(
+      `${declaration.name}: the public-holiday calendar and statutory holiday-pay rule under ${declaration.citation} are not transcribed — transcribe both in the jurisdiction pack before calculating payroll`,
+    );
+  }
   const date = onDate.slice(0, 10);
   // Latest in-force edition wins, so a correction issued with a later
   // `effectiveFrom` supersedes rather than ties. `effectiveFrom: null` sorts
@@ -1008,7 +1013,11 @@ export async function resolveStatutoryHolidayPay(
   // Whether a jurisdiction mandates holiday pay AT ALL is date-independent, so
   // it is asked once and before anything is loaded. WHICH formula is in force
   // is a per-holiday question and is asked below, against the holiday's date.
-  if (payrollJurisdiction(input.jurisdiction).holidayPay === null) return [];
+  const declaration = payrollJurisdiction(input.jurisdiction);
+  if (declaration.holidayPay === null) return [];
+  if (declaration.holidayPay.length === 0) {
+    statutoryHolidayPayRule(input.jurisdiction, input.periodStart);
+  }
 
   const overrides = await loadHolidayOverrides(tx, input.orgId, input.jurisdiction);
   const observedIn = (from: string, to: string) =>
