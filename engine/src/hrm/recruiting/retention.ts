@@ -248,6 +248,26 @@ export async function recordConsent(query: {
     // a stranger manufactures permission over their data. Ownership first —
     // unknown and out-of-scope refuse identically.
     await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
+    // Post-lock erasure recheck: a retention run may clear the prospect
+    // between the ownership read and this write. Consent for an anonymized
+    // shell is permission over nobody, so refuse and name the re-entry
+    // remedy. candidates already depends on this module for the erasure
+    // token, so a static import back would cycle — reach back dynamically,
+    // the same pattern applications uses for postings.
+    const { isRetentionErasedCandidate } = await import("./candidates.ts");
+    const locked = (await db.execute<{ displayName: string | null; email: string | null; phone: string | null }>(sql`
+      select display_name as "displayName", email, phone from hrm_candidates
+       where org_id = ${orgId} and id = ${candidateId} for update
+    `)).rows[0];
+    if (!locked) {
+      throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
+    }
+    if (isRetentionErasedCandidate(locked)) {
+      throw new RecruitingError(
+        "REFUSED",
+        "this candidate's data was erased under the retention policy — re-enter them as a new prospect before recording consent",
+      );
+    }
     const row = (await db.execute<ConsentDTO>(sql`
       insert into hrm_candidate_consents (org_id, candidate_id, purpose, expires_at, source, created_by, updated_by)
       values (${orgId}, ${candidateId}, ${query.purpose}, ${expiresAt}, ${source}, ${actorId}, ${actorId})

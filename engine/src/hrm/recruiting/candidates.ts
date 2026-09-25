@@ -5,6 +5,7 @@ import { requireHrmRecruitingManageOrg } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
 import { requireCandidateOwnedInScope } from "./candidate-scope.ts";
+import { ANONYMIZED_DISPLAY_NAME } from "./retention.ts";
 
 /**
  * Canonical recruiting candidate service (HR-6, 0195): the prospect before
@@ -76,6 +77,26 @@ const CANDIDATE_COLUMNS = sql`
 
 function toDTO(row: CandidateRow): CandidateDTO {
   return { ...row };
+}
+
+/**
+ * Retention-erasure marker: anonymize replaces PII with a fixed display
+ * token and clears every contact field. Writers that lock the candidate row
+ * recheck this under the lock before attaching, hiring, or recording
+ * consent — a retention run may clear the prospect between their read and
+ * their lock. A live prospect that happens to share the name but still
+ * carries any contact detail is NOT erased.
+ */
+export function isRetentionErasedCandidate(candidate: {
+  displayName: string | null;
+  email: string | null;
+  phone: string | null;
+}): boolean {
+  return (
+    candidate.displayName === ANONYMIZED_DISPLAY_NAME &&
+    candidate.email == null &&
+    candidate.phone == null
+  );
 }
 
 export async function loadCandidate(

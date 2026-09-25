@@ -4,6 +4,7 @@ import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts"
 import { requireAggregateRecruitingRead, requireHrmRecruitingManage } from "../authorization.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { RecruitingError } from "./errors.ts";
+import { isRetentionErasedCandidate } from "./candidates.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
 import { loadFeatureState, requireDepthFeature } from "./depth.ts";
 import { featureEnabled } from "../../organization/feature-registry.ts";
@@ -524,20 +525,41 @@ export async function applyViaPosting(
       `)).rows[0]?.id ?? null;
       matchedExistingCandidate = candidateId !== null;
     }
-    if (!candidateId) {
+    const insertFreshProspect = async (): Promise<string> => {
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_candidates (org_id, display_name, email, phone, source, source_detail, consent_recorded_at)
         values (${orgId}, ${query.displayName}, ${email}, ${phone}, 'job_board', ${postingId}, now())
         returning id
       `)).rows[0];
       if (!inserted) throw new RecruitingError("REFUSED", "the application was not recorded — no row was written; retry the request");
-      candidateId = inserted.id;
+      return inserted.id;
+    };
+    if (!candidateId) {
+      candidateId = await insertFreshProspect();
     }
-    const candidateLock = (await db.execute<{ id: string }>(sql`
-      select id from hrm_candidates where org_id = ${orgId} and id = ${candidateId} for update
-    `)).rows[0];
-    if (!candidateLock) {
-      throw new RecruitingError("REFUSED", "the candidate changed before the application was recorded — retry the application");
+    const lockCandidateRow = async (id: string): Promise<{ erased: boolean }> => {
+      const locked = (await db.execute<{ id: string }>(sql`
+        select id from hrm_candidates where org_id = ${orgId} and id = ${id} for update
+      `)).rows[0];
+      if (!locked) {
+        throw new RecruitingError("REFUSED", "the candidate changed before the application was recorded — retry the application");
+      }
+      const marker = (await db.execute<{ displayName: string | null; email: string | null; phone: string | null }>(sql`
+        select display_name as "displayName", email, phone from hrm_candidates where org_id = ${orgId} and id = ${id}
+      `)).rows[0];
+      return { erased: marker ? isRetentionErasedCandidate(marker) : false };
+    };
+    if ((await lockCandidateRow(candidateId)).erased) {
+      // A retention run cleared this prospect between the email match and
+      // the lock (the match only ever hits live rows — erased shells carry
+      // no email). The anonymous caller learns nothing either way: the
+      // submitter's fresh details and consent below record a new prospect
+      // instead of attaching to the shell.
+      candidateId = await insertFreshProspect();
+      matchedExistingCandidate = false;
+      if ((await lockCandidateRow(candidateId)).erased) {
+        throw new RecruitingError("REFUSED", "the candidate changed before the application was recorded — retry the application");
+      }
     }
     const existing = (await db.execute<{ id: string }>(sql`
       select id from hrm_applications

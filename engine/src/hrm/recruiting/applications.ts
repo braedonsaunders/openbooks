@@ -9,7 +9,7 @@ import { RecruitingError } from "./errors.ts";
 import { assertStageMoveAllowed } from "./funnel.ts";
 import { requireActorId, requireId, requireOrgId, requireReason, isUniqueViolation } from "./input.ts";
 import { firstStage, loadPipelineTemplate } from "./pipeline.ts";
-import { createCandidate, loadCandidate, type CandidateDTO } from "./candidates.ts";
+import { createCandidate, isRetentionErasedCandidate, loadCandidate, type CandidateDTO } from "./candidates.ts";
 import { candidateApplicationCount, candidateInScopeRequisitionIds } from "./candidate-scope.ts";
 // HR-18 begin: disposition sync for posting-sourced applications (0229).
 // Static edge applications→postings only; postings reaches back dynamically,
@@ -183,6 +183,16 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
     const candidate = candidateLock ? await loadCandidate(db, orgId, candidateId) : null;
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
+    }
+    // Post-lock erasure recheck: a retention run may clear the prospect
+    // between the caller's read and this lock. Attaching to the anonymized
+    // shell would strand an open application on erased data, so refuse and
+    // name the re-entry remedy.
+    if (isRetentionErasedCandidate(candidate)) {
+      throw new RecruitingError(
+        "REFUSED",
+        "this candidate's data was erased under the retention policy — re-enter them as a new prospect before attaching",
+      );
     }
     // The target requisition is authorized above, but the CANDIDATE must be
     // attachable too: owned through an application on an in-scope

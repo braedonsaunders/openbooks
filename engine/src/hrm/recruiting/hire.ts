@@ -7,7 +7,7 @@ import { loadVacancyAsOf } from "../positions-read.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
 import { appendApplicationEvent, loadApplication, markApplicationHired } from "./applications.ts";
-import { loadCandidate, linkCandidateParty } from "./candidates.ts";
+import { isRetentionErasedCandidate, loadCandidate, linkCandidateParty } from "./candidates.ts";
 import { hiredStage, loadPipelineTemplate } from "./pipeline.ts";
 import { expireOfferIfPastDue, loadOffer } from "./offers.ts";
 import { bumpFillForHire } from "./requisitions.ts";
@@ -102,9 +102,24 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     // feature off this is a strict no-op and hire behaves as today.
     const { requireSignedOfferForHire } = await import("./offers-signing.ts");
     await requireSignedOfferForHire(db, orgId, offerId);
-    const candidate = await loadCandidate(db, orgId, application.candidateId);
+    // The hire mints an employee party FROM the candidate row: lock it in
+    // the same order everywhere (offer, then candidate — retention only
+    // ever locks the candidate, so no path takes these in reverse) and
+    // recheck the erasure marker under the lock. Hiring an anonymized
+    // shell would mint an employee with no identity, so refuse and name
+    // the re-entry remedy.
+    const candidateLock = (await db.execute<{ id: string }>(sql`
+      select id from hrm_candidates where org_id = ${orgId} and id = ${application.candidateId} for update
+    `)).rows[0];
+    const candidate = candidateLock ? await loadCandidate(db, orgId, application.candidateId) : null;
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
+    }
+    if (isRetentionErasedCandidate(candidate)) {
+      throw new RecruitingError(
+        "REFUSED",
+        "this candidate's data was erased under the retention policy — re-enter them as a new prospect and restart the funnel before hiring",
+      );
     }
     // The offer's position must agree with the requisition's vacancy: a
     // hire against a different establishment than the opening is refused,
