@@ -60,9 +60,10 @@
  *
  * What this pass does NOT do (named refusals, stated): non-monthly
  * periodicity, uneven-pay threshold crossings, the FP age band, PUP-hire
- * and return-from-leave FP exemptions, ulga dla młodych, 50 % KUP,
+ * FP exemptions, ulga dla młodych, 50 % KUP,
  * joint filing, PPK, non-employment titles, zero-advance requests and
- * multi-payer pomniejszenia (see PL_REFUSALS_2026).
+ * multi-payer pomniejszenia (see PL_REFUSALS_2026). Return-from-leave FP/FS
+ * relief IS priced, from the asserted leave-end month (see parentalLeaveEnd).
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves
  * away from zero (roundDiv). PIT lines round half-up to the złoty
@@ -359,6 +360,17 @@ export interface PlZusCalcInput {
   periodsPerYear: number;
   /** Employee's birth year (emp pl_rok_urodzenia), for the FP age bar. */
   rokUrodzenia: number;
+  /**
+   * ISO date the qualifying parental leave ENDED (macierzyński / na warunkach /
+   * rodzicielski / wychowawczy), when the employer asserts a return-from-leave
+   * exemption. Labour Market Act art. 263 exempts FP for 36 months from the
+   * first month after the leave-end month (ZUS guide §2.3, examples 9–10); FS
+   * follows because the same exemptions apply to it (ZUS guide §IV; SFWN
+   * art. 4.1). Absent means no asserted return — the engine prices the
+   * standard FP-liable employee, exactly as before. A malformed date refuses:
+   * the window cannot be derived from it.
+   */
+  parentalLeaveEnd?: string | null;
   /** Tenant-declared wypadkowe rate as a percent ("1.67" = 1.67 %); null = undeclared. */
   wypadkowePct?: string | null;
 }
@@ -463,10 +475,37 @@ export function calculatePlZusWithTables(
   }
   if (ageByYear > 60) fpZwolnioneWiek = true;
 
+  // Return-from-leave exemption (Labour Market Act art. 263; pre-June-2025
+  // promotion-act equivalents): no FP for 36 months from the first month
+  // after the leave-end month (ZUS guide §2.3, examples 9–10). FS goes with
+  // it — and ONLY because that is separately sourced: the same exemptions
+  // apply to FS as to FP (ZUS guide §IV; SFWN art. 4.1). Absent means no
+  // asserted return, so the standard pricing below is untouched.
+  let fpZwolnioneUrlop = false;
+  const leaveEnd = input.parentalLeaveEnd ?? null;
+  if (leaveEnd !== null && leaveEnd !== "") {
+    // Month-granular: the statute and the ZUS examples count whole months
+    // from the month after the leave-end month, so only YYYY-MM is read.
+    const monthIndex = (match: RegExpExecArray | null): number => {
+      if (match === null) return NaN;
+      const month = Number(match[2]);
+      if (month < 1 || month > 12) return NaN;
+      return Number(match[1]) * 12 + month;
+    };
+    const leaveMonth = monthIndex(/^(\d{4})-(\d{2})-\d{2}$/.exec(leaveEnd));
+    const payMonth = monthIndex(/^(\d{4})-(\d{2})-\d{2}$/.exec(input.payDate));
+    if (!Number.isInteger(leaveMonth) || !Number.isInteger(payMonth)) {
+      throw new PayrollPackError(
+        `PL FP/FS return-from-leave window needs ISO leave-end and pay dates (YYYY-MM-DD), got leave "${leaveEnd}" and pay "${input.payDate}"`,
+      );
+    }
+    fpZwolnioneUrlop = payMonth > leaveMonth && payMonth <= leaveMonth + 36;
+  }
+
   // FP/FS base is uncapped but needs the minimum wage for the month.
   const fpNalezne = !fpZwolnioneWiek && brut >= minWageForMonth(tables, input.payDate);
-  const fp = fpNalezne ? lineOf(brut, rate6(tables.fp)) : 0n;
-  const fs = fpNalezne ? lineOf(brut, rate6(tables.fs)) : 0n;
+  const fp = fpZwolnioneUrlop || !fpNalezne ? 0n : lineOf(brut, rate6(tables.fp));
+  const fs = fpZwolnioneUrlop || !fpNalezne ? 0n : lineOf(brut, rate6(tables.fs));
   // FGŚP: same uncapped base, no wage threshold. Where the year's law
   // carries the art. 9b ust. 2 age bar (`fgspAgeBar`), seniors certain
   // past 60-by-year are exempt like FP/FS; the 55–60 band already refused
