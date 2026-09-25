@@ -28,6 +28,7 @@
     "convertCreated": "Création de {target} {number}",
     "convertFailed": "Échec de la conversion",
     "actionFailed": "Échec de l’action",
+    "pricingResolving": "La recherche du prix de vente est en cours. Attendez la fin ou corrigez le prix de la ligne avant d’enregistrer ou d’émettre.",
     "invalidLineSave": "Ligne {row}, {field} : saisissez une valeur valide ou supprimez cette ligne avant d’enregistrer.",
     "autosaveFailed": "Échec de l’enregistrement automatique",
     "toastIssued": "Émis",
