@@ -1,17 +1,22 @@
 import type { db } from "../platform/db.ts";
+import type { Money } from "../money/brands.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
 import type { PayrollAssessedOn, PayrollTaxBases } from "./packs.ts";
 import type { StatutoryRateResolution } from "./statutory-rates.ts";
 import type { UsSupplementalWageAmount } from "./supplemental-wages.ts";
 
-/** One line in the stub set `calculateStub` builds before the statutory pass. */
+/**
+ * One line in the stub set `calculateStub` builds before the statutory pass.
+ * Brand boundary: every pack pushes through PushStatutoryFn, which parses;
+ * hours and rates stay plain strings (quantities, not money).
+ */
 export interface StubLine {
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string;
   hours?: string;
   rate?: string;
-  amount: string;
+  amount: Money;
   projectId?: string | null;
   departmentId?: string | null;
   timeTypeId?: string | null;
