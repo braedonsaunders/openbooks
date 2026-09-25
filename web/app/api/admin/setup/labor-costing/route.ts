@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
@@ -672,7 +673,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ...result })
     } catch (e) {
       if (e instanceof LaborCostingFeatureDisabledError) return projectsDisabledResponse()
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      return apiErrorResponse(e)
     }
   }
 

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -377,7 +378,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "surcharge rule not found" }, { status: 404 });
       }
       if (e instanceof SurchargeRuleDatingConflict) {
-        return NextResponse.json({ error: e.message }, { status: 409 });
+        return apiErrorResponse(e, { safeStatus: 409 });
       }
       // The preflight above is intentionally unlocked. The storage constraint
       // decides a concurrent race; expose the exact same API contract rather
@@ -507,7 +508,7 @@ export async function POST(req: Request) {
     }, gate.allowedSubsidiaryIds);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const status = e instanceof PaymentAcceptanceError ? 422 : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 })
+    return apiErrorResponse(e);
   }
 }

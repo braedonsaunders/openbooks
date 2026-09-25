@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
@@ -575,10 +576,7 @@ export async function PUT(req: Request) {
       )
     }
     if (error instanceof WizardFoundationBlocked) {
-      return NextResponse.json(
-        { error: error.key, message: error.message },
-        { status: 409 },
-      )
+      return apiErrorResponse(error, { safeStatus: 409 })
     }
     throw error
   }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { UnrestrictedScopeError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardFeaturePermission } from '../../../../../../../lib/feature-gates'
@@ -31,7 +32,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ag
       return NextResponse.json({ error: 'feature_disabled' }, { status: 409 })
     }
     if (error instanceof UnrestrictedScopeError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return apiErrorResponse(error)
     }
     return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
   }

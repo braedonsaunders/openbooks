@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -222,7 +223,7 @@ export async function POST(req: Request) {
         }
       })
     } catch (e) {
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      return apiErrorResponse(e)
     }
     return NextResponse.json({ ok: true, applied: typeIds.length })
   }
@@ -336,7 +337,7 @@ export async function POST(req: Request) {
       const result = await backfillOverhead(orgId, gate.user.id)
       return NextResponse.json({ ok: true, ...result })
     } catch (e) {
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      return apiErrorResponse(e)
     }
   }
 

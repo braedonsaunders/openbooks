@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
@@ -138,10 +139,7 @@ export async function PATCH(req: Request) {
     try {
       assertValidProjectFinancialProfile(b.financialProfile)
     } catch (error) {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "financialProfile is invalid" },
-        { status: 422 },
-      )
+      return apiErrorResponse(error)
     }
   }
   if (typeof b.id !== 'string' || !isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -260,7 +258,7 @@ export async function PATCH(req: Request) {
       return true
     })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+    return apiErrorResponse(e)
   }
   if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })

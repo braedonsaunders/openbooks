@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
@@ -68,7 +69,7 @@ export async function PUT(req: Request) {
     if ((e as Error).message === "feature_disabled") {
       return NextResponse.json({ error: CONTINUOUS_CLOSE_DISABLED_REMEDY }, { status: 409 });
     }
-    return NextResponse.json({ error: (e as Error).message }, { status: 422 });
+    return apiErrorResponse(e);
   }
   return NextResponse.json(await getOrgAiSettings(gate.user.orgId));
 }

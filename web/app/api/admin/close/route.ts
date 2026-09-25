@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
@@ -700,7 +701,7 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     if (error instanceof CloseError)
-      return NextResponse.json({ error: error.message }, { status: 422 });
+      return apiErrorResponse(error, { safeStatus: 422 });
     throw error;
   }
 }

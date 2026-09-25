@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission, guardUnrestrictedScope } from '../../../../lib/authz'
@@ -74,6 +75,7 @@ export async function PUT(req: Request) {
     }, { kind: "user", userId: gate.user.id }, { expectedUpdatedAt: body.expectedUpdatedAt })
     return NextResponse.json(saved)
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'save failed' }, { status: err instanceof OrgEmailConfigConflictError ? 409 : 422 })
+    if (err instanceof OrgEmailConfigConflictError) return apiErrorResponse(err, { safeStatus: 409 })
+    return apiErrorResponse(err)
   }
 }
