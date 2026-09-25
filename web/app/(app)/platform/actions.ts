@@ -11,6 +11,12 @@ function assertUuid(value: string, label: string): void {
   if (!isUuid(value)) throw new Error(`${label} is invalid`);
 }
 
+async function lockPlatformAdminMutations(): Promise<void> {
+  await db.execute(sql`
+    select pg_advisory_xact_lock(hashtextextended('openbooks:platform-super-admin', 0))
+  `);
+}
+
 async function auditPlatformMutation(input: {
   orgId: string;
   tableName: "users" | "user_org_access";
@@ -61,15 +67,13 @@ export async function setSuperAdminAction(
   }
 
   await withBypass(async () => {
-    await lockSuperAdminActor(db, authz.user.homeUserId);
     // Serialize every platform-wide super-admin grant/revoke. The active
     // quorum check below reads other administrators' rows, which this
     // transaction does not lock; without one serialization point, two
     // concurrent cross-revocations each count the other's target as still
     // present and jointly strip every platform administrator.
-    await db.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended('openbooks:platform-super-admin', 0))
-    `);
+    await lockPlatformAdminMutations();
+    await lockSuperAdminActor(db, authz.user.homeUserId);
 
     const targetResult = (await db.execute(sql`
       select id, org_id as "orgId", email, name, is_super_admin as "isSuperAdmin", is_active as "isActive"
@@ -142,6 +146,7 @@ export async function grantAccessAction(formData: FormData): Promise<void> {
   assertUuid(actingUserId, "Acting user");
 
   await withBypass(async () => {
+    await lockPlatformAdminMutations();
     await lockSuperAdminActor(db, authz.user.homeUserId);
     const validation = (await db.execute(sql`
       select m.org_id as "memberOrgId", mo.env_kind as "memberEnvKind",
@@ -239,6 +244,7 @@ export async function revokeAccessAction(accessId: string): Promise<void> {
   let memberUserId: string | null = null;
 
   await withBypass(async () => {
+    await lockPlatformAdminMutations();
     await lockSuperAdminActor(db, authz.user.homeUserId);
     const beforeResult = (await db.execute(sql`
       select id, org_id as "orgId", member_user_id as "memberUserId",
