@@ -63,6 +63,8 @@ import type { PaymentSetupView } from './PaymentOperationsSetup'
  */
 
 const BASE_PATH = '/admin/setup/payment-operations'
+const ACTIVE_STATES = new Set(['active', 'archived'])
+const MANDATE_STATES = new Set(['pending', 'active', 'suspended', 'revoked', 'expired'])
 const VIEWS = new Set<PaymentSetupView>(['profiles', 'formats', 'schedules', 'mandates'])
 
 type StateCount = { value: string; count: number }
@@ -169,7 +171,10 @@ export async function loadPaymentOperations(
   const requested = pickString(sp.view) as PaymentSetupView | undefined
   const view: PaymentSetupView = requested && VIEWS.has(requested) ? requested : 'profiles'
   const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
-  const state = pickString(sp.state)
+  const requestedState = pickString(sp.state)
+  const state = requestedState && (view === 'mandates' ? MANDATE_STATES : ACTIVE_STATES).has(requestedState)
+    ? requestedState
+    : undefined
   const selectedId = isUuid(pickString(sp.row) ?? '') ? pickString(sp.row)! : null
   const orgId = authz.user.orgId
   const q = `%${list.q ?? ''}%`
