@@ -112,9 +112,20 @@ test('reopening rechecks billed dependencies after waiting for the billing pool 
   await waitForLock(pid);
   reopening=withOrgTransaction(org.orgId,()=>reopenFinalizedCamPool(org.orgId, actor, null,cam,'Concurrent pool correction'));
   const settled=Promise.allSettled([billing,reopening]);
+  // The reopening must queue behind the biller rather than barging past it:
+  // assert a transitive wait chain client <- biller <- reopening. The
+  // reopening may wait at the pool SELECT or earlier at the feature-gate
+  // advisory (assertEnabled takes it before the pool lock and holds it
+  // through commit), so match the chain, not the waiting statement text —
+  // either serialization point orders it strictly after the biller.
   let waiting=false;
   for(let i=0;i<250;i++){
-   const r=await pool.query("select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like '%select cp.name%'");
+   const r=await pool.query(`select 1 from pg_stat_activity w
+     where w.datname=current_database() and w.wait_event_type='Lock'
+       and exists (select 1 from pg_stat_activity b
+        where b.datname=current_database()
+          and b.pid=any(pg_blocking_pids(w.pid))
+          and $1=any(pg_blocking_pids(b.pid)))`,[pid]);
    if(r.rowCount){waiting=true;break;}
    await new Promise(r=>setTimeout(r,20));
   }
