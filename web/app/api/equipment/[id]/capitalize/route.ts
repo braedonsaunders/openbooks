@@ -14,7 +14,6 @@ type CapitalizationResult =
   | { kind: 'created'; assetId: string; assetNumber: string }
   | { kind: 'already_capitalized' }
   | { kind: 'not_found' }
-  | { kind: 'forbidden' }
   | { kind: 'invalid_subsidiary' }
   | { kind: 'acquisition_cost_invalid' }
 
@@ -80,10 +79,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       from equipment_units where id = ${id} and org_id = ${orgId} limit 1`))
   const unit = unitRes.rows[0]
   if (!unit) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
-  if (unit.fixed_asset_id) return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
   if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(unit.subsidiary_id)) {
-    return NextResponse.json({ error: 'forbidden subsidiary' }, { status: 403 })
+    return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
   }
+  if (unit.fixed_asset_id) return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
   const ownedSub = (await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${orgId} and id = ${unit.subsidiary_id}
@@ -121,10 +120,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
          for update`))
       const lockedUnit = lockedRes.rows[0]
       if (!lockedUnit) return { kind: 'not_found' }
-      if (lockedUnit.fixed_asset_id) return { kind: 'already_capitalized' }
       if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(lockedUnit.subsidiary_id)) {
-        return { kind: 'forbidden' }
+        return { kind: 'not_found' }
       }
+      if (lockedUnit.fixed_asset_id) return { kind: 'already_capitalized' }
 
       const lockedOwnedSub = (await tx.execute<{ id: string }>(sql`
         select id from subsidiaries
@@ -190,7 +189,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   if (result.kind === 'not_found') return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
   if (result.kind === 'already_capitalized') return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
-  if (result.kind === 'forbidden') return NextResponse.json({ error: 'forbidden subsidiary' }, { status: 403 })
   if (result.kind === 'invalid_subsidiary') return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
   if (result.kind === 'acquisition_cost_invalid') return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
   return NextResponse.json({ assetId: result.assetId, assetNumber: result.assetNumber })
