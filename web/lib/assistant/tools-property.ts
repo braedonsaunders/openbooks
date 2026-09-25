@@ -457,12 +457,15 @@ const propertyDeposits: AssistantToolDef = {
       return { ok: false, error: error instanceof Error ? error.message : "reconciliation failed" };
     }
     const rows = reconciliation.rows;
+    const capped = capList(rows, 200);
     return {
       ok: true,
       data: {
         asOf: reconciliation.asOf,
-        returned: rows.length,
-        rows: capList(rows, 200).items,
+        returned: capped.items.length,
+        total: rows.length,
+        truncated: capped.truncated,
+        rows: capped.items,
         totals: {
           subledgerBalance: num(sum(rows.map((row) => row.subledgerBalance))),
           linkedGlBalance: num(sum(rows.map((row) => row.linkedGlBalance))),
