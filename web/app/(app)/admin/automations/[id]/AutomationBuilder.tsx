@@ -143,6 +143,7 @@ export function AutomationBuilder({
   const [condMode, setCondMode] = useState<'all' | 'any'>(cond.mode)
   const [leaves, setLeaves] = useState<ConditionLeaf[]>(cond.leaves)
   const [actions, setActions] = useState<Record<string, unknown>[]>([...automation.actions])
+  const [actionDrafts, setActionDrafts] = useState(() => automation.actions.map((action) => JSON.stringify(action, null, 2)))
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<'build' | 'runs'>('build')
   const [simSubject, setSimSubject] = useState('')
@@ -165,6 +166,7 @@ export function AutomationBuilder({
     setCondMode(reseeded.mode)
     setLeaves(reseeded.leaves)
     setActions([...automation.actions])
+    setActionDrafts(automation.actions.map((action) => JSON.stringify(action, null, 2)))
     setVersion(automation.version)
     setConflict(null)
   }, [automation])
@@ -224,18 +226,25 @@ export function AutomationBuilder({
   }
 
   function updateAction(index: number, patchAction: Record<string, unknown>) {
-    setActions((prev) => prev.map((a, i) => (i === index ? { ...a, ...patchAction } : a)))
+    const next = actions.map((action, i) => (i === index ? { ...action, ...patchAction } : action))
+    setActions(next)
+    setActionDrafts((drafts) => drafts.map((draft, i) => (i === index ? JSON.stringify(next[i], null, 2) : draft)))
   }
 
   function moveAction(index: number, delta: -1 | 1) {
-    setActions((prev) => {
-      const next = [...prev]
-      const j = index + delta
-      if (j < 0 || j >= next.length) return prev
-      const tmp = next[index]!
-      next[index] = next[j]!
-      next[j] = tmp
-      return next
+    const next = [...actions]
+    const j = index + delta
+    if (j < 0 || j >= next.length) return
+    const tmp = next[index]!
+    next[index] = next[j]!
+    next[j] = tmp
+    setActions(next)
+    setActionDrafts((drafts) => {
+      const nextDrafts = [...drafts]
+      const draft = nextDrafts[index]!
+      nextDrafts[index] = nextDrafts[j]!
+      nextDrafts[j] = draft
+      return nextDrafts
     })
   }
 
@@ -446,21 +455,27 @@ export function AutomationBuilder({
                     <>
                     <Button variant="outline" onClick={() => moveAction(i, -1)}>↑</Button>
                     <Button variant="outline" onClick={() => moveAction(i, 1)}>↓</Button>
-                    <Button variant="outline" onClick={() => setActions((prev) => prev.filter((_, j) => j !== i))}>{t('builder.remove')}</Button>
+                    <Button variant="outline" onClick={() => {
+                      setActions((prev) => prev.filter((_, j) => j !== i))
+                      setActionDrafts((prev) => prev.filter((_, j) => j !== i))
+                    }}>{t('builder.remove')}</Button>
                     </>
                     ) : null}
                   </div>
                   <Textarea
                     aria-label={t('builder.actionJsonLabel')}
-                    value={JSON.stringify(action, null, 2)}
+                    value={actionDrafts[i] ?? ''}
                     rows={4}
                     disabled={ro}
                     onChange={(e) => {
+                      const raw = e.target.value
+                      setActionDrafts((prev) => prev.map((draft, index) => (index === i ? raw : draft)))
                       try {
-                        updateAction(i, JSON.parse(e.target.value) as Record<string, unknown>)
+                        const parsed = JSON.parse(raw) as Record<string, unknown>
+                        setActions((prev) => prev.map((current, index) => (index === i ? parsed : current)))
                       } catch {
-                        // Partial JSON while typing is not a save; the last
-                        // valid parse stands until the text parses again.
+                        // Preserve incomplete JSON while typing; actions save
+                        // only after the draft parses again.
                       }
                     }}
                   />
@@ -468,7 +483,11 @@ export function AutomationBuilder({
               ))}
               {canManage ? (
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setActions((prev) => [...prev, { kind: 'send_notification', to: 'manager', body: '' }])}>{t('builder.addAction')}</Button>
+                <Button variant="outline" onClick={() => {
+                  const action = { kind: 'send_notification', to: 'manager', body: '' }
+                  setActions((prev) => [...prev, action])
+                  setActionDrafts((prev) => [...prev, JSON.stringify(action, null, 2)])
+                }}>{t('builder.addAction')}</Button>
                 <Button disabled={busy} onClick={() => patch({ actions }, t('builder.saved'))}>{t('builder.saveActions')}</Button>
               </div>
               ) : null}
