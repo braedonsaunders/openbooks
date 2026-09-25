@@ -544,6 +544,15 @@ export interface UsStateWithholdingInput {
   ytd?: UsStateYtd;
   /** Michigan Form 5469 resident rate after the other work city's nonresident offset. */
   detroitResidentRateOverride?: string;
+  /**
+   * The employer's reasonable expectation of the employee's annual earnings in
+   * THIS state, when the employer asserts one. Wisconsin reads it for the
+   * §3.I(4)(b) under-$1,500 nonresident exception; without it the engine
+   * annualizes this period's Wisconsin wages as the estimate. No other state
+   * reads it. A malformed or negative assertion refuses — an expectation is a
+   * fact the employer states, never a value the engine repairs.
+   */
+  wiExpectedAnnualWages?: string;
 }
 
 export interface UsStateWithholdingResult {

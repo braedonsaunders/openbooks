@@ -238,6 +238,43 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   factors.WI_SCHEDULE = schedule;
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
 
+  // W-166 §3.I(4)(b): a nonresident whose annual Wisconsin earnings the
+  // employer can reasonably expect to stay under $1,500 is not withheld from.
+  // The estimate is the employer's asserted expectation when supplied, else
+  // this period's Wisconsin wages annualized — a level-wages read the catch-up
+  // below corrects the moment the year proves it wrong. Residents never take
+  // this exception: the section governs nonresidents only.
+  let catchUpBase = 0n;
+  if (input.basis === "nonresident") {
+    const periodWiWages = U(input.wages) + U(input.supplemental ?? "0");
+    const asserted = input.wiExpectedAnnualWages;
+    const expected = asserted === undefined ? periodWiWages * BigInt(P) : U(asserted);
+    if (expected < 0n) {
+      throw new PayrollError(
+        `invalid expected Wisconsin annual wages for the under-$1,500 nonresident rule: ${asserted}`,
+      );
+    }
+    trace("WI_EXPECTED_ANNUAL_WAGES", expected);
+    if (expected < U("1500")) {
+      return {
+        state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+        statutoryTax: D(0n), additionalWithholding: D(0n),
+        factors: { ...factors, WI_UNDER_1500_EXEMPT: "1" },
+      };
+    }
+    // The estimate crossed $1,500: "the employer must withhold from wages paid
+    // thereafter, sufficient amounts to offset amounts not withheld from wages
+    // previously paid." The previously-paid base is authoritative actuals —
+    // the ledger's year-to-date Wisconsin wages — and only a base with NO
+    // withholding against it can be previously-unwithheld, so any positive
+    // prior tax means earlier periods already withheld and no catch-up applies.
+    const priorBase = U(input.ytd?.wages ?? "0") + U(input.ytd?.supplemental ?? "0");
+    if (priorBase > 0n && U(input.ytd?.tax ?? "0") === 0n) {
+      catchUpBase = priorBase;
+      trace("WI_CATCHUP_BASE", catchUpBase);
+    }
+  }
+
   // W-166 p. 25: paid with regular wages, treat as one payment.
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   const annualGross = wages * BigInt(P);
@@ -256,15 +293,27 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("WI_ANNUAL_TAX", annualTax);
 
   const periodTax = divIntCents(annualTax, P);
+  // Catch-up prices the previously-unwithheld base through the same annual
+  // method (the aggregate-method doctrine: tax on the cumulative annual-scale
+  // base less tax on this period's annual scale), added to this period whole
+  // rather than spread — the statute demands the offset, not a schedule.
+  let catchUp = 0n;
+  if (catchUpBase > 0n) {
+    const cumulativeGross = annualGross + catchUpBase;
+    const cumulativeDeduction = wiDeduction(cumulativeGross, schedule, rates);
+    const cumulativeTax = wiAnnualTax(max0(cumulativeGross - cumulativeDeduction - exemption), rates);
+    catchUp = max0(cumulativeTax - annualTax);
+    if (catchUp > 0n) trace("WI_CATCHUP", catchUp);
+  }
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  const total = periodTax + catchUp + extra;
   trace("WI_WITHHELD", total);
 
   return {
     state: "WI",
     year: rates.year,
     tax: D(total),
-    statutoryTax: D(periodTax),
+    statutoryTax: D(periodTax + catchUp),
     additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
@@ -289,6 +338,10 @@ export const WI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WI_ANNUAL_NET: "Wisconsin annual net income",
   WI_ANNUAL_TAX: "Wisconsin tax (annual)",
   WI_WITHHELD: "Wisconsin tax withheld this period",
+  WI_EXPECTED_ANNUAL_WAGES: "Wisconsin expected annual earnings (§3.I(4)(b) estimate)",
+  WI_UNDER_1500_EXEMPT: "Wisconsin nonresident under-$1,500 expectation, no withholding",
+  WI_CATCHUP_BASE: "Wisconsin wages previously paid without withholding",
+  WI_CATCHUP: "Wisconsin catch-up withholding on the previously-unwithheld base",
 };
 
 export const WI_WITHHOLDING: UsStateWithholdingEngine = {
@@ -485,9 +538,12 @@ export const WI_REGION: PayrollRegionWithholding = {
   region: "WI",
   label: "Wisconsin income tax",
   implemented: true,
-  // W-166 p. 8: wages paid to nonresidents for services performed in Wisconsin
-  // are subject to withholding unless an exception (reciprocity, under $1,500
-  // expected, interstate carrier, military spouse) applies.
+  // W-166 p. 8 + §3.I(4)(b): wages paid to nonresidents for services performed
+  // in Wisconsin are subject to withholding unless an exception (reciprocity,
+  // interstate carrier, military spouse) applies — or the employer reasonably
+  // expects annual Wisconsin earnings under $1,500, in which case compute()
+  // exempts and, once the estimate crosses $1,500, withholds from later wages
+  // with catch-up on the previously-unwithheld base.
   taxesNonresidentWages: true,
   // W-166 p. 7: resident wages are subject to Wisconsin withholding; the
   // special Minnesota arrangement is an eligibility waiver in the engine.
