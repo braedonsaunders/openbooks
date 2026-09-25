@@ -83,11 +83,16 @@ export function AiDraftDrawer({
   const busy = Boolean(draftParam) && draft === null && status === null
   useEffect(() => {
     if (!draftParam) return
-    const separator = draftParam.indexOf(':')
-    const kind = separator < 0 ? '' : draftParam.slice(0, separator)
-    const subjectId = separator < 0 ? '' : draftParam.slice(separator + 1)
-    if (!kind || !subjectId) return
     const requested = draftParam
+    const separator = requested.indexOf(':')
+    const kind = separator < 0 ? '' : requested.slice(0, separator)
+    const subjectId = separator < 0 ? '' : requested.slice(separator + 1)
+    // A malformed ?draft= never resolves: fail loudly instead of leaving
+    // busy true forever with neither draft nor error.
+    if (!kind || !subjectId) {
+      setFailed({ param: requested, message: failedLabel })
+      return
+    }
     let cancelled = false
     fetch('/api/ai/drafts', {
       method: 'POST',
@@ -144,13 +149,20 @@ export function AiDraftDrawer({
       return
     }
     // No editable field on this host (detail drawers): copy to the
-    // clipboard and say so, still recording acceptance of the draft.
-    if (navigator.clipboard) {
-      void navigator.clipboard.writeText(draft.text).then(
-        () => setCopied(true),
-        () => setFailed({ param: draftParam, message: failedLabel }),
-      )
+    // clipboard first, and record acceptance only once the copy
+    // succeeded — recording it before the copy (or without one) closes
+    // the drawer on a draft the operator never received.
+    if (!navigator.clipboard) {
+      setFailed({ param: draftParam, message: failedLabel })
+      return
     }
+    try {
+      await navigator.clipboard.writeText(draft.text)
+    } catch {
+      setFailed({ param: draftParam, message: failedLabel })
+      return
+    }
+    setCopied(true)
     await close('accepted', draft.decisionId)
   }
   return (
