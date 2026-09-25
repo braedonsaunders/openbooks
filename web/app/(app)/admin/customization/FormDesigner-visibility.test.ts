@@ -63,9 +63,7 @@ const messages = (await import('../../../../messages/en')).default
 const { FormDesigner } = await import('./FormDesigner')
 
 /**
- * F-t10-003 — the designer visibility toggles kept aria-label "Visible" in
- * both states with no pressed state: state by colour only. A visibility
- * toggle announces its state and flips its label when used.
+ * Locked field controls remain disabled while editable fields still toggle.
  */
 test('designer visibility toggles expose pressed state and flip their label', async () => {
   document.body.innerHTML = ''
@@ -80,7 +78,7 @@ test('designer visibility toggles expose pressed state and flip their label', as
         messages,
         timeZone: 'UTC',
         children: React.createElement(FormDesigner, {
-          recordType: 'project',
+          recordType: 'vendor_bill',
           def: null,
           headerDefs: [],
           lineDefs: [],
@@ -92,11 +90,11 @@ test('designer visibility toggles expose pressed state and flip their label', as
   })
   /* eslint-enable react/no-children-prop */
   try {
-    // Every visibility toggle (tabs, subtabs, actions, fields) announces its
-    // state and flips its label when used. Locked tabs render disabled for
-    // pointer users, so only actuatable toggles drive. Walk them
-    // deepest-first so hiding a parent never detaches a toggle still
-    // waiting its turn.
+    const lockedBadge = [...document.querySelectorAll('div')].find((node) => node.textContent === 'Locked')
+    assert.ok(lockedBadge, 'built-in locked fields render their lock marker')
+    const lockedRow = lockedBadge?.parentElement?.parentElement
+    assert.equal(lockedRow?.querySelector('button[aria-pressed]')?.hasAttribute('disabled'), true)
+    assert.equal(lockedRow?.querySelector('input:not([type="checkbox"])')?.hasAttribute('disabled'), true)
     const toggles = [...document.querySelectorAll('button[aria-pressed="true"]')]
       .filter((b) => !b.hasAttribute('disabled'))
       .reverse()

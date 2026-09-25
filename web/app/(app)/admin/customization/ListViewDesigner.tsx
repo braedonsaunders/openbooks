@@ -230,11 +230,12 @@ export function ListViewDesigner({
                 <div key={c.key} className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
                   <GripVertical size={14} className="text-slate-300" />
                   <span className="w-44 shrink-0 truncate text-xs font-medium text-slate-600 dark:text-slate-300">{colLabel(c.key)}</span>
+                  {meta?.listColumns.find((column) => column.key === c.key)?.locked ? <span className="rounded border px-1 text-[10px] text-slate-500">{t('designer.forms.locked')}</span> : null}
                   <Input value={c.labelOverride ?? ''} onChange={(e) => updateCol(ci, { labelOverride: e.target.value || null })} placeholder={colLabel(c.key)} className="h-7 w-36" />
                   <div className="ml-auto flex items-center gap-1">
                     <button type="button" onClick={() => setView((p) => { const n = structuredClone(p) as ListViewConfig; n.columns = reorder(n.columns, ci, ci - 1); return n })} aria-label={`${tCommon('actions.previous')}: ${colLabel(c.key)}`} className="text-slate-400 hover:text-slate-600"><ChevronUp size={15} /></button>
                     <button type="button" onClick={() => setView((p) => { const n = structuredClone(p) as ListViewConfig; n.columns = reorder(n.columns, ci, ci + 1); return n })} aria-label={`${tCommon('actions.next')}: ${colLabel(c.key)}`} className="text-slate-400 hover:text-slate-600"><ChevronDown size={15} /></button>
-                    <button type="button" onClick={() => updateCol(ci, { visible: !c.visible })} className={cn('text-slate-400 hover:text-slate-600', !c.visible && 'text-red-500')} aria-label={t('designer.list.visible')}>
+                    <button type="button" onClick={() => updateCol(ci, { visible: !c.visible })} disabled={meta?.listColumns.find((column) => column.key === c.key)?.locked === true} className={cn('text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40', !c.visible && 'text-red-500')} aria-label={t('designer.list.visible')}>
                       {c.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                     </button>
                   </div>
