@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Eye, EyeOff, FolderPlus, Pin, PinOff, Plus, RotateC
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Select, cn } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useUnsavedNavigationGuard } from '../../../../lib/use-unsaved-navigation-guard'
 import {
   MODULE_BY_KEY,
   NAV_GROUP_BY_KEY,
@@ -37,8 +38,11 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
   const t = useTranslations('admin.navigation')
   const tCommon = useTranslations('common')
   const [config, setConfig] = useState<OrgNavConfig>(initial)
+  const [savedConfig, setSavedConfig] = useState<OrgNavConfig>(initial)
   const [busy, setBusy] = useState(false)
   const router = useRouter()
+  const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig)
+  useUnsavedNavigationGuard(dirty, tCommon('feedback.unsavedChanges'), tCommon('confirm.discardChanges'))
   const appByKey = new Map(apps.map((app) => [app.key, app]))
   const placedApps = new Set(
     config.groups.flatMap((group) => group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : []))),
@@ -99,6 +103,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
         body: JSON.stringify({ config }),
       })
       if (res.ok) {
+        setSavedConfig(config)
         toast.success(t('saved'))
         router.refresh()
       } else {
