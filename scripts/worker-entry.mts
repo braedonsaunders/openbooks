@@ -222,6 +222,7 @@ async function runReminderDuty(): Promise<void> {
               status: "queued",
               categoryKey: "hrm.reminder",
               meta: { signerId: signer.signerId, documentId: signer.documentId },
+              actor: { kind: "system", reason: "scheduled HRM document signature reminder" },
             });
             try {
               const outcome = await sendVia(

@@ -83,6 +83,7 @@ const {
   markEmailUncertain: markEmailUncertainUnderTest,
   markPaymentRemittanceAttempt: markPaymentRemittanceAttemptUnderTest,
   markPaymentRemittanceFailed: markPaymentRemittanceFailedUnderTest,
+  insertEmailLog: insertEmailLogUnderTest,
 } = (await import(writeEffectModuleUrl)) as typeof import("./email-config.ts");
 
 function lastWriteEffectSql(): string {
@@ -120,18 +121,11 @@ test("emailSecretChange derives the audit credential marker without secret mater
   assert.equal(emailSecretChange({}, without, without), "unchanged");
 });
 
-test("a user-actor save without a usable id is rejected before any database work", async () => {
-  await assert.rejects(
-    saveOrgEmailConfig("00000000-0000-0000-0000-000000000000", { enabled: false } satisfies SaveOrgEmailInput, {
-      kind: "user",
-      userId: "   ",
-    }),
-    /non-empty acting user id/u,
-  );
-  await assert.rejects(
-    saveOrgEmailConfig("00000000-0000-0000-0000-000000000000", { enabled: false }, { kind: "user", userId: "" }),
-    /non-empty acting user id/u,
-  );
+test("email writes refuse missing actor attribution before writing", async () => {
+  for (const userId of ["   ", ""]) await assert.rejects(saveOrgEmailConfig("org-1", { enabled: false } satisfies SaveOrgEmailInput, { kind: "user", userId }), /non-empty acting user id/u);
+  writeEffectHarness.reset();
+  await assert.rejects(insertEmailLogUnderTest({ orgId: "org-1", recipients: ["a@b.test"], subject: "Test", status: "queued" } as never), /require a user actor/u);
+  assert.equal(writeEffectHarness.queries.length, 0);
 });
 
 test("the conflict error names both revisions so a caller can reload deterministically", () => {
