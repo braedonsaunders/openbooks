@@ -205,15 +205,16 @@ async function readCommittedClaim(
      limit 1`);
   const row = r.rows[0];
   if (!row) return null;
-  // Expiry is checked here, on the read path: an expired claim never replays,
-  // and its row is reaped (the storage guard explicitly permits deleting
-  // expired evidence) so the retry inserts a fresh claim instead of
-  // colliding with — or, worse, completing over — dead evidence. The caller
-  // holds the per-claim advisory lock, so no concurrent claim can interleave.
-  if (new Date(row.expiresAt).getTime() <= Date.now()) {
-    await db.execute(sql`
+  // The database clock decides expiry. Reap only a row the database confirms
+  // expired; if no row is deleted, the persisted claim remains authoritative
+  // and a completed response must replay even if the host clock disagrees.
+  // The caller holds the per-claim advisory lock, so no concurrent claim can
+  // interleave between this delete and the follow-up insert/replay decision.
+  const reaped = await db.execute<{ id: string }>(sql`
       delete from application_idempotency_keys
-       where id = ${row.id} and expires_at <= now()`);
+       where id = ${row.id} and expires_at <= clock_timestamp()
+       returning id`);
+  if (reaped.rows.length > 0) {
     return null;
   }
   return {
