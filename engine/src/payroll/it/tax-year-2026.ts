@@ -28,12 +28,14 @@
  *   (full texts via the MEF portal, "In vigore dal 01/01/2025"), the c. 2
  *   art. 13 amendment and the c. 3 D.L. 3/2020 amendment are textual TUIR
  *   amendments, and no L. 199/2025 comma touches art. 13.
- * - Three NEW 2026-only measures (5% on contractual-renewal increases,
- *   15% on night/holiday/shift allowances, 15% trattamento integrativo
- *   speciale for tourism/hospitality night and festive-holiday overtime,
- *   L. 199/2025 c. 18–21 for prestazioni 1 Jan–30 Sep 2026) are REFUSED by
- *   name: the engine has no CCNL-increase, allowance, or sector inputs, so
- *   there is nothing to price them on. See IT_REFUSED_2026.
+ * - Two NEW 2026-only substitute measures (5% on contractual-renewal
+ *   increases, 15% on night/holiday/shift allowances) are REFUSED by name:
+ *   the engine has no CCNL-increase or allowance inputs, so there is
+ *   nothing to price them on. See IT_REFUSED_2026. The third (15%
+ *   trattamento integrativo speciale for tourism/hospitality night and
+ *   festive-holiday overtime, L. 199/2025 c. 18–21 for prestazioni
+ *   1 Jan–30 Sep 2026) instead PRICES from the it_turismo_speciale
+ *   attestation (IT-TOURISM-2026-IMPL).
  *
  * Sourcing outcomes per host (recorded distinctly):
  * - agenziaentrate.gov.it: 200, full text — the EN IRPEF rates page (last
@@ -401,7 +403,6 @@ export const IT_REFUSED_2026: readonly string[] = [
   "10-rate recovery of indebiti over 60 euro (L. 207/2024 c. 7: year-end timing, not per-period arithmetic)",
   "pensionati (art. 49 c. 2 lett. a): TABELLA 7 detrazioni, not transcribed)",
   "TFR accrual, tredicesima/quattordicesima timing, CU/770 population, INAIL",
-  "L. 199/2025 art. 1 c. 18–21 trattamento integrativo speciale 15% for tourism/hospitality/food-service night work and festive-holiday overtime (prestazioni 1 Jan–30 Sep 2026): a sector- and date-gated credit the engine has no sector input to gate on, so no line can be priced under it",
 ];
 
 /** Edition stamp for IT_TAX_YEARS. */

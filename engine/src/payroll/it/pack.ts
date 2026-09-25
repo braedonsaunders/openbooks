@@ -143,6 +143,11 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
         // fixpoint — exactly like an earnings line. They INCREASE net pay.
         { code: "TI", name: "Trattamento integrativo", systemKey: "ti_payout", kind: "credit", sequence: 140, assessedOn: "earnings", remittance: "tax_authority" },
         { code: "SOMMA", name: "Somma di cui al comma 4 (L. 207/2024)", systemKey: "somma_payout", kind: "credit", sequence: 145, assessedOn: "earnings", remittance: "tax_authority" },
+        // L. 199/2025 art. 1 c. 18–21 (IT-TOURISM-2026-IMPL): the 15% credit
+        // prices only from the it_turismo_speciale attestation, so this
+        // component is unreachable without it; like TI/SOMMA it increases
+        // net pay and the employer recovers it via F24.
+        { code: "SPECIALE", name: "Trattamento integrativo speciale (turismo)", systemKey: "speciale_payout", kind: "credit", sequence: 147, assessedOn: "earnings", remittance: "tax_authority" },
       ],
     },
     {
