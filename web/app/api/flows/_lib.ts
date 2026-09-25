@@ -5,6 +5,7 @@ import { DecisionFailedError, GateError } from '@openbooks/engine/src/flows/inde
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { canReadFlowSubject } from '../../../lib/flow-subject-authz'
+import { allocationScopeVisible } from '@openbooks/engine/src/allocations/subsidiary-scope.ts'
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
 export async function requireFlowsSession(): Promise<Authz | NextResponse> {
@@ -26,12 +27,19 @@ export type GateHeader = {
   assignee_role: string | null
   /** Legal entity owning the approval subject (null = unavailable/rootless). */
   subsidiary_id: string | null
+  subject_kind: string
+  subject_id: string
 };
 
 /** Load a gate header scoped to the caller's org (null = not found for them). */
-export async function loadGateHeader(gateId: string, orgId: string): Promise<GateHeader | null> {
+export async function loadGateHeader(
+  gateId: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<GateHeader | null> {
   const r = (await db.execute<GateHeader>(sql`
     select g.id, g.org_id, g.status, g.assignee_user_id, g.assignee_role,
+           g.subject_kind, g.subject_id,
            case
              when g.subject_kind = 'party_bank_account' then (
                select p.subsidiary_id
@@ -45,6 +53,10 @@ export async function loadGateHeader(gateId: string, orgId: string): Promise<Gat
                  join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
                 where tw.id = g.subject_id and tw.org_id = g.org_id
              )
+             when g.subject_kind = 'allocation_run' then (
+               select ar.subsidiary_id from allocation_runs ar
+                where ar.id = g.subject_id and ar.org_id = g.org_id
+             )
              else d.subsidiary_id
            end as subsidiary_id
       from flow_gates g
@@ -52,7 +64,16 @@ export async function loadGateHeader(gateId: string, orgId: string): Promise<Gat
         on d.id = g.subject_id and d.org_id = g.org_id and d.kind = g.subject_kind
      where g.id = ${gateId} and g.org_id = ${orgId}
   `))
-  return r.rows[0] ?? null
+  const gate = r.rows[0]
+  if (!gate) return null
+  if (gate.subject_kind === 'allocation_run' && allowedSubsidiaryIds !== null) {
+    const run = (await db.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
+      select subsidiary_id, computation from allocation_runs
+       where id = ${gate.subject_id} and org_id = ${orgId}
+    `)).rows[0]
+    if (!run || !allocationScopeVisible(allowedSubsidiaryIds, run.subsidiary_id, run.computation)) return null
+  }
+  return gate
 }
 
 /**
@@ -68,7 +89,16 @@ export async function loadFlowSubjectSubsidiary(
   subjectKind: string,
   subjectId: string,
   orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<string | null> {
+  if (subjectKind === 'allocation_run') {
+    const run = (await db.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
+      select subsidiary_id, computation from allocation_runs
+       where id = ${subjectId} and org_id = ${orgId}
+    `)).rows[0]
+    if (!run || !allocationScopeVisible(allowedSubsidiaryIds, run.subsidiary_id, run.computation)) return null
+    return run.subsidiary_id
+  }
   const r = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select case
              when ${subjectKind} = 'party_bank_account' then (
@@ -130,6 +160,7 @@ export async function filterFlowRunSubjectsToScope<T extends { kind: string; id:
     if (
       subject.kind === 'party_bank_account' ||
       subject.kind === 'timesheet_week' ||
+      subject.kind === 'allocation_run' ||
       subject.kind === 'budget_scenario' ||
       subject.kind === 'close_run'
     ) {
@@ -152,7 +183,7 @@ export async function filterFlowRunSubjectsToScope<T extends { kind: string; id:
     ...individual.map(async (item) => {
       subsidiaryBySubject.set(
         item.key,
-        await loadFlowSubjectSubsidiary(item.kind, item.id, orgId),
+        await loadFlowSubjectSubsidiary(item.kind, item.id, orgId, allowedSubsidiaryIds),
       )
     }),
   ])

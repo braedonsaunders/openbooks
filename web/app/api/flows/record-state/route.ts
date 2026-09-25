@@ -120,7 +120,7 @@ export async function GET(req: Request) {
   // is hidden from every subsidiary-scoped list.
   const denied = guardSubsidiaryScope(
     authz,
-    await loadFlowSubjectSubsidiary(subjectKind, subjectId, orgId),
+    await loadFlowSubjectSubsidiary(subjectKind, subjectId, orgId, authz.allowedSubsidiaryIds),
   )
   if (denied) return denied
   const status = await withOrgContext(orgId, () => adapter.getStatus(subjectId))

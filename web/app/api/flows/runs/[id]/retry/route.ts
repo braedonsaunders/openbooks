@@ -36,7 +36,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const subsidiaryDenied = guardSubsidiaryScope(
     gate,
-    await loadFlowSubjectSubsidiary(run.subjectKind, run.subjectId, orgId),
+    await loadFlowSubjectSubsidiary(run.subjectKind, run.subjectId, orgId, gate.allowedSubsidiaryIds),
   )
   if (subsidiaryDenied) return subsidiaryDenied
 

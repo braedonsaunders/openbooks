@@ -55,7 +55,7 @@ async function availableButtons(
   // use a forged id to run an action on a hidden subsidiary's record.
   const denied = guardSubsidiaryScope(
     authz,
-    await loadFlowSubjectSubsidiary(subjectKind, subjectId, authz.user.orgId),
+    await loadFlowSubjectSubsidiary(subjectKind, subjectId, authz.user.orgId, authz.allowedSubsidiaryIds),
   )
   if (denied) return denied
 

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'gateId and toUserId required' }, { status: 400 })
   }
 
-  const gate = await loadGateHeader(body.gateId, authz.user.orgId)
+  const gate = await loadGateHeader(body.gateId, authz.user.orgId, authz.allowedSubsidiaryIds)
   if (!gate) return NextResponse.json({ error: 'approval not found' }, { status: 404 })
   const subsidiaryDenied = guardSubsidiaryScope(authz, gate.subsidiary_id)
   if (subsidiaryDenied) return subsidiaryDenied
