@@ -33,6 +33,9 @@ export async function loadAccount(
   const childScope = allowedSubsidiaryIds === undefined
     ? sql``
     : subsidiaryVisibleFilter(sql`child.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
+  const parentScope = allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(sql`parent.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
   const transactionScope = allowedSubsidiaryIds === undefined
     ? sql``
     : subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)
@@ -46,7 +49,7 @@ export async function loadAccount(
            (select count(*)::int from accounts child
              where child.org_id = a.org_id and child.parent_id = a.id and child.is_active ${childScope}) as active_child_count
       from accounts a
-      left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
+      left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id ${parentScope}
       left join subsidiaries s on s.id = a.subsidiary_id and s.org_id = a.org_id
      where a.id = ${id} and a.org_id = ${orgId} ${subsidiaryScope}
   `))

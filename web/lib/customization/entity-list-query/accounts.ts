@@ -4,6 +4,7 @@ import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { statementBookExpr } from "../../gl-summary";
 import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 
 /* ------------------------------------------------------------------ */
 /* Accounts                                                            */
@@ -38,8 +39,11 @@ export function accountBaseJoins(today: string, allowedSubsidiaryIds?: ReadonlyS
     : ids.length
       ? sql`and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
       : sql`and false`
+  const parentSubsidiaryScope = allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(sql`parent.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
   return sql`
-  left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
+  left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id ${parentSubsidiaryScope}
   left join lateral (
     with recursive descendants(id) as (
       select a.id
