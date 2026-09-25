@@ -6,6 +6,7 @@ import {
   finalizeEmploymentMigrationReport,
   migrationExitCode,
   parseMigrationRef,
+  resolveNaturalEmployment,
   type EmploymentMigrationReport,
   type PersonMigrationResult,
 } from "./migration-execute.ts";
@@ -170,6 +171,23 @@ test("evidence token round-trips namespaces needing encoding", () => {
   assert.equal(parsed.sourceId, "person 001/2");
   assert.equal(parsed.sourceFingerprint, "b".repeat(64));
   assert.equal(parsed.sourceVersion, "extract v2");
+});
+
+test("natural-key match inserts when absent, reuses one, refuses several as ambiguous", () => {
+  assert.deepEqual(
+    [
+      resolveNaturalEmployment([], false),
+      resolveNaturalEmployment(["e-1"], false),
+      resolveNaturalEmployment(["e-1", "e-2"], false),
+      resolveNaturalEmployment([], true),
+    ],
+    [
+      { kind: "insert" },
+      { kind: "reuse-db", employmentId: "e-1" },
+      { kind: "ambiguous", employmentIds: ["e-1", "e-2"] },
+      { kind: "reuse-run" },
+    ],
+  );
 });
 
 test("corrupt evidence token fails closed, never guesses", () => {

@@ -22,6 +22,11 @@
  * - Idempotent per person: re-running with the same inputs writes nothing
  *   and reports `already_migrated` per person. Changed inputs refuse with
  *   the diff (binding_conflict) rather than silently re-migrating.
+ * - No duplicate employments: when the HR path already created an
+ *   employment for the same natural key (org, worker party, employer
+ *   subsidiary), the migration reuses it and reports `already_migrated`
+ *   instead of inserting a second row. Several matches refuse the person
+ *   as ambiguous rather than guessing or inserting alongside.
  * - Historical coverage stays `unknown`; no start dates are invented. An
  *   observation-date migration writes service_start NULL.
  * - Everything for an org runs in ONE transaction; any refusal rolls the
@@ -327,6 +332,49 @@ export function migrationExitCode(report: EmploymentMigrationReport): number {
 // Executor.
 // ---------------------------------------------------------------------------
 
+/**
+ * Natural-key match for one migration candidate against employments the HR
+ * path already created (org, worker party, employer subsidiary). Pure: the
+ * caller supplies the stored ids in deterministic order plus whether an
+ * earlier row in this same run already claimed the key with an insert.
+ */
+export type NaturalEmploymentMatch =
+  | { readonly kind: "insert" }
+  | { readonly kind: "reuse-db"; readonly employmentId: string }
+  | { readonly kind: "reuse-run" }
+  | { readonly kind: "ambiguous"; readonly employmentIds: readonly string[] };
+
+export function resolveNaturalEmployment(
+  existingIds: readonly string[],
+  runClaimed: boolean,
+): NaturalEmploymentMatch {
+  if (existingIds.length === 0) {
+    return runClaimed ? { kind: "reuse-run" } : { kind: "insert" };
+  }
+  if (existingIds.length === 1 && !runClaimed) {
+    return { kind: "reuse-db", employmentId: existingIds[0] ?? "" };
+  }
+  return {
+    kind: "ambiguous",
+    employmentIds: runClaimed ? [...existingIds, "<this-run>"] : existingIds,
+  };
+}
+
+/** Pre-existing employment ids for one natural key, deterministic order. */
+async function findEmploymentsByNaturalKey(
+  orgId: string,
+  workerPartyId: string,
+  employerSubsidiaryId: string,
+): Promise<string[]> {
+  const found = (await db.execute<{ id: string }>(sql`
+    select id::text as id from worker_employments
+     where org_id = ${orgId}
+       and worker_party_id = ${workerPartyId}::uuid
+       and employer_subsidiary_id = ${employerSubsidiaryId}::uuid
+     order by created_at, id`)) as unknown as { rows: Array<{ id: string }> };
+  return found.rows.map((row) => row.id);
+}
+
 export interface ExecuteEmploymentMigrationOptions {
   readonly orgId: string;
   readonly rows: readonly SourcePersonRow[];
@@ -531,6 +579,51 @@ export async function executeEmploymentMigration(
     });
 
     const preflight = preflightEmploymentMigration(withBindings);
+    // Pre-existing employment guard (HRM-MIGRATE-DUP-EMPLOYMENT): the HR path
+    // may already have created an employment for the same natural key (org,
+    // worker party, employer subsidiary) before the migration runs, and
+    // inserting again would duplicate it. Decided once per run, in preflight
+    // order, so dry runs preview the apply outcomes and the write loop below
+    // trusts the decision (same transaction, advisory-locked for applies).
+    // One match reuses that employment — no employment, version, assignment,
+    // or evidence rows are written for it, so the employment_changes
+    // vocabulary (which has no adoption kind) stays honest. Several matches
+    // refuse as ambiguous. A re-run re-resolves the same way, which keeps
+    // the run idempotent; a reused employment carries no migration evidence
+    // row, so later changed inputs re-resolve rather than conflicting.
+    const naturalDecisions = new Map<string, NaturalEmploymentMatch>();
+    const reuseOf = new Map<string, string>();
+    const claimedNaturalKeys = new Map<string, string>();
+    for (const evaluated of preflight.rows) {
+      if (evaluated.classification !== "ready" || evaluated.candidate === null) continue;
+      assertUuid(
+        evaluated.nativePartyId,
+        "native party",
+        "supply collector evidence with the native parties.id this candidate maps to",
+      );
+      assertUuid(
+        evaluated.candidate.employerSubsidiaryId,
+        "employer subsidiary",
+        "supply collector evidence with the legal subsidiary id of the current employer",
+      );
+      const naturalKey = JSON.stringify([
+        evaluated.nativePartyId,
+        evaluated.candidate.employerSubsidiaryId,
+      ]);
+      const personKey = bindingKey(evaluated.sourceNamespace, evaluated.sourceId);
+      const existingIds = await findEmploymentsByNaturalKey(
+        orgId,
+        evaluated.nativePartyId,
+        evaluated.candidate.employerSubsidiaryId,
+      );
+      const priorClaim = claimedNaturalKeys.get(naturalKey);
+      const decision = resolveNaturalEmployment(existingIds, priorClaim !== undefined);
+      if (decision.kind === "insert") claimedNaturalKeys.set(naturalKey, personKey);
+      if (decision.kind === "reuse-run" && priorClaim !== undefined) {
+        reuseOf.set(personKey, priorClaim);
+      }
+      naturalDecisions.set(personKey, decision);
+    }
     // Ready rows carry unique source keys (duplicates are always ambiguous),
     // so the digest join below is exact for every row this run can write.
     // Same-key rows sharing a native party but differing elsewhere are all
@@ -576,6 +669,55 @@ export async function executeEmploymentMigration(
         };
       }
       if (evaluated.classification === "ready" && evaluated.candidate !== null) {
+        const natural = naturalDecisions.get(
+          bindingKey(evaluated.sourceNamespace, evaluated.sourceId),
+        );
+        if (natural?.kind === "reuse-db" || natural?.kind === "reuse-run") {
+          const employmentId =
+            natural.kind === "reuse-db" ? natural.employmentId : null;
+          return {
+            ...base,
+            outcome: "already_migrated" as const,
+            employmentId,
+            issues: evaluated.issues,
+            notes: [
+              ...evaluated.notes,
+              {
+                code: "reused_preexisting_employment",
+                detail:
+                  natural.kind === "reuse-db"
+                    ? `Reused pre-existing employment ${employmentId}: the HR path already created it ` +
+                      "for this worker and employer, so the migration wrote no employment, version, " +
+                      "assignment, or evidence rows for this person."
+                    : (dryRun ? "Would reuse" : "Reuses") +
+                      " the employment this run inserts for an earlier source row with the " +
+                      "same worker and employer; no second employment is written.",
+              },
+            ],
+            diff: null,
+          };
+        }
+        if (natural?.kind === "ambiguous") {
+          const issue: PreflightIssue = {
+            code: "ambiguous_preexisting_employment",
+            level: "ambiguous",
+            detail:
+              `HR rows already exist ${natural.employmentIds.length} times for this worker and ` +
+              "employer before the migration runs; refusing to guess which employment is canonical " +
+              "or to insert another duplicate.",
+            remedy:
+              "Reconcile the duplicate worker_employments rows to one employment per worker and " +
+              "employer subsidiary (retire or merge with operator approval and evidence) before " +
+              "re-running; the migration never picks among several and never inserts alongside them.",
+          };
+          return {
+            ...base,
+            outcome: "refused" as const,
+            employmentId: null,
+            issues: [...evaluated.issues, issue],
+            diff: null,
+          };
+        }
         return {
           ...base,
           outcome: (dryRun ? "would_migrate" : "migrated") as PersonMigrationOutcome,
@@ -754,15 +896,34 @@ export async function executeEmploymentMigration(
         );
         written.set(bindingKey(person.sourceNamespace, person.sourceId), employment.id);
       }
-      const completed: PersonMigrationResult[] = persons.map((person) =>
-        person.outcome === "migrated"
-          ? {
-              ...person,
-              employmentId:
-                written.get(bindingKey(person.sourceNamespace, person.sourceId)) ?? null,
+      const completed: PersonMigrationResult[] = persons.map((person) => {
+        if (person.outcome === "migrated") {
+          return {
+            ...person,
+            employmentId:
+              written.get(bindingKey(person.sourceNamespace, person.sourceId)) ?? null,
+          };
+        }
+        if (person.outcome === "already_migrated" && person.employmentId === null) {
+          // Reuse of an employment this same run inserted: resolve the id
+          // from the earlier row's write. A missing write is a failure, not
+          // a null — the decision promised exactly one insert for the key.
+          const sourceKey = reuseOf.get(
+            bindingKey(person.sourceNamespace, person.sourceId),
+          );
+          if (sourceKey !== undefined) {
+            const resolved = written.get(sourceKey);
+            if (resolved === undefined) {
+              throw new EmploymentMigrationError(
+                `reuse of this run's employment for ${person.sourceNamespace}/${person.sourceId} ` +
+                  "names an insert no write produced; refusing a null employment id — retry the run",
+              );
             }
-          : person,
-      );
+            return { ...person, employmentId: resolved };
+          }
+        }
+        return person;
+      });
       return finalize(completed, written.size);
     }
 
