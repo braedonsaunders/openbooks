@@ -59,17 +59,23 @@ interface AddedRegionRow {
  * the pack. When no pack declares a levy there is nothing to carry in, and
  * the section renders nothing rather than an empty grid.
  */
-export function EmployerLevyOpeningsView({
-  year,
-  levies,
-  rows,
-  canManage,
-}: {
+type EmployerLevyOpeningsViewProps = {
   year: number
   levies: DeclaredLevy[]
   rows: StoredLevyOpening[]
   canManage: boolean
-}) {
+}
+
+export function EmployerLevyOpeningsView(props: EmployerLevyOpeningsViewProps) {
+  return <EmployerLevyOpeningsYearView key={props.year} {...props} />
+}
+
+function EmployerLevyOpeningsYearView({
+  year,
+  levies,
+  rows,
+  canManage,
+}: EmployerLevyOpeningsViewProps) {
   const t = useTranslations('payroll')
   const router = useRouter()
   const text = (key: string, fallback: string) =>
