@@ -87,8 +87,10 @@ export async function reconcilePayrollFilingAccounts(input: {
         // stub: the bill creator refuses the mismatch, and the one-time
         // unknown→reconciled guard would make it uncorrectable. Org-wide
         // (null-subsidiary) accounts stay usable everywhere. An account the
-        // org does not hold falls through to the update, where the tenant FK
-        // and country guard refuse it as before.
+        // org does not hold refuses by name here: falling through to the
+        // update would surface only a raw database error from the tenant FK
+        // or the country guard, hiding the row from the remittance preflight
+        // with no usable refusal.
         if (row.filingAccountId !== null) {
           const account = (await db.execute<{
             subsidiary_id: string | null; account_number: string | null;
@@ -98,7 +100,13 @@ export async function reconcilePayrollFilingAccounts(input: {
               from payroll_filing_accounts a
               left join subsidiaries ent on ent.org_id=a.org_id and ent.id=a.subsidiary_id
              where a.org_id=${input.orgId} and a.id=${row.filingAccountId}`)).rows[0] ?? null;
-          if (account && account.subsidiary_id != null && account.subsidiary_id !== source.subsidiary_id) {
+          if (!account) {
+            throw new PayrollError(
+              `Cannot reconcile pay stub ${row.stubId} with filing account ${row.filingAccountId}: ` +
+              `this organization holds no filing account with that id. Register the program account first, then reconcile.`,
+            );
+          }
+          if (account.subsidiary_id != null && account.subsidiary_id !== source.subsidiary_id) {
             const label = account.account_number ?? account.name ?? row.filingAccountId;
             const accountEntity = account.entity_name ?? account.subsidiary_id;
             if (source.subsidiary_id == null) {
