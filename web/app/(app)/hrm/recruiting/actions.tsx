@@ -130,6 +130,7 @@ export function ApplicationAttachIsland({
       refresh()
     } catch {
       setError(labels.failed)
+    } finally {
       setBusy(false)
     }
   }
@@ -222,6 +223,7 @@ export function RequisitionLifecycleIsland({
       refresh()
     } catch {
       setError(labels.failed)
+    } finally {
       setBusy(false)
     }
   }
@@ -746,6 +748,7 @@ export function ScorecardFormIsland({
       refresh()
     } catch {
       setError(labels.failed)
+    } finally {
       setBusy(false)
     }
   }
@@ -834,6 +837,7 @@ export function SlotProposeIsland({
       refresh()
     } catch {
       setError(labels.failed)
+    } finally {
       setBusy(false)
     }
   }
@@ -865,6 +869,7 @@ export function SlotProposeIsland({
       refresh()
     } catch {
       setError(labels.failed)
+    } finally {
       setBusy(false)
     }
   }
@@ -934,6 +939,7 @@ export function OfferSigningIsland({
       refresh()
     } catch {
       setError(labels.failed)
+    } finally {
       setBusy(false)
     }
   }
@@ -986,12 +992,12 @@ export function PostingActionsIsland({
       const res = await postJson(url, 'POST', body)
       if (!res.ok) {
         setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
         return
       }
       refresh()
     } catch {
       setError(labels.failed)
+    } finally {
       setBusy(false)
     }
   }
