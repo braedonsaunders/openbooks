@@ -8,6 +8,7 @@ import {
   withOrgTransaction,
 } from "../platform/db.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { PaymentError } from "./payment-errors.ts";
@@ -168,14 +169,39 @@ async function auditProfileChange(
   `);
 }
 
+/**
+ * A profile points at a bank account and optionally a subsidiary: both must
+ * be visible to the caller, checked here under the account row lock so a
+ * concurrent subsidiary move cannot slip between the check and the insert.
+ * A missing, cross-org, or out-of-scope account answers the uniform
+ * not-found. Null scope is the unrestricted caller.
+ */
+async function requireProfileScope(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  orgId: string,
+  bankAccountId: string,
+  subsidiaryId: string | null | undefined,
+  scope: ReadonlySet<string> | null,
+): Promise<void> {
+  const account = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from accounts where id = ${bankAccountId} and org_id = ${orgId} for share`));
+  if (!account.rows[0]
+    || !subsidiaryScopeAllows(scope, account.rows[0].subsidiary_id, { orgWideNull: true })
+    || !subsidiaryScopeAllows(scope, subsidiaryId ?? null, { orgWideNull: true })) {
+    throw new ScopeNotFoundError();
+  }
+}
+
 /** Creates a profile without ever persisting plaintext originator credentials. */
 export async function createPaymentBankProfile(
   orgId: string,
   userId: string,
   input: PaymentBankProfileInput,
+  scope: ReadonlySet<string> | null = null,
 ): Promise<{ id: string }> {
   await validatePaymentBankProfileRefs(orgId, input);
   return db.transaction(async (tx) => {
+    await requireProfileScope(tx, orgId, input.bankAccountId, input.subsidiaryId, scope);
     const profile = (await tx.insert(schema.paymentBankProfiles).values({
       orgId,
       name: input.name.trim(),
@@ -209,6 +235,7 @@ export async function updatePaymentBankProfile(
   orgId: string,
   userId: string,
   input: Partial<PaymentBankProfileInput>,
+  scope: ReadonlySet<string> | null = null,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const existing = (await tx.execute<Record<string, unknown> & {
@@ -243,6 +270,16 @@ export async function updatePaymentBankProfile(
       sftpServerId: input.sftpServerId === undefined ? current.sftp_server_id : input.sftpServerId,
       originatorSecrets,
     });
+    // Repointing at another subsidiary's bank account is the same privilege
+    // as creating there: refuse it under the same account lock, against the
+    // effective (merged) refs rather than only the submitted patch.
+    await requireProfileScope(
+      tx,
+      orgId,
+      input.bankAccountId ?? current.bank_account_id,
+      input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId,
+      scope,
+    );
     const secret = rotating
       ? input.originatorSecrets === null
         ? null
