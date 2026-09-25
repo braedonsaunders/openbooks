@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
+import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import {
   DriverAdminError,
   getDimensionValueLabels,
@@ -33,6 +34,8 @@ const previewBodySchema = z.object({
 export async function POST(req: Request) {
   const gate = await guardAllocations("allocations.read");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, previewBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const { driverId, periodId, date } = parsedBody.data;

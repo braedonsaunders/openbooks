@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { can, type Authz } from "../authz";
+import { can, guardUnrestrictedScope, type Authz } from "../authz";
 import { entryDetail } from "../data";
 import { isFeatureEnabled } from "../features";
 import { ReportBookSelectionError, reportBookSelection } from "../report-books";
@@ -344,6 +344,7 @@ const previewDriverVectorTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const off = await allocationsOff(authz);
     if (off) return off;
+    if (guardUnrestrictedScope(authz)) return { ok: false, error: "requires unrestricted subsidiary access" };
     const a = raw as { driverId?: string; driverKey?: string; periodId?: string; period?: string };
     const driverId = await resolveDriverId(authz.user.orgId, authz.allowedSubsidiaryIds, a);
     if (typeof driverId !== "string") return driverId;

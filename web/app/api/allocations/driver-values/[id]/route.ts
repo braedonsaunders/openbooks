@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
+import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import {
   DriverAdminError,
@@ -32,6 +33,8 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function PATCH(req: Request, { params }: Ctx) {
   const gate = await guardAllocations("allocations.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const parsedBody = await parseJsonBody(req, valuePatchSchema);
@@ -47,6 +50,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
 export async function DELETE(_req: Request, { params }: Ctx) {
   const gate = await guardAllocations("allocations.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   try {

@@ -4,15 +4,12 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// A8 driver-values API: gates, overlap guard, end-dating, onDate reads.
-// Same mock-authz harness as the drivers route test.
-
 const stateKey = Symbol.for("openbooks.alloc-values-route-test");
 interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
   NextResponse: typeof import("next/server").NextResponse | null;
 }
@@ -30,6 +27,7 @@ const mockAuthz = `
     if (!covered) return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
     return state.authz
   }
+  export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds === null ? null : NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 }) }
 `;
 
 routeState.NextResponse = (await import("next/server")).NextResponse;
@@ -39,6 +37,7 @@ const hooks = registerHooks({
     if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
       return { url: "mock:values-authz", shortCircuit: true };
     }
+    if (specifier.includes("lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/driver-values/")) return { url: "mock:values-authz", shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -61,11 +60,11 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 
 
-function authenticate(orgId: string, actorId: string, permissions: string[]): void {
+function authenticate(orgId: string, actorId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.authz = {
     user: { orgId, id: actorId },
     permissions: new Set(permissions),
-    allowedSubsidiaryIds: null,
+    allowedSubsidiaryIds,
   };
 }
 
@@ -157,7 +156,6 @@ test("values grid: add, overlap refused, end-date, onDate read, delete", async (
       ((await autumn.json()) as { values: { value: string }[] }).values.map((v) => v.value),
       ["4.0000"],
     );
-
     const malformed = await itemRoute.DELETE(jsonRequest("/api/allocations/driver-values/nope", "DELETE"), {
       params: Promise.resolve({ id: "nope" }),
     });
@@ -167,6 +165,7 @@ test("values grid: add, overlap refused, end-date, onDate read, delete", async (
       params: Promise.resolve({ id: valueId }),
     });
     assert.equal(deleted.status, 200);
+    authenticate(s.orgId, "restricted-actor", ["allocations.read"], new Set([s.subsidiaryId])); assert.equal((await collectionRoute.GET(jsonRequest(`/api/allocations/driver-values?driverId=${s.driverId}`, "GET"))).status, 403);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(s.orgId);
@@ -180,7 +179,6 @@ test("values writes need manage; reads 404 with feature off", async () => {
     authenticate(org.orgId, actorId, ["allocations.read"]);
     const denied = await collectionRoute.POST(jsonRequest("/api/allocations/driver-values", "POST", {}));
     assert.equal(denied.status, 403);
-    // Feature off (never enabled for this org).
     const missing = await collectionRoute.GET(
       jsonRequest(`/api/allocations/driver-values?driverId=${randomUUID()}`, "GET"),
     );
