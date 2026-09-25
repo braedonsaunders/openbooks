@@ -876,7 +876,8 @@
         "slots": {
           "irrf": "IRRF未払金（INSS・扶養家族・簡易控除後の課税標準に対する月次源泉徴収）",
           "inss": "INSS未払金（従業員負担拠出＋事業主負担：patronal・RAT・terceiros）",
-          "fgts": "FGTS未払金（Caixaの労働者口座への事業主8％拠出）"
+          "fgts": "FGTS未払金（Caixaの労働者口座への事業主8％拠出）",
+          "salario_familia": "Salário-família未払金（労働者への給付、事業主INSSとの相殺）"
         }
       },
       "SG": {

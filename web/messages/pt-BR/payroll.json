@@ -876,7 +876,8 @@
         "slots": {
           "irrf": "IRRF a recolher (retenção mensal sobre a base após INSS, dependentes e desconto simplificado)",
           "inss": "INSS a recolher (contribuição do segurado mais patronal, RAT e terceiros do empregador)",
-          "fgts": "FGTS a recolher (depósitos de 8% do empregador nas contas vinculadas dos trabalhadores na Caixa)"
+          "fgts": "FGTS a recolher (depósitos de 8% do empregador nas contas vinculadas dos trabalhadores na Caixa)",
+          "salario_familia": "Salário-família a pagar (cota paga aos trabalhadores, compensada no INSS patronal)"
         }
       },
       "SG": {

@@ -884,7 +884,8 @@
         "slots": {
           "irrf": "IRRF payable (monthly withholding on the base after INSS, dependents and the simplified discount)",
           "inss": "INSS payable (employee contribution plus employer patronal, RAT and terceiros)",
-          "fgts": "FGTS payable (8% employer deposits to workers’ accounts at Caixa)"
+          "fgts": "FGTS payable (8% employer deposits to workers’ accounts at Caixa)",
+          "salario_familia": "Salário-família payable (quota paid to workers, compensated against employer INSS)"
         }
       }
     },

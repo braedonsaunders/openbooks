@@ -10,7 +10,7 @@
 import { registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
-// Required employee facts. The compute path reads three `emp[...]` keys.
+// Required employee facts. The compute path reads four `emp[...]` keys.
   // This pack still declares NO employee-filed withholding certificate
   // (there is none for IRRF/INSS; saying so is a statement, not a gap) —
   // the `br_cadastro` declaration is the employer-held cadastre facts made
@@ -43,6 +43,23 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
         + "accepted rather than refused.",
       required: false,
       producer: { kind: "profile_column", column: "br_pensao_mensal" },
+    },
+    {
+      key: "br_salario_familia_filhos",
+      kind: "count",
+      min: 0,
+      label: "Filhos qualificados salário-família (<14 ou inválidos, eSocial cadastro)",
+      refusalReason:
+        "The R$ 67,54 salário-família quota is per qualifying child — it is never defaulted.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "No channel exists yet: the count needs a profile column (migration) plus a br_cadastro "
+          + "certificate field, neither of which this change ships. Until then absent is accepted as "
+          + "no qualifying children — the br_pensao_mensal precedent — so a qualifying case with no "
+          + "declared count is unpaid rather than refused without remedy.",
+      },
     },
     {
       key: "br_regime",

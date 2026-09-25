@@ -876,7 +876,8 @@
         "slots": {
           "irrf": "IRRF por pagar (retención mensual sobre la base tras INSS, dependientes y descuento simplificado)",
           "inss": "INSS por pagar (aporte del empleado más patronal, RAT y terceiros del empleador)",
-          "fgts": "FGTS por pagar (depósitos del empleador del 8% en las cuentas de los trabajadores en Caixa)"
+          "fgts": "FGTS por pagar (depósitos del empleador del 8% en las cuentas de los trabajadores en Caixa)",
+          "salario_familia": "Salário-família por pagar (cuota pagada a los trabajadores, compensada contra el INSS patronal)"
         }
       },
       "SG": {

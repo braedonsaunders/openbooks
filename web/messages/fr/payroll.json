@@ -876,7 +876,8 @@
         "slots": {
           "irrf": "IRRF à payer (retenue mensuelle sur la base après INSS, personnes à charge et décote simplifiée)",
           "inss": "INSS à payer (cotisation salariale plus patronale, RAT et terceiros de l’employeur)",
-          "fgts": "FGTS à payer (dépôts patronaux de 8 % sur les comptes des salariés auprès de Caixa)"
+          "fgts": "FGTS à payer (dépôts patronaux de 8 % sur les comptes des salariés auprès de Caixa)",
+          "salario_familia": "Salário-família à payer (quota versé aux salariés, compensé sur l’INSS patronal)"
         }
       },
       "SG": {
