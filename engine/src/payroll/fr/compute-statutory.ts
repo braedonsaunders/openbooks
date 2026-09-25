@@ -309,6 +309,19 @@ export async function computeFrStatutory(
     );
   }
   const transmitted = answers["taux_transmis"] ?? null;
+  // Short contracts price the default grid AFTER the statutory abatement
+  // (€748 Jan–May, €766 from June), which no calculation here applies. A
+  // declared short contract without a transmitted rate refuses by name
+  // instead of over-withholding; with a transmitted rate the grille path
+  // (and the allowance) is moot. See FR_REFUSED_2026.
+  if (answers["short_contract"] === "true" && (transmitted == null || transmitted === "")) {
+    throw new PayrollPackError(
+      "FR PAS refuses a declared short contract (CDD ou mission d'intérim of no more than two months, "
+      + "BOI-IR-PAS-20-20-30-10 §230–250) without a transmitted DGFiP rate: the €748/€766 contrats-courts "
+      + "abattement (BOI-BAREME-000037) is not computed. Transmit the employee's DGFiP rate, or wait for "
+      + "allowance support, before calculating.",
+    );
+  }
   if (!ctx.subsidiaryId) {
     throw new PayrollPackError("FR RGDU needs the paying legal-employer identity to resolve its effective employer facts.");
   }

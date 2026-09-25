@@ -192,6 +192,13 @@ const FR_PAS_CERTIFICATE: PayrollCertificate = {
       max: "100",
       help: "The PAS rate DGFiP returned for this employee, as a percent (7.5 means 7.5%). Copied from the DGFiP retour, never computed here.",
     },
+    {
+      key: "short_contract",
+      label: "Contrat court (CDD ou intérim, durée initiale ≤ 2 mois)",
+      kind: "flag",
+      required: false,
+      help: "Whether this employment is a short contract under BOI-IR-PAS-20-20-30-10 §230–250. When asserted and no DGFiP rate has been transmitted, the statutory €748/€766 abatement applies to the default grid — which this engine does not compute — so the run refuses by name instead of over-withholding.",
+    },
   ],
 };
 
