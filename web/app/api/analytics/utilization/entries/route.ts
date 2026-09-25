@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -147,10 +148,7 @@ export async function GET(req: Request) {
     (error: unknown) => ({ ok: false as const, error }),
   );
   if (!ratesResult.ok) {
-    return NextResponse.json(
-      { error: "missing exchange rate", message: ratesResult.error instanceof Error ? ratesResult.error.message : String(ratesResult.error) },
-      { status: 422 },
-    );
+    return apiErrorResponse(ratesResult.error);
   }
   const rates = ratesResult.rates;
   let entries;
@@ -170,10 +168,7 @@ export async function GET(req: Request) {
       };
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: "missing exchange rate", message: error instanceof Error ? error.message : String(error) },
-      { status: 422 },
-    );
+    return apiErrorResponse(error);
   }
   const currency = rates.base || await presentationCurrency(user.orgId);
   const totalRow = totals.rows[0];

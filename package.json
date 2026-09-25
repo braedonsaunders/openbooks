@@ -68,6 +68,7 @@
     "check:tx-concurrency": "node scripts/check-tx-concurrency.mjs",
     "check:session-advisory-locks": "node scripts/check-session-advisory-locks.mjs",
     "check:org-wide-config-scope": "node scripts/check-org-wide-config-scope.mjs",
+    "check:api-error-sanitization": "node scripts/check-api-error-sanitization.mjs",
     "check:uuid-shapes": "node scripts/check-uuid-shapes.mjs",
     "check:sql-raw-interpolation": "node scripts/check-sql-raw-interpolation.mjs",
     "check:migration-preflights": "node scripts/check-migration-preflights.mjs",

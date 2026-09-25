@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
@@ -155,10 +156,7 @@ export async function GET(req: Request) {
     (error: unknown) => ({ ok: false as const, error }),
   );
   if (!fxResult.ok) {
-    return NextResponse.json(
-      { error: "missing exchange rate", message: fxResult.error instanceof Error ? fxResult.error.message : String(fxResult.error) },
-      { status: 422 },
-    );
+    return apiErrorResponse(fxResult.error);
   }
   const fx = fxResult.rates;
   let recentAmounts: string[];
@@ -171,10 +169,7 @@ export async function GET(req: Request) {
       "0",
     ));
   } catch (error) {
-    return NextResponse.json(
-      { error: "missing exchange rate", message: error instanceof Error ? error.message : String(error) },
-      { status: 422 },
-    );
+    return apiErrorResponse(error);
   }
   const currency = fx.base || await presentationCurrency(user.orgId);
   const rows = partyOpen.map((item) => {
