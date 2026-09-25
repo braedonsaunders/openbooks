@@ -25,6 +25,7 @@ import { certificateAmount, certificateChoice, certificateCount } from "../certi
 import "./employee-facts.ts";
 import "./employer-facts.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
+import { requireEsFiscalResidence } from "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculateEsIrpf2026 } from "./irpf-2026.ts";
@@ -306,6 +307,23 @@ export async function computeEsStatutory(
     fail(
       `employee es_horas_tiempo_parcial "${horasParcial}" was supplied but es_tiempo_parcial is not `
       + "\"true\": declare the part-time contract or clear the hours",
+    );
+  }
+
+  // Fiscal residence gates the math below: a nonresident's Spanish-source
+  // wages fall under the IRNR (LIRNR), never the IRPF retention algorithm —
+  // and "no certificate on file" is not a statutory resident, so an
+  // unrecorded status refuses rather than pricing IRNR wages as IRPF.
+  const residencia = requireEsFiscalResidence(
+    certificateFor("es_residencia_fiscal")?.answers.residencia,
+  );
+  if (residencia !== "residente") {
+    fail(
+      `employee residencia fiscal "${residencia}": Spanish-source wages of a nonresident are taxed `
+      + "under the IRNR (LIRNR, RD Legislativo 5/2004) at the general 19%/24% rates (art. 25), "
+      + "or under the applicable double-taxation treaty — and this pack computes neither. Pay this "
+      + "employee outside the system until IRNR pricing exists, or correct the es_residencia_fiscal "
+      + "certificate if the status is wrong",
     );
   }
 

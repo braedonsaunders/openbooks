@@ -7,10 +7,11 @@
  * module so every read registers before it can run. See
  * `../employee-facts.ts` for the shape and the derivation of `payable`.
  */
-import { registerEmployeeFacts } from "../employee-facts.ts";
+import { empFact, registerEmployeeFacts, resolveEmployeeFact } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 
-// Required employee facts. The compute path reads eleven `emp[...]` keys;
+// Required employee facts. The compute path reads twelve `emp[...]` keys;
   // the three blocking ones (situación, grupo, año) are served since 0191
   // by the profile columns the `es_datos_perceptor` certificate fields map
   // — kept apart from the Modelo 145, whose situación familiar (art. 81
@@ -18,7 +19,9 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
   // fourth (contrato temporal) accepts absence and stays unbuilt, as do the
   // fifth and sixth (the classified overtime pay split, per-period) and the
   // tenth and eleventh (tiempo parcial contract type and its monthly hours):
-  // no profile column or certificate field collects any of them yet.
+  // no profile column or certificate field collects any of them yet. The
+  // twelfth (residencia fiscal) resolves through the stored-certificate
+  // channel, like the US federal alien-status fact.
   //
   // OPEN, still: which AEAT/TGSS artefact the operator copies each value
   // off (contrato, alta en Seguridad Social, otro) — and, shared with PL,
@@ -192,6 +195,45 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
           + "certificate or profile-column producer here.",
       },
     },
+    {
+      key: "es_residencia_fiscal",
+      kind: "choice",
+      choices: ["residente", "no_residente_sin_convenio", "no_residente_con_convenio"],
+      label: "Residencia fiscal (IRPF/IRNR)",
+      refusalReason:
+        "Spanish-source wages of a nonresident fall under the IRNR, not the IRPF, and this pack "
+        + "computes no IRNR levy — pricing them as IRPF withholds the wrong tax.",
+      // The calculation boundary below requires this row-backed status; keep
+      // it out of profile-column readiness gaps because certificates are
+      // resolved through the stored-certificate channel (same shape as the
+      // US federal alien-status fact).
+      required: false,
+      producer: { kind: "certificate", certificate: "es_residencia_fiscal", field: "residencia" },
+    },
 ];
 
 registerEmployeeFacts("ES", ES_EMPLOYEE_FACTS);
+
+/**
+ * Fiscal residence is required at the ES calculation boundary. Spanish-source
+ * wages of a nonresident fall under the IRNR (LIRNR), never the IRPF retention
+ * algorithm — pricing them as IRPF withholds the wrong levy, so an unrecorded
+ * status refuses rather than assuming residence.
+ */
+export function requireEsFiscalResidence(raw: string | null | undefined): string {
+  // Route the certificate-backed fact through the same declared-fact reader
+  // as profile-backed facts, while preserving the certificate as producer.
+  const status = resolveEmployeeFact(
+    "ES",
+    "es_residencia_fiscal",
+    empFact("ES", { es_residencia_fiscal: raw ?? null }, "es_residencia_fiscal"),
+  );
+  if (!status) {
+    throw new PayrollPackError(
+      "ES payroll cannot calculate without the employee's fiscal residence; record residente "
+      + "fiscal en España, or the applicable no_residente value, on the employee's "
+      + "es_residencia_fiscal certificate — refused by name",
+    );
+  }
+  return status;
+}

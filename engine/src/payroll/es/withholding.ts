@@ -21,6 +21,9 @@
  * Non-residents are outside IRPF entirely: they fall under the Impuesto sobre
  * la Renta de No Residentes (LIRNR, RD Legislativo 5/2004), which no pack
  * engine computes — hence `taxesNonresidentWages: false` everywhere below.
+ * A nonresident reaching the ES engine is refused by name at the calculation
+ * boundary (the es_residencia_fiscal certificate), so the distinction can
+ * never price as "no tax".
  */
 import type {
   PayrollPackWithholding,
