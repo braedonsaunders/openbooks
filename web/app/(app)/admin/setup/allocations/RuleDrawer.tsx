@@ -296,6 +296,9 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
   const [detail, setDetail] = useState<RuleDetail | null>(null)
   const [options, setOptions] = useState<PickerOptions | null>(null)
   const [drivers, setDrivers] = useState<{ id: string; key: string; name: string; dimension: string; isActive: boolean }[]>([])
+  // A refused drivers list is not an empty drivers list: without this the
+  // picker renders the "no drivers" copy and the operator never retries.
+  const [driversError, setDriversError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [requestKey, setRequestKey] = useState(0)
 
@@ -304,6 +307,7 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
     let live = true
     const load = async () => {
       setError(null)
+      setDriversError(null)
       const [detailRes, optionsRes, driversRes] = await Promise.all([
         fetchJson(`/api/allocations/rules/${encodeURIComponent(ruleId)}`, { signal: controller.signal }),
         fetchJson('/api/allocations/options', { signal: controller.signal }),
@@ -345,6 +349,8 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       })
       if (driversRes.status === 200) {
         setDrivers((driversRes.body as { drivers?: typeof drivers })?.drivers ?? [])
+      } else {
+        setDriversError(apiError(driversRes.status, driversRes.body, t('drivers.loadFailed')).message)
       }
     }
     void load().catch((loadError: unknown) => {
@@ -379,7 +385,7 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       ) : tab === 'general' ? (
         <GeneralTab detail={detail} onSaved={setDetail} onStale={reload} />
       ) : tab === 'definition' ? (
-        <DefinitionTab ruleId={ruleId} detail={detail} options={options} drivers={drivers} onChanged={reload} />
+        <DefinitionTab ruleId={ruleId} detail={detail} options={options} drivers={drivers} driversError={driversError} onChanged={reload} />
       ) : tab === 'versions' ? (
         <VersionsTab ruleId={ruleId} detail={detail} onChanged={reload} />
       ) : (
@@ -477,12 +483,14 @@ function DefinitionTab({
   detail,
   options,
   drivers,
+  driversError,
   onChanged,
 }: {
   ruleId: string
   detail: RuleDetail
   options: PickerOptions
   drivers: { id: string; key: string; name: string; dimension: string; isActive: boolean }[]
+  driversError: string | null
   onChanged: () => void
 }) {
   const t = useTranslations('allocations')
@@ -888,6 +896,9 @@ function DefinitionTab({
                   clearable={isDraft}
                   emptyLabel={t('rules.definition.driver')}
                 />
+                {driversError ? (
+                  <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">{driversError}</p>
+                ) : null}
               </Field>
             ) : null}
             {form.basisKind === 'stepped' ? (
