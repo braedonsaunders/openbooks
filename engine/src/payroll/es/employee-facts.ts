@@ -198,7 +198,7 @@ import { PayrollPackError } from "../payroll-error.ts";
     {
       key: "es_residencia_fiscal",
       kind: "choice",
-      choices: ["residente", "no_residente_sin_convenio", "no_residente_con_convenio"],
+      choices: ["residente", "no_residente_ue_eee", "no_residente_otros", "no_residente_convenio"],
       label: "Residencia fiscal (IRPF/IRNR)",
       refusalReason:
         "Spanish-source wages of a nonresident fall under the IRNR, not the IRPF, and this pack "
