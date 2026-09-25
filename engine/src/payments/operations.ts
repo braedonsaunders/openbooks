@@ -1829,6 +1829,9 @@ async function processDuePaymentSchedule(
       scheduledFor: businessDate,
       sourceScheduleId: schedule.id,
       selectionCriteria: criteria,
+      maximumRunAmount: criteria.maximumRunAmount == null || criteria.maximumRunAmount === ""
+        ? null
+        : String(criteria.maximumRunAmount),
       sourceOccurrence: {
         scheduleId: schedule.id,
         occurrenceAt,

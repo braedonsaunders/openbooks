@@ -388,6 +388,7 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const fixture = await seedScheduleFixture(org, { action: "create_draft" });
+      await assert.rejects(withOrgContext(org.orgId, () => createPaymentRun({ orgId: org.orgId, createdBy: null, paymentBankProfileId: fixture.profileId, billDocumentIds: [fixture.billId], maximumRunAmount: "100" })), /live bill balances exceed the scheduled maximum run amount/);
       const run = await withOrgContext(org.orgId, () =>
         createPaymentRun({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
@@ -400,9 +401,8 @@ test(
         submitPaymentRun(run.id, org.orgId, fixture.operatorId));
 
       const stored = await runRow(org.orgId, run.id);
-      assert.equal(stored!.created_by, fixture.operatorId);
-      assert.equal(stored!.submitted_by, fixture.operatorId);
-      assert.equal(stored!.status, "pending_approval");
+      assert.deepEqual([stored!.created_by, stored!.submitted_by, stored!.status],
+        [fixture.operatorId, fixture.operatorId, "pending_approval"]);
 
       const events = await runEvents(org.orgId, run.id);
       assert.equal(events.find((e) => e.event_type === "run_created")!.actor_id, fixture.operatorId);
