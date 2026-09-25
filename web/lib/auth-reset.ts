@@ -148,6 +148,10 @@ export async function deliverResetEmail(
       subject: message.subject,
       status: "queued",
       categoryKey: "password_reset",
+      // The reset requester is anonymous (never signed in), so no user id
+      // may be invented: explicit system provenance instead of a null that
+      // reads as missing attribution.
+      actor: { kind: "system", reason: "password reset delivery" },
     });
     try {
       const outcome = await sendVia(transport, {
