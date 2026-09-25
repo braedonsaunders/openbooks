@@ -225,9 +225,69 @@ const DE_PV_NACHWEIS: PayrollCertificate = {
   ],
 };
 
+/**
+ * The §42b attestation record: the three employer-settled prerequisites the
+ * December certificates and the committed stubs cannot show — continuous
+ * employment through the Ausgleichsjahr (§42b Abs. 1 Satz 1), an unchanged
+ * class and Beschäftigungsland all year (Abs. 1 Satz 3 Nr. 2–3), and the
+ * absence of every other statutory exclusion (Nr. 1, 4, 4a, 5, 5a, 6, plus
+ * the untranscribed PAP paths). No agency form exists for it: the employer
+ * settles each flag from the HR records, the ELStAM retrieval history, the
+ * Betriebsstätten record, the Lohnkonto and the pay history, and files the
+ * answers here — the IE pack's "Employer PRSI class record" is the same
+ * shape (an employer record, not an agency form). Filed per employee per
+ * year in the existing certificate rows (no migration); the settlement
+ * edition requires it and refuses by name without it.
+ */
+const DE_AUSGLEICH: PayrollCertificate = {
+  key: "de_ausgleich",
+  form: "Arbeitgeberfeststellung (§42b EStG)",
+  label: "Voraussetzungen für den Lohnsteuer-Jahresausgleich",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation: "EStG §42b Abs. 1 (Voraussetzungen und Ausschlüsse des Lohnsteuer-Jahresausgleichs)",
+  summary:
+    "The employer's per-year attestation of the three §42b prerequisites "
+    + "for the Lohnsteuer-Jahresausgleich: continuous employment, an "
+    + "unchanged class and workplace, and no statutory exclusion. Settled "
+    + "from the employer's own records, not retrieved from ELStAM.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "ganzjaehrig",
+      label: "Ganzjähriges Dienstverhältnis",
+      kind: "flag",
+      required: true,
+      help: "Set when the employee stood in the employment relationship continuously "
+        + "through the whole Ausgleichsjahr and is unbeschränkt einkommensteuerpflichtig "
+        + "(§42b Abs. 1 Satz 1 EStG) — settle from the HR entry/exit dates and residence.",
+    },
+    {
+      key: "unveraendert",
+      label: "Unveränderte Steuerklasse und Betriebsstätte",
+      kind: "flag",
+      required: true,
+      help: "Set when the Steuerklasse and the Beschäftigungsland were unchanged all year "
+        + "and never V or VI (§42b Abs. 1 Satz 3 Nr. 2–3 EStG) — settle from the ELStAM "
+        + "retrieval history and the Betriebsstätten record.",
+    },
+    {
+      key: "kein_ausschluss",
+      label: "Kein Ausschlussgrund",
+      kind: "flag",
+      required: true,
+      help: "Set when no §42b exclusion applies: no employee objection, no wage-replacement "
+        + "benefits, no Großbuchstabe U, no mid-year Vorsorgepauschale change, no unwithheld "
+        + "foreign income — and no sonstige Bezüge, Versorgungsbezüge or Altersentlastungsbetrag, "
+        + "which this pack does not transcribe (Abs. 1 Satz 3 Nr. 1, 4, 4a, 5, 5a, 6). Settle "
+        + "from the Lohnkonto, the benefit records and the pay history.",
+    },
+  ],
+};
+
 const DE_CERTIFICATES: PayrollPackCertificates = {
   country: "DE",
-  certificates: [DE_ELSTAM, DE_PV_NACHWEIS],
+  certificates: [DE_ELSTAM, DE_PV_NACHWEIS, DE_AUSGLEICH],
 };
 
 function deWithholdingRegion(code: string, name: string): PayrollRegionWithholding {
@@ -462,9 +522,9 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
     KIST_AUSGLEICH: "Kirchenlohnsteuer zum Jahresausgleich — Erstattung",
   },
   // The monthly engine reads Steuerklasse and factors off the certificate
-  // answers, never off bare profile keys; the §42b settlement additionally
-  // reads the three attestation facts declared in ./employee-facts.ts
-  // (required: false, so the monthly path stays untouched).
+  // answers, never off bare profile keys; the §42b settlement reads its
+  // three attestation facts the same way — off the de_ausgleich certificate
+  // declared above (required: false, so the monthly path stays untouched).
   employeeFacts: DE_EMPLOYEE_FACTS,
   employerFacts: [],
   // The 2026 Lohnsteuer-Jahresausgleich (§42b EStG): one edition per
