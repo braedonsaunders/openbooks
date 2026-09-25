@@ -41,7 +41,7 @@ test('account registers scope both lines and totals within a visible intercompan
     })
     assert.equal(scoped.total, 1)
     assert.equal(scoped.balance, '100.0000')
-    assert.equal(scoped.lines[0]?.docId, null)
+    assert.equal(scoped.lines[0]?.doc_id, null)
     assert.equal(scoped.lines[0]?.amount, '100.0000')
     assert.equal(childScoped.total, 1)
     assert.equal(childScoped.balance, '-100.0000')

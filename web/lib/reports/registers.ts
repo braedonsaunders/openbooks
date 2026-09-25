@@ -137,7 +137,7 @@ export async function accountRegister(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         left join parties p on p.id = l.party_id and p.org_id = l.org_id
-        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
+        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id ${sourceDocumentScope}
        where l.account_id in (select id from account_scope)
          and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
     ), visible_lines as (
