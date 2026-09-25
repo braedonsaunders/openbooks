@@ -77,29 +77,42 @@ export function GeofenceSection({
     setBusy(true)
     setError(null)
     try {
-      const body =
-        kind === 'circle'
-          ? {
-              projectId,
-              kind,
-              center: { lat: Number(lat), lng: Number(lng) },
-              radiusM: Number(radius),
-              polygon: null,
-            }
-          : {
-              projectId,
-              kind,
-              center: null,
-              radiusM: null,
-              polygon: corners
-                .split('\n')
-                .map((line) => line.trim())
-                .filter(Boolean)
-                .map((line) => {
-                  const [a, b] = line.split(',').map((part) => Number(part.trim()))
-                  return { lat: a, lng: b }
-                }),
-            }
+      // Blank inputs must be refused by name before numeric conversion:
+      // Number('') is 0, so an unchecked conversion would persist a fence
+      // at (0,0). Zero itself stays valid — only the missing string refuses.
+      // Tuple members read through ?? '' because noUncheckedIndexedAccess
+      // types them string|undefined.
+      let body: Record<string, unknown>
+      if (kind === 'circle') {
+        if (lat.trim() === '' || lng.trim() === '') {
+          setError(t('field.coordsRequired'))
+          return
+        }
+        const center = { lat: Number(lat), lng: Number(lng) }
+        if (!Number.isFinite(center.lat) || !Number.isFinite(center.lng)) {
+          setError(t('field.coordsRequired'))
+          return
+        }
+        body = { projectId, kind, center, radiusM: Number(radius), polygon: null }
+      } else {
+        const polygon: Array<{ lat: number; lng: number }> = []
+        for (const line of corners.split('\n').map((entry) => entry.trim()).filter(Boolean)) {
+          const parts = line.split(',')
+          const latText = parts[0]?.trim() ?? ''
+          const lngText = parts[1]?.trim() ?? ''
+          if (parts.length !== 2 || latText === '' || lngText === '') {
+            setError(t('field.cornersInvalid'))
+            return
+          }
+          const corner = { lat: Number(latText), lng: Number(lngText) }
+          if (!Number.isFinite(corner.lat) || !Number.isFinite(corner.lng)) {
+            setError(t('field.cornersInvalid'))
+            return
+          }
+          polygon.push(corner)
+        }
+        body = { projectId, kind, center: null, radiusM: null, polygon }
+      }
       const res = await fetch('/api/time/geofences', {
         method: 'POST',
         credentials: 'same-origin',
