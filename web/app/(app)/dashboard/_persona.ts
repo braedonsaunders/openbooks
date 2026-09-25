@@ -301,8 +301,29 @@ export async function loadPersonaMetrics(
     if (await isFeatureEnabled(orgId, 'hrm')) {
       const mine = await listMyReviews({ orgId, actorId: userId }).catch(() => null)
       if (mine) {
-        for (const review of [...mine.asReviewer.filter((r) => r.status === 'pending'), ...mine.asSubject.filter((r) => r.status === 'shared')].slice(0, 3)) {
-          upcoming.push({ label: tp('reviewDue'), date: today, href: `/hrm/performance?review=${review.id}` })
+        const pending = mine.asReviewer.filter((r) => r.status === 'pending')
+        const shared = mine.asSubject.filter((r) => r.status === 'shared')
+        // The tile shows each review's real due date, never today: answers
+        // I owe fall due on the cycle manager date (self reviews on the
+        // self date), shared rows on the self date — the cycle period end
+        // bounds both when a role date is unset.
+        const dueByCycle = new Map<string, { selfDueOn: string | null; managerDueOn: string | null; periodEndOn: string }>()
+        const cycleIds = [...new Set([...pending, ...shared].map((r) => r.cycleId))]
+        if (cycleIds.length > 0) {
+          const cycles = (await db.execute<{ id: string; selfDueOn: string | null; managerDueOn: string | null; periodEndOn: string }>(sql`
+            select id::text as id, self_due_on::text as "selfDueOn", manager_due_on::text as "managerDueOn", period_end_on::text as "periodEndOn"
+              from hrm_review_cycles
+             where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(cycleIds)}::jsonb)::uuid)
+          `).catch(() => ({ rows: [] as { id: string; selfDueOn: string | null; managerDueOn: string | null; periodEndOn: string }[] }))).rows
+          for (const cycle of cycles) {
+            dueByCycle.set(cycle.id, { selfDueOn: cycle.selfDueOn, managerDueOn: cycle.managerDueOn, periodEndOn: cycle.periodEndOn })
+          }
+        }
+        for (const { review, own } of [...pending.map((review) => ({ review, own: false })), ...shared.map((review) => ({ review, own: true }))].slice(0, 3)) {
+          const due = dueByCycle.get(review.cycleId)
+          const selfReview = review.reviewerPartyId === review.subjectPartyId
+          const roleDue = selfReview || own ? due?.selfDueOn : due?.managerDueOn
+          upcoming.push({ label: tp('reviewDue'), date: roleDue ?? due?.periodEndOn ?? today, href: `/hrm/performance?review=${review.id}` })
         }
       }
     }
