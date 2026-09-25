@@ -219,6 +219,57 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     trace("ND_TRIBAL_SOURCE_WAGES", reservationWages);
   }
 
+  // ND withholding-guideline wage exclusions: solely agricultural labor for
+  // a farmer/rancher, and qualifying military pay under the military-pay
+  // deduction (withholding still applies when the employee elects it).
+  // Military pay keys off the shared classification; ag labor is attested
+  // per period because the guideline keys on the employment relationship,
+  // not a component class. Only qualifying dollars are excluded.
+  const exemptionAmount = (...classes: readonly string[]): bigint =>
+    (input.statutoryExemptionAmounts ?? [])
+      .filter((item) => item.category !== null && classes.includes(item.category))
+      .reduce((total, item) => total + U(item.amount), 0n);
+  const exclusionCert = input.supportingCertificates?.us_nd_wage_exclusion;
+  let excludedWages = 0n;
+  const militaryAmount = exemptionAmount("military_pay");
+  if (militaryAmount > 0n) {
+    if (exclusionCert?.onFile && certificateFlag(exclusionCert, "military_voluntary_withholding")) {
+      factors.ND_MILITARY_VOLUNTARY = "1";
+    } else {
+      factors.ND_EXEMPT_MILITARY_PAY = D(militaryAmount);
+      excludedWages += militaryAmount;
+    }
+  }
+  if (exclusionCert?.onFile && certificateFlag(exclusionCert, "ag_labor_sole")) {
+    const rawAg = certificateAmount(exclusionCert, "ag_period_wages");
+    if (rawAg == null) {
+      throw new PayrollError(
+        "North Dakota agricultural-labor exclusion needs this period's qualifying wages — "
+        + "attest the amount before calculating; refused by name",
+      );
+    }
+    let agWages: bigint;
+    try {
+      agWages = U(rawAg);
+    } catch {
+      throw new PayrollError(
+        `North Dakota agricultural-labor wages "${rawAg}" are not a valid amount — `
+        + "attest exact decimal dollars before calculating; refused by name",
+      );
+    }
+    if (agWages > grossWages) {
+      throw new PayrollError(
+        "North Dakota attested agricultural wages exceed this period's pay — "
+        + "correct the attestation before calculating; refused by name",
+      );
+    }
+    if (agWages > 0n) {
+      factors.ND_EXEMPT_AG_LABOR = D(agWages);
+      excludedWages += agWages;
+    }
+  }
+  wages -= excludedWages;
+
   // §57-38-59.3 mobile-workforce exclusion: a qualifying nonresident present
   // 20 days or fewer is excluded. Without the filed eligibility attestation
   // the exclusion does not apply (fail closed); past 20 days withholding
@@ -299,6 +350,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const ND_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ND_EXEMPT: "Exempt from North Dakota withholding",
+  ND_EXEMPT_MILITARY_PAY: "North Dakota qualifying military pay excluded from withholding",
+  ND_MILITARY_VOLUNTARY: "North Dakota military pay withheld by employee election",
+  ND_EXEMPT_AG_LABOR: "North Dakota solely agricultural labor excluded from withholding",
   ND_W4_METHOD: "North Dakota federal W-4 withholding method",
   ND_W4_ALLOWANCE: "North Dakota pre-2020 W-4 allowance amount",
   ND_W4_TAXABLE: "North Dakota wages after pre-2020 W-4 allowances",
@@ -359,7 +413,7 @@ export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: ND_TAX_YEAR_EDITIONS,
   printedPeriods: ND_PERIODS,
-  supportingCertificateKeys: ["us_nd_ndwm", ND_TRIBAL_KEY, ND_MOBILE_KEY],
+  supportingCertificateKeys: ["us_nd_ndwm", ND_TRIBAL_KEY, ND_MOBILE_KEY, "us_nd_wage_exclusion"],
   taxableWageBases: {
     income: "state:US:ND:income", nonPeriodic: "state:US:ND:nonPeriodic",
   },
@@ -542,6 +596,47 @@ export const ND_NDWR_CERTIFICATE: PayrollCertificate = {
     ],
     help: "Match the NDW-R residence claim to the employee's verified permanent residence.",
   }],
+};
+
+/**
+ * Payer-held wage-exclusion attestation (North Dakota publishes no state
+ * certificate for these guideline exclusions — the employer applies them).
+ * Agricultural labor for a farmer/rancher is attested per period; the
+ * military-pay voluntary-withholding election rides the same filing.
+ */
+export const ND_WAGE_EXCLUSION_CERTIFICATE: PayrollCertificate = {
+  key: "us_nd_wage_exclusion",
+  form: "Wage exclusion attestation",
+  label: "North Dakota wage-exclusion attestation",
+  scope: { level: "region", region: "ND" },
+  purpose: "withholding",
+  citation:
+    "North Dakota Office of State Tax Commissioner, Income Tax Withholding "
+    + "& Information Returns Guideline pp. 2–3",
+  summary:
+    "The employer attests solely agricultural labor for a farmer/rancher and "
+    + "the employee's voluntary-withholding election on qualifying military pay.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "ag_labor_sole",
+      label: "Employee performs only agricultural labor for a farmer/rancher",
+      kind: "flag", required: true,
+      help: "The guideline exempts farm or ranch labor only when it is the employee's sole service.",
+    },
+    {
+      key: "ag_period_wages",
+      label: "This period's agricultural-labor wages",
+      kind: "amount", decimals: 4, min: "0", required: false,
+      help: "Required when claiming the agricultural-labor exclusion; must not exceed this period's pay.",
+    },
+    {
+      key: "military_voluntary_withholding",
+      label: "Employee elects withholding on qualifying military pay",
+      kind: "flag", required: true,
+      help: "Set only when the employee affirmatively elects withholding despite the military-pay deduction; unset keeps the exclusion.",
+    },
+  ],
 };
 
 export const ND_REGION: PayrollRegionWithholding = {
