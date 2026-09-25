@@ -79,21 +79,25 @@ const listFxRates: AssistantToolDef = {
     let where = sql`org_id = ${authz.user.orgId} and from_currency = ${a.fromCurrency} and to_currency = ${a.toCurrency}`;
     if (a.asOf) where = sql`${where} and as_of <= ${a.asOf}`;
     if (a.rateType) where = sql`${where} and rate_type = ${a.rateType}`;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    // Fetch one row past the limit so `truncated` reports whether more rows
+    // exist instead of mistaking an exactly-full page for truncation.
+    const fetched = (await db.execute<Record<string, unknown>>(sql`
       select from_currency, to_currency, as_of, rate_type, rate::text as rate, source, imported_at, created_at
         from fx_rates
        where ${where}
        order by as_of desc, created_at desc
-       limit ${limit}
-    `));
+       limit ${limit + 1}
+    `)).rows;
+    const truncated = fetched.length > limit;
+    const rows = fetched.slice(0, limit);
     return {
       ok: true,
       data: {
         fromCurrency: a.fromCurrency,
         toCurrency: a.toCurrency,
-        returned: rows.rows.length,
-        truncated: rows.rows.length >= limit,
-        rates: rows.rows.map((r) => ({
+        returned: rows.length,
+        truncated,
+        rates: rows.map((r) => ({
           asOf: r.as_of,
           rateType: r.rate_type,
           rate: r.rate,
