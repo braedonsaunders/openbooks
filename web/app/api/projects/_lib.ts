@@ -72,7 +72,8 @@ export async function loadProject(
           ? db.execute<Record<string, unknown>>(sql`
               select display_name from parties
                where id = ${partyId} and org_id = ${orgId}
-                 ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)
+                 ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+               for share`)
           : Promise.resolve({ rows: [] as Record<string, unknown>[] })
       const customer = await partyName(row.customer_id)
       const foreman = await partyName(row.foreman_id)
