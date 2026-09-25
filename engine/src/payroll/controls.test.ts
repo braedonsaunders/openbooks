@@ -790,6 +790,7 @@ const CA_ROE: RoeRecord = {
     payDate: "2026-06-05", periodStart: "2026-05-16", periodEnd: "2026-05-29",
     insurableEarnings: "2000.0000", insurableHours: "86.6150",
   }],
+  separationAmounts: [],
   vacationPayOnSeparation: "0",
   otherMoniesOnSeparation: "0",
 };

@@ -44,6 +44,10 @@ const RECORD: RoeRecord = {
     { payDate: "2026-06-05", periodStart: "2026-05-16", periodEnd: "2026-05-29", insurableEarnings: "2000.00", insurableHours: "80" },
     { payDate: "2026-05-22", periodStart: "2026-05-02", periodEnd: "2026-05-15", insurableEarnings: "1900.50", insurableHours: "76" },
   ],
+  separationAmounts: [
+    { block: "17A", code: "1", amount: "1500.25", expectedPaymentOn: "2026-05-29", paymentStatus: "paid" },
+    { block: "17C", code: "S01", amount: "500.00", expectedPaymentOn: "2026-05-29", paymentStatus: "paid" },
+  ],
   vacationPayOnSeparation: "1500.25",
   otherMoniesOnSeparation: "500.00",
 };
