@@ -51,6 +51,7 @@ async function journalCounts(orgId: string): Promise<{ docs: number; entries: nu
 
 test("a journal write blocked past the run deadline commits nothing; the retry posts exactly once", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb) where id = ${org.orgId}`);
   try {
     const ctx = {
       trigger: "scheduled",
@@ -90,6 +91,7 @@ test("a journal write blocked past the run deadline commits nothing; the retry p
 
 test("a retried run observes the first execution's document instead of double-posting", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb) where id = ${org.orgId}`);
   try {
     const ctx = {
       trigger: "scheduled",
@@ -110,6 +112,7 @@ test("a retried run observes the first execution's document instead of double-po
 
 test("a retried posting run observes the first execution's entry instead of double-posting", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb) where id = ${org.orgId}`);
   try {
     const ctx = {
       trigger: "scheduled",
