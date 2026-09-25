@@ -110,6 +110,7 @@
       "received": "Erhalten"
     },
     "saving": "Korrekturen werden gespeichert…",
+    "unsavedClose": "Die neuesten Korrekturen konnten nicht gespeichert werden. Trotzdem schließen und verwerfen?",
     "unsaved": "Nicht gespeicherte Korrekturen",
     "saved": "Alle Korrekturen gespeichert",
     "saveFailed": "Die Korrekturen konnten nicht gespeichert werden.",

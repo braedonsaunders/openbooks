@@ -110,7 +110,7 @@
       "received": "收到"
     },
     "saving": "正在保存修正…",
-    "unsaved": "有未保存的修正",
+    "unsaved": "有未保存的修正", "unsavedClose": "无法保存最新更正。关闭并放弃它们吗？",
     "saved": "已保存所有修正",
     "saveFailed": "无法保存修正。",
     "processing": "正在提取文档凭据…",
