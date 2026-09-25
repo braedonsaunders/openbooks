@@ -262,9 +262,13 @@ export async function listProcessTemplates(query: {
        group by t.id
        order by t.kind, t.name, t.id
     `)).rows;
-    if (employmentId === undefined) return rows.map((row) => toTemplateDTO(row, row.step_count));
+    // The catalogue lists only what the actor may see: B-targeted rows
+    // are invisible to an A-restricted reader, exactly as the write path
+    // refuses them as not-found.
+    const visible = await scopeTemplateRows(db, orgId, actorId, rows);
+    if (employmentId === undefined) return visible.map((row) => toTemplateDTO(row, row.step_count));
     const context = await loadOpeningEmploymentContext(db, orgId, employmentId, effectiveDate!);
-    return rows
+    return visible
       .filter((row) => {
         const employer = typeof row.applies_to?.employer_subsidiary_id === "string"
           ? row.applies_to.employer_subsidiary_id
@@ -298,6 +302,15 @@ export async function getProcessTemplate(query: {
        where org_id = ${orgId} and id = ${templateId}
     `)).rows[0];
     if (!row) {
+      throw new HrmProcessError(
+        "NOT_FOUND",
+        "process template not found in this organization — open it from the template list",
+      );
+    }
+    // A B-targeted template reads to an A-restricted actor exactly as
+    // the write path refuses it: not-found, with the same message as a
+    // missing template, so a fabricated id probes nothing.
+    if ((await scopeTemplateRows(db, orgId, actorId, [row])).length === 0) {
       throw new HrmProcessError(
         "NOT_FOUND",
         "process template not found in this organization — open it from the template list",
@@ -343,6 +356,50 @@ function templateAppliesTo(
     employerSubsidiaryId: typeof appliesTo?.employer_subsidiary_id === "string" ? appliesTo.employer_subsidiary_id : null,
     departmentId: typeof appliesTo?.department_id === "string" ? appliesTo.department_id : null,
   };
+}
+
+/**
+ * Read-scope half for the template catalogue: the write path refuses a
+ * B-targeted template to an A-restricted actor as not-found, so the
+ * catalogue must not list it either — a listed-but-unwritable row is a
+ * probe for B's configuration. Rows targeted at an out-of-scope
+ * subsidiary drop out, whether targeted directly or through a
+ * department owned by that subsidiary; org-wide rows stay visible
+ * (their writes refuse 403, never not-found, so listing them probes
+ * nothing and the checklist picker needs them).
+ */
+async function scopeTemplateRows<T extends Pick<TemplateRow, "applies_to">>(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  rows: readonly T[],
+): Promise<T[]> {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed === null || rows.length === 0) return [...rows];
+  const departmentIds = [
+    ...new Set(
+      rows
+        .map((row) => templateAppliesTo(row.applies_to).departmentId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const departmentOwner = new Map<string, string | null>();
+  if (departmentIds.length > 0) {
+    const owners = (await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      select id::text as id, subsidiary_id::text as subsidiary_id from departments
+       where org_id = ${orgId} and id = any (${`{${departmentIds.join(",")}}`}::uuid[])
+    `)).rows;
+    for (const owner of owners) departmentOwner.set(owner.id, owner.subsidiary_id);
+  }
+  return rows.filter((row) => {
+    const targets = templateAppliesTo(row.applies_to);
+    if (targets.employerSubsidiaryId !== null) return allowed.has(targets.employerSubsidiaryId);
+    if (targets.departmentId !== null) {
+      const owner = departmentOwner.get(targets.departmentId);
+      return owner !== undefined && (owner === null || allowed.has(owner));
+    }
+    return true;
+  });
 }
 
 /**
