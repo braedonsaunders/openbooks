@@ -404,7 +404,7 @@ for (const mode of ["subtree", "list"] as const) {
       const { id } = await create.json() as { id: string };
       const expected = mode === "subtree" ? { mode, subsidiaryId } : { mode, subsidiaryIds: [subsidiaryId] };
       const read = async () => (await db.execute(sql`select subsidiary_restriction from app_roles where id = ${id}`)).rows[0]!.subsidiary_restriction;
-      assert.deepEqual(await read(), expected);
+      assert.deepEqual([await read(), (await import("../../../../lib/subsidiary-restriction-display.ts")).asSubsidiaryRestriction({ mode: "unknown" })], [expected, { mode: "invalid" }]);
       assert.equal((await call("PATCH", { id: id.toUpperCase(), subsidiaryRestriction: restriction(subsidiaryId) })).status, 200);
       assert.equal((await call("PATCH", { id, subsidiaryRestriction: restriction(foreignId) })).status, 400);
       assert.deepEqual(await read(), expected);
