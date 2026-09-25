@@ -139,6 +139,27 @@ test("AL A4-MS is separate from A-4 and requires every attestation and supportin
   assert.equal(result.factors.AL_MILITARY_SPOUSE_EXEMPT, "1");
 });
 
+test("AL nonresident at 30 or fewer approved days is safe-harbor exempt; without approved location data it refuses", () => {
+  // Act 2025-334, 2026 ALDOR booklet p. 3: https://www.revenue.alabama.gov/wp-content/uploads/2026/01/whbooklet_0126.pdf
+  const exempt = AL_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "10000.00", basis: "nonresident",
+    certificate: cert({ exemption: "0", dependents: "0" }),
+    wageAllocations: [{
+      region: "AL", subRegion: null, workShare: "1", source: "approved Alabama service-day records",
+      serviceDaysCurrentPeriod: 2, serviceDaysYearToDate: 30,
+    }],
+  });
+  assert.equal(exempt.tax, money("0"));
+  assert.equal(exempt.factors.AL_SAFE_HARBOR_EXEMPT, "1");
+  assert.throws(
+    () => AL_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "10000.00", basis: "nonresident",
+      certificate: cert({ exemption: "0", dependents: "0" }),
+    }),
+    /needs exactly one current-period work allocation.*refused by name/,
+  );
+});
+
 test("AL supplemental paid with regular wages is aggregated, not a silent 5%", () => {
   const aggregated = AL_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", supplemental: "200.00",
