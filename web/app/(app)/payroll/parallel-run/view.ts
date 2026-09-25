@@ -9,8 +9,9 @@ import {
   parallelTolerances,
   priorRegisters,
 } from '@openbooks/engine/src/payroll/parallel-run-store.ts'
-import { can, requirePermission } from '../../../../lib/authz'
+import { can, guardRootSubsidiaryScope, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { notFound } from 'next/navigation'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import type { ParallelRunView } from './ParallelRunView'
 
@@ -62,6 +63,10 @@ export async function loadParallelRun(): Promise<ParallelRunData> {
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
+  // Parallel tolerances are one org-wide comparison policy, not subsidiary
+  // rows. Keep the server-rendered control surface behind the same root-scope
+  // requirement as the tolerance API.
+  if (await guardRootSubsidiaryScope(authz)) notFound()
 
   const t = await getTranslations('payroll')
   const text = (key: string, fallback: string) =>
