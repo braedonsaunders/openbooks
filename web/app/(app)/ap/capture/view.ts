@@ -176,6 +176,15 @@ export async function loadApCapture(
         : allowed.length === 0
           ? sql`and false`
           : sql`and (d.subsidiary_id is null or d.subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
+      // The vendor/PO lists above are caller-scoped; the account list was
+      // not (I4-webui-345 AP sibling): a subsidiary-A caller saw
+      // subsidiary-B accounts. Org-wide rows (subsidiary_id null) stay
+      // visible, exactly as for vendors and purchase orders.
+      const accountScope = allowed === null
+        ? sql``
+        : allowed.length === 0
+          ? sql`and false`
+          : sql`and (subsidiary_id is null or subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
       canLookupPurchaseOrders = await isDocKindEnabled(authz.user.orgId, 'purchase_order')
       const [vendors, accounts, purchaseOrders, evidence] = await Promise.all([
         db.execute(sql`
@@ -185,7 +194,7 @@ export async function loadApCapture(
         `),
         db.execute(sql`
           select id, concat_ws(' · ', number, name) as label from accounts
-           where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last limit 3000
+           where org_id = ${authz.user.orgId} and is_active and not is_summary ${accountScope} order by number nulls last limit 3000
         `),
         canLookupPurchaseOrders
           ? db.execute(sql`
