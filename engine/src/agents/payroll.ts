@@ -14,6 +14,7 @@ import {
 import {
   payrollRemittanceSummary,
   remittanceDueDateExplained,
+  remittanceGroupDueDate,
 } from "../payroll/remittance.ts";
 import { packWarnsOnMissingIdentifier, payrollTaxYearForDate } from "../payroll/packs.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
@@ -114,16 +115,31 @@ export async function payrollFindings(
         continue;
       }
       for (const group of groups) {
-        // The bill's own dating rule (createRemittanceBill): a pack-declared
-        // destination schedule when one governs, otherwise the filing
-        // account's CRA remitter-type rule. Never a third copy of either.
+        // The bill's own dating rule (remittanceGroupDueDate, shared with
+        // createRemittanceBill): a pack-declared destination schedule when
+        // one governs, otherwise the filing account's CRA remitter-type rule
+        // — and a refusal for a declared foreign destination with no
+        // timetable. Never a third copy of any of them. A refused group is
+        // an unevaluable month, not a skipped one: the missing remittance
+        // stays visible either way.
+        //
+        // `scheduled`/`cra` below are main's display locals (the merged-slot
+        // authority/frequency/rule), kept byte-identical: the date comes from
+        // the shared helper, the explained legacy rule still feeds the slot.
         const scheduled = group.schedule;
         const cra = scheduled
           ? null
           : remittanceDueDateExplained(month.to, group.filingAccount.remitterType, {
               regionalCalendar: group.regionalCalendar,
             });
-        const dueDate = scheduled?.dueDate ?? cra!.dueDate;
+        let dueDate: string;
+        try {
+          dueDate = remittanceGroupDueDate(group, month.to);
+        } catch (error) {
+          if (!(error instanceof PayrollError)) throw error;
+          unevaluable.push({ from: month.from, to: month.to, reason: error.message });
+          continue;
+        }
         if (dueDate > horizon) continue;
         // One slot per stated currency: a EUR month and a GBP month for the
         // same destination never merge into one symbol-labelled figure.

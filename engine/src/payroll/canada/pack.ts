@@ -92,6 +92,11 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // to remit (pay)" table for the `craRemittancePartyId` destination, so a
   // CRA bill dates from the schedule in force the way an RQ bill already does.
   remittanceSchedules: [RQ_REMITTANCE_SCHEDULE, CRA_REMITTANCE_SCHEDULE],
+  // The CRA remitter-type function stays the live path for CA-declared
+  // destinations the schedules above do not yet govern (F-f7-001 handoff in
+  // progress) — this is the declaration the generic layer reads instead of
+  // branching on the country.
+  allowsRegistrationTimetableFallback: true,
   // T4127 Method 2 ("retroactive pay increase") taxes a retro amount as a
   // BONUS, not as period income — the CRA's own instruction — and Revenu
   // Québec's TP-1015 Appendix 2 says the same for the provincial side. Both
