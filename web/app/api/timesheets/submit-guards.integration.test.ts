@@ -8,10 +8,17 @@ import test from "node:test";
 // The submit guards live in the week's server helper (route/route.ts pins the
 // wiring statically, as the neighbouring submit-atomicity test does); the
 // guard semantics are proven here against a scratch database.
+// The week's server helper pulls `server-only` through its import graph; in
+// the spawned child (plain node, no Next compiler) that marker package
+// throws on evaluation, so resolve it to an empty module — the same stub
+// the report-catalog suites register in-process.
 const serverOnlyLoader = `data:text/javascript,${encodeURIComponent(`
   import { registerHooks } from "node:module";
   registerHooks({
     resolve(specifier, context, nextResolve) {
+      if (specifier === "server-only") {
+        return { shortCircuit: true, url: "data:text/javascript,export default {}" };
+      }
       return nextResolve(specifier, context);
     },
   });
@@ -77,7 +84,7 @@ const SEED = `
     const flowId = randomUUID();
     const runId = randomUUID();
     await db.execute(sql\`
-      insert into flows (id, org_id, name, subject_kind, graph)
+      insert into flows (id, org_id, name, subject_kind, enabled, graph)
       values (\${flowId}, \${fixture.org.orgId}, 'Timesheet approvals',
               'timesheet_week', true, '{}'::jsonb)
     \`);
