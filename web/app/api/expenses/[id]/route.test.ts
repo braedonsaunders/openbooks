@@ -106,6 +106,7 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ['mock:server-only', `export {}`],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -113,6 +114,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/records/transaction-audit.ts', 'mock:transaction-audit'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/expenses', 'mock:expenses-loader'],
+  ['server-only', 'mock:server-only'],
 ])
 
 const hooks = registerHooks({

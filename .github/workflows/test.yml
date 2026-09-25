@@ -516,10 +516,11 @@ jobs:
         run: |
           node --input-type=module - <<'NODE'
           import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
           import { readFileSync, readdirSync } from 'node:fs';
           import { testManifest, shardFiles } from './scripts/test-suite.mjs';
           const manifest = testManifest();
-          for (const [suite, count, root, prefix] of [['integration',16,'integration-evidence','coverage'], ['unit',5,'unit-evidence','unit']]) {
+          for (const [suite, count, root, prefix, log] of [['integration',16,'integration-evidence','coverage','coverage.txt'], ['unit',5,'unit-evidence','unit','unit.txt']]) {
             const files = manifest[suite];
             const dirs = readdirSync(root).sort();
             assert.deepEqual(dirs, Array.from({length:count}, (_,i)=>`${prefix}-${i+1}`).sort());
@@ -530,6 +531,10 @@ jobs:
               assert.equal(selection.shard, `${i}/${count}`);
               assert.deepEqual(selection.files, shardFiles(files, `${i}/${count}`));
               actual.push(...selection.files);
+              // A file reporting zero tests is a failure, not a pass: the
+              // runner exits zero both when a path matches nothing and when
+              // a file dies during load, so assert registration per file.
+              execFileSync(process.execPath, ['scripts/verify-test-registration.mjs', `${root}/${prefix}-${i}/.local/test-selection.json`, `${root}/${prefix}-${i}/${log}`], { stdio: 'inherit' });
             }
             assert.deepEqual(actual.sort(), files);
             console.log(`All ${files.length} ${suite} files completed exactly once across ${count} isolated runners.`);
