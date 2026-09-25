@@ -26,7 +26,7 @@ import {
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
 } from "../packs.ts";
-import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
+import { resolveObservedHolidays, undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 import { buildResolution } from "../statutory-rates.ts";
 
 const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8" };
@@ -195,6 +195,15 @@ test("BR profile jurisdiction resolves to a declared employment calendar", () =>
     }),
     null,
   );
+});
+
+test("BR 20 November is a national holiday from 2024 (Lei 14.759/2023)", () => {
+  // Effective on publication (21 December 2023): 2026-11-20 observes Dia
+  // Nacional de Zumbi e da Consciência Negra, while 2023-11-20 predates it.
+  const observed2026 = resolveObservedHolidays({ jurisdiction: "BR-BR", from: "2026-11-20", to: "2026-11-20" });
+  assert.ok(observed2026.some((holiday) => holiday.key === "consciencia_negra" && holiday.date === "2026-11-20"));
+  const observed2023 = resolveObservedHolidays({ jurisdiction: "BR-BR", from: "2023-11-20", to: "2023-11-20" });
+  assert.ok(!observed2023.some((holiday) => holiday.key === "consciencia_negra"));
 });
 
 test("BR rate lookup carries the region, or no saved rate resolves", () => {

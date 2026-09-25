@@ -6,9 +6,11 @@
  * September, 2 November, 15 November and 25 December, plus Good Friday
  * ("Sexta-Feira da Paixão", movable) and Corpus Christi — the latter kept
  * out: it is a ponto facultativo federally, not a national feriado, and
- * declaring it would pay a day nobody owes. State/municipal feriados
- * (Consciência Negra where not national, city anniversaries, Carnaval) are
- * untranscribed — see the ledger.
+ * declaring it would pay a day nobody owes. Lei nº 14.759/2023 art. 1º
+ * adds 20 November (Dia Nacional de Zumbi e da Consciência Negra) as a
+ * national holiday, effective on publication (21 December 2023), so the
+ * entry carries `from: 2024`. State/municipal feriados (city
+ * anniversaries, Carnaval) are untranscribed — see the ledger.
  *
  * `observance: "none"`: a feriado falling on a weekend does not move.
  * `holidayPay` is null: the CLT holiday-pay formula for monthly employees
@@ -30,7 +32,7 @@ export const BR_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     name: "Brasil (feriados nacionais)",
     scope: "employment",
     citation:
-      "Lei nº 662, de 6/4/1949, art. 1º (redação Lei nº 6.802/1980); CLT art. 70",
+      "Lei nº 662, de 6/4/1949, art. 1º (redação Lei nº 6.802/1980); Lei nº 14.759/2023 art. 1º (20 de novembro); CLT art. 70",
     holidays: [
       { key: "confraternizacao", name: "Confraternização Universal", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },
       { key: "paixao", name: "Paixão de Cristo", rule: { kind: "easter_offset", days: -2 }, observance: "none" },
@@ -40,6 +42,7 @@ export const BR_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       { key: "aparecida", name: "Nossa Senhora Aparecida", rule: { kind: "fixed", month: 10, day: 12 }, observance: "none" },
       { key: "finados", name: "Finados", rule: { kind: "fixed", month: 11, day: 2 }, observance: "none" },
       { key: "republica", name: "Proclamação da República", rule: { kind: "fixed", month: 11, day: 15 }, observance: "none" },
+      { key: "consciencia_negra", name: "Dia Nacional de Zumbi e da Consciência Negra", rule: { kind: "fixed", month: 11, day: 20 }, observance: "none", from: 2024 },
       { key: "natal", name: "Natal", rule: { kind: "fixed", month: 12, day: 25 }, observance: "none" },
     ],
     holidayPay: null,
