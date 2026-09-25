@@ -183,6 +183,16 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
             + "e.g. H501 for Roma). Domicile, never the workplace, attributes both surtaxes.",
         },
         {
+          key: "domicilio_bolzano",
+          label: "Domicilio nella provincia autonoma di Bolzano",
+          kind: "flag",
+          help: "Whether the fiscal domicile is in the autonomous province of Bolzano/Bozen. Required "
+            + "for regione 04 (Trentino-Alto Adige/Südtirol), where Trento and Bolzano set the "
+            + "addizionale regionale separately: \"true\" prices the transcribed 2026 €430,50 credit "
+            + "through €90.000 of regional taxable income, \"false\" prices the Trento path with no "
+            + "credit. Leave unanswered only outside regione 04.",
+        },
+        {
           key: "coniuge_a_carico",
           label: "Coniuge fiscalmente a carico",
           kind: "flag",
