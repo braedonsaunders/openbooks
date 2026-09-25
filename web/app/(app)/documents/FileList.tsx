@@ -164,7 +164,7 @@ export function FileList({
         body: JSON.stringify({ fileIds: ids }),
       })
       if (!res.ok) {
-        toast.error(tb('downloadFailed'))
+        toast.error(await readApiErrorMessage(res, tb('downloadFailed')))
         return
       }
       const blob = await res.blob()
