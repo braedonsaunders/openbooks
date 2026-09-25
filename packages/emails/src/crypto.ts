@@ -5,6 +5,8 @@
 // in the scheduler as long as both share SESSION_SECRET.
 
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto'
+import { isIP } from 'node:net'
+import { resolveVerifiedAddresses, type AddressLookup } from '@openbooks/networking/ssrf'
 
 const FALLBACK_SECRET = 'openbooks-dev-insecure-secret'
 const HKDF_INFO = 'openbooks.secret.v1'
@@ -56,14 +58,26 @@ export function unsealSecret(sealed: SealedSecret): string | null {
 }
 
 /**
- * SMTP host resolver. We
- * reject IP literals so TLS identity can be verified against a DNS name;
- * nodemailer resolves DNS itself, and we keep `rejectUnauthorized` + servername.
+ * SMTP host resolver. Resolve and validate every DNS answer before handing
+ * Nodemailer a pinned address; TLS still authenticates the original hostname.
  */
 export async function resolvePublicHost(
   host: string,
+  lookupAddresses?: AddressLookup,
 ): Promise<{ address: string; hostname: string; family?: number; ipLiteral: boolean }> {
-  const { isIP } = await import('node:net')
   const h = host.trim()
-  return { address: h, hostname: h, family: undefined, ipLiteral: isIP(h) !== 0 }
+  if (!h || isIP(h)) {
+    throw new Error('External SMTP host must be a DNS name so its TLS identity can be verified.')
+  }
+  const target = new URL(`https://${h}/`)
+  if (target.username || target.password || target.port || target.pathname !== '/' || target.search || target.hash) {
+    throw new Error('SMTP host must contain only a DNS hostname.')
+  }
+  const addresses = await resolveVerifiedAddresses(target, lookupAddresses)
+  return {
+    address: addresses[0]!,
+    hostname: target.hostname,
+    family: isIP(addresses[0]!) || undefined,
+    ipLiteral: false,
+  }
 }

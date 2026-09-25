@@ -1,16 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sealSecret } from "./crypto";
+import { resolvePublicHost, sealSecret } from "./crypto";
 import { resolveEmailTransport, resolveEmailTransportDetailed } from "./transport";
 
-test("an absent or disabled config resolves unconfigured, never unusable", () => {
+test("an absent config resolves unconfigured and SMTP refuses DNS resolving to loopback", async () => {
   assert.deepEqual(resolveEmailTransportDetailed(null), { state: "unconfigured" });
   assert.deepEqual(resolveEmailTransportDetailed(undefined), { state: "unconfigured" });
   assert.deepEqual(resolveEmailTransportDetailed({}), { state: "unconfigured" });
-  assert.deepEqual(
-    resolveEmailTransportDetailed({ provider: "resend", enabled: false }),
-    { state: "unconfigured" },
-  );
+  await assert.rejects(resolvePublicHost("smtp.example", async () => ["127.0.0.1"]), /public unicast/);
   assert.deepEqual(resolveEmailTransport(null), null);
 });
 
