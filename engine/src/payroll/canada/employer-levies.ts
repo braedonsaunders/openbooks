@@ -51,7 +51,7 @@ export type QuebecHsfSector = "other" | "primary_manufacturing" | "public" | "ex
  * Exact integer-cent arithmetic, half-up to four rate decimals. Only 2026
  * is transcribed — any other year refuses rather than pricing a stale table.
  */
-export function quebecHsfRateForPayroll(sector: QuebecHsfSector, totalPayroll: string, year: number): string {
+export function quebecHsfRateForPayroll(sector: QuebecHsfSector, totalPayroll: string, year: number): Rate {
   if (year !== 2026) {
     throw new PayrollPackError(
       `QC HSF rate formula is transcribed for 2026 only — update the Revenu Québec table before pricing ${year}`,
@@ -63,8 +63,9 @@ export function quebecHsfRateForPayroll(sector: QuebecHsfSector, totalPayroll: s
   if (cents < 0n) {
     throw new PayrollPackError(`QC HSF total payroll must be non-negative, got "${totalPayroll}"`);
   }
-  if (sector === "exempt_2026") return "0.0000";
-  if (sector === "public") return "4.2600";
+  // Fixed-4dp statutory rate text on every exit: canonical Rate.
+  if (sector === "exempt_2026") return "0.0000" as Rate;
+  if (sector === "public") return "4.2600" as Rate;
   const ONE_M = 100_000_000n;
   const CAP = 780_000_000n;
   const FULL = 42600n;
@@ -79,7 +80,7 @@ export function quebecHsfRateForPayroll(sector: QuebecHsfSector, totalPayroll: s
     rate = 12662n + (3838n * cents + 50_000_000n) / 100_000_000n;
   }
   if (rate > FULL) rate = FULL;
-  return `${rate / 10000n}.${String(rate % 10000n).padStart(4, "0")}`;
+  return `${rate / 10000n}.${String(rate % 10000n).padStart(4, "0")}` as Rate;
 }
 
 export function ehtExemptionConsumedByRunStatus(status: CaExemptionRunStatus): boolean {
@@ -97,6 +98,7 @@ export function ehtExemptionConsumedByRunStatus(status: CaExemptionRunStatus): b
 import {
   add, cmp, mulPercent, mulRatio, neg, roundMoney, sum, toUnits,
 } from "../../money/money.ts";
+import type { Rate } from "../../money/brands.ts";
 import { caPayrollConfig } from "./config.ts";
 import type {
   PayrollEmployerLevyContext,
