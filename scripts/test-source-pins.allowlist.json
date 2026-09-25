@@ -9,7 +9,6 @@
     "engine/src/provisioning/bootstrap-safety.test.ts": 3,
     "engine/src/receivables/dunning.test.ts": 2,
     "engine/src/records/numbering.integration.test.ts": 1,
-    "engine/src/scripting/permissions.integration.test.ts": 4,
     "engine/src/sim/saas-autopilot.test.ts": 1
   }
 }

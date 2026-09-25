@@ -30,7 +30,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // properties were pinned by source-text regexes; each has a behavioural
 // twin (the gl.post gate refusal, the outside-allowlist stamping refusal,
 // and the runScript Date/query refusals below), so the pins are deleted.
-
 test("deterministic Date/Math locks are installed before user source and query is omitted", async () => {
   const captured = await runScript(
     `const now = Date.now;
