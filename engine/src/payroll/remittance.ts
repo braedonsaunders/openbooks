@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { lockScopeRow, ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, div, formatMoney, mulRate, neg, roundMoney, sum } from "../money/money.ts";
 import {
@@ -1960,6 +1961,26 @@ export async function createRemittanceBill(
         partyId: input.partyId, filingAccountId, subsidiaryId: entityId,
       })}, 0))
     `);
+
+    // The vendor party is mutable master data. Fence its ownership for the
+    // entire bill transaction so a concurrent subsidiary rehome cannot move
+    // the remittance destination after the caller's route-level preflight.
+    try {
+      await lockScopeRow(
+        tx,
+        orgId,
+        "party",
+        input.partyId,
+        input.allowedSubsidiaryIds ?? null,
+        "share",
+        { orgWideNull: true },
+      );
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) {
+        throw new PayrollError("nothing to remit to this vendor for the period");
+      }
+      throw error;
+    }
 
     const vendor = (await tx.execute<{ party_id: string | null; subsidiary_id: string | null }>(sql`
       select p.id as party_id, p.subsidiary_id
