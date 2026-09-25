@@ -61,11 +61,6 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       const state = globalThis[Symbol.for("openbooks.qbo-oauth-callback-test")]
-      export const ambientTenantOrgId = () => "org-1"
-      export const currentRequestOrgResolver = () => undefined
-      export const registerRequestOrgResolver = () => {}
-      export const withBypass = (fn) => fn()
-      export const withBypassContext = (fn) => fn()
       export const schema = { connections: { id: "id", orgId: "orgId" }, auditLog: {} }
       export const db = {
         async transaction(fn) {
@@ -91,6 +86,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   ["mock:audit", `export function connectionAuditChanges() { return { event: "oauth_connected" } }`],
+  ["mock:super-admin", `export async function lockActorPermission(tx, gate) { return gate }`],
   ["mock:email-tokens", `export function appBaseUrl() { return "https://books.example"; }`],
 ]);
 
@@ -98,6 +94,8 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
       "../../../../../../../lib/authz": "mock:authz",
+      "../../../../../lib/authz": "mock:authz",
+      "../../../../../../../lib/super-admin": "mock:super-admin",
       "@openbooks/engine/src/sync/connection.ts": "mock:connection",
       "@openbooks/engine/src/connectors/qbo.ts": "mock:qbo",
       "@openbooks/engine/src/platform/db.ts": "mock:db",
