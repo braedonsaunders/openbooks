@@ -11,7 +11,7 @@ import { seedPayrollComponents } from "../run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { form941Worksheet, w2Slips } from "../yearend.ts";
-import { resolveUsSuiYtd, usEmployeeYtd } from "./compute-statutory.ts";
+import { resolveUsSuiYtd, resolveUsSuiYtdForCoverage, usEmployeeYtd } from "./compute-statutory.ts";
 
 // The pack registry side effect every pay run reads through.
 void PAYROLL_COUNTRY_PACKS;
@@ -392,10 +392,8 @@ test(
       }, "OR");
       assert.equal(stateHistory.suiOtherRegions, "TX", "SUI history is state-dimensioned independently of FUTA");
 
-      assert.throws(
-        () => resolveUsSuiYtd("OR", stateHistory),
-        /US SUI cannot be calculated for OR: prior insurable wages are recorded in TX/,
-      );
+      assert.throws(() => resolveUsSuiYtdForCoverage("OR", stateHistory, false), /prior insurable wages are recorded in TX/);
+      assert.equal(resolveUsSuiYtdForCoverage("OR", stateHistory, true), "0");
       const sameStateHistory = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
         documentId: randomUUID(),

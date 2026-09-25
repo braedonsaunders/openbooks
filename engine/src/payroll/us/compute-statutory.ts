@@ -66,6 +66,15 @@ export function resolveUsSuiYtd(
   return ytd.suiCurrentRegion;
 }
 
+/** Exempt employees owe no SUI, so cross-state history must not refuse their run. */
+export function resolveUsSuiYtdForCoverage(
+  region: string,
+  ytd: Pick<UsYtdRow, "suiCurrentRegion" | "suiOtherRegions" | "suiOpeningUnscoped">,
+  suiExempt: boolean,
+): string {
+  return suiExempt ? "0" : resolveUsSuiYtd(region, ytd);
+}
+
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the factor
  * keys this pass stamps itself (the payroll inputs plus the withholding
@@ -199,7 +208,8 @@ export async function computeUsStatutory(
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region);
   const sui = config.sui(region, filingAccountId);
-  const suiWagesYtd = sui ? resolveUsSuiYtd(region, ytd) : "0";
+  const suiExempt = bool(empFact("US", emp, "sui_exempt"));
+  const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, ytd, suiExempt) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const federalAlienStatus = certificateFor("us_w4_tax_residency")?.answers.alien_status;
   const nonresidentAlien = requireUsFederalAlienStatus(federalAlienStatus);
@@ -221,7 +231,7 @@ export async function computeUsStatutory(
     nonresidentAlien,
     ficaExempt: bool(empFact("US", emp, "fica_exempt")),
     futaExempt: bool(empFact("US", emp, "futa_exempt")),
-    suiExempt: bool(empFact("US", emp, "sui_exempt")),
+    suiExempt,
     futaEffectiveRate: config.futaRate(ctx.workAllocations?.[0]?.region ?? region) ?? undefined,
     futaRegion: ctx.workAllocations?.[0]?.region ?? region,
     futaWorkAllocations: ctx.workAllocations,
