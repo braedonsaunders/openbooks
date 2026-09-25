@@ -198,6 +198,10 @@ export function QuickActionsEditor({
       } else {
         toast.error(res.error ?? t('quickActions.editor.saveFailed'))
       }
+    } catch {
+      // A rejected save action throws past the result branch: surface the
+      // localized failure instead of failing silently with zero feedback.
+      toast.error(t('quickActions.editor.saveFailed'))
     } finally {
       setSaving(false)
     }
