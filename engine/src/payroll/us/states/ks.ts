@@ -21,6 +21,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { PayrollError } from "../../error.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
   type PayrollCertificate,
@@ -29,6 +30,7 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
+  requireUsWageAllocation,
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
@@ -39,6 +41,7 @@ import {
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/ks.ts";
+const KS_K4C_KEY = "us_ks_k4c";
 
 export type KsPeriod =
   | "weekly" | "biweekly" | "semimonthly" | "monthly"
@@ -274,8 +277,29 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("KS_TAXABLE", taxable);
 
   const periodTax = ksPeriodTax(taxable, period, married);
+  let allocationRate = "1";
+  if (input.basis === "nonresident") {
+    const k4c = input.supportingCertificates?.[KS_K4C_KEY];
+    const workAllocation = input.wageAllocations?.find((item) =>
+      item.region === "KS" && item.subRegion === null,
+    );
+    if (k4c?.onFile) {
+      const percentage = certificateAmount(k4c, "kansas_services_percentage");
+      if (percentage == null || U(percentage) > U("100")) {
+        throw new PayrollError(
+          "Kansas Form K-4C needs an allocation percentage from 0 through 100; correct the filed Kansas service allocation before calculating — refused by name",
+        );
+      }
+      allocationRate = pctToRate(percentage);
+    } else if (workAllocation) {
+      allocationRate = requireUsWageAllocation(input.wageAllocations, "KS", null).workShare;
+    }
+    factors.KS_NONRESIDENT_ALLOCATION = allocationRate;
+  }
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  const sourcedTax = input.basis === "nonresident" ? mulRateCents(periodTax, allocationRate) : periodTax;
+  const total = sourcedTax + extra;
+  if (input.basis === "nonresident") trace("KS_NONRESIDENT_TAX", sourcedTax);
   trace("KS_WITHHELD", total);
 
   return {
@@ -300,6 +324,8 @@ export const KS_FACTOR_LABELS: Readonly<Record<string, string>> = {
   KS_ALLOWANCE: "Kansas allowance",
   KS_TAXABLE: "Kansas taxable wages",
   KS_WITHHELD: "Kansas tax withheld this period",
+  KS_NONRESIDENT_ALLOCATION: "Kansas nonresident share of services performed in Kansas",
+  KS_NONRESIDENT_TAX: "Kansas withholding apportioned to Kansas services",
 };
 
 export const KS_WITHHOLDING: UsStateWithholdingEngine = {
@@ -309,6 +335,7 @@ export const KS_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: KS_TAX_YEAR_EDITIONS,
   printedPeriods: KS_PERIODS,
+  supportingCertificateKeys: [KS_K4C_KEY],
   compute,
 };
 
@@ -389,6 +416,30 @@ export const KS_CERTIFICATE: PayrollCertificate = {
         + "withholding is not an exemption from filing a Kansas return.",
     },
   ],
+};
+
+/** Form K-4C, Kansas Employee Certificate for Allocation of Kansas Withholding. */
+export const KS_K4C_CERTIFICATE: PayrollCertificate = {
+  key: KS_K4C_KEY,
+  form: "K-4C",
+  label: "Kansas Employee Certificate for Allocation of Kansas Withholding",
+  scope: { level: "region", region: "KS" },
+  purpose: "withholding",
+  citation:
+    "Kansas Department of Revenue, KW-100 Kansas Withholding Tax Guide, Nonresident of Kansas Subject to Kansas Withholding; Form K-4C",
+  summary:
+    "Reports the approximate percentage of a nonresident employee's services performed in Kansas. In the absence of K-4C or adequate work records, Kansas withholding applies to total wages.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "kansas_services_percentage",
+    label: "Percentage of services performed in Kansas",
+    kind: "amount",
+    decimals: 4,
+    min: "0",
+    max: "100",
+    required: true,
+    help: "Enter the K-4C percentage of the employee's services performed in Kansas during the calendar year.",
+  }],
 };
 
 export const KS_REGION: PayrollRegionWithholding = {
