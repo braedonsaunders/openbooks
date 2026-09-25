@@ -48,6 +48,9 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CommitResult | null>(null)
   const [previewFailed, setPreviewFailed] = useState(false)
+  // The server's named refusal for the failed preview: the toast alone
+  // vanishes, so the panel pins it beside Retry until the next load.
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const loadPreview = useCallback(async (signal?: AbortSignal) => {
     if (!bookId) return
@@ -60,10 +63,13 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
       const preview = (await response.json()) as { rows: Candidate[] }
       setRows(preview.rows)
       setPreviewFailed(false)
-    } catch {
+      setPreviewError(null)
+    } catch (e) {
       if (signal?.aborted) return
+      const message = e instanceof Error ? e.message : t('postingPeriods.previewFailed')
       setPreviewFailed(true)
-      toast.error(t('postingPeriods.previewFailed'))
+      setPreviewError(message)
+      toast.error(message)
     }
   }, [bookId, t])
 
@@ -89,9 +95,16 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
           documentIds: assignable.map((row) => row.documentId),
         }),
       })
-      const payload = (await response.json()) as (CommitResult & { error?: string })
+      // The status is checked before the body is trusted: a non-JSON failure
+      // body must surface the named refusal, never a SyntaxError from
+      // response.json().
+      const payload = (await response.json().catch(() => null)) as (CommitResult & { error?: string }) | null
       if (!response.ok) {
-        toast.error(payload.error ?? t('postingPeriods.commitFailed'))
+        toast.error(payload?.error ?? t('postingPeriods.commitFailed'))
+        return
+      }
+      if (!payload) {
+        toast.error(t('postingPeriods.commitFailed'))
         return
       }
       setResult(payload)
@@ -152,7 +165,7 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
         <CardContent>
           {previewFailed ? (
             <div role="alert" className="space-y-2 text-sm text-red-600">
-              <p>{t('postingPeriods.previewFailed')}</p>
+              <p>{previewError ?? t('postingPeriods.previewFailed')}</p>
               <Button variant="outline" onClick={() => void loadPreview()}>{tc('actions.retry')}</Button>
             </div>
           ) : rows === null ? (
