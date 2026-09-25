@@ -123,6 +123,12 @@ export interface CaYearRates {
   ettWageBase: string;
   /** DE 44 p. 18 — the flat rates for supplemental wages paid separately. */
   supplemental: { bonusesAndStockOptions: string; other: string };
+  /**
+   * State Disability Insurance employee rate for the year. All covered wages
+   * have been subject to SDI since January 1, 2024 with no wage limit; the
+   * 2026 rate is 1.3%.
+   */
+  sdiRate: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +365,8 @@ export const CA_RATES_2026: CaYearRates = {
   // the same time as regular wages; when it is, the guide REQUIRES aggregation
   // through the schedules above.
   supplemental: { bonusesAndStockOptions: "0.1023", other: "0.066" },
+  // EDD payroll-tax rates: 2026 SDI employee rate 1.3%, no wage limit.
+  sdiRate: "0.013",
 };
 
 const CA_EDITIONS_BY_YEAR: Record<number, CaYearRates> = {
@@ -598,12 +606,25 @@ export function caAnnualizedMethod(input: {
 }
 
 /**
+ * State Disability Insurance employee withholding — an EMPLOYEE deduction,
+ * not PIT, so it is computed separately rather than folded into `tax`.
+ *
+ * Every covered wage dollar since January 1, 2024 carries SDI with no
+ * annual cap, at the year's published rate (2026: 1.3%).
+ */
+export function caSdiWithholding(payDate: string, coveredWages: string): string {
+  const rates = caRatesForPayDate(payDate);
+  return D(mulRateCents(U(coveredWages), rates.sdiRate));
+}
+
+/**
  * Trace-factor labels for the stub calculation trace, keyed by the trace
  * keys above. Step names are the 2026 Method B schedule's own — see the
  * module header.
  */
 export const CA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CA_EXEMPT: "Exempt from California withholding",
+  CA_SDI_EMPLOYEE: "California SDI employee withholding",
   CA_GROSS: "California gross wages this period",
   CA_LOW_INCOME: "California low-income exemption (Table 1, Step 1)",
   CA_EST_DEDUCTION: "California estimated deduction (Table 2, Step 2)",
