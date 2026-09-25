@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         continue
       }
       if (!isUuid(item.gateId)) throw new Error('invalid gateId')
-      const gate = await loadGateHeader(item.gateId, authz.user.orgId)
+      const gate = await loadGateHeader(item.gateId, authz.user.orgId, authz.allowedSubsidiaryIds)
       if (!gate) throw new Error('approval not found')
       // A gate assignment is not a grant to every legal entity — the same
       // direct-record subsidiary boundary the single decide route enforces,

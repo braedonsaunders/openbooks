@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'gateId and decision required' }, { status: 400 })
   }
 
-  const gate = await loadGateHeader(body.gateId, authz.user.orgId)
+  const gate = await loadGateHeader(body.gateId, authz.user.orgId, authz.allowedSubsidiaryIds)
   if (!gate) return NextResponse.json({ error: 'approval not found' }, { status: 404 })
   // A gate assignment is not a grant to every legal entity. Keep the same
   // direct-record subsidiary boundary as the rest of the API before allowing

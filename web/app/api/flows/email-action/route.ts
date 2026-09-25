@@ -109,7 +109,7 @@ async function loadAssigneeGateScope(
 ): Promise<{ allowedSubsidiaryIds: Set<string> | null; denied: boolean }> {
   const scope = await allowedSubsidiaryIds(userId, gate.orgId)
   const subsidiaryId = await withOrgContext(gate.orgId, () =>
-    loadFlowSubjectSubsidiary(gate.subject_kind, gate.subject_id, gate.orgId),
+    loadFlowSubjectSubsidiary(gate.subject_kind, gate.subject_id, gate.orgId, scope),
   )
   return { allowedSubsidiaryIds: scope, denied: !subsidiaryScopeAllows(scope, subsidiaryId) }
 }
