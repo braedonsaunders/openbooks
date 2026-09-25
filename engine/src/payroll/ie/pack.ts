@@ -181,9 +181,54 @@ const IE_RPN: PayrollCertificate = {
   ],
 };
 
+/**
+ * Fortnightly week split (the employer's own per-period record, not a
+ * Revenue form): reckonable pay attributable to each week worked in the
+ * fortnight. DSP charges PRSI on the amount paid in respect of each week
+ * worked — two artificial halves misclassify uneven weeks — so a
+ * fortnightly run needs the recorded split, and the slices must partition
+ * the fortnight's reckonable pay exactly. Filed per fortnight (a new row
+ * each period); the latest row as of the pay date applies, like every
+ * other certificate.
+ */
+const IE_FORTNIGHT_WEEKS: PayrollCertificate = {
+  key: "ie_fortnight_weeks",
+  form: "Fortnightly week split (employer record)",
+  label: "Reckonable pay per week worked",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "DSP PRSI Employer Guide 2026 (fortnightly PRSI is calculated on the pay for each week worked)",
+  summary:
+    "Employer-recorded reckonable pay for week 1 and week 2 of a fortnightly pay period, "
+    + "for per-week PRSI subclass/rate/credit application.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "week_1",
+    label: "Week 1 reckonable pay",
+    kind: "amount",
+    decimals: 2,
+    min: "0",
+    required: true,
+    help:
+      "Reckonable pay attributable to the first week worked in the fortnight. "
+      + "Week 1 + week 2 must equal the fortnight's reckonable pay exactly.",
+  }, {
+    key: "week_2",
+    label: "Week 2 reckonable pay",
+    kind: "amount",
+    decimals: 2,
+    min: "0",
+    required: true,
+    help:
+      "Reckonable pay attributable to the second week worked in the fortnight. "
+      + "Week 1 + week 2 must equal the fortnight's reckonable pay exactly.",
+  }],
+};
+
 const IE_CERTIFICATES: PayrollPackCertificates = {
   country: "IE",
-  certificates: [IE_RPN, {
+  certificates: [IE_RPN, IE_FORTNIGHT_WEEKS, {
     key: "ie_prsi_class",
     form: "Employer PRSI class record",
     label: "PRSI class",
@@ -545,6 +590,19 @@ export async function computeIeStatutory(
     return requiredIeRpnAmount(value === null ? {} : { [key]: value }, key);
   };
   const rpnNum = (key: string): string => answer(key) ?? "0";
+  // Fortnightly week split for per-week PRSI: the employer's recorded
+  // slices, or null when no split is on file (the engine then refuses the
+  // fortnightly run by name rather than pricing artificial halves).
+  // Non-fortnightly runs never carry a split.
+  const fortnightWeeks = (): readonly [string, string] | null => {
+    if (P !== 26) return null;
+    const split = certificateFor("ie_fortnight_weeks");
+    if (split === null || !split.onFile) return null;
+    const w1 = split.answers["week_1"] ?? null;
+    const w2 = split.answers["week_2"] ?? null;
+    if (w1 === null || w1 === "" || w2 === null || w2 === "") return null;
+    return [w1, w2];
+  };
 
   const statutory = calculateIeStatutory({
     payDate,
@@ -560,6 +618,7 @@ export async function computeIeStatutory(
     // when the previous employment had no pre-tax pension deductions.
     taxPaidYtd: add(ytd.tax, rpnNum("prior_cumulative_tax")),
     reckonablePayPeriod: pensionable,
+    reckonablePayWeeks: fortnightWeeks(),
     grossPayYtd: add(ytd.gross, rpnNum("prior_cumulative_pay")),
     uscPaidYtd: add(ytd.usc, rpnNum("prior_cumulative_usc")),
     uscExempt: hasRpn && (answer("usc_exempt") === "true"),

@@ -150,6 +150,13 @@ export interface IeStatutoryInput {
   taxPaidYtd: string;
   /** This period's reckonable pay (gross; pensions give no PRSI relief). */
   reckonablePayPeriod: string;
+  /**
+   * Fortnightly reckonable pay per week worked (week 1, week 2), required
+   * on 26 pays/year: DSP charges each worked week separately, and two
+   * artificial halves misclassify uneven weeks. Must sum to the period
+   * total. Absent on every other frequency.
+   */
+  reckonablePayWeeks?: readonly [string, string] | null;
   /** Prior cumulative gross pay this year (USC cliff base). */
   grossPayYtd: string;
   /** USC already deducted this year. */
@@ -287,6 +294,8 @@ function prsiPass(
   edition: IeEditionRates,
   periodsPerYear: 12 | 26 | 52,
   reckonablePay: bigint,
+  /** Fortnightly week slices (week 1, week 2); null for every other frequency. */
+  weeks: readonly [bigint, bigint] | null,
 ): { employee: bigint; employer: bigint; subclass: string } {
   if (reckonablePay < 0n) fail("reckonable pay is negative");
   const bands =
@@ -320,6 +329,26 @@ function prsiPass(
   }
   const employerRate =
     reckonablePay <= alMax ? edition.prsiEmployerLowerRate : edition.prsiEmployerHigherRate;
+  // One week's employee charge at the WEEKLY bands: A0 nil, the AX credit
+  // formula inside the credit band, the flat rate above it. Fortnightly
+  // slices below the €38 weekly floor price nil like A0 rather than
+  // refusing as Class J: the slice is not a standalone weekly payroll,
+  // and the aggregate fortnightly floor above already guards degenerate
+  // fortnights — refusing here would strand ordinary variable-hour weeks.
+  const weeklyBands = prsiPeriodBands().weekly;
+  const weeklyCharge = (slice: bigint): bigint => {
+    if (slice <= U(weeklyBands.a0Max)) return 0n;
+    if (slice > U(weeklyBands.axMax)) return mulRateCents(slice, edition.prsiEmployeeRate);
+    const gross = mulRateCents(slice, edition.prsiEmployeeRate);
+    // "Reduced by one sixth of earnings in excess of €352.01": the sixth
+    // rounds half-up to the cent (SW14: 24.99 ÷ 6 shows €4.17) and the
+    // credit is the €12 maximum less that rounded sixth (12.00 − 4.17 =
+    // €7.83 in the same example).
+    const excess = slice - U(edition.prsiCreditBase);
+    const sixth = mulRatioCents(excess < 0n ? 0n : excess, 1n, 6n);
+    const credit = max0(U(edition.prsiCreditMax) - sixth);
+    return max0(gross - credit);
+  };
   if (reckonablePay <= axMax) {
     if (periodsPerYear === 12) {
       fail(
@@ -327,29 +356,16 @@ function prsiPass(
           "publishes no monthly equivalent for — refused by name",
       );
     }
-    // Fortnightly pay covers exactly two weeks ("each week worked during
-    // that fortnight"): split and charge each week. Weekly: charge directly.
-    const weeks = periodsPerYear === 26 ? 2 : 1;
-    const weeklyPay = reckonablePay / BigInt(weeks);
-    const remainder = reckonablePay % BigInt(weeks);
-    let employee = 0n;
-    for (let w = 0; w < weeks; w++) {
-      // Odd cent amounts split half-cent-exact; the extra 0.5 unit lands on
-      // the first week. Sub-cent precision survives: products round once.
-      const slice = weeklyPay + (w === 0 ? remainder : 0n);
-      const gross = mulRateCents(slice, edition.prsiEmployeeRate);
-      // "Reduced by one sixth of earnings in excess of €352.01": the sixth
-      // rounds half-up to the cent (SW14: 24.99 ÷ 6 shows €4.17) and the
-      // credit is the €12 maximum less that rounded sixth (12.00 − 4.17 =
-      // €7.83 in the same example). The maximum caps short excess, which
-      // only fortnightly half-weeks can produce.
-      const excess = slice - U(edition.prsiCreditBase);
-      const sixth = mulRatioCents(excess < 0n ? 0n : excess, 1n, 6n);
-      const credit = max0(U(edition.prsiCreditMax) - sixth);
-      employee += max0(gross - credit);
-    }
+    if (periodsPerYear === 52) return {
+      employee: weeklyCharge(reckonablePay),
+      employer: mulRateCents(reckonablePay, employerRate),
+      subclass: "AX",
+    };
+    // Fortnightly pay is charged on the amount paid in respect of EACH week
+    // worked during the fortnight (DSP Employer Guide 2026): the recorded
+    // week slices price separately, never as two artificial halves.
     return {
-      employee,
+      employee: weeklyCharge(weeks![0]) + weeklyCharge(weeks![1]),
       employer: mulRateCents(reckonablePay, employerRate),
       subclass: "AX",
     };
@@ -453,7 +469,32 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
     // DSP Class M: no contribution is payable by the employee or employer.
     prsi = { employee: 0n, employer: 0n, subclass: "M" };
   } else {
-    prsi = prsiPass(edition, input.periodsPerYear as 12 | 26 | 52, reckonable);
+    // Fortnightly PRSI needs the amount paid in respect of each week
+    // worked: without the recorded split the engine would price two
+    // artificial halves and misclassify uneven weeks (DSP Employer Guide
+    // 2026). The slices must partition the period total exactly.
+    let weeks: readonly [bigint, bigint] | null = null;
+    if (input.periodsPerYear === 26) {
+      const raw = input.reckonablePayWeeks;
+      if (raw == null) {
+        fail(
+          "fortnightly PRSI cannot price without reckonable pay per week worked — "
+          + "record week 1 and week 2 reckonable pay (reckonablePayWeeks) before running payroll",
+        );
+      }
+      const slices = [parseMoney(raw[0], "week 1 reckonable pay"), parseMoney(raw[1], "week 2 reckonable pay")] as const;
+      if (slices[0] < 0n || slices[1] < 0n) fail("weekly reckonable pay must be non-negative");
+      if (slices[0] + slices[1] !== reckonable) {
+        fail(
+          `fortnightly week slices ${D(slices[0])} + ${D(slices[1])} do not sum to the period `
+          + `reckonable pay ${D(reckonable)} — the weeks must partition the fortnight exactly`,
+        );
+      }
+      weeks = slices;
+    } else if (input.reckonablePayWeeks != null) {
+      fail("reckonable pay per week is a fortnightly input — refused on any other frequency");
+    }
+    prsi = prsiPass(edition, input.periodsPerYear as 12 | 26 | 52, reckonable, weeks);
   }
 
   return {
