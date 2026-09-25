@@ -12,7 +12,7 @@ import {
   certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
 import "../../packs.ts";
-import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, U } from "../../canada/decimal.ts";
 import {
   OR_CERTIFICATE, OR_REGION, OR_RATES_2026, OR_TRANSIT_RECORD, OR_WITHHOLDING, orAllowancesUsed,
   orAnnualWithholding,
@@ -285,17 +285,17 @@ test("OR extra withholding is added AFTER the formula; exempt is zero", () => {
   assert.equal(exempt.factors.OR_EXEMPT, "1");
 });
 
-test("OR HB 2119 — no OR-W-4 on file withholds 8% of wages", () => {
-  // "HB 2119 (2019) requires employers to withhold income tax at a rate of
-  // eight (8) percent of employee wages if the employee hasn’t provided a
-  // withholding statement or exception certificate."
+test("OR HB 2119 — no OR-W-4 on file withholds 8% of Oregon-source wages", () => {
   const none = OR_WITHHOLDING.compute({
-    payDate: "2026-03-13", periodsPerYear: 52, wages: "1000.00", basis: "resident",
+    payDate: "2026-03-13", periodsPerYear: 52, wages: "2000.00", basis: "nonresident",
+    wageAllocations: [
+      { region: "OR", subRegion: null, workShare: "0.5", source: "verified time records" },
+      { region: "WA", subRegion: null, workShare: "0.5", source: "verified time records" },
+    ],
     certificate: resolveCertificate({ certificate: OR_CERTIFICATE }),
   });
-  assert.equal(none.factors.OR_METHOD, "eight_percent");
+  assert.equal(none.factors.OR_WAGES, money("1000"));
   assert.equal(none.tax, money("80"));
-  assert.equal(D(mulRateCents(U("1000"), pctToRate("8"))), money("80"));
 });
 
 test("OR refuses without this period's federal income tax withheld", () => {
