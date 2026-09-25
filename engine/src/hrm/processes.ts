@@ -19,6 +19,7 @@ import {
   type MatchableTemplate,
 } from "./process-math.ts";
 import { parseCivilDate } from "./temporal.ts";
+import { isUniqueViolation } from "./field-time/errors.ts";
 
 /**
  * Governed HRM onboarding / offboarding / transfer checklists (0193).
@@ -496,7 +497,7 @@ export async function createProcessTemplate(query: CreateTemplateQuery): Promise
                   updated_at as "updated_at", updated_by as "updated_by"
       `)).rows as TemplateRow[];
     } catch (error) {
-      if ((error as { code?: string }).code === "23505") {
+      if (isUniqueViolation(error)) {
         throw new HrmProcessError(
           "REFUSED",
           `a ${kind} template named ${JSON.stringify(name)} already exists — rename this one or edit the existing template`,
@@ -577,7 +578,7 @@ export async function updateProcessTemplate(query: UpdateTemplateQuery): Promise
                   created_at, created_by, updated_at, updated_by
       `)).rows as TemplateRow[];
     } catch (error) {
-      if ((error as { code?: string }).code === "23505") {
+      if (isUniqueViolation(error)) {
         throw new HrmProcessError(
           "REFUSED",
           `a ${current.kind} template named ${JSON.stringify(name)} already exists — rename this one or edit the existing template`,
@@ -728,7 +729,7 @@ export async function upsertProcessTemplateStep(query: UpsertTemplateStepQuery):
                     due_offset_days, required, evidence_kind
         `)).rows[0];
       } catch (error) {
-        if ((error as { code?: string }).code === "23505") {
+        if (isUniqueViolation(error)) {
           throw new HrmProcessError(
             "REFUSED",
             `position ${position} is already taken on this template — pick the next free position`,
@@ -749,7 +750,7 @@ export async function upsertProcessTemplateStep(query: UpsertTemplateStepQuery):
                     due_offset_days, required, evidence_kind
         `)).rows[0];
       } catch (error) {
-        if ((error as { code?: string }).code === "23505") {
+        if (isUniqueViolation(error)) {
           throw new HrmProcessError(
             "REFUSED",
             `position ${position} is already taken on this template — reorder the steps instead of colliding`,
@@ -1386,7 +1387,7 @@ export async function openProcessInTx(exec: SqlExecutor, args: OpenProcessInTx):
     }
     processId = inserted.id;
   } catch (error) {
-    if ((error as { code?: string }).code === "23505") {
+    if (isUniqueViolation(error)) {
       throw new HrmProcessError(
         "DUPLICATE_OPEN",
         `an open ${kind} process already exists for this employment — complete or cancel it before opening another`,
