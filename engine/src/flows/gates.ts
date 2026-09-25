@@ -17,6 +17,7 @@ import {
 } from "./targets.ts";
 import { activeDelegationPrincipal, activeDelegationPrincipals } from "./delegations.ts";
 import { emailActionUrls } from "./email-tokens.ts";
+import { allocationScopeVisible } from "../allocations/subsidiary-scope.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
@@ -205,6 +206,9 @@ async function gateSubjectSubsidiaryId(gate: Pick<GateRow, "subjectKind" | "subj
              when g.subject_kind = 'financial_change' then (
                select fc.subsidiary_id from financial_changes fc where fc.id=g.subject_id and fc.org_id=g.org_id
              )
+             when g.subject_kind = 'allocation_run' then (
+               select ar.subsidiary_id from allocation_runs ar where ar.id=g.subject_id and ar.org_id=g.org_id
+             )
              when g.subject_kind = 'party_bank_account' then (
                select p.subsidiary_id
                  from party_bank_accounts ba
@@ -235,6 +239,32 @@ async function assertGateSubsidiaryScope(
   allowedSubsidiaryIds: GateSubsidiaryScope,
 ): Promise<void> {
   if (allowedSubsidiaryIds == null) return;
+  if (gate.subjectKind === "allocation_run") {
+    // Allocation visibility depends on the full stored computation (pin plus
+    // every source, target, and line), not just the run pin the generic
+    // resolver below returns.
+    const run = (
+      await db.execute<{
+        subsidiaryId: string | null;
+        computation: unknown;
+      }>(sql`
+      select subsidiary_id as "subsidiaryId", computation
+        from allocation_runs
+       where org_id = ${gate.orgId} and id = ${gate.subjectId}
+    `)
+    ).rows[0];
+    if (
+      !run ||
+      !allocationScopeVisible(
+        allowedSubsidiaryIds,
+        run.subsidiaryId,
+        run.computation,
+      )
+    ) {
+      throw new GateError("approval not found");
+    }
+    return;
+  }
   if (gate.subjectKind === "financial_change") {
     const required = (
       await db.execute<{ ids: string[] }>(
@@ -975,7 +1005,11 @@ const WORKLIST_SELECT = sql`
  * approvals from theirs). Batched per subject kind; subjects with no
  * resolvable entity keep null so restricted callers fail closed on them.
  */
-async function resolveWorklistSubsidiaries(orgId: string, gates: WorklistGate[]): Promise<void> {
+async function resolveWorklistSubsidiaries(
+  orgId: string,
+  gates: WorklistGate[],
+  allowedSubsidiaryIds?: GateSubsidiaryScope,
+): Promise<void> {
   const missing = gates.filter((g) => g.subsidiaryId == null);
   if (missing.length === 0) return;
   const idsFor = (kind: string): string[] => [
@@ -1016,6 +1050,36 @@ async function resolveWorklistSubsidiaries(orgId: string, gates: WorklistGate[])
          and ba.id in (select jsonb_array_elements_text(${JSON.stringify(bankAccounts)}::jsonb)::uuid)
     `);
     apply(r.rows);
+  }
+  const allocationRuns = idsFor("allocation_run");
+  if (allocationRuns.length > 0) {
+    const rows = (
+      await db.execute<{
+        id: string;
+        subsidiaryId: string | null;
+        computation: unknown;
+      }>(sql`
+      select id, subsidiary_id as "subsidiaryId", computation
+        from allocation_runs
+       where org_id = ${orgId}
+         and id in (select jsonb_array_elements_text(${JSON.stringify(allocationRuns)}::jsonb)::uuid)
+    `)
+    ).rows;
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const gate of missing.filter(
+      (candidate) => candidate.subjectKind === "allocation_run",
+    )) {
+      const run = byId.get(gate.subjectId);
+      gate.subsidiaryId =
+        run &&
+        allocationScopeVisible(
+          allowedSubsidiaryIds ?? null,
+          run.subsidiaryId,
+          run.computation,
+        )
+          ? run.subsidiaryId
+          : null;
+    }
   }
 }
 
@@ -1155,7 +1219,7 @@ export async function worklistGates(
   }
   // Every row carries its legal entity (documents join it; other subjects
   // resolve above) so all worklist surfaces can apply the caller's boundary.
-  await resolveWorklistSubsidiaries(orgId, out);
+  await resolveWorklistSubsidiaries(orgId, out, allowedSubsidiaryIds);
   if (allowedSubsidiaryIds != null) {
     return out.filter((g) => gateSubsidiaryScopeAllows(allowedSubsidiaryIds, g.subsidiaryId));
   }
