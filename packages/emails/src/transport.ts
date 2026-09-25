@@ -561,39 +561,24 @@ async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input:
     throw new Error('SMTP: username and password must both be provided, or both omitted for an unauthenticated relay')
   }
   const redactions = [t.password ?? '', t.username ?? ''].filter(Boolean)
-  const loopback = ['localhost', '127.0.0.1', '::1'].includes(t.host.trim().toLowerCase())
-  let connectionOptions: Record<string, unknown>
-  if (loopback) {
-    // Dev catcher (Mailpit/Ethereal-local): plaintext loopback, no TLS verify.
-    connectionOptions = {
-      host: t.host,
-      port: t.port,
-      secure: t.secure,
-      ignoreTLS: !t.secure,
-      auth: t.username ? { user: t.username, pass: t.password! } : undefined,
-      connectionTimeout: TRANSPORT_TIMEOUT_MS,
-      greetingTimeout: TRANSPORT_TIMEOUT_MS,
-      socketTimeout: TRANSPORT_TIMEOUT_MS,
-    }
-  } else {
-    let resolved
-    try {
-      resolved = await resolvePublicHost(t.host)
-      if (resolved.ipLiteral) throw new Error('External SMTP host must be a DNS name so its TLS identity can be verified.')
-    } catch (error) {
-      throw providerOperationError('SMTP', error, redactions)
-    }
-    connectionOptions = {
-      host: resolved.address,
-      port: t.port,
-      secure: t.secure,
-      requireTLS: !t.secure,
-      auth: t.username ? { user: t.username, pass: t.password! } : undefined,
-      tls: { rejectUnauthorized: true, servername: resolved.hostname },
-      connectionTimeout: TRANSPORT_TIMEOUT_MS,
-      greetingTimeout: TRANSPORT_TIMEOUT_MS,
-      socketTimeout: TRANSPORT_TIMEOUT_MS,
-    }
+  let resolved
+  try {
+    resolved = await resolvePublicHost(t.host)
+  } catch (error) {
+    throw providerOperationError('SMTP', error, redactions)
+  }
+  const connectionOptions: Record<string, unknown> = {
+    // IP literal prevents a second DNS lookup after the guard has checked all
+    // answers; `servername` preserves TLS identity verification for the name.
+    host: resolved.address,
+    port: t.port,
+    secure: t.secure,
+    requireTLS: !t.secure,
+    auth: t.username ? { user: t.username, pass: t.password! } : undefined,
+    tls: { rejectUnauthorized: true, servername: resolved.hostname },
+    connectionTimeout: TRANSPORT_TIMEOUT_MS,
+    greetingTimeout: TRANSPORT_TIMEOUT_MS,
+    socketTimeout: TRANSPORT_TIMEOUT_MS,
   }
   const nodemailer = (await import('nodemailer')).default
   // A stable Message-ID plus our audit header keep duplicate SMTP deliveries

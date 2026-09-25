@@ -9,6 +9,7 @@
     "@jitl/quickjs-singlefile-browser-release-asyncify": "^0.31.0",
     "@openbooks/customization": "*",
     "@openbooks/emails": "*",
+    "@openbooks/networking": "*",
     "@openbooks/forms-core": "*",
     "@openbooks/jobs": "*",
     "@openbooks/pdf": "*",

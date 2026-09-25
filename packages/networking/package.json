@@ -1,0 +1,11 @@
+{
+  "name": "@openbooks/networking",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/ssrf.ts",
+  "types": "./src/ssrf.ts",
+  "exports": {
+    "./ssrf": "./src/ssrf.ts"
+  }
+}
