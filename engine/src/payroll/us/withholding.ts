@@ -38,6 +38,7 @@
  */
 import {
   certificateAmount,
+  certificateCode,
   certificateCount,
   certificateFlag,
   emptyResolvedCertificate,
@@ -64,7 +65,7 @@ import {
   usStateWithholding,
   type UsStateYtd,
 } from "./states/index.ts";
-import { act32LocalEit } from "./states/pa.ts";
+import { act32LocalEit, localServicesTaxPerPeriod } from "./states/pa.ts";
 import { miDetroitResidentRate } from "./states/mi.ts";
 import { mdDelawareResidentTax, mdDelawareScheduleApplies } from "./states/md.ts";
 import { inCounty, inCountyWithholding } from "./states/in.ts";
@@ -482,6 +483,14 @@ export interface UsWithholdingResult {
   factors: Record<string, string>;
   /** Local W-2 box 18 wages; absent when a work-locality split is unknown. */
   localTaxableWages?: string;
+  /**
+   * Further stub lines the same levy assesses beyond the primary tax — the
+   * PA worksite Local Services Tax rides the settled Act 32 levy this way.
+   * Posted by the compute pass under the shared local-income-tax component
+   * with each entry's own code, so a second tax never dissolves into the
+   * first one's line.
+   */
+  additionalLines?: { code: string; label: string; tax: string; factors: Record<string, string> }[];
 }
 
 /**
@@ -1371,6 +1380,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         tax,
         factors: { PA_EIT_PSD: subRegion, PA_EIT_RATE: rate, PA_EIT_TAX: tax },
         ...localWageTrace,
+        ...paWorksiteLst(input, levy, subRegion),
       };
     }
     default:
@@ -1383,6 +1393,58 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         `${levy.label} is declared inside ${levy.region} and the US pack has no way to compute it`,
       );
   }
+}
+
+/**
+ * The worksite Local Services Tax riding a settled Act 32 levy.
+ *
+ * LST follows the WORK location and is a different tax from EIT (a flat
+ * annual amount, not rate × wages), so it cannot fold into the EIT line —
+ * it returns as an additional line the compute pass posts separately. The
+ * worksite PSD is the levy's own code on the work side, else the
+ * CLGS-32-6 work code; with neither on file no worksite jurisdiction is
+ * known and there is nothing to assess. An entered annual amount IS the
+ * levy on file (most PA worksites levy no LST, so unconfigured assesses
+ * nothing); the exemption record zeroes it with the reason on the trace.
+ */
+function paWorksiteLst(
+  input: UsWithholdingInput,
+  levy: ResolvedWithholdingLevy,
+  subRegion: string,
+): Pick<UsWithholdingResult, "additionalLines"> {
+  const clgs = input.certificateFor("us_pa_clgs32_6");
+  const workPsd = levy.side === "work"
+    ? subRegion
+    : clgs == null ? null : certificateCode(clgs, "work_psd_code");
+  if (workPsd == null || workPsd === "") return {};
+  const annualAmount = input.tenantRates("us_pa_lst", workPsd)?.annualAmount;
+  if (annualAmount == null || annualAmount === "") return {};
+  const record = input.certificateFor("us_pa_lst_record");
+  const exempt = record != null
+    && (certificateFlag(record, "exempt_low_income")
+      || certificateFlag(record, "principal_employer_withholds"));
+  const factorKey = `LIT_PA-${workPsd}-LST`;
+  const ytd = input.ytd?.lstWithheldYtd?.[factorKey] ?? "0";
+  const tax = localServicesTaxPerPeriod({
+    annualAmount,
+    periodsPerYear: input.periodsPerYear,
+    exempt,
+    alreadyWithheldYtd: ytd,
+  });
+  return {
+    additionalLines: [{
+      code: `PA-${workPsd}-LST`,
+      label: `PA Local Services Tax (worksite PSD ${workPsd})`,
+      tax,
+      factors: {
+        PA_LST_PSD: workPsd,
+        PA_LST_ANNUAL: annualAmount,
+        PA_LST_TAX: tax,
+        PA_LST_YTD: ytd,
+        ...(exempt ? { PA_LST_EXEMPT: "1" } : {}),
+      },
+    }],
+  };
 }
 
 /**

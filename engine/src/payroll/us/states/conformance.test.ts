@@ -18,6 +18,7 @@ import test from "node:test";
 import {
   payrollCertificate, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
+import { computeUsWithholding } from "../withholding.ts";
 // The PACK publishes the US declarations now (its `certificates` / `withholding` /
 // `reciprocity` members). Importing `us/jurisdictions.ts` for its side effect is
 // exactly what made those declarations look alive while nothing in the product
@@ -702,4 +703,15 @@ test("PA Local Services Tax prorates by TRUNCATION, as DCED instructs", () => {
     () => localServicesTaxPerPeriod({ annualAmount: "10", periodsPerYear: 52 }),
     /collected as a lump sum/,
   );
+});
+
+test("PA Local Services Tax dispatches a worksite line through computeUsWithholding", () => {
+  // DCED LST: a $52 biweekly worksite withholds $2.00 — through the dispatch, not the helper.
+  const result = computeUsWithholding({
+    levy: { level: "sub_region", region: "PA", subRegion: "421010", label: "PA EIT", basis: "nonresident", side: "work", reach: "nonresident", certificateKey: "us_pa_clgs32_6" },
+    payDate: "2026-03-06", periodEnd: "2026-03-06", periodsPerYear: 26, wages: "2000.00", federalIncomeTax: "0",
+    certificateFor: () => null,
+    tenantRates: (rateKey): Record<string, string> | undefined => rateKey === "us_pa_local_eit" ? { nonresidentRate: "0.01" } : rateKey === "us_pa_lst" ? { annualAmount: "52" } : undefined,
+  });
+  assert.equal(result!.additionalLines?.find((l) => l.code === "PA-421010-LST")?.tax, money("2"));
 });

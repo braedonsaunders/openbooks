@@ -41,6 +41,8 @@ export type UsYtdRow = {
   regularWageTaxWithheldThisYear: boolean;
   regularWageTaxWithheldKeys: string[];
   fica_tax: string;
+  /** LST withheld this year by stub factor key (`LIT_PA-<worksite PSD>-LST`). */
+  lstWithheldYtd: Record<string, string>;
 };
 
 /** Resolve the SUI wage-base history only when every prior wage has known
@@ -141,7 +143,29 @@ export async function usEmployeeYtd(
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'SS')::numeric), 0)
       + coalesce(sum((s.factors->>'MED')::numeric), 0)
-      + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax
+      + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax,
+      coalesce((
+        select jsonb_object_agg(key, total::text)
+        from (
+          select fact.key as key, sum(coalesce(fact.value::numeric, 0)) as total
+          from pay_stubs history
+          join pay_runs committed_run
+            on committed_run.document_id = history.pay_run_document_id
+           and committed_run.org_id = history.org_id
+          join documents committed_document
+            on committed_document.id = committed_run.document_id
+           and committed_document.org_id = committed_run.org_id
+          cross join lateral jsonb_each_text(history.factors) as fact(key, value)
+          where history.org_id = ${orgId}
+            and history.employee_party_id = ${employeePartyId}
+            and history.tax_year = ${taxYear}
+            and history.pay_run_document_id <> ${documentId}
+            and committed_run.run_status = 'committed'
+            and committed_document.status <> 'voided'
+            and fact.key like 'LIT#_PA-%-LST' escape '#'
+          group by 1
+        ) lst
+      ), '{}'::jsonb) as "lstWithheldYtd"
     from pay_stubs s
     join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
     join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -457,6 +481,7 @@ export async function computeUsStatutory(
       // off ytd.wages — its own documented field, not a repurposed one.
       ytd: {
         supplemental: ytd.supplemental,
+        lstWithheldYtd: ytd.lstWithheldYtd,
         ...(levy.region === "MN" && levy.subRegion === "PLE" ? { wages: ytd.mnPaidLeaveWages } : {}),
       },
       socialInsuranceDeducted: {
@@ -489,6 +514,18 @@ export async function computeUsStatutory(
         ? `STATUTORY_${levy.statutoryComponent.systemKey}`
         : `${levy.level === "region" ? "SIT" : "LIT"}_${withheld.code}`]: withheld.tax,
     };
+    // A levy assessing a second tax (the PA worksite LST rides the settled
+    // Act 32 levy) posts it as its own line under the shared local component,
+    // with its own mirror factor — never folded into the first tax's amount.
+    for (const extra of withheld.additionalLines ?? []) {
+      const extraSequence = sequence++;
+      pushStatutory("local_income_tax", "deduction", extra.label, extra.tax, extraSequence);
+      factors = {
+        ...factors,
+        ...extra.factors,
+        [`LIT_${extra.code}`]: extra.tax,
+      };
+    }
   }
   // Pennsylvania UC employee withholding (2026: 0.07% of all gross wages,
   // no cap) is an employee deduction, not income tax: the state engine only

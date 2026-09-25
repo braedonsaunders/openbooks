@@ -525,6 +525,47 @@ const PA_CLGS32_6: PayrollCertificate = {
   ],
 };
 
+/**
+ * Pennsylvania Local Services Tax exemption record (employer-determined).
+ *
+ * There is no employee LST form: DCED has the employee claim the $12,000
+ * low-income exemption (and the principal-employer priority for concurrent
+ * employment) by filing an upfront exemption certificate with the employer
+ * and the political subdivision. This record is the employer's copy of that
+ * filing — the two facts that zero an LST assessment — following the
+ * Ohio-municipality-record precedent. The low-income THRESHOLD itself is not
+ * carried ($12,000 generally, $15,600 in distressed Scranton): the filed
+ * certificate is the determination, never an engine comparison.
+ */
+const PA_LST_RECORD: PayrollCertificate = {
+  key: "us_pa_lst_record",
+  form: "(employer-determined)",
+  label: "PA Local Services Tax exemption record",
+  scope: { level: "region", region: "PA" },
+  purpose: "withholding",
+  citation: "PA DCED, Local Services Tax (exemptions and priority)",
+  summary:
+    "The employee's LST exemption position for Pennsylvania worksites: the upfront low-income "
+    + "exemption certificate, and whether a principal employer withholds this worksite's LST "
+    + "in full. Either flag zeroes the assessment with the reason on the stub trace.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "exempt_low_income", label: "LST low-income exemption certificate on file", kind: "flag",
+      help: "The employee filed the upfront LST exemption certificate (expected income under the "
+        + "jurisdiction's threshold) with the employer and the political subdivision. Withholding "
+        + "from an exempt employee over-withholds every pay.",
+    },
+    {
+      key: "principal_employer_withholds", label: "Principal employer withholds this LST in full",
+      kind: "flag",
+      help: "A concurrent (principal) employer withholds this worksite jurisdiction's full annual "
+        + "LST for this employee, so this employment withholds nothing for it. DCED priority: the "
+        + "secondary employer must not double-withhold what the principal already collects.",
+    },
+  ],
+};
+
 /** New Jersey Form NJ-W4 (1-21). */
 const NJ_W4: PayrollCertificate = {
   key: "us_nj_njw4",
@@ -1106,6 +1147,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
   country: "US",
   certificates: [
     W4, US_TAX_RESIDENCY, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
+    PA_LST_RECORD,
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
     MA_M4, MA_M4_MS, GA_G4, NC_NC4, CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CT_CERTIFICATE, DC_CERTIFICATE,
     DC_NONRESIDENT_CERTIFICATE,

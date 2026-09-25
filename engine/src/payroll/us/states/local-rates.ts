@@ -293,6 +293,51 @@ const US_MN_PLE_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * A Pennsylvania worksite's annual Local Services Tax, per PSD.
+ *
+ * The LST is a flat ANNUAL dollar amount the worksite's municipality and/or
+ * school district sets — $52 in most of the Commonwealth, $156 in Scranton,
+ * an Act 47 distressed city — so it can never be a pack constant. The
+ * employer holds the figure: it is on the DCED register entry (and the
+ * TCD notice) for the worksite's PSD code. The engine prorates it per pay
+ * period with DCED's truncation and caps it at the annual amount against
+ * the year's committed history; see `localServicesTaxPerPeriod` in
+ * `./pa.ts` and the PA dispatch in `../withholding.ts`.
+ *
+ * Most Pennsylvania worksites levy no LST at all, so an unconfigured PSD
+ * assesses nothing (`zero`, decided): the entered amount IS the levy on
+ * file, the way an unentered Ohio municipality is no levy. Contrast the
+ * Act 32 EIT slot, where the filed PSD code proves the levy exists and a
+ * missing rate must refuse.
+ */
+const US_PA_LST_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_pa_lst",
+  label: "PA Local Services Tax annual amount (worksite PSD)",
+  scope: "sub_region",
+  systemKeys: ["local_income_tax"],
+  regions: ["PA"],
+  whenUnconfigured: "zero",
+  citation:
+    "PA DCED, Local Services Tax (employer withholding, annual rate, installment/rounding, "
+    + "exemptions and priority); PA DCED official tax register (Find Your Withholding Rates by Address)",
+  variesBecause:
+    "Each Pennsylvania municipality and school district sets its own annual LST amount — $52 in "
+    + "most of the Commonwealth, $156.00 in Scranton with a $15,600 low-income exemption — and "
+    + "revises it on its own schedule. DCED's register is authoritative per PSD code; a carried "
+    + "constant would be wrong for whichever jurisdiction moved after it, with nothing able to tell.",
+  fields: [
+    {
+      key: "annualAmount", label: "Combined annual LST amount", kind: "amount", decimals: 2,
+      min: "0", max: "10000", required: true,
+      help: "The worksite jurisdiction's combined annual LST from DCED's register, in dollars: 52 "
+        + "is the common $52 levy. Amounts of $10 or less are collected as a lump sum, not "
+        + "prorated — the run refuses them by name so they are recorded as a one-time deduction "
+        + "instead. A worksite with no amount on file assesses no LST.",
+    },
+  ],
+};
+
 export const US_LOCAL_RATE_SLOTS: readonly PayrollStatutoryRateSlot[] = [
   US_OH_MUNICIPAL_SLOT,
   US_MI_CITY_SLOT,
@@ -301,4 +346,5 @@ export const US_LOCAL_RATE_SLOTS: readonly PayrollStatutoryRateSlot[] = [
   US_VT_CCCE_SLOT,
   US_MN_PL_SLOT,
   US_MN_PLE_SLOT,
+  US_PA_LST_SLOT,
 ];

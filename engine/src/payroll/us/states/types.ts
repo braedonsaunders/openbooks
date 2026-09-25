@@ -414,6 +414,13 @@ export interface UsStateYtd {
   supplemental?: string;
   /** Tax already withheld to this state this year. */
   tax?: string;
+  /**
+   * Local Services Tax already withheld this year, by stub factor key
+   * (`LIT_PA-<worksite PSD>-LST`). The annual LST amount caps the year's
+   * total per worksite jurisdiction; without this history a 27th pay period
+   * or a mid-year schedule change would over-withhold past it.
+   */
+  lstWithheldYtd?: Record<string, string>;
 }
 
 export interface UsStateWithholdingInput {
