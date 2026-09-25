@@ -9,6 +9,7 @@ import { listSchedules } from '@openbooks/engine/src/hrm/construction/rates.ts'
 import { listRuns, listFormats } from '@openbooks/engine/src/hrm/construction/certified.ts'
 import { listCompClasses, listCompRules } from '@openbooks/engine/src/hrm/construction/comp-classes.ts'
 import { listEntries, listPolicies } from '@openbooks/engine/src/hrm/construction/per-diem.ts'
+import { HrmConstructionError } from '@openbooks/engine/src/hrm/construction/errors.ts'
 import { can, type Authz } from '../authz'
 import { setupSectionParams } from '../list-params'
 import { complianceHref } from './workspace-href'
@@ -367,7 +368,10 @@ export async function loadCompliancePage(
       ],
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return { ...empty, refusal: { title: t('compliance.refused'), message } }
+    if (error instanceof HrmConstructionError) {
+      return { ...empty, refusal: { title: t('compliance.refused'), message: error.message } }
+    }
+    console.error('[hrm/compliance] page load failed', error)
+    return { ...empty, refusal: { title: t('compliance.refused'), message: t('compliance.loadFailed') } }
   }
 }

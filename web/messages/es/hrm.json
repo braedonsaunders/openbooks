@@ -1484,6 +1484,7 @@
     "title": "Cumplimiento",
     "description": "Salarios vigentes, nóminas certificadas, clases de compensación, proporciones de aprendices y dietas — cumplimiento de construcción desde los mismos registros de tiempo, proyecto y nómina.",
     "refused": "Cumplimiento no disponible",
+    "loadFailed": "No se pudo cargar el espacio de cumplimiento. Vuelva a intentarlo y contacte con su administrador si el problema continúa.",
     "needRead": "Necesita el permiso de lectura de construcción para abrir este espacio.",
     "generate": "Generar informe",
     "actionFailed": "No se pudo completar esta acción.",
