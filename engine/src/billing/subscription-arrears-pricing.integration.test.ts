@@ -51,8 +51,8 @@ async function seedArrearsJanuary(org: ScratchOrg, actor: string): Promise<strin
         incomeAccountId: org.accounts.revenue,
       },
     ],
-  });
-  await publishPlanVersion(org.orgId, actor, versionId);
+  }, null);
+  await publishPlanVersion(org.orgId, actor, versionId, null);
   const subscriptionId = randomUUID();
   await db.execute(sql`
     insert into subscriptions

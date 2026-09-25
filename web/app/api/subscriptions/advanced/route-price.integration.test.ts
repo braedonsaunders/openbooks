@@ -24,6 +24,7 @@ registerHooks({
           const s = globalThis.__subscriptionPriceState;
           return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['ar.create']), allowedSubsidiaryIds: null };
         }
+        export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
       `);
     if (specifier.endsWith("/lib/features"))
       return virtual("export async function isFeatureEnabled() { return true }");
@@ -148,8 +149,25 @@ test("createPlanVersion refuses an omitted unit price without writing", async ()
         planId,
         effectiveFrom: "2026-10-01",
         components: [{ componentKey: "fee", name: "Fee", unitPrice: undefined as unknown as string }],
-      })),
+      }, null)),
       /component price/,
+    );
+    assert.equal(await versionCount(org.orgId), 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("createPlanVersion refuses a subsidiary-restricted scope by name without writing", async () => {
+  const { org, planId } = await fixture();
+  try {
+    await assert.rejects(
+      withOrgContext(state.orgId, () => createPlanVersion(org.orgId, state.actorId, {
+        planId,
+        effectiveFrom: "2026-10-01",
+        components: [{ componentKey: "fee", name: "Fee", unitPrice: "10.0000" }],
+      }, new Set([randomUUID()]))),
+      /requires unrestricted subsidiary access/,
     );
     assert.equal(await versionCount(org.orgId), 0);
   } finally {

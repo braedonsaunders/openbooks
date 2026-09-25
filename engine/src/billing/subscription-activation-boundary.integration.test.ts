@@ -50,8 +50,8 @@ async function seedQuarterlyVersion(org: ScratchOrg, actor: string, planId: stri
         incomeAccountId: org.accounts.revenue,
       },
     ],
-  });
-  await publishPlanVersion(org.orgId, actor, versionId);
+  }, null);
+  await publishPlanVersion(org.orgId, actor, versionId, null);
   return versionId;
 }
 

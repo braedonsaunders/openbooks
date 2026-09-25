@@ -65,8 +65,8 @@ async function seedRenewableSubscription(
         incomeAccountId: org.accounts.revenue,
       },
     ],
-  });
-  await publishPlanVersion(org.orgId, creatorId ?? SYSTEM_ACTOR_ID, versionId);
+  }, null);
+  await publishPlanVersion(org.orgId, creatorId ?? SYSTEM_ACTOR_ID, versionId, null);
   const subscriptionId = randomUUID();
   await db.execute(sql`
     insert into subscriptions

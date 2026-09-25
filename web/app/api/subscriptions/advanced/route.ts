@@ -15,7 +15,8 @@ import {
   type RenewalPolicy,
 } from "@openbooks/engine/src/billing/advanced-subscriptions.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { isFeatureEnabled } from "../../../../lib/features";
@@ -63,6 +64,12 @@ export async function POST(req: Request) {
   try {
     switch (body.action) {
       case "createVersion": {
+        // Plan versions price every subsidiary's future invoices, so the
+        // catalog write needs unrestricted subsidiary scope — same gate as
+        // the other org-wide config writes (driver values, payment
+        // providers, cashflow categories).
+        const versionScopeDenied = guardUnrestrictedScope(authz);
+        if (versionScopeDenied) return versionScopeDenied;
         // Plan-version currency is Multi-currency configuration. Turning that
         // switch off must refuse a new write; omitting the field copies the
         // plan's stored code so turning the feature back on restores it.
@@ -131,13 +138,18 @@ export async function POST(req: Request) {
           billingTiming: body.billingTiming as BillingTiming | undefined,
           changeSummary: body.changeSummary == null ? null : String(body.changeSummary),
           components,
-        });
+        }, authz.allowedSubsidiaryIds);
         return NextResponse.json({ id }, { status: 201 });
       }
-      case "publishVersion":
+      case "publishVersion": {
+        // Publishing activates the version for every subsidiary at once —
+        // same unrestricted-scope gate as creation.
+        const publishScopeDenied = guardUnrestrictedScope(authz);
+        if (publishScopeDenied) return publishScopeDenied;
         if (!body.versionId) return NextResponse.json({ error: "version required" }, { status: 400 });
-        await publishPlanVersion(authz.user.orgId, authz.user.id, String(body.versionId));
+        await publishPlanVersion(authz.user.orgId, authz.user.id, String(body.versionId), authz.allowedSubsidiaryIds);
         return NextResponse.json({ ok: true });
+      }
       case "activateLifecycle":
         if (!body.subscriptionId || !body.planVersionId || !body.termStartsOn) {
           return NextResponse.json({ error: "subscription, version and term start are required" }, { status: 400 });
@@ -220,6 +232,10 @@ export async function POST(req: Request) {
     }
   } catch (error) {
     if (error instanceof AdvancedSubscriptionError) return NextResponse.json({ error: error.message }, { status: error.status });
+    // Defence in depth: the engine asserts unrestricted scope itself, so a
+    // restricted caller reaching past the route gate still gets the named
+    // 403 instead of an anonymous 500.
+    if (error instanceof UnrestrictedScopeError) return NextResponse.json({ error: error.message }, { status: error.status });
     throw error;
   }
 }

@@ -621,8 +621,8 @@ for (const boundary of [
                   incomeAccountId: org.accounts.revenue,
                 },
               ],
-            })
-            await publishPlanVersion(org.orgId, actor, versionId)
+            }, null)
+            await publishPlanVersion(org.orgId, actor, versionId, null)
             await db.execute(
               sql`insert into subscriptions(id,org_id,customer_id,plan_id,quantity,status,start_on,next_bill_on,auto_post,created_by) values (${subscriptionId},${org.orgId},${org.customerId},${planId},'1','active',${org.date},${org.date},false,${actor})`,
             )
@@ -631,7 +631,12 @@ for (const boundary of [
                 sql`update parties set subsidiary_id=${org.subsidiaryId} where id=${org.customerId}`,
               )
               for (const invalid of [true, [], 0, -1, 1.5, '1.5', 'bad']) {
-                assert.equal((await amend(request({action:'createVersion',planId,effectiveFrom:org.date,intervalCount:invalid,components:[{componentKey:'invalid',name:'Invalid',unitPrice:'1'}]}))).status,422)
+                // Catalog versions price every subsidiary at once (canonical
+                // shape 2), so the restricted auditor gets the named 403
+                // before validation even sees the invalid intervalCount.
+                const deniedVersion = await amend(request({action:'createVersion',planId,effectiveFrom:org.date,intervalCount:invalid,components:[{componentKey:'invalid',name:'Invalid',unitPrice:'1'}]}))
+                assert.equal(deniedVersion.status,403)
+                assert.deepEqual(await deniedVersion.json(), { error: 'requires unrestricted subsidiary access' })
                 assert.equal((await amend(request({action:'activateLifecycle',subscriptionId,planVersionId:versionId,termStartsOn:org.date,renewalTermMonths:invalid}))).status,422)
               }
               assert.equal(

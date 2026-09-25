@@ -62,8 +62,8 @@ async function seedVersion(org: ScratchOrg, actor: string, planId: string, curre
         incomeAccountId: org.accounts.revenue,
       },
     ],
-  });
-  await publishPlanVersion(org.orgId, actor, versionId);
+  }, null);
+  await publishPlanVersion(org.orgId, actor, versionId, null);
   return versionId;
 }
 
@@ -159,9 +159,9 @@ test("a version without a currency falls back to the plan currency", DB, async (
           incomeAccountId: org.accounts.revenue,
         },
       ],
-    });
+    }, null);
     await db.execute(sql`update subscription_plan_versions set currency_code = null where id = ${draftId} and org_id = ${org.orgId}`);
-    await publishPlanVersion(org.orgId, actor, draftId);
+    await publishPlanVersion(org.orgId, actor, draftId, null);
     const versionId = draftId;
     const subscriptionId = await seedSubscription(org, actor, planId);
     await activateLifecycle(org.orgId, actor, {
