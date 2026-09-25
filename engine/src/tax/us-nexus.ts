@@ -73,9 +73,28 @@ export const US_NEXUS_OVERRIDES: Record<string, Omit<StateNexusThreshold, 'state
   NJ: { salesUsd: '100000', txnCount: 200, measure: 'sales_or_txn' },
 }
 
-export function thresholdForState(state: string): StateNexusThreshold {
+/**
+ * Illinois removed its 200-transaction trigger effective 2026-01-01 (P.A.
+ * 104-0006; IDOR Informational Bulletin FY 2026-12): from that date the only
+ * threshold is $100,000 cumulative gross receipts, with the transaction test
+ * applying only before. Jurisdiction rules are therefore effective-dated by
+ * measurement-period end (`asOf`, an ISO date): periods ending before a change
+ * keep the rule then in force, so history is never reinterpreted. Callers
+ * without a period keep the timeless reference rule.
+ */
+const IL_TXN_REMOVED_ON = '2026-01-01'
+const IL_SALES_ONLY: Omit<StateNexusThreshold, 'state'> = {
+  salesUsd: '100000',
+  txnCount: null,
+  measure: 'sales_only',
+}
+
+export function thresholdForState(state: string, asOf?: string): StateNexusThreshold {
   if (US_NEXUS_NO_STATEWIDE_SALES_TAX.has(state)) {
     return { state, ...US_NEXUS_NOT_APPLICABLE }
+  }
+  if (state === 'IL' && (asOf ?? '') >= IL_TXN_REMOVED_ON) {
+    return { state, ...IL_SALES_ONLY }
   }
   const over = US_NEXUS_OVERRIDES[state]
   return { state, ...(over ?? US_NEXUS_DEFAULT) }
@@ -134,14 +153,14 @@ function progressOf(t: StateNexusThreshold, salesUsd: string, txnCount: number):
  * ledger injects its policy-converted thresholds so the decision is exact in
  * the working currency).
  */
-export function evaluateUsNexus(sales: StateSales[], opts?: { approachingAt?: number; thresholds?: ReadonlyMap<string, StateNexusThreshold> }): NexusEvaluation[] {
+export function evaluateUsNexus(sales: StateSales[], opts?: { approachingAt?: number; thresholds?: ReadonlyMap<string, StateNexusThreshold>; asOf?: string }): NexusEvaluation[] {
   const approachingAt = opts?.approachingAt ?? 0.8
   const out = sales.map((s): NexusEvaluation => {
     // An entity ledger evaluates in a functional currency: it converts the
     // USD reference thresholds at its declared policy rate and injects them
     // here, so the comparison stays exact in the working currency while every
     // ledger figure remains a single conversion from posted evidence.
-    const threshold = opts?.thresholds?.get(s.state) ?? thresholdForState(s.state)
+    const threshold = opts?.thresholds?.get(s.state) ?? thresholdForState(s.state, opts?.asOf)
     const met = isMet(threshold, s.salesUsd, s.txnCount)
     const progress = progressOf(threshold, s.salesUsd, s.txnCount)
     const status: NexusStatus = threshold.measure === 'none'
