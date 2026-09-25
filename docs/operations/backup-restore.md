@@ -23,7 +23,7 @@ operator-controlled storage:
 
 ```bash
 cd engine
-npx tsx src/backup-local-cli.ts \
+npx tsx src/backup/local-cli.ts \
   --org=00000000-0000-4000-8000-000000000000 \
   --out=/secure/openbooks/acme-backup.json.gz
 ```

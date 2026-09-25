@@ -14,7 +14,7 @@ export async function GET() {
   return NextResponse.json(
     {
       error: "direct browser export is disabled because it cannot include restore-grade hash evidence",
-      recovery: "create a stored backup and download both Archive and Manifest, or use backup-local-cli.ts",
+      recovery: "create a stored backup and download both Archive and Manifest, or run src/backup/local-cli.ts from the engine directory",
     },
     { status: 410, headers: { "Cache-Control": "no-store" } },
   );
