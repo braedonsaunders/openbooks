@@ -107,9 +107,15 @@ export async function withV1Request(
   const auth = await resolveApiKeyAuth(request);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
   const featureGate = await guardApiKeyFeature(auth, "apiAccess");
-  if (featureGate) return featureGate;
+  if (featureGate) {
+    const tail = await emitV1ExecutionEvent(label, featureGate.status, auth, "not_found");
+    return tail ?? featureGate;
+  }
   const limited = await enforceRateLimit(auth);
-  if (limited) return limited;
+  if (limited) {
+    const tail = await emitV1ExecutionEvent(label, limited.status, auth, "rate_limit_exceeded");
+    return tail ?? limited;
+  }
   try {
     const result = await operation(auth, v1ApplicationContext(auth, request));
     const tail = await emitV1ExecutionEvent(label, result.status, auth);
