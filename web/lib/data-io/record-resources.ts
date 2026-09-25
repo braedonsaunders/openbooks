@@ -100,8 +100,16 @@ const recordNumberText = new Intl.NumberFormat('en-US', {
 })
 
 function importRecordFieldValue(field: FormField, value: unknown): unknown {
+  if (field.type === 'currency' && value !== null && value !== undefined && value !== '') {
+    if (typeof value !== 'string') {
+      throw new Error(`${field.label}: currency values must be decimal strings; re-export the source with exact text and import again`)
+    }
+    const exact = canonicalDecimal(value.trim(), 4)
+    if (exact === null) throw new Error(decimalNullRefusal(field.label, 'a number', value, 4))
+    return exact
+  }
   if (
-    ['number', 'currency', 'percentage', 'rating'].includes(field.type) &&
+    ['number', 'percentage', 'rating'].includes(field.type) &&
     typeof value === 'string' && value.trim() !== ''
   ) {
     const raw = value.trim()
