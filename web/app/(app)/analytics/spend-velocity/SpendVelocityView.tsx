@@ -10,6 +10,7 @@ import {
   TrendingUp, UserRound, PiggyBank, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Badge } from '@openbooks/ui'
+import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { SpendVelocityData, VelocityRow } from '../../../../lib/analytics/spend-velocity-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
@@ -409,7 +410,7 @@ interface Alert {
   label: string
   item: string
   severity: 'Critical' | 'High' | 'Medium' | 'Low'
-  impact: number
+  impact: number | string
   details: string
   accountId?: string
   vendorId?: string
@@ -418,7 +419,7 @@ interface Alert {
 function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
   const t = useTranslations('analytics.spendVelocity')
   const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  const money0 = (n: number | string) => fmtMoney(n)
   const [selected, setSelected] = useState('all')
 
   const alerts = useMemo(() => {
@@ -434,7 +435,7 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
       const c = data.commitmentCliff.summary
       out.push({ detector: 'cliff', label: t('detectors.cliff.label'), item: t('details.cliffItem'), severity: c.status === 'critical' ? 'Critical' : 'High', impact: c.totalPO, details: t('details.cliff', { gap: c.velocityGap, ratio: c.ratio }) })
     }
-    return out.sort((a, b) => b.impact - a.impact)
+    return out.sort((a, b) => compareMoney(String(b.impact), String(a.impact)))
   }, [data, selected, fmtMoney, t])
 
   const total = data.summary.totalAlerts

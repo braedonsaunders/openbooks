@@ -38,7 +38,7 @@ const { loadCustomerIntelligence } = await import('../app/(app)/analytics/custom
 const { loadVendorPerformance } = await import('../app/(app)/analytics/vendor-performance/view');
 const { loadSpendVelocity } = await import('../app/(app)/analytics/spend-velocity/view');
 const { executeAssistantTool } = await import('./assistant/registry');
-type Summary = { kpis?: { totalRevenue: number }; totals?: { spend: number }; summary?: { totalSpend: number }; commitmentCliff?: { summary: { totalPO: number; totalSO: number } }; expenseAnalysis?: { topSpenders: { totalSpend: number }[] | { items: { totalSpend: number }[] } } };
+type Summary = { kpis?: { totalRevenue: number }; totals?: { spend: number }; summary?: { totalSpend: number }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: number }[] | { items: { totalSpend: number }[] } } };
 
 for (const surface of ['customer', 'vendor', 'spend'] as const) {
   for (const boundary of ['service', 'page', 'assistant'] as const) {
@@ -105,8 +105,9 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, expected);
             assert.equal(JSON.stringify(data).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             if (surface === 'spend') {
-              assert.equal(data.commitmentCliff?.summary.totalPO, expectedRevenue);
-              assert.equal(data.commitmentCliff?.summary.totalSO, expectedRevenue);
+              // Cliff totals are exact money strings since I5-platform-183.
+              assert.equal(data.commitmentCliff?.summary.totalPO, expectedRevenue.toFixed(4));
+              assert.equal(data.commitmentCliff?.summary.totalSO, expectedRevenue.toFixed(4));
               const spenders = data.expenseAnalysis?.topSpenders;
               assert.ok(spenders);
               assert.equal((Array.isArray(spenders) ? spenders : spenders.items).reduce((total,row) => total + row.totalSpend,0), mode === 'all' ? 22 : mode === 'empty' ? 0 : 2);
