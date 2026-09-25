@@ -236,16 +236,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         } })
       }
 
-      if (answersCommission) {
-        await db.execute(sql`
-          update employee_payroll_profiles
-             set paid_on_commission = ${paidOnCommission as boolean},
-                 updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
-                 updated_by = ${gate.user.id}
-           where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}`)
-      }
-
-      let filed: { holidayKey: string; holidayDate: string } | null = null
+      // Resolve every requested answer before any write. Returning a 422 from
+      // this callback commits the transaction, so a later validation refusal
+      // must never follow a successful commission-profile update.
+      let target: DemandingHoliday | null = null
       if (answersAbsence) {
         const candidates = (await demandingHolidays(db, {
           orgId: gate.user.orgId,
@@ -254,7 +248,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           employeeName: employee.name,
           periodStart: run.periodStart, periodEnd: run.periodEnd,
         })).filter((holiday) => holiday.needsAbsenceAssertion)
-        let target: DemandingHoliday | null = null
         if (holidayKey !== undefined || holidayDate !== undefined) {
           // An explicitly named holiday must be one of the run's demanding
           // occurrences — filing against any other day would answer a
@@ -270,13 +263,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             { status: 422 },
           )
         }
-        filed = await recordHolidayAssertion(db, {
+      }
+
+      if (answersCommission) {
+        const updated = await db.execute<{ employee_party_id: string }>(sql`
+          update employee_payroll_profiles
+             set paid_on_commission = ${paidOnCommission as boolean},
+                 updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+                 updated_by = ${gate.user.id}
+           where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
+           returning employee_party_id`)
+        if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
+      }
+
+      const filed = target
+        ? await recordHolidayAssertion(db, {
           orgId: gate.user.orgId, documentId: id, employeePartyId,
           holidayKey: target.key, holidayDate: target.date,
           absentWithoutConsent: absentWithoutConsent as boolean,
           actorId: gate.user.id,
         })
-      }
+        : null
       return NextResponse.json({ ok: true, filed })
     })
   } catch (error) {
