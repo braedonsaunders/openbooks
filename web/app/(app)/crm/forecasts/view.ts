@@ -233,7 +233,6 @@ export async function loadForecasts(
          ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
          ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
        order by s.as_of desc
-       limit 50
     `),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from users

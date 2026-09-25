@@ -111,7 +111,6 @@ export async function loadJournal(
              : sql`and false`
            : sql``}
        order by created_at desc
-       limit 20
     `)),
     entryParam ? loadJournalDoc(entryParam, authz.user.orgId, allowedSubsidiaries).then((journal) => {
       if (!journal || !allowedSubsidiaries) return journal
@@ -119,10 +118,10 @@ export async function loadJournal(
     }) : null,
     entryParam || creating
       ? Promise.all([
-          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`) as unknown as PickerResult<PartyPickerRow>,
+          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name`) as unknown as PickerResult<PartyPickerRow>,
           db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as unknown as PickerResult<AccountPickerRow>,
           db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as unknown as PickerResult<NamePickerRow>,
-          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as unknown as PickerResult<NamePickerRow>,
+          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name`) as unknown as PickerResult<NamePickerRow>,
           loadFieldDefs('documents', 'journal'),
           loadFieldDefs('document_lines', 'journal'),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.

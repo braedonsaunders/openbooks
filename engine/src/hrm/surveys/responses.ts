@@ -637,8 +637,7 @@ export async function getSurveyResults(query: {
             prompt: q.prompt,
             texts: flat
               .filter((a) => a.questionId === q.id && typeof a.raw === "string")
-              .map((a) => a.raw as string)
-              .slice(0, 100),
+              .map((a) => a.raw as string),
           }))
           .filter((c) => c.texts.length > 0)
       : [];

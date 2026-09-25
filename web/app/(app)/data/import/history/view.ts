@@ -87,8 +87,7 @@ export async function loadImportHistory(): Promise<ImportHistoryData> {
       from import_jobs j
       left join users u on u.id = j.created_by
      where j.org_id = ${authz.user.orgId}
-     order by j.created_at desc
-     limit 200`)
+     order by j.created_at desc`)
 
   return {
     title: t('history.title'),

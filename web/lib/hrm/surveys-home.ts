@@ -148,7 +148,7 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
       const people = (await db.execute<{ id: string; name: string }>(sql`
         select id::text as id, display_name as name from parties
          where org_id = ${authz.orgId}::uuid and kind = 'person' and is_active
-         order by display_name limit 200`)).rows
+         order by display_name`)).rows
       drawer = {
         closeHref: hrefFor(status, null, false),
         title: survey.name,

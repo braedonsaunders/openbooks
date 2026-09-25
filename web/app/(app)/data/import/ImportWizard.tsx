@@ -649,7 +649,7 @@ function ErrorTable({
           </tr>
         </thead>
         <tbody>
-          {errors.slice(0, 200).map((e, i) => (
+          {errors.map((e, i) => (
             <tr key={i} className={`border-t ${rowLine}`}>
               <td className="px-3 py-2 tabular-nums">{e.row}</td>
               <td className="px-3 py-2">
