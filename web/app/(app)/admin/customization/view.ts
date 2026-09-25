@@ -248,6 +248,8 @@ export async function loadCustomization(
     viewId && viewId !== 'new' && isUuid(viewId)
       ? ((await db.execute(sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`)) as unknown as { rows: ListViewDesignerDef[] }).rows[0] ?? null
       : null
+  if (formId && formId !== 'new' && isUuid(formId) && !openForm) notFound()
+  if (viewId && viewId !== 'new' && isUuid(viewId) && !openView) notFound()
   if (openForm?.recordType && hiddenKinds.has(openForm.recordType)) notFound()
   if (openView?.recordType && hiddenKinds.has(openView.recordType)) notFound()
 
@@ -603,4 +605,3 @@ export function customizationSpec(data: CustomizationData): PageSpec {
     ],
   })
 }
-
