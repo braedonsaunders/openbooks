@@ -1,5 +1,5 @@
 SELECT
-  'payment_run_credit_targets_missing'::text AS code,
+  '0361.payment_run_credit_targets_missing'::text AS code,
   'refuse'::text AS severity,
   run.run_number::text AS subject,
   'This active run contains credit items whose target open lines were not captured by migration 0361.'::text AS detail,

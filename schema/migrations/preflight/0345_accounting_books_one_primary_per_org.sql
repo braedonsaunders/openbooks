@@ -1,5 +1,5 @@
 SELECT
-  'duplicate_primary_accounting_books'::text AS code,
+  '0345.duplicate_primary_accounting_books'::text AS code,
   'refuse'::text AS severity,
   duplicates.org_id::text AS subject,
   format(

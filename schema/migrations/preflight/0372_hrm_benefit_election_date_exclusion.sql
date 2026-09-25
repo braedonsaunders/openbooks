@@ -6,7 +6,7 @@ WITH active_elections AS (
   WHERE status IN ('elected', 'pending_approval', 'active')
 )
 SELECT
-  'hrm_benefit_election_date_overlap'::text AS code,
+  '0372.hrm_benefit_election_date_overlap'::text AS code,
   'refuse'::text AS severity,
   format('enrollments %s and %s', e1.id, e2.id)::text AS subject,
   format(

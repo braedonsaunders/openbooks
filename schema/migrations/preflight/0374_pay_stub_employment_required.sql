@@ -21,7 +21,7 @@ WITH unmatched AS (
   HAVING count(DISTINCT e.id) <> 1
 )
 SELECT
-  'pay_stub_employment_unresolved'::text AS code,
+  '0374.pay_stub_employment_unresolved'::text AS code,
   'refuse'::text AS severity,
   format('org %s, pay stub %s', org_id, id) AS subject,
   format('Pay stub has %s employment matches for its worker, pay-run legal entity, and pay date; exactly one is required.', candidates) AS detail,
