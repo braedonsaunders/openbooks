@@ -382,7 +382,7 @@ function computeDetroit(input: UsStateWithholdingInput): UsStateWithholdingResul
   const rates = miRatesForPayDate(input.payDate);
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
   const rate = input.basis === "resident"
-    ? rates.detroit.residentRate
+    ? input.detroitResidentRateOverride ?? rates.detroit.residentRate
     : rates.detroit.nonresidentRate;
   const perPeriod = miDetroitExemptionPerPeriod(input.payDate, input.periodsPerYear);
 

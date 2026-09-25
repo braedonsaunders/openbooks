@@ -134,6 +134,13 @@ function dispatchInput(
   } as Parameters<typeof computeUsWithholding>[0]
 }
 
+test('Detroit resident withholding offsets the other city rate and refuses an unknown rate', () => {
+  // Michigan Treasury Form 5469, 2026 guide: https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/City-Withholding/TY2026/5469_ty2026.pdf
+  const input = dispatchInput('MI', 'DETROIT', 'us_mi_5527', () => certificate('us_mi_5527', {}), () => undefined)
+  assert.equal(computeUsWithholding({ ...input, detroitOtherCity: { code: 'GRAND_RAPIDS', nonresidentRate: '0.0075' } })?.tax, '33.0000')
+  assert.throws(() => computeUsWithholding({ ...input, detroitOtherCity: { code: 'GRAND_RAPIDS', nonresidentRate: null } }), /GRAND_RAPIDS nonresident rate.*us_mi_city settings/)
+})
+
 test('Ohio school-district dispatch applies the IT 4 exemption count', () => {
   // District 0303: (52,000 − 650) × 1.25% ÷ 26 = 24.69 with one exemption.
   const withExemption = certificate('us_oh_it4', { total_exemptions: '1' })

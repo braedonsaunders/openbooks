@@ -37,7 +37,7 @@ import { GA_EDITIONS, GA_WITHHOLDING, gaEditionForPayDate } from "./ga.ts";
 import { MA_RATES_2026, MA_WITHHOLDING, maSupplementalWithholding } from "./ma.ts";
 import {
   DETROIT_WITHHOLDING, MI_RATES_2026, MI_TAXING_CITIES, MI_WITHHOLDING,
-  miCityWithholding, miDetroitResidentRate,
+  miCityWithholding,
 } from "./mi.ts";
 import { NC_RATES_2026, NC_WITHHOLDING, ncAnnualizedMethod, ncSupplementalFlat } from "./nc.ts";
 import { NJ_RATES_2026, NJ_WITHHOLDING } from "./nj.ts";
@@ -522,26 +522,6 @@ test("Detroit's printed per-period exemptions are $600 a year, and 260 is not 36
       certificate: cert("us_mi_5527", { exemptions: "3" }),
     }),
     /publishes withholding tables for/,
-  );
-});
-
-test("a Detroit resident working in another taxing city: 2.4% MINUS the other city's rate", () => {
-  // Form 5469: "the employer must withhold separately for both the City of
-  // Detroit and the other city. … Compute the City of Detroit withholding rate
-  // by subtracting the other city's nonresident tax rate from 2.4%."
-  assert.equal(
-    miDetroitResidentRate({ payDate: "2026-03-06", otherCityNonresidentRate: null }),
-    "0.024",
-  );
-  // Working in Grand Rapids (0.75% nonresident) leaves Detroit 1.65%.
-  assert.equal(
-    miDetroitResidentRate({ payDate: "2026-03-06", otherCityNonresidentRate: "0.0075" }),
-    money("0.0165"),
-  );
-  // Working in a 1%/0.5% city leaves 1.9%.
-  assert.equal(
-    miDetroitResidentRate({ payDate: "2026-03-06", otherCityNonresidentRate: "0.005" }),
-    money("0.019"),
   );
 });
 

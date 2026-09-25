@@ -249,6 +249,25 @@ export async function computeUsStatutory(
       tenantRates: config.subRegionRates,
     }),
   });
+  const hasDetroitResidentLevy = resolution.levies.some(
+    (levy) => levy.region === "MI" && levy.level === "sub_region"
+      && levy.subRegion === "DETROIT" && levy.reach === "resident",
+  );
+  const detroitOtherWorkCity = hasDetroitResidentLevy
+    ? resolution.levies.find(
+      (levy) => levy.region === "MI" && levy.level === "sub_region"
+        && levy.side === "work" && levy.subRegion !== "DETROIT" && levy.subRegion !== null,
+    )
+    : undefined;
+  const detroitOtherCity = detroitOtherWorkCity?.subRegion
+    ? {
+      code: detroitOtherWorkCity.subRegion,
+      nonresidentRate: (() => {
+        const rates = config.subRegionRates("us_mi_city", "MI", detroitOtherWorkCity.subRegion!);
+        return rates?.nonresidentRate ?? rates?.rate ?? null;
+      })(),
+    }
+    : null;
   const supplementalPaymentTiming = U(income) === 0n && U(nonPeriodic) > 0n
     ? "separate" as const
     : "combined" as const;
@@ -367,6 +386,7 @@ export async function computeUsStatutory(
       },
       tenantRates: (rateKey, subRegion) =>
         config.subRegionRates(rateKey, levy.region, subRegion),
+      detroitOtherCity,
     });
     if (!withheld) continue;
     if (levy.level === "region" && levy.side === "work") {
