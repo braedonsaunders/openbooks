@@ -56,6 +56,7 @@ import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -194,6 +195,8 @@ export const PA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   PHILA_BASIS: "Philadelphia basis (resident or nonresident)",
   PHILA_RATE: "Philadelphia wage tax rate",
   PHILA_RATE_EFFECTIVE: "Philadelphia rate in force since",
+  PHILA_WORK_ALLOCATION: "Philadelphia nonresident city work share",
+  PHILA_TAXABLE_WAGES: "Philadelphia taxable wages",
   PHILA_TAX: "Philadelphia wage tax",
 };
 
@@ -255,7 +258,23 @@ export function philadelphiaRateFor(
 function computePhiladelphia(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = paRatesForPayDate(input.payDate);
   const { rate, effectiveFrom } = philadelphiaRateFor(input.payDate, input.basis);
-  const compensation = U(input.wages) + U(input.supplemental ?? "0");
+  let compensation = U(input.wages) + U(input.supplemental ?? "0");
+  let allocation = "1";
+  if (input.basis === "nonresident") {
+    try {
+      const work = requireUsWageAllocation(input.wageAllocations, "PA", "PHILADELPHIA");
+      allocation = work.workShare;
+      compensation = mulRateCents(compensation, allocation);
+    } catch (error) {
+      if (error instanceof PayrollError) {
+        throw new PayrollError(
+          "Philadelphia nonresident withholding needs the employee's verified share of services performed in Philadelphia; "
+          + "record approved work-location dates or HR allocation for PA/PHILADELPHIA before calculating; refused by name",
+        );
+      }
+      throw error;
+    }
+  }
   const tax = mulRateCents(compensation, rate);
   return {
     state: "PA-PHILA",
@@ -266,6 +285,8 @@ function computePhiladelphia(input: UsStateWithholdingInput): UsStateWithholding
       PHILA_BASIS: input.basis,
       PHILA_RATE: rate,
       PHILA_RATE_EFFECTIVE: effectiveFrom,
+      PHILA_WORK_ALLOCATION: allocation,
+      PHILA_TAXABLE_WAGES: D(compensation),
       PHILA_TAX: D(tax),
     },
   };
