@@ -44,9 +44,9 @@
  * (cadres only — no cadre-status channel), a conventionally modified
  * 60/40 split (no tenant-override channel), AT/MP and versement mobilité
  * (tenant-declared — the pure function accepts declared rates and prices
- * them, but no pack channel carries them to the adapter), the
- * Alsace-Moselle 1,30 % salary supplement (no department channel), the
- * AGS 0,03 % interim variant (no employer-type channel).
+ * them, but no pack channel carries them to the adapter), and the
+ * Alsace-Moselle 1,30 % salary supplement (no department channel). AGS
+ * selects its employer-type rate from the effective FR employer fact.
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves
  * away from zero (roundDiv) — the same discipline as ./compute-statutory.ts
@@ -150,6 +150,8 @@ export interface FrCotisations2026Input {
    * not a substitute for the legally defined prior-year average.
    */
   employerEffectif: string | null;
+  /** Effective FR legal-employer type; supplied by the statutory adapter. */
+  agsInterim?: boolean;
   /** The employer has a source-backed exemption/special regime that allows
    * the reduced family rate. Missing means ordinary employer (5.25%). */
   allocFamReducedEligible?: boolean;
@@ -282,7 +284,10 @@ export function calculateFrCotisations2026(
     : FR_ALLOC_FAM_ER_2026.plein.rate;
   const allocFamEr = lineOf(brut, rate6(allocFamRate));
   const chomageEr = lineOf(largePer, rate6(FR_CHOMAGE_ER_2026.rate.rate));
-  const agsEr = lineOf(largePer, rate6(FR_AGS_ER_2026.rate.rate));
+  const agsRate = input.agsInterim === true
+    ? FR_AGS_ER_2026.interimVariant.rate
+    : FR_AGS_ER_2026.rate.rate;
+  const agsEr = lineOf(largePer, rate6(agsRate));
   const csaEr = lineOf(brut, rate6(FR_CSA_ER_2026.rate));
   const dialogueEr = lineOf(brut, rate6(FR_DIALOGUE_SOCIAL_ER_2026.rate));
 

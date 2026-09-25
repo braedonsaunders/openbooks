@@ -47,7 +47,7 @@ test("table integrity: every transcribed rate matches its page quote", () => {
   assert.equal(FR_DIALOGUE_SOCIAL_ER_2026.rate, "0.00016");
   assert.equal(FR_CHOMAGE_ER_2026.rate.rate, "0.04");
   assert.equal(FR_AGS_ER_2026.rate.rate, "0.0025");
-  assert.equal(FR_AGS_ER_2026.interimVariant.rate, "0.0003");
+  assert.equal(calculateFrCotisations2026({ ...small, agsInterim: true }).agsEr, "0.6000"); // URSSAF: https://www.urssaf.fr/accueil/employeur/cotisations/liste-cotisations/assurance-chomage-ags.html
   assert.equal(FR_FNAL_ER_2026.moins50.rate, "0.001");
   assert.equal(FR_FNAL_ER_2026.cinquanteEtPlus.rate, "0.005");
   // Taux salariaux.
@@ -247,7 +247,7 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
   const ctx: PayrollStatutoryComputeContext = {
     tx: { execute: async () => ++query === 1
       ? ({ rows: [{ fact_value: "70.00" }] })
-      : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
+      : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
     resolveStatutoryRates: async () => ({

@@ -2,6 +2,20 @@ import type { PayrollEmployerFact } from "../employer-facts.ts";
 
 export const FR_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
   {
+    key: "fr_ags_employer_type",
+    kind: "choice",
+    label: "Type d'employeur pour la cotisation AGS",
+    choices: [
+      { value: "ordinary", label: "Employeur ordinaire (0,25 %)" },
+      { value: "temporary_work_agency", label: "Entreprise de travail temporaire (0,03 %)" },
+    ],
+    refusalReason:
+      "URSSAF publishes 0.25% generally and 0.03% for temporary-work agencies; the legal employer's effective classification determines the AGS rate",
+    legalBasis: "URSSAF, taux des cotisations du secteur privé (AGS; CTP 496)",
+    required: true,
+    effectivePeriod: "date",
+  },
+  {
     key: "effectif_moyen_annuel",
     kind: "decimal",
     scale: 2,

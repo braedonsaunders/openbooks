@@ -180,8 +180,9 @@ export const FR_CHOMAGE_ER_2026 = {
  * "Cotisation AGS Dans la limite de 192 240 € en 2026 : 0,25 %
  * 0,03 % pour les entreprises de travail temporaire"
  *
- * The engine applies 0,25 %. The 0,03 % temporary-work-agency variant
- * needs an employer-type channel no pack carries — refused by name.
+ * The employer-type selection is resolved from the effective legal-employer
+ * fact in Payroll Setup; ordinary employers owe 0,25 %, temporary-work
+ * agencies 0,03 %.
  */
 export const FR_AGS_ER_2026 = {
   rate: { rate: "0.0025", quote: "Cotisation AGS Dans la limite de 192 240 € en 2026 : 0,25 %" },
@@ -300,7 +301,6 @@ export const FR_TENANT_DECLARED_QUOTES_2026 = {
 export const FR_COTISATION_REFUSALS_2026: readonly string[] = [
   "Maladie patronale taux réduit 7 %: the page states no income condition for the réduit/plein split — the engine applies the 13 % plein, never the 7 % réduit",
   "Allocations familiales reduced rate 3.45%: requires an explicit employer exemption/special-regime eligibility fact and the 31-Dec-2023 SMIC threshold (FR_ALLOC_FAM_SEUIL_2026); ordinary employers owe 5.25%",
-  "AGS 0,03 % interim variant: needs an employer-type (entreprise de travail temporaire) channel no pack carries — the engine applies 0,25 %",
   "Alsace-Moselle cotisation salariale maladie supplémentaire 1,30 % (transcribed above): needs a workplace-department channel no pack carries",
   "AT/MP (Carsat-notified) and versement mobilité (commune-dependent): effective establishment rates resolved from the audited payroll statutory-rate setup; never inferred from a national table",
   "FNAL without a known legal-employer effectif_moyen_annuel — the 0,10 % plafonné vs 0,50 % déplafonné choice cannot be made",
