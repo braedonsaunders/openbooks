@@ -80,6 +80,23 @@ const ALLOCATION_BASE_KEYS = [
 
 type ApiResult = { ok: true } | { ok: false; error: string }
 
+async function runMutation(
+  fn: () => Promise<ApiResult>,
+  setBusy: (busy: boolean) => void,
+  onSuccess: () => void,
+) {
+  setBusy(true)
+  try {
+    const result = await fn()
+    if (!result.ok) toast.error(result.error)
+    else onSuccess()
+  } catch (error) {
+    toast.error(error instanceof Error && error.message ? error.message : 'Request failed. Please retry.')
+  } finally {
+    setBusy(false)
+  }
+}
+
 async function apiCall(path: string, init: RequestInit): Promise<ApiResult> {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
   if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Request failed') }
@@ -209,11 +226,7 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
 
   const dirty = name !== cat.name || color !== (cat.color ?? FALLBACK) || pattern !== (cat.match.namePattern ?? '')
   const run = async (fn: () => Promise<ApiResult>) => {
-    setBusy(true)
-    const result = await fn()
-    if (!result.ok) toast.error(result.error)
-    else router.refresh()
-    setBusy(false)
+    await runMutation(fn, setBusy, () => router.refresh())
   }
   const setAllocation = (patch: Record<string, unknown>) =>
     run(() => mutateActiveProfile((profile) => { profile.categorySettings ??= {}; profile.categorySettings[cat.id] = { ...profile.categorySettings[cat.id], ...patch } }))
@@ -476,11 +489,7 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
     return t('custom.typeFormula')
   }
   const assign = async (groupId: string, accountId: string) => {
-    setBusy(true)
-    const result = await pinAccount(groupId, accountId)
-    if (!result.ok) toast.error(result.error)
-    else router.refresh()
-    setBusy(false)
+    await runMutation(() => pinAccount(groupId, accountId), setBusy, () => router.refresh())
   }
   return (
     <div className="space-y-5">
@@ -1149,11 +1158,7 @@ function CompositePanel({ data }: { data: TrueCostData }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const run = async (fn: () => Promise<ApiResult>) => {
-    setBusy(true)
-    const result = await fn()
-    if (!result.ok) toast.error(result.error)
-    else router.refresh()
-    setBusy(false)
+    await runMutation(fn, setBusy, () => router.refresh())
   }
   const [newProfile, setNewProfile] = useState('')
 
@@ -1272,11 +1277,7 @@ function CustomCategoryManager({ data }: { data: TrueCostData }) {
   const [formula, setFormula] = useState('')
 
   const run = async (fn: () => Promise<ApiResult>) => {
-    setBusy(true)
-    const result = await fn()
-    if (!result.ok) toast.error(result.error)
-    else router.refresh()
-    setBusy(false)
+    await runMutation(fn, setBusy, () => router.refresh())
   }
   const add = () => {
     const cat: CustomCategory = { id: `cat_${crypto.randomUUID().slice(0, 8)}`, name: name.trim(), type, color: '#64748b', allocationBase: 'billed_hours', rateFormat: 'per_hour', includeInComposite: true }
