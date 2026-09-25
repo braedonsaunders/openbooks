@@ -15,7 +15,7 @@ import { subsidiaryScopeAllows } from "../authz";
 import { disabledDocKinds } from "../documents.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { uuidInput, num, capList } from "./tools-shared";
+import { uuidInput, num, capList, decimalText } from "./tools-shared";
 
 /**
  * Subscription and recurring-billing read/search tools for the agentic
@@ -155,7 +155,7 @@ function subscriptionRow(r: Record<string, unknown>) {
     advancedLifecycle: r.advancedLifecycle,
     planCurrency: r.planCurrency,
     planInterval: r.interval,
-    mrr: num(rowMrr(r as unknown as MrrSource)),
+    mrr: decimalText(rowMrr(r as unknown as MrrSource)),
     memo: r.memo == null ? null : truncateText(String(r.memo), 300),
   };
 }
@@ -186,7 +186,7 @@ const listSubscriptionPlans: AssistantToolDef = {
         planId: p.id,
         name: p.name,
         description: p.description == null ? null : truncateText(String(p.description), 300),
-        amount: num(p.amount),
+        amount: decimalText(p.amount),
         currency: p.currency,
         interval: p.interval,
         intervalCount: p.intervalCount,
@@ -271,11 +271,11 @@ const listSubscriptions: AssistantToolDef = {
       mrrByCurrency.set(code, add(mrrByCurrency.get(code) ?? "0.0000", rowMrr(row)));
     }
     const currency = await orgCurrency(authz.user.orgId);
-    let mrrOrgTotal: number | null = null;
+    let mrrOrgTotal: string | null = null;
     let mrrNote: string | undefined;
     if (currency) {
       try {
-        mrrOrgTotal = num(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows));
+        mrrOrgTotal = decimalText(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows));
       } catch (error) {
         // The route fails the whole read on a missing rate; the tool still
         // returns every row and the per-currency totals with the reason noted.
@@ -290,7 +290,7 @@ const listSubscriptions: AssistantToolDef = {
         truncated: capped.truncated,
         subscriptions: capped.items,
         byStatus: byStatus.rows.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
-        mrrByCurrency: [...mrrByCurrency].map(([code, amount]) => ({ currency: code, mrr: num(amount) })),
+        mrrByCurrency: [...mrrByCurrency].map(([code, amount]) => ({ currency: code, mrr: decimalText(amount) })),
         ...(currency ? { orgCurrency: currency, mrrOrgTotal } : {}),
         ...(mrrNote ? { mrrNote } : {}),
         href: "/collections",
@@ -374,8 +374,8 @@ const getSubscription: AssistantToolDef = {
       data: {
         subscription: subscriptionRow(head),
         events: capList(events.rows, 20).items,
-        periodInvoices: invoices.rows.map((i) => ({ ...i, invoiceTotal: num(i.invoiceTotal) })),
-        dunningLog: dunning.rows.map((d) => ({ ...d, amountDue: num(d.amountDue) })),
+        periodInvoices: invoices.rows.map((i) => ({ ...i, invoiceTotal: decimalText(i.invoiceTotal) })),
+        dunningLog: dunning.rows.map((d) => ({ ...d, amountDue: decimalText(d.amountDue) })),
         ...(lifecycle.rows[0] ? { advancedTerm: lifecycle.rows[0] } : {}),
         href: "/collections",
       },
@@ -439,11 +439,11 @@ const subscriptionMrr: AssistantToolDef = {
     ]);
     const activeRows = mrrRows.rows.filter((r) => r.status === "active");
     const currency = await orgCurrency(authz.user.orgId);
-    let mrrOrgTotal: number | null = null;
+    let mrrOrgTotal: string | null = null;
     let mrrNote: string | undefined;
     if (currency) {
       try {
-        mrrOrgTotal = num(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows));
+        mrrOrgTotal = decimalText(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows));
       } catch (error) {
         mrrNote = error instanceof Error ? error.message : "mrr conversion unavailable";
       }
@@ -480,7 +480,7 @@ const subscriptionMrr: AssistantToolDef = {
         mrrByPlan: [...mrrByPlan].map(([key, v]) => ({
           planName: key.split("||")[0],
           currency: v.currency,
-          mrr: num(v.mrr),
+          mrr: decimalText(v.mrr),
           activeCount: v.count,
         })),
         byDunningState: byDunning.rows.map((r) => ({ dunningState: r.dunningState, count: Number(r.count ?? 0) })),
@@ -488,7 +488,7 @@ const subscriptionMrr: AssistantToolDef = {
           newCount,
           canceledCount,
           pausedCount,
-          lostMrrByCurrency: [...lostByCurrency].map(([code, amount]) => ({ currency: code, mrr: num(amount) })),
+          lostMrrByCurrency: [...lostByCurrency].map(([code, amount]) => ({ currency: code, mrr: decimalText(amount) })),
         },
         href: "/collections",
       },
@@ -549,7 +549,7 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
         planName: r.planName,
         quantity: num(r.quantity),
         currency: r.currency,
-        expectedAmount: num(mulDecimal(String(r.priceOverride ?? r.planAmount ?? 0), String(r.quantity ?? 1))),
+        expectedAmount: decimalText(mulDecimal(String(r.priceOverride ?? r.planAmount ?? 0), String(r.quantity ?? 1))),
         lastError: r.lastError == null ? null : truncateText(String(r.lastError), 200),
       })),
     );
@@ -565,7 +565,7 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
         totalsByCurrency: totals.rows.map((r) => ({
           currency: r.currency,
           count: Number(r.count ?? 0),
-          expectedAmount: num(r.expected),
+          expectedAmount: decimalText(r.expected),
         })),
         href: "/collections",
       },

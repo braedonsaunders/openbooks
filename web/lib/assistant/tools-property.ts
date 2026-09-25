@@ -10,7 +10,7 @@ import { isFeatureEnabled } from "../features";
 import { withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { dateInput, uuidInput, num, capList } from "./tools-shared";
+import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
 
 /**
  * Property-management read/search tools for the agentic assistant. Every tool
@@ -166,7 +166,7 @@ const listLeases: AssistantToolDef = {
         endsOn: l.endsOn,
         baseRent: l.baseRent == null ? null : num(l.baseRent),
         currency: l.currency,
-        depositBalance: num(l.depositBalance ?? 0),
+        depositBalance: decimalText(l.depositBalance ?? 0),
         autoInvoice: l.autoInvoice,
       })),
       limit
@@ -211,7 +211,7 @@ const getLease: AssistantToolDef = {
           periodStartsOn: s.periodStartsOn,
           periodEndsOn: s.periodEndsOn,
           dueOn: s.dueOn,
-          amount: num(s.amount),
+          amount: decimalText(s.amount),
           status: s.status,
           chargeType: s.chargeType,
           description: s.description,
@@ -219,7 +219,7 @@ const getLease: AssistantToolDef = {
           invoiceNumber: s.invoiceNumber,
           invoiceStatus: s.invoiceStatus,
           invoiceDueOn: s.invoiceDueOn,
-          invoiceOpenBalance: s.invoiceOpenBalance == null ? null : num(s.invoiceOpenBalance),
+          invoiceOpenBalance: s.invoiceOpenBalance == null ? null : decimalText(s.invoiceOpenBalance),
         })),
       50,
     );
@@ -229,7 +229,7 @@ const getLease: AssistantToolDef = {
         .map((d) => ({
           kind: d.kind,
           occurredOn: d.occurredOn,
-          amount: num(d.amount),
+          amount: decimalText(d.amount),
           memo: d.memo == null ? null : truncateText(String(d.memo), 200),
           reversed: d.reversed,
         })),
@@ -259,7 +259,7 @@ const getLease: AssistantToolDef = {
           autoPost: lease.autoPost,
           baseRent: lease.baseRent == null ? null : num(lease.baseRent),
           currency: lease.currency,
-          depositBalance: num(lease.depositBalance ?? 0),
+          depositBalance: decimalText(lease.depositBalance ?? 0),
           monthlyCharges: num(monthlyChargesFor(workspace.charges, lease, asOf)),
           pastDue: num(pastDueFor(workspace.overdueByLease, lease.id)),
           notes: lease.notes == null ? null : truncateText(String(lease.notes), 500),
@@ -267,7 +267,7 @@ const getLease: AssistantToolDef = {
         charges: charges.map((c) => ({
           chargeType: c.chargeType,
           description: c.description,
-          amount: num(c.amount),
+          amount: decimalText(c.amount),
           frequency: c.frequency,
           effectiveFrom: c.effectiveFrom,
           effectiveTo: c.effectiveTo,
@@ -349,8 +349,8 @@ const rentRoll: AssistantToolDef = {
         total: rows.length,
         truncated: capped.truncated,
         roll: capped.items,
-        monthlyChargesByCurrency: [...chargesByCurrency].map(([currency, amount]) => ({ currency, amount: num(amount) })),
-        pastDueByCurrency: [...pastDueByCurrency].map(([currency, amount]) => ({ currency, amount: num(amount) })),
+        monthlyChargesByCurrency: [...chargesByCurrency].map(([currency, amount]) => ({ currency, amount: decimalText(amount) })),
+        pastDueByCurrency: [...pastDueByCurrency].map(([currency, amount]) => ({ currency, amount: decimalText(amount) })),
         occupancy: {
           totalUnits: units.length,
           occupiedUnits: units.filter((u) => String(u.status) === "occupied").length,
@@ -411,7 +411,7 @@ const leaseArrears: AssistantToolDef = {
           invoiceDocumentId: line.documentId,
           invoiceNumber: line.documentNumber,
           invoiceDueOn: line.dueOn,
-          invoiceOpenBalance: line.openBalance == null ? null : num(line.openBalance),
+          invoiceOpenBalance: line.openBalance == null ? null : decimalText(line.openBalance),
         })),
       })),
       limit
@@ -424,7 +424,7 @@ const leaseArrears: AssistantToolDef = {
         total: rows.length,
         truncated: capped.truncated,
         arrears: capped.items,
-        totalsByCurrency: [...totalsByCurrency].map(([currency, amount]) => ({ currency, amount: num(amount) })),
+        totalsByCurrency: [...totalsByCurrency].map(([currency, amount]) => ({ currency, amount: decimalText(amount) })),
         href: "/property-management",
       },
     };
@@ -467,8 +467,8 @@ const propertyDeposits: AssistantToolDef = {
         truncated: capped.truncated,
         rows: capped.items,
         totals: {
-          subledgerBalance: num(sum(rows.map((row) => row.subledgerBalance))),
-          linkedGlBalance: num(sum(rows.map((row) => row.linkedGlBalance))),
+          subledgerBalance: decimalText(sum(rows.map((row) => row.subledgerBalance))),
+          linkedGlBalance: decimalText(sum(rows.map((row) => row.linkedGlBalance))),
           cashActivity: num(sum(rows.map((row) => row.cashActivity))),
           discrepancies: rows.filter((row) => row.status === "discrepancy").length,
           configurationRequired: rows.filter((row) => row.status === "configuration_required").length,
