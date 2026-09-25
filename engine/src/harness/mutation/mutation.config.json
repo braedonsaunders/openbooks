@@ -12,7 +12,6 @@
       "path": "engine/src/ledger/posting-rules.ts",
       "tests": [
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -25,7 +24,6 @@
       "path": "engine/src/ledger/posting-tax-policy.ts",
       "tests": [
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -274,7 +272,6 @@
       "tests": [
         "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -292,7 +289,6 @@
         "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
         "engine/src/ledger/journal-posting-atomic.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -310,7 +306,6 @@
         "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
         "engine/src/ledger/journal-posting-atomic.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -328,7 +323,6 @@
         "engine/src/ledger/expense-settlement.integration.test.ts",
         "engine/src/ledger/gl-regeneration.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -344,7 +338,6 @@
       "tests": [
         "engine/src/ledger/posting-projection.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -358,7 +351,6 @@
       "tests": [
         "engine/src/ledger/posting-dispatch.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -372,7 +364,6 @@
       "tests": [
         "engine/src/ledger/posting-accounts.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -386,7 +377,6 @@
       "tests": [
         "engine/src/ledger/posting-provider-tax.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -399,22 +389,23 @@
       "path": "engine/src/ledger/posting-subsidiaries.ts",
       "tests": [
         "engine/src/ledger/posting-subsidiaries.unit.test.ts",
+        "engine/src/ledger/journal-posting-atomic.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
         "engine/src/ledger/posting.test.ts",
         "engine/src/ledger/posting-tax-guards.test.ts",
         "engine/src/ledger/posting-period.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "Functional-currency posting reads the persisted direct and inverse FX quotes in one journal transaction."
     },
     {
       "path": "engine/src/ledger/posting-period.ts",
       "tests": [
         "engine/src/ledger/posting-period.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
@@ -427,7 +418,6 @@
       "path": "engine/src/ledger/posting-invariants.ts",
       "tests": [
         "engine/src/ledger/posting-replay.test.ts",
-        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
         "engine/src/receivables/dunning.test.ts",
         "engine/src/payments/direct-debit.test.ts",
