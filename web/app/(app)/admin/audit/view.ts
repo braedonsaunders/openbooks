@@ -11,6 +11,7 @@ import { requirePermission } from '../../../../lib/authz'
 import { accessDeniedHref } from '../../../../lib/gate-targets'
 import type { AuditListRow } from './AuditRows'
 import type { AuditEvent } from './AuditEventDrawer'
+import { parseImportJson } from '../../../../lib/data-io/import-parse'
 
 /**
  * The company audit log, split into a loader and a spec.
@@ -55,7 +56,7 @@ interface AuditListSource extends AuditRowMetadata {
 
 interface AuditEventSource extends AuditRowMetadata {
   request_id: string | null
-  changes: unknown
+  changes: string
 }
 
 const BASE = '/admin/audit'
@@ -176,7 +177,7 @@ export async function loadAudit(
     `)),
     eventId && isUuid(eventId)
       ? (db.execute<AuditEventSource>(sql`
-          select a.id, a.row_id, a.action, a.at, a.request_id, a.changes,
+          select a.id, a.row_id, a.action, a.at, a.request_id, a.changes::text as changes,
                  u.name as actor_name, (${rtypeExpr}) as rtype
             ${auditFrom}
            where a.id = ${eventId} and a.org_id = ${authz.user.orgId}
@@ -206,7 +207,7 @@ export async function loadAudit(
       action: selectedRow.action,
       recordType: selectedRow.rtype,
       requestId: selectedRow.request_id,
-      changes: selectedRow.changes,
+      changes: parseImportJson(selectedRow.changes),
     },
     closeHref: mergeHref(BASE, sp, { event: null }),
   } : null
