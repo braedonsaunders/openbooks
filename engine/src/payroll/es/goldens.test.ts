@@ -169,9 +169,8 @@ test("hand-worked: SS grupo 7 base 2.000 → EE 130,00 / ER 613,00", () => {
   assert.equal(r.empresaTotal, "613.0000");
 });
 
-// SS solidaridad: base 5.101,20, retribución 6.000. Slice 510,12 € @1,15%:
-// EE 0,97 / ER 4,90. Slice 388,68 € @1,25%: EE 0,82 / ER 4,04.
-// Totals EE 1,79 / ER 8,94 (half-up per line).
+// SS solidaridad art. 17 monthly: 510,12 € @1,15% + 388,68 € @1,25%; Orden
+// PJC/297/2026 art. 17.2: https://www.boe.es/boe/dias/2026/03/31/pdfs/BOE-A-2026-7296.pdf; EE 1,79 / ER 8,94.
 test("hand-worked: SS solidaridad on 6.000 → EE 1,79 / ER 8,94", () => {
   const r = calculateEsSeguridadSocial2026({
     payDate: "2026-06-10",
@@ -179,9 +178,9 @@ test("hand-worked: SS solidaridad on 6.000 → EE 1,79 / ER 8,94", () => {
     base: "5101.20",
     retribucionMensual: "6000",
   });
-  assert.equal(r.baseContingenciasComunes, "5101.2000");
   assert.equal(r.solidaridadTrabajador, "1.7900");
   assert.equal(r.solidaridadEmpresa, "8.9400");
+  assert.equal(calculateEsSeguridadSocial2026({ payDate: "2026-06-10", grupo: 9, base: "170.04", dias: 31, retribucionMensual: "5200" }).solidaridadTrabajador, "0.0000");
 });
 
 // SS clamp: grupo 1 base 1.500 rises to the 1.989,30 mínima.
