@@ -469,7 +469,15 @@ export async function loadOfferDrawerExtra(
 export interface PostingDrawerExtra {
   /** hrm.recruiting.manage: publish/pause/close render only with it. */
   canManage: boolean
-  posting: { id: string; boardKey: string; status: string; requisitionId: string }
+  posting: {
+    id: string
+    boardKey: string
+    /** Localized display label — never compared for state. */
+    status: string
+    /** Raw status code the action island compares (closed hides Pause/Close). */
+    statusCode: string
+    requisitionId: string
+  }
   events: { kind: string; recordedAt: string }[]
   labels: Record<string, string>
 }
@@ -492,6 +500,7 @@ export async function loadPostingDrawerExtra(
         id: posting.id,
         boardKey: posting.boardKey,
         status: t(`recruiting.posting.${posting.status}`),
+        statusCode: posting.status,
         requisitionId: posting.requisitionId,
       },
       events: events.map((event) => ({
