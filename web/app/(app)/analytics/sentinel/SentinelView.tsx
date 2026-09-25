@@ -17,7 +17,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useSort } from '../_ui/useSort'
 import { TxnLink } from '../../reports/TxnLink'
-import { useAnalyticsMoney } from '../_ui/format'
+import { escapeTooltipHtml, useAnalyticsMoney } from '../_ui/format'
 import { countLabel, dateLabel } from '@/lib/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
@@ -536,7 +536,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
     const years = [...byYear.keys()].sort().slice(-2) // show up to 2 most recent years
     const max = Math.max(...data.calendar.map((c) => c.amount), 1)
     return {
-      tooltip: { formatter: (p: { data: [string, number] }) => `${p.data[0]}<br/>${fmtMoney(p.data[1])}` },
+      tooltip: { formatter: (p: { data: [string, number] }) => `${escapeTooltipHtml(p.data[0])}<br/>${fmtMoney(p.data[1])}` },
       visualMap: { min: 0, max, orient: 'horizontal' as const, left: 'center', top: 0, inRange: { color: ['#e2e8f0', '#99f6e4', '#14b8a6', '#f59e0b', '#ef4444'] }, formatter: (v: number) => fmtMoney(v, { compact: true }) },
       calendar: years.map((y, i) => ({
         range: y, top: 60 + i * 150, left: 40, right: 10, cellSize: ['auto', 13] as [string, number],

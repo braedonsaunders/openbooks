@@ -13,7 +13,7 @@ import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
-import { useAnalyticsMoney, fmtPct } from '../_ui/format'
+import { escapeTooltipHtml, useAnalyticsMoney, fmtPct } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors'] as const
@@ -303,7 +303,7 @@ function matrixOption(rows: VendorRow[], money: (value: number) => string, t: Re
     }))
   return {
     grid: { left: 8, right: 16, top: 16, bottom: 28, containLabel: true },
-    tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: MatrixPoint) => `${p.data.name}<br/>${t('chart.tooltipSpend', { amount: money(p.data.value[2]) })}<br/>${t('chart.tooltipOnTime', { pct: p.data.value[1].toFixed(0) })}` },
+    tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: MatrixPoint) => `${escapeTooltipHtml(p.data.name)}<br/>${t('chart.tooltipSpend', { amount: money(p.data.value[2]) })}<br/>${t('chart.tooltipOnTime', { pct: p.data.value[1].toFixed(0) })}` },
     xAxis: { type: 'value', name: t('chart.xAxis'), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: '#94a3b8', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } }, axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (v: number) => money(Math.pow(10, v)) } },
     yAxis: { type: 'value', name: t('chart.yAxis'), min: 0, max: 100, axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } }, axisLabel: { color: '#94a3b8', fontSize: 9 } },
     series: [

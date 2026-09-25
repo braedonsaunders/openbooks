@@ -85,6 +85,20 @@ function exactCurrencyCoordinate(value: unknown): number | null {
   return units(coordinate.toFixed(4)) === expected ? coordinate : null
 }
 
+/** Escape dimension/series names before they enter an HTML tooltip string.
+ * ECharts writes formatter output via innerHTML, and dimension values are
+ * tenant-controlled (vendor, customer, account names) — raw interpolation
+ * would execute as stored XSS. The `exact` fragment is a formatted number
+ * and needs no escaping. */
+function escapeTooltipHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function exactTooltip(params: unknown): string {
   const points = Array.isArray(params) ? params : [params]
   return points.map((point) => {
@@ -95,8 +109,8 @@ function exactTooltip(params: unknown): string {
       : null
     const exact = typeof data?.exactValue === 'string' ? formatCell(data.exactValue, 'currency') : String(item.value ?? '')
     const label = item.seriesName ?? item.name ?? ''
-    const category = item.axisValueLabel == null ? '' : `${String(item.axisValueLabel)} — `
-    return `${category}${String(label)}: ${exact}`
+    const category = item.axisValueLabel == null ? '' : `${escapeTooltipHtml(item.axisValueLabel)} — `
+    return `${category}${escapeTooltipHtml(label)}: ${exact}`
   }).join('<br/>')
 }
 

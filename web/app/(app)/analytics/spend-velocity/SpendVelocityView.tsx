@@ -19,7 +19,7 @@ import { DrillDrawer } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
-import { useAnalyticsMoney } from '../_ui/format'
+import { escapeTooltipHtml, useAnalyticsMoney } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /* ------------------------------------------------------------------ helpers */
@@ -186,7 +186,7 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
       xAxis: { type: 'value' as const, name: t('scatter.xAxis'), nameLocation: 'middle' as const, nameGap: 24, min: vMin - vPad, max: vMax + vPad },
       yAxis: { type: 'value' as const, name: t('scatter.yAxis'), min: aMin - aPad, max: aMax + aPad },
       tooltip: {
-        formatter: (p: ScatterPoint) => `<b>${p.data[3]}</b><br/>${t('scatter.tooltipVelocity', { pct: p.data[0].toFixed(1) })}<br/>${t('scatter.tooltipAccel', { pct: p.data[1].toFixed(1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
+        formatter: (p: ScatterPoint) => `<b>${escapeTooltipHtml(p.data[3])}</b><br/>${t('scatter.tooltipVelocity', { pct: p.data[0].toFixed(1) })}<br/>${t('scatter.tooltipAccel', { pct: p.data[1].toFixed(1) })}<br/>${t('scatter.tooltipSpend', { amount: fmtMoney(p.data[2], { compact: true }) })}`,
       },
       series: [{
         type: 'scatter' as const,

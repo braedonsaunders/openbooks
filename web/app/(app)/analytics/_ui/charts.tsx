@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { InsightChart } from '@openbooks/analytics/viz'
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, neg as moneyNeg } from '@openbooks/engine/src/money/money.ts'
-import { toChartNumber, useAnalyticsMoney } from './format'
+import { escapeTooltipHtml, toChartNumber, useAnalyticsMoney } from './format'
 
 /** Loose ECharts option shape — mirrors the analytics package's own alias. */
 type EChartsOption = Record<string, unknown>
@@ -109,7 +109,7 @@ export function TrendChart({
       ...tooltip,
       valueFormatter: undefined,
       formatter: (params: ChartParam[]) =>
-        [params[0]?.axisValue, ...params.map((p) => `${p.marker} ${p.seriesName}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : plain(p.value)}`)].join('<br/>'),
+        [escapeTooltipHtml(params[0]?.axisValue), ...params.map((p) => `${p.marker} ${escapeTooltipHtml(p.seriesName)}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : plain(p.value)}`)].join('<br/>'),
     },
     legend: series.length > 1 ? { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 } : undefined,
     xAxis: catAxis(labels, maxTicks),
@@ -150,7 +150,7 @@ export function ForecastChart({
   const bandSpan = low.map((v, i) => (v == null || high[i] == null ? null : (high[i] as number) - v))
   const option: EChartsOption = {
     grid: { ...baseGrid, top: 30 },
-    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => [ps[0]?.axisValue, ...ps.filter((p) => p.value != null && p.seriesName !== '_base' && p.seriesName !== '_band').map((p) => `${p.marker} ${p.seriesName}: ${money(p.value)}`)].join('<br/>') },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => [escapeTooltipHtml(ps[0]?.axisValue), ...ps.filter((p) => p.value != null && p.seriesName !== '_base' && p.seriesName !== '_band').map((p) => `${p.marker} ${escapeTooltipHtml(p.seriesName)}: ${money(p.value)}`)].join('<br/>') },
     legend: { top: 0, right: 0, data: [t('history'), t('forecast')], textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 },
     xAxis: catAxis(labels),
     yAxis: valAxis(money),
@@ -177,7 +177,7 @@ export function DivergingBar({
   const money = useChartMoney()
   const option: EChartsOption = {
     grid: { ...baseGrid, left: 4 },
-    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.name}: ${money(ps[0]?.value ?? 0)}` },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${escapeTooltipHtml(ps[0]?.name)}: ${money(ps[0]?.value ?? 0)}` },
     xAxis: valAxis(money),
     yAxis: { ...catAxis(labels), inverse: true },
     series: [
@@ -252,7 +252,7 @@ export function Waterfall({
   })
   const option: EChartsOption = {
     grid: baseGrid,
-    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.axisValue}: ${money(steps[ps[0]?.dataIndex ?? -1]?.amount ?? 0)}` },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${escapeTooltipHtml(ps[0]?.axisValue)}: ${money(steps[ps[0]?.dataIndex ?? -1]?.amount ?? 0)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
     yAxis: valAxis(money),
     series: [
@@ -286,7 +286,7 @@ export function Donut({
   const money = useChartMoney()
   const fmt = valueFormat ?? money
   const option: EChartsOption = {
-    tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: ChartParam) => `${p.name}: ${fmt(p.value)} (${p.percent}%)` },
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: ChartParam) => `${escapeTooltipHtml(p.name)}: ${fmt(p.value)} (${p.percent}%)` },
     legend: { type: 'scroll', orient: 'vertical', right: 0, top: 'center', textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 8 },
     series: [
       {
@@ -329,7 +329,7 @@ export function cashBridgeOption(startCash: string, inflows: string, outflows: s
   const exactValues = [startCash, inflows, moneyNeg(outflows), end]
   return {
     grid: baseGrid,
-    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.axisValue}: ${money(exactValues[ps[0]?.dataIndex ?? -1]!)}` },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${escapeTooltipHtml(ps[0]?.axisValue)}: ${money(exactValues[ps[0]?.dataIndex ?? -1]!)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
     yAxis: valAxis(money),
     series: [
@@ -371,7 +371,7 @@ export function cashForecastOption(
         const w = weeks[ps[0]?.dataIndex ?? -1]
         if (!w) return ''
         return [
-          w.label,
+          escapeTooltipHtml(w.label),
           `${labels.in}: ${money(w.inflow)}`,
           `${labels.out}: ${money(w.outflow)}`,
           `${labels.net}: ${money(w.net)}`,
