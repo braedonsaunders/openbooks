@@ -35,7 +35,14 @@ export async function surveysAuthz(): Promise<SurveysHomeAuthz | null> {
   let gate
   try {
     gate = await requirePermission('hrm.surveys.manage')
-  } catch {
+  } catch (error) {
+    // requirePermission answers a missing grant with a redirect to the
+    // access-denied page: rethrowing lets it name the missing
+    // permission, while swallowing it 404s instead. Matched on the
+    // digest string like page-layouts — Next's own predicate is not
+    // public API.
+    const digest = (error as { digest?: unknown } | null)?.digest
+    if (typeof digest === 'string' && digest.startsWith('NEXT_REDIRECT')) throw error
     return null
   }
   await requireFeatureEnabled(gate.user.orgId, 'hrm')
