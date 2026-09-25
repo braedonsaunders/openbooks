@@ -142,3 +142,22 @@ test("apply refuses while the sandbox is mid-refresh", async () => {
     );
   }
 });
+
+test("review refuses a captured change set after its sandbox stops being ready", async () => {
+  const pair = await seedPair("ready");
+  try {
+    const { changeSetId } = await buildChangeSet(pair.sandboxId, "Invalidated Capture", null);
+    const reviewer = await createScratchUser(pair.prodOrgId, "Invalidated Capture Reviewer", "admin");
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${pair.prodOrgId} and key='admin'`);
+    await db.execute(sql`update sandboxes set status = 'failed' where id = ${pair.sandboxId}`);
+
+    await assert.rejects(() => reviewChangeSet(changeSetId, reviewer), /sandbox is failed, not ready/);
+    assert.equal((await db.execute<{ status: string }>(sql`
+      select status from change_sets where id = ${changeSetId}`)).rows[0]?.status, "draft");
+  } finally {
+    await runTeardowns(
+      () => dropScratchOrgReporting(pair.sbxOrgId),
+      () => dropScratchOrgReporting(pair.prodOrgId),
+    );
+  }
+});
