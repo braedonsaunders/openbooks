@@ -65,7 +65,7 @@ export async function loadPdfTemplates(): Promise<PdfTemplatesData> {
     const starter = starterTemplate(meta)
     return {
       recordType: meta.key,
-      label: meta.label,
+      label: t(`recordTypes.${meta.labelKey}` as never),
       sourceHtml: starter.sourceHtml,
       headerHtml: starter.headerHtml,
       footerHtml: starter.footerHtml,
@@ -81,7 +81,10 @@ export async function loadPdfTemplates(): Promise<PdfTemplatesData> {
     list: {
       templates,
       starters,
-      recordTypes: catalog.map((meta) => ({ key: meta.key, label: meta.label })),
+      recordTypes: catalog.map((meta) => ({
+        key: meta.key,
+        label: t(`recordTypes.${meta.labelKey}` as never),
+      })),
     },
   }
 }

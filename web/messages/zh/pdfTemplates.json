@@ -1,6 +1,26 @@
 {
   "title": "PDF 模板",
   "description": "设计精美的可打印文档，并将其分配给发票、日记账及其他所有交易",
+  "recordTypes":   {
+    "customer_invoice": "客户发票",
+    "customer_credit": "客户贷项",
+    "quote": "报价单",
+    "sales_order": "销售订单",
+    "purchase_order": "采购订单",
+    "vendor_bill": "供应商账单",
+    "vendor_credit": "供应商贷项",
+    "vendor_payment": "供应商付款",
+    "customer_payment": "客户付款",
+    "expense_report": "费用报告",
+    "check": "支票",
+    "card_charge": "银行卡扣款",
+    "card_refund": "银行卡退款",
+    "journal": "日记账",
+    "field_ticket": "现场工单",
+    "journal_entry": "日记账分录",
+    "pay_stub": "工资单",
+    "payroll_cheque": "工资支票"
+  },
   "newTemplate": "新建模板",
   "list": {
     "name": "名称",

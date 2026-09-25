@@ -1,6 +1,26 @@
 {
   "title": "PDF Templates",
   "description": "Author beautiful printable documents and assign them to invoices, journals, and every other transaction",
+  "recordTypes":   {
+    "customer_invoice": "Customer invoice",
+    "customer_credit": "Customer credit",
+    "quote": "Quote",
+    "sales_order": "Sales order",
+    "purchase_order": "Purchase order",
+    "vendor_bill": "Vendor bill",
+    "vendor_credit": "Vendor credit",
+    "vendor_payment": "Vendor payment",
+    "customer_payment": "Customer payment",
+    "expense_report": "Expense report",
+    "check": "Check",
+    "card_charge": "Card charge",
+    "card_refund": "Card refund",
+    "journal": "Journal",
+    "field_ticket": "Field ticket",
+    "journal_entry": "Journal entry",
+    "pay_stub": "Pay stub",
+    "payroll_cheque": "Payroll cheque"
+  },
   "newTemplate": "New template",
   "list": {
     "name": "Name",

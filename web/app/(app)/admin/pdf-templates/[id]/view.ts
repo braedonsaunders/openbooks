@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
@@ -38,6 +39,7 @@ export interface PdfTemplateEditorData {
 
 export async function loadPdfTemplateEditor(id: string): Promise<PdfTemplateEditorData> {
   const authz = await requirePermission('admin.customization.manage')
+  const t = await getTranslations('pdfTemplates')
   const row = await getPdfTemplate(authz.user.orgId, id)
   if (!row) notFound()
   const meta = PDF_RECORD_TYPE_BY_KEY[row.recordType]
@@ -59,7 +61,7 @@ export async function loadPdfTemplateEditor(id: string): Promise<PdfTemplateEdit
     template: {
       id: row.id,
       recordType: row.recordType,
-      recordTypeLabel: meta.label,
+      recordTypeLabel: t(`recordTypes.${meta.labelKey}` as never),
       name: row.name,
       description: row.description,
       paperSize: row.paperSize,

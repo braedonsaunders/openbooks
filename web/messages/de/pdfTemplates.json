@@ -1,6 +1,26 @@
 {
   "title": "PDF-Vorlagen",
   "description": "Gestalten Sie ansprechende druckbare Dokumente und weisen Sie sie Rechnungen, Buchungen und allen anderen Transaktionen zu",
+  "recordTypes":   {
+    "customer_invoice": "Kundenrechnung",
+    "customer_credit": "Kundengutschrift",
+    "quote": "Angebot",
+    "sales_order": "Kundenauftrag",
+    "purchase_order": "Bestellung",
+    "vendor_bill": "Lieferantenrechnung",
+    "vendor_credit": "Lieferantengutschrift",
+    "vendor_payment": "Lieferantenzahlung",
+    "customer_payment": "Kundenzahlung",
+    "expense_report": "Spesenabrechnung",
+    "check": "Scheck",
+    "card_charge": "Kartenbelastung",
+    "card_refund": "Kartenerstattung",
+    "journal": "Journal",
+    "field_ticket": "Arbeitsschein",
+    "journal_entry": "Journalbuchung",
+    "pay_stub": "Gehaltsabrechnung",
+    "payroll_cheque": "Gehaltscheck"
+  },
   "newTemplate": "Neue Vorlage",
   "list": {
     "name": "Name",

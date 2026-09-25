@@ -1,6 +1,26 @@
 {
   "title": "Modèles PDF",
   "description": "Créez de superbes documents imprimables et associez-les aux factures, écritures et à toutes les autres transactions",
+  "recordTypes":   {
+    "customer_invoice": "Facture client",
+    "customer_credit": "Avoir client",
+    "quote": "Devis",
+    "sales_order": "Commande client",
+    "purchase_order": "Commande fournisseur",
+    "vendor_bill": "Facture fournisseur",
+    "vendor_credit": "Avoir fournisseur",
+    "vendor_payment": "Paiement fournisseur",
+    "customer_payment": "Paiement client",
+    "expense_report": "Note de frais",
+    "check": "Chèque",
+    "card_charge": "Débit de carte",
+    "card_refund": "Remboursement de carte",
+    "journal": "Journal",
+    "field_ticket": "Bon de travail",
+    "journal_entry": "Écriture de journal",
+    "pay_stub": "Bulletin de paie",
+    "payroll_cheque": "Chèque de paie"
+  },
   "newTemplate": "Nouveau modèle",
   "list": {
     "name": "Nom",
