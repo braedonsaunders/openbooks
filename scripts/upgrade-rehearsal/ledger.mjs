@@ -17,8 +17,8 @@
  * the core ledger tables is also hashed over EVERY column the source release
  * had. The after-snapshot reuses the before-snapshot's column list: columns
  * the upgrade adds are ignored, and a column it drops is refused. Only
- * `updated_at` is excluded, because it is bookkeeping metadata that a trigger
- * bumps on any backfill.
+ * `updated_at` and `revision_seq` are excluded, because they are bookkeeping
+ * metadata that triggers bump on any backfill.
  */
 
 const COUNTED_TABLES = Object.freeze([
@@ -42,7 +42,11 @@ export const FINGERPRINTED_TABLES = Object.freeze([
   "document_lines",
   "applications",
 ]);
-const VOLATILE_COLUMNS = new Set(["updated_at"]);
+// revision_seq is the optimistic-concurrency counter that 0167's trigger bumps
+// on every UPDATE of a document, so any backfill moves it, exactly like
+// updated_at. Rehearsal 36135363346 showed it as the ONLY changed column in
+// every ledger-parity refusal (the 0265/0338 heals).
+const VOLATILE_COLUMNS = new Set(["updated_at", "revision_seq"]);
 
 function quoteIdent(name) {
   return `"${String(name).replaceAll('"', '""')}"`;
