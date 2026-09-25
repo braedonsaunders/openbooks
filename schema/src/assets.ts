@@ -49,9 +49,12 @@ export const assetCategories = pgTable("asset_categories", {
   id: id(),
   orgId: orgRef(),
   name: text("name").notNull(), // Vehicles, Shop Equipment, Computers…
-  assetAccountId: uuid("asset_account_id").notNull(),
-  accumulatedDepreciationAccountId: uuid("accumulated_depreciation_account_id").notNull(),
-  depreciationExpenseAccountId: uuid("depreciation_expense_account_id").notNull(),
+  // Posting-role accounts. NULL only as a triple: an explicitly unconfigured
+  // category (see 0384_asset_category_unconfigured_accounts). Drafts may
+  // reference it; in-service and posting transitions refuse until roles exist.
+  assetAccountId: uuid("asset_account_id"),
+  accumulatedDepreciationAccountId: uuid("accumulated_depreciation_account_id"),
+  depreciationExpenseAccountId: uuid("depreciation_expense_account_id"),
   gainLossAccountId: uuid("gain_loss_account_id"),
   defaultMethod: text("default_method", {
     enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],

@@ -1,0 +1,1 @@
+Relaxing the three category role columns to nullable with an all-or-nothing CHECK preserves every existing row: all prior categories were created under NOT NULL, so each row already satisfies the CHECK and no operator data repair is required.
