@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { enqueueSandboxOp } from "@openbooks/jobs";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, longPool, withBypassContext } from "../platform/db.ts";
+import { REFRESH_CLONE_PROOF_PREFIX, sandboxRefreshLockKey } from "../sandbox/lifecycle.ts";
 
 /**
  * Sandbox refresh scanner — polls every 5 min for ready sandboxes whose
@@ -74,33 +75,62 @@ async function getSandboxRefreshJobState(jobId: string): Promise<string | null> 
   return job ? job.getState() : null;
 }
 
+async function withRefreshRecoveryLock(sandboxId: string, recover: () => Promise<boolean>): Promise<boolean> {
+  const client = await longPool.connect();
+  const key = sandboxRefreshLockKey(sandboxId);
+  let locked = false;
+  try {
+    const result = await client.query<{ locked: boolean }>(
+      "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
+      [key],
+    );
+    locked = result.rows[0]?.locked === true;
+    if (!locked) return false;
+    return await recover();
+  } finally {
+    if (locked) {
+      await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [key]).catch(() => undefined);
+    }
+    client.release();
+  }
+}
+
 export async function releaseStaleSandboxClaims(
   getJobState: (jobId: string) => Promise<string | null> = getSandboxRefreshJobState,
 ): Promise<number> {
   const stale = (await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string; cadence: string | null }>(sql`
-      select id, org_id as "orgId", refresh_schedule as "cadence"
+    db.execute<{ id: string; orgId: string; cadence: string | null; lastError: string | null }>(sql`
+      select id, org_id as "orgId", refresh_schedule as "cadence", last_error as "lastError"
         from sandboxes
        where status = 'refreshing'
-         and (last_error is null or last_error not like 'clone-rls-proof:%')
          and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
     `)));
   let released = 0;
   for (const row of stale.rows) {
-    const window = (row.cadence && CADENCE_MS[row.cadence]) || TICK_INTERVAL_MS;
-    const liveness = await sandboxRefreshQueueLiveness(row.id, window, getJobState);
-    if (liveness !== "dead") continue;
-    const done = (await withBypassContext(() =>
-      db.execute(sql`
-        update sandboxes set status = 'ready',
-               last_error = 'refresh worker never started: stale scheduler claim released for re-queue',
-               updated_at = now()
+    const proofExists = row.lastError?.startsWith(REFRESH_CLONE_PROOF_PREFIX) === true;
+    if (!proofExists) {
+      const window = (row.cadence && CADENCE_MS[row.cadence]) || TICK_INTERVAL_MS;
+      const liveness = await sandboxRefreshQueueLiveness(row.id, window, getJobState);
+      if (liveness !== "dead") continue;
+    }
+    const recovered = await withRefreshRecoveryLock(row.id, async () => {
+      const message = proofExists
+        ? "refresh lease expired: worker stopped during clone verification; rerun refresh or delete this sandbox"
+        : "refresh worker never started: stale scheduler claim released for re-queue";
+      const done = await withBypassContext(() => db.execute(sql`
+        update sandboxes set status = ${proofExists ? "failed" : "ready"},
+               last_error = ${message}, updated_at = now()
          where id = ${row.id} and org_id = ${row.orgId} and status = 'refreshing'
-           and (last_error is null or last_error not like 'clone-rls-proof:%')
-      `)));
-    if (done.rowCount) {
+           and last_error is not distinct from ${row.lastError}
+           and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
+      `));
+      if (done.rowCount) {
+        console.error(`[sandbox-scheduler] ${proofExists ? "failed" : "released"} stale refresh for sandbox ${row.id}: ${message}`);
+      }
+      return Boolean(done.rowCount);
+    });
+    if (recovered) {
       released += 1;
-      console.error(`[sandbox-scheduler] released stale refreshing claim for sandbox ${row.id} back to ready`);
     }
   }
   return released;
