@@ -152,6 +152,14 @@ async function usPayrollOrg(): Promise<Fixture> {
         ),
       })}::jsonb
     ) where id = ${org.orgId}`);
+  // Presence-only CA ETT reserve status the same way: an unconfigured
+  // balance refuses by name, and the tests assert withholding, never ETT
+  // amounts. A positive test balance keeps the employer liable.
+  await db.execute(sql`
+    insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                         rate_values, created_by, updated_by)
+    values (${org.orgId}, 'US', 'us_ca_ett', 'CA', 2026, '{"reserveBalance": "5000.00"}',
+            ${actorId}, ${actorId})`);
 
   const subsidiaryId = randomUUID();
   await db.execute(sql`
@@ -320,6 +328,9 @@ test(
       // The residence assumption is recorded rather than silent.
       assert.equal(stub!.factors.WITHHOLDING_RESIDENCE, "CA");
       assert.equal(stub!.factors.WITHHOLDING_RESIDENCE_SOURCE, "assumed");
+      // ETT is an employer contribution on the first $7,000, not a
+      // deduction: $2,000 × 0.1% = $2.00 on the positive-balance fixture.
+      assert.equal(stub!.factors.CA_ETT_EMPLOYEE, "2.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

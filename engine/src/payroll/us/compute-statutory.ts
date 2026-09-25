@@ -24,6 +24,7 @@ import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
+import { caEttWithholding } from "./states/ca.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -440,5 +441,27 @@ export async function computeUsStatutory(
   }
   factors.WITHHOLDING_RESIDENCE = resolution.residenceRegion;
   factors.WITHHOLDING_RESIDENCE_SOURCE = resolution.residenceSource;
+  // California ETT (2026: 0.1% on the first $7,000, positive UI-reserve
+  // employers only): the unconfigured-balance refusal fires at run
+  // readiness, so a null here is unreachable in a run — it throws by name
+  // rather than assuming an exempt account. The cap tracks the UI-covered
+  // wage base, the same first-$7,000 the SUI base measures.
+  if (region === "CA") {
+    const reserve = config.ettReserveBalance(region);
+    if (reserve == null) {
+      throw new PayrollError(
+        "California Employment Training Tax needs the employer's UI reserve account balance "
+        + "(positive balance owes 0.1% on the first $7,000; a deficit balance is exempt). "
+        + "Enter it on the us_ca_ett rate before calculating — refused by name",
+      );
+    }
+    if (U(reserve) > 0n) {
+      const caEtt = caEttWithholding(run.pay_date!, sum([income, nonPeriodic]), ytd.suiCurrentRegion);
+      pushStatutory("ca_ett", "employer_contribution", "CA employment training tax", caEtt, 251);
+      factors.CA_ETT_EMPLOYEE = caEtt;
+    } else {
+      factors.CA_ETT_EXEMPT = "1";
+    }
+  }
   return factors;
 }
