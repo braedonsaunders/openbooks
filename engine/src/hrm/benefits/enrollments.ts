@@ -6,6 +6,7 @@ import {
   requireHrmBenefitsManageOnEmployment,
   requireOwnEmploymentForBenefits,
   requireOwnEmploymentForBenefitsSelf,
+  lockEmploymentsForScope,
   type TrustedEmploymentSubject,
 } from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
@@ -187,6 +188,35 @@ async function lockEnrollmentWindowAdmission(
       `)
     ).rows,
     "enrollment window",
+  );
+}
+
+async function lockEnrollmentPlanAdmission(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+  planId: string,
+): Promise<void> {
+  await exec.execute(sql`
+    select pg_advisory_xact_lock(
+      hashtextextended(${`hrm-benefit-election:${orgId}:${employmentId}:${planId}`}, 0)
+    )
+  `);
+}
+
+function isElectionRangeConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23P01"
+  );
+}
+
+function electionRangeConflict(): BenefitsError {
+  return new BenefitsError(
+    "REFUSED",
+    "this employment already holds this plan over those dates — change or end the existing enrolment instead of electing twice",
   );
 }
 
@@ -409,6 +439,8 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
   const coverageLevelKey = query.coverageLevelKey ?? null;
   return withOrgTransaction(orgId, async () => {
     if (windowId !== null) await lockEnrollmentWindowAdmission(db, orgId, windowId);
+    await lockEmploymentsForScope(db, [employmentId], { orgId, actorId });
+    await lockEnrollmentPlanAdmission(db, orgId, employmentId, planId);
     const subject = query.selfRequest
       ? await requireOwnEmploymentForBenefitsSelf(db, orgId, actorId, employmentId)
       : query.selfService
@@ -425,8 +457,9 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
     await validateBenefitPlanComponents(db, orgId, plan, levels);
     await requireNoOverlappingElection(db, orgId, employmentId, planId, effectiveFrom, effectiveTo);
     const status = plan.requiresApproval ? "pending_approval" : "active";
-    const inserted = requireOneRow(
-      (
+    let insertedRows: Record<string, unknown>[];
+    try {
+      insertedRows = (
         await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_enrollments
             (org_id, employment_id, plan_id, window_id, coverage_level_key, status,
@@ -438,9 +471,12 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
                   ${plan.currency}, ${actorId}, ${actorId}, ${actorId})
           returning ${ENROLLMENT_COLUMNS}
         `)
-      ).rows,
-      "recording the election",
-    );
+      ).rows;
+    } catch (error) {
+      if (isElectionRangeConflict(error)) throw electionRangeConflict();
+      throw error;
+    }
+    const inserted = requireOneRow(insertedRows, "recording the election");
     const dto = toEnrollmentDTO(inserted);
     const eventKind = entry.lifeEvent ? "life_event" : "elected";
     const eventReason = entry.lifeEvent
@@ -482,6 +518,8 @@ export async function waiveEnrollment(query: WaiveEnrollmentQuery): Promise<Enro
   const windowId = query.windowId ?? null;
   return withOrgTransaction(orgId, async () => {
     if (windowId !== null) await lockEnrollmentWindowAdmission(db, orgId, windowId);
+    await lockEmploymentsForScope(db, [employmentId], { orgId, actorId });
+    await lockEnrollmentPlanAdmission(db, orgId, employmentId, planId);
     const subject = query.selfService
       ? await requireOwnEmploymentForBenefits(db, orgId, actorId, employmentId)
       : await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
@@ -491,8 +529,9 @@ export async function waiveEnrollment(query: WaiveEnrollmentQuery): Promise<Enro
     const plan = await requireActivePlanInScope(db, orgId, subject, planId, effectiveFrom);
     const entry = await checkEntry(db, orgId, subject, effectiveFrom, windowId, reason);
     await requireNoOverlappingElection(db, orgId, employmentId, planId, effectiveFrom, null);
-    const inserted = requireOneRow(
-      (
+    let insertedRows: Record<string, unknown>[];
+    try {
+      insertedRows = (
         await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_enrollments
             (org_id, employment_id, plan_id, window_id, status,
@@ -501,9 +540,12 @@ export async function waiveEnrollment(query: WaiveEnrollmentQuery): Promise<Enro
                   ${effectiveFrom}::date, ${plan.currency}, ${actorId}, ${actorId}, ${actorId})
           returning ${ENROLLMENT_COLUMNS}
         `)
-      ).rows,
-      "recording the waiver",
-    );
+      ).rows;
+    } catch (error) {
+      if (isElectionRangeConflict(error)) throw electionRangeConflict();
+      throw error;
+    }
+    const inserted = requireOneRow(insertedRows, "recording the waiver");
     const dto = toEnrollmentDTO(inserted);
     await appendEvent(db, orgId, actorId, dto.id, "waived", reason);
     return dto;
