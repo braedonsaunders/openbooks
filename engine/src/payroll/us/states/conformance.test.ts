@@ -209,6 +209,20 @@ test("CA supplemental flat rates are the published ones", () => {
   assert.equal(CA_RATES_2026.supplemental.other, "0.066");
 });
 
+test("CA separately paid bonus refuses instead of aggregating to zero", () => {
+  // DE 44 p. 18: a monthly bonus-only $1,000 check aggregated here priced $0
+  // against the $1,575 low-income exemption; the flat election (10.23%) is
+  // $102.30 and needs classified components, so the engine refuses by name.
+  assert.throws(
+    () => CA_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 12, wages: "0.00", supplemental: "1000.00",
+      supplementalPaymentTiming: "separate", basis: "resident",
+      certificate: de4({ filing_status: "single_or_dual", regular_allowances: "0" }),
+    }),
+    /separately from regular wages take the DE 44.*flat election.*timed withholding dispatch.*refused by name/,
+  );
+});
+
 /* ===================================================================== */
 /* ILLINOIS — Booklet IL-700-T (R-12/25), automated payroll method        */
 /* ===================================================================== */
