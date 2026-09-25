@@ -184,37 +184,28 @@ test("offer documents render data plus selected clauses, and refuse invented one
   );
 });
 
-test("signature evidence seals name, time, IP hash, and document hash", () => {
+test("signature evidence seals every field and encoding stays deterministic", () => {
   const documentHash = hashOfferDocument("rendered letter");
   assert.match(documentHash, /^[0-9a-f]{64}$/);
-  const first = sealSignatureEvidence({
+  const args = {
     signerName: "A. Candidate",
     signedAt: "2026-09-21T10:00:00Z",
     ipHash: "ipexample",
     documentHash,
     offerId: ID_A,
     version: 2,
-  });
-  const second = sealSignatureEvidence({
-    signerName: "A. Candidate",
-    signedAt: "2026-09-21T10:00:00Z",
-    ipHash: "ipexample",
-    documentHash,
-    offerId: ID_A,
-    version: 2,
-  });
-  // Deterministic seal over the same inputs; any input change reseals.
-  assert.equal(first.seal, second.seal);
+  };
+  const first = sealSignatureEvidence(args);
+  assert.equal(sealSignatureEvidence(args).seal, first.seal);
   assert.equal(first.evidence.document_hash, documentHash);
-  const resealed = sealSignatureEvidence({
-    signerName: "A. Candidate",
-    signedAt: "2026-09-21T10:00:00Z",
-    ipHash: "ipexample",
-    documentHash: hashOfferDocument("different letter"),
-    offerId: ID_A,
-    version: 2,
-  });
-  assert.notEqual(resealed.seal, first.seal);
+  assert.ok([
+    { signerName: "B. Candidate" },
+    { signedAt: "2026-09-21T10:00:01Z" },
+    { ipHash: "other-ip" },
+    { documentHash: hashOfferDocument("different letter") },
+    { offerId: ID_B },
+    { version: 3 },
+  ].every((change) => sealSignatureEvidence({ ...args, ...change }).seal !== first.seal));
 });
 
 test("array literals bind as single pg-array params", () => {
