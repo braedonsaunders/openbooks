@@ -322,6 +322,9 @@ async function provisionUnmarkedDatabase(): Promise<ProvisionedDatabase> {
       ...process.env,
       OPENBOOKS_DB_URL: dbUrl.toString(),
       OPENBOOKS_RUNTIME_DB_URL: runtimeUrl.toString(),
+      // The installer unit runs on the bypass pool, which falls back to the
+      // suite database; pin it to the database under test instead.
+      OPENBOOKS_BYPASS_DB_URL: dbUrl.toString(),
     },
   });
   return { name, dbUrl: runtimeUrl.toString() };
