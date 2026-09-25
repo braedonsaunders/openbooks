@@ -13,24 +13,13 @@ import {
 } from "./stock-counts.ts";
 import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { receiveTen } from "./integration-seeds.ts";
 
 /**
  * Stock-count lifecycle regressions: duplicate subjects (D2), the posting
  * transaction contract (D1-lite), and the transactional feature fence (D3).
  * Runs in the integration partition only (filename), against a scratch org.
  */
-
-async function receiveTen(org: ScratchOrg): Promise<void> {
-  await receiveInventory(org.orgId, null, {
-    itemId: org.items.fifo,
-    stockLocationId: org.stockLocationId,
-    quantity: "10",
-    unitCost: "4",
-    subsidiaryId: org.subsidiaryId,
-    offsetAccountId: org.accounts.clearing,
-    date: org.date,
-  });
-}
 
 async function openCountedReview(org: ScratchOrg, counted: string): Promise<{ countId: string; lineId: string }> {
   const count = await createStockCount(org.orgId, null, {

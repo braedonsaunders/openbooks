@@ -15,6 +15,7 @@ import {
   submitStockCountForReview,
 } from "./stock-counts.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { receiveTen } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -25,18 +26,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * stale variance with no refusal. The post now takes every line position
  * lock BEFORE the re-read and holds them to the outer commit.
  */
-
-async function receiveTen(org: ScratchOrg): Promise<void> {
-  await receiveInventory(org.orgId, null, {
-    itemId: org.items.fifo,
-    stockLocationId: org.stockLocationId,
-    quantity: "10",
-    unitCost: "4",
-    subsidiaryId: org.subsidiaryId,
-    offsetAccountId: org.accounts.clearing,
-    date: org.date,
-  });
-}
 
 async function openReviewedCount(org: ScratchOrg, counted: string): Promise<{ countId: string; lineId: string }> {
   const count = await createStockCount(org.orgId, null, {

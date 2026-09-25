@@ -2,16 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { receiveInventory } from "./movements.ts";
 import {
-  createStockCount,
   postStockCount,
   recordCountedQuantity,
   recountStockCountLine,
-  startStockCount,
   submitStockCountForReview,
 } from "./stock-counts.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { openCountingLine } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -41,28 +39,6 @@ async function lineAudit(orgId: string, lineId: string): Promise<AuditEvent[]> {
       from audit_log
      where org_id = ${orgId} and table_name = 'stock_count_lines' and row_id = ${lineId}
      order by at, id`)).rows;
-}
-
-async function openCountingLine(org: ScratchOrg): Promise<{ countId: string; lineId: string }> {
-  await receiveInventory(org.orgId, null, {
-    itemId: org.items.fifo,
-    stockLocationId: org.stockLocationId,
-    quantity: "10",
-    unitCost: "4",
-    subsidiaryId: org.subsidiaryId,
-    offsetAccountId: org.accounts.clearing,
-    date: org.date,
-  });
-  const count = await createStockCount(org.orgId, null, {
-    locationId: org.locationId,
-    subsidiaryId: org.subsidiaryId,
-    countedOn: org.date,
-    lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
-  });
-  await startStockCount(org.orgId, null, count.id);
-  const lineId = (await db.execute<{ id: string }>(sql`
-    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
-  return { countId: count.id, lineId };
 }
 
 test("a correction keeps the first counter's observation with actor, time, before, after, and reason", { skip: !DB }, async () => {
