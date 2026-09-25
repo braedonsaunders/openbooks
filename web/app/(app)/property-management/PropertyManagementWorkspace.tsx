@@ -8,9 +8,9 @@ import type { FormLayoutConfig, ListViewConfig } from "@openbooks/customization"
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
-import { decimalCmp, decimalSum } from "../../../lib/statement-format";
+import { decimalCmp } from "../../../lib/statement-format";
 import { readApiErrorMessage } from "../../../lib/api-error";
-import { Metric, type Option } from "./workspace-ui";
+import { Metric, formatGroupedMoney, sumByCurrency, type Option } from "./workspace-ui";
 import { PropertiesTable } from "./PropertiesTable";
 import { RentRollTable } from "./RentRollTable";
 import { CamTable } from "./CamTable";
@@ -179,7 +179,10 @@ export function PropertyManagementWorkspace({
   const occupied = data.units.filter(
     (unit) => unit.status === "occupied",
   ).length;
-  const monthlyRent = decimalSum(
+  // Portfolio money is grouped by currency, never summed across it: each
+  // lease carries its property's currency, so the metric is one exact total
+  // per currency (CamTable's per-pool formatting, portfolio-wide).
+  const monthlyRent = sumByCurrency(
     activeLeases.flatMap((lease) =>
       data.charges
         .filter(
@@ -189,15 +192,22 @@ export function PropertyManagementWorkspace({
             charge.effectiveFrom <= today &&
             (!charge.effectiveTo || charge.effectiveTo >= today),
         )
-        .map((charge) => charge.amount),
+        .map((charge) => ({ currency: lease.currency, amount: charge.amount })),
     ),
   );
-  // Past-due money is a server-side aggregate over the complete set of posted
-  // documents. It must never be derived from the capped schedule preview,
-  // which drops older lines once the portfolio passes the preview limit.
-  const overdue = data.overdueTotal ?? "0";
-  const depositsHeld = decimalSum(
-    data.leases.map((lease) => lease.depositBalance ?? "0"),
+  // Past-due money stays a server-side aggregate over the complete set of
+  // posted documents — never the capped schedule preview, which drops older
+  // lines once the portfolio passes the preview limit — grouped here by the
+  // invoiced lease's currency instead of summed across currencies.
+  const leaseCurrency = new Map(data.leases.map((lease) => [lease.id, lease.currency]));
+  const overdue = sumByCurrency(
+    data.overdueByLease.map((row) => ({
+      currency: leaseCurrency.get(row.leaseId) ?? "",
+      amount: row.balance,
+    })),
+  );
+  const depositsHeld = sumByCurrency(
+    data.leases.map((lease) => ({ currency: lease.currency, amount: lease.depositBalance ?? "0" })),
   );
   const selectedLease =
     data.leases.find((lease) => lease.id === selectedLeaseId) ?? null;
@@ -222,22 +232,22 @@ export function PropertyManagementWorkspace({
         />
         <Metric
           label={t("metrics.monthlyBaseRent")}
-          value={money(monthlyRent)}
+          value={monthlyRent.length ? formatGroupedMoney(monthlyRent, money) : money("0")}
           hint={t("metrics.currentChargesHint")}
           icon="badge-dollar"
           accent="emerald"
         />
         <Metric
           label={t("metrics.rentPastDue")}
-          value={money(overdue)}
+          value={overdue.length ? formatGroupedMoney(overdue, money) : money("0")}
           hint={t("metrics.agingHint")}
-          tone={decimalCmp(overdue, "0") > 0 ? "danger" : undefined}
+          tone={overdue.some((part) => decimalCmp(part.total, "0") > 0) ? "danger" : undefined}
           icon="circle-alert"
           accent="red"
         />
         <Metric
           label={t("metrics.depositsHeld")}
-          value={money(depositsHeld)}
+          value={depositsHeld.length ? formatGroupedMoney(depositsHeld, money) : money("0")}
           hint={t("metrics.depositLiabilityHint")}
           icon="shield-check"
           accent="violet"

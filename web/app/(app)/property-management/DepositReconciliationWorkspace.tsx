@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
-import { Empty, Field, Small, Status } from "./workspace-ui";
+import { Empty, Field, Small, Status, formatGroupedMoney, sumByCurrency } from "./workspace-ui";
 import type { Money } from "./types";
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
@@ -12,6 +12,9 @@ type ReconciliationRow = {
   propertyId: string;
   propertyName: string;
   propertyCode: string;
+  /** Property currency, carried by the engine row: every amount below is
+   * formatted in it, and the header totals group by it. */
+  currency?: string;
   bankAccounts: Array<{ bankAccountName: string }>;
   defaultBankAccountName: string | null;
   subledgerBalance: string;
@@ -26,6 +29,8 @@ type ReconciliationRow = {
   controlNote?: string | null;
   lastActivityOn: string | null;
   status: string;
+  /** Per-property cash activity behind the header total. */
+  cashActivity?: string;
 };
 type ReconciliationResult = {
   rows: ReconciliationRow[];
@@ -80,6 +85,12 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
     );
   const rows = result?.rows ?? [];
   const totals = result?.totals;
+  // The engine totals sum across property currencies: regroup the per-row
+  // balances by currency instead, like the workspace metrics above.
+  const inCurrency = (row: ReconciliationRow) => row.currency ?? "";
+  const subledgerByCurrency = sumByCurrency(rows.map((row) => ({ currency: inCurrency(row), amount: row.subledgerBalance })));
+  const linkedByCurrency = sumByCurrency(rows.map((row) => ({ currency: inCurrency(row), amount: row.linkedGlBalance })));
+  const cashByCurrency = sumByCurrency(rows.map((row) => ({ currency: inCurrency(row), amount: row.cashActivity ?? "0" })));
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -102,9 +113,9 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Small label="Deposit subledger" value={money(totals?.subledgerBalance ?? 0)} />
-        <Small label="Linked posted GL" value={money(totals?.linkedGlBalance ?? 0)} />
-        <Small label="Deposit cash activity" value={money(totals?.cashActivity ?? 0)} />
+        <Small label="Deposit subledger" value={subledgerByCurrency.length ? formatGroupedMoney(subledgerByCurrency, money) : money(totals?.subledgerBalance ?? 0)} />
+        <Small label="Linked posted GL" value={linkedByCurrency.length ? formatGroupedMoney(linkedByCurrency, money) : money(totals?.linkedGlBalance ?? 0)} />
+        <Small label="Deposit cash activity" value={cashByCurrency.length ? formatGroupedMoney(cashByCurrency, money) : money(totals?.cashActivity ?? 0)} />
         <Small
           label="Exceptions"
           value={String(
@@ -135,6 +146,10 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
               const difference = row.controlShared
                 ? (row.controlGroupVariance ?? row.linkedVariance)
                 : (row.controlVariance ?? row.linkedVariance);
+              // Every balance belongs to this property's currency: format in
+              // it, never in the org default across a mixed portfolio.
+              const rowMoney = (value: string | number | null | undefined) =>
+                money(value ?? 0, row.currency ? { currency: row.currency } : undefined);
               return (
                 <InteractiveTableRow
                   key={row.propertyId}
@@ -163,13 +178,13 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
                           .join(", ")
                       : row.defaultBankAccountName ?? "Not configured"}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{money(row.subledgerBalance)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(row.linkedGlBalance)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{rowMoney(row.subledgerBalance)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{rowMoney(row.linkedGlBalance)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {row.locationControlBalance == null ? "—" : money(row.locationControlBalance)}
+                    {row.locationControlBalance == null ? "—" : rowMoney(row.locationControlBalance)}
                   </TableCell>
                   <TableCell className={cn("text-right tabular-nums", Number(difference) !== 0 && "font-medium text-red-600")}>
-                    {money(difference ?? 0)}
+                    {rowMoney(difference)}
                   </TableCell>
                   <TableCell>{row.lastActivityOn ?? "—"}</TableCell>
                   <TableCell><Status value={row.status} /></TableCell>
