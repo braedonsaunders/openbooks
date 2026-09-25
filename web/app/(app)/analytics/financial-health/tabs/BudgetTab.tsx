@@ -6,6 +6,8 @@ import { ClipboardList, Download, Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn, Input } from '@openbooks/ui'
 import type { HealthData, BudgetRow } from '../../../../../lib/analytics/health-data'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { divideDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
@@ -140,7 +142,7 @@ function RealBudget({ data }: { data: HealthData }) {
             </thead>
             <tbody>
               {pageRows.map((r) => {
-                const ratio = Math.abs(r.budget) > 0 ? Math.max(0, r.actual / r.budget) : null
+                const ratio = cmp(r.budget, '0') !== 0 ? Math.max(0, Number(divideDecimal(r.actual, r.budget, 12))) : null
                 return (
                   <tr key={r.accountId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                     <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
@@ -159,7 +161,7 @@ function RealBudget({ data }: { data: HealthData }) {
                       )}
                     </td>
                     <td className={cn('px-4 py-2 text-right tabular-nums', r.status === 'no-budget' ? 'text-slate-400 dark:text-slate-500' : r.favorable ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
-                      {r.status === 'no-budget' ? '—' : `${r.variance >= 0 ? '+' : ''}${fmtMoney(r.variance, { compact: true })}`}
+                      {r.status === 'no-budget' ? '—' : `${cmp(r.variance, '0') >= 0 ? '+' : ''}${fmtMoney(r.variance, { compact: true })}`}
                     </td>
                     <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', STATUS_STYLE[r.status])}>{statusLabel(r.status)}</span></td>
                   </tr>

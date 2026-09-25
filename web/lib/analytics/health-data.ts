@@ -3,7 +3,8 @@ import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { add, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { divideDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { flowRates } from "../fx-presentation";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -120,9 +121,9 @@ export interface BudgetRow {
   accountId: string;
   name: string;
   type: string;
-  budget: number;
-  actual: number;
-  variance: number; // actual − budget (income sign-normalised positive)
+  budget: string;
+  actual: string;
+  variance: string; // actual − budget (income sign-normalised positive)
   variancePct: number | null;
   favorable: boolean;
   status: "on-track" | "watch" | "over" | "under" | "no-budget";
@@ -131,7 +132,7 @@ export interface BudgetRow {
 export interface BudgetVariance {
   scenario: { id: string; name: string; fiscalYear: number; status: string } | null;
   rows: BudgetRow[];
-  totals: { budget: number; actual: number; variance: number };
+  totals: { budget: string; actual: string; variance: string };
 }
 
 export interface HealthData extends FinancialHealth {
@@ -732,7 +733,7 @@ export async function healthData(
     gpPerEmployee: cfg.gpPerEmployee!,
   };
 
-  const emptyBudget = (): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } });
+  const emptyBudget = (): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } });
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
 
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
@@ -773,15 +774,25 @@ export async function healthData(
  */
 export function budgetLineStatus(
   type: string,
-  variance: number,
+  variance: string,
   variancePct: number | null,
-  budget: number,
+  budget: string,
 ): BudgetRow["status"] {
-  const favorable = type === "income" || type === "income_other" ? variance >= 0 : variance <= 0;
-  if (budget === 0) return "no-budget";
+  const favorable = type === "income" || type === "income_other" ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
+  if (isZero(budget)) return "no-budget";
   if (favorable || Math.abs(variancePct ?? 0) <= 0.1) return "on-track";
   if (Math.abs(variancePct ?? 0) <= 0.25) return "watch";
   return type === "income" || type === "income_other" ? "under" : "over";
+}
+
+/** Preserve ledger amounts through budget variance arithmetic; only the
+ * dimensionless tolerance ratio is projected to a number for status bands. */
+export function exactBudgetVariance(budget: string, actual: string): { variance: string; variancePct: number | null } {
+  const variance = add(actual, neg(budget));
+  return {
+    variance,
+    variancePct: isZero(budget) ? null : Number(divideDecimal(variance, abs(budget), 12)),
+  };
 }
 
 /**
@@ -807,7 +818,7 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
     limit 1
   `)) as unknown as { rows: BudgetScenarioSqlRow[] };
   const s = scen.rows[0];
-  if (!s) return { scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } };
+  if (!s) return { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } };
 
   // Both sides arrive per (account, functional) and translate to
   // presentation before the variance compares them — the same second leg as
@@ -889,22 +900,21 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
   // applies after translation, on presentation figures.
   const rows: BudgetRow[] = [...bvaByAccount.entries()]
     .map(([accountId, v]): BudgetRow => {
-      const budget = Number(v.budget);
-      const actual = Number(v.actual);
-      const variance = actual - budget;
-      const variancePct = Math.abs(budget) > 0 ? variance / Math.abs(budget) : null;
-      const favorable = isIncome(v.type) ? variance >= 0 : variance <= 0;
+      const budget = v.budget;
+      const actual = v.actual;
+      const { variance, variancePct } = exactBudgetVariance(budget, actual);
+      const favorable = isIncome(v.type) ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
       const status = budgetLineStatus(v.type, variance, variancePct, budget);
       return { accountId, name: v.name, type: v.type, budget, actual, variance, variancePct, favorable, status };
     })
-    .sort((a, b) => Math.abs(b.actual - b.budget) - Math.abs(a.actual - a.budget));
+    .sort((a, b) => cmp(abs(b.variance), abs(a.variance)));
   return {
     scenario: { id: s.id, name: s.name, fiscalYear: Number(s.fiscal_year), status: s.status },
     rows,
     totals: {
-      budget: rows.reduce((a, x) => a + x.budget, 0),
-      actual: rows.reduce((a, x) => a + x.actual, 0),
-      variance: rows.reduce((a, x) => a + x.variance, 0),
+      budget: rows.reduce((a, x) => add(a, x.budget), "0.0000"),
+      actual: rows.reduce((a, x) => add(a, x.actual), "0.0000"),
+      variance: rows.reduce((a, x) => add(a, x.variance), "0.0000"),
     },
   };
 }
