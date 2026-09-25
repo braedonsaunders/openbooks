@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { markEntryReversed, postEntry, type PostEntryInput } from "../ledger/post-entry.ts";
+import { neg } from "../money/money.ts";
 
 /**
  * Admin merge for duplicate projects (the same job under two ids — e.g. a
@@ -20,9 +22,10 @@ import { uuidArray } from "../organization/subsidiaries.ts";
  * journal lines in a controller-closed GL period (reopen the period first),
  * a merge cycle, a change-order number present on both sides (numbers are
  * unique per project in storage), or a budget/retro allocation cell key the
- * survivor already holds. Posted journal lines in open periods move with
- * everything else through the governed amend path — the same paired
- * transaction-local authority party merges use — and the preview reports
+ * survivor already holds. Posted journal lines in open periods move by
+ * reversal plus repost through the ledger API — posted history is immutable
+ * under 0380, so the duplicate-attributed legs are cancelled by an exact
+ * negated reversal and re-booked under the survivor; the preview reports
  * those counts so the admin sees the posted impact before committing.
  */
 
@@ -412,13 +415,14 @@ async function planMerge(
       `cannot move lines of ${frozenLines} non-draft document(s); void or correct them first`,
     );
   }
-  // Posted journal lines move through the governed amend path (the same
-  // paired transaction-local authority party merges use), but a
-  // controller-closed GL period still refuses: those lines cannot follow
-  // the merge while the period is closed. Checked here — with the same
-  // migration-aware lens the journal guard will see under the amend pair —
-  // so both preview and commit refuse by name instead of the guard firing
-  // a raw storage error mid-merge.
+  // Posted journal lines move by reversal plus repost (see
+  // moveJournalLinesForProjectMerge): in-place project moves on posted
+  // history are refused by the append-only journal guard, with no amend
+  // escape. A controller-closed GL period still refuses: those lines cannot
+  // follow the merge while the period is closed. Checked here — with the
+  // same migration-aware lens postEntry will see — so both preview and
+  // commit refuse by name instead of the guard firing a raw storage error
+  // mid-merge.
   const closedLines = (await runner.execute<{ n: string }>(sql`
     select count(*)::text as n
       from journal_lines jl
@@ -609,6 +613,165 @@ export async function previewProjectMerge(
 }
 
 /**
+ * Move journal-line project attribution to the survivor. Draft lines move in
+ * place (the guard admits draft edits). Posted and reversed lines are
+ * immutable — the append-only guard admits reconciliation stamps and party
+ * moves only, with no project escape — so each affected entry moves by
+ * reversal plus repost through the ledger API: an exact negated reversal
+ * keeps the duplicate attribution (cancelling the original), a corrected
+ * copy re-books the legs under the survivor, a posted original is marked
+ * reversed, and document, application, and reconciliation-match links follow
+ * the corrected lines by line number (amounts never change, so the links
+ * still describe the same economic event). Closed-period pairs never reach
+ * here: planMerge refuses them by name, and postEntry re-checks the open
+ * period before anything posts.
+ *
+ * Returns the count of lines now attributed to the survivor (draft updates
+ * plus corrected copies), matching the preview's per-table row counts.
+ */
+async function moveJournalLinesForProjectMerge(
+  tx: SqlExecutor,
+  orgId: string,
+  survivorId: string,
+  duplicateId: string,
+  actorId: string | null,
+): Promise<number> {
+  const draftMoved = (await tx.execute<{ id: string }>(sql`
+    update journal_lines jl set project_id = ${survivorId}
+     where jl.org_id = ${orgId} and jl.project_id = ${duplicateId}
+       and exists (
+         select 1 from journal_entries e
+          where e.id = jl.entry_id and e.org_id = jl.org_id and e.status = 'draft'
+       )
+    returning jl.id`)).rows.length;
+
+  const entries = (await tx.execute<{
+    id: string;
+    status: string;
+    book_id: string;
+    subsidiary_id: string;
+    entry_number: string;
+    posting_date: string;
+    period_id: string;
+    memo: string | null;
+    origin: string;
+  }>(sql`
+    select distinct e.id, e.status, e.book_id, e.subsidiary_id, e.entry_number,
+           e.posting_date::text as posting_date, e.period_id, e.memo, e.origin
+      from journal_entries e
+      join journal_lines jl on jl.entry_id = e.id and jl.org_id = e.org_id
+     where e.org_id = ${orgId} and jl.project_id = ${duplicateId}
+       and e.status in ('posted', 'reversed')
+     order by e.id`)).rows;
+
+  const asText = (value: unknown): string | null =>
+    value == null ? null : String(value);
+  let moved = draftMoved;
+  for (const entry of entries) {
+    const rows = (await tx.execute<Record<string, unknown>>(sql`
+      select id, line_number, account_id, subsidiary_id, amount::text, currency,
+             txn_amount::text, fx_rate::text, memo, party_id, department_id,
+             project_id, location_id, class_id, equipment_unit_id,
+             payment_card_id, tax_code_id, quantity::text, unit, due_date::text,
+             is_open_item, extra_dims, custom, contributor_kind, contributor_ref
+        from journal_lines
+       where entry_id = ${entry.id} and org_id = ${orgId}
+       order by line_number`)).rows;
+    if (rows.length === 0) continue;
+    const legs = rows.map((row) => ({
+      accountId: String(row.account_id),
+      subsidiaryId: String(row.subsidiary_id),
+      amount: String(row.amount),
+      currency: String(row.currency),
+      txnAmount: String(row.txn_amount),
+      fxRate: String(row.fx_rate),
+      memo: asText(row.memo),
+      partyId: asText(row.party_id),
+      departmentId: asText(row.department_id),
+      projectId: asText(row.project_id),
+      locationId: asText(row.location_id),
+      classId: asText(row.class_id),
+      equipmentUnitId: asText(row.equipment_unit_id),
+      extraDims: (row.extra_dims ?? {}) as Record<string, unknown>,
+      paymentCardId: asText(row.payment_card_id),
+      taxCodeId: asText(row.tax_code_id),
+      quantity: asText(row.quantity),
+      unit: asText(row.unit),
+      dueDate: row.due_date == null ? null : String(row.due_date).slice(0, 10),
+      isOpenItem: row.is_open_item === true,
+      custom: (row.custom ?? {}) as Record<string, unknown>,
+      contributorKind: asText(row.contributor_kind),
+      contributorRef: asText(row.contributor_ref),
+      lineNumber: Number(row.line_number),
+    }));
+    const posting: Omit<PostEntryInput, "entryNumber" | "lines"> = {
+      orgId,
+      bookId: entry.book_id,
+      subsidiaryId: entry.subsidiary_id,
+      postingDate: String(entry.posting_date).slice(0, 10),
+      periodId: entry.period_id,
+      memo: entry.memo,
+      origin: entry.origin,
+      reversesEntryId: entry.id,
+      currency: null,
+      closeModules: ["gl"],
+      allowImportedLocks: true,
+      actorId,
+    };
+    await postEntry(tx, {
+      ...posting,
+      entryNumber: `${entry.entry_number}-R`,
+      lines: legs.map((leg) => ({
+        ...leg,
+        amount: neg(leg.amount),
+        txnAmount: neg(leg.txnAmount),
+        quantity: leg.quantity == null ? null : neg(leg.quantity),
+      })),
+    });
+    const replacement = await postEntry(tx, {
+      ...posting,
+      entryNumber: `${entry.entry_number}-C`,
+      lines: legs.map((leg) => ({
+        ...leg,
+        projectId: leg.projectId === duplicateId ? survivorId : leg.projectId,
+      })),
+    });
+    if (entry.status === "posted") {
+      await markEntryReversed(tx, { orgId, entryId: entry.id, actorId });
+    } else if (entry.status !== "reversed") {
+      throw new ProjectMergeError(
+        `cannot move project attribution on ${entry.status} journal entry ${entry.id}; only draft, posted, and reversed entries move`,
+      );
+    }
+    const oldByNumber = new Map(
+      rows.map((row) => [Number(row.line_number), String(row.id)]),
+    );
+    await tx.execute(sql`
+      update documents set posted_entry_id = ${replacement.entryId}
+       where org_id = ${orgId} and posted_entry_id = ${entry.id}`);
+    for (const line of replacement.lines) {
+      const oldId = oldByNumber.get(line.lineNumber);
+      if (!oldId) {
+        throw new ProjectMergeError(
+          `project merge lost the line-number map for ${entry.entry_number}; refusing a half-moved entry`,
+        );
+      }
+      await tx.execute(sql`
+        update applications set from_line_id = ${line.id}
+         where org_id = ${orgId} and from_line_id = ${oldId}`);
+      await tx.execute(sql`
+        update applications set to_line_id = ${line.id}
+         where org_id = ${orgId} and to_line_id = ${oldId}`);
+      await tx.execute(sql`
+        update reconciliation_matches set journal_line_id = ${line.id}
+         where org_id = ${orgId} and journal_line_id = ${oldId}`);
+    }
+    moved += replacement.lines.length;
+  }
+  return moved;
+}
+
+/**
  * Merge `duplicateId` into `survivorId` in one transaction. Every typed
  * reference, child project, activity link, and project custom value moves;
  * the duplicate is deactivated with a `merged_into` pointer; one audit row
@@ -636,13 +799,15 @@ export async function mergeProjects(
       if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
         throw new ProjectMergeError("projects feature is disabled");
       }
-      // Re-pointing posted journal lines runs through the governed amend
-      // path, the same paired transaction-local authority party merges and
-      // historical replay use: the journal guard admits posted-line project
-      // moves, while controller-closed periods still block (those pairs
-      // refuse by name in planMerge before anything moves). Either setting
-      // alone is deliberately not a bypass. Previous values are restored on
-      // success; after a failure only rollback is legal, and the settings
+      // Re-pointing non-journal references runs under the paired
+      // transaction-local amend authority historical replay uses: the
+      // document guards still admit governed moves, while controller-closed
+      // periods still block (those pairs refuse by name in planMerge before
+      // anything moves). Either setting alone is deliberately not a bypass.
+      // Journal lines are excluded: posted history moves only by reversal
+      // plus repost (moveJournalLinesForProjectMerge), because the
+      // append-only journal guard admits no project escape. Previous values
+      // are restored on success; after a failure only rollback is legal, and the settings
       // last only until the transaction ends either way.
       const prior = (await tx.execute<{ name: string; value: string }>(sql`
         select 'openbooks.amend' as name, coalesce(current_setting('openbooks.amend', true), 'off') as value
@@ -675,12 +840,23 @@ export async function mergeProjects(
       }
       const movedCounts: Record<string, number> = {};
       for (const [table, column] of PROJECT_REFS) {
+        // Journal lines move by reversal plus repost below: the append-only
+        // guard refuses in-place project moves on posted history.
+        if (table === "journal_lines") continue;
         const updated = (await tx.execute<{ id: string }>(sql`
           update ${sql.identifier(table)} set ${sql.identifier(column)} = ${opts.survivorId}
            where org_id = ${orgId} and ${sql.identifier(column)} = ${opts.duplicateId}
           returning id`)).rows;
         if (updated.length > 0) movedCounts[table] = updated.length;
       }
+      const journalLinesMoved = await moveJournalLinesForProjectMerge(
+        tx,
+        orgId,
+        opts.survivorId,
+        opts.duplicateId,
+        opts.actorId,
+      );
+      if (journalLinesMoved > 0) movedCounts["journal_lines"] = journalLinesMoved;
       // Children follow the survivor; a survivor parented under the duplicate
       // keeps its hierarchy level instead of pointing at a merged row.
       await tx.execute(sql`

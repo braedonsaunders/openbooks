@@ -786,7 +786,10 @@ export async function restoreOrgBackup(args: {
         await client.query("set local statement_timeout = 0");
         await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", ["openbooks:organization-restore"]);
         await client.query("select set_config('app.current_org', '', true), set_config('app.bypass_rls', 'on', true)");
-        await client.query("select set_config('openbooks.migration', 'on', true), set_config('openbooks.amend', 'on', true)");
+        // The amend flag is deliberately not set: every kernel guard that
+        // reads it is a trigger, and all USER triggers are disabled below,
+        // so it would be inert. RLS reads no amend flag either.
+        await client.query("select set_config('openbooks.migration', 'on', true)");
         await client.query("set constraints all deferred");
         const existing = await client.query<{ count: string }>("select count(*)::text as count from orgs");
         if (existing.rows[0]?.count !== "0" && !args.testOnlyAllowNonemptyTarget) {
