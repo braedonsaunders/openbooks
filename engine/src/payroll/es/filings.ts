@@ -2,10 +2,11 @@
  * The ES pack's filing declaration: IRPF retentions settle with the AEAT,
  * Seguridad Social with the TGSS — different agencies, different channels.
  *
- * - Modelo 190 (annual resumen, AEAT): one perceptor row per employee and
- *   province off committed stubs, each rendering the certificado de
- *   retenciones e ingresos a cuenta the employer must hand the employee
- *   (RIRPF art. 108.3). Clave A, no subclave — ./modelo-190.ts.
+ * - Modelo 190 (annual resumen, AEAT): one perceptor row per employee off
+ *   committed stubs, filed under the perceptor's domicile province
+ *   (es_domicilio declaration, two-digit code), each rendering the
+ *   certificado de retenciones e ingresos a cuenta the employer must hand
+ *   the employee (RIRPF art. 108.3). Clave A, no subclave — ./modelo-190.ts.
  * - Modelo 111 trimestral (AEAT): one aggregate row per quarter off
  *   committed stubs (casillas 01/02/03). The US 941 is the shape copied:
  *   population + slip + amendment real, download refused by name. For
@@ -55,7 +56,9 @@ const ES_ROW_UUID_RE =
 
 /**
  * The 190 row grammar, as the inverse of es190Population's
- * `employee:province` construction. Owned HERE, beside the declaration — the
+ * `employee:domicile-code` construction — the suffix is the AEAT two-digit
+ * domicile-province code (positions 76–77), never the two-letter work
+ * community on the stub. Owned HERE, beside the declaration — the
  * subsidiary-scope guard parses through the declaration, never its own copy
  * of this shape.
  */
@@ -63,7 +66,7 @@ export function parseEs190RowId(rowId: string): PayrollFilingRowScope | null {
   const parts = rowId.split(":");
   const employee = parts[0] ?? "";
   const province = parts[1] ?? "";
-  if (parts.length !== 2 || !ES_ROW_UUID_RE.test(employee) || !/^[A-Z]{2}$/.test(province)) {
+  if (parts.length !== 2 || !ES_ROW_UUID_RE.test(employee) || !/^\d{2}$/.test(province)) {
     return null;
   }
   return { employees: [employee], accounts: [] };

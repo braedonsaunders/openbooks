@@ -10,6 +10,7 @@
 import { empFact, registerEmployeeFacts, resolveEmployeeFact } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
+import { ES_PROVINCIA_CODES } from "./provincias.ts";
 
 // Required employee facts. The compute path reads eighteen `emp[...]`
   // keys; the four blocking ones (situación, grupo, año, contrato temporal)
@@ -295,6 +296,21 @@ import { PayrollPackError } from "../payroll-error.ts";
           "Hogar-only input: the TGSS-assigned tarifa rate (percent) for the household activity, "
           + "required when es_regimen is hogar (named refusal when missing), ignored otherwise.",
       },
+    },
+    {
+      key: "es_provincia_domicilio",
+      kind: "choice",
+      choices: ES_PROVINCIA_CODES,
+      label: "Provincia del domicilio del perceptor (código de dos dígitos)",
+      refusalReason:
+        "Modelo 190 type-2 positions 76–77 carry the perceptor's domicile province — the work "
+        + "community snapshotted on the pay stub is employment, not domicile, so the 190 refuses "
+        + "until the domicile is declared and never substitutes the stub province.",
+      // Optional at WITHHOLDING time: the IRPF rate never reads domicile, so
+      // an undeclared domicile must not block calculation — only the Modelo
+      // 190 population refuses (./yearend.ts names the employee and the remedy).
+      required: false,
+      producer: { kind: "certificate", certificate: "es_domicilio", field: "provincia_domicilio" },
     },
 ];
 

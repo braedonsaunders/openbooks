@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { payrollCertificate, resolveCertificate } from "../certificates.ts";
 import { assertPayrollCountryKnown } from "../country.ts";
+import { resolveEmployeeFact } from "../employee-facts.ts";
 import { PayrollError } from "../error.ts";
 import { assertPayrollFilingAccountKnown } from "../filing.ts";
 import type {
@@ -8,6 +10,9 @@ import type {
   PayrollFilingData,
   PayrollFilingSlipData,
 } from "../filing-registry.ts";
+import { storedTaxCertificates } from "../run-calculation-support.ts";
+import "./employee-facts.ts";
+import { esProvinciaName } from "./provincias.ts";
 import { ES_TAX_YEARS } from "./rates.ts";
 
 /**
@@ -61,21 +66,27 @@ async function assertEsFilingYear(orgId: string, taxYear: number, filing: string
 export interface Es190Slip {
   employeePartyId: string;
   employeeName: string;
+  /** The AEAT two-digit domicile-province code filed at type-2 positions 76–77. */
   province: string;
   percepcionIntegra: string;
   retencionesPracticadas: string;
 }
 
 /**
- * One Modelo 190 perceptor row per (employee, province): the year's committed
- * taxable earnings as percepción íntegra and the year's committed IRPF lines
- * as retenciones practicadas — clave A, no subclave (./modelo-190.ts).
+ * One Modelo 190 perceptor row per employee: the year's committed taxable
+ * earnings as percepción íntegra and the year's committed IRPF lines as
+ * retenciones practicadas — clave A, no subclave (./modelo-190.ts) — filed
+ * under the perceptor's DOMICILE province (Orden EHA/3127/2009, type-2
+ * positions 76–77), resolved from the employee's `es_domicilio` declaration
+ * through the declared `es_provincia_domicilio` fact. The work community
+ * snapshotted on the pay stub is employment, not domicile, so it never
+ * reaches the 190: an employee with no domicile on file refuses by name
+ * instead of filing under the wrong code.
  */
 export async function es190Slips(orgId: string, taxYear: number): Promise<Es190Slip[]> {
   await assertEsFilingYear(orgId, taxYear, "the Modelo 190");
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
-           s.province as province,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
@@ -89,8 +100,8 @@ export async function es190Slips(orgId: string, taxYear: number): Promise<Es190S
        and r.run_status = 'committed'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
-     group by s.employee_party_id, p.display_name, s.province
-     order by p.display_name, s.province
+     group by s.employee_party_id, p.display_name
+     order by p.display_name
   `));
   if (rows.rows.length === 0) {
     throw new PayrollError(
@@ -98,13 +109,38 @@ export async function es190Slips(orgId: string, taxYear: number): Promise<Es190S
       + "actually paid and withheld, so calculate and commit the year's pay runs first",
     );
   }
-  return rows.rows.map((row) => ({
-    employeePartyId: String(row.employee_party_id),
-    employeeName: String(row.display_name),
-    province: String(row.province ?? ""),
-    percepcionIntegra: num(row.percepcion),
-    retencionesPracticadas: num(row.retencion),
-  }));
+  const domicilio = payrollCertificate("ES", "es_domicilio");
+  const slips: Es190Slip[] = [];
+  for (const row of rows.rows) {
+    const employeePartyId = String(row.employee_party_id);
+    const employeeName = String(row.display_name);
+    const stored = await storedTaxCertificates(db, orgId, employeePartyId, "ES");
+    const resolved = resolveCertificate({
+      certificate: domicilio,
+      stored,
+      asOf: `${taxYear}-12-31`,
+    });
+    const province = resolveEmployeeFact(
+      "ES", "es_provincia_domicilio", resolved.answers.provincia_domicilio,
+    );
+    if (province == null) {
+      throw new PayrollError(
+        `the ES payroll pack cannot populate the ${taxYear} Modelo 190 for ${employeeName}: no `
+        + "domicile province is on file — the 190 files each perceptor under their domicile "
+        + "province (Orden EHA/3127/2009, type-2 positions 76–77), never under the work "
+        + "community on the pay stub. Record the employee's Declaración de domicilio "
+        + "(es_domicilio) before filing.",
+      );
+    }
+    slips.push({
+      employeePartyId,
+      employeeName,
+      province,
+      percepcionIntegra: num(row.percepcion),
+      retencionesPracticadas: num(row.retencion),
+    });
+  }
+  return slips;
 }
 
 export interface Es111Quarter {
@@ -457,7 +493,9 @@ export async function es190Slip(
   const slips = await es190Slips(orgId, taxYear);
   const slip = slips.find((s) => `${s.employeePartyId}:${s.province}` === rowId);
   if (!slip) {
-    throw new PayrollError(`no ${taxYear} Modelo 190 row matches the requested employee/province`);
+    throw new PayrollError(
+      `no ${taxYear} Modelo 190 row matches the requested employee/domicile province`,
+    );
   }
   return {
     formCode: "ES_CERT_RET",
@@ -469,7 +507,10 @@ export async function es190Slip(
         label: "Clave de percepción",
         value: "A — Empleados por cuenta ajena en general (sin subclave)",
       },
-      { label: "Código de provincia", value: slip.province || "—" },
+      {
+        label: "Código de provincia (domicilio del perceptor)",
+        value: `${slip.province} — ${esProvinciaName(slip.province) ?? "desconocida"}`,
+      },
     ],
     boxes: [
       {

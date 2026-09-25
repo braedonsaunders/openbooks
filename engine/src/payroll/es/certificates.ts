@@ -19,6 +19,7 @@ import type {
   PayrollCertificate,
   PayrollPackCertificates,
 } from "../certificates.ts";
+import { ES_PROVINCIAS } from "./provincias.ts";
 
 const MODELO_145: PayrollCertificate = {
   key: "es_145",
@@ -355,7 +356,49 @@ const ES_RESIDENCIA_FISCAL: PayrollCertificate = {
   ],
 };
 
+/**
+ * The perceptor's domicile province for the Modelo 190 annual summary.
+ *
+ * Not a numbered agency form: no single AEAT form carries this one fact to
+ * the payer, so — like ES_ZONA_IRPF and ES_RETRIBUCION_ANUAL — the form
+ * names the declaration itself instead of inventing a code. The closed
+ * choice list is the AEAT two-digit province table (./provincias.ts): the
+ * 190's positions 76–77 take a code from that table, so free text that
+ * cannot resolve to one refuses at the certificate write path, never at
+ * filing time.
+ */
+const ES_DOMICILIO: PayrollCertificate = {
+  key: "es_domicilio",
+  form: "Declaración de domicilio a efectos del Modelo 190",
+  label: "Perceptor domicile province for Modelo 190",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "BOE Orden EHA/3127/2009, Modelo 190 registro tipo 2, posiciones 76–77 (provincia del "
+    + "domicilio del perceptor); AEAT diseños lógicos Modelo 190",
+  summary:
+    "The employee declares the province of their domicile (vivienda habitual) so the payer "
+    + "reports the perceptor row under the legally defined domicile code. The work community "
+    + "on the pay stub is a different fact and never substitutes for it.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "provincia_domicilio",
+      label: "Provincia del domicilio del perceptor",
+      kind: "choice",
+      choices: ES_PROVINCIAS.map((provincia) => ({
+        value: provincia.code,
+        label: `${provincia.code} — ${provincia.name}`,
+      })),
+      required: true,
+      help: "The two-digit province code of the employee's domicile, as filed on the Modelo 190 "
+        + "(posiciones 76–77). Domicile, not workplace: an employee living in Madrid and working "
+        + "in Catalonia files 28.",
+    },
+  ],
+};
+
 export const ES_CERTIFICATES: PayrollPackCertificates = {
   country: "ES",
-  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL, ES_CONTRATO, ES_RESIDENCIA_FISCAL],
+  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL, ES_CONTRATO, ES_RESIDENCIA_FISCAL, ES_DOMICILIO],
 };
