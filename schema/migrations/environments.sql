@@ -133,15 +133,23 @@ comment on function period_module_blocks_write(
   'Blocks soft-closed and closed-period writes except source-owned imported locks or a database-authenticated connector replay; never changes the lock itself.';
 
 -- ---------------------------------------------------------------------------
--- Row-level security. Tenant isolation is enforced at the database, keyed on two
--- GUCs the connection layer sets from AsyncLocalStorage (see engine/src/db.ts):
---   app.current_org  — the tenant a request is scoped to
---   app.bypass_rls   — 'on' for trusted org-spanning code (clone engine, seeds)
+-- Row-level security. Tenant isolation is enforced at the database, keyed on the
+-- tenant GUC the connection layer sets from AsyncLocalStorage (see
+-- engine/src/platform/db.ts) plus the privileged-bypass predicate:
+--   app.current_org              — the tenant a request is scoped to
+--   app.bypass_rls               — 'on' for trusted org-spanning code (clone
+--                                  engine, seeds), honored ONLY through
+--                                  public.app_bypass_rls_active(), which also
+--                                  requires a privileged login (BYPASSRLS /
+--                                  superuser attribute, or the
+--                                  migration/installer owner). A raw SET on
+--                                  the runtime role grants nothing.
 --
 -- DENY BY DEFAULT: with neither GUC set, business tables return zero rows. Every
 -- authenticated web request sets app.current_org (currentUser → setRequestOrg),
--- so it sees only its own tenant; trusted server code runs with bypass on. A
--- missing scope fails closed (no rows), never open (cross-tenant leak).
+-- so it sees only its own tenant; trusted server code runs with bypass on
+-- from a privileged login. A missing scope fails closed (no rows), never
+-- open (cross-tenant leak).
 --
 -- The policy is created for every BASE TABLE carrying an `org_id` column, so it
 -- auto-covers tables added later — re-run this file after adding tables.
@@ -155,9 +163,13 @@ declare
   rls_enabled boolean;
   rls_forced boolean;
   policy_version text;
+  -- Bypass arm calls the role-gated predicate (0399), never the raw GUC: a SET
+  -- on the runtime role must not widen this policy. The
+  -- openbooks:org_isolation:v1 comment is kept so the drift check stays
+  -- quiet; v1 now MEANS the predicate form.
   body text := $pol$
     (
-      current_setting('app.bypass_rls', true) = 'on'
+      public.app_bypass_rls_active()
       or org_id::text = current_setting('app.current_org', true)
     )
   $pol$;
@@ -229,12 +241,12 @@ begin
     drop policy if exists sandbox_isolation on sandboxes;
     create policy sandbox_isolation on sandboxes
       using (
-        current_setting('app.bypass_rls', true) = 'on'
+        public.app_bypass_rls_active()
         or org_id::text = current_setting('app.current_org', true)
         or production_org_id::text = current_setting('app.current_org', true)
       )
       with check (
-        current_setting('app.bypass_rls', true) = 'on'
+        public.app_bypass_rls_active()
         or (
           production_org_id::text = current_setting('app.current_org', true)
           and exists (

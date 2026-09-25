@@ -3078,7 +3078,15 @@ async function transferTestOwnershipToRuntimeRole(
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
       where n.nspname in ('public', 'openbooks_query')
-        and pg_get_userbyid(p.proowner) <> $1`,
+        and pg_get_userbyid(p.proowner) <> $1
+        -- RLS-GUC-ESCALATION (0399): public.app_bypass_rls_active() recognizes
+        -- the migration/installer owner BY OWNERSHIP (pg_has_role against its
+        -- proowner), so transferring it to the runtime role would make the
+        -- runtime login satisfy the predicate and silently re-open every
+        -- tenant policy. It stays with the migration executor; the runtime
+        -- role still executes it through the retained PUBLIC grant, and the
+        -- ownership verifier ignores SECURITY INVOKER functions.
+        and not (n.nspname = 'public' and p.proname = 'app_bypass_rls_active')`,
     [config.roleName],
   );
   for (const { stmt } of stmts.rows) {

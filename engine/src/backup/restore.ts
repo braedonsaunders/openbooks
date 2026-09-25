@@ -786,6 +786,23 @@ export async function restoreOrgBackup(args: {
         await client.query("set local statement_timeout = 0");
         await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", ["openbooks:organization-restore"]);
         await client.query("select set_config('app.current_org', '', true), set_config('app.bypass_rls', 'on', true)");
+        // The bypass GUC alone grants nothing since 0399: RLS policies honor
+        // it only through public.app_bypass_rls_active(), which additionally
+        // requires a privileged login. This connection is posture-checked
+        // above to be the schema owner or a superuser, both of which satisfy
+        // the predicate — prove it engaged before touching rows, so a
+        // wrong-grade connection (e.g. the runtime login) is refused by name
+        // here instead of dying mid-restore on row denials.
+        const bypassEngagement = await client.query<{ active: boolean }>(
+          "select public.app_bypass_rls_active() as active",
+        );
+        if (bypassEngagement.rows[0]?.active !== true) {
+          const who = (await client.query<{ login: string }>("select current_user as login")).rows[0]?.login;
+          throw new Error(
+            `restore bypass did not engage for login ${who ?? "unknown"}; ` +
+            "connect as the schema owner or a BYPASSRLS login (OPENBOOKS_RESTORE_DB_URL must name an owner-grade login)",
+          );
+        }
         // The amend flag is deliberately not set: every kernel guard that
         // reads it is a trigger, and all USER triggers are disabled below,
         // so it would be inert. RLS reads no amend flag either.

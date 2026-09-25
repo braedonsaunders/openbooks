@@ -24,6 +24,14 @@ import { createScratchOrg, createScratchUser, dropScratchOrg, dropScratchOrgRepo
 
 const ENABLED = !!process.env.OPENBOOKS_DB_URL && !!process.env.OPENBOOKS_DATA_KEY && process.env.OPENBOOKS_RESTORE_DRILL === "1";
 
+// Restore replays rows across orgs, so since 0399 its connection must satisfy
+// public.app_bypass_rls_active(): an owner-grade login, never the runtime
+// role. The CI drill connects OPENBOOKS_DB_URL as the schema owner; local
+// test databases transfer table ownership to the runtime login, so there the
+// privileged test-admin login is the owner-grade connection.
+const RESTORE_CONNECTION_STRING =
+  process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL!;
+
 test("offline drill exports, removes, restores, and revalidates an organization", { skip: !ENABLED, timeout: 300_000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "openbooks-restore-drill-"));
   const archive = join(root, "org.json.gz");
@@ -134,7 +142,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
         archivePath: wrongDataKeyArchive,
         expectedSha256: wrongDataKeySha256,
         expectedOrgId: source.orgId,
-        connectionString: process.env.OPENBOOKS_DB_URL!,
+        connectionString: RESTORE_CONNECTION_STRING,
         testOnlyAllowNonemptyTarget: true,
       }),
       /backup data-key verification failed/,
@@ -145,7 +153,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
         archivePath: wrongSchemaArchive,
         expectedSha256: wrongSchemaSha256,
         expectedOrgId: source.orgId,
-        connectionString: process.env.OPENBOOKS_DB_URL!,
+        connectionString: RESTORE_CONNECTION_STRING,
         testOnlyAllowNonemptyTarget: true,
       }),
       /schema fingerprint .* does not match target/,
@@ -155,7 +163,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
         archivePath: archive,
         expectedSha256: sha256,
         expectedOrgId: source.orgId,
-        connectionString: process.env.OPENBOOKS_DB_URL!,
+        connectionString: RESTORE_CONNECTION_STRING,
       }),
       /restore target is not empty/,
     );
@@ -164,7 +172,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
       archivePath: archive,
       expectedSha256: sha256,
       expectedOrgId: source.orgId,
-      connectionString: process.env.OPENBOOKS_DB_URL!,
+      connectionString: RESTORE_CONNECTION_STRING,
       testOnlyAllowNonemptyTarget: true,
     });
     assert.equal(report.rowsRestored, exported.totalRows);
@@ -230,7 +238,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
       archivePath: archive,
       expectedSha256: sha256,
       expectedOrgId: source.orgId,
-      connectionString: process.env.OPENBOOKS_DB_URL!,
+      connectionString: RESTORE_CONNECTION_STRING,
       testOnlyAllowNonemptyTarget: true,
       resetMfaFactors: true,
     });
@@ -423,7 +431,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
       archivePath: archive,
       expectedSha256: hash.digest("hex"),
       expectedOrgId: source.orgId,
-      connectionString: process.env.OPENBOOKS_DB_URL!,
+      connectionString: RESTORE_CONNECTION_STRING,
       // The bootstrap's own org row always remains, so the strict
       // empty-target gate cannot pass in a bootstrapped database.
       testOnlyAllowNonemptyTarget: true,
