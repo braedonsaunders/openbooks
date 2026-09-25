@@ -716,7 +716,6 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
         included.push({ module: "documents", status: "incomplete", detail });
       }
     }
-    const exportIncomplete = included.some((s) => s.status === "incomplete");
     await gather("payroll", async () => {
       // The persisted stub records (snapshots at calculate time — the
       // payroll read seam), never live re-resolution. Stubs paginate by
@@ -1211,10 +1210,15 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     // the winner. The freshly stored zip is then unreferenced cabinet bytes
     // under the export's folder rather than anyone's download — refused
     // rather than orphaned into the wrong hands.
-    // Completeness: an export with omitted document bytes is marked
+    // Completeness is judged on the FINAL module ledger, after every
+    // module gathered: an export with omitted bytes ('incomplete') or a
+    // module that failed inside its savepoint ('failed') is marked
     // 'incomplete', never 'ready' — the scope manifest and export.json name
-    // every omission, and the UI/API show the incomplete status distinctly.
-    const terminalStatus = exportIncomplete ? "incomplete" : "ready";
+    // every omission and failure, and the UI/API show the incomplete
+    // status distinctly. (Judging earlier missed both failed modules and
+    // omissions recorded by later gathers.)
+    const exportComplete = included.every((s) => s.status === "included");
+    const terminalStatus = exportComplete ? "ready" : "incomplete";
     const marked = (await db.execute<{ n: string }>(sql`
       update hrm_data_subject_exports
          set status = ${terminalStatus}, file_id = ${fileId}, scope = ${JSON.stringify(included)}::jsonb,
