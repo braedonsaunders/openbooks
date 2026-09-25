@@ -272,13 +272,10 @@ test("a foreign employee's bonus still enters SDL while CPF stays inapplicable",
   assert.deepEqual(pushed.map(({ systemKey }) => systemKey), ["sdl"]);
 });
 
-test("computeStatutory refuses without the certificate, and refuses foreign/PR/aged statuses", async () => {
+test("computeStatutory refuses without the certificate and prices published PR and senior tables", async () => {
   const { ctx: noCert } = stubContext({ certificateFor: () => null });
   await assert.rejects(() => SG_PAYROLL_PACK.computeStatutory(noCert), /without the sg_cpf_status certificate/);
-  for (const [status, band, pattern] of [
-    ["spr_1st_year", "le55", /graduated rates/],
-    ["citizen", "b60_65", /age band/],
-  ] as const) {
+  for (const [status, band] of [["spr_1st_year", "le55"], ["citizen", "b60_65"]] as const) {
     const { ctx } = stubContext({
       certificateFor: () => ({
         certificate: SG_PAYROLL_PACK.certificates().certificates[0]!,
@@ -288,7 +285,7 @@ test("computeStatutory refuses without the certificate, and refuses foreign/PR/a
         missing: [],
       }),
     });
-    await assert.rejects(() => SG_PAYROLL_PACK.computeStatutory(ctx), pattern, `${status}/${band}`);
+    await assert.doesNotReject(() => SG_PAYROLL_PACK.computeStatutory(ctx), `${status}/${band}`);
   }
 });
 
