@@ -207,12 +207,18 @@ export function ViewStudio({
       }))
     )
       return
-    const res = await fetch(`/api/views/${view.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      router.push('/knowledge/views')
-      router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? tc('feedback.deleteFailed'))
+    try {
+      const res = await fetch(`/api/views/${view.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        router.push('/knowledge/views')
+        router.refresh()
+      } else {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        const message = typeof body?.error === 'string' && body.error ? body.error : tc('feedback.deleteFailed')
+        toast.error(message)
+      }
+    } catch {
+      toast.error(tc('feedback.deleteFailed'))
     }
   }
 
