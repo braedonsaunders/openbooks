@@ -75,6 +75,8 @@ export interface UsResidentWithholdingFacts {
   outOfRegionWages: string;
   /** Tax actually computed on those wages by work-region withholding. */
   workRegionTaxes: readonly { region: string; amount: string }[];
+  /** Current-period wages sourced to each out-of-region work state. */
+  workRegionWages: readonly { region: string; amount: string }[];
 }
 
 /** Jurisdiction-declared annual nonresident exception evaluated on shared facts. */
@@ -261,6 +263,15 @@ export function requireUsResidentWithholdingFacts(
       );
     }
   }
+  for (const item of facts.workRegionWages) {
+    try {
+      U(item.amount);
+    } catch {
+      throw new PayrollError(
+        `${source} received invalid ${item.region} work-region wages; use verified current-period wage allocations; refused by name`,
+      );
+    }
+  }
   if (new Set(facts.workRegionTaxes.map((item) => item.region)).size !== facts.workRegionTaxes.length) {
     throw new PayrollError(
       `${source} received duplicate work-region tax facts; provide one computed amount per region for this period; refused by name`,
@@ -371,6 +382,10 @@ export function resolveUsResidentWithholdingFacts(
   return {
     outOfRegionWages,
     workRegionTaxes: sourceRegions.map((region) => ({ region, amount: taxByRegion.get(region)! })),
+    workRegionWages: sourceRegions.map((region) => ({
+      region,
+      amount: fromUnits(roundDiv(wagesUnits * shares.get(region)!, 1_000_000n)),
+    })),
   };
 }
 
@@ -519,6 +534,10 @@ export interface UsStateWithholdingResult {
   year: number;
   /** State income tax withheld this period, including any extra amount. */
   tax: string;
+  /** Tax from the statutory method before any requested extra amount. */
+  statutoryTax?: string;
+  /** Employee-elected extra, never reduced by a resident credit. */
+  additionalWithholding?: string;
   /** The supplemental-wage share of `tax`, when the state has a separate rule. */
   taxSupplemental: string;
   /** Every intermediate line, for the explainability trace. */

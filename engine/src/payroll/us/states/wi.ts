@@ -186,6 +186,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     ]);
     return {
       state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      statutoryTax: D(0n), additionalWithholding: D(0n),
       factors: { WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "1" },
     };
   }
@@ -193,6 +194,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   if (certificateFlag(input.certificate, "exempt")) {
     return {
       state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      statutoryTax: D(0n), additionalWithholding: D(0n),
       factors: { WI_EXEMPT: "1" },
     };
   }
@@ -236,6 +238,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "WI",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -457,13 +461,11 @@ export const WI_REGION: PayrollRegionWithholding = {
   // are subject to withholding unless an exception (reciprocity, under $1,500
   // expected, interstate carrier, military spouse) applies.
   taxesNonresidentWages: true,
-  // W-166 p. 7: "Wages paid to Wisconsin residents are subject to Wisconsin
-  // withholding, whether paid for services performed entirely in Wisconsin,
-  // partly in and partly outside Wisconsin, or entirely outside Wisconsin."
-  // A special Minnesota arrangement and a voluntary out-of-state-employer
-  // registration are exceptions this engine does not implement.
+  // W-166 p. 7: resident wages are subject to Wisconsin withholding; the
+  // special Minnesota arrangement is an eligibility waiver in the engine.
   residentWithholding: "required",
-  residentWithholdingImplemented: false,
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "waive_when_work_region_withheld", regions: ["MN"] },
   certificateKey: "us_wi_wt4",
   subRegions: [],
   subRegionConflictRule: "both",

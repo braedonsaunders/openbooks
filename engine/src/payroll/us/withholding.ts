@@ -43,8 +43,12 @@ import {
   emptyResolvedCertificate,
   type ResolvedCertificate,
 } from "../certificates.ts";
-import { add as addMoney, mulRatio, roundDiv } from "../../money/money.ts";
-import type { ResolvedWithholdingLevy } from "../withholding-resolution.ts";
+import { add as addMoney, fromUnits, mulRatio, roundDiv, toUnits } from "../../money/money.ts";
+import {
+  adjustResidentWithholding,
+  residentWaivedWages,
+  type ResolvedWithholdingLevy,
+} from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
 import { D, mulRateCents, rate6, U } from "../canada/decimal.ts";
@@ -401,6 +405,8 @@ export interface UsWithholdingResult {
   /** What the jurisdiction calls the tax, for the stub line. */
   label: string;
   tax: string;
+  statutoryTax?: string;
+  additionalWithholding?: string;
   factors: Record<string, string>;
   /** Local W-2 box 18 wages; absent when a work-locality split is unknown. */
   localTaxableWages?: string;
@@ -424,7 +430,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     return mulRatio(compensation, rate6(allocation.workShare), 1_000_000n);
   })();
   const localWageTrace = localTaxableWages === undefined ? {} : { localTaxableWages };
-  const residentWithholdingFacts = levy.basis === "resident_out_of_region"
+  const residentMethod = levy.residentWithholdingMethod ?? { kind: "full" as const };
+  const needsResidentWorkFacts = residentMethod.kind !== "full";
+  const residentWithholdingFacts = levy.basis === "resident_out_of_region" && needsResidentWorkFacts
     ? requireUsResidentWithholdingFacts(
       input.residentWithholdingFacts,
       levy.creditAgainstRegion,
@@ -432,6 +440,28 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     )
     : input.residentWithholdingFacts;
   const supplemental = input.supplemental == null ? 0n : U(input.supplemental);
+  const waiverWages = levy.basis === "resident_out_of_region" && residentWithholdingFacts
+    ? toUnits(residentWaivedWages(
+      residentWithholdingFacts.workRegionTaxes,
+      residentWithholdingFacts.workRegionWages,
+      levy.residentWithholdingMethod,
+    ))
+    : 0n;
+  const totalResidentWages = toUnits(input.wages) + supplemental;
+  const eligibleResidentWages = totalResidentWages > waiverWages
+    ? totalResidentWages - waiverWages
+    : 0n;
+  const residentWages = waiverWages === 0n || totalResidentWages === 0n
+    ? input.wages
+    : fromUnits(roundDiv(toUnits(input.wages) * eligibleResidentWages, totalResidentWages));
+  const residentSupplemental = waiverWages === 0n || totalResidentWages === 0n
+    ? fromUnits(supplemental)
+    : fromUnits(eligibleResidentWages - toUnits(residentWages));
+  const waiverOutcome = levy.basis === "resident_out_of_region"
+    && residentMethod.kind === "waive_when_work_region_withheld"
+    && waiverWages > 0n
+    ? "eligible_to_waive_covered_wages"
+    : "withheld";
   const certificate = levy.certificateKey
     ? input.certificateFor(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
     : emptyResolvedCertificate(`${levy.label} publishes no withholding certificate`);
@@ -577,7 +607,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         employerEmployeeCount: input.employerEmployeeCount,
         periodEnd: input.periodEnd,
         periodsPerYear: input.periodsPerYear,
-        wages: input.wages,
+        wages: residentWages,
         federalFilingStatus: input.federalFilingStatus,
         federalLegacyW4: input.federalLegacyW4,
         supplemental: "0",
@@ -598,7 +628,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           (total, item) => total + mulRateCents(U(item.amount), item.rate),
           0n,
         )
-        : mulRateCents(supplemental, separateFlatRate!);
+        : mulRateCents(toUnits(residentSupplemental), separateFlatRate!);
       const supplementalTax = separateFlatWholeDollar
         ? roundDiv(rawSupplementalTax, 10_000n) * 10_000n
         : rawSupplementalTax;
@@ -608,10 +638,31 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           item.rate,
         ]),
       );
+      const separateStatutoryTax = fromUnits(
+        toUnits(regular.statutoryTax ?? regular.tax) + supplementalTax,
+      );
+      if (levy.basis === "resident_out_of_region"
+        && (regular.statutoryTax == null || regular.additionalWithholding == null)) {
+        throw new UsWithholdingError(
+          `${levy.region} resident withholding must separate statutory tax and additional withholding; update ${engine.ratesModule}; refused by name`,
+        );
+      }
+      const separateAdditional = regular.additionalWithholding ?? "0.0000";
+      const separateAdjustment = levy.basis === "resident_out_of_region"
+        && levy.residentWithholdingMethod?.kind === "net_of_work_region_tax"
+        ? adjustResidentWithholding(
+          separateStatutoryTax,
+          separateAdditional,
+          residentWithholdingFacts!.workRegionTaxes,
+          levy.residentWithholdingMethod,
+        )
+        : undefined;
       return {
         code: engine.state,
         label: engine.label,
-        tax: addMoney(regular.tax, D(supplementalTax)),
+        tax: separateAdjustment?.tax ?? fromUnits(toUnits(separateStatutoryTax) + toUnits(separateAdditional)),
+        statutoryTax: separateAdjustment?.statutoryTax ?? separateStatutoryTax,
+        additionalWithholding: separateAdditional,
         ...localWageTrace,
         factors: {
           ...regular.factors,
@@ -619,6 +670,11 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           ...(separateFlatRate ? { US_SUPPLEMENTAL_RATE: separateFlatRate } : {}),
           ...categoryRateFactors,
           US_SUPPLEMENTAL_TAX: D(supplementalTax),
+          ...(levy.basis === "resident_out_of_region" ? {
+            US_RESIDENT_WITHHOLDING_OUTCOME: separateAdjustment?.outcome ?? waiverOutcome,
+            US_RESIDENT_WORK_REGION_TAX_CREDIT: separateAdjustment?.workRegionTaxCredit ?? "0.0000",
+            ...(waiverWages > 0n ? { US_RESIDENT_WAIVED_WAGES: fromUnits(waiverWages) } : {}),
+          } : {}),
         },
       };
     }
@@ -631,7 +687,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         employerEmployeeCount: input.employerEmployeeCount,
         periodEnd: input.periodEnd,
         periodsPerYear: input.periodsPerYear,
-        wages: input.wages,
+        wages: residentWages,
         federalFilingStatus: input.federalFilingStatus,
         federalLegacyW4: input.federalLegacyW4,
         supplemental: "0",
@@ -648,11 +704,13 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       });
       const exempt = combinedFlatHonorsCertificateExemption
         && certificateFlag(certificate, "exempt");
-      const supplementalTax = exempt ? 0n : mulRateCents(supplemental, combinedFlatRate);
+      const supplementalTax = exempt ? 0n : mulRateCents(toUnits(residentSupplemental), combinedFlatRate);
       return {
         code: engine.state,
         label: engine.label,
         tax: addMoney(regular.tax, D(supplementalTax)),
+        statutoryTax: fromUnits(toUnits(regular.statutoryTax ?? regular.tax) + supplementalTax),
+        additionalWithholding: regular.additionalWithholding ?? "0.0000",
         factors: {
           ...regular.factors,
           US_SUPPLEMENTAL_METHOD: "flat_supplemental",
@@ -667,12 +725,12 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       employerEmployeeCount: input.employerEmployeeCount,
       periodEnd: input.periodEnd,
       periodsPerYear: input.periodsPerYear,
-      wages: input.wages,
+      wages: residentWages,
       federalFilingStatus: input.federalFilingStatus,
       federalLegacyW4: input.federalLegacyW4,
       federalTaxExempt: input.federalTaxExempt,
       stateCertificateOnFile: certificate.onFile,
-      supplemental: input.supplemental,
+      supplemental: residentSupplemental,
       supplementalPaymentTiming: input.supplementalPaymentTiming,
       federalIncomeTax: input.federalIncomeTax,
       federalWithholdingExempt: input.federalWithholdingExempt,
@@ -686,8 +744,42 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       socialInsuranceDeducted: input.socialInsuranceDeducted,
       ytd: input.ytd,
     });
+    const residentAdjustment = levy.basis === "resident_out_of_region"
+      && residentMethod.kind === "net_of_work_region_tax"
+      ? (() => {
+        if (result.statutoryTax == null || result.additionalWithholding == null) {
+          throw new UsWithholdingError(
+            `${levy.region} resident withholding must separate statutory tax and additional withholding before applying its resident rule; update ${engine.ratesModule}; refused by name`,
+          );
+        }
+        return adjustResidentWithholding(
+          result.statutoryTax,
+          result.additionalWithholding,
+          residentWithholdingFacts!.workRegionTaxes,
+          residentMethod,
+        );
+      })()
+      : undefined;
     return {
-      code: engine.state, label: engine.label, tax: result.tax, factors: result.factors,
+      code: engine.state, label: engine.label,
+      tax: residentAdjustment?.tax ?? result.tax,
+      statutoryTax: (() => {
+        if (levy.basis === "resident_out_of_region" && (result.statutoryTax == null || result.additionalWithholding == null)) {
+          throw new UsWithholdingError(
+            `${levy.region} resident withholding must separate statutory tax and additional withholding; update ${engine.ratesModule}; refused by name`,
+          );
+        }
+        return residentAdjustment?.statutoryTax ?? result.statutoryTax;
+      })(),
+      additionalWithholding: result.additionalWithholding,
+      factors: {
+        ...result.factors,
+        ...(levy.basis === "resident_out_of_region" ? {
+          US_RESIDENT_WITHHOLDING_OUTCOME: residentAdjustment?.outcome ?? waiverOutcome,
+          US_RESIDENT_WORK_REGION_TAX_CREDIT: residentAdjustment?.workRegionTaxCredit ?? "0.0000",
+          ...(waiverWages > 0n ? { US_RESIDENT_WAIVED_WAGES: fromUnits(waiverWages) } : {}),
+        } : {}),
+      },
       ...localWageTrace,
     };
   }

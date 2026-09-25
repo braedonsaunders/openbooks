@@ -323,6 +323,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     ]);
     return {
       state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      statutoryTax: D(0n), additionalWithholding: D(0n),
       factors: { WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "1" },
     };
   }
@@ -349,6 +350,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   ) {
     return {
       state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      statutoryTax: D(0n), additionalWithholding: D(0n),
       factors: { WV_EXEMPT: "1" },
     };
   }
@@ -383,6 +385,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "WV",
     year: rates.year,
     tax: D(tax + extra),
+    statutoryTax: D(tax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -551,15 +555,17 @@ export const WV_REGION: PayrollRegionWithholding = {
   // TSD 381 (Rev. September 2025): nonresident employers with employees
   // working in West Virginia must withhold unless a published exemption applies.
   taxesNonresidentWages: true,
-  // NOT ESTABLISHED by IT-100.2A: whether a West Virginia resident's wages
-  // earned entirely outside West Virginia must be withheld on. Declared unknown.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // West Virginia withholding applies to resident wages wherever earned. The
+  // Schedule E credit depends on actual other-state tax paid and is claimed on
+  // the employee's return, not netted from employer withholding.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "full" },
   certificateKey: "us_wv_it104",
   // West Virginia publishes no local wage income tax an employer withholds.
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "West Virginia Tax Division, Form WV IT-100.2A (March 2026); Form WV IT-104 "
+    "West Virginia Code §11-21-71(a); Tax Division, Form WV IT-100.2A (March 2026); Form WV IT-104 "
     + "(Rev. 03/2023); TSD 381 (Rev. September 2025)",
 };

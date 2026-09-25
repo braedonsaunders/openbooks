@@ -243,7 +243,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   if (certificateFlag(input.certificate, "exempt")) {
     trace("VT_EXEMPT", 1n);
-    return { state: "VT", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "VT", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as VtFilingStatus;
@@ -266,6 +266,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "VT",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -374,8 +376,9 @@ export const VT_REGION: PayrollRegionWithholding = {
   label: "Vermont income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  residentWithholding: "required_net_of_credit",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_vt_w4vt",
   subRegions: [],
   subRegionConflictRule: "both",

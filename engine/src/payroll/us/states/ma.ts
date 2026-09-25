@@ -209,7 +209,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
         { key: "current_military_orders_on_file", description: "the servicemember's current Massachusetts military orders are on file" },
       ]);
       factors.MA_MILITARY_SPOUSE_EXEMPT = "1";
-      return { state: "MA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+      return { state: "MA", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
     }
   }
 
@@ -218,7 +218,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // is filled in."
   if (certificateFlag(input.certificate, "student_exempt")) {
     factors.MA_STUDENT_EXEMPT = "1";
-    return { state: "MA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "MA", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   const claimed = certificateCount(input.certificate, "total_exemptions") ?? 0;
@@ -297,6 +297,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "MA",
     year: rates.year,
     tax: D(tax + supplemental + extra),
+    statutoryTax: D(tax + supplemental),
+    additionalWithholding: D(extra),
     taxSupplemental: D(supplemental),
     factors,
   };

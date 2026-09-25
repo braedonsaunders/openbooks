@@ -111,7 +111,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   if (certificateFlag(input.certificate, "exempt")) {
     trace("SC_EXEMPT", 1n);
-    return { state: "SC", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "SC", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
@@ -138,6 +138,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "SC",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -236,11 +238,13 @@ export const SC_REGION: PayrollRegionWithholding = {
   label: "South Carolina income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "waive_when_work_region_withheld" },
   certificateKey: "us_sc_scw4",
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "SCDOR WH-1603F, 2026 SC Withholding Tax Formula; Form SC W-4 (2026); WH-105",
+    "SCDOR Revenue Ruling 22-3; WH-1603F, 2026 SC Withholding Tax Formula; "
+    + "Form SC W-4 (2026); WH-105",
 };

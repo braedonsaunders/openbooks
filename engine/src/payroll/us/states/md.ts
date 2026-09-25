@@ -464,7 +464,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       { key: "spousal_military_id_on_file", description: "a copy of the military ID card is attached" },
     ]);
     trace("MD_MILITARY_SPOUSE_EXEMPT", 1n);
-    return { state: "MD", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "MD", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   if (
@@ -472,7 +472,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     || certificateFlag(input.certificate, "reciprocal_exempt")
   ) {
     trace("MD_EXEMPT", 1n);
-    return { state: "MD", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "MD", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   // MW507 lines 6–7: a Pennsylvania resident also exempt from the LOCAL tax.
@@ -482,7 +482,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     || certificateFlag(input.certificate, "pa_other_local_exempt")
   ) {
     trace("MD_PA_LOCAL_EXEMPT", 1n);
-    return { state: "MD", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "MD", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   const schedule = mdScheduleFor(certificateChoice(input.certificate, "filing_status"));
@@ -501,7 +501,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     factors.MD_BELOW_MINIMUM = "1";
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MD", year: rates.year, tax: D(extra), taxSupplemental: D(0n),
+      state: "MD", year: rates.year, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra), taxSupplemental: D(0n),
       factors: { ...factors, MD_WITHHELD: D(extra) },
     };
   }
@@ -509,7 +509,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     factors.MD_BELOW_MINIMUM = "1";
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MD", year: rates.year, tax: D(extra), taxSupplemental: D(0n),
+      state: "MD", year: rates.year, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra), taxSupplemental: D(0n),
       factors: { ...factors, MD_WITHHELD: D(extra) },
     };
   }
@@ -572,6 +572,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "MD",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -910,12 +912,12 @@ export const MD_REGION: PayrollRegionWithholding = {
   // Guide p. 4: an employee includes a nonresident who performs any
   // service in Maryland for wages, unless a reciprocal MW507 is on file.
   taxesNonresidentWages: true,
-  // Guide p. 4: "A resident of Maryland who performs any service outside
-  // this state for wages" is an employee. Residents working in Delaware
-  // or another nonreciprocal state use a special credit table (Guide
-  // pp. 10–12) this engine does not compute.
+  // Guide pp. 4, 10–12: residents' out-of-state wages are subject to
+  // Maryland withholding, with work-state withholding credited against the
+  // state/local statutory result by the shared resident-credit path.
   residentWithholding: "required",
-  residentWithholdingImplemented: false,
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_md_mw507",
   subRegions: MD_COUNTY_LEVIES,
   // Local tax follows the county of residence. A nonresident's MW507

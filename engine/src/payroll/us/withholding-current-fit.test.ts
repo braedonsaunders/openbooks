@@ -11,11 +11,10 @@ import { US_STATES } from './rates.ts'
 import { AL_WITHHOLDING } from './states/al.ts'
 import { OR_WITHHOLDING } from './states/or.ts'
 import {
-  requireUsResidentWithholdingFacts,
   requireUsWageAllocation,
   resolveUsResidentWithholdingFacts,
 } from './states/types.ts'
-import type { ResolvedWithholdingLevy } from '../withholding-resolution.ts'
+import { adjustResidentWithholding, residentWaivedWages, type ResolvedWithholdingLevy } from '../withholding-resolution.ts'
 
 const PAY_DATE = '2026-07-21'
 const PERIOD_END = '2026-07-18'
@@ -465,8 +464,10 @@ test('US resident credits price only sourced out-of-region wages and require eac
     resolveUsResidentWithholdingFacts(
       '2000.0000', allocations, [{ region: 'NJ', amount: '42.00' }], 'NY',
     ),
-    { outOfRegionWages: '1500.0000', workRegionTaxes: [{ region: 'NJ', amount: '42.00' }] },
+    { outOfRegionWages: '1500.0000', workRegionTaxes: [{ region: 'NJ', amount: '42.00' }], workRegionWages: [{ region: 'NJ', amount: '1500.0000' }] },
   )
+  assert.equal(residentWaivedWages([{ region: 'NJ', amount: '42.00' }], [{ region: 'NJ', amount: '1500.00' }], { kind: 'waive_when_work_region_withheld' }), '1500.0000')
+  assert.deepEqual(adjustResidentWithholding('100.00', '7.50', [{ region: 'NJ', amount: '120.00' }], { kind: 'net_of_work_region_tax' }), { statutoryTax: '0.0000', additionalWithholding: '7.5000', tax: '7.5000', outcome: 'withheld', workRegionTaxCredit: '100.0000' })
   assert.throws(
     () => resolveUsResidentWithholdingFacts('2000.0000', allocations, [], 'NY'),
     /same-period computed work-region tax for NJ.*refused by name/,
@@ -484,6 +485,7 @@ test('US resident withholding requires its out-of-region wages and actual work-s
     ...levy('NY', 'us_ny_it2104'),
     basis: 'resident_out_of_region' as const,
     creditAgainstRegion: 'NJ',
+    residentWithholdingMethod: { kind: 'net_of_work_region_tax' as const },
   }
   assert.throws(
     () => computeUsWithholding({
@@ -494,20 +496,16 @@ test('US resident withholding requires its out-of-region wages and actual work-s
     }),
     /NY resident withholding needs verified out-of-region wages and same-period work-region taxes.*refused by name/,
   )
-  assert.throws(
-    () => requireUsResidentWithholdingFacts(undefined, 'NJ', 'NY'),
-    /NY resident withholding needs verified out-of-region wages and same-period work-region taxes.*refused by name/,
-  )
-  assert.throws(
-    () => requireUsResidentWithholdingFacts({ outOfRegionWages: '1000.00', workRegionTaxes: [] }, 'NJ', 'NY'),
-    /needs exactly one computed NJ tax amount for this period; found 0.*refused by name/,
-  )
-  assert.deepEqual(
-    requireUsResidentWithholdingFacts({
-      outOfRegionWages: '1000.00', workRegionTaxes: [{ region: 'NJ', amount: '21.34' }],
-    }, 'NJ', 'NY'),
-    { outOfRegionWages: '1000.00', workRegionTaxes: [{ region: 'NJ', amount: '21.34' }] },
-  )
+  const fullHi = computeUsWithholding({ levy: { ...levy('HI', 'us_hi_hw4'), basis: 'resident_out_of_region', residentWithholdingMethod: { kind: 'full' } }, payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26, wages: '1000.00', supplemental: '0.00', federalIncomeTax: '0.00', certificateFor: key => certificate(key, {}), tenantRates: () => undefined })!
+  assert.ok(fullHi.tax)
+  const scLevy = { ...levy('SC', 'us_sc_scw4'), basis: 'resident_out_of_region' as const, residentWithholdingMethod: { kind: 'waive_when_work_region_withheld' as const, regions: ['NJ'] } }
+  const scFacts = { outOfRegionWages: '600.00', workRegionTaxes: [{ region: 'NJ', amount: '25.00' }], workRegionWages: [{ region: 'NJ', amount: '600.00' }] }
+  const scCertificate = (key: string) => certificate(key, { allowances: '0', additional_per_period: '5.00' })
+  const residentSc = computeUsWithholding({ levy: scLevy, payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26, wages: '1000.00', supplemental: '0.00', federalIncomeTax: '0.00', residentWithholdingFacts: scFacts, certificateFor: scCertificate, tenantRates: () => undefined })!
+  const eligibleSc = computeUsWithholding({ levy: levy('SC', 'us_sc_scw4'), payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26, wages: '400.00', supplemental: '0.00', federalIncomeTax: '0.00', certificateFor: scCertificate, tenantRates: () => undefined })!
+  assert.equal(residentSc.tax, eligibleSc.tax)
+  assert.equal(residentSc.additionalWithholding, '5.0000')
+  assert.equal(residentSc.factors.US_RESIDENT_WITHHOLDING_OUTCOME, 'eligible_to_waive_covered_wages')
 })
 
 test('US states declare methods and California applies the classified bonus rate', () => {
