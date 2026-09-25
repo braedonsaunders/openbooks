@@ -7,7 +7,20 @@ import { currentUser, validateSessionToken, SESSION_COOKIE } from "./auth";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
 
-const requestUser = cache(async () => currentUser());
+/**
+ * Request-optional active user: outside a request scope (background jobs,
+ * scheduled delivery, harness scripts) there is no cookie store, so that one
+ * shape resolves to anonymous and callers fall back to neutral defaults.
+ * Everything else — DB failures, Next's digested prerender bailouts — still
+ * throws, so authenticated resolution and fail-closed behavior are unchanged.
+ */
+const requestUser = cache(async () =>
+  currentUser().catch((error: unknown) => {
+    if (typeof error === 'object' && error !== null && 'digest' in error) throw error;
+    if (error instanceof Error && /outside a request scope/i.test(error.message)) return null;
+    throw error;
+  }),
+);
 
 /**
  * The active locale for this request: the user's personal choice
@@ -18,7 +31,7 @@ const requestUser = cache(async () => currentUser());
  * request — the i18n request config and the account menu both ask.
  */
 export const resolveLocale = cache(async (): Promise<Locale> => {
-  // cookies() throws synchronously when there is no request store.
+  // Off-request requestUser() is null (see above), so this stays anonymous.
   const activeUser = await requestUser();
   if (activeUser) {
     const r = await withBypassContext(async () => (await db.execute(sql`
