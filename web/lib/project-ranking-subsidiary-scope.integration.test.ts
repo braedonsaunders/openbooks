@@ -12,6 +12,11 @@ const { sql } = await import('drizzle-orm')
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { rankProjects } = await import('./project-ranking')
+const { marginPercentText } = await import('./financial-decimal')
+
+test('ranked margin rounds the half-up tie exactly (1.005% -> 1.01)', () => {
+  assert.equal(marginPercentText('1.0050', '100.0000'), '1.01')
+})
 
 test('project ranking counts only purchase order commitments visible to the caller', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await withBypassContext(async () => {
