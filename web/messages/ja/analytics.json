@@ -2342,6 +2342,27 @@
     },
     "monthYear": "{yy}年{month}"
   },
+  "entityDrawer": {
+    "descriptionCustomer": "顧客の支払履歴",
+    "descriptionVendor": "仕入先の支払履歴",
+    "loading": "読み込み中…",
+    "loadFailed": "履歴を読み込めませんでした。",
+    "historyUnavailable": "履歴を利用できません（ステータス {status}）。",
+    "reliability": "信頼性",
+    "avgToCollect": "平均回収日数",
+    "avgToPay": "平均支払日数",
+    "daysValue": "{days}日",
+    "paymentsCount": "{count}件の支払い · 12か月",
+    "openOverdue": "未処理 · 延滞{count}件",
+    "tabOpen": "未処理項目 ({count})",
+    "tabPayments": "支払い ({count} · {currency})",
+    "emptyOpen": "未処理項目はありません。",
+    "emptyPayments": "記録された支払いはありません。",
+    "overdue": "延滞",
+    "pagerRange": "{from}–{to} / 全{total}件",
+    "prevPage": "前のページ",
+    "nextPage": "次のページ"
+  },
   "cashWeek": {
     "actionBar": {
       "bills": "仕入請求書",

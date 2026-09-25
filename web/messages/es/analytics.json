@@ -2342,6 +2342,27 @@
     },
     "monthYear": "{month} ''{yy}"
   },
+  "entityDrawer": {
+    "descriptionCustomer": "Historial de pagos del cliente",
+    "descriptionVendor": "Historial de pagos del proveedor",
+    "loading": "Cargando…",
+    "loadFailed": "No se pudo cargar el historial.",
+    "historyUnavailable": "Historial no disponible (estado {status}).",
+    "reliability": "Fiabilidad",
+    "avgToCollect": "Promedio de cobro",
+    "avgToPay": "Promedio de pago",
+    "daysValue": "{days} d",
+    "paymentsCount": "{count} pagos · 12 meses",
+    "openOverdue": "Abierto · {count} vencidos",
+    "tabOpen": "Partidas abiertas ({count})",
+    "tabPayments": "Pagos ({count} · {currency})",
+    "emptyOpen": "Sin partidas abiertas.",
+    "emptyPayments": "Sin pagos registrados.",
+    "overdue": "vencido",
+    "pagerRange": "{from}–{to} de {total}",
+    "prevPage": "Página anterior",
+    "nextPage": "Página siguiente"
+  },
   "cashWeek": {
     "actionBar": {
       "bills": "facturas de proveedores",

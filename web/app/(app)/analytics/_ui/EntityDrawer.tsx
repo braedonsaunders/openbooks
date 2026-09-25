@@ -5,7 +5,7 @@ import { Drawer, cn } from '@openbooks/ui'
 import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { TxnLink } from '../../reports/TxnLink'
 import { useAnalyticsMoney } from './format'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { dateLabel } from '@/lib/format'
 const PER_PAGE = 25
 
@@ -56,6 +56,7 @@ interface EntityData {
 
 export function EntityDrawer({ party, name, side, onClose }: { party: string; name: string; side: 'ar' | 'ap'; onClose: () => void }) {
   const locale = useLocale()
+  const t = useTranslations('analytics.entityDrawer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<EntityData | null>(null)
@@ -74,14 +75,14 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
             const problem = (await r.json()) as { message?: unknown }
             if (typeof problem.message === 'string' && problem.message.length > 0) message = problem.message
           } catch { message = null }
-          throw new Error(message ?? `History is unavailable (status ${r.status}).`)
+          throw new Error(message ?? t('historyUnavailable', { status: r.status }))
         }
         return r.json()
       })
       .then((j) => { if (live) setData(j) })
-      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'Could not load history.') })
+      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : t('loadFailed')) })
     return () => { live = false }
-  }, [party, side])
+  }, [party, side, t])
   const dt = (d: string) => dateLabel(new Date(d + 'T00:00:00Z'), locale)
   const relTone = (r: number) => (r >= 80 ? 'text-emerald-600 dark:text-emerald-400' : r >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')
 
@@ -95,39 +96,39 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
   const linkCls = 'font-medium text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400'
 
   return (
-    <Drawer open onClose={onClose} size="md" title={name} description={side === 'ar' ? 'Customer payment history' : 'Vendor payment history'} bodyClassName="overflow-hidden flex flex-col p-0">
+    <Drawer open onClose={onClose} size="md" title={name} description={side === 'ar' ? t('descriptionCustomer') : t('descriptionVendor')} bodyClassName="overflow-hidden flex flex-col p-0">
       {error ? (
         <p className="p-6 text-center text-sm text-slate-400" role="alert">{error}</p>
       ) : !data ? (
-        <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
+        <p className="p-6 text-center text-sm text-slate-400">{t('loading')}</p>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
             <div className="px-5 py-3 text-center">
               <p className={cn('text-2xl font-bold tabular-nums', relTone(data.reliability))}>{data.reliability}</p>
-              <p className="flex items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> Reliability</p>
+              <p className="flex items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> {t('reliability')}</p>
             </div>
             <div className="px-5 py-3 text-center">
-              <p className="text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">{data.avgDays === null ? '—' : `${data.avgDays}d`}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">Avg {side === 'ar' ? 'to Collect' : 'to Pay'}</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">{data.avgDays === null ? '—' : t('daysValue', { days: data.avgDays })}</p>
+              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{side === 'ar' ? t('avgToCollect') : t('avgToPay')}</p>
             </div>
           </div>
           <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
             <div className="px-5 py-3 text-center">
               <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(data.totalPaid)}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{data.paymentCount} payments · 12mo</p>
+              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('paymentsCount', { count: data.paymentCount })}</p>
             </div>
             <div className="px-5 py-3 text-center">
               <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(data.openBalance)}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">Open · {data.overdueCount} overdue</p>
+              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('openOverdue', { count: data.overdueCount })}</p>
             </div>
           </div>
 
           {/* Subtabs */}
           <div className="flex shrink-0 items-center gap-1 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
             {([
-              ['open', `Open items (${(data.openItems ?? []).length})`],
-              ['payments', `Payments (${(data.recentPayments ?? []).length} · ${data.currency})`],
+              ['open', t('tabOpen', { count: (data.openItems ?? []).length })],
+              ['payments', t('tabPayments', { count: (data.recentPayments ?? []).length, currency: data.currency })],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -149,7 +150,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
           <div className="min-h-0 flex-1 overflow-y-auto">
             {(tab === 'open' ? visibleOpen.length === 0 : visiblePay.length === 0) ? (
               <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">
-                {tab === 'open' ? 'No open items.' : 'No payments recorded.'}
+                {tab === 'open' ? t('emptyOpen') : t('emptyPayments')}
               </p>
             ) : tab === 'open' ? (
               <table className="w-full text-sm">
@@ -157,7 +158,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
                   {visibleOpen.map((i, k: number) => (
                     <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-1.5"><TxnLink entryId={i.entryId ?? ''} docKind={i.docKind} docId={i.docId} className={linkCls}>{i.docNumber || i.docKind}</TxnLink></td>
-                      <td className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? dt(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">overdue</span> : null}</td>
+                      <td className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? dt(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">{t('overdue')}</span> : null}</td>
                       <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(i.remaining)}</td>
                     </tr>
                   ))}
@@ -182,7 +183,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
           {rowCount > PER_PAGE ? (
             <div className="flex shrink-0 items-center justify-between border-t border-slate-100 px-4 py-2 dark:border-slate-800">
               <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-                {safePage * PER_PAGE + 1}–{Math.min((safePage + 1) * PER_PAGE, rowCount)} of {rowCount}
+                {t('pagerRange', { from: safePage * PER_PAGE + 1, to: Math.min((safePage + 1) * PER_PAGE, rowCount), total: rowCount })}
               </p>
               <div className="flex items-center gap-1">
                 <button
@@ -190,7 +191,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
                   onClick={() => setPage(Math.max(0, safePage - 1))}
                   disabled={safePage === 0}
                   className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
-                  aria-label="Previous page"
+                  aria-label={t('prevPage')}
                 >
                   <ChevronLeft size={14} />
                 </button>
@@ -199,7 +200,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
                   onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
                   disabled={safePage >= pageCount - 1}
                   className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
-                  aria-label="Next page"
+                  aria-label={t('nextPage')}
                 >
                   <ChevronRight size={14} />
                 </button>
