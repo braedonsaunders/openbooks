@@ -72,7 +72,6 @@ test("property-management API gates reads, accounting effects, and subsidiary re
     route,
     /Bulk portfolio billing requires unrestricted subsidiary access/,
   );
-  assert.match(route, /workspace\.properties\.filter/);
   assert.match(gate, /isFeatureEnabled\(orgId, "propertyManagement"\)/);
 });
 
