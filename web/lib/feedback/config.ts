@@ -181,9 +181,11 @@ export async function getFeedbackRuntime(): Promise<FeedbackRuntime | null> {
 export async function saveFeedbackSettings(
   input: FeedbackSettingsInput,
   actorId: string,
+  authorize?: () => Promise<unknown>,
 ): Promise<FeedbackSettingsView> {
   const validated = sanitizeFeedbackSettingsInput(input)
   return withBypass(async () => {
+    await authorize?.()
     const settings = await lockSettings()
     const previous = (settings.feedback ?? {}) as StoredFeedback
     const next: StoredFeedback = {
@@ -200,8 +202,9 @@ export async function saveFeedbackSettings(
 }
 
 /** Forget the stored credential without losing the rest of the destination. */
-export async function clearFeedbackToken(actorId: string): Promise<void> {
+export async function clearFeedbackToken(actorId: string, authorize?: () => Promise<unknown>): Promise<void> {
   await withBypass(async () => {
+    await authorize?.()
     const settings = await lockSettings()
     const previous = (settings.feedback ?? {}) as StoredFeedback
     // A destination with no credential cannot file, so the switch goes off
