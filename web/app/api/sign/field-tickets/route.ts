@@ -5,7 +5,8 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { uploadAndAttach } from '../../../../lib/file-cabinet'
 import { resolveFieldTicketLockId } from '../../../../lib/field-ticket-lock'
 import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { acquireFeatureGateLock } from '../../../../lib/features'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 
 export const runtime = 'nodejs'
@@ -57,8 +58,13 @@ export async function POST(req: Request) {
     // The public link is possession-authenticated, but it is still a Projects
     // capability. Keep an already-issued link from mutating a ticket after
     // Field Tickets (or its Projects parent) has been disabled; historical
-    // signatures remain stored and auditable.
-    if (!(await isFeatureEnabled(verified.orgId, 'fieldTickets'))) {
+    // signatures remain stored and auditable. The fence serializes this
+    // signer with the switchboard's own toggle transaction and the
+    // row-locked recheck refuses a link that arrives after the disable
+    // commits — an unlocked read could land a signature after the
+    // capability is gone.
+    await acquireFeatureGateLock(verified.orgId)
+    if (!(await lockAndCheckOrgFeature(db, verified.orgId, 'fieldTickets'))) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     // Serialize signers of this request BEFORE any check or write; the lock is
