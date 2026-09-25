@@ -260,6 +260,17 @@ export async function applyCompletionRetention(
       return;
     }
     anchor = term;
+    // Keep the blocked row as the audit record, but move it out of the open
+    // queue once the authoritative employment end date becomes available.
+    // The document row is already locked above, serializing this transition
+    // with completion and retention ticks for this document.
+    await exec.execute(sql`
+      update hrm_retention_actions
+         set blocked_reason = 'resolved: termination anchor is now available; prior refusal: ' || blocked_reason
+       where org_id = ${orgId} and document_id = ${documentId}
+         and schedule_id = ${schedule.id} and executed_at is null
+         and blocked_reason like 'termination anchor:%'
+    `);
   }
   if (!anchor) return;
   const computed = (await exec.execute<{ until: string }>(sql`
@@ -366,7 +377,9 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
            select 1 from hrm_retention_actions a
             where a.org_id = d.org_id and a.document_id = d.id
               and a.schedule_id = d.retention_rule_id
-              and (a.blocked_reason is null or a.blocked_reason not like 'termination anchor:%')
+              and (a.blocked_reason is null
+                   or (not starts_with(a.blocked_reason, 'termination anchor:')
+                       and not starts_with(a.blocked_reason, 'resolved: termination anchor is now available;')))
          )
        limit 200
     `)).rows;
@@ -389,6 +402,7 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
         join hrm_documents d on d.org_id = a.org_id and d.id = a.document_id
        where a.org_id = ${orgId} and a.executed_at is null
          and a.blocked_reason is not null
+         and not starts_with(a.blocked_reason, 'resolved: termination anchor is now available;')
          and a.due_on <= (${today}::date - (${grace} || ' days')::interval)
          and d.status not in ('deleted', 'voided')
     `)).rows[0]?.n ?? 0;
@@ -494,7 +508,8 @@ export async function listRetentionActions(query: {
       from hrm_retention_actions a
       join hrm_documents d on d.org_id = a.org_id and d.id = a.document_id
      where a.org_id = ${query.orgId}
-       ${query.pendingOnly ? sql`and a.executed_at is null` : sql``}
+       ${query.pendingOnly ? sql`and a.executed_at is null
+         and not starts_with(coalesce(a.blocked_reason, ''), 'resolved: termination anchor is now available;')` : sql``}
        ${allowed === null ? sql`` : sql`and (
          (d.employment_id is not null and exists (
            select 1 from worker_employments e
