@@ -1816,6 +1816,7 @@
     },
     "emptyTitle": "Keine Qualifikationen erfasst",
     "emptyDescription": "Erfassen Sie Lizenzen und Zertifizierungen der Mannschaft, um Einsätze zu steuern.",
+    "ledgerTruncated": "{shown} von {total} werden angezeigt.",
     "requirementsTitle": "Einsatzanforderungen",
     "requirementsEmpty": "Noch keine Anforderungen festgelegt.",
     "requirementManager": {
@@ -1849,6 +1850,7 @@
     "coverageProjectLabel": "Projekt",
     "coverageProjectAll": "Projekt wählen",
     "coverageEmpty": "Diesem Projekt ist noch keine Mannschaft zugewiesen.",
+    "coverageTruncated": "Mannschaft: {shown} von {total} werden angezeigt.",
     "coverage": {
       "qualified": "Qualifiziert",
       "missing": "Fehlt",

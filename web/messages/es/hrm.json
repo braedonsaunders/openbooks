@@ -1816,6 +1816,7 @@
     },
     "emptyTitle": "Sin cualificaciones registradas",
     "emptyDescription": "Registre las licencias y certificaciones del equipo para controlar las asignaciones.",
+    "ledgerTruncated": "Mostrando {shown} de {total}.",
     "requirementsTitle": "Requisitos de asignación",
     "requirementsEmpty": "Aún no hay requisitos declarados.",
     "requirementManager": {
@@ -1849,6 +1850,7 @@
     "coverageProjectLabel": "Proyecto",
     "coverageProjectAll": "Elegir proyecto",
     "coverageEmpty": "Aún no hay personal asignado a este proyecto.",
+    "coverageTruncated": "Personal: mostrando {shown} de {total}.",
     "coverage": {
       "qualified": "Habilitado",
       "missing": "Faltante",

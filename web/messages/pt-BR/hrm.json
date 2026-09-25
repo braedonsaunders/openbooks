@@ -1816,6 +1816,7 @@
     },
     "emptyTitle": "Nenhuma qualificação registrada",
     "emptyDescription": "Registre as licenças e certificações da equipe para controlar as alocações.",
+    "ledgerTruncated": "Mostrando {shown} de {total}.",
     "requirementsTitle": "Requisitos de alocação",
     "requirementsEmpty": "Nenhum requisito declarado ainda.",
     "requirementManager": {
@@ -1849,6 +1850,7 @@
     "coverageProjectLabel": "Projeto",
     "coverageProjectAll": "Escolher projeto",
     "coverageEmpty": "Nenhuma equipe alocada a este projeto ainda.",
+    "coverageTruncated": "Equipe: mostrando {shown} de {total}.",
     "coverage": {
       "qualified": "Apto",
       "missing": "Ausente",

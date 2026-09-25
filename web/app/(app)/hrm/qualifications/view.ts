@@ -107,6 +107,7 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
             }),
             panel({
               title: f('listTitle'),
+              hint: f('ledgerHint'),
               bodyClassName: 'min-h-0 overflow-y-auto p-0',
               className: 'min-h-0 flex-1',
               blocks: [
@@ -176,6 +177,7 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
               }),
               panel({
                 title: f('coverageTitle'),
+                hint: f('coverageHint'),
                 bodyClassName: 'min-h-0 overflow-auto p-0',
                 blocks: [
                   widgetBlock('filter-chips', {

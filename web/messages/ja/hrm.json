@@ -1816,6 +1816,7 @@
     },
     "emptyTitle": "資格が登録されていません",
     "emptyDescription": "作業員の免許・資格を登録して配置を管理します。",
+    "ledgerTruncated": "{total} 件中 {shown} 件を表示しています。",
     "requirementsTitle": "配置要件",
     "requirementsEmpty": "要件はまだ定義されていません。",
     "requirementManager": {
@@ -1849,6 +1850,7 @@
     "coverageProjectLabel": "プロジェクト",
     "coverageProjectAll": "プロジェクトを選択",
     "coverageEmpty": "このプロジェクトに要員はまだ配置されていません。",
+    "coverageTruncated": "要員 {total} 名中 {shown} 名を表示しています。",
     "coverage": {
       "qualified": "充足",
       "missing": "不足",
