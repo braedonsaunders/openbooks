@@ -36,10 +36,15 @@ function actionArm(source, action) {
   return source.slice(match.index, next ? match.index + match[0].length + next.index : source.length);
 }
 
+// An arm may classify and guard inline, or delegate both to one local helper
+// (end/delete share a locked scope resolver); either way the pair must be there.
+function classifiesAndGuards(text) {
+  return /isOrgWideWageScope\s*\(/.test(text) && /guardUnrestrictedScope\s*\(/.test(text);
+}
 function assertLaborRateMutationGuard(source, action) {
   const arm = actionArm(source, action);
-  assert.match(arm, /isOrgWideWageScope\s*\(/, `labor-costing ${action} does not classify the persisted wage scope`);
-  assert.match(arm, /guardUnrestrictedScope\s*\(/, `labor-costing ${action} does not guard org-wide wage scopes`);
+  const helpers = [...arm.matchAll(/\b(\w+)\s*\(/g)].map((m) => new RegExp(`\\nasync function ${m[1]}\\s*\\([\\s\\S]*?\\n\\}\\n`).exec(source)?.[0] ?? "");
+  assert.ok(classifiesAndGuards(arm) || helpers.some(classifiesAndGuards), `labor-costing ${action} does not classify and guard the persisted wage scope`);
 }
 function handlerArm(source, method) {
   const marker = new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\(`);
