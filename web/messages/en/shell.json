@@ -158,6 +158,7 @@
     },
     "markAllRead": "Mark all read",
     "markRead": "Mark read",
+    "markFailed": "Could not mark notifications as read.",
     "readLabel": "Read",
     "emptyTitle": "Nothing here yet",
     "emptyDescription": "Notifications arrive when a flow, an approval, or a close automation needs you.",

@@ -158,6 +158,7 @@
     },
     "markAllRead": "全部标为已读",
     "markRead": "标为已读",
+    "markFailed": "无法将通知标记为已读。",
     "readLabel": "已读",
     "emptyTitle": "暂无内容",
     "emptyDescription": "当流程、审批或结账自动化需要您处理时，通知会显示在这里。",

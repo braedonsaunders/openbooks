@@ -158,6 +158,7 @@
     },
     "markAllRead": "Alle als gelesen markieren",
     "markRead": "Als gelesen markieren",
+    "markFailed": "Benachrichtigungen konnten nicht als gelesen markiert werden.",
     "readLabel": "Gelesen",
     "emptyTitle": "Noch nichts vorhanden",
     "emptyDescription": "Benachrichtigungen erscheinen, wenn ein Flow, eine Genehmigung oder eine Abschlussautomatisierung Sie benötigt.",
