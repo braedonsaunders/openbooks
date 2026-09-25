@@ -42,7 +42,12 @@ async function newConnection(orgId: string, source = "netsuite"): Promise<string
   return id;
 }
 
-function claim(orgId: string, connectionId: string, kind: string, sourceName = "netsuite") {
+function claim(
+  orgId: string,
+  connectionId: string,
+  kind: "incremental" | "full_migration" | "targeted_repair" | "project_financials" | "attachments",
+  sourceName = "netsuite",
+) {
   return claimSyncRun({
     orgId,
     connectionId,
