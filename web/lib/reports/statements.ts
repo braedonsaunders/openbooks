@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { functionalReportReader } from "./currency-basis";
+import { payrollOriginSql } from "../payroll-confidentiality";
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
@@ -364,27 +365,42 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
  * Interactive callers default to the org's business day; exports and other
  * reproducible reads can pin that same boundary explicitly.
  */
-export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string, bookId?: string | null, dims?: DimFilter) {
+export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string, bookId?: string | null, dims?: DimFilter,
+  /**
+   * True when the reader holds payroll.read and may see per-employee pay
+   * detail. Defaults to false (fail closed): without it, party-tagged
+   * payroll lines fold into the unassigned row — the same remap the
+   * register applies, so control totals still tie out while employee
+   * identity and per-employee amounts go.
+   */
+  canSeePayroll?: boolean,
+) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   const resolvedAsOf = asOf ?? (await businessToday(resolvedOrgId));
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${resolvedAsOf} and a.type = ${type} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const masked = canSeePayroll === true;
+  const payrollParty = sql`${payrollOriginSql(sql`dd.kind`, sql`e.origin`)} and l.party_id is not null`;
+  const partyIdExpr = masked ? sql`p.id` : sql`case when ${payrollParty} then null else p.id end`;
+  const partyNameExpr = masked ? sql`p.display_name` : sql`case when ${payrollParty} then null else p.display_name end`;
   const r = (await reportDb.execute(sql`
     with e as materialized (
-      select id from journal_entries
+      select id, origin, source_document_id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and posting_date <= ${resolvedAsOf}
          and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
-    select ${reportDb.censusColumn}, p.id, p.display_name, sum(l.amount) as balance, count(*) as line_count,
+    select ${reportDb.censusColumn}, ${partyIdExpr} as id, ${partyNameExpr} as display_name,
+           sum(l.amount) as balance, count(*) as line_count,
            max(l.due_date) as latest_due
       from journal_lines l
       join e on e.id = l.entry_id
+      left join documents dd on dd.id = e.source_document_id and dd.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = ${resolvedOrgId}
      where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
        and a.type = ${type} and ${dimWhere(dims)}
-     group by p.id, p.display_name
+     group by ${partyIdExpr}, ${partyNameExpr}
     having abs(sum(l.amount)) > 0
      order by abs(sum(l.amount)) desc
   `));

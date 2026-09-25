@@ -347,7 +347,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       // flipping to payables.
       const raw = p.get('kind') ?? p.get('side')
       const s = (raw === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
-      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims), t) }
+      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims, canSeePayroll), t) }
     }
     case 'aging': {
       // Bare export hits default to the screen's as-of (today) through the
