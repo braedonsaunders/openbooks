@@ -1,11 +1,12 @@
-import { UrlDrawer } from '@openbooks/ui'
+import Link from 'next/link'
+import { Button, UrlDrawer } from '@openbooks/ui'
 import { CycleActions } from './CycleActions'
 import { CycleCreateForm } from './CycleCreateForm'
 import { GoalForm } from './GoalForm'
 import { ReviewActions } from './ReviewActions'
 import { ReviewAnswerForm } from './ReviewAnswerForm'
 import { ExitRecordForm } from './ExitRecordForm'
-import type { PerformancePageData } from './view'
+import type { PerformanceLoadError, PerformancePageData } from './view'
 
 type PageData = PerformancePageData
 
@@ -16,6 +17,24 @@ type PageData = PerformancePageData
  * the Retention panel. Every string arrives loader-resolved as props — no
  * org id, user id, or Authz crosses into render.
  */
+
+/**
+ * A drawer read that failed mid-flight: the record may still exist, so
+ * the drawer says the load failed (never "not found") with a retry link
+ * that re-runs the loader for the same drawer.
+ */
+export function DrawerLoadError({ error }: { error: PerformanceLoadError }) {
+  return (
+    <div className="flex items-center gap-3">
+      <p role="alert" className="text-sm text-slate-500 dark:text-slate-400">
+        {error.message}
+      </p>
+      <Button variant="outline" asChild>
+        <Link href={error.retryHref}>{error.retryLabel}</Link>
+      </Button>
+    </div>
+  )
+}
 
 export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePageData['detail']> }) {
   return (
@@ -53,11 +72,13 @@ export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePag
 export function CycleDrawer({
   detail,
   missingDetail,
+  loadError,
 }: {
   detail: PerformancePageData['detail']
   missingDetail: string | null
+  loadError: PerformancePageData['detailError']
 }) {
-  if (!detail && !missingDetail) return null
+  if (!detail && !missingDetail && !loadError) return null
   return (
     <UrlDrawer
       open
@@ -67,6 +88,8 @@ export function CycleDrawer({
     >
       {detail ? (
         <CycleDrawerBody detail={detail} />
+      ) : loadError ? (
+        <DrawerLoadError error={loadError} />
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingDetail}</p>
       )}
@@ -155,11 +178,13 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
 export function ReviewDrawer({
   review,
   missingReview,
+  loadError,
 }: {
   review: PerformancePageData['review']
   missingReview: string | null
+  loadError: PerformancePageData['reviewError']
 }) {
-  if (!review && !missingReview) return null
+  if (!review && !missingReview && !loadError) return null
   return (
     <UrlDrawer
       open
@@ -168,6 +193,8 @@ export function ReviewDrawer({
     >
       {review ? (
         <ReviewDrawerBody review={review} />
+      ) : loadError ? (
+        <DrawerLoadError error={loadError} />
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingReview}</p>
       )}
@@ -200,14 +227,18 @@ export function GoalSection({ employmentId, cycleId }: { employmentId: string; c
 export function ExitDrawer({
   exit,
   missingExit,
+  loadError,
 }: {
   exit: PageData['exit']
   missingExit: string | null
+  loadError: PageData['exitError']
 }) {
-  if (!exit && !missingExit) return null
+  if (!exit && !missingExit && !loadError) return null
   return (
     <UrlDrawer open closeHref={exit?.closeHref ?? '/hrm/performance'} title={exit?.title ?? ''}>
-      {exit ? (
+      {loadError && !exit ? (
+        <DrawerLoadError error={loadError} />
+      ) : exit ? (
         exit.canRecord ? (
           <ExitRecordForm employmentId={exit.employmentId} existing={exit.existing} />
         ) : exit.existing ? (
