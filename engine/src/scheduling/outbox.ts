@@ -518,7 +518,7 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
     return;
   }
   if (row.kind === "property_billing") {
-    const { runDuePropertyBilling } = await import("../property/management.ts");
+    const { runDuePropertyBilling } = await import("../property/rent-billing.ts");
     const result = await runDuePropertyBilling();
     const problems = new Map<string, string[]>();
     for (const failure of result.orgErrors) {
