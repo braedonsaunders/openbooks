@@ -58,7 +58,12 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
   const [modelFast, setModelFast] = useState(initial.modelFast)
   const [modelSmart, setModelSmart] = useState(initial.modelSmart)
   const [hasKey, setHasKey] = useState(initial.hasKey)
-  const [savedProviderValue, setSavedProviderValue] = useState(initial.provider)
+  const [savedProvider, setSavedProvider] = useState(() => ({
+    provider: initial.provider,
+    modelFast: initial.modelFast,
+    modelSmart: initial.modelSmart,
+    baseUrl: initial.baseUrl,
+  }))
   const [documentCapture, setDocumentCapture] = useState(initial.documentCapture)
   const [documentCaptureKey, setDocumentCaptureKey] = useState('')
   const [testingCapture, startCaptureTest] = useTransition()
@@ -145,7 +150,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
   const spec = specs.find((s) => s.value === provider) ?? specs[0]
   if (!spec) return null
   const showBaseUrl = spec.requiresBaseUrl || spec.baseUrl !== null
-  const savedProvider = provider === savedProviderValue
+  const isSavedProvider = provider === savedProvider.provider
 
   function invalidateModels() {
     modelRequestId.current += 1
@@ -157,10 +162,10 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
     invalidateModels()
     setProvider(next)
     // Carry saved values only when switching back to the saved provider.
-    const isSaved = next === savedProviderValue
-    setModelFast(isSaved ? initial.modelFast : '')
-    setModelSmart(isSaved ? initial.modelSmart : '')
-    setBaseUrl(isSaved ? initial.baseUrl : '')
+    const isSaved = next === savedProvider.provider
+    setModelFast(isSaved ? savedProvider.modelFast : '')
+    setModelSmart(isSaved ? savedProvider.modelSmart : '')
+    setBaseUrl(isSaved ? savedProvider.baseUrl : '')
     setManual(false)
   }
 
@@ -191,7 +196,12 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
           return
         }
         setHasKey(body.hasKey)
-        setSavedProviderValue(body.provider)
+        setSavedProvider({
+          provider: body.provider,
+          modelFast: body.modelFast,
+          modelSmart: body.modelSmart,
+          baseUrl: body.baseUrl,
+        })
         setDocumentCapture(body.documentCapture)
         setDocumentCaptureKey('')
         setApiKey('')
@@ -274,7 +284,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
     })
   }
 
-  const keyPlaceholder = hasKey && savedProvider ? t('keySavedPlaceholder') : spec.keyHint || t('keyPlaceholder')
+  const keyPlaceholder = hasKey && isSavedProvider ? t('keySavedPlaceholder') : spec.keyHint || t('keyPlaceholder')
 
   function modelOptions(value: string): SelectOption[] {
     const opts: SelectOption[] = models.map((m) => ({
@@ -472,7 +482,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
           autoComplete="off"
           placeholder={keyPlaceholder}
         />
-        <p className="text-xs text-slate-400 dark:text-slate-500">{hasKey && savedProvider ? t('keySavedHint') : t('keyHint')}</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">{hasKey && isSavedProvider ? t('keySavedHint') : t('keyHint')}</p>
       </div>
 
       <div className="space-y-2">
