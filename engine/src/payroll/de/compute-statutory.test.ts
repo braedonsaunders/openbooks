@@ -3,8 +3,7 @@
  * end, and every missing channel refuses BY NAME (no zero-KVZ default, no
  * Klasse-I assumption, no silent childlessness).
  *
- * Lohnsteuer/Soli/BK wiring is proven against the PAP engine direct (the PAP
- * itself is proven by the 516/516 Prüftabellen goldens in pap.test.ts).
+ * Lohnsteuer/Soli/BK wiring is proven against the PAP engine direct.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -24,6 +23,7 @@ type Pushed = { systemKey: string; kind: string; amount: string; sequence: numbe
 
 function fakeCtx(overrides: {
   income?: string;
+  pensionable?: string; insurable?: string;
   region?: string;
   nonPeriodic?: string;
   elstam?: Record<string, string | null> | null;
@@ -47,8 +47,8 @@ function fakeCtx(overrides: {
     taxYear: 2026,
     income: overrides.income ?? "3000.00",
     nonPeriodic: overrides.nonPeriodic ?? "0",
-    pensionable: overrides.income ?? "3000.00",
-    insurable: overrides.income ?? "3000.00",
+    pensionable: overrides.pensionable ?? overrides.income ?? "3000.00",
+    insurable: overrides.insurable ?? overrides.income ?? "3000.00",
     periodsPerYear: 12,
     region: overrides.region ?? "NW",
     country: "DE",
@@ -95,10 +95,9 @@ const line = (pushed: Pushed[], systemKey: string, kind: string): string | null 
   pushed.find((entry) => entry.systemKey === systemKey && entry.kind === kind)?.amount ?? null;
 
 test("full monthly period computes: PAP wiring + hand-checked SV and adapter names missing employer levies", async () => {
-  // €3,000, StKl I, KVZ 2.90, childless, no confession, NW.
-  // Hand SV: KV 3000 × 8.75% = 262.50; RV 3000 × 9.3% = 279.00;
-  // AV 3000 × 1.3% = 39.00; PV-AN 3000 × 2.4% = 72.00; PV-AG 3000 × 1.8% = 54.00.
-  const { ctx, pushed } = fakeCtx({});
+  // €3,000 taxable, €2,500 pensionable, €2,000 insurable; StKl I, KVZ 2.90, NW.
+  // Hand SV: KV 218.75, RV 186, AV 26, PV-AN 60, PV-AG 45.
+  const { ctx, pushed } = fakeCtx({ pensionable: "2500.00", insurable: "2000.00" });
   await assert.rejects(computeDeStatutory(ctx), /refuses.*U1.*U2.*U3.*Berufsgenossenschaft/);
   const result = computeDeStatutoryWithRates(ctx, { kvz: 2.9 });
   const pap = computePapLaufend2026({
@@ -110,14 +109,14 @@ test("full monthly period computes: PAP wiring + hand-checked SV and adapter nam
   assert.equal(result.SOLI, (pap.solzlzz / 100).toFixed(4));
   assert.equal(result.BK, (pap.bk / 100).toFixed(4));
   assert.equal(line(pushed, "lohnsteuer", "deduction"), result.LST);
-  assert.equal(result.KV_W, "262.5000");
-  assert.equal(result.KV_ER, "262.5000");
-  assert.equal(result.RV_W, "279.0000");
-  assert.equal(result.RV_ER, "279.0000");
-  assert.equal(result.AV_W, "39.0000");
-  assert.equal(result.AV_ER, "39.0000");
-  assert.equal(result.PV_W, "72.0000");
-  assert.equal(result.PV_ER, "54.0000");
+  assert.equal(result.KV_W, "218.7500");
+  assert.equal(result.KV_ER, "218.7500");
+  assert.equal(result.RV_W, "186.0000");
+  assert.equal(result.RV_ER, "186.0000");
+  assert.equal(result.AV_W, "26.0000");
+  assert.equal(result.AV_ER, "26.0000");
+  assert.equal(result.PV_W, "60.0000");
+  assert.equal(result.PV_ER, "45.0000");
   // No confession: no KiSt line at all (zero never becomes a line).
   assert.equal(line(pushed, "kirchenlohnsteuer", "deduction"), null);
   assert.equal(result.KIST, "0.0000");
