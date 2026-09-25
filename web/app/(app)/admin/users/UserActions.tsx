@@ -9,6 +9,7 @@ import { Check, UserCog } from 'lucide-react'
 import { Badge, Button, cn, Drawer, Label, Popover, SearchSelect, Textarea } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { useAppAction } from '@/lib/use-app-action'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 import { InviteLinkDrawer } from './InviteLinkDrawer'
 
 /**
@@ -333,6 +334,13 @@ function LinkPersonDrawer({
   const [attested, setAttested] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
+  const closeGuard = useDirtyClose({
+    dirty: value !== (initialOption?.value ?? '') || reason !== '' || attested,
+    busy,
+    onClose,
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
   const requestId = useRef(0)
 
   // Remote per-query search: bounded page per query so people beyond the
@@ -438,13 +446,13 @@ function LinkPersonDrawer({
   return (
     <Drawer
       open
-      onClose={onClose}
+      onClose={closeGuard.close}
       size="md"
       title={t('linkPersonTitle', { name: userName })}
       description={t('linkPersonDescription')}
       headerActions={
         <>
-          <Button variant="outline" disabled={busy} onClick={onClose}>
+          <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
             {tCommon('actions.cancel')}
           </Button>
           <Button disabled={busy} onClick={save}>
