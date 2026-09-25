@@ -1,11 +1,12 @@
 /**
  * One-time employment migration operator entrypoint.
  *
- *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json>
- *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> --apply
- *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> --apply --allow-partial
+ *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> [--applied-by=<uuid>]
+ *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> --apply [--applied-by=<uuid>]
+ *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> --apply --allow-partial [--applied-by=<uuid>]
  *   npx tsx scripts/hrm-migrate-employments.ts --collect=<uuid> [--operator-mappings=<map.json>] > rows.json
- *   npx tsx scripts/hrm-migrate-employments.ts --collect=<uuid> --apply [--operator-mappings=<map.json>]
+ *   npx tsx scripts/hrm-migrate-employments.ts --collect=<uuid> --apply [--operator-mappings=<map.json>] [--applied-by=<uuid>]
+ *   npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --operator-mappings=<map.json> --request-approval --requested-by=<uuid>
  *
  * The input file is the collector output: a JSON array of SourcePersonRow
  * (see engine/src/hrm/migration-preflight.ts); --input=- reads it from
@@ -16,6 +17,17 @@
  * dry run that writes nothing; --apply writes. Everything for the org runs
  * in ONE transaction and any refusal rolls the whole org back, unless
  * --allow-partial accepts the ready subset with the rest listed.
+ *
+ * Operator mapping approval (fail closed): a mapping is applicable only
+ * under a decided Flows gate over the digest of the exact mapping set
+ * (subject kind hrm_employment_migration_mapping) — free-text approver
+ * metadata never authorizes. --request-approval pins the mappings file's
+ * digest and submits it for approval, printing the gate ids; an approver
+ * distinct from the applier decides in Flows; then the apply runs with the
+ * gate id in the mappings file and --applied-by=<the applier's user id>.
+ * Any run carrying mappings without --applied-by is refused before
+ * evaluation, and any mapping the approval does not cover refuses in the
+ * report instead of applying.
  *
  * Production interlock (fail closed): --apply proceeds without controls
  * ONLY when NODE_ENV is explicitly development/test AND the target database
@@ -39,23 +51,33 @@ import {
   type OperatorEmploymentMapping,
 } from "../engine/src/hrm/migration-collect.ts";
 import {
+  MappingApprovalError,
+  requestMigrationMappingApproval,
+} from "../engine/src/hrm/migration-approval.ts";
+import {
   EmploymentMigrationError,
   EmploymentMigrationRefusalError,
   executeEmploymentMigration,
   migrationExitCode,
   type EmploymentMigrationReport,
 } from "../engine/src/hrm/migration-execute.ts";
-import type { SourcePersonRow } from "../engine/src/hrm/migration-preflight.ts";
+import {
+  hashOperatorMappingSet,
+  type MappingSetEntry,
+  type SourcePersonRow,
+} from "../engine/src/hrm/migration-preflight.ts";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function usage(): string {
   return [
-    "usage: npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> [--apply] [--allow-partial]",
+    "usage: npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --input=<rows.json> [--apply] [--allow-partial] [--applied-by=<uuid>]",
     "       [--allow-production --dry-run-hash=<sha256>] (production apply only)",
     "       npx tsx scripts/hrm-migrate-employments.ts --collect=<uuid> [--operator-mappings=<map.json>] [--apply]",
-    "         [--allow-partial] [--org=<uuid>] > rows.json",
+    "         [--allow-partial] [--applied-by=<uuid>] [--org=<uuid>] > rows.json",
+    "       npx tsx scripts/hrm-migrate-employments.ts --org=<uuid> --operator-mappings=<map.json>",
+    "         --request-approval --requested-by=<uuid>",
     "",
     "Migrates one org's legacy person-keyed employment facts into the canonical",
     "0184 tables exactly once. Default is a dry run: evaluates, prints the",
@@ -63,11 +85,18 @@ function usage(): string {
     "With --collect, rows are built from the live database and only the JSON",
     "array goes to stdout (count and evidence hash go to stderr); without",
     "--apply the run ends after collecting. --input=- reads rows from stdin.",
+    "Runs carrying operator mappings require --applied-by=<the applier's user id>.",
+    "--request-approval pins the mappings file's digest and submits it for Flows",
+    "approval, printing the approval id and the pending gate ids as JSON.",
   ].join("\n");
 }
 
 function readStdin(): string {
   return readFileSync(0, "utf8");
+}
+
+function isOptionalText(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
 }
 
 function isOperatorMapping(value: unknown): value is OperatorEmploymentMapping {
@@ -79,10 +108,23 @@ function isOperatorMapping(value: unknown): value is OperatorEmploymentMapping {
       typeof mapping.employerSubsidiaryId === "string") &&
     (mapping.hiredOn === null || typeof mapping.hiredOn === "string") &&
     (mapping.terminatedOn === null || typeof mapping.terminatedOn === "string") &&
-    typeof mapping.approvedBy === "string" &&
-    typeof mapping.approvedAt === "string" &&
-    typeof mapping.rationale === "string"
+    // Free-text approver metadata is non-authoritative record context: it
+    // may be absent, and it never authorizes. Authority is the Flows
+    // approval gate named by approvalGateId.
+    isOptionalText(mapping.approvedBy) &&
+    isOptionalText(mapping.approvedAt) &&
+    isOptionalText(mapping.rationale) &&
+    isOptionalText(mapping.approvalGateId)
   );
+}
+
+function mappingSetEntries(mappings: readonly OperatorEmploymentMapping[]): MappingSetEntry[] {
+  return mappings.map((mapping) => ({
+    partyId: mapping.partyId,
+    employerSubsidiaryId: mapping.employerSubsidiaryId,
+    hiredOn: mapping.hiredOn,
+    terminatedOn: mapping.terminatedOn,
+  }));
 }
 
 function readOperatorMappings(path: string): OperatorEmploymentMapping[] | null {
@@ -104,7 +146,8 @@ function readOperatorMappings(path: string): OperatorEmploymentMapping[] | null 
     console.error(
       `hrm-migrate-employments: operator mappings file ${path} must be a JSON array (or ` +
         '{"mappings": [...]} ) of {partyId, employerSubsidiaryId|null, hiredOn|null, ' +
-        "terminatedOn|null, approvedBy, approvedAt, rationale}",
+        'terminatedOn|null, approvalGateId?, approvedBy?, approvedAt?, rationale?} — ' +
+        "free-text approver metadata never authorizes; authority is the Flows approval gate",
     );
     return null;
   }
@@ -153,6 +196,64 @@ function isSourcePersonRow(value: unknown): value is SourcePersonRow {
   );
 }
 
+/**
+ * Pin a mappings file's digest and submit it for Flows approval. One job
+ * per run: requesting approval never collects, evaluates, or applies —
+ * the approver decides after this request, and a later run applies.
+ */
+async function runRequestApproval(options: {
+  mappingsPath: string | null;
+  requestedBy: string | null;
+  orgFlag: string | null;
+  inputPath: string | null;
+  collectOrg: string | null;
+  apply: boolean;
+}): Promise<number> {
+  const { mappingsPath, requestedBy, orgFlag, inputPath, collectOrg, apply } = options;
+  if (mappingsPath === null) {
+    console.error(usage());
+    return fail("refusing --request-approval without --operator-mappings=<map.json>: approval covers an exact mapping set");
+  }
+  if (requestedBy === null || !UUID_PATTERN.test(requestedBy)) {
+    console.error(usage());
+    return fail("--requested-by=<uuid> is required; refusing to request approval without an explicit requester");
+  }
+  if (orgFlag === null || !UUID_PATTERN.test(orgFlag)) {
+    console.error(usage());
+    return fail("--org=<uuid> is required; refusing to request approval without an explicit tenant scope");
+  }
+  if (inputPath !== null || collectOrg !== null) {
+    console.error(usage());
+    return fail("refusing --request-approval with --input or --collect: one run requests approval or migrates, never both");
+  }
+  if (apply) {
+    return fail(
+      "refusing --request-approval with --apply: the approver decides after the request — " +
+        "re-run the apply with the decided gate id and --applied-by once Flows approves",
+    );
+  }
+  const read = readOperatorMappings(mappingsPath);
+  if (read === null) return 1;
+  try {
+    const requested = await requestMigrationMappingApproval(
+      orgFlag,
+      mappingSetEntries(read),
+      requestedBy,
+    );
+    process.stdout.write(`${JSON.stringify(requested, null, 2)}\n`);
+    console.error(
+      `hrm-migrate-employments: mapping set digest ${requested.digest} ` +
+        (requested.created
+          ? `submitted for Flows approval ${requested.approvalId}; pending gates: ${requested.gateIds.join(", ") || "none"}`
+          : `was already submitted for approval ${requested.approvalId}; reuse its decided gate`),
+    );
+    return 0;
+  } catch (error) {
+    if (error instanceof MappingApprovalError) return fail(error.message);
+    throw error;
+  }
+}
+
 export interface HrmMigrationCliOptions {
   readonly argv: readonly string[];
   readonly env?: NodeJS.ProcessEnv;
@@ -186,7 +287,10 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
   const apply = args.includes("--apply");
   const allowPartial = args.includes("--allow-partial");
   const allowProduction = args.includes("--allow-production");
+  const requestApproval = args.includes("--request-approval");
   const dryRunHash = args.find((a) => a.startsWith("--dry-run-hash="))?.slice("--dry-run-hash=".length) ?? null;
+  const appliedBy = args.find((a) => a.startsWith("--applied-by="))?.slice("--applied-by=".length) ?? null;
+  const requestedBy = args.find((a) => a.startsWith("--requested-by="))?.slice("--requested-by=".length) ?? null;
   const unknown = args.filter(
     (a) =>
       !a.startsWith("--org=") &&
@@ -194,13 +298,23 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
       !a.startsWith("--collect=") &&
       !a.startsWith("--operator-mappings=") &&
       !a.startsWith("--dry-run-hash=") &&
+      !a.startsWith("--applied-by=") &&
+      !a.startsWith("--requested-by=") &&
       a !== "--apply" &&
       a !== "--allow-partial" &&
-      a !== "--allow-production",
+      a !== "--allow-production" &&
+      a !== "--request-approval",
   );
   if (unknown.length > 0) {
     console.error(usage());
     return fail(`unknown arguments: ${unknown.join(" ")}`);
+  }
+  if (appliedBy !== null && !UUID_PATTERN.test(appliedBy)) {
+    console.error(usage());
+    return fail(`--applied-by=${appliedBy} is not a valid UUID; refusing without an explicit applying actor`);
+  }
+  if (requestApproval) {
+    return runRequestApproval({ mappingsPath, requestedBy, orgFlag, inputPath, collectOrg, apply });
   }
   if (collectOrg !== null && inputPath !== null) {
     console.error(usage());
@@ -238,6 +352,13 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
     try {
       const collected = await collectLegacyEmployments(collectOrg, { operatorMappings });
       rows = [...collected.rows];
+      if (operatorMappings !== undefined) {
+        console.error(
+          `hrm-migrate-employments: mapping set digest ` +
+            `${hashOperatorMappingSet(mappingSetEntries(operatorMappings))} — ` +
+            "request Flows approval for this digest before apply",
+        );
+      }
       if (!apply) {
         // Machine contract on stdout (redirect-safe); humans read stderr.
         process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
@@ -258,7 +379,7 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
           `${collectOrg}; evidence hash ${collected.evidenceHash}`,
       );
     } catch (error) {
-      if (error instanceof EmploymentCollectionError) {
+      if (error instanceof EmploymentCollectionError || error instanceof MappingApprovalError) {
         return fail(error.message);
       }
       throw error;
@@ -298,14 +419,23 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
 
   // Always evaluate first: the dry-run report is what the operator reviews,
   // and on production its hash is the apply interlock. It writes nothing.
+  // The dry run verifies mapping approvals exactly like the apply — the
+  // reviewed report certifies the same authority the apply enforces.
   let planned: EmploymentMigrationReport;
   try {
-    planned = await executeEmploymentMigration({ orgId, rows, dryRun: true, allowPartial });
+    planned = await executeEmploymentMigration({
+      orgId,
+      rows,
+      dryRun: true,
+      allowPartial,
+      appliedBy: appliedBy ?? undefined,
+    });
   } catch (error) {
     if (error instanceof EmploymentMigrationRefusalError) {
       printReport(error.report);
       return 1;
     }
+    if (error instanceof MappingApprovalError) return fail(error.message);
     throw error;
   }
   if (!apply) {
@@ -329,7 +459,12 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
   if (!gate.proceed) return fail(`[${gate.code}] ${gate.reason}`);
 
   try {
-    const applied = await executeEmploymentMigration({ orgId, rows, allowPartial });
+    const applied = await executeEmploymentMigration({
+      orgId,
+      rows,
+      allowPartial,
+      appliedBy: appliedBy ?? undefined,
+    });
     printReport(applied);
     return migrationExitCode(applied);
   } catch (error) {
@@ -337,6 +472,7 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
       printReport(error.report);
       return 1;
     }
+    if (error instanceof MappingApprovalError) return fail(error.message);
     throw error;
   }
 }
@@ -362,7 +498,8 @@ if (isEntrypoint()) {
     } catch (error) {
       if (
         error instanceof EmploymentMigrationError ||
-        error instanceof EmploymentCollectionError
+        error instanceof EmploymentCollectionError ||
+        error instanceof MappingApprovalError
       ) {
         console.error(`hrm-migrate-employments: ${error.message}`);
       } else {

@@ -12,7 +12,6 @@ import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-  seedWorkerEmployment,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import {
@@ -123,29 +122,11 @@ async function seedCommittedStub(
                             pay_date, tax_year, run_status, created_by, updated_by)
       values (${documentId}, ${org.orgId}, ${scheduleId}, ${payDate}, ${payDate},
               ${payDate}, 2026, 'committed', ${actorId}, ${actorId})`);
-    // pay_stubs.employment_id is NOT NULL with a same-worker coherence
-    // trigger (0186): legacy stub parties carry no HR employment by design
-    // (migration creates them), so the fixture seeds one bare employment
-    // per stub party in the party's own subsidiary. Reused across stubs of
-    // one party — a second live employment would resolve as ambiguous.
-    const party = (
-      await db.execute<{ subsidiaryId: string }>(sql`
-        select subsidiary_id::text as "subsidiaryId" from parties
-         where id = ${partyId} and org_id = ${org.orgId}`)
-    ).rows[0];
-    assert.ok(party, `expected party ${partyId} before seeding its stub`);
-    const existing = (
-      await db.execute<{ id: string }>(sql`
-        select id::text as id from worker_employments
-         where org_id = ${org.orgId} and worker_party_id = ${partyId} limit 1`)
-    ).rows[0];
-    const employmentId =
-      existing?.id ?? (await seedWorkerEmployment(org.orgId, partyId, party.subsidiaryId));
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
                              periods_per_year, pay_date, tax_year, currency_code,
                              created_by, updated_by)
-      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${partyId}, ${employmentId}, 'ON', 26,
+      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${partyId}, 'ON', 26,
               ${payDate}, 2026, 'CAD', ${actorId}, ${actorId})`);
   });
 }
@@ -523,12 +504,11 @@ test("operator mappings attach as resolution evidence with provenance", { skip }
     assert.equal(row.resolution?.approvedBy, "operator-1");
 
     const preflight = preflightEmploymentMigration(collected.rows);
-    assert.equal(preflight.rows[0]?.classification, "ready");
-    assert.equal(preflight.rows[0]?.serviceStart, "2021-06-01");
-    assert.equal(
-      preflight.rows[0]?.serviceStartProvenance,
-      "operator-employer-date-mapping",
-    );
+    // Free text never authorizes: without a decided Flows gate over the
+    // mapping set the mapping is inapplicable, even when complete.
+    assert.ok(preflight.rows[0]?.issues.some((issue) => issue.code === "unapproved_mapping"));
+    assert.notEqual(preflight.rows[0]?.classification, "ready");
+    assert.equal(preflight.rows[0]?.candidate, null);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -641,14 +621,13 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     const dry = runCli([`--org=${org.orgId}`, `--input=${rowsPath}`]);
     assert.equal(dry.status, 0, `dry run failed: ${dry.stderr}\n${dry.stdout}`);
     const dryReport = reportJson(dry.stdout);
-    assert.equal(dryReport.totals.wouldMigrate, 0);
-    assert.equal(dryReport.totals.alreadyMigrated, 2);
+    assert.equal(dryReport.totals.wouldMigrate, 2);
     assert.equal(dryReport.totals.refused, 0);
 
     const applied = runCli([`--org=${org.orgId}`, `--input=${rowsPath}`, "--apply"]);
     assert.equal(applied.status, 0, `apply failed: ${applied.stderr}\n${applied.stdout}`);
     const appliedReport = reportJson(applied.stdout);
-    assert.equal(appliedReport.totals.migrated, 0);
+    assert.equal(appliedReport.totals.migrated, 2);
     assert.equal(appliedReport.totals.refused, 0);
     const stored = await withBypassContext(async () => {
       const result = (await db.execute<{ n: string }>(sql`
@@ -657,12 +636,10 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
       };
       return result.rows[0]?.n;
     });
-    // The two stub-support employments are reused, never duplicated: the
-    // apply writes nothing, so the count stays an exact two.
     assert.equal(stored, "2");
 
-    // Re-collection is byte-identical; the dry run reports ready persons,
-    // then reuses their live employments (reuse writes no binding).
+    // Re-collection after migration is byte-identical, and the dry run
+    // reports the settled persons instead of migrating again.
     const recollected = runCli([`--collect=${org.orgId}`]);
     assert.equal(recollected.status, 0, `re-collect failed: ${recollected.stderr}`);
     assert.equal(evidenceHashFrom(recollected.stderr), firstHash);
@@ -675,7 +652,7 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     assert.equal(againReport.totals.refused, 0);
     assert.equal(againReport.persons.length, 2, "the re-run reports both persons");
     for (const person of againReport.persons) {
-      assert.equal(person.classification, "ready");
+      assert.equal(person.classification, "already_migrated");
       assert.equal(person.outcome, "already_migrated");
     }
     assert.equal(migrationExitCode(againReport), 0);

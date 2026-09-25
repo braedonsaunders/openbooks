@@ -219,6 +219,7 @@ export const TENANT_TABLE_POLICIES = {
   "hrm_documents": "clone:catalog-uuid-rebase",
   "hrm_employment_change_requests": "clone:catalog-uuid-rebase",
   "hrm_employment_classifications": "clone:catalog-uuid-rebase",
+  "hrm_employment_migration_approvals": "clone:catalog-uuid-rebase",
   "hrm_enrollment_dependents": "clone:catalog-uuid-rebase",
   "hrm_enrollment_windows": "clone:catalog-uuid-rebase",
   "hrm_exit_record_events": "clone:catalog-uuid-rebase",

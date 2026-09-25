@@ -40,6 +40,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { resolveMappingApprovalSnapshots } from "./migration-approval.ts";
 import {
   fingerprintSourceRow,
   preflightEmploymentMigration,
@@ -380,6 +381,13 @@ export interface ExecuteEmploymentMigrationOptions {
   readonly rows: readonly SourcePersonRow[];
   readonly dryRun?: boolean;
   readonly allowPartial?: boolean;
+  /**
+   * The applying actor (user id). Required whenever any row carries an
+   * operator mapping: the classifier must prove the Flows approver is
+   * distinct from the applier, and without the applier that proof is
+   * impossible. Rows without mappings never need it.
+   */
+  readonly appliedBy?: string;
 }
 
 interface StoredBinding {
@@ -508,6 +516,7 @@ export async function executeEmploymentMigration(
   const { orgId } = options;
   const dryRun = options.dryRun ?? false;
   const allowPartial = options.allowPartial ?? false;
+  const appliedBy = options.appliedBy;
   if (!UUID_PATTERN.test(orgId)) {
     throw new EmploymentMigrationError(
       `org ${JSON.stringify(orgId)} is not a valid UUID; refusing to migrate ` +
@@ -553,8 +562,33 @@ export async function executeEmploymentMigration(
       storedByKey.set(key, entry);
     }
 
+    // Mapping authority is re-resolved here, inside the apply
+    // transaction: snapshots the input rows claim are overwritten with the
+    // stored flow_gates truth (or an explicit null), so a forged approval
+    // can never reach the classifier — including on the --input path, which
+    // bypasses the collector. Fail closed on a missing applier: without the
+    // applying actor no independence proof is possible.
+    const needsApproval = options.rows.some((row) => row.resolution !== null);
+    if (needsApproval) {
+      if (appliedBy === undefined || appliedBy.length === 0) {
+        throw new EmploymentMigrationError(
+          "this run carries operator mappings but no applying actor; refusing to evaluate approvals " +
+            "without one — pass the applying user's id (CLI: --applied-by=<uuid>) so the classifier " +
+            "can prove the Flows approver is distinct from the applier",
+        );
+      }
+      assertUuid(
+        appliedBy,
+        "applying actor",
+        "pass the applying user's id as a UUID (CLI: --applied-by=<uuid>)",
+      );
+    }
+    const approvedRows = needsApproval
+      ? await resolveMappingApprovalSnapshots(orgId, options.rows)
+      : options.rows;
+
     const digests = new Map<string, string>();
-    const withBindings = options.rows.map((row) => {
+    const withBindings = approvedRows.map((row) => {
       digests.set(
         personKey(row.orgId, row.sourceNamespace, row.sourceId, row.nativePartyId),
         fingerprintSourceRow(row),
@@ -578,7 +612,7 @@ export async function executeEmploymentMigration(
       };
     });
 
-    const preflight = preflightEmploymentMigration(withBindings);
+    const preflight = preflightEmploymentMigration(withBindings, { appliedBy });
     // Pre-existing employment guard (HRM-MIGRATE-DUP-EMPLOYMENT): the HR path
     // may already have created an employment for the same natural key (org,
     // worker party, employer subsidiary) before the migration runs, and

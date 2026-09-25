@@ -66,12 +66,17 @@
  * coverage. The precise known service start and its provenance are reported
  * separately and never conflate the two.
  *
- * Operator mapping evidence (resolution) is validated for shape and
- * consistency only. approvedBy/approvedAt/rationale are untrusted input to
- * this pure function: presence and format are checked, authority is NOT
- * authenticated here. Remedies name the missing evidence precisely; the
- * manual resolution workflow does not exist yet, so no remedy points at any
- * screen.
+ * Operator mapping evidence (resolution) authorizes nothing by itself.
+ * A mapping is applicable only under a verified Flows approval: the
+ * resolution must name the deciding gate (approvalGateId) and carry the
+ * snapshot the collector/executor re-resolved from flow_gates inside their
+ * transaction (status approved, human decider, migration-mapping subject,
+ * subject digest equal to this mapping set's digest), and the applying
+ * actor (preflight options.appliedBy) must differ from the decider.
+ * approvedBy/approvedAt/rationale are untrusted operator context: presence
+ * and format are checked, authority is NEVER derived from them. Remedies
+ * name the missing evidence precisely: request Flows approval for the
+ * mapping set, then re-run with the gate id and the applying actor.
  *
  * Primary-code priority (deterministic; every issue is still retained):
  * binding_conflict > already_migrated > unknown_employer > invalid_employer
@@ -80,6 +85,7 @@
 
 import { createHash } from "node:crypto";
 import { compareCivilDates, isCivilDate } from "./temporal.ts";
+import { HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND } from "@openbooks/schema/src/hrm.ts";
 
 export const PREFLIGHT_CODES = [
   "ready",
@@ -197,15 +203,51 @@ export function postTerminationConflictOf(
   return { terminatedOn: match[1]!, activityAnchor, activityDate };
 }
 
+/**
+ * Verified Flows approval snapshot for one operator mapping. Resolved from
+ * flow_gates plus the gate's migration-mapping approval subject row by the
+ * collector/executor inside their own transaction — never trusted from
+ * caller input, which both re-resolve before classifying. Every field is
+ * the stored truth as last read; the classifier verifies the binding
+ * (approved, human decider distinct from the applier, digest match) and
+ * refuses the mapping when any of it fails.
+ */
+export interface MappingApprovalSnapshot {
+  /** The flow_gates row this mapping claims as its authority. */
+  readonly gateId: string;
+  /** Gate status as read (only "approved" authorizes). */
+  readonly status: string;
+  /** flow_gates.decided_by: the human decider. Null (system decisions) never authorizes. */
+  readonly decidedBy: string | null;
+  /** The gate's subject kind; must be the migration-mapping kind. */
+  readonly subjectKind: string;
+  /** mapping_digest from the gate's approval subject row. */
+  readonly subjectDigest: string;
+}
+
 export interface ResolutionEvidence {
   readonly kind: "operator-employer-date-mapping";
   readonly employerSubsidiaryId: string | null;
   readonly hiredOn: string | null;
   readonly terminatedOn: string | null;
-  /** Untrusted operator metadata: checked for presence/shape, never authenticated. */
+  /**
+   * Untrusted operator metadata: checked for presence/shape as record
+   * context, never authority. Authority is the Flows approval below.
+   */
   readonly approvedBy: string;
   readonly approvedAt: string;
   readonly rationale: string;
+  /**
+   * The Flows gate id authorizing this mapping set. Absent or blank means
+   * unapproved: the mapping contributes nothing and the candidate refuses.
+   */
+  readonly approvalGateId?: string;
+  /**
+   * Verified approval snapshot, re-resolved from the database by the
+   * collector/executor. Missing means unverified: the mapping refuses even
+   * when a gate id is named.
+   */
+  readonly approval?: MappingApprovalSnapshot | null;
 }
 
 export interface MigrationBinding {
@@ -394,6 +436,45 @@ export function fingerprintSourceRow(row: SourcePersonRow): string {
  */
 function rowIdentityHash(row: SourcePersonRow): string {
   return sha256Hex(ROW_IDENTITY_VERSION, canonicalEncode(row));
+}
+
+/** One operator mapping as covered by the approval digest. */
+export interface MappingSetEntry {
+  readonly partyId: string;
+  readonly employerSubsidiaryId: string | null;
+  readonly hiredOn: string | null;
+  readonly terminatedOn: string | null;
+}
+
+const MAPPING_SET_DIGEST_VERSION =
+  "openbooks/hrm-migration-preflight/mapping-set-digest/v1";
+
+/**
+ * Digest binding the exact operator mapping set an approval covers.
+ * Sorted by party id so file order never changes the digest; covers only
+ * the mapping facts (party, employer, service dates) — never the approval
+ * reference or free-text operator metadata, so authority cannot be
+ * self-covering and context edits cannot invalidate an approval. Exported
+ * so the collector, the approval requester, and the verifier pin the same
+ * digest the classifier recomputes.
+ */
+export function hashOperatorMappingSet(entries: readonly MappingSetEntry[]): string {
+  const sorted = [...entries].sort((left, right) =>
+    left.partyId < right.partyId ? -1 : left.partyId > right.partyId ? 1 : 0,
+  );
+  return sha256Hex(MAPPING_SET_DIGEST_VERSION, canonicalEncode(sorted));
+}
+
+/** Project one row's claimed mapping into digest space. */
+function mappingEntryOf(row: SourcePersonRow): MappingSetEntry | null {
+  const resolution = row.resolution;
+  if (resolution === null) return null;
+  return {
+    partyId: row.nativePartyId,
+    employerSubsidiaryId: resolution.employerSubsidiaryId,
+    hiredOn: resolution.hiredOn,
+    terminatedOn: resolution.terminatedOn,
+  };
 }
 
 function duplicateKey(row: SourcePersonRow): string {
@@ -663,7 +744,8 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
       detail: `resolution kind ${JSON.stringify(resolution.kind)} is not a recognized operator mapping.`,
       remedy:
         "Supply an operator employer/date mapping with kind operator-employer-date-mapping, employer, " +
-        "approver, instant, and rationale; presence is checked, authority is not authenticated here.",
+        "approver, instant, and rationale, authorized by a Flows approval gate for the mapping set; " +
+        "free-text approver metadata never authorizes a mapping.",
     });
     return empty;
   }
@@ -694,7 +776,8 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
       detail: `operator mapping cannot be applied: ${problems.join("; ")}.`,
       remedy:
         "Supply a complete operator employer/date mapping (employer, valid date-only service dates, " +
-        "approver, valid approval instant, rationale); an incomplete mapping contributes nothing.",
+        "approver, valid approval instant, rationale) under a Flows approval gate for the mapping set; " +
+        "an incomplete mapping contributes nothing, and free-text approver metadata never authorizes one.",
     });
     return empty;
   }
@@ -704,6 +787,131 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
     terminatedOn: resolution.terminatedOn,
     employer: normalizedId(resolution.employerSubsidiaryId),
   };
+}
+
+const MAPPING_APPROVAL_REMEDY =
+  "Request Flows approval for the exact mapping set (subject kind " +
+  `${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND}), then re-run with the decided ` +
+  "approval gate id and the applying actor (--applied-by): the gate must be " +
+  "approved by an authenticated approver distinct from the applier, and the " +
+  "approved digest must cover exactly the mappings in this run. Free-text " +
+  "approver names never authorize a mapping.";
+
+/**
+ * Verify the Flows approval authorizing one operator mapping. Shape
+ * completeness (checkResolutionDates) is necessary but never sufficient:
+ * only a verified approval makes the mapping applicable. Every refusal
+ * names the Flows path, and the remedy it names exists (the collector CLI
+ * request-approval flow plus decideGate on the mapping approval subject).
+ */
+function checkResolutionApproval(
+  row: SourcePersonRow,
+  appliedBy: string | undefined,
+  groupDigest: string | null,
+  ctx: RowContext,
+): boolean {
+  const resolution = row.resolution;
+  if (resolution === null) return false;
+  const gateId = resolution.approvalGateId ?? "";
+  if (!isNonBlank(gateId)) {
+    ctx.issues.push({
+      code: "unapproved_mapping",
+      level: "requires_review",
+      detail:
+        "operator mapping names no Flows approval gate: an unapproved mapping contributes nothing, " +
+        "even when its dates and employer are otherwise complete.",
+      remedy: MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  const snapshot = resolution.approval ?? null;
+  // UUID text is case-insensitive (postgres canonicalizes to lowercase):
+  // compare folded so an uppercase gate id still binds its approval.
+  if (snapshot === null || snapshot.gateId.toLowerCase() !== gateId.toLowerCase()) {
+    ctx.issues.push({
+      code: "unverified_mapping_approval",
+      level: "requires_review",
+      detail:
+        `operator mapping names approval gate ${gateId} but carries no approval verified against ` +
+        "flow_gates; a gate id the database cannot vouch for authorizes nothing.",
+      remedy:
+        "Re-run through the collector or apply path so the gate is re-resolved from flow_gates " +
+        "inside the migration transaction; " + MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  if (snapshot.status !== "approved") {
+    ctx.issues.push({
+      code: "mapping_not_approved",
+      level: "requires_review",
+      detail:
+        `approval gate ${gateId} is ${snapshot.status}, not approved: a pending, rejected, or ` +
+        "otherwise undecided gate authorizes nothing.",
+      remedy: MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  if (!isNonBlank(snapshot.decidedBy)) {
+    ctx.issues.push({
+      code: "anonymous_mapping_approval",
+      level: "requires_review",
+      detail:
+        `approval gate ${gateId} records no human decider: a system or unattributed decision is ` +
+        "not an authenticated approver and never authorizes a mapping.",
+      remedy: MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  if (appliedBy === undefined || !isNonBlank(appliedBy)) {
+    ctx.issues.push({
+      code: "unknown_mapping_applier",
+      level: "requires_review",
+      detail:
+        "the applying actor is unknown, so independence of the approver cannot be proven: " +
+        "an approval whose decider might be the applier authorizes nothing.",
+      remedy:
+        "Re-run with the applying actor supplied (--applied-by); " + MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  if (snapshot.decidedBy.toLowerCase() === appliedBy.toLowerCase()) {
+    ctx.issues.push({
+      code: "self_approved_mapping",
+      level: "requires_review",
+      detail:
+        `approval gate ${gateId} was decided by ${snapshot.decidedBy}, who is also applying this ` +
+        "migration: the approver must be distinct from the applying actor.",
+      remedy: MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  if (snapshot.subjectKind !== HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND) {
+    ctx.issues.push({
+      code: "approval_subject_mismatch",
+      level: "requires_review",
+      detail:
+        `approval gate ${gateId} decides subject kind ${snapshot.subjectKind}, not a migration ` +
+        "mapping set: an approval for something else never authorizes these mappings.",
+      remedy: MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  if (groupDigest === null || snapshot.subjectDigest !== groupDigest) {
+    ctx.issues.push({
+      code: "approval_subject_mismatch",
+      level: "requires_review",
+      detail:
+        `approval gate ${gateId} covers mapping digest ${snapshot.subjectDigest}, but this run's ` +
+        `mapping set digests to ${groupDigest ?? "nothing"}: the approval does not cover exactly ` +
+        "these mappings, so it authorizes none of them.",
+      remedy:
+        "Either re-run with exactly the approved mapping set (any added, removed, or edited " +
+        "mapping changes the digest), or request a new Flows approval for this set; " +
+        MAPPING_APPROVAL_REMEDY,
+    });
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -1010,7 +1218,17 @@ const PRIMARY_PRIORITY: readonly Exclude<PreflightCode, "ready">[] = [
   "requires_review",
 ];
 
-function classifyRow(row: SourcePersonRow, isDuplicate: boolean): PersonPreflight {
+interface ApprovalContext {
+  readonly appliedBy?: string;
+  /** Mapping-set digest per named approval gate, recomputed from this run's rows. */
+  readonly groupDigests: ReadonlyMap<string, string>;
+}
+
+function classifyRow(
+  row: SourcePersonRow,
+  isDuplicate: boolean,
+  approval: ApprovalContext,
+): PersonPreflight {
   const ctx: RowContext = { issues: [], notes: [], provenance: [] };
   addProvenance(ctx, [
     ...row.party.evidenceIds,
@@ -1049,11 +1267,21 @@ function classifyRow(row: SourcePersonRow, isDuplicate: boolean): PersonPrefligh
     });
   }
   const assertedEmployer = normalizedId(row.employer.assertedSubsidiaryId);
-  const resolution = checkResolutionDates(row, ctx);
-  const effectiveEmployer = resolution.applied && resolution.employer !== null
-    ? resolution.employer
+  const shape = checkResolutionDates(row, ctx);
+  // Shape completeness never applies a mapping by itself: only a verified
+  // Flows approval authorizes it. The conflict checks below still read the
+  // claimed employer so a source-versus-operator disagreement refuses as
+  // ambiguous even before approval exists.
+  const gateKey = (row.resolution?.approvalGateId ?? "").toLowerCase();
+  const groupDigest = isNonBlank(gateKey) ? (approval.groupDigests.get(gateKey) ?? null) : null;
+  const authorized = row.resolution !== null
+    ? checkResolutionApproval(row, approval.appliedBy, groupDigest, ctx)
+    : false;
+  const applied = shape.applied && authorized;
+  const effectiveEmployer = applied && shape.employer !== null
+    ? shape.employer
     : assertedEmployer;
-  checkEmployer(row, effectiveEmployer, resolution.employer, assertedEmployer, ctx);
+  checkEmployer(row, effectiveEmployer, shape.employer, assertedEmployer, ctx);
   const payrollScope = row.payroll !== null && row.payroll.present
     ? normalizedId(row.payroll.subsidiaryId)
     : null;
@@ -1075,7 +1303,7 @@ function classifyRow(row: SourcePersonRow, isDuplicate: boolean): PersonPrefligh
     row,
     observationCurrent,
     observationTerminated,
-    { applied: resolution.applied, hiredOn: resolution.hiredOn, terminatedOn: resolution.terminatedOn },
+    { applied, hiredOn: applied ? shape.hiredOn : null, terminatedOn: applied ? shape.terminatedOn : null },
     ctx,
   );
   const fingerprint = fingerprintSourceRow(row);
@@ -1139,11 +1367,23 @@ function classifyRow(row: SourcePersonRow, isDuplicate: boolean): PersonPrefligh
   };
 }
 
+export interface PreflightEmploymentMigrationOptions {
+  /**
+   * The applying actor. Required to prove approver/applier independence
+   * for any mapped row: without it every mapping refuses as
+   * unknown_mapping_applier. Rows without mappings never need it.
+   */
+  readonly appliedBy?: string;
+}
+
 /**
  * Pure preflight over one batch of source inventory. Never mutates input,
  * never drops rows, deterministic under input permutation.
  */
-export function preflightEmploymentMigration(rows: readonly SourcePersonRow[]): PreflightReport {
+export function preflightEmploymentMigration(
+  rows: readonly SourcePersonRow[],
+  options: PreflightEmploymentMigrationOptions = {},
+): PreflightReport {
   const counts = Object.fromEntries(PREFLIGHT_CODES.map((code) => [code, 0])) as Record<
     PreflightCode,
     number
@@ -1154,10 +1394,29 @@ export function preflightEmploymentMigration(rows: readonly SourcePersonRow[]): 
     const key = duplicateKey(row);
     seen.set(key, (seen.get(key) ?? 0) + 1);
   }
+  // Mapping-set digests per named approval gate, recomputed from the
+  // claimed mapping facts in THIS run: an approval authorizes exactly the
+  // set it digested, so any added, removed, or edited mapping fails the
+  // binding in checkResolutionApproval.
+  const groupEntries = new Map<string, MappingSetEntry[]>();
+  for (const row of rows) {
+    const gateKey = (row.resolution?.approvalGateId ?? "").toLowerCase();
+    if (!isNonBlank(gateKey)) continue;
+    const entry = mappingEntryOf(row);
+    if (entry === null) continue;
+    const list = groupEntries.get(gateKey);
+    if (list === undefined) groupEntries.set(gateKey, [entry]);
+    else list.push(entry);
+  }
+  const groupDigests = new Map<string, string>();
+  for (const [gateKey, entries] of groupEntries) {
+    groupDigests.set(gateKey, hashOperatorMappingSet(entries));
+  }
+  const approval: ApprovalContext = { appliedBy: options.appliedBy, groupDigests };
   const decorated = rows.map((row) => ({
     fingerprint: fingerprintSourceRow(row),
     tieBreak: rowIdentityHash(row),
-    result: classifyRow(row, (seen.get(duplicateKey(row)) ?? 0) > 1),
+    result: classifyRow(row, (seen.get(duplicateKey(row)) ?? 0) > 1, approval),
   }));
   decorated.sort((a, b) => {
     if (a.result.orgId !== b.result.orgId) return a.result.orgId < b.result.orgId ? -1 : 1;

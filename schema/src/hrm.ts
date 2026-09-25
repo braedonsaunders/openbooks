@@ -22,6 +22,17 @@ import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
 
 /**
+ * Native Flows subject kind for operator employment mapping sets
+ * (migration 0408: hrm_employment_migration_approvals). The Flows adapter
+ * owns the approval lifecycle over this kind; the migration preflight and
+ * verifier bind operator mapping authority to it. Both sides import this
+ * constant — never a second literal — so a rename cannot strand one side
+ * on the old kind.
+ */
+export const HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND =
+  "hrm_employment_migration_mapping";
+
+/**
  * HRM employment foundation (migration 0184).
  *
  * Additive only; payroll is untouched until the compatibility audit.

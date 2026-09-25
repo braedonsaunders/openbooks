@@ -60,6 +60,11 @@ import {
   crewBatchSubjectProfile,
 } from "./crew-batches-adapter.ts";
 // HR-20 end
+import {
+  employmentMigrationFlowAdapter,
+  employmentMigrationSubjectProfile,
+} from "./employment-migration-adapter.ts";
+import { HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND } from "@openbooks/schema/src/hrm.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 
@@ -89,6 +94,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   // HR-20 begin: crew time batches approve through Flows.
   if (subjectKind === CREW_TIME_BATCH_SUBJECT_KIND) return crewBatchFlowAdapter;
   // HR-20 end
+  if (subjectKind === HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND) return employmentMigrationFlowAdapter;
   // A pay run is a document, but with payroll's own authoring vocabulary; the
   // adapter is the documents adapter with those fields layered on.
   if (subjectKind === PAY_RUN_SUBJECT_KIND) return payRunsFlowAdapter;
@@ -136,6 +142,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     // HR-20 begin
     crewBatchSubjectProfile,
     // HR-20 end
+    employmentMigrationSubjectProfile,
   ];
 }
 
