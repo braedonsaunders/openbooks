@@ -178,8 +178,8 @@ export function RunBuilder({
                 setFieldError(null)
                 setPaymentBankProfileId(v ?? '')
               }}
+              disabled={busy || bankProfiles.length === 0}
               placeholder={bankProfiles.length > 0 ? t('selectBankAccountPlaceholder') : t('noBankAccounts')}
-              disabled={bankProfiles.length === 0}
             />
           </div>
           <div className="space-y-1.5">
@@ -188,6 +188,7 @@ export function RunBuilder({
               id={`${fieldId}-funds-date`}
               aria-labelledby={`${fieldId}-funds-date-label`}
               type="date"
+              disabled={busy}
               value={scheduledFor}
               onChange={(e) => {
                 setFieldError(null)
@@ -229,8 +230,8 @@ export function RunBuilder({
       <div className="shrink-0 px-4 py-3 sm:px-6">{toolbar}</div>
 
       {mode === 'payments' ? <div className="flex shrink-0 flex-wrap gap-x-5 gap-y-2 px-4 pb-3 text-sm text-slate-700 sm:px-6 dark:text-slate-200">
-        <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-teal-600" checked={captureDiscounts} onChange={(e) => setCaptureDiscounts(e.target.checked)} />{t('captureDiscounts')}</label>
-        <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-teal-600" checked={applyCredits} onChange={(e) => setApplyCredits(e.target.checked)} />{t('applyCredits')}</label>
+        <label className="flex items-center gap-2"><input type="checkbox" disabled={busy} className="h-4 w-4 accent-teal-600" checked={captureDiscounts} onChange={(e) => setCaptureDiscounts(e.target.checked)} />{t('captureDiscounts')}</label>
+        <label className="flex items-center gap-2"><input type="checkbox" disabled={busy} className="h-4 w-4 accent-teal-600" checked={applyCredits} onChange={(e) => setApplyCredits(e.target.checked)} />{t('applyCredits')}</label>
       </div> : null}
 
       <div className="min-h-0 flex-1 px-4 pb-3 sm:px-6 [&>div]:h-full [&>div]:overflow-auto">
@@ -247,6 +248,7 @@ export function RunBuilder({
                     type="checkbox"
                     className="h-4 w-4 accent-teal-600"
                     checked={allOnPage}
+                    disabled={busy}
                     onChange={toggleAll}
                     aria-label={t('selectAllAriaLabel')}
                   />
@@ -267,6 +269,7 @@ export function RunBuilder({
                       type="checkbox"
                       className="h-4 w-4 accent-teal-600"
                       checked={!!selected[b.id]}
+                      disabled={busy}
                       onChange={() => toggle(b)}
                       aria-label={t('selectAriaLabel', { document: b.document_number })}
                     />
