@@ -262,9 +262,9 @@ function subsidiaryTargetVisibleSql(
     or exists (select 1 from parties p
                  where p.org_id = ${orgId} and p.id = ${idCol} and ${tableCol} = 'parties'
                    and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[])))
-    or exists (select 1 from fixed_assets a
-                 where a.org_id = ${orgId} and a.id = ${idCol} and ${tableCol} = 'fixed_assets'
-                   and a.subsidiary_id = any(${fence}::uuid[]))
+    or exists (select 1 from fixed_assets fx
+                 where fx.org_id = ${orgId} and fx.id = ${idCol} and ${tableCol} = 'fixed_assets'
+                   and fx.subsidiary_id = any(${fence}::uuid[]))
     or exists (select 1 from compliance_records cr
                  join parties p on p.id = cr.party_id and p.org_id = cr.org_id
                  left join projects pj on pj.id = cr.project_id and pj.org_id = cr.org_id
@@ -430,6 +430,15 @@ export async function folderAccessLevel(
   executor?: SqlExecutor,
 ): Promise<AccessLevel> {
   const exec = executor ?? db
+  // Admins skip the tier query below (it binds the caller id into uuid
+  // comparisons): existence alone decides, exactly as the anchor read did.
+  if (viewer.isAdmin && (viewer.allowedSubsidiaryIds === null || viewer.allowedSubsidiaryIds === undefined)) {
+    const exists = (await exec.execute(sql`
+      select 1 from folders where id = ${folderId} and org_id = ${orgId} and not is_inactive
+    `)).rows[0]
+    if (!exists) return 'none'
+    return 'manager'
+  }
   const recordFence = recordTargetVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`a.record_table`, sql`a.record_id`)
   const r = (await exec.execute<{ n: number; ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number; recordVisible: boolean }>(sql`
     with recursive ancestors as (
