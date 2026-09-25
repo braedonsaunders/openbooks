@@ -167,12 +167,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'this action is not available' }, { status: 404 })
   }
 
+  // The request's subsidiary scope travels into the dispatch: the
+  // availability check above is a precheck, and the engine re-verifies it
+  // under lock before any effect lands (I1-refix-108) — otherwise a party
+  // rehome between check and effect runs a permitted button on a record
+  // that just left the caller's legal entity.
   const result = await withOrgContext(authz.user.orgId, () =>
     runRecordFlows(
       { kind: 'manual', buttonId: body.buttonId! },
       body.subjectKind!,
       body.subjectId!,
-      { orgId: authz.user.orgId, userId: authz.user.id },
+      {
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      },
     ),
   )
   // A dispatch-level failure leaves NO runs behind (the dispatch threw before

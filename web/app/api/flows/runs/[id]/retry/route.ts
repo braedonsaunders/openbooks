@@ -41,7 +41,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (subsidiaryDenied) return subsidiaryDenied
 
   try {
-    const result = await retryFlowRun(id, { orgId, userId: gate.user.id })
+    // Same scope-in-dispatch contract as the manual route (I1-refix-108):
+    // the subject-scope gate above is a precheck; the engine re-verifies
+    // under lock before re-driving the run.
+    const result = await retryFlowRun(id, {
+      orgId,
+      userId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     return NextResponse.json(result)
   } catch (e) {
     if (e instanceof FlowRetryError) {

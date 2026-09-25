@@ -13,6 +13,7 @@ interface RetryState {
   subjectLoads: Array<{ subjectKind: string; subjectId: string; orgId: string }>;
   headerQueries: number;
   calls: Array<{ runId: string }>;
+  engineCtx: Array<{ allowedSubsidiaryIds: unknown }>;
   mode: { kind: "ok" } | { kind: "fail"; message: string };
 }
 
@@ -28,6 +29,7 @@ const retryState: RetryState = {
   subjectLoads: [],
   headerQueries: 0,
   calls: [],
+  engineCtx: [],
   mode: { kind: "ok" },
 };
 (
@@ -78,8 +80,9 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.flow-retry-route-test')]
       export class FlowRetryError extends Error {}
-      export async function retryFlowRun(runId) {
+      export async function retryFlowRun(runId, ctx) {
         state.calls.push({ runId })
+        state.engineCtx.push(ctx ?? null)
         if (state.mode.kind === 'fail') throw new FlowRetryError(state.mode.message)
         return { runId, status: 'waiting', gatesCreated: 1 }
       }
@@ -163,6 +166,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   retryState.subjectLoads = [];
   retryState.headerQueries = 0;
   retryState.calls = [];
+  retryState.engineCtx = [];
   retryState.mode = { kind: "ok" };
 }
 
@@ -244,4 +248,5 @@ test("an in-scope caller may retry the run", async () => {
   const body = (await res.json()) as { runId?: string; status?: string; gatesCreated?: number };
   assert.deepEqual(body, { runId: RUN_ID, status: "waiting", gatesCreated: 1 });
   assert.deepEqual(retryState.calls, [{ runId: RUN_ID }]);
+  assert.deepEqual(retryState.engineCtx[0]?.allowedSubsidiaryIds, new Set([SUBJECT_SUBSIDIARY]));
 });
