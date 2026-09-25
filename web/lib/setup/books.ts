@@ -6,7 +6,7 @@ import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-
 import { claimSetupCreate } from '../api/idempotency'
 import { auditSetupChange as audit } from './audit'
 import { coerceBoolean } from './coerce'
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 export function isSetupBookEntity(entity: SetupEntity): boolean {
   return entity.key === 'accounting-books' || entity.key === 'item-rate-books'

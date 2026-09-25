@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /** Read-side projection/source for registry fields stored in a child relation. */
 export function setupReadProjection(entity: SetupEntity, columns?: readonly string[]) {

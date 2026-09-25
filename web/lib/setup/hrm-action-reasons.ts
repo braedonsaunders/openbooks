@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * Setup-registry descriptor for HR action/reason codes (0227).

@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * HR-21 AI rails settings (ai_rails_settings singleton). The scan

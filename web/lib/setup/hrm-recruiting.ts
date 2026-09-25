@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * HR-18 recruiting-depth Setup entities (0229). All four top-level lists

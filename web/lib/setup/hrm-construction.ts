@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * HR-13 construction-compliance Setup entities. All five live rehomed on

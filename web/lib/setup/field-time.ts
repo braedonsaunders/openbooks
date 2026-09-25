@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * HR-20 field-time Setup entities. All three are rehomed — geofences

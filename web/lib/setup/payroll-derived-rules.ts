@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * Setup-registry descriptors for derived earnings rules (and the trades list

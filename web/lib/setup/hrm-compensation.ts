@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * Setup-registry descriptors for HRM compensation architecture (0221).
