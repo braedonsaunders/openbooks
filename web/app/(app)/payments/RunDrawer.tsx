@@ -74,11 +74,11 @@ export interface RunBlockerClient {
 
 export interface PaymentRunClient {
   id: string; run_number: string; status: string; scheduled_for: string | null;
-  bank_number: string | null; bank_name: string | null
+  bank_number: string | null; bank_name: string | null; currency: string
 }
 export interface PaymentInstructionClient {
   id: string; status: string; payee: string; document_number: string | null;
-  amount: string | number; payment_document_id: string | null; settlement_effective_on: string | null;
+  amount: string | number; currency: string; payment_document_id: string | null; settlement_effective_on: string | null;
   bank_reference: string | null; return_code: string | null; return_reason: string | null
 }
 export interface PaymentFileClient {
@@ -275,7 +275,7 @@ export function RunDrawer({
     const ok = await confirmDialog({
       message: t('runDrawer.confirmPost', {
         count: live.filter((i) => i.status === 'pending').length,
-        total: money(total),
+        total: money(total, { currency: run.currency }),
       }),
     })
     if (!ok) return
@@ -387,7 +387,7 @@ export function RunDrawer({
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
             {t.rich('runDrawer.paymentsSummary', {
               count: live.length,
-              amount: money(total),
+              amount: money(total, { currency: run.currency }),
               total: (chunks) => <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>,
             })}
           </span>
@@ -467,7 +467,7 @@ export function RunDrawer({
                         : i.status}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{money(i.amount)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{money(i.amount, { currency: i.currency })}</td>
                   <td className="px-3 py-2 text-right">{['sent', 'settled'].includes(i.status) ? <Button size="sm" variant="outline" onClick={() => { setOutcomeInstruction(i); setOutcomeStatus(i.status === 'settled' ? 'settled' : 'settled'); setEffectiveOn(i.settlement_effective_on ?? today); setBankReference(i.bank_reference ?? ''); setReturnCode(i.return_code ?? ''); setReturnReason(i.return_reason ?? '') }}>{t('runDrawer.recordOutcome')}</Button> : null}</td>
                 </tr>
               ))}
