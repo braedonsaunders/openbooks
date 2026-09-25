@@ -120,11 +120,13 @@ const mockSources = new Map<string, string>([
        }
      }`,
   ],
+  ["mock:server-only", `export {}`],
 ]);
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],
+  ["server-only", "mock:server-only"],
 ]);
 
 const hooks = registerHooks({

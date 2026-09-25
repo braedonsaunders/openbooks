@@ -118,6 +118,7 @@ const mockSources = new Map<string, string>([
   ],
   ['mock:features', `export async function isFeatureEnabled() { return true }\n     export async function acquireFeatureGateLock() {}\n     export async function checkProjectsWriteEnabled() { return true }`],
   ['mock:org-feature-lock', `export async function lockAndCheckOrgFeature() { return true }\nexport async function acquireOrgFeatureGateLock() {}\nexport function featureGateLockKey(orgId) { return \`openbooks:feature-gate:\${orgId}\` }`],
+  ['mock:server-only', `export {}`],
   [
     'mock:signing',
     `export async function sendTicketForSignature() {
@@ -132,6 +133,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/features', 'mock:features'],
   ['../../../../lib/field-ticket-signing', 'mock:signing'],
   ['@openbooks/engine/src/organization/org-feature-lock.ts', 'mock:org-feature-lock'],
+  ['server-only', 'mock:server-only'],
 ])
 
 const hooks = registerHooks({
