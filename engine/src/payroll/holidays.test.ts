@@ -931,25 +931,17 @@ const VARIES: ResolvedWorkSchedule = {
 };
 
 test("a normal-day jurisdiction pays ONE normal working day, from the schedule", () => {
-  // Manitoba s. 23(1): the wages for regular hours on a normal workday.
-  // Mon–Fri, 8 hours, $25.00 → $200.00.
   const result = computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
     schedule: pattern("8"), hourlyRate: "25.00",
     earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
   }));
   assert.equal(result.holidayPay, "200.0000");
   assert.match(result.basis, /one normal working day/);
-
-  // And the case a single weekly-hours number gets wrong twice: four ten-hour
-  // days is the same forty hours a week and a TEN-hour normal day. 40 ÷ 5 = 8
-  // would pay $200; the pattern pays $250.
-  assert.equal(
-    computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
-      schedule: pattern("10", [1, 2, 3, 4]), hourlyRate: "25.00",
-      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-    })).holidayPay,
-    "250.0000",
-  );
+  // Four 10-hour days have a $250 normal-day wage, not $200.
+  const tenHourDay = computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
+    schedule: pattern("10", [1, 2, 3, 4]), hourlyRate: "25.00", earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+  }));
+  assert.equal(tenHourDay.holidayPay, "250.0000");
 });
 
 test("a holiday landing on the employee's day off still owes a normal day", () => {

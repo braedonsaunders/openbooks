@@ -1139,6 +1139,25 @@ export interface PayrollHoliday {
   until?: number;
 }
 
+/** A dated statutory payment triggered by working a day outside the general-holiday calendar. */
+export interface PayrollWorkTriggeredHoliday {
+  key: string;
+  name: string;
+  rule: PayrollHolidayRule;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  /** A pack-declared employer fact that exempts the employer from this Act. */
+  employerExemptionFact?: string;
+  qualifying: { lastAndFirstScheduledShift: boolean };
+  payment:
+    | {
+        kind: "holiday_pay_plus_overtime";
+        overtimeRate: string;
+        minimumHours: "half_normal_day";
+      }
+    | { kind: "alternate_paid_day" };
+}
+
 /**
  * WHICH days of a window a statute counts — the predicate, declared.
  *
@@ -1439,6 +1458,8 @@ export interface PayrollJurisdiction {
   citation: string;
   holidays: readonly PayrollHoliday[];
   holidayPay: readonly PayrollHolidayPayEdition[] | null;
+  /** Statutory work-triggered payments that are not general holidays. */
+  workTriggeredHolidays?: readonly PayrollWorkTriggeredHoliday[];
 }
 
 // --- Canadian jurisdictions ------------------------------------------------

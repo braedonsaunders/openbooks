@@ -289,7 +289,15 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     ...CA_COMPUTE_FACTOR_LABELS,
   },
   employeeFacts: CA_EMPLOYEE_FACTS,
-  employerFacts: CA_EMPLOYER_FACTS,
+  employerFacts: [...CA_EMPLOYER_FACTS, {
+    key: "mb_remembrance_day_act_exempt",
+    kind: "boolean",
+    label: "Exempt from Manitoba Remembrance Day Act work provisions",
+    refusalReason: "the Act's work-triggered payment applies only to employers required to observe it",
+    legalBasis: "The Remembrance Day Act (Manitoba), CCSM c R80, ss. 2–3",
+    required: false,
+    effectivePeriod: "date",
+  }],
   // HR-13: construction carve-outs as pack data — statute transcribed
   // with citations, consumed by generic readers, never a generic branch.
   construction: CA_CONSTRUCTION,

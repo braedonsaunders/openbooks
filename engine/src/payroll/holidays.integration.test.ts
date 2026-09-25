@@ -60,14 +60,8 @@ async function seedPaidVacationBeforeCanadaDay(options: {
   const holidayComponentId = await component("STATHOL", "stat_holiday");
   const premiumComponentId = await component("STATPREM", "stat_holiday_premium");
 
-  // Two committed periods, each paid and each carrying NO hours: the shape a
-  // salary or a bank-paid absence leaves behind.
-  //
-  // The document is 'approved' rather than 'posted' deliberately. What the
-  // evidence query keys off is `pay_runs.run_status = 'committed'` — it never
-  // reads documents.status — and a 'posted' document must also carry
-  // posted_entry_id and posting_period_id (documents_posted_period_required),
-  // which would mean seeding a journal entry this test does not exercise.
+  // Two paid committed periods carry no hours, as with salary or bank-paid
+  // absence. Approved documents avoid unrelated posted-journal setup.
   const committed = async (periodStart: string, periodEnd: string, payDate: string) => {
     const documentId = randomUUID();
     await db.execute(sql`
@@ -155,10 +149,8 @@ test(
   async () => {
     const fx = await seedPaidVacationBeforeCanadaDay();
     try {
-      // The measure this engine used to count, asserted directly so the "would
-      // not have qualified before" half is a fact and not a claim: there is not
-      // one approved timesheet day in the thirty before the holiday, so the old
-      // 15-of-30 numerator was zero and the day was refused outright.
+      // The old 15-of-30 test counted no approved work days and refused this
+      // employee, despite $4,000 of paid vacation in the lookback.
       const timesheetDays = (await db.execute<{ days: number }>(sql`
         select count(distinct worked_on)::int as days
           from time_entries
@@ -177,6 +169,20 @@ test(
       assert.equal(holidayPay.holidayDate, "2026-07-01");
       // Not worked, so no premium line.
       assert.equal(lines.some((line) => line.componentId === fx.premiumComponentId), false);
+      // Manitoba Remembrance Day is work-triggered, not a general holiday: 2
+      // hours worked on 11-11 with a non-exempt employer pays the normal-day
+      // amount (8 h × $30) plus the 1.5× overtime minimum on the greater of
+      // hours worked and half a normal day, less ordinary wages already paid.
+      await db.execute(sql`insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
+        is_billable, billing_status, costing_basis, created_by, updated_by)
+        values (${fx.orgId}, ${fx.employeeId}, '2026-11-11', '2', 'approved', false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+      await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId,
+        subsidiaryId: fx.subsidiaryId, country: "CA", factKey: "mb_remembrance_day_act_exempt",
+        effectiveFrom: "2026-01-01", value: "false", changeReason: "Subject to Manitoba Act" });
+      const manitoba = await resolveStatutoryHolidayPay(db, { ...holidayInput(fx),
+        periodStart: "2026-11-11", periodEnd: "2026-11-11", jurisdiction: "CA-MB",
+        country: "CA", subsidiaryId: fx.subsidiaryId });
+      assert.deepEqual(manitoba.map((line) => line.amount), ["240.0000", "120.0000"]);
       await upsertPayrollEmployerFact({
         orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: fx.subsidiaryId,
         country: "CA", factKey: "work_week_start", effectiveFrom: "2026-01-01",
