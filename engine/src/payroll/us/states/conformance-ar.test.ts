@@ -76,6 +76,12 @@ test("AR no AR4EC withholds at zero exemptions", () => {
   assert.equal(empty.tax, zero.tax);
   assert.equal(empty.factors.AR_PERSONAL_CREDITS, money("0"));
   assert.equal(empty.tax, money("41.33"));
+  // NFC low-income credit: $16,000 single → gross $173 (13550 × 3.4% − 287.97)
+  // minus $58.72 credit = $114.28 for the year.
+  assert.equal(AR_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 1, wages: "16000",
+    basis: "resident", certificate: cert({ low_income: "true", filing_status: "single" }),
+  }).tax, money("114.28"));
 });
 
 test("AR exempt is zero and a year it has not transcribed is refused", () => {

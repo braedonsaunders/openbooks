@@ -10,6 +10,8 @@
  *       2-exemption example ($36.50).
  *   Employer's Instructions, Effective 01/01/2026 — Form AR4EC / AR4ECSP;
  *     optional 3.9% on separately-paid supplementals; daily × 260.
+ *   NFC Bulletin 1781190112, effective Pay Period 15, 2026 — low-income
+ *     tax-credit formulas and their filing-status/exemption bands.
  *
  * Texarkana AR-TX-4EC and AR4ECSP exemption are honored as a zero
  * withholding flag. The 3.9% supplemental election is exported, not used
@@ -21,7 +23,7 @@ import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, rate6, U } from "../../canada/decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateCount, certificateFlag, type PayrollCertificate,
+  certificateAmount, certificateChoice, certificateCount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -131,6 +133,30 @@ export function arAnnualGrossTax(netTaxable: bigint, rates: ArYearRates): bigint
   return roundDiv(max0(exactTax), RATE6 * DOLLAR) * DOLLAR;
 }
 
+function arLowIncomeCredit(annualWages: bigint, status: string, exemptions: number): bigint {
+  let lower: bigint;
+  let upper: bigint;
+  let maximum: bigint;
+  if (status === "single") {
+    [lower, upper, maximum] = [U("14644"), U("17500"), U("111.80")];
+  } else if (status === "married_joint" && exemptions <= 1) {
+    [lower, upper, maximum] = [U("24696"), U("29000"), U("391.56")];
+  } else if (status === "married_joint") {
+    [lower, upper, maximum] = [U("29723"), U("36100"), U("531.96")];
+  } else if (status === "head_household" && exemptions <= 1) {
+    [lower, upper, maximum] = [U("20821"), U("25300"), U("268.84")];
+  } else if (status === "head_household") {
+    [lower, upper, maximum] = [U("24819"), U("29000"), U("378.04")];
+  } else {
+    throw new PayrollError(`AR4EC low-income election has unsupported filing status ${status}`);
+  }
+
+  if (annualWages >= upper) return 0n;
+  const numerator = (upper - annualWages) * maximum;
+  const creditCents = roundDiv(numerator, (upper - lower) * 100n) * 100n;
+  return max0(creditCents);
+}
+
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = arRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
@@ -157,9 +183,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   const annualGross = arAnnualGrossTax(netTaxable, rates);
   trace("AR_ANNUAL_GROSS_TAX", annualGross);
+  const lowIncome = certificateFlag(input.certificate, "low_income");
+  const lowIncomeStatus = lowIncome ? certificateChoice(input.certificate, "filing_status") : null;
+  if (lowIncome && lowIncomeStatus == null) {
+    throw new PayrollError(
+      "AR4EC low-income election requires the signed filing status; record the status shown on line 5 before calculating",
+    );
+  }
+  const lowIncomeCredit = lowIncome
+    ? arLowIncomeCredit(annualWages, lowIncomeStatus!, exemptions)
+    : 0n;
+  trace("AR_LOW_INCOME_CREDIT", lowIncomeCredit);
+  const taxAfterLowIncomeCredit = max0(annualGross - lowIncomeCredit);
   const credits = U(rates.exemptionCredit) * BigInt(exemptions);
   trace("AR_PERSONAL_CREDITS", credits);
-  const annualNet = max0(annualGross - credits);
+  const annualNet = max0(taxAfterLowIncomeCredit - credits);
   trace("AR_ANNUAL_NET_TAX", annualNet);
 
   const periodTax = divIntCents(annualNet, P);
@@ -188,6 +226,7 @@ export const AR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AR_NET_TAXABLE: "Arkansas net taxable income",
   AR_MIDRANGE: "Arkansas midrange-table amount",
   AR_ANNUAL_GROSS_TAX: "Arkansas gross tax (annual)",
+  AR_LOW_INCOME_CREDIT: "Arkansas low-income tax credit (annual)",
   AR_PERSONAL_CREDITS: "Arkansas personal tax credits",
   AR_ANNUAL_NET_TAX: "Arkansas net tax (annual)",
   AR_ADDITIONAL_WITHHOLDING: "Additional Arkansas withholding per paycheck",
@@ -228,8 +267,9 @@ export const AR_CERTIFICATE: PayrollCertificate = {
     + "Form AR4EC / AR4ECSP / AR-TX-4EC",
   summary:
     "Sets the number of Arkansas withholding exemptions. A missing AR4EC is "
-    + "withheld at zero exemptions (nothing claimed on the certificate). AR4ECSP "
-    + "and Texarkana AR-TX-4EC are the exempt paths.",
+    + "withheld at zero exemptions (nothing claimed on the certificate). It also "
+    + "records the low-income election and status. AR4ECSP and Texarkana "
+    + "AR-TX-4EC are the exempt paths.",
   storage: "certificate_rows",
   fields: [
     {
@@ -252,6 +292,28 @@ export const AR_CERTIFICATE: PayrollCertificate = {
       min: "0",
       default: "0",
       help: "Optional dollar amount from Form AR4EC line 4, added after formula withholding.",
+    },
+    {
+      key: "low_income",
+      label: "Line 5 — I qualify for the low-income tax rates",
+      kind: "flag",
+      default: "false",
+      help:
+        "Record the employee's signed Yes/No election. A Yes uses the NFC low-income "
+        + "tax credit formula for the elected filing status and claimed exemptions.",
+    },
+    {
+      key: "filing_status",
+      label: "Line 5 — Low-income filing status",
+      kind: "choice",
+      choices: [
+        { value: "single", label: "Single" },
+        { value: "married_joint", label: "Married Filing Jointly" },
+        { value: "head_household", label: "Head of Household" },
+      ],
+      help:
+        "Required with a low-income election. NFC's 2026 credit formula uses this "
+        + "status and the AR4EC exemption count to select its income band.",
     },
     {
       key: "exempt",
