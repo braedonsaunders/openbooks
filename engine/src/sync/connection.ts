@@ -516,6 +516,16 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       tokenKey: String(secret?.tokenKey),
       tokenSecret: String(secret?.tokenSecret),
     };
+    // A legacy or corrupt stored connection without a base currency bypasses
+    // save-time validation: refuse by name before any capture or import
+    // instead of importing a non-USD company as USD.
+    const netSuiteBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (netSuiteBaseState === "missing") {
+      throw new Error("NetSuite connection needs its base currency — set it on the connection before syncing");
+    }
+    if (netSuiteBaseState === "invalid") {
+      throw new Error(`NetSuite connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
     return new NetSuiteSource(creds, {
       baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
       bridge: {
@@ -539,7 +549,14 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       username: String(cfg.username),
       apiKey: String(secret.apiKey),
     };
-    return new OdooSource(creds, { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
+    const odooBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (odooBaseState === "missing") {
+      throw new Error("Odoo connection needs its base currency — set it on the connection before syncing");
+    }
+    if (odooBaseState === "invalid") {
+      throw new Error(`Odoo connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
+    return new OdooSource(creds, { orgId: conn.orgId, baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
   }
 
   if (conn.source === "erpnext") {
@@ -549,7 +566,14 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       throw new Error("ERPNext connection is missing its URL, API key or API secret");
     }
     const creds: ErpNextCreds = { url: String(cfg.url), apiKey: String(secret.apiKey), apiSecret: String(secret.apiSecret) };
-    return new ErpNextSource(creds, { baseCurrency: cfg.baseCurrency });
+    const erpNextBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (erpNextBaseState === "missing") {
+      throw new Error("ERPNext connection needs its base currency — set it on the connection before syncing");
+    }
+    if (erpNextBaseState === "invalid") {
+      throw new Error(`ERPNext connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
+    return new ErpNextSource(creds, { baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
   }
 
   if (conn.source === "qbo") {
@@ -574,7 +598,14 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     };
     const onRefresh = (consumed: QboTokens, refresh: (token: string) => Promise<QboTokens>) =>
       refreshConnectionTokens(conn, consumed, refresh);
-    return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
+    const qboBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (qboBaseState === "missing") {
+      throw new Error("QuickBooks connection needs its base currency — set it on the connection before syncing");
+    }
+    if (qboBaseState === "invalid") {
+      throw new Error(`QuickBooks connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
+    return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
   }
 
   if (conn.source === "xero") {
@@ -595,7 +626,14 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     // Xero rotates refresh tokens, so refresh and persistence share a row lock.
     const onRefresh = (consumed: XeroTokens, refresh: (token: string) => Promise<XeroTokens>) =>
       refreshConnectionTokens(conn, consumed, refresh);
-    return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
+    const xeroBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (xeroBaseState === "missing") {
+      throw new Error("Xero connection needs its base currency — set it on the connection before syncing");
+    }
+    if (xeroBaseState === "invalid") {
+      throw new Error(`Xero connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
+    return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
   }
 
   if (conn.source === "dynamics") {
@@ -623,9 +661,16 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     };
     const onRefresh = (consumed: DynamicsTokens, refresh: (token: string) => Promise<DynamicsTokens>) =>
       refreshConnectionTokens(conn, consumed, refresh);
+    const dynamicsBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (dynamicsBaseState === "missing") {
+      throw new Error("Dynamics connection needs its base currency — set it on the connection before syncing");
+    }
+    if (dynamicsBaseState === "invalid") {
+      throw new Error(`Dynamics connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
     return new DynamicsSource(new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens, onRefresh), {
       orgId: conn.orgId,
-      baseCurrency: cfg.baseCurrency,
+      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
     });
   }
 
