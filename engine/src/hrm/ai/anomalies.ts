@@ -8,7 +8,7 @@ import {
   subsidiaryVisibleFilter,
 } from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../../organization/org-feature-lock.ts";
 import { AiRailsError, finalizeBlockedRefusal } from "./errors.ts";
 import { logDecision } from "./governance.ts";
 import { loadAiRailsSettings } from "./settings.ts";
@@ -761,10 +761,19 @@ export type FlagRow = {
   reason: string | null;
 }
 
-async function assertFlagReadScope(exec: SqlExecutor, orgId: string, actorId: string): Promise<void> {
-  if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) return;
-  if (await actorHasPermission(exec, orgId, actorId, "time.approve")) return;
-  if (await actorHasPermission(exec, orgId, actorId, "hrm.employment.read")) return;
+async function assertFlagReadScope(exec: SqlExecutor, orgId: string, actorId: string): Promise<{
+  payroll: boolean;
+  time: boolean;
+}> {
+  const [payrollPermission, timePermission, employmentRead] = await Promise.all([
+    actorHasPermission(exec, orgId, actorId, "payroll.manage"),
+    actorHasPermission(exec, orgId, actorId, "time.approve"),
+    actorHasPermission(exec, orgId, actorId, "hrm.employment.read"),
+  ]);
+  const payroll = payrollPermission && await orgFeatureEnabled(orgId, "hrmPayrollAnomalies", exec);
+  const time = (timePermission || employmentRead || payrollPermission)
+    && await orgFeatureEnabled(orgId, "hrmTimeAnomalies", exec);
+  if (payroll || time) return { payroll, time };
   throw new AiRailsError(
     "ai_forbidden",
     "payroll checks need the payroll manager, time approver or HR reader — ask an administrator for access",
@@ -785,7 +794,7 @@ export async function listFlags(
     readonly employmentId?: string;
   },
 ): Promise<FlagRow[]> {
-  await assertFlagReadScope(exec, input.orgId, input.actorId);
+  const capabilities = await assertFlagReadScope(exec, input.orgId, input.actorId);
   // Legal-entity lens: a flag is visible only through its employment's
   // employer subsidiary. Flags with no employment cannot be attributed,
   // so the predicate fails them closed for restricted callers (a null
@@ -812,6 +821,10 @@ export async function listFlags(
        and (${input.kind ?? null}::text is null or f.kind = ${input.kind ?? null}::text)
        and (${input.status ?? null}::text is null or f.status = ${input.status ?? null}::text)
        and (${input.employmentId ?? null}::uuid is null or f.employment_id = ${input.employmentId ?? null}::uuid)
+       and (
+         (f.kind = any(${[...TIME_ANOMALY_KINDS]}::text[]) and ${capabilities.time})
+         or (f.kind <> all(${[...TIME_ANOMALY_KINDS]}::text[]) and ${capabilities.payroll})
+       )
        ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
      order by f.severity, f.pay_period_from desc, f.id`)).rows;
   return rows;
@@ -856,16 +869,15 @@ export async function transitionFlag(
       "a reason is required — write the sentence the audit needs; empty reasons are refused",
     );
   }
-  await assertFlagReadScope(exec, orgId, actorId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   // Locked read: the scope check and the write below are one atomic unit
   // on the public path (resolveFlag wraps this in a transaction), so a
   // concurrent rehome of the flag's employment cannot move the flag
   // between the check and the update.
   const current = (await exec.execute<{
-    severity: string; status: string; employerSubsidiaryId: string | null;
+    kind: string; severity: string; status: string; employerSubsidiaryId: string | null;
   }>(sql`
-    select f.severity, f.status,
+    select f.kind, f.severity, f.status,
            e.employer_subsidiary_id::text as "employerSubsidiaryId"
       from payroll_anomaly_flags f
       left join worker_employments e
@@ -879,6 +891,17 @@ export async function transitionFlag(
       "ai_flag_missing",
       `flag ${flagId} matched no row — it is missing or outside this organization; reload and retry`,
     );
+  }
+  const isTimeFlag = TIME_ANOMALY_KINDS.has(current.kind);
+  const authorized = isTimeFlag
+    ? (await actorHasPermission(exec, orgId, actorId, "time.approve")
+      || await actorHasPermission(exec, orgId, actorId, "payroll.manage"))
+    : await actorHasPermission(exec, orgId, actorId, "payroll.manage");
+  const featureOn = await lockAndCheckOrgFeature(
+    exec, orgId, isTimeFlag ? "hrmTimeAnomalies" : "hrmPayrollAnomalies",
+  );
+  if (!authorized || !featureOn) {
+    throw new AiRailsError("ai_forbidden", "this anomaly flag is outside your enabled payroll or time authority");
   }
   if (current.status !== "open" && current.status !== "acknowledged") {
     throw new AiRailsError(
@@ -911,7 +934,7 @@ export async function transitionFlag(
   await logDecision(exec, {
     orgId,
     actorId,
-    capabilityKey: "hrmPayrollAnomalies",
+    capabilityKey: isTimeFlag ? "hrmTimeAnomalies" : "hrmPayrollAnomalies",
     subjectKind: "payroll_anomaly_flag",
     subjectId: row.id,
     input: `transitionFlag ${row.id} -> ${input.to}`,
