@@ -480,6 +480,7 @@
       "downloadXlsx": "Descargar Excel",
       "runNow": "Ejecutar ahora",
       "runFailed": "La ejecución del informe falló",
+      "runFailedHelp": "No se pudo ejecutar el informe. Vuelva a intentarlo y contacte con su administrador si el problema continúa.",
       "runComplete": "Ejecución del informe completada",
       "emptyHint": "Ejecute el informe para ver los resultados aquí. Las ejecuciones se guardan y se pueden descargar como CSV.",
       "scheduledDelivery": "Envío programado",

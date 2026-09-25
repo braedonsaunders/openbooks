@@ -89,7 +89,10 @@ export async function loadReportDelivery(id: string): Promise<ReportDeliveryData
     backLabel: displayName,
     definitionId: definition.id,
     schedules: schedules.rows,
-    recentRuns: recentRuns.rows,
+    recentRuns: recentRuns.rows.map((run) => ({
+      ...run,
+      error: run.error ? tk('runner.runFailedHelp') : null,
+    })),
     canSchedule,
   }
 }

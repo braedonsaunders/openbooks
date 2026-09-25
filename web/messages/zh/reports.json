@@ -480,6 +480,7 @@
       "downloadXlsx": "下载 Excel",
       "runNow": "立即运行",
       "runFailed": "报表运行失败",
+      "runFailedHelp": "无法运行报表。请重试；如果问题仍然存在，请联系管理员。",
       "runComplete": "报表运行完成",
       "emptyHint": "运行报表以在此查看结果。运行结果会保存并可下载为 CSV。",
       "scheduledDelivery": "定时投递",

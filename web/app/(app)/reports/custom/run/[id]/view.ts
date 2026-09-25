@@ -134,6 +134,7 @@ export async function loadReportRun(
     : 0
 
   const t = await getTranslations('reports')
+  const tRunner = await getTranslations('reports.custom.runner')
   const tc = await getTranslations('common')
 
   // Built-in definitions localize by slug; custom slugs fall back to stored text.
@@ -211,20 +212,24 @@ export async function loadReportRun(
   let result: ReportRunResult | null = null
   let error: string | null = null
   const branding = await orgBranding(authz.user.orgId)
-  try {
-    if (queryError) throw queryError
-    const executed = pagination
-      ? await executeReportPage(authz.user.orgId, query, {
-          offset: (pageNum - 1) * perPage,
-          limit: perPage,
-        })
-      : await executeReport(authz.user.orgId, query)
-    if (pagination && !executed.pageInfo) {
-      throw new Error('Paged report result is missing page metadata')
+  if (queryError) {
+    error = queryError.message
+  } else {
+    try {
+      const executed = pagination
+        ? await executeReportPage(authz.user.orgId, query, {
+            offset: (pageNum - 1) * perPage,
+            limit: perPage,
+          })
+        : await executeReport(authz.user.orgId, query)
+      if (pagination && !executed.pageInfo) {
+        throw new Error('Paged report result is missing page metadata')
+      }
+      result = executed
+    } catch (err) {
+      console.error('[reports/custom/run] report execution failed', err)
+      error = tRunner('runFailedHelp')
     }
-    result = executed
-  } catch (err) {
-    error = err instanceof Error ? err.message : 'report failed'
   }
 
   return {

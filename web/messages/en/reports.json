@@ -480,6 +480,7 @@
       "downloadXlsx": "Download Excel",
       "runNow": "Run now",
       "runFailed": "Report run failed",
+      "runFailedHelp": "The report could not be run. Retry it, and contact your administrator if the problem continues.",
       "runComplete": "Report run complete",
       "emptyHint": "Run the report to see results here. Runs are saved and downloadable as CSV.",
       "scheduledDelivery": "Scheduled delivery",

@@ -1,6 +1,7 @@
 import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { getTranslations } from 'next-intl/server'
 import { guardPermission } from '../../../../lib/authz'
 import { guardReportEntity } from '../../../../lib/report-authz'
 import {
@@ -60,7 +61,10 @@ export async function POST(req: Request) {
       query: def.query,
       trigger: 'manual',
     })
-    if (run.error) return NextResponse.json({ error: run.error }, { status: 422 })
+    if (run.error) {
+      const t = await getTranslations('reports.custom.runner')
+      return NextResponse.json({ error: t('runFailedHelp') }, { status: 422 })
+    }
     return NextResponse.json({ result: run.result, runId: run.runId })
   }
 
@@ -81,8 +85,10 @@ export async function POST(req: Request) {
     const result = await executeReport(user.orgId, query, maxRows)
     return NextResponse.json({ result })
   } catch (err) {
+    console.error('[reports/run] ad-hoc report execution failed', err)
+    const t = await getTranslations('reports.custom.runner')
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Report run failed' },
+      { error: t('runFailedHelp') },
       { status: 422 },
     )
   }

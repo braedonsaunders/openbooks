@@ -480,6 +480,7 @@
       "downloadXlsx": "Excel herunterladen",
       "runNow": "Jetzt ausführen",
       "runFailed": "Berichtsausführung fehlgeschlagen",
+      "runFailedHelp": "Der Bericht konnte nicht ausgeführt werden. Versuchen Sie es erneut und wenden Sie sich an die Administration, wenn das Problem weiterhin besteht.",
       "runComplete": "Berichtsausführung abgeschlossen",
       "emptyHint": "Führen Sie den Bericht aus, um hier Ergebnisse zu sehen. Ausführungen werden gespeichert und können als CSV heruntergeladen werden.",
       "scheduledDelivery": "Geplante Zustellung",
