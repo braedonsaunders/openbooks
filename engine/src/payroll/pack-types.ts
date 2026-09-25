@@ -755,6 +755,16 @@ export interface PayrollCountryPack {
    */
   jurisdictions: readonly PayrollJurisdiction[];
   /**
+   * A work-triggered alternate-day-off entitlement the pack's statute grants
+   * (see `PayrollRemembranceAlternateDayRule`) — Nova Scotia's Remembrance
+   * Day Act is the one declared anywhere. OPTIONAL: absent means the pack
+   * declares no work-triggered grant, and the generic seed layer provisions
+   * no alternate-day bank for it. The seed reads this declaration and no
+   * country code, so a second jurisdiction's grant is a pack edit, never a
+   * branch in the generic layer.
+   */
+  alternateDayGrant?: PayrollRemembranceAlternateDayRule;
+  /**
    * The pack's filing declaration: filing-account program types, the
    * separation-payment component mapping, and the year-end filings (label,
    * population, electronic-file builder, issue workflow). LAZY — the filings
@@ -1411,6 +1421,33 @@ export interface PayrollHolidayPayEdition {
   /** Last date the edition governs, inclusive; null while it is current. */
   effectiveTo: string | null;
   rule: PayrollHolidayPayRule;
+}
+
+/**
+ * A work-triggered alternate-day-off entitlement: the shape Nova Scotia's
+ * Remembrance Day Act takes, and deliberately NOT a PayrollHolidayPayRule.
+ * A general-holiday rule pays cash on the holiday's own run; this one pays
+ * nothing then and grants an employee-specific hours-bank entitlement to be
+ * taken later. Declaring it as a holiday-pay rule would price the benefit on
+ * November 11 itself — the exact defect I6-payroll-262 removes.
+ */
+export interface PayrollRemembranceAlternateDayRule {
+  /** Ledger source key stamped on the granted movement (e.g. remembrance_day). */
+  holidayKey: string;
+  /** Fixed month/day the statute names — never substituted, never observed. */
+  month: number;
+  day: number;
+  /** Days of the qualifying window on which wages must have been receivable. */
+  qualifyingDays: number;
+  /** Length of the qualifying window in calendar days, ending the day before. */
+  qualifyingWindowDays: number;
+  /** Which days count — the statute's own predicate, not "worked". */
+  counting: PayrollHolidayDayCounting;
+  /** Employer-fact key carrying the business class (see employer-facts). */
+  businessClassFactKey: string;
+  /** Business-class values exempt from granting. */
+  exemptBusinessClasses: readonly string[];
+  citation: string;
 }
 
 /**

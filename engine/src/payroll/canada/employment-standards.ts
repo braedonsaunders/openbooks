@@ -5,8 +5,10 @@ import type {
   PayrollHolidayPayRule,
   PayrollHolidayRule,
   PayrollJurisdiction,
+  PayrollRemembranceAlternateDayRule,
   PayrollWorkTriggeredHoliday,
 } from "../pack-types.ts";
+import { NS_REMEMBRANCE_EXEMPT_BUSINESS_CLASSES } from "./employer-facts.ts";
 
 /**
  * Canada's employment-standards jurisdictions: which statutory holidays each
@@ -457,6 +459,36 @@ const NS_HOLIDAY_PAY: PayrollHolidayPayRule = {
   premium: { multiplier: "1.5", plusHolidayPay: true },
   // "the thirty calendar days immediately preceding the holiday".
   lookbackEnds: ENDS_DAY_BEFORE,
+};
+
+/**
+ * Nova Scotia Remembrance Day, RSNS 1989 c 396 — the work-triggered,
+ * 15-of-30 qualifying alternate paid day (I6-payroll-262).
+ *
+ * This is a SEPARATE statute from the Labour Standards Code transcribed
+ * above, with an inverted trigger: an employee who does NOT work November 11
+ * gets nothing, and one who DOES — and was entitled to wages for at least
+ * fifteen of the thirty calendar days before it — earns another day off with
+ * REGULAR pay, never a premium. The date is fixed: employers cannot
+ * substitute another day for November 11. Employees of exempt businesses
+ * (the class enumeration lives with the employer fact, whose dropdown shows
+ * it) earn nothing; for them November 11 is a regular business day.
+ *
+ * Deliberately NOT a PayrollHolidayPayRule and NOT on the CA-NS calendar:
+ * both would pay cash on the November 11 run. The grant (hours in the
+ * alternate-day bank, taken on the next scheduled workday or an agreed date)
+ * is executed by the payroll run from this declaration.
+ */
+export const NS_REMEMBRANCE_ALTERNATE_DAY: PayrollRemembranceAlternateDayRule = {
+  holidayKey: "remembrance_day",
+  month: 11,
+  day: 11,
+  qualifyingDays: 15,
+  qualifyingWindowDays: 30,
+  counting: "entitled_to_pay",
+  businessClassFactKey: "ns_remembrance_business_class",
+  exemptBusinessClasses: NS_REMEMBRANCE_EXEMPT_BUSINESS_CLASSES,
+  citation: "Remembrance Day Act (Nova Scotia), RSNS 1989 c 396 — alternate day off with regular pay",
 };
 
 /**

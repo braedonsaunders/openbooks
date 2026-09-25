@@ -3,10 +3,19 @@
  * NEVER an engine binding (schema/src/payroll-entitlements.ts explains the
  * doctrine, which is pay_components.systemKey's); this is.
  */
-export type EntitlementPlanSystemKey = "vacation";
+export type EntitlementPlanSystemKey = "vacation" | "stat_holiday_alternate";
 
 /** The system key of the plan employee_payroll_profiles.vacation_* drives. */
 export const VACATION_PLAN_SYSTEM_KEY: EntitlementPlanSystemKey = "vacation";
+
+/**
+ * The system key of the statutory alternate-day-off bank (0413): hours,
+ * manual, accrue-only. Work-triggered holiday rules (Nova Scotia Remembrance
+ * Day) grant into it instead of paying immediate cash; the operator pays it
+ * out when the day is taken, and a final pay clears it like every other bank.
+ */
+export const STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY: EntitlementPlanSystemKey =
+  "stat_holiday_alternate";
 
 export type EntitlementUnit = "money" | "hours";
 export type EntitlementDirection = "accrue" | "owe";

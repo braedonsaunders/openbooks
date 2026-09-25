@@ -154,10 +154,13 @@ export async function recordEntitlementMovements(
     await executor.execute(sql`
       insert into entitlement_ledger (org_id, plan_id, employee_party_id, movement_date, amount,
                                       hours, kind, pay_run_document_id, stub_line_id, note,
+                                      source_holiday_key, source_holiday_date, take_on,
                                       created_by, updated_by)
       values (${orgId}, ${movement.planId}, ${movement.employeePartyId}, ${movement.movementDate},
               ${movement.amount}, ${movement.hours}, ${movement.kind}, ${payRunDocumentId},
-              ${stubLineId}, ${movement.note}, ${actorId}, ${actorId})
+              ${stubLineId}, ${movement.note},
+              ${movement.sourceHolidayKey ?? null}, ${movement.sourceHolidayDate ?? null},
+              ${movement.takeOn ?? null}, ${actorId}, ${actorId})
     `);
   }
   return input.movements.length;

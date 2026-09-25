@@ -54,6 +54,7 @@ export async function GET(req: Request) {
     const movements = (await db.execute(sql`
       select l.id, l.plan_id, pl.code as plan_code, pl.name as plan_name, pl.unit,
              l.movement_date, l.amount, l.hours, l.kind, l.note,
+             l.source_holiday_key, l.source_holiday_date::text, l.take_on::text,
              d.document_number as run_number, l.pay_run_document_id
         from entitlement_ledger l
         join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id

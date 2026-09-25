@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { cmp, roundMoney } from "../money/money.ts";
-import { assertContributoryBasesDeclared, ensurePackSlotRoleAccounts, packStatutoryComponents } from "./packs.ts";
+import { assertContributoryBasesDeclared, ensurePackSlotRoleAccounts, packStatutoryComponents, payrollPack } from "./packs.ts";
 import { type EntitlementPlan } from "./entitlements.ts";
 export interface PayrollSettings {
   /** DR for wages when a component has no expense account of its own. */
@@ -198,6 +198,7 @@ export async function seedPayrollComponents(
   // operator has not mapped the slot yet. An explicit mapping always wins.
   await ensurePackSlotRoleAccounts(db, orgId, actorId, country);
   await seedVacationEntitlementPlan(orgId, actorId, country);
+  await seedAlternateDayEntitlementPlan(orgId, actorId, country);
 }
 
 /**
@@ -359,4 +360,49 @@ export function assertVacationPlanResolved(
     + "has no vacation entitlement plan to accrue it into — create one in Payroll setup → "
     + "Entitlement plans (or set the employee's vacation method to pay each period)",
   );
+}
+
+/**
+ * The statutory alternate-day-off bank (0413, I6-payroll-262): hours,
+ * manual, accrue-only, bound to `stat_holiday_alternate`, seeded once per org
+ * and adopted (not duplicated) when a tenant already carries the binding.
+ *
+ * The payout rides the stat_holiday earning component: alternate-day pay IS
+ * wages with the same classification, and minting a second component for the
+ * same money would split wage reporting across two keys. The liability stays
+ * report-only until the operator maps it — an unmapped GL account would post
+ * the bank somewhere wrong, which is worse than carrying it visibly unmapped.
+ *
+ * Seeded only where the country's pack declares a work-triggered grant
+ * (`alternateDayGrant`): Nova Scotia's Remembrance Day rule is the one
+ * declared anywhere. A second jurisdiction's grant is a pack declaration,
+ * never a branch here — the generic layer names no country.
+ */
+async function seedAlternateDayEntitlementPlan(
+  orgId: string, actorId: string | null, country: string,
+): Promise<void> {
+  if (payrollPack(country).alternateDayGrant === undefined) return;
+
+  await db.execute(sql`
+    insert into entitlement_plans (org_id, code, system_key, name, unit, direction, accrual_method,
+                                   accrual_value, accrual_component_id, payout_component_id,
+                                   liability_account_id, cap_behavior, is_active,
+                                   created_by, updated_by)
+    select ${orgId}, 'ALT', 'stat_holiday_alternate', 'Statutory alternate day', 'hours', 'accrue', 'manual',
+           null,
+           null,
+           (select id from pay_components
+             where org_id = ${orgId} and system_key = 'stat_holiday' and kind = 'earning' limit 1),
+           null,
+           'warn', true, ${actorId}, ${actorId}
+     where not exists (
+       select 1 from entitlement_plans where org_id = ${orgId} and system_key = 'stat_holiday_alternate'
+     )
+    on conflict (org_id, code) do update
+       set system_key = 'stat_holiday_alternate',
+           payout_component_id = coalesce(entitlement_plans.payout_component_id,
+                                          excluded.payout_component_id),
+           updated_by = ${actorId}, updated_at = now()
+     where entitlement_plans.org_id = ${orgId}
+  `);
 }

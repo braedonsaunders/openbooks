@@ -37,6 +37,7 @@ export {
   type EntitlementPlanSystemKey,
   type EntitlementScopeKeys,
   type EntitlementUnit,
+  STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY,
   VACATION_PLAN_SYSTEM_KEY,
 } from "./entitlements-types.ts";
 
@@ -63,6 +64,7 @@ export {
 } from "./entitlements-movement-kernel.ts";
 
 export {
+  alternateDayPlanOf,
   entitlementBalances,
   entitlementPlans,
   type EntitlementBalance,

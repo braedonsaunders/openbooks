@@ -1,0 +1,1 @@
+Widening a CHECK with one more allowed value plus three nullable ledger columns; every existing row satisfies the new constraints by construction (the in-migration precheck proves it), so no operator data repair is needed.

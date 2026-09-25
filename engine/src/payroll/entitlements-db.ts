@@ -10,6 +10,7 @@ import {
   type ServiceTierRow,
 } from "./entitlements-service-tiers.ts";
 import {
+  STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY,
   type EntitlementAccrualMethod,
   type EntitlementCapBehavior,
   type EntitlementLimitRow,
@@ -26,10 +27,19 @@ import {
 export type Executor = Pick<typeof db, "execute">;
 
 function planFromRow(row: Record<string, unknown>): EntitlementPlan {
+  // Engine bindings are a closed set: a value the code does not know is
+  // unmapped (never passed through as a string the engine would then fail to
+  // match), so a migration that adds a binding without its code half leaves
+  // the plan inert rather than half-bound.
+  const systemKey = row.system_key === VACATION_PLAN_SYSTEM_KEY
+    ? VACATION_PLAN_SYSTEM_KEY
+    : row.system_key === STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY
+      ? STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY
+      : null;
   return {
     id: String(row.id),
     code: String(row.code),
-    systemKey: row.system_key === VACATION_PLAN_SYSTEM_KEY ? VACATION_PLAN_SYSTEM_KEY : null,
+    systemKey,
     name: String(row.name),
     unit: row.unit === "hours" ? "hours" : "money",
     direction: row.direction === "owe" ? "owe" : "accrue",
@@ -69,6 +79,16 @@ export function vacationPlanOf(
   plans: readonly EntitlementPlan[],
 ): EntitlementPlan | null {
   return plans.find((plan) => plan.systemKey === VACATION_PLAN_SYSTEM_KEY) ?? null;
+}
+
+/**
+ * The org's statutory alternate-day-off bank (0413), resolved on its ENGINE
+ * BINDING like the vacation plan above — never on the operator-typed code.
+ */
+export function alternateDayPlanOf(
+  plans: readonly EntitlementPlan[],
+): EntitlementPlan | null {
+  return plans.find((plan) => plan.systemKey === STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY) ?? null;
 }
 
 /** The scope keys an employee competes on — the wage resolver's inputs. */

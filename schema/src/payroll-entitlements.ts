@@ -85,7 +85,7 @@ export const entitlementPlans = pgTable(
      * employee_payroll_profiles.vacation_percent / vacation_method decide
      * between banking it and paying it in cash.
      */
-    systemKey: text("system_key", { enum: ["vacation"] }),
+    systemKey: text("system_key", { enum: ["vacation", "stat_holiday_alternate"] }),
     /** Denomination of the BALANCE. Money is the default (see doctrine). */
     unit: text("unit", { enum: ["money", "hours"] }).notNull().default("money"),
     direction: text("direction", { enum: ["accrue", "owe"] }).notNull().default("accrue"),
@@ -329,6 +329,15 @@ export const entitlementLedger = pgTable(
     payRunDocumentId: uuid("pay_run_document_id"),
     stubLineId: uuid("stub_line_id"),
     note: text("note"),
+    /**
+     * Statutory provenance for work-triggered grants (0413): which holiday
+     * earned this movement, and the day the alternate-day entitlement must
+     * be taken (the next-scheduled-workday default, or the audited agreed
+     * date). A pair — a key without its date traces nothing.
+     */
+    sourceHolidayKey: text("source_holiday_key"),
+    sourceHolidayDate: date("source_holiday_date"),
+    takeOn: date("take_on"),
     ...auditColumns,
   },
   (t) => [

@@ -13,7 +13,7 @@ import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
 import { add, cmp, mulRatio, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
-import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
+import { packRates, PayrollPackError, assertPayrollRegionSupported, jurisdictionKey, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
@@ -21,7 +21,8 @@ import { assertSettlementFactorsMergeable, settleAnnualSettlement } from "./annu
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./statutory-context.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { payRateIsUsable } from "./rate.ts";
-import { entitlementPlans, planMovementsForStub, vacationPlanOf, type EntitlementWarning } from "./entitlements.ts";
+import { alternateDayPlanOf, entitlementPlans, planMovementsForStub, vacationPlanOf, type EntitlementWarning } from "./entitlements.ts";
+import { grantRemembranceAlternateDay } from "./remembrance-grants.ts";
 import { resolvePayrollPaymentMethod } from "./payment-method.ts";
 import { assertEarningsAssessedStable, dropIncomeAssessedLines, type EarningsAssessedLine } from "./limits.ts";
 import { reduceTaxBases } from "./treatment-bases.ts";
@@ -329,6 +330,27 @@ export async function calculateStub(
 
   const payVacationInCash = emp.vacation_method === "pay_each_period" || terminationRun;
   await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines });
+
+  // Work-triggered alternate-day grants (I6-payroll-262): a statutory day off
+  // banked as hours, never cash on this stub. Under the same gate as the
+  // holiday-pay phase, and persisted with every other movement below (which
+  // skips simulation), so a simulated run grants nothing. Plan caps do not
+  // gate the grant: a statutory entitlement is owed regardless of a cap, and
+  // an auto_payout cap would pay it in cash — the outcome the statute refuses.
+  if (!oneOffRun && ctx.statHolidayPay) {
+    const grant = await grantRemembranceAlternateDay(tx, {
+      orgId,
+      runDocumentId: documentId,
+      employeePartyId,
+      employeeName: emp.display_name ?? employeePartyId,
+      jurisdiction: jurisdictionKey(country, province),
+      subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+      periodStart: run.period_start!,
+      periodEnd: run.period_end!,
+      plan: alternateDayPlanOf(plans),
+    });
+    if (grant) entitlementMovements.push(grant);
+  }
 
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
     orgId, documentId, employeePartyId, payDate: run.pay_date!,
