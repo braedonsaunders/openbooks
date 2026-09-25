@@ -2396,6 +2396,9 @@
           "rates": "Taxas",
           "lifecycle": "Ciclo de vida das taxas",
           "application": "Aplicação contábil"
+        },
+        "errors": {
+          "requestFailed": "Não foi possível concluir a alteração dos custos indiretos. Revise as taxas selecionadas e a data de vigência e tente novamente."
         }
       },
       "compliance-classes": {

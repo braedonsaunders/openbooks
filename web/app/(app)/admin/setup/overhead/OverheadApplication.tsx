@@ -50,6 +50,7 @@ export function OverheadApplication(props: {
   const { money } = useMoney()
   const locale = useLocale()
   const t = useTranslations('admin.setup.entities.overhead-model.application')
+  const tFailure = useTranslations('admin.setup.entities.overhead-model')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState(props.mode)
@@ -62,7 +63,7 @@ export function OverheadApplication(props: {
       body: JSON.stringify(payload),
     })
     const j = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(j.error ?? 'failed')
+    if (!res.ok) throw new Error(tFailure('errors.requestFailed'))
     return j
   }
 
@@ -72,8 +73,8 @@ export function OverheadApplication(props: {
       await post({ action: 'set-application', mode, accountId: accountId || null })
       toast.success(t('saved'))
       router.refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
+    } catch {
+      toast.error(tFailure('errors.requestFailed'))
     } finally {
       setBusy(false)
     }
@@ -85,8 +86,8 @@ export function OverheadApplication(props: {
       const r = await post({ action: 'backfill-overhead' })
       toast.success(t('backfilled', { total: formatDecimal(locale, r.total, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), entries: r.entries }))
       router.refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
+    } catch {
+      toast.error(tFailure('errors.requestFailed'))
     } finally {
       setBusy(false)
     }

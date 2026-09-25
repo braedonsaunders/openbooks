@@ -66,7 +66,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
     const res = await fetch('/api/admin/setup/overhead', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })
-    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
+    if (!res.ok) throw new Error(t('errors.requestFailed'))
   }
 
   async function publish() {
@@ -79,7 +79,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
       toast.success(t('publishDone'))
       setOpen(null)
       router.refresh()
-    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+    } catch { toast.error(t('errors.requestFailed')) } finally { setBusy(false) }
   }
 
   async function finishWizard() {
@@ -106,7 +106,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
       setOpen(null)
       setStep(0)
       router.refresh()
-    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+    } catch { toast.error(t('errors.requestFailed')) } finally { setBusy(false) }
   }
 
   const rateTable = (

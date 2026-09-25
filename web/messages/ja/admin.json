@@ -2471,6 +2471,9 @@
           "lifecycle": "レートライフサイクル",
           "model": "モデル",
           "rates": "レート"
+        },
+        "errors": {
+          "requestFailed": "間接費の変更を完了できませんでした。選択した料率と適用日を確認して、もう一度お試しください。"
         }
       },
       "compliance-classes": {

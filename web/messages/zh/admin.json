@@ -2396,6 +2396,9 @@
           "rates": "费率",
           "lifecycle": "费率生命周期",
           "application": "账簿应用"
+        },
+        "errors": {
+          "requestFailed": "无法完成间接费用更改。请检查所选费率和生效日期，然后重试。"
         }
       },
       "compliance-classes": {
