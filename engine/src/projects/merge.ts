@@ -2,7 +2,12 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
-import { markEntryReversed, postEntry, type PostEntryInput } from "../ledger/post-entry.ts";
+import {
+  markEntryReversed,
+  postEntry,
+  repointDraftProjectLines,
+  type PostEntryInput,
+} from "../ledger/post-entry.ts";
 import { neg } from "../money/money.ts";
 
 /**
@@ -636,14 +641,11 @@ async function moveJournalLinesForProjectMerge(
   duplicateId: string,
   actorId: string | null,
 ): Promise<number> {
-  const draftMoved = (await tx.execute<{ id: string }>(sql`
-    update journal_lines jl set project_id = ${survivorId}
-     where jl.org_id = ${orgId} and jl.project_id = ${duplicateId}
-       and exists (
-         select 1 from journal_entries e
-          where e.id = jl.entry_id and e.org_id = jl.org_id and e.status = 'draft'
-       )
-    returning jl.id`)).rows.length;
+  const draftMoved = await repointDraftProjectLines(tx, {
+    orgId,
+    fromId: duplicateId,
+    toId: survivorId,
+  });
 
   const entries = (await tx.execute<{
     id: string;
