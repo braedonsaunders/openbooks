@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { overheadPublishBlockers } from '@openbooks/engine/src/projects/overhead-rates.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { lockScopeRows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { syncOverheadSystemRule } from '@openbooks/engine/src/allocations/overhead-sync.ts'
 import { trueCostData } from './analytics/true-cost-data'
 
@@ -57,6 +58,7 @@ export async function publishOverheadRates(
   actorId: string | null,
   effectiveFrom: string,
   rates?: PublishedRate[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<{ published: number }> {
   let toPublish = rates ?? []
   if (toPublish.length === 0) toPublish = await computeLiveOverheadRates(orgId)
@@ -68,6 +70,13 @@ export async function publishOverheadRates(
   // untouched and no canonical publish audit. Joins an org boundary's pinned
   // transaction when the caller already owns one.
   await inDbTransaction(async (tx) => {
+    await lockScopeRows(
+      tx,
+      orgId,
+      toPublish.map((rate) => ({ kind: 'department', id: rate.departmentId })),
+      allowedSubsidiaryIds,
+      'share',
+    )
     for (const r of toPublish) {
       await tx.execute(sql`
         update overhead_rates set effective_to = (${effectiveFrom}::date - 1)
