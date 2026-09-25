@@ -651,9 +651,24 @@ async function persistFlags(
            = coalesce(${flag.employmentId}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
          and kind = ${flag.kind}
          and coalesce(detail->>'key', '') = ${flag.detailKey}
-       limit 1`)).rows[0];
+       limit 1
+       for update`)).rows[0];
     if (existing) {
-      alreadyOpen += 1;
+      if (existing.status === "resolved") {
+        const reopened = (await exec.execute<{ id: string }>(sql`
+          update payroll_anomaly_flags
+             set status = 'open', resolved_by = null, resolved_at = null, reason = null,
+                 detail = ${JSON.stringify(flag.detail)}::jsonb, explanation = ${flag.explanation},
+                 updated_by = ${actorId}::uuid, updated_at = now()
+           where org_id = ${orgId}::uuid and id = ${existing.id}::uuid and status = 'resolved'
+          returning id::text as id`)).rows[0];
+        if (!reopened) {
+          throw new AiRailsError("ai_flag_missing", `flag ${existing.id} could not be reopened — rerun the scan`);
+        }
+        alreadyOpen += 1;
+      } else {
+        alreadyOpen += 1;
+      }
       continue;
     }
     // A racing rescan for the same key is expected and benign: the
