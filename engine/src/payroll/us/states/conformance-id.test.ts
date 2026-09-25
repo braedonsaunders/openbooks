@@ -77,6 +77,19 @@ test("ID extra withholding is added and exempt is zero", () => {
   }).tax, money("0"));
 });
 
+test("ID nonresident under-$1,000 exception suspends withholding", () => {
+  // "Income You Don't Have to Withhold On": a nonresident with $900 of Idaho pay for the year is not withheld.
+  const result = ID_WITHHOLDING.compute({
+    payDate: "2026-08-15", periodsPerYear: 260, wages: "900.00", basis: "nonresident",
+    certificate: cert({ filing_status: "single" }),
+    wageAllocations: [{
+      region: "ID", subRegion: null, workShare: "1", source: "approved_time_entries",
+      sourceWagesCurrentPeriod: "900", sourceWagesYearToDate: "0", periodsYearToDate: 1,
+    }],
+  });
+  assert.equal(result.tax, money("0"));
+});
+
 test("ID W-4 Line 2 refuses fractional dollars", () => {
   // Form ID W-4 Line 2 says "Enter whole dollars".
   // https://tax.idaho.gov/document-mngr/forms_EFO00307

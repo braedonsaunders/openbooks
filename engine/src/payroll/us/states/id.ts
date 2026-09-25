@@ -31,10 +31,14 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
+  evaluateUsNonresidentThreshold,
   payPeriodFor,
   roundUsFinalWithholding,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsSourceWages,
+  requireUsWageAllocation,
+  type UsNonresidentThresholdRule,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -42,6 +46,14 @@ import {
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/id.ts";
+
+const ID_NONRESIDENT_EARNINGS_RULE: UsNonresidentThresholdRule = {
+  measure: "source_wages",
+  threshold: "1000",
+  crossing: ">=",
+  catchUpPriorWages: true,
+  label: "Idaho $1,000 annual nonresident withholding threshold",
+};
 const DOLLAR = 10_000n;
 const ID_SUNSET_EDITION_FROM = "2026-07-23";
 
@@ -152,7 +164,25 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as IdFilingStatus;
   const married = idUsesMarriedTable(status);
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const reportedWages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = reportedWages;
+  let catchUpWages = 0n;
+  let catchUpPeriods = 0;
+  if (input.basis === "nonresident") {
+    const allocation = requireUsWageAllocation(input.wageAllocations, "ID", null);
+    wages = U(requireUsSourceWages(input.wageAllocations, "ID", null));
+    const thresholdResult = evaluateUsNonresidentThreshold(allocation, ID_NONRESIDENT_EARNINGS_RULE, input.periodsPerYear);
+    factors.ID_NONRESIDENT_SOURCE_WAGES = D(wages);
+    factors.ID_NONRESIDENT_SOURCE_WAGES_YTD = D(U(allocation.sourceWagesYearToDate ?? "0"));
+    if (!thresholdResult.crossed) {
+      const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+      trace("ID_WITHHELD", extra);
+      factors.ID_NONRESIDENT_UNDER_1000 = "1";
+      return { state: "ID", year: rates.year, tax: D(extra), taxSupplemental: D(0n), factors };
+    }
+    catchUpWages = U(thresholdResult.catchUpSourceWages);
+    catchUpPeriods = thresholdResult.periodsBeforeCurrent ?? 0;
+  }
   trace("ID_WAGES", wages);
 
   // Computing Withholding: "Multiply the employee's number of Idaho
@@ -168,8 +198,16 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("ID_THRESHOLD", threshold);
 
   const periodTax = idPeriodTax(taxable, published, married, rates);
+  let catchUpTax = 0n;
+  if (catchUpWages > 0n) {
+    const averagePriorWages = roundDiv(catchUpWages, BigInt(catchUpPeriods));
+    catchUpTax = idPeriodTax(averagePriorWages, published, married, rates) * BigInt(catchUpPeriods);
+    factors.ID_CATCHUP_SOURCE_WAGES = D(catchUpWages);
+    factors.ID_CATCHUP_PERIODS = String(catchUpPeriods);
+    factors.ID_CATCHUP_TAX = D(catchUpTax);
+  }
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = roundUsFinalWithholding(periodTax + extra, ID_WITHHOLDING.finalRounding);
+  const total = roundUsFinalWithholding(periodTax + catchUpTax + extra, ID_WITHHOLDING.finalRounding);
   trace("ID_WITHHELD", total);
 
   return {
@@ -192,6 +230,12 @@ export const ID_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ID_ALLOWANCES: "Idaho allowances (valued at zero per guide)",
   ID_TAXABLE: "Idaho taxable wages",
   ID_THRESHOLD: "Idaho withholding threshold",
+  ID_NONRESIDENT_SOURCE_WAGES: "Idaho-source wages this period for a nonresident",
+  ID_NONRESIDENT_SOURCE_WAGES_YTD: "Idaho-source wages previously paid to this nonresident",
+  ID_NONRESIDENT_UNDER_1000: "Idaho nonresident under-$1,000 calendar-year exception",
+  ID_CATCHUP_SOURCE_WAGES: "Idaho-source wages previously exempted",
+  ID_CATCHUP_PERIODS: "Idaho prior periods included in catch-up",
+  ID_CATCHUP_TAX: "Idaho catch-up withholding for prior periods",
   ID_WITHHELD: "Idaho tax withheld this period",
 };
 
