@@ -9,9 +9,10 @@ import type { PerformancePageData } from './view'
 type Calibration = NonNullable<PerformancePageData['detail']>['calibration']
 
 /**
- * The calibration island in the cycle drawer: move to calibrating (with an
- * optional force reason recorded on each pending review), or close the
- * cycle. Closing shares nothing by itself. Refusals render as the error.
+ * The calibration island in the cycle drawer: open a draft cycle (which
+ * instantiates its reviews), move to calibrating (with an optional force
+ * reason recorded on each pending review), or close the cycle. Closing
+ * shares nothing by itself. Refusals render as the error.
  */
 export function CycleActions({ cycleId, calibration }: { cycleId: string; calibration: Calibration }) {
   const router = useRouter()
@@ -44,6 +45,13 @@ export function CycleActions({ cycleId, calibration }: { cycleId: string; calibr
     <div className="space-y-3">
       {calibration.gapNote ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">{calibration.gapNote}</p>
+      ) : null}
+      {calibration.canOpen ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" disabled={busy} onClick={() => act({ action: 'open' })}>
+            {calibration.openLabel}
+          </Button>
+        </div>
       ) : null}
       {calibration.canMove ? (
         <div className="flex flex-wrap items-center gap-2">
