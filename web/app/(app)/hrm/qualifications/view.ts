@@ -144,6 +144,11 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
                 title: f('requirementsTitle'),
                 bodyClassName: 'min-h-0 overflow-y-auto p-0',
                 blocks: [
+                  widgetBlock('hrm-qualification-requirement-manager', {
+                    today: f('today'),
+                    types: f('requirementTypeOptions'),
+                    labels: f('requirementManagerLabels'),
+                  }, f('canManage')),
                   table({
                     variant: 'app',
                     rows: f('requirements'),
@@ -153,6 +158,17 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
                       column(f('columns.type'), text(item('typeCode'))),
                       column(f('columns.severity'), badge(item('severity'), { variant: item('severityVariant') })),
                       column(f('columns.window'), text(item('windowLabel'), { className: 'tabular-nums' })),
+                      ...(data.canManage ? [column('', {
+                        kind: 'widget',
+                        widget: 'hrm-qualification-requirement-remove',
+                        props: {
+                          id: item('id'),
+                          label: data.requirementsRemoveLabel,
+                          confirmLabel: data.requirementsRemoveConfirm,
+                          failedLabel: data.requirementsRemoveFailed,
+                          canManage: data.canManage,
+                        },
+                      })] : []),
                     ],
                     empty: { title: f('requirementsEmpty') },
                   }),
