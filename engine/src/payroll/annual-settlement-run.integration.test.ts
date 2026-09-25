@@ -15,7 +15,7 @@ import { seedPayrollComponents } from "./run-setup.ts";
 import { payrollRemittanceSummary } from "./remittance.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Annual settlement wiring: the run layer invokes the pack's declared
@@ -115,13 +115,17 @@ async function seedHarness(orgId: string, actorId: string): Promise<Harness> {
 
   // Domicile-deliberated addizionali, the same 1,23% / 0,8% the pack's own
   // settlement tests price against.
+  // Domiciled in Lazio (12, Roma H501): Lombardia (03) deliberates a
+  // progressive scaglioni schedule, so a scalar Lombardia computation
+  // refuses by design. The scalar rates price identically in any
+  // non-bracket region, so every money figure below is unaffected.
   await upsertStatutoryRate({
     orgId, actorId, rates: IT_PACK_RATES, rateKey: "it_addizionale_regionale",
-    region: "03", filingAccountId: null, taxYear: 2026, values: { rate: "1.23" },
+    region: "12", filingAccountId: null, taxYear: 2026, values: { rate: "1.23" },
   });
   await upsertStatutoryRate({
     orgId, actorId, rates: IT_PACK_RATES, rateKey: "it_addizionale_comunale",
-    region: "03", subRegion: "H501", filingAccountId: null, taxYear: 2026,
+    region: "12", subRegion: "H501", filingAccountId: null, taxYear: 2026,
     values: { rate: "0.8" },
   });
 
@@ -143,23 +147,30 @@ async function seedEmployee(
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${employeeId}, ${fx.orgId}, 'person', ${name}, ${fx.subsidiaryId}, true, '{}'::jsonb)`);
+  // pay_stubs.employment_id is NOT NULL and the run refuses stubs without
+  // an HRM employment: every stub employee carries one, and the profile
+  // points at it (the run reads emp.employment_id).
+  const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                   effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, 'EUR', ${annualRate}, 'year', 2080, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country,
                                            province, pay_basis, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${fx.scheduleId}, 'IT', '03', 'salary',
+    values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'IT', '12', 'salary',
             true, ${fx.actorId}, ${fx.actorId})`);
   // The detrazioni declaration, domiciled in Roma (H501): the monthly engine
   // and the settlement read the same answers, so refusal parity is structural.
+  // The term is answered indeterminate: the engine refuses an unknown term
+  // before pricing, and these personas price the standard rail.
   await db.execute(sql`
     insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key,
                                            answers, created_by, updated_by)
     values (${randomUUID()}, ${fx.orgId}, ${employeeId}, 'IT', 'it_detrazioni',
-            ${JSON.stringify({ domicilio_comune: "H501" })}::jsonb, ${fx.actorId}, ${fx.actorId})`);
+            ${JSON.stringify({ domicilio_comune: "H501", tempo_determinato: "false" })}::jsonb,
+            ${fx.actorId}, ${fx.actorId})`);
   if (opts.eft) {
     await db.execute(sql`
       insert into party_bank_accounts (org_id, party_id, bank_name, country, currency,
@@ -248,11 +259,13 @@ test(
       try {
         const fx = await seedHarness(org.orgId, actorId);
         // Level full year (dust), bonus year (collection), credit-band year
-        // (nonzero TI/somma through the generic keys) from January; the
-        // mid-year joiner (refund) from July.
+        // (nonzero somma through the generic keys) from January; the
+        // mid-year joiner (refund) from July. Tina must clear the IVS
+        // full-time daily-minimum floor (€18,136.56): below it the engine
+        // refuses without contribution-day facts rather than pricing.
         const dust = await seedEmployee(fx, "Livia Livello", "24000");
         const bonus = await seedEmployee(fx, "Bruno Bonus", "30000");
-        const credit = await seedEmployee(fx, "Tina Trattamento", "14400");
+        const credit = await seedEmployee(fx, "Tina Trattamento", "18200");
         for (let month = 0; month < 6; month++) await calculateMonthly(fx, month);
         const joiner = await seedEmployee(fx, "Giulia Joiner", "48000", { eft: true });
         for (let month = 6; month < 10; month++) await calculateMonthly(fx, month);
