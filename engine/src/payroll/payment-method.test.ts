@@ -17,7 +17,8 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * How an employee gets paid, end to end.
@@ -207,6 +208,8 @@ async function payrollOrg(): Promise<Fixture> {
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
+  // The ON hires calculate, so the EHT leg resolves (never asserted here).
+  await seedOntarioEhtFixture(org.orgId, actorId);
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -227,17 +230,18 @@ async function employee(fx: Fixture, name: string, opts: {
     values (${id}, ${fx.orgId}, 'person', ${name}, true, ${opts.partyMethod ?? null}, '{}'::jsonb)`);
   await db.execute(sql`
     insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${fx.orgId}, ${id})`);
+  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                   effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', '2080', '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            vacation_percent, vacation_method, payment_method,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'CA', 'ON', 'hourly', 1, 1, '4', 'accrue',
+    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'CA', 'ON', 'hourly', 1, 1, '4', 'accrue',
             ${opts.profileMethod ?? null}, true, ${fx.actorId}, ${fx.actorId})`);
   if (opts.approvedBank) {
     await db.execute(sql`

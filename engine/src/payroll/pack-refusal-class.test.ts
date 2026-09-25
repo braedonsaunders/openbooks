@@ -37,7 +37,7 @@ import {
   payrollTaxYearSupport,
 } from "./packs.ts";
 import { payrollSupportedTaxYears } from "./tax-years.ts";
-import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
 import { ratesForPayDate as caRatesForPayDate } from "./canada/rates.ts";
 import { ratesForPayDate as usRatesForPayDate } from "./us/rates.ts";
@@ -182,6 +182,7 @@ test(
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'person', 'Unknown Country', true, '{}'::jsonb)`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       const documentId = "00000000-0000-4000-8000-000000000002";
       await db.execute(sql`
         insert into documents (org_id, id, kind, document_number, document_date, currency)
@@ -196,9 +197,9 @@ test(
         values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18',
                 '2026-07-21', 2026, 'committed', now(), 1)`);
       await db.execute(sql`
-        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
-        values (${org.orgId}, ${documentId}, ${employeeId}, 'UNKNOWN', 26, '2026-07-21', 2026,
+        values (${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'UNKNOWN', 26, '2026-07-21', 2026,
                 'CAD', '1000', '800')`);
       // The legacy trigger stamps a country from the province; an UNKNOWN
       // province is precisely the unattributable row. Make it explicit.

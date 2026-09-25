@@ -17,6 +17,7 @@ import {
   dropScratchOrgReporting,
   seedFlowActors,
 } from "../testing/fixtures.ts";
+import { seedGbLevyAllowanceFixture, seedHiredEmployee } from "./filing-test-fixtures.ts";
 import "../testing/database-bypass.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -45,25 +46,11 @@ async function makeEmployee(
   rate: string,
   currency: string,
 ): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Emp ${country}`}, ${subsidiaryId}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
-       created_by, updated_by)
-    values (${orgId}, ${id}, ${scheduleId}, ${country}, ${province}, 'salary', true,
-            ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into labor_cost_rates
-      (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active,
-       created_by, updated_by)
-    values (${orgId}, ${id}, ${currency}, ${rate}, 'year', '2080', '2026-01-01', true,
-            ${actorId}, ${actorId})`);
-  return id;
+  const { employeeId } = await seedHiredEmployee(orgId, actorId, {
+    scheduleId, subsidiaryId, name: `Emp ${country}`, country, province, payBasis: "salary",
+    currency, rate, rateBasis: "year", annualHours: "2080", partySubsidiaryId: subsidiaryId,
+  });
+  return employeeId;
 }
 
 async function fileCertificate(
@@ -116,6 +103,8 @@ test(
       // GB first, then IE — the install order that swallowed the IE row.
       await seedPayrollComponents(org.orgId, actorId, "GB");
       await seedPayrollComponents(org.orgId, actorId, "IE");
+      // The Apprenticeship Levy leg refuses by name without the allowance.
+      await seedGbLevyAllowanceFixture(org.orgId, actorId, org.subsidiaryId);
 
       // Defect C: IE seeds its own PAYE component — distinct code and system
       // key from the GB row, owned by the IE pack.
@@ -161,6 +150,14 @@ test(
                 ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
       const gbEmployee = await makeEmployee(org.orgId, org.subsidiaryId, actorId, gbScheduleId, "GB", "ENG", "36000", "GBP");
       await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_tax_code_notice", { tax_code: "1257L" }, "2026-04-06");
+      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_nic_category", {
+        category_letter: "A", director_status: "not_director",
+      }, "2026-04-06");
+      // Outside automatic-enrolment age: no pension contributions price here.
+      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_workplace_pension", {
+        age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder",
+        enrolment_status: "not_enrolled",
+      }, "2026-04-06");
       await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_starter_checklist", {
         starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false",
       }, "2026-04-06");
@@ -243,6 +240,9 @@ test(
       await fileCertificate(org.orgId, ieEmployee, actorId, "IE", "ie_rpn", {
         tax_credits_total: "4000", rate_band_total: "44000", usc_cutoff_total: "70044",
         pay_basis: "cumulative",
+      }, "2026-01-01");
+      await fileCertificate(org.orgId, ieEmployee, actorId, "IE", "ie_prsi_class", {
+        prsi_class: "A",
       }, "2026-01-01");
       const ieRun = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: ieScheduleId,
