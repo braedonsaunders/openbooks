@@ -551,9 +551,12 @@ export async function dispatchReportDeliveries(
     // them at send time instead of Redis holding file contents for days.
     // Keys derive from the dispatch identity, so a same-generation retry
     // overwrites the same blob instead of orphaning a fresh random key.
-    const attachments = await storeEmailAttachments([
-      { filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type },
-    ], { storageKeySeed: jobId });
+    const attachments = await storeEmailAttachments(
+      [
+        { filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type },
+      ],
+      { storageKeySeed: jobId, orgId: row.org_id },
+    );
     const emailData = {
       orgId: row.org_id,
       to: row.recipient,

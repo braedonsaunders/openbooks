@@ -1,6 +1,8 @@
-import type { EmailAttachment } from "@openbooks/emails";
+import { isEmailAttachmentRef, type EmailAttachment } from "@openbooks/emails";
 import type { EnqueueEmailData } from "@openbooks/jobs";
 import { deleteStoredEmailAttachments } from "./email-attachments.ts";
+import { emailAttachmentObjectKey } from "../platform/file-storage.ts";
+import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 
 /**
  * Uncertain email-enqueue settlement — the single handoff all staged
@@ -115,7 +117,24 @@ export async function settleStagedAttachmentsAfterEnqueueError(input: {
   probeQueuedJob?: EmailQueuedJobProbe;
   removeStagedAttachments?: RemoveStagedAttachments;
 }): Promise<UncertainEnqueueSettlement> {
-  const remove = input.removeStagedAttachments ?? deleteStoredEmailAttachments;
+  const remove =
+    input.removeStagedAttachments ??
+    (async (attachments: EmailAttachment[] | undefined): Promise<void> => {
+      // I5-platform-57: durable cleanup intents first so the worker duty
+      // retries what the inline delete below cannot confirm; the inline
+      // attempt stays.
+      for (const attachment of attachments ?? []) {
+        if (isEmailAttachmentRef(attachment) && "storageKey" in attachment) {
+          await enqueueStorageCleanupStandalone({
+            orgId: input.data.orgId,
+            objectKey: emailAttachmentObjectKey(attachment.storageKey),
+            ownerKind: "email_attachment",
+            ownerId: attachment.storageKey,
+          });
+        }
+      }
+      await deleteStoredEmailAttachments(attachments);
+    });
   const result = await probeEmailEnqueueAfterError(input);
   if (result.outcome === "already-queued") return result;
   if (result.outcome === "not-queued") {

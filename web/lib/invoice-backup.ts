@@ -7,7 +7,7 @@ import { can, getAuthz, type Authz } from './authz'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { add, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
-import { deleteS3Blobs } from './file-storage'
+import { deleteS3Blobs, enqueueStorageCleanup, fileCabinetObjectKey } from './file-storage'
 import { attachmentReadPermission, getFileBlob, listAttachments, uploadAndAttach, type FileViewer } from './file-cabinet'
 import { recordFileEvent } from './file-audit'
 import { resolvePdfTemplate, type PdfTemplateProvenance, type ResolvedPdfTemplate } from './pdf-templates/store'
@@ -494,6 +494,16 @@ export async function assembleInvoiceBackup(
         where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${priorFileId}
       `)
       await tx.execute(sql`delete from files where id = ${priorFileId} and org_id = ${orgId}`)
+      // I5-platform-41: durable cleanup intents in the same transaction as
+      // the row deletes; the worker duty drains them with retry.
+      for (const versionId of priorS3VersionIds) {
+        await enqueueStorageCleanup(tx, {
+          orgId,
+          objectKey: fileCabinetObjectKey(versionId),
+          ownerKind: 'file_version',
+          ownerId: priorFileId,
+        })
+      }
     }
 
     await recordFileEvent({

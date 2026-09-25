@@ -18,7 +18,8 @@ import {
   validateSandboxTier,
   type SandboxTier,
 } from "./clone.ts";
-import { deleteS3Blobs } from "../platform/file-storage.ts";
+import { deleteS3Blobs, fileCabinetObjectKey } from "../platform/file-storage.ts";
+import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
@@ -718,7 +719,18 @@ export async function refreshSandbox(
         onlyTables: target,
       });
       const currentS3VersionIds = new Set(await listSandboxS3VersionIds(s.org_id));
-      await deleteS3Blobs(staleS3VersionIds.filter((id) => !currentS3VersionIds.has(id)));
+      const staleIds = staleS3VersionIds.filter((id) => !currentS3VersionIds.has(id));
+      // I5-platform-41: durable intents so the worker retries what the
+      // inline delete below cannot confirm; the inline attempt stays.
+      for (const versionId of staleIds) {
+        await enqueueStorageCleanupStandalone({
+          orgId: s.org_id,
+          objectKey: fileCabinetObjectKey(versionId),
+          ownerKind: "file_version",
+          ownerId: versionId,
+        });
+      }
+      await deleteS3Blobs(staleIds);
       // After the clone unit commits, still under the same-sandbox lock.
       // verifyCloneRls opens its own withOrg transactions (bypass off).
       await verifyCloneRls({
@@ -881,6 +893,17 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
       await recordSandboxS3Cleanup(productionOrgId, sandboxId, manifest, "manifest");
     }
     await wipeSandbox(orgId, new Set(tenantTables.map((t) => t.name)));
+    // I5-platform-41: the rows are gone, so record durable intents after the
+    // wipe (never before — the worker must not delete objects whose rows may
+    // still exist if the wipe fails). The inline delete below stays.
+    for (const versionId of manifest.versionIds) {
+      await enqueueStorageCleanupStandalone({
+        orgId,
+        objectKey: fileCabinetObjectKey(versionId),
+        ownerKind: "file_version",
+        ownerId: versionId,
+      });
+    }
     await deleteS3Blobs(manifest.versionIds);
     await recordSandboxS3Cleanup(productionOrgId, sandboxId, manifest, "consumed");
     await withOrg(null, async () => {

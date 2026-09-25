@@ -44,7 +44,23 @@ function s3(): S3Client {
   return client;
 }
 
-const objectKey = (versionId: string) => `file-cabinet/${versionId}`;
+/**
+ * Bucket-key namespaces for staged bytes. Every producer and the cleanup
+ * outbox build keys through these shared builders — never a second copy of
+ * the prefix — so the drain can dispatch a stored key back to its deleter.
+ */
+export const fileCabinetKeyPrefix = "file-cabinet/";
+export const emailAttachmentsKeyPrefix = "email-attachments/";
+
+export function fileCabinetObjectKey(versionId: string): string {
+  return `${fileCabinetKeyPrefix}${versionId}`;
+}
+
+export function emailAttachmentObjectKey(id: string): string {
+  return `${emailAttachmentsKeyPrefix}${id}`;
+}
+
+const objectKey = (versionId: string) => fileCabinetObjectKey(versionId);
 
 /**
  * Build the `x-amz-copy-source` value for an S3 server-side copy: the bucket
@@ -238,7 +254,7 @@ export async function copyS3Blob(fromVersionId: string, toVersionId: string): Pr
  * are transport staging, not tenant records) so cabinet retention and
  * lifecycle rules never apply to them.
  */
-const emailAttachmentKey = (id: string) => `email-attachments/${id}`;
+const emailAttachmentKey = (id: string) => emailAttachmentObjectKey(id);
 
 /** Storage ids are path segments, never paths: reject anything escapable. */
 function assertEmailAttachmentId(id: string): void {

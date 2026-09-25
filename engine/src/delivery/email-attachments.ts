@@ -8,10 +8,12 @@ import {
 } from "@openbooks/emails";
 import {
   deleteEmailAttachmentBlobs,
+  emailAttachmentObjectKey,
   getEmailAttachmentBlob,
   putEmailAttachmentBlob,
   s3Enabled,
 } from "../platform/file-storage.ts";
+import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 import { sealSecret, unsealSecret } from "../platform/secrets.ts";
 
 /**
@@ -56,7 +58,7 @@ export function emailStagingKey(seed: string | undefined, index: number, filenam
 
 export async function storeEmailAttachments(
   attachments: EmailAttachmentPayload[] | undefined,
-  opts: { storageKeySeed?: string } = {},
+  opts: { storageKeySeed?: string; orgId?: string } = {},
 ): Promise<EmailAttachmentRef[]> {
   if (!attachments || attachments.length === 0) return [];
   assertValidEmailAttachmentPayloads(attachments);
@@ -79,7 +81,19 @@ export async function storeEmailAttachments(
     // The caller never receives partial refs, so a mid-loop failure must
     // delete every key this call already wrote before rethrowing —
     // otherwise the orphaned blobs sit in object storage unreferenced
-    // forever (no TTL covers them).
+    // forever (no TTL covers them). I5-platform-57: the inline delete stays,
+    // and when the caller names its org a durable cleanup intent is recorded
+    // first so the worker retries what inline cannot confirm.
+    if (opts?.orgId) {
+      for (const key of writtenStorageKeys) {
+        await enqueueStorageCleanupStandalone({
+          orgId: opts.orgId,
+          objectKey: emailAttachmentObjectKey(key),
+          ownerKind: "email_attachment",
+          ownerId: key,
+        });
+      }
+    }
     await deleteEmailAttachmentBlobs(writtenStorageKeys);
     throw error;
   }

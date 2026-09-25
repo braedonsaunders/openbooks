@@ -3,7 +3,8 @@ import { db, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";
-import { copyS3Blob, deleteS3Blobs, MASKED_STORAGE_KIND } from "../platform/file-storage.ts";
+import { copyS3Blob, deleteS3Blobs, fileCabinetObjectKey, MASKED_STORAGE_KIND } from "../platform/file-storage.ts";
+import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 
 /**
  * The deterministic UUID-rebase clone engine. Copies one org's rows into a
@@ -543,6 +544,16 @@ export async function copyClonedFileObjects(opts: {
   } catch (err) {
     // Compensating cleanup during unwind: best-effort on purpose — a cleanup
     // failure here must never mask the original copy error being rethrown.
+    // I5-platform-41: durable intents first so the worker retries what the
+    // inline delete below cannot confirm; the inline attempt stays.
+    for (const sandboxVersionId of copied) {
+      await enqueueStorageCleanupStandalone({
+        orgId: opts.sandboxOrgId,
+        objectKey: fileCabinetObjectKey(sandboxVersionId),
+        ownerKind: "file_version_copy",
+        ownerId: sandboxVersionId,
+      });
+    }
     await deleteS3Blobs(copied).catch(() => undefined);
     throw err;
   }

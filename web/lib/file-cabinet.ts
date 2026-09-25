@@ -4,7 +4,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { actorAllowedSubsidiaryIds, restrictionSubsidiaryScope, type SubsidiaryTreeNode } from '@openbooks/engine/src/organization/actor-subsidiaries.ts'
 import type { SubsidiaryRestriction } from '@openbooks/schema'
-import { activeStorageKind, deleteS3Blobs, getS3Blob, putS3Blob, refuseMaskedStorageKind } from './file-storage'
+import { activeStorageKind, deleteS3Blobs, enqueueStorageCleanup, enqueueStorageCleanupStandalone, fileCabinetObjectKey, getS3Blob, putS3Blob, refuseMaskedStorageKind } from './file-storage'
 import { recordFileEvent } from './file-audit'
 
 /**
@@ -17,6 +17,28 @@ import { recordFileEvent } from './file-audit'
  * Raw SQL (not Drizzle table objects) is used for the read paths to keep list
  * queries expressive; inserts use the builder where it helps.
  */
+
+/**
+ * Record durable S3 cleanup intents for cabinet versions deleted beside
+ * their rows. Called inside the row-delete transaction so intent and delete
+ * commit atomically; the storage-cleanup worker duty drains the queue with
+ * retry, which survives crashes and partial S3 responses that the inline
+ * post-commit delete cannot.
+ */
+async function enqueueCabinetCleanup(
+  tx: SqlExecutor,
+  orgId: string,
+  versions: { id: string; file_id: string }[],
+): Promise<void> {
+  for (const version of versions) {
+    await enqueueStorageCleanup(tx, {
+      orgId,
+      objectKey: fileCabinetObjectKey(version.id),
+      ownerKind: 'file_version',
+      ownerId: version.file_id,
+    })
+  }
+}
 
 // --- types ------------------------------------------------------------------
 
@@ -1598,8 +1620,8 @@ export async function purgeFolder(
     `))
     if (pinned.rows.length > 0) return { ok: false as const, reason: 'retained' as const }
 
-    const s3Versions = (await tx.execute<{ id: string }>(sql`
-      select fv.id from file_versions fv
+    const s3Versions = (await tx.execute<{ id: string; file_id: string }>(sql`
+      select fv.id, fv.file_id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
       where fi.folder_id in (${descendants}) and fv.storage_kind = 's3'
     `))
@@ -1663,6 +1685,7 @@ export async function purgeFolder(
         executor: tx,
       })
     }
+    await enqueueCabinetCleanup(tx, orgId, s3Versions.rows)
     return { ok: true as const, s3VersionIds: s3Versions.rows.map((v) => v.id) }
   })
   if (!outcome.ok) return outcome
@@ -1972,6 +1995,12 @@ export async function createFile(input: {
   const fileType = deriveFileType(input.contentType)
   const contentHash = createHash('sha256').update(input.bytes).digest('hex')
   const kind = activeStorageKind()
+  // I5-platform-41: the S3 put below cannot roll back with the row
+  // transaction. Track the staged version so a later failure (or a commit
+  // failure) records a durable cleanup intent instead of stranding the
+  // object. Nested callers (executor passed) compensate at their outer
+  // boundary, where the final commit verdict is known.
+  let staged: { versionId: string; fileId: string } | null = null
   return runMutation(input.audit?.executor, async (tx) => {
     if (!(await viewerFolderGate(tx, input.orgId, input.audit, input.folderId, 'editor'))) {
       throw new Error('createFile refused: caller lacks editor access to the destination folder')
@@ -1998,10 +2027,12 @@ export async function createFile(input: {
     await tx.execute(sql`
       update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${input.orgId}
     `)
-    // Object-store put happens inside the transaction: an upload failure rolls
-    // the metadata back; a commit failure at worst orphans one unreferenced
-    // object (never metadata without bytes).
+    // Object-store put happens inside the transaction window: an upload
+    // failure rolls the metadata back (never metadata without bytes), while
+    // a later failure is compensated by the catch below, which records a
+    // durable cleanup intent for the staged key.
     if (kind === 's3') await putS3Blob(versionId, input.bytes, input.contentType)
+    if (kind === 's3') staged = { versionId, fileId }
     else
       await tx.execute(sql`
         insert into file_blobs (version_id, bytes) values (${versionId}, ${input.bytes})
@@ -2040,7 +2071,17 @@ export async function createFile(input: {
         from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where fi.id = ${fileId} and fi.org_id = ${input.orgId}
     `))
     return meta.rows[0]!
-  }, input.audit?.viewer ? input.orgId : undefined)
+  }, input.audit?.viewer ? input.orgId : undefined).catch(async (error) => {
+    if (staged && !input.audit?.executor) {
+      await enqueueStorageCleanupStandalone({
+        orgId: input.orgId,
+        objectKey: fileCabinetObjectKey(staged.versionId),
+        ownerKind: 'file_version',
+        ownerId: staged.fileId,
+      })
+    }
+    throw error
+  })
 }
 
 /**
@@ -2056,6 +2097,11 @@ export async function replaceFile(input: {
   updatedBy: string
   audit?: FileMutationAudit
 }): Promise<boolean> {
+  // I5-platform-41: the S3 put below cannot roll back with the row
+  // transaction. Track the staged version so the catch below records a
+  // durable cleanup intent instead of stranding the object. Nested callers
+  // (executor passed) compensate at their outer boundary.
+  let staged: { versionId: string; fileId: string } | null = null
   return runMutation(input.audit?.executor, async (tx) => {
     const contentHash = createHash('sha256').update(input.bytes).digest('hex')
     const current = (await tx.execute<{
@@ -2098,6 +2144,7 @@ export async function replaceFile(input: {
     const versionId = verIns.rows[0]!.id
 
     if (kind === 's3') await putS3Blob(versionId, input.bytes, input.contentType)
+    if (kind === 's3') staged = { versionId, fileId: input.fileId }
     else
       await tx.execute(sql`
         insert into file_blobs (version_id, bytes) values (${versionId}, ${input.bytes})
@@ -2140,7 +2187,17 @@ export async function replaceFile(input: {
       })
     }
     return true
-  }, input.audit?.viewer ? input.orgId : undefined)
+  }, input.audit?.viewer ? input.orgId : undefined).catch(async (error) => {
+    if (staged && !input.audit?.executor) {
+      await enqueueStorageCleanupStandalone({
+        orgId: input.orgId,
+        objectKey: fileCabinetObjectKey(staged.versionId),
+        ownerKind: 'file_version',
+        ownerId: staged.fileId,
+      })
+    }
+    throw error
+  })
 }
 
 /**
@@ -2603,8 +2660,8 @@ export async function purgeFile(
        limit 1
     `))
     if (material.rows.length > 0 || pinned.rows.length > 0) return { outcome: 'retained' as const }
-    const s3Versions = (await tx.execute<{ id: string }>(sql`
-      select fv.id from file_versions fv
+    const s3Versions = (await tx.execute<{ id: string; file_id: string }>(sql`
+      select fv.id, fv.file_id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
       where fv.file_id = ${id} and fv.storage_kind = 's3'
     `))
@@ -2624,6 +2681,7 @@ export async function purgeFile(
       where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${id}
     `)
     await tx.execute(sql`delete from files where id = ${id} and org_id = ${orgId}`)
+    await enqueueCabinetCleanup(tx, orgId, s3Versions.rows)
     if (audit && evidence) {
       await recordFileEvent({
         orgId,

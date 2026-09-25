@@ -239,7 +239,7 @@ export async function deliverFlowEmail(
   // them at send time instead of Redis holding file contents for days. The
   // keys derive from the row's deterministic job id, so a retry overwrites
   // the same blobs instead of orphaning a fresh random generation.
-  const attachments = await storeEmailAttachments(delivery.attachments, { storageKeySeed: jobId });
+  const attachments = await storeEmailAttachments(delivery.attachments, { storageKeySeed: jobId, orgId: row.org_id });
   const emailData = {
     orgId: row.org_id,
     to: delivery.to,

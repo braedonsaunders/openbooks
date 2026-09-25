@@ -2,6 +2,7 @@ import { authorizeReportRun } from './render-client.ts';
 import { Worker } from "bullmq";
 import { EMAIL_QUEUE, getBlockingConnection, resolveEmailDeliveryKey, type EmailJobData } from "@openbooks/jobs";
 import {
+  isEmailAttachmentRef,
   reconcileDeliveryAttempts,
   sendVia,
 } from "@openbooks/emails";
@@ -23,6 +24,8 @@ import {
 import { sql } from "drizzle-orm";
 import { deleteStoredEmailAttachments, loadEmailAttachments } from "../delivery/email-attachments.ts";
 import { db, withOrgContext } from "../platform/db.ts";
+import { emailAttachmentObjectKey } from "../platform/file-storage.ts";
+import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 import { isSandboxOrg } from "../organization/sandbox-guard.ts";
 import {
   markReportDeliveryFailed,
@@ -126,10 +129,25 @@ export function createEmailWorker(): Worker<EmailJobData> {
       // terminal state. Best-effort by design: a failed delete must never
       // fail delivery bookkeeping, and a crash-orphaned blob is never
       // re-read because only live job payloads reference storage ids.
-      const dropStagedAttachments = (): Promise<void> =>
-        deleteStoredEmailAttachments(d.attachments).catch((error) => {
+      const dropStagedAttachments = async (): Promise<void> => {
+        // I5-platform-57: durable cleanup intents first so the worker duty
+        // retries what the inline delete below cannot confirm; the inline
+        // best-effort attempt stays (a failed delete must never fail
+        // delivery bookkeeping).
+        for (const attachment of d.attachments ?? []) {
+          if (isEmailAttachmentRef(attachment) && "storageKey" in attachment) {
+            await enqueueStorageCleanupStandalone({
+              orgId: d.orgId,
+              objectKey: emailAttachmentObjectKey(attachment.storageKey),
+              ownerKind: "email_attachment",
+              ownerId: attachment.storageKey,
+            });
+          }
+        }
+        await deleteStoredEmailAttachments(d.attachments).catch((error) => {
           console.error("[worker] email attachment cleanup failed:", error instanceof Error ? error.message : error);
         });
+      };
       const deferEmailForReconciliation = async (logId: string, reason: string): Promise<never> => {
         await appendEmailAttemptEvent(d.orgId, logId, { outcome: "blocked", detail: reason });
         if (paymentRemittanceId) {

@@ -8,6 +8,7 @@ import { captureContentMatchesMime } from '@openbooks/engine/src/payables/ap-cap
 import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import { guardPermission } from '../../../lib/authz'
 import { createFile, deleteFile, ensureApCaptureRoot } from '../../../lib/file-cabinet'
+import { enqueueStorageCleanupStandalone, fileCabinetObjectKey } from '../../../lib/file-storage'
 
 export const runtime = 'nodejs'
 
@@ -86,7 +87,30 @@ export async function POST(request: Request) {
       })
       created.push(captureItemId!)
     } catch {
-      if (storedId) await deleteFile(gate.user.orgId, storedId).catch(() => false)
+      // I5-platform-41 addendum: deleteFile only marks the file inactive, so
+      // the committed S3 blobs would strand. Record durable cleanup intents
+      // for every staged version, then keep the existing failure handling.
+      if (storedId) {
+        try {
+          const staged = (await db.execute<{ id: string }>(sql`
+            select fv.id from file_versions fv
+            join files fi on fi.id = fv.file_id and fi.org_id = ${gate.user.orgId}
+            where fv.file_id = ${storedId} and fv.storage_kind = 's3'
+          `)).rows
+          for (const version of staged) {
+            await enqueueStorageCleanupStandalone({
+              orgId: gate.user.orgId,
+              objectKey: fileCabinetObjectKey(version.id),
+              ownerKind: 'file_version',
+              ownerId: storedId,
+            })
+          }
+        } catch {
+          // Intent recording is best-effort on this path; the upload_failed
+          // result below is the evidence that must survive.
+        }
+        await deleteFile(gate.user.orgId, storedId).catch(() => false)
+      }
       results.push({ filename: upload.filename, status: 'failed', error: 'upload_failed' })
       continue
     }
