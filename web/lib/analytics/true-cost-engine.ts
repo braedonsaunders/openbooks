@@ -11,7 +11,8 @@
  */
 
 import { englishTrueCostStrings, type TrueCostStrings } from "./true-cost-strings";
-import { fromUnits, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, fromUnits, mulDecimal, mulPercent, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { quantizeOverheadMoney } from "@openbooks/engine/src/projects/overhead-rates.ts";
 
 /* ─────────────────────────────────────────────── constants ── */
 
@@ -315,6 +316,37 @@ export function calculateCompositeRate(
 
 /* ─────────────────────────────────── manual / derived / formula ── */
 
+/**
+ * Parse a configured money input exactly. Route-persisted values arrive as
+ * canonical decimal strings; legacy numeric values quantize without float
+ * artifacts. Anything else behaves as zero, matching the legacy
+ * `Number(x) || 0` leniency — strictness lives at the API boundary, so one
+ * corrupt stored row cannot take down the whole report.
+ */
+function exactConfigMoney(value: unknown): string {
+  try {
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return "0.0000";
+      return quantizeOverheadMoney(value);
+    }
+    if (typeof value !== "string") return "0.0000";
+    return quantizeOverheadMoney(value);
+  } catch {
+    return "0.0000";
+  }
+}
+
+/** Exact department share of an allocation base (decimal string, 0 when empty). */
+function exactBaseShare(base: AllocationBase, bases: AllocationBaseBundle, deptId: string): string {
+  try {
+    const totalBase = quantizeOverheadMoney(getAllocationBaseValue(base, bases, "Overall"));
+    if (cmp(totalBase, "0") <= 0) return "0";
+    return div(quantizeOverheadMoney(getAllocationBaseValue(base, bases, deptId)), totalBase);
+  } catch {
+    return "0";
+  }
+}
+
 /** Calculate manual category values in fixed-total, department, or per-unit mode. */
 export function calculateManualCategoryData(
   manualConfig: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number | string; byDeptAmounts?: Record<string, number | string>; unitType?: AllocationBase; perUnitRate?: number | string },
@@ -370,21 +402,34 @@ export function calculateManualCategoryData(
     }
   } else if (entryMode === "by_dept") {
     const byDept = manualConfig.byDeptAmounts || {};
+    expenseExact = Object.fromEntries(deptIds.map((id) => [id, "0.0000"]));
+    let exactTotal = "0.0000";
     for (const id of deptIds) {
-      const amt = Number(byDept[id]) || 0;
-      expense[id] = amt;
-      totalExpense += amt;
+      const amt = exactConfigMoney(byDept[id]);
+      expenseExact[id] = amt;
+      expense[id] = Number(amt);
+      exactTotal = add(exactTotal, amt);
     }
+    totalExpense = Number(exactTotal);
   } else if (entryMode === "per_unit") {
     const unitType = manualConfig.unitType || "headcount";
-    const perUnitRate = Number(manualConfig.perUnitRate) || 0;
+    const perUnitRate = exactConfigMoney(manualConfig.perUnitRate);
     const isPercent = unitType === "revenue" || unitType === "direct_cost";
+    const rate = isPercent ? div(perUnitRate, "100") : perUnitRate;
+    expenseExact = Object.fromEntries(deptIds.map((id) => [id, "0.0000"]));
+    let exactTotal = "0.0000";
     for (const id of deptIds) {
-      const unitBase = getAllocationBaseValue(unitType, bases, id);
-      const exp = isPercent ? unitBase * (perUnitRate / 100) : unitBase * perUnitRate;
-      expense[id] = exp;
-      totalExpense += exp;
+      let exp = "0.0000";
+      try {
+        exp = mulDecimal(quantizeOverheadMoney(getAllocationBaseValue(unitType, bases, id)), rate);
+      } catch {
+        exp = "0.0000";
+      }
+      expenseExact[id] = exp;
+      expense[id] = Number(exp);
+      exactTotal = add(exactTotal, exp);
     }
+    totalExpense = Number(exactTotal);
   }
 
   expense["Overall"] = totalExpense;
@@ -398,32 +443,37 @@ export function calculateDerivedCategoryData(
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
-): { expense: Record<string, number>; totalExpense: number } {
+): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number } {
   const expense: Record<string, number> = { Overall: 0 };
-  for (const id of deptIds) expense[id] = 0;
+  const expenseExact: Record<string, string> = { Overall: "0.0000" };
+  for (const id of deptIds) {
+    expense[id] = 0;
+    expenseExact[id] = "0.0000";
+  }
 
   const sourceId = derivedConfig.sourceCategory;
-  const percentage = Number(derivedConfig.percentage ?? 100);
-  if (!sourceId || !categoryTotals[sourceId]) return { expense, totalExpense: 0 };
+  if (!sourceId || !categoryTotals[sourceId]) return { expense, expenseExact, totalExpense: 0 };
+  const percentage = exactConfigMoney(derivedConfig.percentage ?? "100");
 
-  const totalDerived = (categoryTotals[sourceId]!.expenseOverall || 0) * (percentage / 100);
+  const totalDerived = mulPercent(exactConfigMoney(categoryTotals[sourceId]!.expenseOverall), percentage);
   const base = derivedConfig.allocationBase && derivedConfig.allocationBase !== "same" ? derivedConfig.allocationBase : allocationBase;
-  const totalBase = getAllocationBaseValue(base, bases, "Overall");
 
   for (const id of deptIds) {
-    const deptBase = getAllocationBaseValue(base, bases, id);
-    const share = totalBase > 0 ? deptBase / totalBase : 0;
-    expense[id] = totalDerived * share;
+    const exact = mulDecimal(totalDerived, exactBaseShare(base, bases, id));
+    expenseExact[id] = exact;
+    expense[id] = Number(exact);
   }
-  expense["Overall"] = totalDerived;
-  return { expense, totalExpense: totalDerived };
+  expenseExact["Overall"] = totalDerived;
+  const totalExpense = Number(totalDerived);
+  expense["Overall"] = totalExpense;
+  return { expense, expenseExact, totalExpense };
 }
 
 /**
  * Evaluate a formula with
  * cat.<id> / cat["id"] and base.<name> references against category totals and
  * base values, then allocates by base. Evaluation is a guarded arithmetic
- * parser (no `eval`) — see evaluateFormula.
+ * parser (no `eval`) — see evaluateExactFormula.
  */
 export function calculateFormulaCategoryData(
   formulaConfig: { formula?: string },
@@ -432,41 +482,118 @@ export function calculateFormulaCategoryData(
   deptIds: string[],
   bases: AllocationBaseBundle,
   strings: TrueCostStrings = englishTrueCostStrings,
-): { expense: Record<string, number>; totalExpense: number; error?: string } {
+): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number; error?: string } {
   const expense: Record<string, number> = { Overall: 0 };
-  for (const id of deptIds) expense[id] = 0;
+  const expenseExact: Record<string, string> = { Overall: "0.0000" };
+  for (const id of deptIds) {
+    expense[id] = 0;
+    expenseExact[id] = "0.0000";
+  }
 
   const formula = formulaConfig.formula || "";
-  if (!formula) return { expense, totalExpense: 0 };
+  if (!formula) return { expense, expenseExact, totalExpense: 0 };
 
-  const catVals: Record<string, number> = {};
-  for (const id of Object.keys(categoryTotals)) catVals[id] = categoryTotals[id]!.expenseOverall || 0;
-  const baseVals: Record<string, number> = {
-    billed_hours: bases.hours.totalBilled,
-    total_hours: bases.hours.total,
-    headcount: bases.headcount.total,
-    revenue: bases.revenue.total,
-    labor_dollars: bases.laborDollars.total,
-    direct_cost: bases.directCost.total,
+  const catVals: Record<string, string> = {};
+  for (const id of Object.keys(categoryTotals)) catVals[id] = exactConfigMoney(categoryTotals[id]!.expenseOverall);
+  const safeBase = (value: number): string => {
+    try {
+      return quantizeOverheadMoney(value);
+    } catch {
+      return "0.0000";
+    }
+  };
+  const baseVals: Record<string, string> = {
+    billed_hours: safeBase(bases.hours.totalBilled),
+    total_hours: safeBase(bases.hours.total),
+    headcount: safeBase(bases.headcount.total),
+    revenue: safeBase(bases.revenue.total),
+    labor_dollars: safeBase(bases.laborDollars.total),
+    direct_cost: safeBase(bases.directCost.total),
   };
 
-  let evalFormula = formula;
-  evalFormula = evalFormula.replace(/cat\["([^"]+)"\]/g, (_m, id) => String(catVals[id] ?? 0));
-  evalFormula = evalFormula.replace(/cat\.([a-zA-Z0-9_]+)/g, (_m, id) => String(catVals[id] ?? 0));
-  evalFormula = evalFormula.replace(/base\.([a-zA-Z0-9_]+)/g, (_m, id) => String(baseVals[id] ?? 0));
+  let evalFormulaText = formula;
+  evalFormulaText = evalFormulaText.replace(/cat\["([^"]+)"\]/g, (_m, id) => catVals[id] ?? "0.0000");
+  evalFormulaText = evalFormulaText.replace(/cat\.([a-zA-Z0-9_]+)/g, (_m, id) => catVals[id] ?? "0.0000");
+  evalFormulaText = evalFormulaText.replace(/base\.([a-zA-Z0-9_]+)/g, (_m, id) => baseVals[id] ?? "0.0000");
 
-  const calc = evaluateFormula(evalFormula);
-  if (calc === null || isNaN(calc) || !isFinite(calc)) return { expense, totalExpense: 0, error: strings.formulaError };
+  const calc = evaluateExactFormula(evalFormulaText);
+  if (calc === null) return { expense, expenseExact, totalExpense: 0, error: strings.formulaError };
 
-  const totalExpense = Math.max(0, calc);
-  const totalBase = getAllocationBaseValue(allocationBase, bases, "Overall");
+  const totalExpenseExact = cmp(calc, "0") < 0 ? "0.0000" : calc;
   for (const id of deptIds) {
-    const deptBase = getAllocationBaseValue(allocationBase, bases, id);
-    const share = totalBase > 0 ? deptBase / totalBase : 0;
-    expense[id] = totalExpense * share;
+    const exact = mulDecimal(totalExpenseExact, exactBaseShare(allocationBase, bases, id));
+    expenseExact[id] = exact;
+    expense[id] = Number(exact);
   }
+  expenseExact["Overall"] = totalExpenseExact;
+  const totalExpense = Number(totalExpenseExact);
   expense["Overall"] = totalExpense;
-  return { expense, totalExpense };
+  return { expense, expenseExact, totalExpense };
+}
+
+/**
+ * Exact arithmetic evaluator for money formulas — supports
+ * + − × ÷, parentheses, and decimal numbers only. No identifiers, no calls,
+ * so a stored formula can't execute code. Operands evaluate as exact 4dp
+ * ledger units (never binary floats) and the result returns as a canonical
+ * decimal string; null on parse failure or division by zero.
+ */
+export function evaluateExactFormula(expr: string): string | null {
+  const clean = expr.replace(/\s+/g, "");
+  if (!/^[0-9+\-*/().]*$/.test(clean) || clean === "") return null;
+  let pos = 0;
+  const peek = () => clean[pos];
+  const parseNumber = (): bigint | null => {
+    let s = "";
+    while (pos < clean.length && /[0-9.]/.test(clean[pos]!)) s += clean[pos++];
+    if (s === "" || s === ".") return null;
+    try {
+      return toUnits(s);
+    } catch {
+      return null;
+    }
+  };
+  const parenOrNum = (): bigint | null => {
+    if (peek() === "(") {
+      pos++;
+      const v = expression();
+      if (peek() !== ")") return null;
+      pos++;
+      return v;
+    }
+    if (peek() === "-") { pos++; const v = parenOrNum(); return v === null ? null : -v; }
+    if (peek() === "+") { pos++; return parenOrNum(); }
+    return parseNumber();
+  };
+  const term = (): bigint | null => {
+    let v = parenOrNum();
+    if (v === null) return null;
+    while (peek() === "*" || peek() === "/") {
+      const op = clean[pos++];
+      const r = parenOrNum();
+      if (r === null) return null;
+      if (op === "*") v = roundDiv(v * r, 10_000n);
+      else {
+        if (r === 0n) return null;
+        const scaled = r < 0n ? -v * 10_000n : v * 10_000n;
+        v = roundDiv(scaled, r < 0n ? -r : r);
+      }
+    }
+    return v;
+  };
+  function expression(): bigint | null {
+    let v = term();
+    if (v === null) return null;
+    while (peek() === "+" || peek() === "-") {
+      const op = clean[pos++];
+      const r = term();
+      if (r === null) return null;
+      v = op === "+" ? v + r : v - r;
+    }
+    return v;
+  }
+  const result = expression();
+  return pos === clean.length && result !== null ? fromUnits(result) : null;
 }
 
 /**
