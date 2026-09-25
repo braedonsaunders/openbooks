@@ -5131,6 +5131,7 @@
     "storedCard": {
       "backUpNow": "Sauvegarder maintenant",
       "body": "Les {count} sauvegardes terminées les plus récentes sont conservées dans le stockage objet ; les autres sont supprimées. Supprimer une sauvegarde la retire immédiatement du stockage.",
+      "runCount": "Affichage de {shown} sauvegardes sur {total}. Les archives conservées sont prioritaires.",
       "noneYet": "Aucune sauvegarde stockée pour l’instant.",
       "title": "Sauvegardes stockées"
     },

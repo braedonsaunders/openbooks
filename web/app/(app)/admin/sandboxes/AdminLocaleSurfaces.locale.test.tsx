@@ -31,7 +31,7 @@ test('admin backup and sandbox controls render their French catalog copy', () =>
   const markup = renderToStaticMarkup(
     <NextIntlClientProvider locale="fr" messages={frenchMessages} timeZone="UTC">
       <>
-        <BackupManager policy={null} runs={[]} s3Enabled={false} workerOnline={false} />
+        <BackupManager policy={null} runs={[]} totalRuns={0} s3Enabled={false} workerOnline={false} />
         <SandboxManager sandboxes={[]} periods={[]} />
       </>
     </NextIntlClientProvider>,

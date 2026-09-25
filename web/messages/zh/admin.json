@@ -5137,6 +5137,7 @@
     "storedCard": {
       "title": "已存备份",
       "body": "最新的 {count} 个已完成备份保存在对象存储中；其余已轮换。删除备份会立即将其从存储中移除。",
+      "runCount": "共 {total} 次备份运行，显示 {shown} 次。保留的归档优先。",
       "backUpNow": "立即备份",
       "noneYet": "尚无已存备份。"
     },

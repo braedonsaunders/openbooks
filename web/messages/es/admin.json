@@ -5131,6 +5131,7 @@
     "storedCard": {
       "backUpNow": "Hacer copia ahora",
       "body": "Las {count} copias terminadas más recientes se conservan en el almacenamiento de objetos; las demás se eliminan. Eliminar una copia la quita del almacenamiento de inmediato.",
+      "runCount": "Mostrando {shown} de {total} copias. Los archivos retenidos tienen prioridad.",
       "noneYet": "Aún no hay copias almacenadas.",
       "title": "Copias almacenadas"
     },

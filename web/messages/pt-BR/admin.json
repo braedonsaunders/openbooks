@@ -5137,6 +5137,7 @@
     "storedCard": {
       "title": "Backups armazenados",
       "body": "Os {count} backups concluídos mais novos ficam no armazenamento de objetos; o resto roda para fora. Excluir um backup o remove do armazenamento na hora.",
+      "runCount": "Mostrando {shown} de {total} backups. Arquivos retidos têm prioridade.",
       "backUpNow": "Fazer backup agora",
       "noneYet": "Sem backups armazenados ainda."
     },
