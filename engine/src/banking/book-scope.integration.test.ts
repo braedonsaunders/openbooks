@@ -7,6 +7,7 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { autoMatch, createMatch, createMatchWithJournal, importStatement, markReconciled, reconciliationTotals, startReconciliation } from "./banking.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 
 async function postBankJournal(
   org: ScratchOrg,
@@ -154,13 +155,20 @@ for (const policy of ["inactive", "nonposting", "ambiguous"] as const) {
       const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
       await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
       const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "0" }, ctx);
-      if (policy === "ambiguous") await db.transaction(async tx => {
-        // Deliberately reproduce legacy ambiguous data: ordinary SQL now
-        // refuses adding another primary after reconciliation history exists.
-        await tx.execute(sql`set local openbooks.migration=on`);
-        await tx.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'ALSO_PRIMARY','Ambiguous primary',true)`);
-      });
-      else await db.execute(sql`update accounting_books set is_active=${policy !== 'inactive'},posts_gl=${policy !== 'nonposting'} where org_id=${org.orgId} and id=${org.bookId}`);
+      if (policy === "ambiguous") {
+        // 0345 made a second primary unrepresentable: the insert is refused
+        // at the write boundary and exactly one primary survives.
+        await assert.rejects(
+          db.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'ALSO_PRIMARY','Ambiguous primary',true)`),
+          (error: unknown) => errorChainMatches(error, /accounting_books_one_primary_per_org/),
+          "a second primary book must be refused at the write boundary",
+        );
+        const primaries = (await db.execute<{ n: number }>(sql`select count(*)::int as n from accounting_books
+          where org_id=${org.orgId} and is_primary`)).rows[0];
+        assert.equal(primaries?.n, 1, "exactly one primary survives the refused sabotage");
+        return;
+      }
+      await db.execute(sql`update accounting_books set is_active=${policy !== 'inactive'},posts_gl=${policy !== 'nonposting'} where org_id=${org.orgId} and id=${org.bookId}`);
       await assert.rejects(reconciliationTotals(recon.id, ctx), /exactly one active primary posting book/);
       await assert.rejects(autoMatch(recon.id, ctx), /exactly one active primary posting book/);
       await assert.rejects(markReconciled(recon.id, ctx), /exactly one active primary posting book/);
