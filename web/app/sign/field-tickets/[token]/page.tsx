@@ -3,6 +3,7 @@ import { withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldTicket } from '../../../../lib/field-tickets'
+import { formatTicketHours } from '../../../../lib/format'
 import { SignTicketForm } from './SignTicketForm'
 
 export const dynamic = 'force-dynamic'
@@ -69,7 +70,7 @@ export default async function SignFieldTicketPage({ params }: { params: Promise<
           {[...crewSummary.entries()].map(([name, hours]) => (
             <tr key={name} className="border-b border-slate-100 dark:border-slate-800">
               <td className="py-1.5 text-slate-800 dark:text-slate-100">{name}</td>
-              <td className="py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-100">{hours.toFixed(1)}</td>
+              <td className="py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-100">{formatTicketHours(hours)}</td>
             </tr>
           ))}
         </tbody>

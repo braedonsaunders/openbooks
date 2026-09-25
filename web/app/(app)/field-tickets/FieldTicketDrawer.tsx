@@ -2,6 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
+import { formatTicketHours } from '@/lib/format'
 import Link from 'next/link'
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -1115,7 +1116,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.crew.hint')}</p>
             </div>
             <span className="text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-              {t('editor.crew.total', { hours: totalHours.toFixed(1) })}
+              {t('editor.crew.total', { hours: formatTicketHours(totalHours) })}
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -1233,7 +1234,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                         </div>
                       </td>
                     ))}
-                    <td className="py-1.5 pl-2 text-right text-sm font-medium tabular-nums">{rowHours(row).toFixed(1)}</td>
+                    <td className="py-1.5 pl-2 text-right text-sm font-medium tabular-nums">{formatTicketHours(rowHours(row))}</td>
                     {editable && (
                       <td className="py-1.5 text-right">
                         <button
@@ -1257,9 +1258,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                     <td />
                     {projectTasks.length > 0 ? <td /> : null}
                     {days.map((d) => (
-                      <td key={d} className="px-1 py-1.5 text-center tabular-nums">{dayHours(d) > 0 ? dayHours(d).toFixed(1) : '·'}</td>
+                      <td key={d} className="px-1 py-1.5 text-center tabular-nums">{dayHours(d) > 0 ? formatTicketHours(dayHours(d)) : '·'}</td>
                     ))}
-                    <td className="py-1.5 pl-2 text-right font-semibold tabular-nums">{totalHours.toFixed(1)}</td>
+                    <td className="py-1.5 pl-2 text-right font-semibold tabular-nums">{formatTicketHours(totalHours)}</td>
                     {editable && <td />}
                   </tr>
                 )}
