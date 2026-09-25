@@ -101,51 +101,43 @@ function errorToasts(): string[] {
   return (globalThis.__navToasts ?? []).filter((t) => t.kind === "error").map((t) => t.message);
 }
 
-test("B3-NAV-01: a non-JSON 500 toasts the refusal and releases the editor", async () => {
-  // An unhandled-throw 500 with an EMPTY body: the old else branch parsed
-  // first and threw, so no toast ever rendered and busy never released.
-  const restore = scriptFetch(() => new Response("", { status: 500 }));
-  try {
-    const { host, root } = await mountEditor();
-    await act(async () => {
-      saveButton(host).click();
-      await tick();
-      await tick();
-    });
+// An unhandled-throw 500 with an EMPTY body: the old else branch parsed
+// first and threw, so no toast ever rendered and busy never released. A
+// dead network is the same shape through the catch.
+for (const [name, respond, releaseMessage] of [
+  [
+    "B3-NAV-01: a non-JSON 500 toasts the refusal and releases the editor",
+    () => new Response("", { status: 500 }),
+    "busy must release after a failed save",
+  ],
+  [
+    "B3-NAV-01: a dead network toasts and releases the editor",
+    () => Promise.reject(new Error("down")),
+    "busy must release after a network failure",
+  ],
+] as Array<[string, () => Promise<Response> | Response, string]>) {
+  test(name, async () => {
+    const restore = scriptFetch(respond);
+    try {
+      const { host, root } = await mountEditor();
+      await act(async () => {
+        saveButton(host).click();
+        await tick();
+        await tick();
+      });
 
-    const errors = errorToasts();
-    assert.equal(errors.length, 1, `exactly one error toast must render, saw ${JSON.stringify(errors)}`);
-    assert.match(errors[0]!, /Could not save/);
+      const errors = errorToasts();
+      assert.equal(errors.length, 1, `exactly one error toast must render, saw ${JSON.stringify(errors)}`);
+      assert.match(errors[0]!, /Could not save/);
 
-    const after = saveButton(host);
-    assert.equal(after.disabled, false, "busy must release after a failed save");
-    assert.ok((after.textContent ?? "").includes("Save navigation"));
-    await act(async () => {
-      root.unmount();
-    });
-  } finally {
-    restore();
-  }
-});
-
-test("B3-NAV-01: a dead network toasts and releases the editor", async () => {
-  const restore = scriptFetch(() => Promise.reject(new Error("down")));
-  try {
-    const { host, root } = await mountEditor();
-    await act(async () => {
-      saveButton(host).click();
-      await tick();
-      await tick();
-    });
-
-    const errors = errorToasts();
-    assert.equal(errors.length, 1, `exactly one error toast must render, saw ${JSON.stringify(errors)}`);
-    assert.match(errors[0]!, /Could not save/);
-    assert.equal(saveButton(host).disabled, false, "busy must release after a network failure");
-    await act(async () => {
-      root.unmount();
-    });
-  } finally {
-    restore();
-  }
-});
+      const after = saveButton(host);
+      assert.equal(after.disabled, false, releaseMessage);
+      assert.ok((after.textContent ?? "").includes("Save navigation"));
+      await act(async () => {
+        root.unmount();
+      });
+    } finally {
+      restore();
+    }
+  });
+}

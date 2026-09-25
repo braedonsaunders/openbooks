@@ -374,36 +374,29 @@ test("multi-entity imports require and post the selected subsidiary with provide
 
 /** F1T-9: every import/post/reverse mutation POSTs with banking.reconcile,
  * so a read-only operator must not see the import form or the row buttons —
- * only the batch list. */
-test("read-only operators see batches but no import, post or reverse affordances", async (t) => {
-  const { host, root } = await mount({ canReconcile: false, rows: ROWS });
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
+ * only the batch list. Companion: the permitted path still offers all three
+ * mutations. */
+for (const [name, canReconcile, present] of [
+  ["read-only operators see batches but no import, post or reverse affordances", false, false],
+  ["reconcile operators keep the import, post and reverse affordances", true, true],
+] as Array<[string, boolean, boolean]>) {
+  test(name, async (t) => {
+    const { host, root } = await mount({ canReconcile, rows: ROWS });
+    t.after(async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
     });
-    host.remove();
+    await tick();
+    const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent);
+    const verb = present ? "render with" : "stay hidden without";
+    assert.equal(buttons.includes(STRINGS.importDraft), present, `the import button must ${verb} banking.reconcile`);
+    assert.equal(buttons.includes(STRINGS.postLabel), present, `the post button must ${verb} banking.reconcile`);
+    assert.equal(buttons.includes(STRINGS.reverse), present, `the reverse button must ${verb} banking.reconcile`);
+    if (!present) {
+      assert.ok(host.textContent?.includes("po_draft"), "the draft batch row must still render");
+      assert.ok(host.textContent?.includes("po_posted"), "the posted batch row must still render");
+    }
   });
-  await tick();
-  const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent);
-  assert.ok(!buttons.includes(STRINGS.importDraft), "the import button must stay hidden without banking.reconcile");
-  assert.ok(!buttons.includes(STRINGS.postLabel), "the post button must stay hidden without banking.reconcile");
-  assert.ok(!buttons.includes(STRINGS.reverse), "the reverse button must stay hidden without banking.reconcile");
-  assert.ok(host.textContent?.includes("po_draft"), "the draft batch row must still render");
-  assert.ok(host.textContent?.includes("po_posted"), "the posted batch row must still render");
-});
-
-/** F1T-9 companion: the permitted path still offers all three mutations. */
-test("reconcile operators keep the import, post and reverse affordances", async (t) => {
-  const { host, root } = await mount({ canReconcile: true, rows: ROWS });
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
-  await tick();
-  const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent);
-  assert.ok(buttons.includes(STRINGS.importDraft), "the import button must render with banking.reconcile");
-  assert.ok(buttons.includes(STRINGS.postLabel), "the post button must render with banking.reconcile");
-  assert.ok(buttons.includes(STRINGS.reverse), "the reverse button must render with banking.reconcile");
-});
+}

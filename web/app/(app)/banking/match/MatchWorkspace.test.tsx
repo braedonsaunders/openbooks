@@ -187,41 +187,43 @@ function addJournalButton(): HTMLButtonElement {
   return found as HTMLButtonElement
 }
 
-test('a refused rule suggestion surfaces the server reason', async (t) => {
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': previewOk,
-    '/rules/apply-line': () => Response.json({ error: 'rule requires a mapped offset account' }, { status: 422 }),
-  }))
-  await act(async () => {
-    suggestionChip().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-    await tick()
+for (const [name, applyLine, expected, message] of [
+  [
+    'a refused rule suggestion surfaces the server reason',
+    () => Response.json({ error: 'rule requires a mapped offset account' }, { status: 422 }),
+    'mapped offset account',
+    'the refusal must surface',
+  ],
+  [
+    'an unreadable rule refusal still toasts',
+    () => new Response('', { status: 422 }),
+    null,
+    'an empty-body 422 must still toast',
+  ],
+] as Array<[string, (url: string, body?: string) => Response, string | null, string]>) {
+  test(name, async (t) => {
+    await mountWorkspace(t, scriptedFetch({
+      '/rules/preview': previewOk,
+      '/rules/apply-line': applyLine,
+    }))
+    await act(async () => {
+      suggestionChip().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+      await tick()
+      await tick()
+      await tick()
+    })
+    assert.ok(
+      script.toasts.some(
+        (toast) => toast.kind === 'error' && (expected === null || toast.message.includes(expected)),
+      ),
+      `${message}, got ${JSON.stringify(script.toasts)}`,
+    )
   })
-  assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error' && toast.message.includes('mapped offset account')),
-    `the refusal must surface, got ${JSON.stringify(script.toasts)}`,
-  )
-})
+}
 
-test('an unreadable rule refusal still toasts', async (t) => {
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': previewOk,
-    '/rules/apply-line': () => new Response('', { status: 422 }),
-  }))
-  await act(async () => {
-    suggestionChip().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-    await tick()
-  })
-  assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error'),
-    `an empty-body 422 must still toast, got ${JSON.stringify(script.toasts)}`,
-  )
-})
-
-test('a refused add-journal surfaces the server reason', async (t) => {
+// Both add-journal refusals drive the same dialog flow — open, pick the
+// offset, submit — and differ only in where the refusal must land.
+async function submitAddJournal(t: TestContext): Promise<HTMLButtonElement> {
   await mountWorkspace(t, scriptedFetch({
     '/rules/preview': () => Response.json({ matches: [] }),
     '/create-match': () => Response.json({ error: 'offset account is not postable' }, { status: 422 }),
@@ -251,13 +253,18 @@ test('a refused add-journal surfaces the server reason', async (t) => {
   })
   const add = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
   assert.ok(add, 'the dialog must offer Add journal once an offset is picked')
-  assert.equal(add.disabled, false, 'picking the offset must enable Add journal')
   await act(async () => {
     add.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await tick()
     await tick()
     await tick()
   })
+  return add
+}
+
+test('a refused add-journal surfaces the server reason', async (t) => {
+  const add = await submitAddJournal(t)
+  assert.equal(add.disabled, false, 'picking the offset must enable Add journal')
   assert.ok(
     script.toasts.some((toast) => toast.kind === 'error' && toast.message.includes('not postable')),
     `the refusal must surface, got ${JSON.stringify(script.toasts)}`,
@@ -265,41 +272,7 @@ test('a refused add-journal surfaces the server reason', async (t) => {
 })
 
 test('a refused add-journal persists the reason inline and releases busy', async (t) => {
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': () => Response.json({ matches: [] }),
-    '/create-match': () => Response.json({ error: 'offset account is not postable' }, { status: 422 }),
-  }))
-  await act(async () => {
-    addJournalButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
-  const dialogs = document.querySelectorAll('[role="dialog"]')
-  const dialog = dialogs[dialogs.length - 1] as HTMLElement
-  assert.ok(dialog, 'the add-journal dialog must open')
-  const trigger = dialog.querySelector('button[aria-haspopup="listbox"]')
-  assert.ok(trigger, 'the dialog must offer the offset picker')
-  await act(async () => {
-    trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-  })
-  const option = [...document.querySelectorAll('button[role="option"]')].find(
-    (b) => (b.textContent ?? '').includes('6800 Bank & Merchant Fees'),
-  )
-  assert.ok(option, 'the picker must list the offset account')
-  await act(async () => {
-    ;(option as HTMLElement).click()
-    await tick()
-    await tick()
-  })
-  const add = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
-  assert.ok(add, 'the dialog must offer Add journal once an offset is picked')
-  await act(async () => {
-    add.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-    await tick()
-  })
+  await submitAddJournal(t)
   // The dialog stays open (nothing matched) — but the typed refusal must
   // persist inline, not vanish with a transient toast .
   const alert = document.querySelector('[role="alert"]')
