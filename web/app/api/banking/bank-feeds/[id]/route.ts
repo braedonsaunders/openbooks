@@ -28,6 +28,7 @@ async function lockScopedConnection(
   tx: SqlExecutor,
   authz: Authz,
   id: string,
+  lockConnection = true,
 ): Promise<Record<string, unknown> | NextResponse> {
   const reference = (await tx.execute<{ account_id: string }>(sql`
     select account_id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
@@ -41,7 +42,7 @@ async function lockScopedConnection(
   }
   const connection = (await tx.execute<Record<string, unknown>>(sql`
     select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId} and account_id = ${reference.account_id}
-     for update
+     ${lockConnection ? sql`for update` : sql``}
   `)).rows[0];
   return connection ?? NextResponse.json({ error: "not found" }, { status: 404 });
 }
@@ -171,10 +172,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = (parsedBody2.data) as { action?: string };
   if (body.action === "test") {
     const resultOrDenied = await db.transaction(async (tx) => {
-      const existing = await lockScopedConnection(tx, authz, id);
+      // Snapshot under scope, holding the account lock across the probe so a
+      // rehome cannot leak connection health — but not the connection row: a
+      // concurrent rotation or deletion must win, and the compare-and-swap
+      // below turns the loser into a named 409 instead of deadlocking it.
+      const existing = await lockScopedConnection(tx, authz, id, false);
       if (existing instanceof NextResponse) return existing;
-      // Keep both scope locks from credential snapshot through probe and
-      // status publication, so a rehome cannot leak connection health.
       const credentialRevision = existing.credentials as string | null;
       const result = await testBankFeedConnection(id, { orgId: authz.user.orgId }, credentialRevision);
       const nextStatus = result.ok ? "connected" : "error";
@@ -187,7 +190,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
          returning id
       `)).rows[0];
       if (!updated) {
-        return NextResponse.json({ error: "stale probe" }, { status: 409 });
+        const current = (await tx.execute<{ id: string }>(sql`
+          select id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
+        `)).rows[0];
+        return NextResponse.json(
+          { error: current ? "stale probe" : "deleted while testing" },
+          { status: 409 },
+        );
       }
       await audit(tx, authz.user.orgId, id, "update", {
         field: "status",
