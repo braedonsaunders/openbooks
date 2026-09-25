@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
@@ -50,6 +50,10 @@ export function ExitRecordForm({
   const [interviewDate, setInterviewDate] = useState(existing?.interviewHeldOn ?? '')
   const [interviewerId, setInterviewerId] = useState(existing?.interviewerPartyId ?? '')
   const [interviewers, setInterviewers] = useState<{ value: string; label: string }[]>([])
+  const [interviewerQuery, setInterviewerQuery] = useState('')
+  const [interviewersAttempt, setInterviewersAttempt] = useState(0)
+  const interviewersRequestId = useRef(0)
+  const storedInterviewer = existing?.interviewerPartyId ?? null
   const [interviewersError, setInterviewersError] = useState<string | null>(null)
   const [destination, setDestination] = useState(existing?.destination ?? '')
   const [notes, setNotes] = useState(existing?.notes ?? '')
@@ -59,47 +63,39 @@ export function ExitRecordForm({
   // The interviewer picker loads with the form: directory people holding
   // an employment, keyed by party — the record names its interviewer by
   // party, so employment ids would be the wrong ids. A picker failure is
-  // an error with retry, never a silent empty list.
-  async function readInterviewers(): Promise<{ value: string; label: string }[]> {
-    const params = new URLSearchParams({ source: 'people', limit: '200' })
-    if (existing?.interviewerPartyId) params.set('include', existing.interviewerPartyId)
-    const res = await fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
-    // res.ok first, always: the refusal names the missing grant.
-    if (!res.ok) throw new Error(await readApiErrorMessage(res, t('performance.exitInterviewerFailed')))
-    const payload = (await res.json().catch(() => ({}))) as {
-      options?: { partyId?: unknown; label?: unknown }[]
-    }
-    const page = Array.isArray(payload.options) ? payload.options : []
-    return page.flatMap((row) =>
-      typeof row.partyId === 'string' && typeof row.label === 'string'
-        ? [{ value: row.partyId, label: row.label }]
-        : [],
-    )
-  }
-
-  async function loadInterviewers(): Promise<void> {
-    setInterviewersError(null)
-    try {
-      setInterviewers(await readInterviewers())
-    } catch (e) {
-      setInterviewersError((e as Error).message)
-    }
-  }
+  // an error with retry, never a silent empty list. The request stays
+  // inside the shared options contract (limits above 100 refuse with
+  // 422), paging 100 with server-backed search so holders beyond the
+  // first page stay selectable; a sequence guard drops stale responses.
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const list = await readInterviewers()
-        if (!cancelled) setInterviewers(list)
-      } catch (e) {
-        if (!cancelled) setInterviewersError((e as Error).message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    const id = (interviewersRequestId.current += 1)
+    const params = new URLSearchParams({ source: 'people', limit: '100' })
+    if (interviewerQuery.trim()) params.set('q', interviewerQuery.trim())
+    if (storedInterviewer) params.set('include', storedInterviewer)
+    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+      .then(async (res) => {
+        if (id !== interviewersRequestId.current) return
+        // res.ok first, always: the refusal names the missing grant.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, t('performance.exitInterviewerFailed')))
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { partyId?: unknown; label?: unknown }[]
+        }
+        if (id !== interviewersRequestId.current) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        setInterviewers(
+          page.flatMap((row) =>
+            typeof row.partyId === 'string' && typeof row.label === 'string'
+              ? [{ value: row.partyId, label: row.label }]
+              : [],
+          ),
+        )
+        setInterviewersError(null)
+      })
+      .catch((e: unknown) => {
+        if (id !== interviewersRequestId.current) return
+        setInterviewersError((e as Error).message)
+      })
+  }, [interviewerQuery, storedInterviewer, interviewersAttempt, t])
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -178,6 +174,17 @@ export function ExitRecordForm({
         </div>
         <div>
           <Label htmlFor="exit-interviewer">{t('performance.exitInterviewer')}</Label>
+          <Input
+            id="exit-interviewer-search"
+            value={interviewerQuery}
+            onChange={(e) => {
+              setInterviewerQuery(e.target.value)
+              setInterviewersError(null)
+            }}
+            placeholder={t('performance.exitInterviewerSearch')}
+            aria-label={t('performance.exitInterviewerSearch')}
+            className="mb-1.5"
+          />
           <Select id="exit-interviewer" value={interviewerId} onChange={(e) => setInterviewerId(e.target.value)}>
             <option value="">{t('performance.exitInterviewerPlaceholder')}</option>
             {interviewers.map((option) => (
@@ -189,7 +196,7 @@ export function ExitRecordForm({
           {interviewersError ? (
             <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
               {interviewersError}{' '}
-              <Button variant="ghost" size="sm" onClick={() => void loadInterviewers()}>
+              <Button variant="ghost" size="sm" onClick={() => setInterviewersAttempt((n) => n + 1)}>
                 {tCommon('actions.retry')}
               </Button>
             </p>

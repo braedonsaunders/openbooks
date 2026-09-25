@@ -953,6 +953,7 @@
     "exitInterviewDate": "面谈日期",
     "exitInterviewer": "面谈人",
     "exitInterviewerPlaceholder": "选择面谈人",
+    "exitInterviewerSearch": "搜索人员…",
     "exitInterviewerFailed": "无法加载面谈人列表。",
     "saveExit": "保存离职记录",
     "recordExit": "记录离职",

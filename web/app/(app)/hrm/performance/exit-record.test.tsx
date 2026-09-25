@@ -85,20 +85,20 @@ async function mount(opts?: {
     const url = String(input)
     const method = init?.method ?? 'GET'
     if (method === 'GET' && url.includes('/api/hrm/options?source=people')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ options: people.map((p) => ({ partyId: p.partyId, label: p.label })) }),
-      }
+      // Mirror the production options contract: pages above 100 refuse
+      // with 422, so the form can never depend on an over-limit request.
+      const limit = Number(new URL(url, 'http://localhost').searchParams.get('limit') ?? '25')
+      const contracted = Number.isSafeInteger(limit) && limit >= 1 && limit <= 100
+      return contracted
+        ? { ok: true, json: async () => ({ options: people.map((p) => ({ partyId: p.partyId, label: p.label })) }) }
+        : { ok: false, status: 422, json: async () => ({ error: 'options limit must be an integer from 1 to 100' }) }
     }
     if (method === 'POST' || method === 'PATCH') {
       posts.push({ url, body: init?.body ? (JSON.parse(init.body) as Record<string, unknown>) : {} })
     }
     return {
       ok: true,
-      status: 200,
       json: async () => ({}),
-      clone: () => ({ json: async () => ({}) }),
     }
   }
   await act(async () => {

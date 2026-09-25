@@ -1008,6 +1008,7 @@
     "exitInterviewDate": "Interview date",
     "exitInterviewer": "Interviewer",
     "exitInterviewerPlaceholder": "Select the interviewer",
+    "exitInterviewerSearch": "Search people…",
     "exitInterviewerFailed": "The interviewer list could not be loaded.",
     "saveExit": "Save exit record",
     "recordExit": "Record exit",

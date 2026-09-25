@@ -953,6 +953,7 @@
     "exitInterviewDate": "Fecha de la entrevista",
     "exitInterviewer": "Entrevistador",
     "exitInterviewerPlaceholder": "Seleccionar al entrevistador",
+    "exitInterviewerSearch": "Buscar personas…",
     "exitInterviewerFailed": "No se pudo cargar la lista de entrevistadores.",
     "saveExit": "Guardar registro de salida",
     "recordExit": "Registrar salida",
