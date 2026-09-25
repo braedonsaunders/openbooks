@@ -3,6 +3,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
@@ -150,6 +151,11 @@ function formulaDerivedField(src: Record<string, unknown>, field: string): boole
   return direct?.[source] === 'formula' || mapped?.[source] === 'formula'
 }
 
+function fieldWasMapped(src: Record<string, unknown>, field: string): boolean {
+  const sourceColumns = objectRecord(src[SOURCE_COLUMNS_KEY])
+  return Object.prototype.hasOwnProperty.call(sourceColumns ?? {}, field)
+}
+
 export function transactionResource(
   cfg: DocKindConfig,
   orgId: string,
@@ -290,6 +296,7 @@ async function writeTransactions(
     rows: { base_currency: string }[]
   }).rows[0]?.base_currency ?? 'CAD'
   const multiCurrencyOn = await orgFeatureEnabled(ctx.orgId, 'multiCurrency')
+  const multiSubsidiaryOn = await orgFeatureEnabled(ctx.orgId, 'multiSubsidiary')
   // The kernel posts a NULL-subsidiary document's legs to the org root, so an
   // omitted subsidiary defaults to the root explicitly: document and GL agree,
   // and subsidiary-fenced surfaces can see the row. Exactly one root exists
@@ -359,6 +366,12 @@ async function writeTransactions(
       // subsidiary trial balance. Omitted means the root (see above).
       let subsidiaryId: string | null = null
       const subsidiaryHuman = String(src.subsidiary ?? '').trim()
+      const subsidiaryMapped = fieldWasMapped(src, 'subsidiary') || subsidiaryHuman.length > 0
+      if (subsidiaryMapped && !multiSubsidiaryOn) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: 'subsidiary field is not available while multi-subsidiary is disabled' })
+        continue
+      }
       if (subsidiaryHuman) {
         subsidiaryId = await resolver.resolveId({ resource: 'subsidiaries', by: 'name' }, subsidiaryHuman)
         if (!subsidiaryId) {
@@ -486,6 +499,12 @@ async function writeTransactions(
       const number = wantNumber || (await nextDocumentNumber(ctx.orgId, cfg.kind, cfg.numberPrefix))
       const currency = String(src.currency ?? '').trim() || baseCurrency
       const documentId = await db.transaction(async (tx) => {
+        if (subsidiaryMapped) {
+          await acquireOrgFeatureGateLock(tx, ctx.orgId)
+          if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, 'multiSubsidiary'))) {
+            throw new Error('subsidiary field is not available while multi-subsidiary is disabled')
+          }
+        }
         // Row-scoped savepoint. Under the import route's outer org transaction
         // a nested db.transaction PARTICIPATES instead of opening (and rolling
         // back) its own, so a mid-row failure must undo this row's partial
