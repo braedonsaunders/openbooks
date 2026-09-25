@@ -9,7 +9,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
-import { listDecisions, logDecision, syncCapabilities, updateCapability } from "./governance.ts";
+import { listDecisions, logDecision, syncCapabilities, updateCapability, updateCapabilityForOrg } from "./governance.ts";
 import {
   checkPayrollFinalizeAllowed,
   flagsForEmployment,
@@ -138,10 +138,12 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
     const seeded = await syncCapabilities(db, org.orgId, adminId);
     assert.equal(seeded.length, 6);
     // Re-sync preserves the org's lowered autonomy (never overwrites).
-    const lowered = await updateCapability(db, {
+    const beforeDecisions = await decisionCount(org.orgId);
+    const lowered = await updateCapabilityForOrg({
       orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "read_only",
     });
     assert.equal(lowered.autonomy, "read_only");
+    assert.equal(await decisionCount(org.orgId), beforeDecisions + 1, "each committed capability change has its governance row");
     const reseeded = await syncCapabilities(db, org.orgId, adminId);
     assert.deepEqual(reseeded, []);
     const rows = (await db.execute<{ autonomy: string }>(sql`

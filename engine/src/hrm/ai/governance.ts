@@ -262,6 +262,19 @@ export async function updateCapability(
   return row;
 }
 
+/** Public write boundary: capability state and its governance evidence commit together. */
+export async function updateCapabilityForOrg(query: {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly key: string;
+  readonly autonomy?: string;
+  readonly reviewerRole?: string | null;
+  readonly markReviewed?: boolean;
+}): Promise<CapabilityRow> {
+  const { orgId, actorId } = requireIds(query.orgId, query.actorId);
+  return withOrgTransaction(orgId, () => updateCapability(db, { ...query, orgId, actorId }));
+}
+
 export type DecisionRow = {
   id: string;
   capabilityKey: string;

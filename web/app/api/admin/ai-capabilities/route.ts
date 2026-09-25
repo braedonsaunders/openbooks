@@ -5,7 +5,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   listCapabilities,
   syncCapabilitiesForOrg,
-  updateCapability,
+  updateCapabilityForOrg,
 } from "@openbooks/engine/src/hrm/ai/governance.ts";
 import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
 import { guardPermission } from "../../../../lib/authz";
@@ -51,7 +51,7 @@ export async function PATCH(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
   try {
-    const capability = await updateCapability(db, {
+    const capability = await updateCapabilityForOrg({
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       key: body.key,
