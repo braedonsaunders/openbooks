@@ -30,8 +30,8 @@ test("mulRate rejects zero, negative, and over-precise rates", () => {
 test("mulPercent remains exact across the full numeric(19,4) money range", () => {
   assert.equal(mulPercent("900719925474099.1250", "13", 2), "117093590311632.8900");
   assert.equal(mulPercent("999999999999999.9500", "13", 2), "129999999999999.9900");
-  assert.equal(mulPercent("-10.0500", "5", 2), "-0.5000");
-  assert.equal(mulPercent("0.1000", "7.25", 4), "0.0073");
+  assert.equal(mulPercent("900719925474099.3", "12.123456789012345"), "109198390954876.6259");
+  assert.throws(() => mulPercent("100", "1e2"), /plain percentage/);
 });
 
 test("mulRatio allocates exact partial carrying values", () => {

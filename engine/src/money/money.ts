@@ -180,18 +180,26 @@ export function mulDecimal(amount: string, factor: string | number): string {
 
 /**
  * Multiply money by a percentage without crossing JavaScript's floating-point
- * boundary. Both inputs are exact numeric(19,4) strings; `13.25` means 13.25%.
- * The result is rounded half-away-from-zero to `decimalPlaces` (0..4), while
- * remaining represented as the ledger's canonical four-decimal money string.
+ * boundary. The money uses numeric(19,4); the plain-decimal percentage accepts
+ * up to 18 fractional places. `13.25` means 13.25%. The result is rounded
+ * half-away-from-zero to `decimalPlaces` (0..4), while remaining represented
+ * as the ledger's canonical four-decimal money string.
  */
 export function mulPercent(amount: string, percent: string, decimalPlaces = 4): string {
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
     throw new Error("decimalPlaces must be an integer from 0 through 4");
   }
+  const match = /^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/.exec(percent.trim());
+  const fraction = match?.[3] ?? match?.[4] ?? "";
+  if (!match || fraction.length > 18) {
+    throw new Error(`not a plain percentage with at most 18 decimal places: "${percent}"`);
+  }
+  const whole = match[2]!.split(".")[0] || "0";
+  const percentUnits = BigInt(`${whole}${fraction}` || "0") * (match[1] === "-" ? -1n : 1n);
   const quantum = 10n ** BigInt(4 - decimalPlaces);
   const roundedQuanta = roundDiv(
-    toUnits(amount) * toUnits(percent),
-    100n * SCALE * quantum,
+    toUnits(amount) * percentUnits,
+    100n * 10n ** BigInt(fraction.length) * quantum,
   );
   return fromUnits(roundedQuanta * quantum);
 }
