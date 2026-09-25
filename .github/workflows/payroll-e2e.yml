@@ -144,7 +144,11 @@ jobs:
           for pair in $SUITES; do
             spec="${pair%%:*}"
             echo "::group::playwright payroll ${spec}"
+            # Runtime and bypass pools must point at the SAME clone: bypass
+            # reads (org resolution) otherwise hit the template source and miss
+            # every row this suite wrote. Keep the bypass login, swap the dbname.
             OPENBOOKS_DB_URL="postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD}@localhost:5433/openbooks_e2e_${pair##*:}" \
+            OPENBOOKS_BYPASS_DB_URL="${OPENBOOKS_BYPASS_DB_URL%/*}/openbooks_e2e_${pair##*:}" \
               npx playwright test --project workflows --workers=1 "e2e/workflows/${spec}.spec.ts" || status=1
             echo "::endgroup::"
           done
