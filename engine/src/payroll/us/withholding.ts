@@ -66,7 +66,6 @@ import {
   type UsStateYtd,
 } from "./states/index.ts";
 import { act32LocalEit, localServicesTaxPerPeriod } from "./states/pa.ts";
-import { miDetroitResidentRate } from "./states/mi.ts";
 import { mdDelawareResidentTax, mdDelawareScheduleApplies } from "./states/md.ts";
 import { inCounty, inCountyWithholding } from "./states/in.ts";
 import { orTransitWithholding } from "./states/or.ts";
@@ -442,8 +441,13 @@ export interface UsWithholdingInput {
   regularWageTaxWithheldFor?: readonly string[];
   /** Resolved exact work shares used by state and local allocation rules. */
   wageAllocations?: readonly UsWageAllocation[];
-  /** Other Michigan taxing city reached by a Detroit resident's work-location levy. */
-  detroitOtherCity?: { code: string; nonresidentRate: string | null } | null;
+  /**
+   * Every other Michigan taxing city a Detroit resident works in this
+   * period, with that city's entered nonresident rate (null when unentered —
+   * the Detroit engine refuses it by name). The resident rate prices per
+   * work-city wage allocation, never first-match.
+   */
+  detroitOtherCities?: { code: string; nonresidentRate: string | null }[];
   /** Verified out-of-region wage source and current work-region tax amounts. */
   residentWithholdingFacts?: UsResidentWithholdingFacts;
   /** Current paycheck's computed federal income-tax withholding. */
@@ -1140,21 +1144,12 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         + "in engine/src/payroll/us/states/index.ts",
       );
     }
-    const detroitResidentRateOverride = engineCode === "MI-DETROIT" && levy.reach === "resident"
-      ? (() => {
-        const otherCity = input.detroitOtherCity ?? null;
-        if (otherCity && !otherCity.nonresidentRate) {
-          throw new UsWithholdingError(
-            `Detroit resident withholding needs the ${otherCity.code} nonresident rate under Michigan Form 5469; `
-            + "record that rate in the employer's us_mi_city settings before calculating",
-          );
-        }
-        return miDetroitResidentRate({
-          payDate: input.payDate,
-          otherCityNonresidentRate: otherCity?.nonresidentRate ?? null,
-        });
-      })()
-      : undefined;
+    // The per-allocation credit prices inside the Detroit engine, which sees
+    // the wage allocations; the dispatch only forwards the other work
+    // cities (a null rate refuses by name there, naming the city).
+    const detroitOtherCities = engineCode === "MI-DETROIT" && levy.reach === "resident"
+      ? input.detroitOtherCities ?? []
+      : [];
     if (separateFlatRate) {
       const regular = engine.compute({
         payDate: input.payDate,
@@ -1174,7 +1169,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
         ytd: input.ytd,
-        ...(detroitResidentRateOverride ? { detroitResidentRateOverride } : {}),
+        detroitOtherCities,
       });
       const rawSupplementalTax = mulRateCents(supplemental, separateFlatRate);
       const supplementalTax = separateFlatWholeDollar
@@ -1216,7 +1211,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       residentWithholdingFacts,
       regionTax: input.regionTax,
       ytd: input.ytd,
-      ...(detroitResidentRateOverride ? { detroitResidentRateOverride } : {}),
+      detroitOtherCities,
     });
     return { code: engine.state, label: engine.label, tax: result.tax, factors: result.factors };
   }
@@ -1298,15 +1293,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       };
     }
     case "MI": {
-      // Not applied here, and it is a known gap rather than an oversight:
-      // Michigan's two-city rule reduces a DETROIT RESIDENT's rate by the work
-      // city's nonresident rate (`miDetroitResidentRate`). Detroit is computed
-      // by its published engine above, which applies its full resident rate —
-      // correct for the Detroit resident working in Detroit, and an
-      // OVER-withholding of at most the other city's nonresident rate for the
-      // employee who works in a second taxing city. Wiring it needs the sibling
-      // levy's rate handed to a Detroit path that bypasses the engine, which is
-      // a decision for the state's own module.
+      // The Detroit resident's two-city credit is not priced here: it prices
+      // inside the Detroit engine on the published-engine path above, which
+      // receives every other work city and its rate (`detroitOtherCities`).
+      // This branch prices each work city's OWN levy at its entered rate.
       const result = miCityWithholding({
         city: subRegion,
         wages: compensation,

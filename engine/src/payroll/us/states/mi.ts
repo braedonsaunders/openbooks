@@ -209,10 +209,11 @@ export const MI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MI_CITY: "Michigan city (code)",
   MI_CITY_RATE: "Michigan city rate (employer-entered)",
   DETROIT_BASIS: "Detroit basis (resident or nonresident)",
-  DETROIT_RATE: "Detroit rate applied",
+  DETROIT_RATE: "Detroit full resident rate (per-allocation credits price off it)",
   DETROIT_EXEMPTION_PER_PERIOD: "Detroit exemption this period",
   DETROIT_TAXABLE: "Detroit taxable income",
   DETROIT_TAX: "Detroit tax",
+  DETROIT_OTHER_CITY_CREDITS: "Detroit other-city credits vs the full rate",
 };
 
 export const MI_WITHHOLDING: UsStateWithholdingEngine = {
@@ -381,23 +382,82 @@ export function miCityWithholding(input: {
 function computeDetroit(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = miRatesForPayDate(input.payDate);
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
-  const rate = input.basis === "resident"
-    ? input.detroitResidentRateOverride ?? rates.detroit.residentRate
-    : rates.detroit.nonresidentRate;
+  const fullRate = rates.detroit.residentRate;
+  const otherCities = input.basis === "resident" ? input.detroitOtherCities ?? [] : [];
   const perPeriod = miDetroitExemptionPerPeriod(input.payDate, input.periodsPerYear);
 
   const factors: Record<string, string> = {
     DETROIT_BASIS: input.basis,
-    DETROIT_RATE: rate,
+    DETROIT_RATE: fullRate,
     DETROIT_EXEMPTION_PER_PERIOD: perPeriod,
   };
-  const allowance = U(perPeriod) * BigInt(Math.max(exemptions, 0));
-  const taxable = max0(U(input.wages) - allowance);
-  factors.DETROIT_TAXABLE = D(taxable);
-  const tax = mulRateCents(taxable, rate);
-  const supplemental = mulRateCents(U(input.supplemental ?? "0"), rate);
+  const totalAllowance = U(perPeriod) * BigInt(Math.max(exemptions, 0));
+  const supplemental = mulRateCents(U(input.supplemental ?? "0"), fullRate);
+  if (otherCities.length === 0) {
+    const rate = input.basis === "resident" ? fullRate : rates.detroit.nonresidentRate;
+    factors.DETROIT_RATE = rate;
+    const taxable = max0(U(input.wages) - totalAllowance);
+    factors.DETROIT_TAXABLE = D(taxable);
+    const tax = mulRateCents(taxable, rate);
+    factors.DETROIT_TAX = D(tax + supplemental);
+    return {
+      state: "MI-DETROIT",
+      year: rates.year,
+      tax: D(tax + supplemental),
+      taxSupplemental: D(supplemental),
+      factors,
+    };
+  }
+  // Michigan City Income Tax Act credit, Detroit withholding guide (Form
+  // 5469): a Detroit resident's wages earned in another taxing city are
+  // taxed at 2.4% minus THAT city's nonresident rate — one credit per work
+  // city, priced off that city's own allocation, never first-match. Wages
+  // outside the credited allocations price at the full resident rate. The
+  // period allowance offsets the highest-taxed slice first, so an exemption
+  // never shelters low-taxed dollars while full-rate dollars go untaxed.
+  let allowance = totalAllowance;
+  let otherWages = 0n;
+  const slices: { wages: bigint; rate: string }[] = [];
+  for (const city of otherCities) {
+    if (!city.nonresidentRate) {
+      throw new PayrollError(
+        `Detroit resident withholding needs the ${city.code} nonresident rate under Michigan Form 5469; `
+        + "record that rate in the employer's us_mi_city settings before calculating",
+      );
+    }
+    const allocation = (input.wageAllocations ?? []).find(
+      (item) => item.region === "MI" && item.subRegion === city.code,
+    );
+    const basis = allocation?.sourceWagesCurrentPeriod;
+    if (basis == null) {
+      throw new PayrollError(
+        `Detroit resident withholding needs current-period source wages for work in ${city.code} `
+        + "(Michigan) to price the 2.4%-minus-that-city credit; record approved work-location "
+        + "time or an HR allocation before calculating; refused by name",
+      );
+    }
+    const cityWages = U(basis);
+    otherWages += cityWages;
+    slices.push({
+      wages: cityWages,
+      rate: miDetroitResidentRate({ payDate: input.payDate, otherCityNonresidentRate: city.nonresidentRate }),
+    });
+  }
+  const totalWages = U(input.wages);
+  slices.push({ wages: totalWages > otherWages ? totalWages - otherWages : 0n, rate: fullRate });
+  slices.sort((a, b) => (U(b.rate) > U(a.rate) ? 1 : U(b.rate) < U(a.rate) ? -1 : 0));
+  let tax = 0n;
+  let credit = 0n;
+  for (const slice of slices) {
+    const relief = allowance > slice.wages ? slice.wages : allowance;
+    allowance -= relief;
+    const taxable = slice.wages - relief;
+    tax += mulRateCents(taxable, slice.rate);
+    credit += mulRateCents(taxable, fullRate) - mulRateCents(taxable, slice.rate);
+  }
+  factors.DETROIT_TAXABLE = D(max0(totalWages - totalAllowance));
+  factors.DETROIT_OTHER_CITY_CREDITS = D(credit);
   factors.DETROIT_TAX = D(tax + supplemental);
-
   return {
     state: "MI-DETROIT",
     year: rates.year,
