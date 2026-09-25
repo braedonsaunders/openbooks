@@ -228,9 +228,11 @@ export function PlatformClient() {
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   const load = useCallback(() => {
-    // load() never re-arms loading, so the 2.5s live poll refreshes
-    // silently; only the mount and an explicit retry show it.
-    setLoadError(null);
+    // load() sets no state synchronously — every update sits in a promise
+    // continuation — so the mount effect below stays a pure fetch kickoff
+    // (react-hooks/set-state-in-effect) and the 2.5s live poll refreshes
+    // silently. Callers clear a shown error before re-arming (retryLoad) or
+    // on success below, never here.
     return fetch("/api/platform/connections")
       .then(async (res) => {
         // The status is checked before the body is parsed: a 403 carries
@@ -243,6 +245,7 @@ export function PlatformClient() {
         }
         const payload = (await res.json()) as Payload;
         setData(payload);
+        setLoadError(null);
         setLoading(false);
       })
       .catch(() => {
@@ -254,6 +257,7 @@ export function PlatformClient() {
   }, [t]);
 
   function retryLoad() {
+    setLoadError(null);
     setLoading(true);
     void load();
   }
