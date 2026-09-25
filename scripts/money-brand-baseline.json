@@ -1,0 +1,4 @@
+{
+  "$comment": "Ceiling on heuristic money-shaped Number()/parseFloat()/unary-+ crossings in engine/src and packages/*/src (non-test). Branded Money/Rate/Quantity conversions fail unconditionally outside this count. This ceiling may only be lowered: adoption slices convert a site below to the engine/src/money/brands.ts boundary and lower it. See scripts/check-money-brand.mjs.",
+  "ceiling": 9
+}
