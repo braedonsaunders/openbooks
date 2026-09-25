@@ -29,7 +29,10 @@
   "status": {
     "quoted": "Cotizado",
     "awarded": "Adjudicado",
-    "substantially_complete": "Sustancialmente completo"
+    "active": "Activo",
+    "substantially_complete": "Sustancialmente completo",
+    "closed": "Cerrado",
+    "cancelled": "Cancelado"
   },
   "billing": {
     "availableToBill": "Disponible para facturar",

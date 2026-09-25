@@ -29,7 +29,10 @@
   "status": {
     "quoted": "Quoted",
     "awarded": "Awarded",
-    "substantially_complete": "Substantially complete"
+    "active": "Active",
+    "substantially_complete": "Substantially complete",
+    "closed": "Closed",
+    "cancelled": "Cancelled"
   },
   "billing": {
     "availableToBill": "Available to bill",

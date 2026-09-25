@@ -54,14 +54,20 @@ function withoutPreview(current: Record<string, Preview>, key: string): Record<s
   return next
 }
 
-export function ProjectDuplicatesView() {
+export function ProjectDuplicatesView({ canMerge }: { canMerge: boolean }) {
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
+  // The full project lifecycle, not just the pre-award trio: duplicates can
+  // group active, closed and cancelled projects, and those rendered as an
+  // unknown-value fallback read as a data defect (I4-webui-44 regression).
   const projectStatusLabels = {
     quoted: t('status.quoted'),
     awarded: t('status.awarded'),
+    active: t('status.active'),
     substantially_complete: t('status.substantially_complete'),
-  } satisfies Record<'quoted' | 'awarded' | 'substantially_complete', string>
+    closed: t('status.closed'),
+    cancelled: t('status.cancelled'),
+  } satisfies Record<'quoted' | 'awarded' | 'active' | 'substantially_complete' | 'closed' | 'cancelled', string>
   const [groups, setGroups] = useState<DuplicateGroup[] | null>(null)
   const [survivors, setSurvivors] = useState<Record<string, string>>({})
   // One cached preview per group + duplicate row. The survivor direction is
@@ -76,15 +82,21 @@ export function ProjectDuplicatesView() {
   const [loadFailed, setLoadFailed] = useState(false)
 
   const load = useCallback(async () => {
-    const response = await fetch('/api/projects/duplicates')
-    if (!response.ok) {
+    // Own catch: merge awaits this after a successful POST, and a reload
+    // failure must toast as a load failure, never as a merge failure.
+    try {
+      const response = await fetch('/api/projects/duplicates')
+      if (!response.ok) {
+        toast.error(t('duplicates.loadFailed'))
+        return
+      }
+      const payload = (await response.json()) as { groups: DuplicateGroup[] }
+      setGroups(payload.groups)
+      setPreviews({})
+      setPreviewErrors({})
+    } catch {
       toast.error(t('duplicates.loadFailed'))
-      return
     }
-    const payload = (await response.json()) as { groups: DuplicateGroup[] }
-    setGroups(payload.groups)
-    setPreviews({})
-    setPreviewErrors({})
   }, [t])
 
   useEffect(() => {
@@ -116,9 +128,12 @@ export function ProjectDuplicatesView() {
       const response = await fetch(
         `/api/projects/merge?survivorId=${encodeURIComponent(survivorId)}&duplicateId=${encodeURIComponent(duplicateId)}`,
       )
-      const payload = (await response.json()) as (Preview & { error?: string })
+      // The status is checked before the body parses: a non-JSON error page
+      // must name the translated failure, never throw out of .json() and
+      // leave the previous direction's success on screen.
       if (!response.ok) {
-        const message = payload.error ?? t('duplicates.previewFailed')
+        const refused = (await response.json().catch(() => null)) as { error?: string } | null
+        const message = refused?.error ?? t('duplicates.previewFailed')
         toast.error(message)
         // The refusal replaces the cached preview for this pair: the last
         // good direction's counts must not survive as a stale success.
@@ -126,7 +141,13 @@ export function ProjectDuplicatesView() {
         setPreviewErrors((current) => ({ ...current, [groupKey]: message }))
         return
       }
+      const payload = (await response.json()) as Preview
       setPreviews((current) => ({ ...current, [key]: { ...payload, groupKey, survivorId, duplicateId } }))
+    } catch {
+      const message = t('duplicates.previewFailed')
+      toast.error(message)
+      setPreviews((current) => withoutPreview(current, key))
+      setPreviewErrors((current) => ({ ...current, [groupKey]: message }))
     } finally {
       setBusy(null)
     }
@@ -141,9 +162,10 @@ export function ProjectDuplicatesView() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ survivorId, duplicateId }),
       })
-      const payload = (await response.json()) as (Preview & { error?: string })
+      // The status is checked before the body parses, like preview above.
       if (!response.ok) {
-        const message = payload.error ?? t('duplicates.mergeFailed')
+        const refused = (await response.json().catch(() => null)) as { error?: string } | null
+        const message = refused?.error ?? t('duplicates.mergeFailed')
         toast.error(message)
         setPreviewErrors((current) => ({ ...current, [groupKey]: message }))
         return
@@ -151,6 +173,10 @@ export function ProjectDuplicatesView() {
       toast.success(t('duplicates.merged'))
       setPreviews((current) => withoutPreview(current, `${groupKey}:${duplicateId}`))
       await load()
+    } catch {
+      const message = t('duplicates.mergeFailed')
+      toast.error(message)
+      setPreviewErrors((current) => ({ ...current, [groupKey]: message }))
     } finally {
       setBusy(null)
     }
@@ -232,15 +258,17 @@ export function ProjectDuplicatesView() {
                           <td className="py-1">
                             {project.id !== survivorId ? (
                               <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={busy !== null}
-                                  onClick={() => preview(groupKey, survivorId, project.id)}
-                                >
-                                  {t('duplicates.preview')}
-                                </Button>
-                                {previewResult && !previewResult.alreadyMerged ? (
+                                {canMerge ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={busy !== null}
+                                    onClick={() => preview(groupKey, survivorId, project.id)}
+                                  >
+                                    {t('duplicates.preview')}
+                                  </Button>
+                                ) : null}
+                                {canMerge && previewResult && !previewResult.alreadyMerged ? (
                                   <Button
                                     size="sm"
                                     disabled={busy !== null}

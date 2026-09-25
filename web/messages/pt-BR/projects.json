@@ -29,7 +29,10 @@
   "status": {
     "quoted": "Orçado",
     "awarded": "Adjudicado",
-    "substantially_complete": "Substancialmente concluído"
+    "active": "Ativo",
+    "substantially_complete": "Substancialmente concluído",
+    "closed": "Fechado",
+    "cancelled": "Cancelado"
   },
   "billing": {
     "availableToBill": "Disponível para faturar",

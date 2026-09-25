@@ -29,7 +29,10 @@
   "status": {
     "quoted": "已报价",
     "awarded": "已中标",
-    "substantially_complete": "基本完工"
+    "active": "启用",
+    "substantially_complete": "基本完工",
+    "closed": "已关闭",
+    "cancelled": "已取消"
   },
   "billing": {
     "availableToBill": "可开票金额",

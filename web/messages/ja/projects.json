@@ -29,7 +29,10 @@
   "status": {
     "quoted": "見積済み",
     "awarded": "受注済み",
-    "substantially_complete": "実質完了"
+    "active": "有効",
+    "substantially_complete": "実質完了",
+    "closed": "クローズ",
+    "cancelled": "取り消し済み"
   },
   "billing": {
     "availableToBill": "請求可能額",
