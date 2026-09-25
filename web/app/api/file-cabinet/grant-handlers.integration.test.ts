@@ -26,7 +26,7 @@ test('grant changes are resource-scoped and audit-atomic', () => {
       },
     });
     const { deleteGrant } = await import('./web/app/api/file-cabinet/grant-handlers.ts');
-    const { removeGrant, setGrant } = await import('./web/lib/file-cabinet.ts');
+    const { removeGrant, setGrant } = await import('./web/lib/file-cabinet/index.ts');
     hooks.deregister();
 
     installTrustedTestDatabaseBypass();
@@ -129,7 +129,7 @@ test('grants and tiers refuse absent resources instead of using the baseline', (
       },
     });
     const { deleteGrant, getGrants, postGrant } = await import('./web/app/api/file-cabinet/grant-handlers.ts');
-    const { cabinetResourceExists, fileAccessLevel, folderAccessLevel } = await import('./web/lib/file-cabinet.ts');
+    const { cabinetResourceExists, fileAccessLevel, folderAccessLevel } = await import('./web/lib/file-cabinet/index.ts');
     hooks.deregister();
 
     installTrustedTestDatabaseBypass();
