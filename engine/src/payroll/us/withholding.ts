@@ -514,6 +514,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         + "recalculate with the pack's deduction treatments before withholding — refused by name",
       );
     }
+    // A derived supplemental base goes negative when pre-tax reductions exceed
+    // that period's supplemental pay; supplemental pay itself is never negative,
+    // so floor the artifact here instead of double-subtracting it in every state.
+    if (kind === "nonPeriodic" && U(value) < 0n) return "0";
     return value;
   };
   const stateWages = declaredBase("income", input.wages);
