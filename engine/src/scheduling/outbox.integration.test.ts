@@ -1722,7 +1722,7 @@ test("the scheduler sweep routes allocation_run rows to the allocation processor
     assert.ok(failed, "the probe row stays visible as failed");
     assert.match(
       failed.error ?? "",
-      /allocation_run payload requires ruleId, periodId, and bookId/,
+      /allocation_run payload requires ruleId, versionId, periodId, and bookId/,
       "the failure names the allocation payload contract, not the escalation fallthrough",
     );
   } finally {
