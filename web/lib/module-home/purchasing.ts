@@ -274,12 +274,12 @@ export async function purchasingHome(
     orgId,
     trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
   ) : null
-  const byWeek = new Map<string, number>()
+  const byWeek = new Map<string, string>()
   for (const r of trendRes.rows) {
     const wk = String(r.wk).slice(0, 10)
     const late = String(r.late ?? r.wk).slice(0, 10)
-    const spend = Number(mulDecimal(String(r.spend ?? 0), trendCtx!.rateAt((r.func ?? null) as string | null, late)))
-    byWeek.set(wk, (byWeek.get(wk) ?? 0) + spend)
+    const spend = mulDecimal(String(r.spend ?? 0), trendCtx!.rateAt((r.func ?? null) as string | null, late))
+    byWeek.set(wk, add(byWeek.get(wk) ?? '0.0000', spend))
   }
   const paid7dValue = grants.ap ? Number(await translateFlows(
     orgId,
@@ -369,7 +369,7 @@ export async function purchasingHome(
     openPos: Number(badge.open_pos ?? 0),
     spend30d,
     topExposure,
-    trend: weekStarts.map((weekStart) => ({ weekStart, spend: byWeek.get(weekStart) ?? 0 })),
+    trend: weekStarts.map((weekStart) => ({ weekStart, spend: Number(byWeek.get(weekStart) ?? '0.0000') })),
     badges: {
       openPos: Number(badge.open_pos ?? 0),
       openBills,

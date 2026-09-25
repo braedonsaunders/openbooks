@@ -59,7 +59,7 @@ export function scanMoneyNumberConversions(source, path = "<source>") {
 }
 
 function discoverWebComponents() {
-  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "web/components/**/*.tsx", "web/app/**/*.tsx", "web/lib/module-home/**/*.ts", "web/lib/module-home/**/*.tsx"], {
+  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "web/components/**/*.tsx", "web/app/**/*.tsx", "web/lib/module-home/*.ts", "web/lib/module-home/*.tsx", "web/lib/module-home/**/*.ts", "web/lib/module-home/**/*.tsx"], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   }).split("\0").filter(Boolean).filter((file) =>
