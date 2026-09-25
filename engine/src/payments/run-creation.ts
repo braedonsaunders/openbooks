@@ -32,6 +32,8 @@ interface CreatePaymentRunOptions {
   scheduledFor?: string | null;
   sourceScheduleId?: string | null;
   selectionCriteria?: Record<string, unknown>;
+  /** Scheduled-run cap rechecked against the live open balances used below. */
+  maximumRunAmount?: string | null;
   /**
    * Durable per-occurrence claim for scheduled runs. The occurrence row is
    * inserted (or adopted) inside the creation transaction BEFORE any run
@@ -290,6 +292,12 @@ async function createPaymentRunWithinTransaction(
   }
   const payable = bills.rows.filter((b) => cmp(b.open, "0") > 0);
   if (payable.length === 0) throw new PaymentError("all selected bills are already fully paid");
+  if (opts.maximumRunAmount != null) {
+    const liveTotal = payable.reduce((total, bill) => total + toUnits(bill.open), 0n);
+    if (liveTotal > toUnits(opts.maximumRunAmount)) {
+      throw new PaymentError("live bill balances exceed the scheduled maximum run amount; review the schedule selection and retry");
+    }
+  }
 
   // Apply subcontract holds and joint-check instructions before creating any
   // payment documents or instructions. A later control is caught again by the
