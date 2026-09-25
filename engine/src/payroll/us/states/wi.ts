@@ -226,7 +226,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       );
     }
     const current = U(input.wages) + U(input.supplemental ?? "0");
-    if (U(expected) < 150000n && U(ytd) + current < 150000n) {
+    if (U(expected) < U("1500") && U(ytd) + current < U("1500")) {
       return {
         state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
         factors: { WI_NONRESIDENT_THRESHOLD_EXEMPT: "1", WI_NONRESIDENT_WAGES: D(current) },
