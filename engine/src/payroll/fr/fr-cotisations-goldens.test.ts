@@ -210,6 +210,26 @@ test("tranche edges: plafonds bite at 4 005 € and 16 020 €, monotonic above"
   }
 });
 
+test("progressive regularization: December bonus under the annual PASS stays capped", () => {
+  // €3,000 January–November then €13,000 December (ordinary pay plus a
+  // €10,000 bonus): cumulative €46,000 sits below the €48,060 annual PASS,
+  // so the whole December versement stays in the capped base — 6,90 % on
+  // €13,000, no T2, no CET. Annualising December alone would cap at
+  // €4,005 and misprice €8,995 as T2.
+  const r = calculateFrCotisations2026({
+    ...small,
+    brut: "13000.00",
+    payDate: "2026-12-15",
+    ytdRemunerationBefore: "33000.00",
+    ceilingPeriodsElapsed: 12,
+  });
+  assert.equal(r.t1Base, "13000.0000");
+  assert.equal(r.t2Base, "0.0000");
+  assert.equal(r.vieillesseSalPlafonnee, "897.0000");
+  assert.equal(r.cetApplies, false);
+  assert.equal(r.cetBase, "0.0000");
+});
+
 test("guards: out-of-year dates, unknown effectif, bad amounts refuse by name", () => {
   for (const payDate of ["2025-12-31", "2027-01-01"]) {
     assert.throws(
