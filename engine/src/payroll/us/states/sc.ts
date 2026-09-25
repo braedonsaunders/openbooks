@@ -9,6 +9,9 @@
  *       methods; official $750 weekly / 3-allowance example ($549.90 /
  *       $10.58).
  *   SCDOR Withholding FAQs / WH-105 — no SC W-4 → zero allowances.
+ *   SCDOR Revenue Ruling #22-3, "Nonresident Employee Wages" —
+ *     withholding applies only to wages for services rendered in SC,
+ *     https://dor.sc.gov/income-tax-employer-wage-withholding-requirements
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
@@ -22,6 +25,7 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -115,7 +119,14 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   }
 
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    // SCDOR Revenue Ruling 22-3 taxes only wages for services rendered in SC:
+    // price the verified SC work share, and refuse when it is missing.
+    const allocation = requireUsWageAllocation(input.wageAllocations, "SC", null);
+    wages = mulRateCents(wages, allocation.workShare);
+    trace("SC_NONRESIDENT_WAGES", wages);
+  }
   const annualWages = wages * BigInt(P);
   trace("SC_ANNUAL_WAGES", annualWages);
 
@@ -153,6 +164,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 export const SC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   SC_EXEMPT: "Exempt from South Carolina withholding",
   SC_ANNUAL_WAGES: "South Carolina annualized wages",
+  SC_NONRESIDENT_WAGES: "South Carolina-source wages (verified work share)",
   SC_PERSONAL_ALLOWANCE: "South Carolina personal allowance",
   SC_STANDARD_DEDUCTION: "South Carolina standard deduction",
   SC_TAXABLE: "South Carolina taxable income",
