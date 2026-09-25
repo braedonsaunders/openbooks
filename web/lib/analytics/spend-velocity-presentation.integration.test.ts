@@ -6,6 +6,9 @@ import test from 'node:test'
 registerHooks({
   resolve(specifier, _context, next) {
     if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+    // No request scope here: the money formatter resolves its locale through
+    // request cookies, so serve an empty jar (anonymous caller, default locale).
+    if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export function cookies() { return { get() { return undefined } } }' }
     return next(specifier)
   },
 })
@@ -101,7 +104,8 @@ test('spend velocity translates every spend functional to presentation', { skip:
       assert.equal(data.summary.billsTotal, 235)
       assert.equal(data.monthlyTrends.find((m) => m.month === '2026-07')?.totalAmount, 235)
       assert.equal(data.commitmentCliff.summary.totalPO, 235)
-      assert.equal(data.revenue.totalRevenue, 470)
+      // Revenue arrives as an exact decimal string since I5-platform-189.
+      assert.equal(data.revenue.totalRevenue, '470.0000')
       // P&L operating expenses are the 100 CAD bill plus the 50 CAD manual
       // journal; the 135 CAD of COGS spend must not feed the "Operating
       // expenses … of revenue" ratio (F-t09-001).

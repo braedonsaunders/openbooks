@@ -6,6 +6,9 @@ import test from 'node:test'
 registerHooks({
   resolve(specifier, _context, next) {
     if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+    // No request scope here: the money formatter resolves its locale through
+    // request cookies, so serve an empty jar (anonymous caller, default locale).
+    if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export function cookies() { return { get() { return undefined } } }' }
     return next(specifier)
   },
 })
