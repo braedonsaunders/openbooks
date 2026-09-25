@@ -51,7 +51,7 @@ test("application evidence lock holds both source documents and endpoints throug
     const lockReady = new Promise<void>((resolve) => { locked = resolve; });
     const release = new Promise<void>((resolve) => { unlock = resolve; });
     const holder = withOrg(org.orgId, () => db.transaction(async (tx) => {
-      const result = await lockApplicationEvidence(tx, org.orgId, [lineId], [], [entryId]);
+      const result = await lockApplicationEvidence(tx, org.orgId, [lineId], [documentId], [entryId]);
       assert.deepEqual(result.documentIds, [documentId]);
       assert.deepEqual(result.entryIds, [entryId]);
       assert.deepEqual(result.lineIds, [lineId]);

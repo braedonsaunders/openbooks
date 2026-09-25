@@ -6,6 +6,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { evaluateBillsForRelease, recordReleaseCheck } from "../compliance/compliance.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
+import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { allocationsMatchApprovedSnapshot, canonicalSettlementRate, carryingAmountForSettlement, realizedFxControlAdjustment, validateAllocationInputs, validateSettlementEvidence, type AllocationInput, type SettlementRateSource } from "./settlement-policy.ts";
@@ -139,8 +140,19 @@ export async function postPaymentWithApplications(
     }
     // Match the kernel's organization → book lock order before touching GL.
     await db.execute(sql`select id from orgs where id = ${preflight.orgId} for update`);
-    // Serialize both the payment aggregate and every application endpoint.
-    await db.execute(sql`select id from documents where id = ${paymentDocId} and org_id = ${preflight.orgId} for update`);
+    const beforeLock = (preflight.custom ?? {}) as {
+      allocations?: AllocationInput[];
+      creditAllocations?: CreditAllocationInput[];
+    };
+    const beforeCash = allocations ?? beforeLock.allocations ?? [];
+    const beforeCredits = beforeLock.creditAllocations ?? [];
+    const discoveredEndpoints = [...new Set([
+      ...beforeCash.map((allocation) => allocation.openLineId),
+      ...beforeCredits.flatMap((allocation) => [allocation.fromLineId, allocation.toLineId]),
+    ])];
+    // Application triggers update invoice open balances. Lock every source
+    // document, entry and line (and the payment document) in the shared order.
+    await lockApplicationEvidence(db, preflight.orgId, discoveredEndpoints, [paymentDocId]);
     const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, paymentDocId), eq(schema.documents.orgId, preflight.orgId)));
     if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
     if (doc.status !== "approved") {
@@ -178,6 +190,17 @@ export async function postPaymentWithApplications(
     const storedAllocations = custom.allocations ?? [];
     const allocs = allocations ?? storedAllocations;
     const creditAllocs = custom.creditAllocations ?? [];
+    const currentEndpoints = [...new Set([
+      ...(custom.allocations ?? []).map((allocation) => allocation.openLineId),
+      ...creditAllocs.flatMap((allocation) => [allocation.fromLineId, allocation.toLineId]),
+    ])].sort();
+    const discoveredStoredEndpoints = [...new Set([
+      ...(beforeLock.allocations ?? []).map((allocation) => allocation.openLineId),
+      ...beforeCredits.flatMap((allocation) => [allocation.fromLineId, allocation.toLineId]),
+    ])].sort();
+    if (JSON.stringify(currentEndpoints) !== JSON.stringify(discoveredStoredEndpoints)) {
+      throw new PaymentError("payment application endpoints changed while posting; retry the operation");
+    }
     if (options.runClaim) {
       await assertPaymentRunComposition(options.runClaim.runId, paymentDocId, allocs, creditAllocs, custom.discountAmount ?? "0", preflight.orgId);
     }
@@ -203,12 +226,6 @@ export async function postPaymentWithApplications(
         "payment allocations differ from the approved document; save the payment and complete approval before posting",
       );
     }
-
-    const endpointIds = [...new Set([
-      ...allocs.map((a) => a.openLineId),
-      ...creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId]),
-    ])];
-    await db.execute(sql`select id from journal_lines where id in ${endpointIds} and org_id = ${doc.orgId} order by id for update`);
 
     const side = PAYMENT_KIND_SIDE[doc.kind];
     const bookId = await paymentBookId(doc.orgId);

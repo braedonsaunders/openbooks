@@ -4,6 +4,7 @@ import { db } from "../platform/db.ts";
 import { add, cmp, mulRate, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../close/period-policy.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
@@ -144,11 +145,17 @@ export async function recordPayRunPayment(input: {
          and jl.amount < 0
          ${payrollSubsidiaryScopeFilter(sql`jl.subsidiary_id`, input.allowedSubsidiaryIds)}
        order by jl.id
-       for update of jl
     `));
     if (postedItems.rows.length === 0) {
       throw new PayrollError("the posted run has no open net-pay items (already settled?)");
     }
+    await lockApplicationEvidence(
+      tx,
+      orgId,
+      postedItems.rows.map((item) => item.id),
+      [documentId],
+      [run.posted_entry_id],
+    );
 
     // Read live applications in a separate statement AFTER the endpoint locks:
     // a payment that committed while we waited must be visible to this read.
