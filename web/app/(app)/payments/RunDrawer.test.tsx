@@ -39,7 +39,7 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { MoneyProvider } = await import('../../../components/money-provider')
 const { BusinessDateProvider } = await import('../../../components/business-date-provider')
-const { RunDrawer } = await import('./RunDrawer')
+const { RunDrawer, hasPaymentAdjustment } = await import('./RunDrawer')
 
 test('posting confirmation sums live instruction amounts with exact decimal precision', async (t) => {
   globalThis.__runDrawerConfirmCalls = []
@@ -76,7 +76,7 @@ test('posting confirmation sums live instruction amounts with exact decimal prec
     host.remove()
   })
   const post = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('runDrawer.postPayments')) as HTMLButtonElement | undefined
-  assert.ok(post, 'a generated run with an approved file offers the posting action')
+  assert.ok(post && hasPaymentAdjustment('9007199254740993.01', '0'), 'posting is available and high-precision adjustments remain visible')
   await act(async () => { post.click() })
   assert.match(globalThis.__runDrawerConfirmCalls?.[0]?.message ?? '', /Post 2 payments totalling \$9,007,199,254,740,993\.00/)
 })

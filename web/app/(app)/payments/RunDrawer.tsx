@@ -12,7 +12,7 @@ import { Check, Download, FileCheck2, RotateCcw, Send, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { readApiErrorMessage } from '../../../lib/api-error'
-import { sum } from '@openbooks/engine/src/money/money.ts'
+import { isZero, sum } from '@openbooks/engine/src/money/money.ts'
 /**
  * Payment-run flyout: instructions, EFT readiness, and the two explicit
  * actions — CPA-005 file download (draft → exported) and posting the run's
@@ -44,6 +44,18 @@ const INSTRUCTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 
 
 // payment_instructions.status enum values with a translated display label.
 const INSTRUCTION_STATUS_KEYS = ['pending', 'approved', 'generated', 'sent', 'settled', 'returned', 'rejected', 'failed', 'reversed', 'cancelled']
+
+/** Invalid source amounts stay visible so malformed money is never hidden as zero. */
+export function hasPaymentAdjustment(discount: string, credit: string): boolean {
+  const nonzero = (value: string) => {
+    try {
+      return !isZero(value)
+    } catch {
+      return value.trim() !== ''
+    }
+  }
+  return nonzero(discount) || nonzero(credit)
+}
 
 // payment_runs.status enum → common.status.* message keys (confirmed/exported
 // live in payments.runs.status.*; fallback: raw value).
@@ -114,8 +126,8 @@ export function postingEventReason(
   return t('runDrawer.eventsDetail.postingOutcome', { posted, failed, pending })
 }
 export interface PaymentRunItemClient {
-  id: string; document_number: string; party_name: string; payment_amount: string | number;
-  discount_amount: string | number; credit_amount: string | number; currency: string
+  id: string; document_number: string; party_name: string; payment_amount: string;
+  discount_amount: string; credit_amount: string; currency: string
 }
 
 export function RunDrawer({
@@ -397,7 +409,7 @@ export function RunDrawer({
 
         {files.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.filesTitle')}</h3><div className="grid gap-2">{files.map((file) => <div key={file.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"><div><p className="text-sm font-medium">{file.filename}</p><p className="font-mono text-[11px] text-slate-500">{String(file.content_hash).slice(0, 16)}… · v{file.sequence_number}</p></div><div className="flex items-center gap-2"><span className="text-xs tabular-nums text-slate-500">{file.payment_count} · {money(file.total_amount, { currency: file.currency })}</span><Badge variant={file.status === 'approved' || file.status === 'delivered' ? 'success' : file.status === 'rejected' ? 'destructive' : file.status === 'delivery_uncertain' ? 'warning' : 'secondary'}>{t(`runDrawer.fileStatus.${file.status}`)}</Badge>{file.status === 'delivery_uncertain' && canApprove ? <><Button size="sm" variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'resolveDelivered', fileId: file.id }) }}>{t('runDrawer.resolveDelivered')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'resolveApproved', fileId: file.id }) }}>{t('runDrawer.resolveApproved')}</Button></> : null}</div></div>)}</div></section> : null}
 
-        {items.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.sourcesTitle')}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"><div className="flex justify-between gap-3"><span className="font-mono text-xs font-semibold">{item.document_number}</span><span className="tabular-nums">{money(item.payment_amount, { currency: item.currency })}</span></div><p className="mt-1 text-xs text-slate-500">{item.party_name}</p>{Number(item.discount_amount) || Number(item.credit_amount) ? <p className="mt-1 text-xs text-slate-500">{t('runDrawer.adjustments', { discount: money(item.discount_amount, { currency: item.currency }), credit: money(item.credit_amount, { currency: item.currency }) })}</p> : null}</div>)}</div></section> : null}
+        {items.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.sourcesTitle')}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"><div className="flex justify-between gap-3"><span className="font-mono text-xs font-semibold">{item.document_number}</span><span className="tabular-nums">{money(item.payment_amount, { currency: item.currency })}</span></div><p className="mt-1 text-xs text-slate-500">{item.party_name}</p>{hasPaymentAdjustment(item.discount_amount, item.credit_amount) ? <p className="mt-1 text-xs text-slate-500">{t('runDrawer.adjustments', { discount: money(item.discount_amount, { currency: item.currency }), credit: money(item.credit_amount, { currency: item.currency }) })}</p> : null}</div>)}</div></section> : null}
 
         <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.instructionsTitle')}</h3><Input value={instructionQ} onChange={(e) => { setInstructionQ(e.target.value); setInstructionPage(1) }} placeholder={t('runDrawer.searchInstructions')} className="max-w-64" /></div>
         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
