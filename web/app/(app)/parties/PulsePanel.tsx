@@ -17,8 +17,15 @@ import {
   Card,
   cn,
 } from '@openbooks/ui'
+import { roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { CustomerPulseData } from '../../../lib/customer-pulse'
+
+function billedPercent(billed: string, contract: string): string {
+  const denominator = toUnits(contract)
+  if (denominator <= 0n) return '—'
+  return `${roundDiv(toUnits(billed) * 100n, denominator)}%`
+}
 
 /**
  * Pulse — the live state of one commercial relationship on its own record.
@@ -306,9 +313,7 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
             <div>
               <div className="text-xs text-slate-500">{t('billedProgress')}</div>
               <div className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">
-                {Number(projects.totalContractValue) > 0
-                  ? `${Math.round((Number(projects.totalBilled) / Number(projects.totalContractValue)) * 100)}%`
-                  : '—'}
+                {billedPercent(projects.totalBilled, projects.totalContractValue)}
               </div>
             </div>
           </div>
