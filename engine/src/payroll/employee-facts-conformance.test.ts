@@ -133,9 +133,8 @@ test("every pack with reads has its facts module registered", () => {
   }
   assert.ok(isEmployeeFactsRegistered("GB"), "GB facts are registered");
   assert.deepEqual(employeeFactsFor("GB").map((fact) => fact.key), [
-    "gb_student_loan_plan",
-    "gb_postgraduate_loan",
-    "gb_nic_category_letter",
+    "gb_student_loan_plan", "gb_postgraduate_loan", "gb_nic_category_letter",
+    "gb_ae_age_band", "gb_ae_membership_status", "gb_ae_scheme_basis", "gb_ae_deduction_method",
   ]);
 });
 
