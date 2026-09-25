@@ -29,8 +29,6 @@ import { loadQueueLabels } from './change-requests'
  * segments, never an empty table pretending to be data.
  */
 
-const LIST_LIMIT = 500
-
 export interface BenefitsWindowRow extends EnrollmentWindowSummary {
   kindLabel: string
   statusLabel: string
@@ -218,7 +216,11 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     count: counts[value] ?? 0,
   }))
 
-  const windowRows: BenefitsWindowRow[] = windows.slice(0, LIST_LIMIT).map((w) => ({
+  // No silent prefix cap: the window drawer resolves any window by id and
+  // joins its enrolments from the complete arrays, so the table must present
+  // the same complete population — a sliced table beside complete counts
+  // showed a nonzero status with "No enrolments".
+  const windowRows: BenefitsWindowRow[] = windows.map((w) => ({
     ...w,
     kindLabel: windowKindLabel(t, w.kind),
     statusLabel: statusLabel(t, w.status),
@@ -228,7 +230,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     openLabel: t('benefits.openWindow'),
   }))
 
-  const enrollmentRows: BenefitsEnrollmentRow[] = enrolments.slice(0, LIST_LIMIT).map((e) => {
+  const enrollmentRows: BenefitsEnrollmentRow[] = enrolments.map((e) => {
     const worker = workerByEmployment.get(e.employmentId)
     const label = worker?.name ?? e.employeeName ?? e.employmentId
     return {
