@@ -105,6 +105,30 @@ for (const file of routes) {
     `${file} writes org-wide configuration (${touched.join(", ")}) without guardUnrestrictedScope`);
 }
 
+// Qualification taxonomy and its category vocabulary have no subsidiary
+// owner. Derive each write boundary from the service command it dispatches.
+const qualificationCommands = new Map([
+  ["createQualificationType", "POST"],
+  ["updateQualificationType", "PATCH"],
+  ["declareCategory", "POST"],
+  ["setAlertSchedule", "POST"],
+]);
+const qualificationWrites = [];
+for (const file of routes) {
+  const source = readFileSync(join(root, file), "utf8");
+  for (const [command, method] of qualificationCommands) {
+    if (!new RegExp(`\\b${command}\\s*\\(`).test(source)) continue;
+    const arm = handlerArm(source, method);
+    assert.match(arm, new RegExp(`\\b${command}\\s*\\(`), `${file} no longer dispatches ${command} from ${method}`);
+    assert.match(arm, /guardUnrestrictedScope\s*\(/,
+      `${file} dispatches org-wide qualification command ${command} without a ${method} unrestricted-scope guard`);
+    qualificationWrites.push({ file, command });
+  }
+}
+assert.deepEqual(qualificationWrites.map(({ command }) => command).sort(), [
+  "createQualificationType", "declareCategory", "setAlertSchedule", "updateQualificationType",
+].sort(), "qualification policy writer set changed; review every mutation boundary");
+
 // Connector configuration, execution, run metadata, OAuth, and source
 // deletion surfaces all act on org-wide integration state. Unlike ordinary
 // entity APIs, even their readers expose one shared connector registry and
@@ -202,6 +226,7 @@ if (/\bloadCategories\s*\(/.test(cashflowComposite)) {
 }
 
 console.log(`org-wide config scope: ${writes.length} route(s), ${writes.reduce((n, row) => n + row.tables.length, 0)} write target(s)`);
+console.log(`org-wide qualification scope: ${qualificationWrites.length} command writer(s), mutation handlers guarded`);
 for (const row of writes) console.log(`  ${row.file}: ${row.tables.join(", ")}`);
 console.log(`org-wide connector scope: ${connectorRoutes.length} route(s), reads and writes guarded`);
 console.log(`org-wide settings scope: ${orgSettingsWrites.length} route writer(s), mutation handlers guarded`);
