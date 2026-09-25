@@ -21,7 +21,7 @@ import { groupByVendor, type VendorPayable } from '@/lib/cash/ap-position'
 import { cashPosition } from '@/lib/cash/cash-position'
 import { analyticsConfig } from '@/lib/analytics/config'
 import { MissingRatesError } from '@/lib/consolidation'
-import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopeFilter } from '@/lib/agents/work-item-subsidiary-scope'
+import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopePredicate } from '@/lib/agents/work-item-subsidiary-scope'
 import {
   addDays,
   bankBalances,
@@ -499,7 +499,7 @@ export async function loadDashboardMetrics(
             from ai_work_items w
             ${WORK_ITEM_SUBJECT_JOIN}
            where w.org_id = ${orgId} and w.agent_key in (${agentPackList})
-             ${workItemSubjectScopeFilter(authz.allowedSubsidiaryIds)}
+             ${workItemSubjectScopePredicate(orgId, authz.allowedSubsidiaryIds)}
         `)
       : Promise.resolve({ rows: [{ open: 0, proposals: 0, last_run: null }] }),
   ])

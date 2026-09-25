@@ -5,7 +5,7 @@ import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/conti
 import { can, type Authz } from "../authz";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import type { FindingDir, FindingSort } from "../list/agent-findings";
-import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopeFilter } from "./work-item-subsidiary-scope";
+import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopePredicate } from "./work-item-subsidiary-scope";
 
 /**
  * Agent Workbench inbox read model. ONE resolver backs the /agents inbox, the
@@ -194,19 +194,18 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
   // never the KPI tiles or filter-chip counts (F-t11-005) — and the status
   // facet additionally ignores the status clause so every lifecycle state
   // stays selectable with true counts (F-t11-006).
-  // Findings can sit behind an account subject (lineage resolves through
-  // the account's subsidiary) or behind another subject kind whose
-  // subsidiary is unresolvable. A subsidiary-restricted caller sees only
-  // account-subject findings inside their scope: subjects without lineage
-  // (or with a null subsidiary) fail closed, like unattributed documents
-  // elsewhere. The client-selected subsidiary (above) intersects naturally.
+  // Findings sit behind a typed subject whose legal-entity lineage resolves
+  // per kind (shared accounts visible, reconciliations through their
+  // account, documents strictly scoped, budget scenarios line-gated); any
+  // other lineage fails closed for restricted callers. The client-selected
+  // subsidiary (above) intersects naturally.
   const whereBase = sql`w.org_id = ${authz.user.orgId}
     and w.agent_key in (${agentList})
     ${severities.length > 0 ? sql`and w.severity in (${sql.join(severities.map((s) => sql`${s}`), sql`, `)})` : sql``}
     ${filters.hasProposal === true ? sql`and (w.summary ? 'proposedCommand')` : sql``}
     ${filters.hasProposal === false ? sql`and not (w.summary ? 'proposedCommand')` : sql``}
     ${filters.subsidiaryId ? sql`and subj_acct.subsidiary_id = ${filters.subsidiaryId}` : sql``}
-    ${workItemSubjectScopeFilter(authz.allowedSubsidiaryIds)}
+    ${workItemSubjectScopePredicate(authz.user.orgId, authz.allowedSubsidiaryIds)}
     ${sinceValid ? sql`and w.last_detected_at > ${sinceValid.toISOString()}` : sql``}
     ${filters.assignedToMe ? sql`and w.assignee_user_id = ${authz.user.id}` : sql``}
     ${filters.unassignedOnly ? sql`and w.assignee_user_id is null and w.assignee_role is null` : sql``}
