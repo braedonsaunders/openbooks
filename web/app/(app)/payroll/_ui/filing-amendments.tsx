@@ -184,6 +184,7 @@ export async function postFilingCorrection(input: {
   revision: 'amended' | 'cancelled'
   rowIds: string[]
   reason?: string
+  confirmedAmendment?: boolean
   confirmedCancellation?: boolean
 }): Promise<string | null> {
   const res = await fetch('/api/payroll/year-end/amendments', {
@@ -641,9 +642,8 @@ function FilingCorrectionSectionBody({
         year,
         revision,
         rowIds: [review.rowId],
-        ...(revision === 'cancelled'
-          ? { confirmedCancellation: true as const, reason }
-          : {}),
+        ...(revision === 'amended' ? { confirmedAmendment: true as const } : {}),
+        ...(revision === 'cancelled' ? { confirmedCancellation: true as const, reason } : {}),
       })
       if (fileRefusal) setError(fileRefusal)
       setPreview({ status: 'idle' })
