@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requireProjectsFeature } from '../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -60,6 +60,7 @@ export async function loadProjects(
   const canViewGl = can(authz, 'gl.read')
   const orgId = authz.user.orgId
   await requireProjectsFeature(orgId)
+  return withOrgTransaction(orgId, async () => {
   const applicationPermissions = {
     canRead: can(authz, 'ar.read'),
     canCreate: can(authz, 'ar.create'),
@@ -195,6 +196,7 @@ export async function loadProjects(
           }
         : null,
   }
+  })
 }
 
 const f = ref<ProjectsData>()
