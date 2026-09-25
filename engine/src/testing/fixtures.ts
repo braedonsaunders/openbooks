@@ -904,6 +904,10 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "budget_scenarios", trigger: "budget_scenario_guard" },
   { table: "field_ticket_labor_lines", trigger: "field_ticket_labor_line_immutable" },
   { table: "field_ticket_labor_snapshots", trigger: "field_ticket_labor_snapshot_retention" },
+  // Dunning delivery evidence is append-only with no sandbox-wipe escape;
+  // its trigger honors only the session bypass flag, which pooled
+  // connections never carry, so scratch reset/drop disables it here.
+  { table: "dunning_log", trigger: "dunning_log_no_mutate" },
   { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },
 ];
 
