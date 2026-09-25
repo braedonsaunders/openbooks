@@ -167,13 +167,18 @@ class OrderRouteHarness {
       }
     }
 
-    if (normalized.startsWith('select status, party_id, total')) {
+    // The issuance read locks the aggregate and rechecks scope, status and
+    // revision on the locked row in one round trip (no TOCTOU between the
+    // unlocked pre-check and the side effects). This supplants the pre-fix
+    // split reads, which the route no longer issues.
+    if (normalized.startsWith('select status, party_id, subsidiary_id as "subsidiaryid", total,')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
       return {
         rows: this.matchesDocument(params)
           ? [{
               status: this.document.status,
               party_id: this.document.partyId,
+              subsidiaryId: this.document.subsidiaryId ?? null,
               total: this.document.total,
               updated_at: this.document.updatedAt,
             }]
@@ -181,11 +186,17 @@ class OrderRouteHarness {
       }
     }
 
-    if (normalized.startsWith('select status, (revision_seq)::text')) {
+    // The draft-save mutation locks the same aggregate before replacing
+    // header/lines; scope and revision are rechecked on the locked row.
+    if (normalized.startsWith('select status, subsidiary_id as "subsidiaryid", (revision_seq)::text')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
       return {
         rows: this.matchesDocument(params)
-          ? [{ status: this.document.status, updated_at: this.document.updatedAt }]
+          ? [{
+              status: this.document.status,
+              subsidiaryId: this.document.subsidiaryId ?? null,
+              updated_at: this.document.updatedAt,
+            }]
           : [],
       }
     }
@@ -193,6 +204,18 @@ class OrderRouteHarness {
     if (normalized.startsWith('select 1 from documents')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
       return { rows: this.matchesDocument(params) ? [{ exists: 1 }] : [] }
+    }
+
+    // The scoped account catalog (listScopedAccountOptions) the draft save
+    // reads before validating lines. Only the suite's referenced accounts
+    // are visible; anything else refuses as out of scope, fail closed.
+    if (normalized.startsWith('select a.id, a.number, a.name, a.type,')) {
+      return {
+        rows: [
+          { id: '22222222-0000-4000-8000-000000000002' },
+          { id: '22222222-0000-4000-8000-000000000003' },
+        ],
+      }
     }
 
     if (normalized.startsWith('update documents set')) {
@@ -844,11 +867,11 @@ class IssuePoolHarness {
         ? [{ status: document.status, document_date: document.documentDate, currency: 'CAD', party_id: document.partyId, subsidiaryId: null, updated_at: document.updatedAt }]
         : [])
     }
-    if (normalized.startsWith('select status, party_id, total')) {
+    if (normalized.startsWith('select status, party_id, subsidiary_id as "subsidiaryid", total,')) {
       const document = this.documentFromParams(params)
       if (document && normalized.endsWith('for update')) await this.lockDocument(document.id)
       return this.result(document
-        ? [{ status: document.status, party_id: document.partyId, total: document.total, updated_at: document.updatedAt }]
+        ? [{ status: document.status, party_id: document.partyId, subsidiaryId: null, total: document.total, updated_at: document.updatedAt }]
         : [])
     }
     if (normalized.startsWith('select source.document_number')) return this.result([])
