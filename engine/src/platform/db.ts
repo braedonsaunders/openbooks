@@ -509,10 +509,28 @@ export async function withMaintenanceTransaction<T>(
   opts: MaintenanceTransactionOptions = {},
 ): Promise<T> {
   const active = orgContext.getStore();
-  if (active?.txDb && active.bypass) return fn();
+  if (active?.txDb && active.bypass) {
+    // Reuse the pinned transaction, same as below — but a requested
+    // isolation level or advisory lock cannot be honored mid-transaction,
+    // so refuse by name instead of silently dropping it. The outer
+    // transaction's level and locks stand; request them there instead.
+    if (opts.isolationLevel !== undefined) {
+      throw new Error("cannot change isolation inside an active bypass transaction");
+    }
+    if (opts.advisoryLockKey !== undefined) {
+      throw new Error("cannot change advisory lock inside an active bypass transaction");
+    }
+    return fn();
+  }
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
       throw new Error("cannot change organization inside an active tenant transaction");
+    }
+    if (opts.isolationLevel !== undefined) {
+      throw new Error("cannot change isolation inside an active tenant transaction");
+    }
+    if (opts.advisoryLockKey !== undefined) {
+      throw new Error("cannot change advisory lock inside an active tenant transaction");
     }
     // Reuse the pinned transaction. Opening a second transaction here would
     // hide the caller's uncommitted aggregate writes and break atomicity.
@@ -607,7 +625,16 @@ export async function withOrgTransaction<T>(
   opts: OrgTransactionOptions = {},
 ): Promise<T> {
   const active = orgContext.getStore();
-  if (active?.txDb && active.bypass) return fn();
+  if (active?.txDb && active.bypass) {
+    // Reuse the pinned bypass transaction — but a requested isolation
+    // level cannot be honored mid-transaction, so refuse by name instead
+    // of silently dropping it. The outer transaction's level stands;
+    // request it there instead.
+    if (opts.isolationLevel !== undefined) {
+      throw new Error("cannot change isolation inside an active bypass transaction");
+    }
+    return fn();
+  }
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
       throw new Error("cannot change organization inside an active tenant transaction");
