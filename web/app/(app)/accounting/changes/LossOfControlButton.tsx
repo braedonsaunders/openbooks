@@ -12,6 +12,8 @@ import {
   Textarea,
 } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { useDirtyClose } from "@/lib/use-dirty-close";
+import { useTranslations } from "next-intl";
 type Setup = {
   interest: { investment_account_id: string; equity_income_account_id: string };
   subsidiaries: { id: string; name: string; base_currency: string }[];
@@ -38,6 +40,7 @@ type Oci = {
 export function LossOfControlButton({ interestId }: { interestId: string }) {
   const router = useRouter(),
     today = useBusinessToday();
+  const tc = useTranslations("common");
   const fieldId = useId();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
@@ -55,11 +58,21 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     [adjustments, setAdjustments] = useState<
       { lineId: string; amount: string }[]
     >([]),
+    [dirty, setDirty] = useState(false),
     [key, setKey] = useState(() => crypto.randomUUID());
   const changed = () => {
+    setDirty(true);
     setKey(crypto.randomUUID());
     setError(null);
   };
+  const closeDrawer = () => {
+    setOpen(false);
+    setDirty(false);
+  };
+  const closeGuard = useDirtyClose({
+    dirty, busy, onClose: closeDrawer,
+    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+  });
   const set = (name: string, value: string) => {
     setValues((v) => ({ ...v, [name]: value }));
     changed();
@@ -99,6 +112,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
       <Input
         id={`${fieldId}-${name}`}
         type={type}
+        disabled={busy}
         value={values[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
       />
@@ -109,6 +123,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
       <Label htmlFor={`${fieldId}-${name}`}>{label}</Label>
       <SearchSelect
         id={`${fieldId}-${name}`}
+        disabled={busy}
         ariaLabel={label}
         value={values[name] ?? ""}
         onChange={(v) => set(name, v)}
@@ -121,6 +136,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
       <Label htmlFor={`${fieldId}-${name}`}>{label}</Label>
       <Textarea
         id={`${fieldId}-${name}`}
+        disabled={busy}
         value={values[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
       />
@@ -155,7 +171,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
         throw new Error(e.error ?? "Unable to prepare disposal");
       }
       const result = (await r.json()) as { changeId: string };
-      setOpen(false);
+      closeDrawer();
       router.push(`/accounting/changes?change=${result.changeId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to prepare disposal");
@@ -171,7 +187,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
       <Drawer
         stacked
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeGuard.close}
         title="Loss of control"
         description="Prepare the separate-book disposal and consolidated derecognition for independent approval. Posted history remains intact."
         size="2xl"
@@ -199,6 +215,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             <Label htmlFor={`${fieldId}-elimination-entity`}>Consolidation entity and presentation currency</Label>
             <SearchSelect
               id={`${fieldId}-elimination-entity`}
+              disabled={busy}
               ariaLabel="Consolidation entity and presentation currency"
               value={values.eliminationSubsidiaryId ?? ""}
               onChange={(v) => set("eliminationSubsidiaryId", v)}
@@ -243,6 +260,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             <h3 className="font-semibold">Retained interest</h3>
             <Select
               aria-label="Retained interest method"
+              disabled={busy}
               value={values.retainedMethod}
               onChange={(e) => {
                 set("retainedMethod", e.target.value);
@@ -309,6 +327,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                 </Label>
                 <Input
                   id={`${fieldId}-rate-${s.id}`}
+                  disabled={busy}
                   value={rates[s.id] ?? ""}
                   onChange={(e) => {
                     setRates((v) => ({ ...v, [s.id]: e.target.value }));
@@ -333,6 +352,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
               <div key={i} className="space-y-2">
                 <SearchSelect
                   ariaLabel="Adjustment journal line"
+                  disabled={busy}
                   value={line.lineId}
                   onChange={(id) => {
                     setAdjustments((rows) =>
@@ -358,6 +378,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                 />
                 <Input
                   aria-label="Attributed signed amount"
+                  disabled={busy}
                   value={line.amount}
                   onChange={(e) => {
                     setAdjustments((rows) =>
@@ -370,6 +391,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                 />
                 <Button
                   variant="ghost"
+                  disabled={busy}
                   onClick={() => {
                     setAdjustments((rows) => rows.filter((_, n) => n !== i));
                     changed();
@@ -381,6 +403,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             ))}
             <Button
               variant="outline"
+              disabled={busy}
               onClick={() => {
                 setAdjustments((rows) => [...rows, { lineId: "", amount: "" }]);
                 changed();
@@ -411,6 +434,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                 <div key={i} className="space-y-2">
                   <SearchSelect
                     ariaLabel="Reserve account"
+                    disabled={busy}
                     value={line.accountId}
                     onChange={(accountId) => update({ accountId })}
                     options={accountOptions}
@@ -418,16 +442,19 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                   />
                   <Input
                     aria-label="Reserve description"
+                    disabled={busy}
                     value={line.description}
                     onChange={(e) => update({ description: e.target.value })}
                   />
                   <Input
                     aria-label="Signed reserve balance"
+                    disabled={busy}
                     value={line.balance}
                     onChange={(e) => update({ balance: e.target.value })}
                   />
                   <Select
                     aria-label="Reserve treatment"
+                    disabled={busy}
                     value={line.treatment}
                     onChange={(e) =>
                       update({ treatment: e.target.value as Oci["treatment"] })
@@ -450,6 +477,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                   </Select>
                   <SearchSelect
                     ariaLabel="Destination account"
+                    disabled={busy}
                     value={line.destinationAccountId}
                     onChange={(destinationAccountId) =>
                       update({ destinationAccountId })
@@ -459,6 +487,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                   />
                   <Button
                     variant="ghost"
+                    disabled={busy}
                     onClick={() => {
                       setOci((rows) => rows.filter((_, n) => n !== i));
                       changed();
@@ -471,6 +500,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             })}
             <Button
               variant="outline"
+              disabled={busy}
               onClick={() => {
                 setOci((rows) => [
                   ...rows,
