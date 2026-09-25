@@ -215,20 +215,14 @@ function jsonRequest(url: string, body: unknown): Request {
   return new Request(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    // A string body rides through raw so the hostile-payload test exercises
+    // the real boundary parser; anything else is serialized.
+    body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
 function ctx(params: Record<string, string>): { params: Promise<Record<string, string>> } {
   return { params: Promise.resolve(params) };
-}
-
-function rawRequest(url: string, body: string): Request {
-  return new Request(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body,
-  });
 }
 
 test("a missing feature flag 404s before any service runs", async () => {
@@ -265,29 +259,17 @@ test("a missing feature flag 404s before any service runs", async () => {
     reset();
     // Missing employmentId, unknown kind, and a non-date are all refused at
     // the boundary — the service never sees them.
-    assert.equal(
-      (await collectionRoute!.POST!(jsonRequest("http://openbooks.test/api/hrm/processes", {
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-      }))).status,
-      400,
-    );
-    assert.equal(
-      (await collectionRoute!.POST!(jsonRequest("http://openbooks.test/api/hrm/processes", {
-        employmentId: EMPLOYMENT_ID,
-        kind: "orientation",
-        effectiveDate: "2026-09-01",
-      }))).status,
-      400,
-    );
-    assert.equal(
-      (await collectionRoute!.POST!(jsonRequest("http://openbooks.test/api/hrm/processes", {
-        employmentId: EMPLOYMENT_ID,
-        kind: "onboarding",
-        effectiveDate: "September",
-      }))).status,
-      400,
-    );
+    for (const body of [
+      { kind: "onboarding", effectiveDate: "2026-09-01" },
+      { employmentId: EMPLOYMENT_ID, kind: "orientation", effectiveDate: "2026-09-01" },
+      { employmentId: EMPLOYMENT_ID, kind: "onboarding", effectiveDate: "September" },
+    ]) {
+      assert.equal(
+        (await collectionRoute!.POST!(jsonRequest("http://openbooks.test/api/hrm/processes", body))).status,
+        400,
+        `boundary accepted an invalid open body: ${JSON.stringify(body)}`,
+      );
+    }
     assert.deepEqual(routeState.calls, []);
   });
 
@@ -403,7 +385,7 @@ test("a missing feature flag 404s before any service runs", async () => {
     // mocked above), so this is a test of the refusal, not of a double.
     for (const body of ["{not json", "null"]) {
       const refused = await completeRoute!.POST!(
-        rawRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, body),
+        jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, body),
         ctx({ id: PROCESS_ID }),
       );
       assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
