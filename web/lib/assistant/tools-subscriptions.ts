@@ -600,12 +600,13 @@ const listRecurringSchedules: AssistantToolDef = {
         left join parties p on p.id = d.party_id and p.org_id = rs.org_id
        where rs.org_id = ${authz.user.orgId}
          ${a.activeOnly ? sql` and rs.is_active` : sql``}
+         ${hidden.size > 0 ? sql` and d.kind not in ${[...hidden]}` : sql``}
          ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by rs.is_active desc, rs.next_run_on
        limit ${limit + 1}
     `);
-    // Same hidden-kind filtering as GET /api/recurring, applied after the
-    // capped fetch so the page matches the screen's.
+    // Keep the screen's disabled-kind filter before pagination, so hidden
+    // templates cannot push visible schedules off this page.
     const visible = rows.rows.filter((row) => !hidden.has(String(row.templateKind)));
     const capped = capList(
       visible.slice(0, limit).map((r) => ({
