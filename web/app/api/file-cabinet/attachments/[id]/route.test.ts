@@ -44,6 +44,7 @@ const mockSources = new Map<string, string>([
       export const db = {
         execute() { return Promise.resolve({ rows: state.targetRows.shift() ?? [] }) },
       }
+      export async function inDbTransaction(fn) { return fn(db) }
     `,
   ],
   [
@@ -71,6 +72,8 @@ const mockSources = new Map<string, string>([
   [
     'mock:file-cabinet',
     `
+      import { attachmentReadPermission } from '@/lib/file-cabinet'
+      export { attachmentReadPermission }
       const state = globalThis[Symbol.for('openbooks.file-cabinet-attachment-detach-route-test')]
       export async function getAttachmentLink() { return state.link }
       export async function detachAttachment(...args) {
@@ -94,14 +97,18 @@ const mockUrls = new Map<string, string>([
   ['../../../lib/file-cabinet', 'mock:file-cabinet'],
 ])
 
+const selfUrl = new URL(import.meta.url).href
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
+    // File-URL serving: the double re-exports the real permission map (opaque mock: URLs cannot resolve it).
+    if (mocked === 'mock:file-cabinet') return { url: `${selfUrl}?mock=file-cabinet`, shortCircuit: true }
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
     return nextLoad(url, context)
   },

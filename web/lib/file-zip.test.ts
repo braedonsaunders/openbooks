@@ -20,6 +20,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.file-zip-test')]
       export async function fileReadPredicate() { return 'true' }
+      export async function folderPathVisiblePredicate() { return 'true' }
       export async function getFileBlob(_orgId, id, _viewer) {
         return state.blobs.get(id) ?? null
       }

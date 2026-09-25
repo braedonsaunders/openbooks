@@ -65,6 +65,8 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.currency-route-test')]
+      export const ambientTenantOrgId = () => 'tenant-a'
+      export const withBypassContext = (fn) => fn()
       export const db = {
         execute() { state.executeCalls++; return Promise.resolve({ rows: [] }) },
         transaction() { state.transactionCalls++; throw new Error('read-only currency route must not open a transaction') },

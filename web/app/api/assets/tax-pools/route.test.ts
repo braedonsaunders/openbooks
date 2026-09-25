@@ -9,9 +9,7 @@ const SUB_VISIBLE = '00000000-0000-4000-8000-0000000000e1'
 interface TaxPoolRouteState {
   allowedSubsidiaryIds: Set<string> | null;
   explicitSubsidiaryExists: boolean;
-  requestedSubsidiaryId: string | undefined;
   explicitBookExists: boolean;
-  requestedBookId: string | undefined;
   filterCalls: (string[] | null)[];
   queries: string[];
   runCalls: {
@@ -27,9 +25,7 @@ const stateKey = Symbol.for("openbooks.tax-pools-route-test");
 const routeState: TaxPoolRouteState = {
   allowedSubsidiaryIds: null,
   explicitSubsidiaryExists: true,
-  requestedSubsidiaryId: undefined,
   explicitBookExists: true,
-  requestedBookId: undefined,
   filterCalls: [],
   queries: [],
   runCalls: [],
@@ -60,23 +56,6 @@ function sqlText(query: unknown): string {
 }
 
 const mockSources = new Map<string, string>([
-  [
-    "mock:json",
-    `
-      const state = globalThis[Symbol.for('openbooks.tax-pools-route-test')]
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        const data = await request.json()
-        state.requestedSubsidiaryId = data && typeof data.subsidiaryId === 'string'
-          ? data.subsidiaryId
-          : undefined
-        state.requestedBookId = data && typeof data.bookId === 'string'
-          ? data.bookId
-          : undefined
-        return { ok: true, data }
-      }
-    `,
-  ],
   [
     "mock:authz",
     `
@@ -122,13 +101,17 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.tax-pools-route-test')]
       const sqlText = globalThis.openbooksTaxPoolsSqlText
+      function whereId(text) {
+        return text.match(/where id = '?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null
+      }
       export const db = {
         async execute(query) {
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes('from accounting_books')) {
-            if (state.requestedBookId) {
-              return state.explicitBookExists ? { rows: [{ id: state.requestedBookId }] } : { rows: [] }
+            const requestedBookId = whereId(text)
+            if (requestedBookId) {
+              return state.explicitBookExists ? { rows: [{ id: requestedBookId }] } : { rows: [] }
             }
             return { rows: [{ id: 'book-1' }] }
           }
@@ -145,7 +128,7 @@ const mockSources = new Map<string, string>([
               ] }
             }
             if (!state.explicitSubsidiaryExists) return { rows: [] }
-            return { rows: [{ id: state.requestedSubsidiaryId ?? SUB_VISIBLE }] }
+            return { rows: [{ id: whereId(text) ?? SUB_VISIBLE }] }
           }
           throw new Error('unexpected database query: ' + text)
         },
@@ -170,7 +153,6 @@ const mockSources = new Map<string, string>([
 const selfUrl = new URL(import.meta.url).href;
 const mockUrl = (name: string) => `${selfUrl}?tax-pool-mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", mockUrl("json")],
   ["../../../../lib/authz", mockUrl("authz")],
   ["../../../../lib/feature-gates", mockUrl("feature-gates")],
   ["../../../../lib/subsidiaries", mockUrl("subsidiaries")],
@@ -202,9 +184,7 @@ hooks.deregister();
 function reset(allowed: Set<string> | null): void {
   routeState.allowedSubsidiaryIds = allowed;
   routeState.explicitSubsidiaryExists = true;
-  routeState.requestedSubsidiaryId = undefined;
   routeState.explicitBookExists = true;
-  routeState.requestedBookId = undefined;
   routeState.filterCalls = [];
   routeState.queries = [];
   routeState.runCalls = [];

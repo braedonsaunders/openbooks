@@ -81,6 +81,8 @@ const mockSources = new Map<string, string>([
         }
         return { rows: [] }
       }
+      export const ambientTenantOrgId = () => '${ORG_ID}'
+      export const withBypassContext = (fn) => fn()
       export const db = {
         execute: async (query) => {
           state.queries.push(sqlText(query))

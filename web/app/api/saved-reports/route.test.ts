@@ -69,19 +69,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        const raw = await request.json().catch(() => undefined)
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-          return { ok: false, response: new Response(JSON.stringify({ error: 'invalid request body' }), { status: 400 }) }
-        }
-        return { ok: true, data: raw }
-      }
-    `,
-  ],
 ])
 
 const SELF_URL = new URL(import.meta.url).href
@@ -89,7 +76,6 @@ const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['../../../lib/authz', mockUrl('authz')],
-  ['@/lib/api/json', mockUrl('json')],
 ])
 
 const hooks = registerHooks({
