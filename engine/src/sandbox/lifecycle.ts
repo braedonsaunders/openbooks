@@ -24,7 +24,7 @@ import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
 import { verifyCloneRls } from "./verify-rls.ts";
-import { assertProductionSandboxSource } from "./source-validation.ts";
+import { assertProductionSandboxSource, isSampleTemplateSource } from "./source-validation.ts";
 
 /** A zero-row sandbox lookup is a failure: the caller asked to act on a named id. */
 export function requireFoundSandbox<T>(
@@ -733,10 +733,19 @@ export async function refreshSandbox(
       await deleteS3Blobs(staleIds);
       // After the clone unit commits, still under the same-sandbox lock.
       // verifyCloneRls opens its own withOrg transactions (bypass off).
+      // Sample shells re-verify through the sanctioned template branch:
+      // their source is the promoted template org, never production, so a
+      // production-only proof would refuse the pair the same way
+      // provisioning did before CI3-sample-source. Detect the registration
+      // flag with the same predicate the assertion uses; ordinary pairs
+      // keep the production-only default.
+      const sourceSettings = (await db.execute<{ settings: Record<string, unknown> | null }>(sql`
+        select settings from orgs where id = ${s.production_org_id}`)).rows[0]?.settings;
       await verifyCloneRls({
         productionOrgId: s.production_org_id,
         sandboxOrgId: s.org_id,
         tier,
+        allowTemplateSource: isSampleTemplateSource(sourceSettings),
       });
       const markedReady = await withMaintenanceTransaction(null, async () => {
         const updated = await db.execute<{ id: string }>(sql`
