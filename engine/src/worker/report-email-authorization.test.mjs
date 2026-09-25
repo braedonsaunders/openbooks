@@ -10,6 +10,7 @@ const sources = {
   '../delivery/email-attachments.ts': 'export const loadEmailAttachments = async () => []; export const deleteStoredEmailAttachments = async () => {};',
   '@openbooks/emails': `
     export const deriveEmailDeliveryKey = () => 'delivery';
+    export const isEmailAttachmentRef = (attachment) => !('content' in attachment);
     export const reconcileDeliveryAttempts = () => globalThis.__reportEmailTest.accepted
       ? { action: 'complete', providerMessageId: 'prior-acceptance' } : { action: 'send' };
     export async function sendVia() { globalThis.__reportEmailTest.sent++; return { kind: 'sent', providerMessageId: 'new' }; }
