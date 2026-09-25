@@ -44,7 +44,15 @@ function assertLaborRateMutationGuard(source, action) {
 function handlerArm(source, method) {
   const marker = new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\(`);
   const match = marker.exec(source);
-  assert.ok(match, `org-settings route is missing its ${method} handler`);
+  if (!match) {
+    // A route may expose a factory-created handler so tests can inject the
+    // permission and persistence boundaries without replacing app modules.
+    const factory = new RegExp(`export\\s+const\\s+${method}\\s*=\\s*(create\\w+Handler)\\s*\\(`).exec(source);
+    assert.ok(factory, `org-settings route is missing its ${method} handler`);
+    const declaration = new RegExp(`export\\s+function\\s+${factory[1]}\\s*\\(`).exec(source);
+    assert.ok(declaration, `org-settings route's ${method} handler factory is missing`);
+    return source.slice(declaration.index, factory.index + factory[0].length);
+  }
   const next = /\nexport\s+async\s+function\s+/.exec(source.slice(match.index + match[0].length));
   return source.slice(match.index, next ? match.index + match[0].length + next.index : source.length);
 }
@@ -118,13 +126,14 @@ const orgSettingsWriters = new Map([
   ["saveOrgAiAgentSettings", "orgs.settings.ai.agentPolicies"],
   ["saveOrgAiSettings", "orgs.settings.ai"],
   ["clearOrgAiKey", "orgs.settings.ai.apiKey"],
+  ["clearOrgDocumentCaptureKey", "orgs.settings.ai.documentCapture.apiKey"],
 ]);
 const orgSettingsWrites = [];
 for (const file of routes) {
   const source = readFileSync(join(root, file), "utf8");
   for (const [writer, target] of orgSettingsWriters) {
     if (!new RegExp(`\\b${writer}\\s*\\(`).test(source)) continue;
-    const methods = writer === "clearOrgAiKey" ? ["DELETE"] : ["PUT"];
+    const methods = writer.startsWith("clearOrg") ? ["DELETE"] : ["PUT"];
     for (const method of methods) {
       const arm = handlerArm(source, method);
       assert.match(arm, new RegExp(`\\b${writer}\\s*\\(`),
