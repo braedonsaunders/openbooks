@@ -28,7 +28,7 @@ registerHooks({
       return {
         shortCircuit: true,
         url: 'data:text/javascript,' + encodeURIComponent(
-          'export async function getTranslations(){const t=(k)=>k;t.has=()=>false;t.raw=(k)=>k;return t};export async function getLocale(){return "en"}',
+          'export async function getTranslations(){const t=(k)=>k;t.has=()=>false;t.raw=(k)=>k;return t};export async function getLocale(){return "en"};export async function getFormatter(){return {dateTime:(d)=>d.toISOString()}}',
         ),
       }
     }
@@ -144,8 +144,15 @@ async function teardown(orgId: string) {
 }
 
 const isNotFound = (error: unknown) => /NOT_FOUND|;404/.test(String((error as { digest?: string }).digest ?? (error as Error).message))
+// F1T-10 names the /tax subsidiary refusal instead of answering a silent
+// 404: the same entity-restricted callers the API fence refuses are
+// redirected to access-denied with the remedy named.
+const isNamedSubsidiaryRedirect = (error: unknown) => {
+  const digest = String((error as { digest?: string }).digest ?? '')
+  return digest.includes('/access-denied?permission=unrestricted%20subsidiary%20access')
+}
 
-test('/tax applies the API fence: an entity-restricted caller gets not-found, not the filing history', { skip: !DB }, async () => {
+test('/tax applies the API fence: an entity-restricted caller is refused to access-denied, not the filing history', { skip: !DB }, async () => {
   const { org, restrict } = await fixture()
   try {
     await withBypassContext(() =>
@@ -154,7 +161,7 @@ test('/tax applies the API fence: an entity-restricted caller gets not-found, no
     )
     await withOrgContext(org.orgId, async () => {
       await restrict([org.subsidiaryId])
-      await assert.rejects(TaxPage({ searchParams: Promise.resolve({ tab: 'history' }) }), isNotFound)
+      await assert.rejects(TaxPage({ searchParams: Promise.resolve({ tab: 'history' }) }), isNamedSubsidiaryRedirect)
       await restrict(null)
       const output = await TaxPage({ searchParams: Promise.resolve({ tab: 'history' }) })
       assert.ok(renderedText(output).includes('Audit form'))
