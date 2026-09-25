@@ -16,6 +16,7 @@ import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/Propose
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
 // HR-14 begin: qualification islands (verbatim adapters only).
 import { QualificationDialog } from '../../app/(app)/hrm/qualifications/QualificationDialog'
+import { QualificationRequirementManager, QualificationRequirementRemove } from '../../app/(app)/hrm/qualifications/RequirementManager'
 // HR-14 end
 // HR-13 begin: construction-compliance islands (verbatim adapters only).
 import { ComplianceActions } from '../../app/(app)/hrm/compliance/ComplianceActions'
@@ -218,6 +219,22 @@ export const HRM_WIDGETS = {
       qualificationId={str(props, 'qualificationId') ?? null}
       recordOpen={props.recordOpen === true}
       closeHref={str(props, 'closeHref') ?? '/hrm/qualifications'}
+      canManage={props.canManage === true}
+    />
+  ),
+  'hrm-qualification-requirement-manager': (props) => (
+    <QualificationRequirementManager
+      today={str(props, 'today') ?? ''}
+      types={(props.types as ComponentProps<typeof QualificationRequirementManager>['types']) ?? []}
+      labels={(props.labels as ComponentProps<typeof QualificationRequirementManager>['labels'])}
+    />
+  ),
+  'hrm-qualification-requirement-remove': (props) => (
+    <QualificationRequirementRemove
+      id={str(props, 'id') ?? ''}
+      label={str(props, 'label') ?? ''}
+      confirmLabel={str(props, 'confirmLabel') ?? ''}
+      failedLabel={str(props, 'failedLabel') ?? ''}
       canManage={props.canManage === true}
     />
   ),

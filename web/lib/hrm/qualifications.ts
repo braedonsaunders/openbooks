@@ -123,6 +123,32 @@ export interface QualificationsPageData {
   requirementsTitle: string
   requirementsEmpty: string
   requirements: RequirementRow[]
+  today: string
+  requirementTypeOptions: { value: string; label: string }[]
+  requirementManagerLabels: {
+    title: string
+    subjectKind: string
+    subject: string
+    type: string
+    from: string
+    to: string
+    severity: string
+    block: string
+    warn: string
+    save: string
+    remove: string
+    removeConfirm: string
+    failed: string
+    saved: string
+    search: string
+    searchHint: string
+    searchFailed: string
+    more: string
+    subjects: Record<'project' | 'equipment' | 'position' | 'classification', string>
+  }
+  requirementsRemoveLabel: string
+  requirementsRemoveConfirm: string
+  requirementsRemoveFailed: string
   coverageTitle: string
   coverageProjectLabel: string
   coverageProjectAll: string
@@ -411,6 +437,37 @@ export async function loadQualificationsPage(
     taxonomyTitle: t('qualifications.taxonomyTitle'),
     requirementsTitle: t('qualifications.requirementsTitle'),
     requirementsEmpty: t('qualifications.requirementsEmpty'),
+    today,
+    requirementTypeOptions: types.filter((type) => type.isActive).map((type) => ({ value: type.id, label: `${type.code} · ${type.name}` })),
+    requirementManagerLabels: {
+      title: t('qualifications.requirementManager.title'),
+      subjectKind: t('qualifications.requirementManager.subjectKind'),
+      subject: t('qualifications.requirementManager.subject'),
+      type: t('qualifications.requirementManager.type'),
+      from: t('qualifications.requirementManager.from'),
+      to: t('qualifications.requirementManager.to'),
+      severity: t('qualifications.requirementManager.severity'),
+      block: t('qualifications.requirementManager.block'),
+      warn: t('qualifications.requirementManager.warn'),
+      save: t('qualifications.requirementManager.save'),
+      remove: t('qualifications.requirementManager.remove'),
+      removeConfirm: t('qualifications.requirementManager.removeConfirm'),
+      failed: t('qualifications.requirementManager.failed'),
+      saved: t('qualifications.requirementManager.saved'),
+      search: t('qualifications.requirementManager.search'),
+      searchHint: t('qualifications.requirementManager.searchHint'),
+      searchFailed: t('qualifications.requirementManager.searchFailed'),
+      more: t('qualifications.requirementManager.more'),
+      subjects: {
+        project: t('qualifications.requirementManager.subjects.project'),
+        equipment: t('qualifications.requirementManager.subjects.equipment'),
+        position: t('qualifications.requirementManager.subjects.position'),
+        classification: t('qualifications.requirementManager.subjects.classification'),
+      },
+    },
+    requirementsRemoveLabel: t('qualifications.requirementManager.remove'),
+    requirementsRemoveConfirm: t('qualifications.requirementManager.removeConfirm'),
+    requirementsRemoveFailed: t('qualifications.requirementManager.removeFailed'),
     requirements: requirements.map((r) => ({
       id: r.id,
       subjectName: r.subjectName,
