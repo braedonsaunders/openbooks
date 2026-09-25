@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
 import { useViewerFormat } from '../../../../lib/viewer-format'
 import type { loadDocumentsHome } from '../../../../lib/hrm/documents-home'
@@ -234,6 +235,7 @@ export function DocumentsDrawer({ drawer }: { drawer: Home['drawer'] }) {
 
 export function DocumentsGenerateDialog({ generate }: { generate: Home['generate'] }) {
   const fieldId = useId()
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [templateId, setTemplateId] = useState('')
   const [partyId, setPartyId] = useState('')
@@ -284,8 +286,21 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
     }
   }
 
+  // A half-filled generate draft is unsaved work: drawer-level dismiss
+  // (Escape, backdrop, X) asks before abandoning it. An in-flight generate
+  // cannot be dismissed, even with a discard confirmation.
+  async function confirmDiscard() {
+    if (submitting) return false
+    if (!templateId && !partyId && !title.trim()) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
   return (
-    <UrlDrawer open closeHref={generate.closeHref} title={msg(labels, 'title')}>
+    <UrlDrawer open closeHref={generate.closeHref} title={msg(labels, 'title')} beforeClose={confirmDiscard}>
       <div className="flex flex-col gap-4">
         {generate.templates.length === 0 ? (
           <p className="text-sm text-slate-500">{msg(labels, 'noTemplates')}</p>
