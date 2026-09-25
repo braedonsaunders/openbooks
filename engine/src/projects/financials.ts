@@ -4,7 +4,7 @@ import { db, orgContext, pool } from '../platform/db.ts'
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type CostSource, type OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from '../records/account-groups.ts'
 import { flowTranslation, translateFlowAmount } from '../fx/translation.ts'
-import { add, cmp, fromUnits, isZero, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from '../money/money.ts'
+import { add, cmp, fromUnits, isZero, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, signedDocumentAmount, sum, toUnits } from '../money/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
 import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
 import { businessToday } from '../platform/business-date.ts'
@@ -289,8 +289,7 @@ async function resolveProjectFinancialsInSnapshot(
                     then round(coalesce(dl.cost_amount, dl.amount) * d.fx_rate, 4)
                     else round(
                       round(
-                        (case when d.kind = 'vendor_credit'
-                              then -dl.amount else dl.amount end)
+                        (${signedDocumentAmount(sql`d.kind`, sql`dl.amount`)})
                         * case when coalesce(dl.quantity,0) > 0
                           then greatest(0, (dl.quantity - coalesce(dl.quantity_billed,0)) / dl.quantity)
                           else 1
@@ -344,12 +343,10 @@ async function resolveProjectFinancialsInSnapshot(
                case
                  when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
                  when dl.bill_amount is not null then
-                   case when d.kind = 'vendor_credit'
-                        then -dl.bill_amount else dl.bill_amount end
+                   ${signedDocumentAmount(sql`d.kind`, sql`dl.bill_amount`)}
                  else
                    round(
-                     (case when d.kind = 'vendor_credit'
-                           then -dl.amount else dl.amount end)
+                     (${signedDocumentAmount(sql`d.kind`, sql`dl.amount`)})
                      * case when dl.markup_percent is not null
                             then 1 + dl.markup_percent / 100
                             else coalesce(nullif(dl.cost_multiplier, 0), 1)
@@ -359,19 +356,16 @@ async function resolveProjectFinancialsInSnapshot(
                end
              ) * d.fx_rate, 4)), 0) as total_bill,
              coalesce(sum(round(
-               case when d.kind = 'vendor_credit'
-                    then -dl.amount else dl.amount end
+               ${signedDocumentAmount(sql`d.kind`, sql`dl.amount`)}
              * d.fx_rate, 4)), 0) as total_cost,
              coalesce(sum(round((
                case
                  when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
                  when dl.bill_amount is not null then
-                   case when d.kind = 'vendor_credit'
-                        then -dl.bill_amount else dl.bill_amount end
+                   ${signedDocumentAmount(sql`d.kind`, sql`dl.bill_amount`)}
                  else
                    round(
-                     (case when d.kind = 'vendor_credit'
-                           then -dl.amount else dl.amount end)
+                     (${signedDocumentAmount(sql`d.kind`, sql`dl.amount`)})
                      * case when dl.markup_percent is not null
                             then 1 + dl.markup_percent / 100
                             else coalesce(nullif(dl.cost_multiplier, 0), 1)
@@ -381,8 +375,7 @@ async function resolveProjectFinancialsInSnapshot(
                end
              ) * d.fx_rate, 4)) filter (where dl.billed_by_line_id is null), 0) as unbilled_bill,
              coalesce(sum(round((
-               case when d.kind = 'vendor_credit'
-                    then -dl.amount else dl.amount end
+               ${signedDocumentAmount(sql`d.kind`, sql`dl.amount`)}
              ) * d.fx_rate, 4))
                filter (where dl.billed_by_line_id is null), 0) as unbilled_cost
         from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id

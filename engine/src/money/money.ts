@@ -3,6 +3,8 @@
  * Never floats. The kernel's deferred balance trigger is the last line of
  * defense; this is the first.
  */
+import { sql, type SQL } from "drizzle-orm";
+
 const SCALE = 10_000n;
 const RATE_SCALE = 10_000_000_000n;
 
@@ -89,6 +91,17 @@ export function fromUnits(u: bigint): string {
 
 export const add = (a: string, b: string) => fromUnits(toUnits(a) + toUnits(b));
 export const neg = (a: string) => fromUnits(-toUnits(a));
+
+/**
+ * The canonical document-direction rule for SQL measures: a vendor credit's
+ * positive stored amount inverts when it becomes cost or billable value;
+ * every other document kind (including sales and purchase orders) passes
+ * through unsigned. Shared by project cost/billable measures and invoice
+ * generation so the rule has exactly one home.
+ */
+export function signedDocumentAmount(kind: SQL, amount: SQL): SQL {
+  return sql`case when ${kind} = 'vendor_credit' then -${amount} else ${amount} end`;
+}
 export const abs = (a: string) => {
   const units = toUnits(a);
   return fromUnits(units < 0n ? -units : units);
