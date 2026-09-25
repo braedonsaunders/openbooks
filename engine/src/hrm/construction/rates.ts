@@ -648,7 +648,16 @@ export async function resolveWage(
          order by recorded_at desc limit 1
       `)
     ).rows[0];
-    if (breach) {
+    // A breach reprices only under its recorded schedule obligation: the
+    // finding's schedule must still resolve for this employment, so another
+    // jurisdiction's rule cannot alter this wage. Findings recorded before
+    // the obligation was bound carry no schedule and keep their effect.
+    const breachScheduleId = breach ? breach.detail.scheduleId : null;
+    if (
+      breach &&
+      (typeof breachScheduleId !== "string" ||
+        scored.some(({ schedule }) => schedule.id === breachScheduleId))
+    ) {
       priceClassificationId = assignment.journeyClassificationId;
       rateAtJourney = true;
     }
