@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { netSuiteFamDate, netSuiteFamPeriodForDate, netSuiteFamState } from "./netsuite-fixed-assets.ts";
+import { mergeNetSuiteFamTaxAttributes, netSuiteFamDate, netSuiteFamPeriodForDate, netSuiteFamState } from "./netsuite-fixed-assets.ts";
 
 
 test("NetSuite FAM dates remain date-only", () => {
@@ -27,8 +27,8 @@ test("NetSuite FAM state reconciles current cost to exact book value", () => {
     { cost: state.cost, accumulated: state.accumulated, bookValue: state.bookValue },
     { cost: "20316.1500", accumulated: "838.7700", bookValue: "19477.3800" },
   );
+  assert.equal(mergeNetSuiteFamTaxAttributes({ ca_cca_class: "8" }, { nsId: "type-1" }).ca_cca_class, "8");
 });
-
 test("NetSuite FAM state refuses a carrying value above cost", () => {
   assert.throws(
     () => netSuiteFamState(
