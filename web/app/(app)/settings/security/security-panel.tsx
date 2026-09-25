@@ -34,10 +34,12 @@ export async function jsonRequest(url: string, init: RequestInit | undefined, re
 export function SecurityPanel() {
   const t = useTranslations("shell.securityPage");
   const requestFailed = t("requestFailed");
+  const tCommon = useTranslations("common");
   const { dateTime } = useViewerFormat();
   const router = useRouter();
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [setup, setSetup] = useState<{ secret: string; provisioningUri: string } | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -57,7 +59,15 @@ export function SecurityPanel() {
     });
   }, [requestFailed]);
 
-  useEffect(() => { void reload().catch(() => setMessage(requestFailed)); }, [reload, requestFailed]);
+  useEffect(() => {
+    void reload().then(
+      () => setLoaded(true),
+      () => {
+        setMessage(requestFailed);
+        setLoaded(true);
+      },
+    );
+  }, [reload, requestFailed]);
 
   async function act(action: () => Promise<void>) {
     setBusy(true);
@@ -78,13 +88,15 @@ export function SecurityPanel() {
           <div>
             <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("authenticatorTitle")}</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {status?.enabled
-                ? t("enabled", { count: status.recoveryCodesRemaining })
-                : t("disabledDescription")}
+              {!loaded
+                ? tCommon("feedback.loading")
+                : status?.enabled
+                  ? t("enabled", { count: status.recoveryCodesRemaining })
+                  : t("disabledDescription")}
             </p>
           </div>
 
-          {!status?.enabled && !setup ? (
+          {loaded && !status?.enabled && !setup ? (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="setup-password">{t("confirmPassword")}</Label>
@@ -183,7 +195,10 @@ export function SecurityPanel() {
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("sessionsDescription")}</p>
           </div>
           <div className="divide-y divide-slate-200 dark:divide-slate-800">
-            {sessions.map((session) => (
+            {!loaded ? (
+              <p className="py-3 text-sm text-slate-500 dark:text-slate-400">{tCommon("feedback.loading")}</p>
+            ) : (
+              sessions.map((session) => (
               <div key={session.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <p className="inline-flex gap-1 text-sm font-medium text-slate-900 dark:text-white">
@@ -200,9 +215,10 @@ export function SecurityPanel() {
                   {t("revoke")}
                 </Button>
               </div>
-            ))}
+              ))
+            )}
           </div>
-          {sessions.length > 1 ? (
+          {loaded && sessions.length > 1 ? (
             <Button variant="outline" disabled={busy} onClick={() => void act(async () => {
               await jsonRequest("/api/auth/sessions", { method: "DELETE" }, requestFailed);
               await reload();

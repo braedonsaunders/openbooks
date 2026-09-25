@@ -29,8 +29,13 @@ test('security settings page renders in French and uses localized request failur
 
   assert.match(markup, /Sécurité de connexion/)
   assert.match(markup, /Authentification multifacteur/)
-  assert.match(markup, /Configurer l’authentificateur/)
-  assert.ok(markup.includes('Sessions actives') && markup.includes('Révoquez une session de navigateur sans changer votre mot de passe'))
+  // Pre-load the panel asserts no MFA state: the setup action appears only
+  // after the fetch resolves, so a slow load never reads as MFA-disabled.
+  assert.match(markup, /Chargement…/)
+  assert.match(markup, /Sessions actives/)
+  assert.match(markup, /Révoquez une session de navigateur sans changer votre mot de passe/)
+  assert.doesNotMatch(markup, /Sign-in security|Authenticator MFA|Set up authenticator|Active sessions|Revoke a browser session/)
+  assert.doesNotMatch(markup, /Configurer l’authentificateur/)
   globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
   await assert.rejects(jsonRequest('/api/auth/mfa', {}, frenchMessages.shell.securityPage.requestFailed), { message: frenchMessages.shell.securityPage.requestFailed })
 })
