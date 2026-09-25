@@ -205,17 +205,7 @@ test(
   "payroll settings and audit evidence roll back together",
   { skip: !DB },
   async () => {
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      return {
-        ...org,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
+    const fixture = await scratchPayrollOrg();
     let removeFailure: (() => Promise<void>) | undefined;
     try {
       authorize(fixture.orgId, fixture.actorId);
@@ -242,17 +232,7 @@ test(
   "slot-account mutations share the payroll settings transaction",
   { skip: !DB },
   async () => {
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      return {
-        ...org,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
+    const fixture = await scratchPayrollOrg();
     let removeFailure: (() => Promise<void>) | undefined;
     try {
       authorize(fixture.orgId, fixture.actorId);
@@ -292,17 +272,7 @@ test(
   "pack installation rolls back seeded components when audit fails",
   { skip: !DB },
   async () => {
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      return {
-        ...org,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
+    const fixture = await scratchPayrollOrg();
     let removeFailure: (() => Promise<void>) | undefined;
     try {
       authorize(fixture.orgId, fixture.actorId);
@@ -329,17 +299,7 @@ test(
   "concurrent payroll setting saves preserve disjoint fields",
   { skip: !DB },
   async () => {
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      return {
-        ...org,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
+    const fixture = await scratchPayrollOrg();
     try {
       authorize(fixture.orgId, fixture.actorId);
       const responses = await Promise.all([
@@ -365,17 +325,7 @@ test(
   "payroll account and remittance IDs must belong to active local records",
   { skip: !DB },
   async () => {
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      return {
-        ...org,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
+    const fixture = await scratchPayrollOrg();
     const foreign = await withBypass(() => createScratchOrg());
     try {
       authorize(fixture.orgId, fixture.actorId);
@@ -404,17 +354,7 @@ test(
   "destination remittance frequencies validate against their own schedule",
   { skip: !DB },
   async () => {
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      return {
-        ...org,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
+    const fixture = await scratchPayrollOrg();
     try {
       authorize(fixture.orgId, fixture.actorId);
 
@@ -1098,17 +1038,7 @@ test(
     const { installablePayrollPacks, PAYROLL_COUNTRY_PACKS } = await import(
       "../../../../../engine/src/payroll/packs.ts"
     );
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg();
-      return {
-        ...org,
-        actorId: await createScratchUser(
-          org.orgId,
-          "Payroll Admin",
-          "payroll_admin",
-        ),
-      };
-    });
+    const fixture = await scratchPayrollOrg();
     try {
       authorize(fixture.orgId, fixture.actorId);
       // The route handlers that mutate wrap themselves in the org
