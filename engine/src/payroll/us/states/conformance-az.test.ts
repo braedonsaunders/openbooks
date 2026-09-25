@@ -85,13 +85,13 @@ test("AZ no A-4 on file withholds the form's stated 2.0% default", () => {
   assert.equal(result.tax, money("20"));
 });
 
-test("AZ Form A-4 line 2 zero election withholds nothing", () => {
+test("AZ nonresident under 60 service days are exempt", () => {
   const result = AZ_WITHHOLDING.compute({
-    payDate: "2026-03-13", periodsPerYear: 26, wages: "1000.00", basis: "resident",
-    certificate: cert({ withholding_percent: "3.5", zero_percent: "true" }),
+    payDate: "2026-03-13", periodsPerYear: 26, wages: "1000.00", basis: "nonresident",
+    certificate: resolveCertificate({ certificate: AZ_CERTIFICATE }),
+    wageAllocations: [{ region: "AZ", subRegion: null, workShare: "1", source: "approved_time_entries", serviceDaysCurrentPeriod: 2, serviceDaysYearToDate: 59, sourceWagesCurrentPeriod: "1000.00", sourceWagesYearToDate: null }],
   });
   assert.equal(result.tax, money("0"));
-  assert.equal(result.factors.AZ_ZERO, "1");
 });
 
 test("AZ zero-percent A-4 remains valid through Feb 15, then returns to the 2.0% default", () => {
