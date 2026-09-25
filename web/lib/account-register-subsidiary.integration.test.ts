@@ -9,7 +9,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { accountRegister } = await import('./reports/registers')
+const { accountRegister, partyRegister } = await import('./reports/registers')
 
 test('account registers scope both lines and totals within a visible intercompany header', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const scratch = await withBypass(() => createScratchOrg())
@@ -28,16 +28,17 @@ test('account registers scope both lines and totals within a visible intercompan
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
         values (${scratch.orgId}, ${entry}, 1, ${scratch.accounts.bank}, ${scratch.subsidiaryId}, '100', 'CAD', '100', '1'),
           (${scratch.orgId}, ${entry}, 2, ${scratch.accounts.bank}, ${child}, '-100', 'CAD', '-100', '1'),
-          (${scratch.orgId}, ${entry}, 3, ${scratch.accounts.revenue}, ${scratch.subsidiaryId}, '-100', 'CAD', '-100', '1'),
+          (${scratch.orgId}, ${entry}, 3, ${scratch.accounts.ar}, ${scratch.subsidiaryId}, '-100', 'CAD', '-100', '1'),
           (${scratch.orgId}, ${entry}, 4, ${scratch.accounts.revenue}, ${child}, '100', 'CAD', '100', '1')`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
     })
-    const { scoped, childScoped, all, none } = await withOrgContext(scratch.orgId, async () => {
+    const { scoped, childScoped, all, none, scopedAr } = await withOrgContext(scratch.orgId, async () => {
       const scoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([scratch.subsidiaryId]))
       const childScoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([child]))
       const all = await accountRegister(scratch.orgId, scratch.accounts.bank)
       const none = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set())
-      return { scoped, childScoped, all, none }
+      const scopedAr = await partyRegister("ar", { from: scratch.date, to: scratch.date, orgId: scratch.orgId, dims: { subsidiaryIds: [scratch.subsidiaryId] } })
+      return { scoped, childScoped, all, none, scopedAr }
     })
     assert.equal(scoped.total, 1)
     assert.equal(scoped.balance, '100.0000')
@@ -50,6 +51,7 @@ test('account registers scope both lines and totals within a visible intercompan
     assert.equal(all.balance, '0.0000')
     assert.equal(none.total, 0)
     assert.equal(none.lines.length, 0)
+    assert.deepEqual(scopedAr.parties.flatMap((section) => section.lines.map((line) => line.docId)), [null])
   } finally { await withBypass(() => dropScratchOrg(scratch.orgId)) }
 })
 

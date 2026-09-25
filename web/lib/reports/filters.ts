@@ -47,6 +47,22 @@ export function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
 }
 
 /**
+ * Source-document twin of dimWhere's subsidiary limb: an out-of-scope
+ * document's identity must never surface on a scoped read (I1-refix-77).
+ * The predicate matches the line predicate exactly — undefined dims read
+ * unscoped like the lines, the includeNullSubsidiary null limb applies,
+ * and a fail-closed empty list masks every document.
+ */
+export function documentSubsidiaryScope(dims: DimFilter | undefined, alias: SQL = sql`d`): SQL {
+  const subsidiaryIds = dims?.subsidiaryIds;
+  if (!subsidiaryIds) return sql``;
+  const list = `{${subsidiaryIds.join(",")}}`;
+  if (subsidiaryIds.length > 0 && dims?.includeNullSubsidiary === true)
+    return sql` and (${alias}.subsidiary_id is null or ${alias}.subsidiary_id = any(${list}::uuid[]))`;
+  return sql` and ${alias}.subsidiary_id = any(${list}::uuid[])`;
+}
+
+/**
  * Scope for dimension picker options: the subsidiary ids the report query
  * itself carries (the caller's authz scope as resolved for the viewed
  * entity set — every statement/register view builds it the same way).
