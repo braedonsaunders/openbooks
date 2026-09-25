@@ -12,6 +12,7 @@ import { seedPayrollComponents } from "../run-setup.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { upsertStatutoryRate } from "../statutory-rates.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import { sealSecret } from "../../platform/secrets.ts";
 import { BR_PACK_RATES } from "./rates.ts";
 import { brInformeRows } from "./informe.ts";
 
@@ -103,7 +104,7 @@ async function brPayrollOrg(): Promise<Fixture> {
     region: "BR", filingAccountId, taxYear: 2025, values: { aliquota: "5.8" },
   });
 
-  const employee = async (name: string, annualSalary: string, dependentes: number) => {
+  const employee = async (name: string, annualSalary: string, dependentes: number, cpf: string) => {
     const id = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -119,13 +120,14 @@ async function brPayrollOrg(): Promise<Fixture> {
     await db.execute(sql`
       insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
                                              province, pay_basis, filing_account_id, br_dependentes,
-                                             is_active, created_by, updated_by)
+                                             sin_encrypted, is_active, created_by, updated_by)
       values (${org.orgId}, ${id}, ${scheduleId}, 'BR', 'BR',
-              'salary', ${filingAccountId}, ${dependentes}, true, ${actorId}, ${actorId})`);
+              'salary', ${filingAccountId}, ${dependentes}, ${sealSecret(cpf)}, true, ${actorId},
+              ${actorId})`);
     return id;
   };
-  const anaId = await employee("Ana Souza", "36000", 0);
-  const brunoId = await employee("Bruno Lima", "72000", 2);
+  const anaId = await employee("Ana Souza", "36000", 0, "11144477735");
+  const brunoId = await employee("Bruno Lima", "72000", 2, "222.555.888-46");
   return { orgId: org.orgId, actorId, scheduleId, anaId, brunoId };
 }
 
@@ -235,6 +237,10 @@ test(
       // The slip carries the same figures, box for box.
       const slip = (await filing.slip!.build(fx.orgId, 2025, String(ana.rowId)))!;
       assert.equal(slip.formNumber, "IN RFB nº 2.060/2021 · Anexo I");
+      assert.ok(
+        slip.headerFields.some((h) => h.label === "CPF do beneficiário" && h.value === "11144477735"),
+        "the slip identifies the beneficiary by the sealed CPF",
+      );
       const box = (code: string) => slip.boxes.find((b) => b.code === code)!.value;
       assert.equal(box("Q3-1"), String(ana.rendimentos));
       assert.equal(box("Q3-2"), String(ana.inss));
