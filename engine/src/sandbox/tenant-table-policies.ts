@@ -403,6 +403,7 @@ export const TENANT_TABLE_POLICIES = {
   "payroll_retro_allocations": "clone:catalog-uuid-rebase",
   "payroll_retro_settlements": "clone:catalog-uuid-rebase",
   "payroll_statutory_rates": "clone:catalog-uuid-rebase",
+  "payroll_work_location_allocations": "clone:catalog-uuid-rebase",
   "pdf_templates": "clone:catalog-uuid-rebase",
   "performance_obligations": "clone:catalog-uuid-rebase",
   "period_locks": "clone:catalog-uuid-rebase",
