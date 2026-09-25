@@ -172,10 +172,11 @@ const listSyncConnections: AssistantToolDef = {
     const [connections, runs] = await Promise.all([
       listConnections(authz.user.orgId),
       db.execute<Record<string, unknown>>(sql`
-        select id, connection_id as "connectionId", source, kind, status,
+        select distinct on (connection_id) id, connection_id as "connectionId", source, kind, status,
                started_at as "startedAt", finished_at as "finishedAt",
                synced_through as "syncedThrough", error_message as "errorMessage", triggered_by as "triggeredBy"
-          from sync_runs where org_id = ${authz.user.orgId} order by started_at desc limit 200`),
+          from sync_runs where org_id = ${authz.user.orgId} and connection_id is not null
+         order by connection_id, started_at desc, id desc`),
     ]);
     const latestByConnection = new Map<string, SyncRunEvidence>();
     for (const row of runs.rows) {
