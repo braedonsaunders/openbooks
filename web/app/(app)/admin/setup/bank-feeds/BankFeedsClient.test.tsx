@@ -355,7 +355,7 @@ for (const [name, respond, present, phantomMessage, checkBusy] of [
   ],
 ] as Array<[string, () => Response, RegExp, string | null, boolean]>) {
   test(name, async (t) => {
-    const { host, root } = await mountFeed(respond as typeof fetch)
+    const { host, root } = await mountFeed((async () => respond()) as typeof fetch)
     unmountAfter(t, host, root)
     const btn = actionButton(host, 'Sync')
     await clickAndSettle(btn)
