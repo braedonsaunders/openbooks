@@ -116,6 +116,12 @@ test("adapter resolves the September late edition", async () => {
   const { ctx } = esAdapterContext("2026-09-15");
   const result = await computeEsStatutory(ctx);
   assert.equal(result["ES_EDITION"], "2026");
+  // I6-payroll-43: €100 of classified non-FM overtime prices the art. 5
+  // additional 4,70 % employee contribution through the adapter.
+  const overtime = esAdapterContext("2026-09-15");
+  Object.assign(overtime.ctx, { emp: { ...overtime.ctx.emp, es_horas_extra_resto: "100.00" } });
+  await computeEsStatutory(overtime.ctx);
+  assert.equal(overtime.lines.find((line) => line.componentId === "ss_hex_resto:deduction")?.amount, "4.7000");
 });
 
 test("adapter counts a pensionable one-off contribution once in annual COTIZACIONES", async () => {
