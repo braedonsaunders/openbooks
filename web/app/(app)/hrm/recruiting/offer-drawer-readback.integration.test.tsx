@@ -73,6 +73,7 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
   const offerStatus = catalog.recruiting.offerStatus;
   const offer: OfferDrawerData = {
     ...detail,
+    canManage: true,
     employerName,
     statusLabel: offerStatus[detail.status as keyof typeof offerStatus],
     effectiveStatusLabel: offerStatus[detail.effectiveStatus as keyof typeof offerStatus],
@@ -87,6 +88,7 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
   const cand = await getCandidateDetail({ orgId, actorId: adminId, candidateId: created.candidate.id });
   const candidate: CandidateDrawerData = {
     ...cand,
+    canManage: true,
     interviews: [{
       id: "interview-readable-kind",
       applicationId: application.id,

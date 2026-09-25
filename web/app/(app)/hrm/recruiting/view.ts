@@ -28,7 +28,24 @@ import {
 } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
-import { can, requirePermission } from '../../../../lib/authz'
+import { can, requirePermission, type Authz } from '../../../../lib/authz'
+
+/**
+ * Funnel move display gate: the org-wide manage grant, or the hiring
+ * manager on their own requisition — the same authority the move
+ * endpoint enforces (requireOwnRequisitionForHiringManager), probed
+ * read-only. Anything else (including an outage of the probe) hides
+ * Move; the endpoint stays authoritative on every attempt.
+ */
+async function canMoveFunnel(authz: Authz, requisitionId: string, canManage: boolean): Promise<boolean> {
+  if (canManage) return true
+  try {
+    await requireOwnRequisitionForHiringManager(db, authz.user.orgId, authz.user.id, requisitionId)
+    return true
+  } catch {
+    return false
+  }
+}
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { setupSectionParams } from '../../../../lib/list-params'
 import { recruitingHref } from '../../../../lib/hrm/workspace-href'
@@ -37,6 +54,7 @@ import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
+import { requireOwnRequisitionForHiringManager } from '@openbooks/engine/src/hrm/authorization.ts'
 import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
 import { drawerTitleKind } from './drawer-title'
@@ -502,6 +520,10 @@ export async function loadRecruitingPage(
             failed: t('recruiting.lifecycle.failed'),
           },
         },
+        // Funnel move rides the manage grant or the hiring manager's own
+        // requisition — the same authority the move endpoint enforces, so
+        // the Move control reaches exactly the hands that can use it.
+        canMoveApplications: await canMoveFunnel(authz, requisitionId, canManage),
         offerEmployer: { value: detail.employerSubsidiaryId, label: offerEmployerName },
         offerEmployerOptions,
         employeeOptions: employeeRows.map((option) => ({ value: option.id, label: option.name })),
@@ -525,6 +547,7 @@ export async function loadRecruitingPage(
       const detail = await getCandidateDetail({ orgId: authz.user.orgId, actorId: authz.user.id, candidateId })
       candidate = {
         ...detail,
+        canManage,
         interviews: detail.interviews.map((interview) => ({
           ...interview,
           kindLabel: t(`recruiting.interviewKind.${interview.kind}`),
@@ -567,6 +590,7 @@ export async function loadRecruitingPage(
       }
       offer = {
         ...detail,
+        canManage,
         statusLabel: t(`recruiting.offerStatus.${detail.status}`),
         effectiveStatusLabel: t(`recruiting.offerStatus.${detail.effectiveStatus}`),
         employerName: offerEmployerName,

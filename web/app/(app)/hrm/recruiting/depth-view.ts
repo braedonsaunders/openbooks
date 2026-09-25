@@ -30,7 +30,7 @@ import { listCandidateConsents } from '@openbooks/engine/src/hrm/recruiting/rete
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
 import { sql } from 'drizzle-orm'
-import type { Authz } from '../../../../lib/authz'
+import { can, type Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 
 /**
@@ -245,6 +245,10 @@ export async function loadPoolsTab(authz: Authz, t: T, tab: DepthTab): Promise<P
 
 export interface InterviewDrawer {
   id: string
+  /** hrm.recruiting.manage: the slot proposer renders only with it — the
+   * slots endpoint requires the grant, so readers never get a form that
+   * can only refuse. Scorecards stay ungated (panelist self-service). */
+  canManage: boolean
   timeZone: string
   closeHref: string
   candidate: string
@@ -336,6 +340,7 @@ export async function loadInterviewDrawer(
     }
     return {
       id: interviewId,
+      canManage: can(authz, 'hrm.recruiting.manage'),
       timeZone,
       closeHref: hrefForTab(tab, null),
       candidate: interview.candidate,
@@ -406,6 +411,8 @@ function translateRating(t: T, rating: string | null): string | null {
 }
 
 export interface OfferDrawerExtra {
+  /** hrm.recruiting.manage: the signing island renders only with it. */
+  canManage: boolean
   signature: string
   signatureVariant: OfferTabRow['signatureVariant']
   versions: { version: number; createdAt: string }[]
@@ -423,6 +430,7 @@ export async function loadOfferDrawerExtra(
       listOfferVersions({ orgId: authz.user.orgId, actorId: authz.user.id, offerId }),
     ])
     return {
+      canManage: can(authz, 'hrm.recruiting.manage'),
       signature: t(`recruiting.signature.${state.signatureStatus ?? 'unsigned'}`),
       signatureVariant: signatureVariant(state.signatureStatus),
       versions: versions.map((version) => ({ version: version.version, createdAt: version.createdAt })),
@@ -443,6 +451,8 @@ export async function loadOfferDrawerExtra(
 }
 
 export interface PostingDrawerExtra {
+  /** hrm.recruiting.manage: publish/pause/close render only with it. */
+  canManage: boolean
   posting: { id: string; boardKey: string; status: string; requisitionId: string }
   events: { kind: string; recordedAt: string }[]
   labels: Record<string, string>
@@ -461,6 +471,7 @@ export async function loadPostingDrawerExtra(
     const posting = postings.find((row) => row.id === postingId)
     if (!posting) return null
     return {
+      canManage: can(authz, 'hrm.recruiting.manage'),
       posting: {
         id: posting.id,
         boardKey: posting.boardKey,
@@ -486,6 +497,8 @@ export async function loadPostingDrawerExtra(
 
 export interface PoolDrawer {
   id: string
+  /** hrm.recruiting.manage: member remove and rediscovery render only with it. */
+  canManage: boolean
   name: string
   members: { candidateId: string; displayName: string; tags: readonly string[]; note: string | null }[]
   labels: Record<string, string>
@@ -501,6 +514,7 @@ export async function loadPoolDrawer(authz: Authz, t: T, poolId: string): Promis
     if (!pool) return null
     return {
       id: pool.id,
+      canManage: can(authz, 'hrm.recruiting.manage'),
       name: pool.name,
       members: members.map((member) => ({
         candidateId: member.candidateId,

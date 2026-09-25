@@ -145,6 +145,13 @@ export interface RequisitionDrawerData {
     canManage: boolean
     labels: { title: string; open: string; hold: string; resume: string; cancel: string; reason: string; failed: string }
   }
+  /**
+   * Funnel move affordance: the org-wide manage grant, or the hiring
+   * manager on their own requisition (the move endpoint allows both;
+   * reject/withdraw need the grant in full and ride lifecycle.canManage).
+   * Readers who are neither see no application actions at all.
+   */
+  canMoveApplications: boolean
   candidateOptions: Option[]
   employeeOptions: Option[]
   /** The org's business time zone: the schedule island resolves the
@@ -158,6 +165,8 @@ export interface RequisitionDrawerData {
 
 export interface CandidateDrawerData {
   id: string
+  /** hrm.recruiting.manage: interview complete/cancel renders only with it. */
+  canManage: boolean
   displayName: string
   email: string | null
   phone: string | null
@@ -180,6 +189,8 @@ export interface CandidateDrawerData {
 
 export interface OfferDrawerData {
   id: string
+  /** hrm.recruiting.manage: send/accept/decline/withdraw render only with it. */
+  canManage: boolean
   applicationId: string
   requisitionId: string
   /** Persisted legal entity display name, loader-resolved — never the raw id. */
@@ -281,85 +292,95 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
                   {` · ${labels.interviews}: ${application.interviewsCount}`}
                 </p>
                 <div className="mt-3 space-y-3">
-                  <ApplicationActionsIsland
-                    applicationId={application.id}
-                    stages={detail.stages.map((stage) => ({ value: stage.id, label: stage.name }))}
-                    labels={{
-                      move: labels.moveSubmit,
-                      reject: labels.rejectSubmit,
-                      reason: labels.rejectReason,
-                      withdraw: labels.withdrawLabel,
-                      failed: labels.moveFailed,
-                    }}
-                  />
-                  <details>
-                    <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
-                      {labels.interviewTitle}
-                    </summary>
-                    <div className="mt-2">
-                      <InterviewScheduleIsland
-                        applicationId={application.id}
-                        kinds={detail.kindOptions}
-                        employees={detail.employeeOptions}
-                        timeZone={detail.timeZone}
-                        labels={{
-                          kind: labels.interviewKind,
-                          when: labels.interviewWhen,
-                          duration: labels.interviewDuration,
-                          location: labels.interviewLocation,
-                          panel: labels.interviewPanel,
-                          submit: labels.interviewSubmit,
-                          failed: labels.interviewFailed,
-                          invalidTime: labels.interviewInvalidTime,
-                        }}
-                      />
-                    </div>
-                  </details>
-                  <details>
-                    <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
-                      {labels.offerTitle}
-                    </summary>
-                    <div className="mt-2">
-                      <OfferCreateIsland
-                        applicationId={application.id}
-                        bases={detail.basisOptions}
-                        employer={detail.offerEmployer}
-                        employers={detail.offerEmployerOptions}
-                        labels={{
-                          employer: labels.offerEmployer,
-                          job: labels.offerJob,
-                          start: labels.offerStart,
-                          amount: labels.offerAmount,
-                          currency: labels.offerCurrency,
-                          basis: labels.offerBasis,
-                          expires: labels.offerExpires,
-                          submit: labels.offerSubmit,
-                          failed: labels.offerFailed,
-                        }}
-                      />
-                    </div>
-                  </details>
+                  {detail.canMoveApplications || detail.lifecycle.canManage ? (
+                    <ApplicationActionsIsland
+                      applicationId={application.id}
+                      stages={detail.stages.map((stage) => ({ value: stage.id, label: stage.name }))}
+                      canMove={detail.canMoveApplications}
+                      canDecide={detail.lifecycle.canManage}
+                      labels={{
+                        move: labels.moveSubmit,
+                        reject: labels.rejectSubmit,
+                        reason: labels.rejectReason,
+                        withdraw: labels.withdrawLabel,
+                        failed: labels.moveFailed,
+                      }}
+                    />
+                  ) : null}
+                  {detail.lifecycle.canManage ? (
+                    <>
+                      <details>
+                        <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
+                          {labels.interviewTitle}
+                        </summary>
+                        <div className="mt-2">
+                          <InterviewScheduleIsland
+                            applicationId={application.id}
+                            kinds={detail.kindOptions}
+                            employees={detail.employeeOptions}
+                            timeZone={detail.timeZone}
+                            labels={{
+                              kind: labels.interviewKind,
+                              when: labels.interviewWhen,
+                              duration: labels.interviewDuration,
+                              location: labels.interviewLocation,
+                              panel: labels.interviewPanel,
+                              submit: labels.interviewSubmit,
+                              failed: labels.interviewFailed,
+                              invalidTime: labels.interviewInvalidTime,
+                            }}
+                          />
+                        </div>
+                      </details>
+                      <details>
+                        <summary className="cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
+                          {labels.offerTitle}
+                        </summary>
+                        <div className="mt-2">
+                          <OfferCreateIsland
+                            applicationId={application.id}
+                            bases={detail.basisOptions}
+                            employer={detail.offerEmployer}
+                            employers={detail.offerEmployerOptions}
+                            labels={{
+                              employer: labels.offerEmployer,
+                              job: labels.offerJob,
+                              start: labels.offerStart,
+                              amount: labels.offerAmount,
+                              currency: labels.offerCurrency,
+                              basis: labels.offerBasis,
+                              expires: labels.offerExpires,
+                              submit: labels.offerSubmit,
+                              failed: labels.offerFailed,
+                            }}
+                          />
+                        </div>
+                      </details>
+                    </>
+                  ) : null}
                 </div>
               </div>
             ))}
           </div>
         )}
-        <div className="mt-4">
-          <h5 className="text-xs font-semibold text-slate-900 dark:text-slate-100">{labels.attachTitle}</h5>
-          <div className="mt-2">
-            <ApplicationAttachIsland
-              requisitionId={detail.id}
-              labels={{
-                name: labels.attachName,
-                email: labels.attachEmail,
-                phone: labels.attachPhone,
-                submit: labels.attachSubmit,
-                failed: labels.attachFailed,
-                mergedNote: labels.attachMergedNote,
-              }}
-            />
+        {detail.lifecycle.canManage ? (
+          <div className="mt-4">
+            <h5 className="text-xs font-semibold text-slate-900 dark:text-slate-100">{labels.attachTitle}</h5>
+            <div className="mt-2">
+              <ApplicationAttachIsland
+                requisitionId={detail.id}
+                labels={{
+                  name: labels.attachName,
+                  email: labels.attachEmail,
+                  phone: labels.attachPhone,
+                  submit: labels.attachSubmit,
+                  failed: labels.attachFailed,
+                  mergedNote: labels.attachMergedNote,
+                }}
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   )
@@ -408,7 +429,7 @@ export function CandidateDrawerBody({ detail }: { detail: CandidateDrawerData })
                 {interview.kindLabel} · {interview.scheduledAt} · {interview.status}
                 {interview.outcome ? ` · ${interview.outcome}` : null}
               </p>
-              {interview.status === 'scheduled' ? (
+              {interview.status === 'scheduled' && detail.canManage ? (
                 <div className="mt-2">
                   <InterviewActionsIsland
                     interviewId={interview.id}
@@ -450,7 +471,7 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
           </a>
         ) : null}
       </div>
-      {detail.status === 'draft' || detail.status === 'sent' ? (
+      {detail.canManage && (detail.status === 'draft' || detail.status === 'sent') ? (
         <OfferActionsIsland offerId={detail.id} labels={detail.labels} />
       ) : null}
     </div>
@@ -499,14 +520,16 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
             </p>
           ))}
         </div>
-        <div className="mt-3">
-          <SlotProposeIsland
-            interviewId={detail.id}
-            pools={detail.pools}
-            timeZone={detail.timeZone}
-            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed ?? 'Save failed.', invalidTime: detail.labels.invalidTime ?? 'Enter a valid local time.', proposeFromPool: detail.labels.proposeFromPool ?? 'Propose from pool', starts: detail.labels.starts ?? 'Starts', ends: detail.labels.ends ?? 'Ends', timezone: detail.labels.timezone ?? 'Time zone', bookingLink: detail.labels.bookingLink ?? 'Booking link' }}
-          />
-        </div>
+        {detail.canManage ? (
+          <div className="mt-3">
+            <SlotProposeIsland
+              interviewId={detail.id}
+              pools={detail.pools}
+              timeZone={detail.timeZone}
+              labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed ?? 'Save failed.', invalidTime: detail.labels.invalidTime ?? 'Enter a valid local time.', proposeFromPool: detail.labels.proposeFromPool ?? 'Propose from pool', starts: detail.labels.starts ?? 'Starts', ends: detail.labels.ends ?? 'Ends', timezone: detail.labels.timezone ?? 'Time zone', bookingLink: detail.labels.bookingLink ?? 'Booking link' }}
+            />
+          </div>
+        ) : null}
       </div>
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.myScorecard}</h4>
@@ -566,12 +589,14 @@ export function OfferDepthBody({ offerId, extra }: { offerId: string; extra: Off
           </li>
         ))}
       </ul>
-      <div className="mt-3">
-        <OfferSigningIsland
-          offerId={offerId}
-          labels={{ sendLink: extra.labels.sendLink ?? 'Send signing link', void: extra.labels.void ?? 'Void', failed: extra.labels.failed ?? 'Save failed.', email: extra.labels.email ?? 'Email', name: extra.labels.name ?? 'Name', reason: extra.labels.reason ?? 'Reason' }}
-        />
-      </div>
+      {extra.canManage ? (
+        <div className="mt-3">
+          <OfferSigningIsland
+            offerId={offerId}
+            labels={{ sendLink: extra.labels.sendLink ?? 'Send signing link', void: extra.labels.void ?? 'Void', failed: extra.labels.failed ?? 'Save failed.', email: extra.labels.email ?? 'Email', name: extra.labels.name ?? 'Name', reason: extra.labels.reason ?? 'Reason' }}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -590,11 +615,13 @@ export function PostingDrawerBody({
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{posting.boardKey}</h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{posting.status}</p>
       </div>
-      <PostingActionsIsland
-        postingId={posting.id}
-        status={posting.status}
-        labels={{ publish: extra.labels.publish ?? 'Publish', pause: extra.labels.pause ?? 'Pause', close: extra.labels.close ?? 'Close', failed: extra.labels.failed ?? 'Save failed.' }}
-      />
+      {extra.canManage ? (
+        <PostingActionsIsland
+          postingId={posting.id}
+          status={posting.status}
+          labels={{ publish: extra.labels.publish ?? 'Publish', pause: extra.labels.pause ?? 'Pause', close: extra.labels.close ?? 'Close', failed: extra.labels.failed ?? 'Save failed.' }}
+        />
+      ) : null}
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{extra.labels.events}</h4>
         <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
@@ -625,17 +652,21 @@ export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
               {member.tags.map((tag) => (
                 <Badge key={tag} variant="outline">{tag}</Badge>
               ))}
-              <PoolMemberRemoveIsland poolId={detail.id} candidateId={member.candidateId} labels={{ remove: detail.labels.remove ?? 'Remove', failed: detail.labels.failed ?? 'Save failed.' }} />
+              {detail.canManage ? (
+                <PoolMemberRemoveIsland poolId={detail.id} candidateId={member.candidateId} labels={{ remove: detail.labels.remove ?? 'Remove', failed: detail.labels.failed ?? 'Save failed.' }} />
+              ) : null}
             </div>
           ))}
         </div>
       </div>
-      <div>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.labels.match}</h4>
-        <div className="mt-2">
-          <PoolRediscoverIsland poolId={detail.id} labels={{ tags: detail.labels.tags ?? 'Tags (comma separated)', failed: detail.labels.failed ?? 'Save failed.' }} />
+      {detail.canManage ? (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.labels.match}</h4>
+          <div className="mt-2">
+            <PoolRediscoverIsland poolId={detail.id} labels={{ tags: detail.labels.tags ?? 'Tags (comma separated)', failed: detail.labels.failed ?? 'Save failed.' }} />
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
