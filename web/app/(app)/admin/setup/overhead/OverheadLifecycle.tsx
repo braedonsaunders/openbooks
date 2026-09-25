@@ -38,6 +38,7 @@ export function OverheadLifecycle(props: {
 }) {
   const { money } = useMoney()
   const t = useTranslations('admin.setup.entities.overhead-model.lifecycle')
+  const tFailure = useTranslations('admin.setup.entities.overhead-model')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState(props.mode)
@@ -51,11 +52,11 @@ export function OverheadLifecycle(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'set-lifecycle', mode, cadence }),
       })
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
+      if (!res.ok) throw new Error(tFailure('errors.requestFailed'))
       toast.success(t('saved'))
       router.refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
+    } catch {
+      toast.error(tFailure('errors.requestFailed'))
     } finally {
       setBusy(false)
     }

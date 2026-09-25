@@ -2300,6 +2300,9 @@
           "rates": "Tasas",
           "lifecycle": "Ciclo de vida de tarifas",
           "application": "Aplicación al libro mayor"
+        },
+        "errors": {
+          "requestFailed": "No se pudo completar el cambio de costes indirectos. Revise las tarifas seleccionadas y la fecha de vigencia e inténtelo de nuevo."
         }
       },
       "compliance-classes": {

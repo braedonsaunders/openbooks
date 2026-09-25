@@ -2471,6 +2471,9 @@
           "lifecycle": "Tariflebenszyklus",
           "model": "Modell",
           "rates": "Sätze"
+        },
+        "errors": {
+          "requestFailed": "Die Änderung der Gemeinkosten konnte nicht abgeschlossen werden. Prüfen Sie die ausgewählten Sätze und das Gültigkeitsdatum und versuchen Sie es erneut."
         }
       },
       "compliance-classes": {

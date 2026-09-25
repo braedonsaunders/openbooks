@@ -2300,6 +2300,9 @@
           "rates": "Taux",
           "lifecycle": "Cycle de vie des taux",
           "application": "Application au grand livre"
+        },
+        "errors": {
+          "requestFailed": "La modification des frais indirects n’a pas abouti. Vérifiez les taux sélectionnés et la date d’effet, puis réessayez."
         }
       },
       "compliance-classes": {

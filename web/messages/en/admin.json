@@ -2396,6 +2396,9 @@
           "rates": "Rates",
           "lifecycle": "Rate lifecycle",
           "application": "Ledger application"
+        },
+        "errors": {
+          "requestFailed": "The overhead change could not be completed. Review the selected rates and effective date, then try again."
         }
       },
       "compliance-classes": {
