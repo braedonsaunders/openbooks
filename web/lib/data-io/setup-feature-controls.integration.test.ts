@@ -51,7 +51,7 @@ for(const dryRun of [false,true]){
 
 for(const mode of ['insert','upsert'] as const){
  test(`setup import ${mode} joins the feature fence before waiting writes`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  const org=await createScratchOrg();const holder=new pg.Client({connectionString:process.env.OPENBOOKS_DB_URL});let pending:Promise<unknown>|undefined;
+  const org=await createScratchOrg();const holder=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL});let pending:Promise<unknown>|undefined;
   try{
    const actorId=(await seedFlowActors(org.orgId)).adminId;
    const resource=setupResource(SETUP_ENTITY_BY_KEY.get('item-rate-books')!,org.orgId);
@@ -60,11 +60,7 @@ for(const mode of ['insert','upsert'] as const){
    const before=(await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`))).rows;
    await holder.connect();await holder.query('begin');
    await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`openbooks:feature-gate:${org.orgId}`]);
-   // The holder is a raw concurrent session outside the test bypass: scope it
-   // explicitly so its disable actually stages (unscoped it matches zero rows
-   // under RLS and the import sails through). Assert the footprint so a blind
-   // holder fails fast instead of passing a vacuous gate.
-   await holder.query("select set_config('app.bypass_rls','on',true)");
+   // 0399 gates the bypass GUC by session role, so the holder connects as the privileged test login above.
    const staged=await holder.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"projects\":false}'::jsonb) where id=$1",[org.orgId]);
    assert.equal(staged.rowCount,1,'concurrent holder must stage the feature disable');
    const pid=(await holder.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;

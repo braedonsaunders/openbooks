@@ -42,20 +42,13 @@ async function evidence(id: string, action: string) {
 }
 
 test('rate book deletion cannot remove a concurrently promoted default', {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
- const org=await createScratchOrg();const writer=new pg.Client({connectionString:env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
+ const org=await createScratchOrg();const writer=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
  try{
   await authenticate(org);
   const prior=await send('POST','item-rate-books',{code:'PRIOR',name:'Prior default',isDefault:true,isActive:true});assert.equal(prior.status,200);const priorId=(await prior.json()).id;
   const next=await send('POST','item-rate-books',{code:'NEXT',name:'Next default',isDefault:false,isActive:true});assert.equal(next.status,200);const nextId=(await next.json()).id;
   await writer.connect();await writer.query('begin');
-  // The writer is a raw concurrent session outside the test bypass: scope it
-  // explicitly (the same set_config the role-reference tests use on raw
-  // clients) so its promotion actually holds row locks. Without this its
-  // updates match zero rows under RLS and take no locks, so the deletion
-  // below would sail through instead of blocking. Assert the lock footprint
-  // so a blind writer fails fast, not after a 10s poll for a block that can
-  // never arrive.
-  await writer.query("select set_config('app.bypass_rls','on',true)");
+  // 0399 gates the bypass GUC by session role, so the writer connects as the privileged test login above.
   const undefaulted=await writer.query('update item_rate_books set is_default=false where id=$1',[priorId]);
   assert.equal(undefaulted.rowCount,1,'concurrent writer must hold the prior-default row');
   const promoted=await writer.query('update item_rate_books set is_default=true where id=$1',[nextId]);

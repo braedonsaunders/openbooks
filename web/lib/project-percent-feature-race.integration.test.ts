@@ -22,7 +22,7 @@ const { PUT } = await import("../app/api/projects/[id]/percent-complete/route");
 
 test("project percent-complete refuses a Projects disable committed while its write waits", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
-  const writer = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
   let pending: Promise<Response> | undefined;
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -39,7 +39,7 @@ test("project percent-complete refuses a Projects disable committed while its wr
     }), { params: Promise.resolve({ id: projectId }) });
     await writer.connect();
     await writer.query("begin");
-    await writer.query("select set_config('app.bypass_rls','on',true)");
+    // 0399 gates the bypass GUC by session role, so the writer connects as the privileged test login above.
     await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [org.orgId]);
     const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
     pending = send();
