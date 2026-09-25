@@ -307,6 +307,7 @@ export function ArCockpit({
           initialSide="ar"
           categories={data.categories}
           weekIndex={drillWeek}
+          horizonWeeks={data.horizonWeeks}
           canCollectionRun={canCollect}
           onClose={() => setDrillWeek(null)}
         />

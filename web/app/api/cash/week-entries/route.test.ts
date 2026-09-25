@@ -12,6 +12,7 @@ interface CashPositionCall {
 
 interface RouteState {
   allowedSubsidiaryIds: Set<string> | null;
+  permissions: string[];
   cashPositionCalls: CashPositionCall[];
 }
 
@@ -21,20 +22,37 @@ const stateKey = Symbol.for("openbooks.cash-week-entries-route-test");
 const vitestModuleName: string = "vitest";
 const routeState: RouteState = {
   allowedSubsidiaryIds: null,
+  permissions: ["banking.read"],
   cashPositionCalls: [],
 };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    "mock:feature-gates",
+    // Session boundary only: the Authz carries a caller-chosen permission
+    // set, and `can` delegates to the REAL engine permission check — never
+    // a reimplementation — so wildcard/refusal semantics cannot drift.
+    "mock:authz",
     `
+      import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts'
       const state = globalThis[Symbol.for('openbooks.cash-week-entries-route-test')]
-      export async function guardFeaturePermission() {
+      export async function getAuthz() {
         return {
           user: { orgId: 'org-1', id: 'user-1' },
+          permissions: new Set(state.permissions),
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
+      }
+      export function can(authz, perm) {
+        return permissionSetCovers(authz.permissions, perm)
+      }
+    `,
+  ],
+  [
+    "mock:features",
+    `
+      export async function isFeatureEnabled() {
+        return true
       }
     `,
   ],
@@ -75,11 +93,17 @@ const mockSources = new Map<string, string>([
 let GET: typeof import("./route.ts")["GET"];
 if (process.env.VITEST) {
   const { vi } = await import(vitestModuleName);
-  vi["mock"]("../../../../lib/feature-gates", () => ({
-    guardFeaturePermission: async () => ({
+  const { permissionSetCovers } = await import("@openbooks/engine/src/organization/permissions.ts");
+  vi["mock"]("../../../../lib/authz", () => ({
+    getAuthz: async () => ({
       user: { orgId: "org-1", id: "user-1" },
+      permissions: new Set(routeState.permissions),
       allowedSubsidiaryIds: routeState.allowedSubsidiaryIds,
     }),
+    can: (authz: { permissions: Set<string> }, perm: string) => permissionSetCovers(authz.permissions, perm),
+  }));
+  vi["mock"]("../../../../lib/features", () => ({
+    isFeatureEnabled: async () => true,
   }));
   vi["mock"]("../../../../lib/analytics/config", () => ({
     analyticsConfig: async () => ({ weeklyApCap: 250, restrictToSafe: 1 }),
@@ -108,7 +132,8 @@ if (process.env.VITEST) {
   ({ GET } = (await import("./route.ts")) as typeof import("./route.ts"));
 } else {
   const mockUrls = new Map<string, string>([
-    ["../../../../lib/feature-gates", "mock:feature-gates"],
+    ["../../../../lib/authz", "mock:authz"],
+    ["../../../../lib/features", "mock:features"],
     ["../../../../lib/analytics/config", "mock:analytics-config"],
     ["../../../../lib/cash/core", "mock:cash-core"],
     ["../../../../lib/cash/cash-position", "mock:cash-position"],
@@ -131,6 +156,7 @@ if (process.env.VITEST) {
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
+  routeState.permissions = ["banking.read"];
   routeState.cashPositionCalls.length = 0;
 }
 
@@ -193,6 +219,23 @@ const unrestricted = async () => {
   assert.deepEqual(routeState.cashPositionCalls[0]?.subIds, ["00000000-0000-4000-8000-000000000002"]);
 };
 
+const embeddingPagePermission = async () => {
+  // The drill rides inside the banking/cash page (banking.read), which
+  // declares no reports.read: a banking.read-only caller opens it, while a
+  // caller with none of the embedding pages' permissions gets a 403 naming
+  // the remedy — and a refused caller never queries the forecast.
+  reset(null);
+  routeState.permissions = ["banking.read"];
+  assert.equal((await get()).status, 200);
+
+  routeState.permissions = [];
+  routeState.cashPositionCalls.length = 0;
+  const denied = await get();
+  assert.equal(denied.status, 403);
+  assert.deepEqual(await denied.json(), { error: "missing permission: banking.read, ap.read or ar.read" });
+  assert.deepEqual(routeState.cashPositionCalls, []);
+};
+
 if (process.env.VITEST) {
   const { describe, it } = await import(vitestModuleName);
   describe("cash week entries subsidiary scope", () => {
@@ -201,6 +244,7 @@ if (process.env.VITEST) {
     it("empty subsidiary scopes fail closed", emptyScopeDenied);
     it("restricted callers may explicitly drill into an allowed subsidiary", restrictedAllowed);
     it("unrestricted callers retain whole-company and explicit subsidiary behavior", unrestricted);
+    it("banking.read opens the drill without reports.read; unpermitted callers get the remedy", embeddingPagePermission);
   });
 } else {
   test("restricted callers inherit every allowed subsidiary when sub is omitted", restrictedDefault);
@@ -208,6 +252,7 @@ if (process.env.VITEST) {
   test("empty subsidiary scopes fail closed", emptyScopeDenied);
   test("restricted callers may explicitly drill into an allowed subsidiary", restrictedAllowed);
   test("unrestricted callers retain whole-company and explicit subsidiary behavior", unrestricted);
+  test("banking.read opens the drill without reports.read; unpermitted callers get the remedy", embeddingPagePermission);
 }
 
 const invalidQueries = [

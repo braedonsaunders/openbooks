@@ -35,9 +35,13 @@ import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
 const ZERO_MONEY = '0.0000'
 const PAGE_SIZE = 25
 
-export function cashWeekEntriesUrl(weekStart: string, selectedSubsidiaryIds?: string[]): string {
+export function cashWeekEntriesUrl(weekStart: string, selectedSubsidiaryIds?: string[], horizonWeeks?: number): string {
   const params = new URLSearchParams({ week: weekStart })
   if (selectedSubsidiaryIds !== undefined) params.set('sub', selectedSubsidiaryIds.join(','))
+  // The route defaults to 13 weeks and 404s weeks outside its horizon: the
+  // caller must name the horizon it rendered, or weeks 14-26 of a 26-week
+  // forecast never load.
+  if (horizonWeeks !== undefined) params.set('horizon', String(horizonWeeks))
   return `/api/cash/week-entries?${params}`
 }
 
@@ -73,6 +77,7 @@ export function CashWeekFlyout({
   selectedSubsidiaryIds,
   categories = [],
   weekIndex = 0,
+  horizonWeeks,
   initialSide = 'ap',
   canPayRun = false,
   canCollectionRun = false,
@@ -84,6 +89,9 @@ export function CashWeekFlyout({
   categories?: CategoryWeekly[]
   /** This week's index into each category's weekly[] array. */
   weekIndex?: number
+  /** Weeks the calling page rendered: forwarded as the drill's `horizon`
+   * so late-horizon weeks resolve instead of 404ing outside the default. */
+  horizonWeeks?: number
   initialSide?: 'ar' | 'ap'
   /** ap.pay — shows "Build pay run" on the AP tab (filtered set → /payments). */
   canPayRun?: boolean
@@ -117,7 +125,7 @@ export function CashWeekFlyout({
   useEffect(() => {
     if (fetched) return
     let cancelled = false
-    fetch(cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds))
+    fetch(cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds, horizonWeeks))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
       .then((d) => {
         if (!cancelled) {
@@ -131,7 +139,7 @@ export function CashWeekFlyout({
     return () => {
       cancelled = true
     }
-  }, [week.weekStart, selectedSubsidiaryIds, fetched, fetchAttempt])
+  }, [week.weekStart, selectedSubsidiaryIds, horizonWeeks, fetched, fetchAttempt])
   const weekCats = categories.filter((c) => compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
   const otherIn = sumMoney(weekCats.filter((c) => c.direction === 'inflow').map((c) => c.weekly[weekIndex] ?? ZERO_MONEY))
   const catOuts = weekCats.filter((c) => c.direction === 'outflow')

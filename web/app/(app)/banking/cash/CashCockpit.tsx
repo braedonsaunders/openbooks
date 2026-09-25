@@ -143,6 +143,7 @@ export function CashCockpit({
                 weeklyCap={data.apSettings.weeklyCap}
                 restrictToSafe={data.apSettings.restrictToSafe}
                 deferredBeyondHorizon={data.deferredBeyondHorizon}
+                horizonWeeks={data.horizonWeeks}
                 canPayRun={canPayRun}
                 canCollectionRun={canCollectionRun}
               />

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { isUuid } from "../../../../lib/list-params";
-import { guardFeaturePermission } from "../../../../lib/feature-gates";
+import { can, getAuthz } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
 import { cashPosition } from "../../../../lib/cash/cash-position";
 import { normalizeMoneyValue } from "../../../../lib/cash/core";
 import { analyticsConfig } from "../../../../lib/analytics/config";
@@ -18,8 +19,19 @@ export const runtime = "nodejs";
  * supplies the rows behind whichever week is actually opened.
  */
 export async function GET(req: Request) {
-  const gate = await guardFeaturePermission("reports.read", "banking");
-  if (gate instanceof NextResponse) return gate;
+  // The week drill rides inside the banking/cash cockpit (banking.read) and
+  // the AP/AR cockpits (ap.read / ar.read): any one of the embedding pages'
+  // read permissions opens it, and a caller with none gets a 403 naming the
+  // remedy. reports.read alone never sufficed — no embedding page declares
+  // it — so it is not in the set.
+  const gate = await getAuthz();
+  if (!gate) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!can(gate, "banking.read") && !can(gate, "ap.read") && !can(gate, "ar.read")) {
+    return NextResponse.json({ error: "missing permission: banking.read, ap.read or ar.read" }, { status: 403 });
+  }
+  if (!(await isFeatureEnabled(gate.user.orgId, "banking"))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const user = gate.user;
 
   const url = new URL(req.url);
