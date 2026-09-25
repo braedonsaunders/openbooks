@@ -13,7 +13,7 @@ import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
   type GlLine,
-} from "../projects/recognition.ts";
+} from "../journal/origin-entry.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import {
   acquireOrgFeatureGateLock,

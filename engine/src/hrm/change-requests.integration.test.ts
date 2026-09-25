@@ -23,6 +23,12 @@ import {
 } from "./change-requests.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate, GateError, ReleaseError } from "../flows/gates.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 /**
  * Slice A DB coverage (integration partition): governed employment

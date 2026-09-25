@@ -8,6 +8,7 @@ import {
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import { flowDocumentEffects } from "./document-effects-hook.ts";
 import {
   DOCUMENT_FIELDS,
   WRITABLE_DOCUMENT_FIELDS,
@@ -296,16 +297,18 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         doc?.voidRequestedAt &&
         (doc.status === "posted" || doc.status === "approved")
       ) {
-        const { completeRequestedDocumentVoid, rejectRequestedDocumentVoid } =
-          await import("../ledger/document-void.ts");
+        // Void completion lives behind the installed document-effects port
+        // (C14): the adapter never imports ledger. Runs inline in this call
+        // chain, so the ambient pinned org transaction is unchanged.
+        const effects = flowDocumentEffects();
         if (outcome === "approved") {
-          await completeRequestedDocumentVoid(
+          await effects.completeRequestedVoid(
             subjectId,
             ctx.orgId,
             ctx.allowedSubsidiaryIds,
           );
         } else {
-          await rejectRequestedDocumentVoid(
+          await effects.rejectRequestedVoid(
             subjectId,
             ctx.orgId,
             ctx.userId ?? null,

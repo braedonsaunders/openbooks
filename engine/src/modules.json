@@ -27,7 +27,6 @@
         "organization",
         "periods",
         "platform",
-        "projects",
         "records",
         "reports"
       ]
@@ -114,7 +113,9 @@
         "flows",
         "hrm",
         "ledger",
+        "payments",
         "platform",
+        "records",
         "scripting"
       ]
     },
@@ -206,9 +207,7 @@
       "description": "Approvals and workflow engine: gates, registry, subject adapters, record flows, the approvals worklist.",
       "dependsOn": [
         "delivery",
-        "ledger",
         "organization",
-        "payments",
         "payments-core",
         "periods",
         "platform",
@@ -641,15 +640,5 @@
       ]
     }
   },
-  "cycles": [
-    [
-      "allocations",
-      "flows",
-      "ledger",
-      "payables",
-      "payments",
-      "payroll",
-      "projects"
-    ]
-  ]
+  "cycles": []
 }

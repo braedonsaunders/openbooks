@@ -15,6 +15,12 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { decideGate } from "./gates.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

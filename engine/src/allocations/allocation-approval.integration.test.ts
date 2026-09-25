@@ -16,6 +16,12 @@ import { getFlowAdapter } from "../flows/registry.ts";
 import { postAllocationRun, previewAllocationRun } from "./period-run.ts";
 import { processAllocationRunOutboxRow } from "./scheduling.ts";
 import { enableAllocations, journalLineCount, seedDepartment } from "./integration-seeds.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

@@ -38,6 +38,12 @@ import {
   releaseLeavePayrollInputs,
   strandedLeavePayrollInputs,
 } from "./leave-payroll-inputs.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 /**
  * HR-5 DB coverage (integration partition — run by the integrator at gate;
