@@ -134,6 +134,38 @@ async function checkPhotoRequirement(input: RecordClockInput): Promise<void> {
   }
 }
 
+async function checkClockProjectEntity(
+  orgId: string,
+  employeePartyId: string,
+  projectId: string | null,
+): Promise<void> {
+  if (!projectId) return;
+  // One row proves both halves: a missing project reads as a null id,
+  // distinct from a present project with no subsidiary.
+  const entity = (await db.execute<{
+    employee_sub: string | null;
+    project_sub: string | null;
+    project_id: string | null;
+  }>(sql`
+    select (select subsidiary_id from parties
+             where org_id = ${orgId} and id = ${employeePartyId}) as employee_sub,
+           (select subsidiary_id from projects
+             where org_id = ${orgId} and id = ${projectId}) as project_sub,
+           (select id::text from projects
+             where org_id = ${orgId} and id = ${projectId}) as project_id
+  `)).rows[0];
+  if (!entity?.project_id) {
+    refuse("project_unknown", "The project is unknown in this organization — pick it from the picker and retry");
+  }
+  if (
+    entity.employee_sub != null &&
+    entity.project_sub != null &&
+    entity.employee_sub !== entity.project_sub
+  ) {
+    refuse("project_wrong_entity", "The project belongs to a different legal entity than the employee — clock onto a project in the employee's legal entity");
+  }
+}
+
 async function checkGeofence(
   orgId: string,
   projectId: string | null,
@@ -563,6 +595,13 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
       validateEventChronology(input.kind, Date.parse(current.occurred_at), occurredMs);
     }
 
+    // Legal-entity isolation, mirroring the weekly timesheet PUT: a clock
+    // event posts its labor cost against its project, so a worker of one
+    // subsidiary cannot clock onto another subsidiary's project. Either
+    // side unscoped (null) keeps the existing attribution; a project that
+    // is unknown in this organization refuses by name instead of persisting
+    // a dangling pointer (project_id carries no foreign key).
+    await checkClockProjectEntity(input.orgId, input.employeePartyId, input.projectId ?? null);
     await checkPhotoRequirement(input);
     const geoCheck = await checkGeofence(input.orgId, input.projectId ?? null, input.geo ?? null);
 

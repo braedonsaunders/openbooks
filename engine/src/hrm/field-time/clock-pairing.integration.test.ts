@@ -471,3 +471,28 @@ test("an overnight local shift splits at the business midnight", { skip: !DB }, 
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a clock-in onto another subsidiary's project refuses by name", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const otherSub = randomUUID();
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSub}, ${org.orgId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id) values (${worker}, ${org.orgId}, 'person', 'Crew Hand', ${org.subsidiaryId})`);
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${otherSub}, 'JOB-OTHER', 'Other entity job', 'active', true, '{}'::jsonb)`);
+      const code = await refusesCode(() => recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T11:00:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      }));
+      assert.equal(code, "project_wrong_entity");
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
