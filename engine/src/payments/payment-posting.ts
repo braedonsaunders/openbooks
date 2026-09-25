@@ -14,7 +14,7 @@ import { allocationsMatchApprovedSnapshot, canonicalSettlementRate, carryingAmou
 import { PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";
 import { openItemsForParty } from "./payment-queries.ts";
-import { validateCreditAllocations } from "./credit-allocation.ts";
+import { assertCreditSourcesExist, validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind } from "./payment-documents.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { expireStalePaymentLinkSessions } from "./payment-link-session-expiry.ts";
@@ -153,6 +153,14 @@ export async function postPaymentWithApplications(
       ...beforeCash.map((allocation) => allocation.openLineId),
       ...beforeCredits.flatMap((allocation) => [allocation.fromLineId, allocation.toLineId]),
     ])];
+    // Name a broken credit source claim before the evidence lock: a credit
+    // whose from-line does not exist can never satisfy the source-document
+    // match, and the lock below would otherwise fail it first with a generic
+    // retry that hides the remedy — the same refusal the draft gate returns
+    // for the same workpapers.
+    if (beforeCredits.length > 0) {
+      await assertCreditSourcesExist(preflight.orgId, beforeCredits);
+    }
     // Application triggers update invoice open balances. Lock every source
     // document, entry and line (and the payment document) in the shared order.
     await lockApplicationEvidence(db, preflight.orgId, discoveredEndpoints, [paymentDocId]);

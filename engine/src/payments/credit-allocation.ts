@@ -5,6 +5,40 @@ import { PaymentError } from "./payment-errors.ts";
 import { sameCurrencyAllocation, validateAllocationInputs, type AllocationInput } from "./settlement-policy.ts";
 import { type OpenItemSide, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentControlDeps } from "./payment-accounts.ts";
+/** A credit's source-document claim, judged against the line's actual source.
+ * Missing lines and sourceless lines never match: the operator must point
+ * the credit at the tenant-owned posted credit entry that supplied it. */
+export function assertCreditSourceDocument(
+  credit: CreditAllocationInput,
+  actualSourceDocumentId: string | null | undefined,
+): void {
+  if (!credit.sourceDocumentId || actualSourceDocumentId !== credit.sourceDocumentId) {
+    throw new PaymentError("credit source document must match the tenant-owned posted credit entry");
+  }
+}
+
+/** Lock-free pre-check of credit source claims: a plain SELECT takes no row
+ * locks, so this can run before the evidence lock without inverting the
+ * validation's line-lock order. A from-line that does not exist can never
+ * satisfy the source match — without this, the evidence lock fails it first
+ * with a generic retry that hides the remedy. The full validation below
+ * re-judges every claim under the lock. */
+export async function assertCreditSourcesExist(orgId: string, credits: CreditAllocationInput[]): Promise<void> {
+  const fromIds = [...new Set(credits.map((credit) => credit.fromLineId))];
+  if (fromIds.length === 0) return;
+  const rows = (await db.execute<{ id: string; source_document_id: string | null }>(sql`
+    select jl.id as id, d.id as source_document_id
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+      left join documents d on d.id = je.source_document_id and d.org_id = jl.org_id
+     where jl.org_id = ${orgId} and jl.id in ${fromIds}
+  `)).rows;
+  const byId = new Map(rows.map((row) => [row.id, row.source_document_id]));
+  for (const credit of credits) {
+    assertCreditSourceDocument(credit, byId.get(credit.fromLineId) ?? null);
+  }
+}
+
 /** Validate credit workpapers against the payment, not merely against each
  * other. Endpoint locks serialize cash and credit capacity checks together. */
 export async function validateCreditAllocations(
@@ -52,9 +86,7 @@ export async function validateCreditAllocations(
   for (const allocation of allocations) targetAmounts.set(allocation.openLineId,
     (targetAmounts.get(allocation.openLineId) ?? 0n) + toUnits(allocation.targetTransactionAmount));
   for (const credit of credits) {
-    if (!credit.sourceDocumentId || byId.get(credit.fromLineId)?.source_document_id !== credit.sourceDocumentId) {
-      throw new PaymentError("credit source document must match the tenant-owned posted credit entry");
-    }
+    assertCreditSourceDocument(credit, byId.get(credit.fromLineId)?.source_document_id);
     // The "credit" in a credit settlement must be a credit MEMO. The source-
     // document match alone does not say which document kind supplied the
     // line: any posted open item of the right sign (a receipt's on-account
