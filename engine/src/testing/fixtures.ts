@@ -782,13 +782,17 @@ function qualified(table: string) {
  * posted documents be deleted, `openbooks.sandbox_wipe` (with
  * the org flagged env_kind='sandbox') authorizes the wipe of posted journal
  * entries — posted journals are append-only with no amend escape — and
- * satisfies the append-only evidence guards. The enclosing transaction uses
+ * satisfies the append-only evidence guards. `app.bypass_rls` reflects the
+ * bypass role this transaction already runs as, so row-guard triggers that
+ * honor an explicit bypass (e.g. unexpired idempotency evidence) clear
+ * instead of failing the wipe. The enclosing transaction uses
  * the dedicated database bypass role for direct table deletes.
  */
 async function setTeardownGucs(tx: TeardownTx): Promise<void> {
   await tx.execute(sql`
     select set_config('openbooks.amend', 'on', true),
-           set_config('openbooks.sandbox_wipe', 'on', true)`);
+           set_config('openbooks.sandbox_wipe', 'on', true),
+           set_config('app.bypass_rls', 'on', true)`);
 }
 
 /** Every base table in public that carries an org_id column. */

@@ -12,12 +12,14 @@ import { sql } from "drizzle-orm";
 
 const stateKey = Symbol.for("openbooks.analytics-config-revision-integration");
 interface RouteState {
-  authz: { user: { orgId: string; id: string } } | null;
+  authz: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null;
 }
 const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
+const realAuthzUrl = new URL("../../../../../lib/authz.ts", import.meta.url).href;
 const mockAuthz = `
+  export { guardUnrestrictedScope } from '${realAuthzUrl}'
   const state = globalThis[Symbol.for('openbooks.analytics-config-revision-integration')]
   export async function guardPermission() {
     return state.authz
@@ -82,7 +84,9 @@ const DEFAULTS = {
 async function seed(): Promise<{ orgId: string; actorId: string }> {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Config Admin", "admin");
-  routeState.authz = { user: { orgId: org.orgId, id: actorId } };
+  // Dashboard config is an org-wide write: the route demands explicit null
+  // (unrestricted), and an absent scope fails closed.
+  routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null };
   return { orgId: org.orgId, actorId };
 }
 
