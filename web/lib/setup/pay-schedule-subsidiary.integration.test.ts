@@ -171,7 +171,7 @@ test(
         id: scheduleId,
       });
       assert.equal(updated.status, 200);
-      assert.deepEqual(updated.body.rescope, { reresolved: 1, untouched: 0 });
+      assert.deepEqual(updated.body.rescope, { reresolved: 1, untouched: 0, skipped: [] });
 
       const after = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
         select subsidiary_id, currency from documents where id = ${run.documentId}`)).rows[0]!;
