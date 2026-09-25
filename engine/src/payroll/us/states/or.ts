@@ -682,6 +682,9 @@ export const OR_REGION: PayrollRegionWithholding = {
   // required from wages regardless of the state in which they were earned.
   // The other-state credit is return-level only — no employer
   // withholding-credit mechanism — so the full resident tax is withheld.
+  // Narrow reliefs only: $300-or-less yearly wages, and voluntary (never
+  // compelled) withholding by an out-of-state employer with no Oregon
+  // activity.
   residentWithholding: "required",
   residentWithholdingImplemented: true,
   certificateKey: "us_or_orw4",
