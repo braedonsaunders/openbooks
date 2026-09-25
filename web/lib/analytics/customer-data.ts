@@ -980,15 +980,31 @@ export async function customerData(
     // Headline money is RECOGNIZED (ledger); invoiced stays alongside as the
     // reconciling column. Population, counts and dates stay document-based:
     // they describe billing activity, not earned value.
-    const invoicedRevenue = Number(c.revenue);
+    // The invoiced→recognized bridge identity is money arithmetic, so it
+    // stays in exact decimal strings: float subtraction on ledger amounts
+    // leaves dust in `other`, which the durable recon test pins to zero for
+    // pure document flows. Each leg converts to Number once below, at this
+    // presentation boundary.
     const led = ledgerByParty.get(id);
-    const revenue = led ? Number(led.recognized) : 0;
-    const tax = led ? Number(led.tax) : 0;
-    const credits = led ? Number(led.credits) : 0;
-    const timingDeferred = led ? Number(led.parked) : 0;
-    const timingRecognized = led ? Number(led.sched) : 0;
-    const voids = led ? Number(led.voids) : 0;
-    const explained = tax + credits + (timingDeferred - timingRecognized) + voids;
+    const invoicedExact = c.revenue;
+    const recognizedExact = led?.recognized ?? "0";
+    const taxExact = led?.tax ?? "0";
+    const creditsExact = led?.credits ?? "0";
+    const timingDeferredExact = led?.parked ?? "0";
+    const timingRecognizedExact = led?.sched ?? "0";
+    const voidsExact = led?.voids ?? "0";
+    const explainedExact = add(
+      add(taxExact, creditsExact),
+      add(add(timingDeferredExact, neg(timingRecognizedExact)), voidsExact),
+    );
+    const otherExact = add(add(invoicedExact, neg(recognizedExact)), neg(explainedExact));
+    const invoicedRevenue = Number(invoicedExact);
+    const revenue = Number(recognizedExact);
+    const tax = Number(taxExact);
+    const credits = Number(creditsExact);
+    const timingDeferred = Number(timingDeferredExact);
+    const timingRecognized = Number(timingRecognizedExact);
+    const voids = Number(voidsExact);
     return {
       id,
       name: c.name,
@@ -1004,7 +1020,7 @@ export async function customerData(
         // Residual, not a plug target: manual-journal income with a party tag
         // and FX/rounding dust land here. The durable recon test pins it to
         // zero for pure document flows and to the manual amount when seeded.
-        other: (invoicedRevenue - revenue) - explained,
+        other: Number(otherExact),
       },
       txns: c.txns,
       // Billing behavior (average invoice size), not earned value — pairs with
