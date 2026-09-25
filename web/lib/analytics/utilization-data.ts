@@ -36,7 +36,7 @@ export interface UStat {
   billableHours: number;
   nonBillableHours: number;
   percentBilled: number; // 0-100
-  nonBillableCost: number;
+  nonBillableCost: string;
 }
 
 export interface UGroupRow {
@@ -49,7 +49,7 @@ export interface UGroupRow {
   departmentName?: string;
   range: UStat;
   prior: UStat;
-  deltas: { pctDelta: number; costDelta: number };
+  deltas: { pctDelta: number; costDelta: string };
   meetsMinHours: boolean;
   noBillable?: boolean;
 }
@@ -72,9 +72,9 @@ export interface UtilizationData {
   prior: { from: string; to: string };
   config: { target: number; costSpike: number; minHours: number };
   company: {
-    range: UStat & { nonBillableCostPerDay: number; nonBillableCostPerHour: number };
-    prior: UStat & { nonBillableCostPerDay: number; nonBillableCostPerHour: number };
-    deltas: { pctDelta: number; costDelta: number };
+    range: UStat & { nonBillableCostPerDay: string; nonBillableCostPerHour: string };
+    prior: UStat & { nonBillableCostPerDay: string; nonBillableCostPerHour: string };
+    deltas: { pctDelta: number; costDelta: string };
     alerts: UAlert[];
   };
   departments: UGroupRow[];
@@ -171,7 +171,7 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
       non_billable_cost: "0",
     };
     const leg = String(r.non_billable_cost ?? 0);
-    const translated = Number(leg) === 0
+    const translated = cmp(leg, "0") === 0
       ? "0"
       : mulDecimal(leg, ctx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)));
     prev.total_hours = add(prev.total_hours, String(r.total_hours ?? 0));
@@ -196,11 +196,11 @@ function calcStat(hours: string, billable: string, cost: string): UStat {
     billableHours: b,
     nonBillableHours: h - b,
     percentBilled: h > 0 ? (b / h) * 100 : 0,
-    nonBillableCost: Number(cost),
+    nonBillableCost: cost,
   };
 }
 
-const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBilled: 0, nonBillableCost: 0 };
+const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBilled: 0, nonBillableCost: "0.0000" };
 
 type Key = "department" | "item" | "employee";
 
@@ -249,7 +249,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       name: c.name,
       range,
       prior: pr,
-      deltas: { pctDelta: range.percentBilled - pr.percentBilled, costDelta: range.nonBillableCost - pr.nonBillableCost },
+      deltas: { pctDelta: range.percentBilled - pr.percentBilled, costDelta: add(range.nonBillableCost, neg(pr.nonBillableCost)) },
       meetsMinHours: range.hours >= minHours,
     };
     if (key === "employee") {
@@ -354,8 +354,8 @@ export async function utilizationData(
     const nonBillableHours = add(hours, neg(billable));
     return {
       ...s,
-      nonBillableCostPerDay: days > 0 ? Number(div(cost, String(days))) : 0,
-      nonBillableCostPerHour: cmp(nonBillableHours, "0") > 0 ? Number(div(cost, nonBillableHours)) : 0,
+      nonBillableCostPerDay: days > 0 ? div(cost, String(days)) : "0.0000",
+      nonBillableCostPerHour: cmp(nonBillableHours, "0") > 0 ? div(cost, nonBillableHours) : "0.0000",
     };
   };
   const cCompany = companySum(curr);
@@ -410,7 +410,7 @@ export async function utilizationData(
       prior: pCompany,
       deltas: {
         pctDelta: cCompany.percentBilled - pCompany.percentBilled,
-        costDelta: Number(costDeltaExact),
+        costDelta: costDeltaExact,
       },
       alerts,
     },
