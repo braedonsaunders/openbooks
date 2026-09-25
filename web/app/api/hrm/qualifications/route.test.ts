@@ -3,18 +3,12 @@ import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
 import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+import { pathToFileURL } from "node:url";
 
-/**
- * Qualification route gates (HR-14): the feature-off 404 fires before
- * any service runs, an unauthenticated caller never reaches it, and
- * engine refusals map with their message intact. Module doubles cover
- * only the network boundary (authz, features) and the engine services
- * (DB-owned, covered by the integration file); the zod bodies and the
- * error mapper run as-is.
- */
+/** Route gates and engine refusal mapping. */
 
 interface RouteState {
-  gate: { user: { id: string; orgId: string } } | { status: number };
+  gate: { user: { id: string; orgId: string }; allowedSubsidiaryIds?: ReadonlySet<string> | null } | { status: number };
   perms: string[];
   featureOn: boolean;
   calls: Array<{ fn: string; args: unknown }>;
@@ -26,7 +20,7 @@ type TestFn = typeof nodeTest;
 const test: TestFn = nodeTest;
 
 const routeState: RouteState = {
-  gate: { user: { id: "user-1", orgId: "org-1" } },
+  gate: { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null },
   perms: ["hrm.certifications.read", "hrm.certifications.manage", "hrm.self.read"],
   featureOn: true,
   calls: [],
@@ -39,6 +33,7 @@ const mockSources = new Map<string, string>([
     "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-qualifications-route-test')]
+      export { guardUnrestrictedScope } from ${JSON.stringify(pathToFileURL(process.cwd() + "/web/lib/authz.ts").href)}
       const ALLOWED = ['hrm.certifications.read', 'hrm.certifications.manage', 'hrm.self.read']
       export async function guardPermission(permission) {
         if (!ALLOWED.includes(permission)) {
@@ -174,16 +169,6 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return { extraCategories: [args.category], alertLeadDays: [30, 14, 7, 1] }
       }
-      export async function loadSettings(exec, orgId) {
-        state.calls.push({ fn: 'loadSettings', args: { orgId } })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { extraCategories: [], alertLeadDays: [30, 14, 7, 1] }
-      }
-      export async function setAlertSchedule(exec, args) {
-        state.calls.push({ fn: 'setAlertSchedule', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { extraCategories: [], alertLeadDays: args.leadDays }
-      }
     `,
   ],
 ]);
@@ -224,10 +209,12 @@ const revokeRoute = (await import("./[id]/revoke/route.ts")) as typeof import(".
 const renewRoute = (await import("./[id]/renew/route.ts")) as typeof import("./[id]/renew/route.ts");
 const evidenceRoute = (await import("./[id]/evidence/route.ts")) as typeof import("./[id]/evidence/route.ts");
 const typesRoute = (await import("../qualification-types/route.ts")) as typeof import("../qualification-types/route.ts");
+const typeDetailRoute = (await import("../qualification-types/[id]/route.ts")) as typeof import("../qualification-types/[id]/route.ts");
+const categoriesRoute = (await import("../qualification-types/categories/route.ts")) as typeof import("../qualification-types/categories/route.ts");
 hooks.deregister();
 
 function reset(): void {
-  routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
+  routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null };
   routeState.perms = ["hrm.certifications.read", "hrm.certifications.manage", "hrm.self.read"];
   routeState.featureOn = true;
   routeState.calls = [];
@@ -403,6 +390,16 @@ test("requirements set refuses an unreadable shape before the service", async ()
 
 test("type creation carries code and category into the service", async () => {
   reset();
+  routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: new Set([UUID]) };
+  const request = (url: string, body: unknown) => new Request(`http://openbooks.test${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const denied = await Promise.all([
+    typesRoute.POST(request("/api/hrm/qualification-types", { code: "A", name: "A", category: "other" })),
+    typeDetailRoute.PATCH(request("/api/hrm/qualification-types/x", { name: "A" }), { params: Promise.resolve({ id: UUID }) }),
+    categoriesRoute.POST(request("/api/hrm/qualification-types/categories", { category: "A" })),
+  ]);
+  assert.deepEqual(denied.map((response) => response.status), [403, 403, 403]);
+  assert.deepEqual(routeState.calls, []);
+  routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null };
   const post = await typesRoute.POST(
     new Request("http://openbooks.test/api/hrm/qualification-types", {
       method: "POST",

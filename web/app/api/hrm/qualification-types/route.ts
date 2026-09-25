@@ -5,7 +5,7 @@ import {
   createQualificationType,
   listQualificationTypes,
 } from "@openbooks/engine/src/hrm/qualifications/types.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { qualificationErrorResponse } from "../qualifications/_lib";
 import { createQualificationTypeBody } from "../qualifications/bodies";
@@ -38,6 +38,8 @@ export async function POST(req: Request) {
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, createQualificationTypeBody);
   if (!parsedBody.ok) return parsedBody.response;
   try {
