@@ -2163,6 +2163,8 @@
     "title": "Journal",
     "empty": "No posted entries in this period.",
     "truncated": "Showing the first 4,000 lines — narrow the period to see everything.",
+    "otherOrigin": "Other",
+    "origins": { "document": "Document", "manual": "Manual", "payroll": "Payroll", "labor_burden": "Labor burden", "depreciation": "Depreciation", "disposal": "Disposal", "revaluation": "Revaluation", "revenue_recognition": "Revenue recognition", "inventory": "Inventory", "lease": "Lease", "allocation": "Allocation", "intercompany": "Intercompany", "fx_settlement": "Foreign-exchange settlement", "fx_revaluation": "Foreign-exchange revaluation", "translation": "Currency translation", "closing": "Closing", "migration": "Migration", "tax_provision": "Tax provision" },
     "columns": {
       "detail": "Party / memo"
     }

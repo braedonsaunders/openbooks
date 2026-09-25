@@ -2163,6 +2163,8 @@
     "title": "Journal",
     "empty": "Keine gebuchten Buchungen in dieser Periode.",
     "truncated": "Es werden die ersten 4.000 Zeilen angezeigt – grenzen Sie die Periode ein, um alles zu sehen.",
+    "otherOrigin": "Sonstige",
+    "origins": { "document": "Beleg", "manual": "Manuell", "payroll": "Lohnabrechnung", "labor_burden": "Arbeitskostenumlage", "depreciation": "Abschreibung", "disposal": "Abgang", "revaluation": "Neubewertung", "revenue_recognition": "Umsatzrealisierung", "inventory": "Bestand", "lease": "Leasing", "allocation": "Umlage", "intercompany": "Konzernintern", "fx_settlement": "Währungsabrechnung", "fx_revaluation": "Währungsneubewertung", "translation": "Währungsumrechnung", "closing": "Abschluss", "migration": "Migration", "tax_provision": "Steuerrückstellung" },
     "columns": {
       "detail": "Geschäftspartner / Notiz"
     }

@@ -2163,6 +2163,8 @@
     "title": "日记账",
     "empty": "本期间内无已过账分录。",
     "truncated": "仅显示前 4,000 行——缩小期间范围以查看全部内容。",
+    "otherOrigin": "其他",
+    "origins": { "document": "凭证", "manual": "手动", "payroll": "工资", "labor_burden": "劳务负担", "depreciation": "折旧", "disposal": "处置", "revaluation": "重估", "revenue_recognition": "收入确认", "inventory": "库存", "lease": "租赁", "allocation": "分摊", "intercompany": "公司间", "fx_settlement": "外汇结算", "fx_revaluation": "外汇重估", "translation": "货币折算", "closing": "结账", "migration": "迁移", "tax_provision": "税项准备" },
     "columns": {
       "detail": "往来方 / 备注"
     }
