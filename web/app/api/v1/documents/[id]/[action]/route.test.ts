@@ -147,6 +147,7 @@ test("POST void dispatches to voidDocument with reason and reversal date", async
       documentId: "doc-3",
       reason: "duplicate",
       reversalDate: "2026-09-01",
+      reversalPeriodId: null,
       idempotencyKey: "doc-action-key-1",
     },
   });

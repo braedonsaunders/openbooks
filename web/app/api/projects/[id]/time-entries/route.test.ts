@@ -88,6 +88,12 @@ const mockSources = new Map<string, string>([
           if (text.includes('count(*)')) {
             return Promise.resolve({ rows: [{ entries: 1, hours: '2.5', cost: '100.00', bill: '150.00' }] })
           }
+          if (text.includes('distinct employee_party_id')) {
+            return Promise.resolve({ rows: [{ id: 'employee-1' }] })
+          }
+          if (text.includes('from parties p')) {
+            return Promise.resolve({ rows: [{ id: 'employee-1', subsidiaryId: state.projectSubsidiary }] })
+          }
           if (text.includes('from time_entries')) {
             return Promise.resolve({
               rows: [{
