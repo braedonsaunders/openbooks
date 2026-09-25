@@ -78,5 +78,15 @@ test('layouts are stable grids: unique ids, twelve columns, no overlaps', () => 
       assert.ok(widget.x >= 0 && widget.x + widget.w <= 12, `${persona}/${widget.id}: inside twelve columns`)
       assert.ok(widget.w >= 2 && widget.h >= 2, `${persona}/${widget.id}: meets the minimum size`)
     }
+    // No shared layout validator exists, so the half-open check lives here:
+    // rectangles are [x, x + w) by [y, y + h), and abutting edges do not overlap.
+    for (let i = 0; i < widgets.length; i++) {
+      for (let j = i + 1; j < widgets.length; j++) {
+        const a = widgets[i]!
+        const b = widgets[j]!
+        const disjoint = a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y
+        assert.ok(disjoint, `${persona}: ${a.id} overlaps ${b.id}`)
+      }
+    }
   }
 })
