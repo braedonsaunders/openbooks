@@ -75,20 +75,20 @@ test("property workspace shows a restricted caller only their own entity", async
   const fx = await seedFixture();
   try {
     const scopeA = new Set([fx.subA]);
-    const aOnly = await withBypass(() => propertyManagementWorkspace(fx.orgId, scopeA));
+    const aOnly = await propertyManagementWorkspace(fx.orgId, scopeA);
     assert.deepEqual(aOnly.properties.map((row) => String(row.id)), [fx.propA]);
     assert.equal(aOnly.leases.length, 1);
     assert.equal(String(aOnly.leases[0]!.propertyId), fx.propA);
     assert.equal(String(aOnly.leases[0]!.leaseNumber), "L-A-1");
     assert.deepEqual(aOnly.units.map((row) => String(row.code)), ["A-101"]);
     const scopeB = new Set([fx.subB]);
-    const bOnly = await withBypass(() => propertyManagementWorkspace(fx.orgId, scopeB));
+    const bOnly = await propertyManagementWorkspace(fx.orgId, scopeB);
     assert.deepEqual(bOnly.properties.map((row) => String(row.id)), [fx.propB]);
     assert.deepEqual(bOnly.leases, []);
     assert.deepEqual(bOnly.units.map((row) => String(row.code)), ["B-101"]);
-    const all = await withBypass(() => propertyManagementWorkspace(fx.orgId, null));
+    const all = await propertyManagementWorkspace(fx.orgId, null);
     assert.equal(all.properties.length, 2);
-    const none = await withBypass(() => propertyManagementWorkspace(fx.orgId, new Set()));
+    const none = await propertyManagementWorkspace(fx.orgId, new Set());
     assert.deepEqual(none.properties, []);
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId));
@@ -131,7 +131,7 @@ test("property workspace snapshot does not tear across a concurrent rehome", asy
     assert.deepEqual(seen.first, [fx.propA]);
     assert.deepEqual(seen.second, [fx.propA], "the snapshot must not see the concurrent rehome");
     // The move did commit: a fresh scoped read no longer sees the property.
-    const after = await withBypass(() => propertyManagementWorkspace(fx.orgId, scopeA));
+    const after = await propertyManagementWorkspace(fx.orgId, scopeA);
     assert.deepEqual(after.properties, []);
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId));
