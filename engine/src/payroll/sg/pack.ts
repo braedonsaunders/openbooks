@@ -274,9 +274,27 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
   computeStatutory: computeSgStatutory,
   statutoryEngineLabel: "CPF",
   factorLabels: { ...SG_FACTOR_LABELS },
-  // No `emp` facts: the engine reads age band and contribution answers off
-  // the certificate rows, never off bare profile keys.
-  employeeFacts: [],
+  // One `emp` fact: the IR21 cessation hold reads the termination date off
+  // the engine record (see `./cpf.ts`), never off a certificate answer.
+  // Optional — absence is still employed — so this never blocks `payable`.
+  employeeFacts: [
+    {
+      key: "terminated_on",
+      kind: "code",
+      label: "Termination date (ISO)",
+      refusalReason:
+        "Cessation of a non-citizen's employment withholds all monies for IRAS tax clearance; "
+        + "without a termination date the hold cannot tell a final pay from an ordinary one.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "No pack-owned channel carries this yet: the engine record feeds it from the HRM "
+          + "employment, and no SG certificate field or profile-column mapping produces it. "
+          + "Declare the certificate or profile-column producer here when that input is built.",
+      },
+    },
+  ],
   employerFacts: [],
 };
 
