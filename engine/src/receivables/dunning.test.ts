@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db, withBypass, withOrg } from "../platform/db.ts";
 import { daysBetween, isDunnableDocumentKind, renderTemplate, runDunning, runDunningForOrg, selectDueStage, type DunningStage } from "./dunning.ts";
 import { markDunningClaimFailed, markDunningClaimSent } from "../delivery/email-config.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -253,9 +253,17 @@ async function dunningClaim(invoiceId: string): Promise<{ id: string; status: st
 }
 
 async function ageDunningClaim(claimId: string): Promise<void> {
-  await db.execute(sql`
-    update dunning_log set updated_at = now() - interval '24 hours' where id = ${claimId}
-  `);
+  // Crash-gap time travel: backdating updated_at is a staged→staged write,
+  // which dunning_log_guard refuses by design (staged rows are never updated
+  // in place — the runner hops through failed). Like migration 0329's
+  // backfill, the maintenance write runs under the guard's own bypass inside
+  // one transaction; the behavior under test never sees the bypass.
+  await withBypass(async () => {
+    await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
+    await db.execute(sql`
+      update dunning_log set updated_at = now() - interval '24 hours' where id = ${claimId}
+    `);
+  });
 }
 
 test("a fired dunning stage commits its staged claim and its mail deferral together", { skip: !DB }, async () => {
@@ -1093,10 +1101,14 @@ test("an abandoned staged claim is re-armed by name", { skip: !DB }, async () =>
     // The deferred letter's outbox row died without the worker ever settling
     // the claim (crashed drain, exhausted retries): the staged row is older
     // than any outbox retry horizon, so it must not block the rung forever.
-    await db.execute(sql`
-      update dunning_log set updated_at = now() - interval '24 hours'
-       where document_id = ${invoiceId} and stage_id = ${stageId}
-    `);
+    // Same guard's-own-bypass maintenance write as ageDunningClaim below.
+    await withBypass(async () => {
+      await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
+      await db.execute(sql`
+        update dunning_log set updated_at = now() - interval '24 hours'
+         where document_id = ${invoiceId} and stage_id = ${stageId}
+      `);
+    });
     const reaquired = await runDunningForOrg(org.orgId, "2026-07-10");
     assert.equal(reaquired.sent, 1);
 
