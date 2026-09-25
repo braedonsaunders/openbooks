@@ -17,6 +17,7 @@ import { AZ_FACTOR_LABELS } from "./states/az.ts";
 import { CA_FACTOR_LABELS } from "./states/ca.ts";
 import { CO_FACTOR_LABELS } from "./states/co.ts";
 import { CT_FACTOR_LABELS } from "./states/ct.ts";
+import { DC_FACTOR_LABELS } from "./states/dc.ts";
 import { DE_FACTOR_LABELS } from "./states/de.ts";
 import { GA_FACTOR_LABELS } from "./states/ga.ts";
 import { HI_FACTOR_LABELS } from "./states/hi.ts";
@@ -485,6 +486,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     ...CA_FACTOR_LABELS,
     ...CO_FACTOR_LABELS,
     ...CT_FACTOR_LABELS,
+    ...DC_FACTOR_LABELS,
     ...DE_FACTOR_LABELS,
     ...GA_FACTOR_LABELS,
     ...HI_FACTOR_LABELS,

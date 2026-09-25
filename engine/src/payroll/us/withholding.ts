@@ -559,8 +559,17 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       `separately paid or combined supplemental timing is missing for ${levy.label}; record whether this payment was issued with regular wages before calculating — refused by name`,
     );
   }
-  if (levy.withholdingMethod?.kind === "flat_rate") {
-    const rate = levy.withholdingMethod.rates
+  // A declared flat-rate method prices from the declaration when the caller
+  // did not thread the levy's own method through: the published rate is the
+  // same either way, and depending on caller threading leaves declared-but-
+  // implemented levies (Oregon STT) refusing as unwired. Only STT declares
+  // one today, so no other levy's path changes.
+  const levyMethod = levy.withholdingMethod
+    ?? (levy.level === "sub_region" && levy.subRegion
+      ? subRegionLevy("US", levy.region, levy.subRegion)?.withholdingMethod
+      : undefined);
+  if (levyMethod?.kind === "flat_rate") {
+    const rate = levyMethod.rates
       .filter((entry) => entry.effectiveFrom <= input.payDate)
       .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
       .at(-1);

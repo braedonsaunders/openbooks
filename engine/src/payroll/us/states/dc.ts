@@ -385,6 +385,7 @@ export const DC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   DC_TAXABLE: "District of Columbia taxable wages",
   DC_TAX: "District of Columbia tax this period",
   DC_WITHHELD: "District of Columbia tax withheld this period",
+  DC_D4A_NONRESIDENT: "DC Form D-4A nonresident exemption in effect",
 };
 
 export const DC_WITHHOLDING: UsStateWithholdingEngine = {
