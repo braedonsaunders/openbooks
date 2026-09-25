@@ -11,9 +11,9 @@ import { empFact, registerEmployeeFacts, resolveEmployeeFact } from "../employee
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 
-// Required employee facts. The compute path reads twelve `emp[...]` keys;
-  // the four blocking ones (situación, grupo, año, contrato temporal) are
-  // served by the profile columns the `es_datos_perceptor` certificate
+// Required employee facts. The compute path reads eighteen `emp[...]`
+  // keys; the four blocking ones (situación, grupo, año, contrato temporal)
+  // are served by the profile columns the `es_datos_perceptor` certificate
   // fields map (situación, grupo and año since 0191; contrato temporal
   // since 0406) — kept apart from the Modelo 145, whose situación familiar
   // (art. 81 RIRPF) is a FAMILY status, not the labour status SITUPER
@@ -22,7 +22,10 @@ import { PayrollPackError } from "../payroll-error.ts";
   // and its monthly hours) stay unbuilt: no profile column or certificate
   // field collects any of them yet. The twelfth (residencia fiscal)
   // resolves through the stored-certificate channel, like the US federal
-  // alien-status fact.
+  // alien-status fact. The thirteenth (régimen general/hogar, absent is
+  // general) selects the contribution table; the five hogar-only facts
+  // after it refuse by name when a household payroll needs them and never
+  // block General-Regime payroll.
   //
   // OPEN, still: which AEAT/TGSS artefact the operator copies each value
   // off (contrato, alta en Seguridad Social, otro) — and, shared with PL,
@@ -205,6 +208,93 @@ import { PayrollPackError } from "../payroll-error.ts";
       // US federal alien-status fact).
       required: false,
       producer: { kind: "certificate", certificate: "es_residencia_fiscal", field: "residencia" },
+    },
+    {
+      key: "es_regimen",
+      kind: "choice",
+      choices: ["general", "hogar"],
+      label: "Régimen de Seguridad Social",
+      refusalReason:
+        "A declared special system prices its own transcribed table; anything else refuses by name.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "No channel exists yet: absent is the General Regime, so this fact does not block `payable`. "
+          + "When the régimen input is built (same form as the profile-column facts above), declare the "
+          + "certificate or profile-column producer here.",
+      },
+    },
+    {
+      key: "es_hogar_retribucion_mensual",
+      kind: "amount",
+      label: "Retribución mensual hogar (con prorrata de extras)",
+      refusalReason:
+        "The household band prices the monthly retribution including proportional extra pays (art. 147.1 LGSS).",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Hogar-only input: required when es_regimen is hogar (named refusal when missing), ignored "
+          + "otherwise, so it never blocks General-Regime payroll.",
+      },
+    },
+    {
+      key: "es_hogar_horas_mes",
+      kind: "count",
+      label: "Horas mensuales pactadas (hogar)",
+      refusalReason:
+        "The art. 15.2 SMI floor scales to agreed monthly hours.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Hogar-only input: required when es_regimen is hogar (named refusal when missing), ignored "
+          + "otherwise, so it never blocks General-Regime payroll.",
+      },
+    },
+    {
+      key: "es_hogar_retribucion_por_horas",
+      kind: "flag",
+      label: "Retribución pactada por horas todo incluido (hogar)",
+      refusalReason:
+        "Only a present-but-foreign value refuses; absent counts as monthly pay (art. 15.2(d)).",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Hogar-only input: absent is accepted as monthly pay, so it never blocks `payable`.",
+      },
+    },
+    {
+      key: "es_hogar_beneficio_cc",
+      kind: "choice",
+      choices: ["alta_20", "familia_numerosa_45", "ninguno"],
+      label: "Beneficio en la cuota empresarial CC (hogar)",
+      refusalReason:
+        "The employer CC quota needs its benefit: 20% alta reduction, 45% single large-family caregiver "
+        + "(not cumulative), or none.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Hogar-only input: required when es_regimen is hogar (named refusal when missing), ignored "
+          + "otherwise, so it never blocks General-Regime payroll.",
+      },
+    },
+    {
+      key: "es_hogar_at_ep_rate",
+      kind: "amount",
+      label: "Tipo AT/EP hogar (tarifa de primas)",
+      refusalReason:
+        "Professional-contingency premiums are activity-rated and tenant-entered, never transcribed.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Hogar-only input: the TGSS-assigned tarifa rate (percent) for the household activity, "
+          + "required when es_regimen is hogar (named refusal when missing), ignored otherwise.",
+      },
     },
 ];
 

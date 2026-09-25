@@ -20,12 +20,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateEsIrpf2026, escalaIrpf2026 } from "./irpf-2026.ts";
+import { calculateEsHogar2026 } from "./seguridad-social-hogar-2026.ts";
 import { calculateEsSeguridadSocial2026 } from "./seguridad-social-2026.ts";
 
 // --- Mechanism 1: the agency's own outputs --------------------------------
 // "Para una base de 24.000,00: Hasta 20.200,00: 4.225,50 / Resto:
 // 24.000,00 – 20.200,00 = 3.800,00: 3.800,00* 0,30 = 1.140,00 / CUOTA 1=
 // 4.225,50 + 1.140, 00 = 5.365,50" (ALGORITMO p.30).
+// --- Sistema Especial Hogar: 450,00 at 40 h/mes prices tramo 2 (base
+// 436,00; the SMI floor band ties, never undercuts). Rates per the module
+// doc; cross-checks OCU's published 2026 hogar table: employee 27,90,
+// employer 97,10.
+test("hogar tramo 2: 450,00 alta_20 → base 436,00 fully priced", () => {
+  const r = calculateEsHogar2026({
+    retribucionMensual: "450.00",
+    horasMes: 40,
+    retribucionPorHoras: false,
+    contratoTemporal: false,
+    beneficioCc: "alta_20",
+    atEpRate: "1.50",
+  });
+  assert.equal(r.base, "436.0000");
+  assert.equal(r.ccTrabajador, "20.4900");
+  assert.equal(r.ccEmpresa, "82.3200");
+  assert.equal(r.desempleoTrabajador, "6.7600");
+  assert.equal(r.desempleoEmpresa, "4.8000");
+  assert.equal(r.fogasaEmpresa, "0.1700");
+  assert.equal(r.meiTrabajador, "0.6500");
+  assert.equal(r.meiEmpresa, "3.2700");
+  assert.equal(r.atEpEmpresa, "6.5400");
+  assert.equal(r.trabajadorTotal, "27.9000");
+  assert.equal(r.empresaTotal, "97.1000");
+});
+
 test("agency CUOTA1 example: base 24.000 → 5.365,50", () => {
   assert.equal(escalaIrpf2026("24000"), "5365.5000");
 });

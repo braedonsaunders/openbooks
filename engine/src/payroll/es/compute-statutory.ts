@@ -9,6 +9,8 @@
  * Pack-owned emp keys (named refusals when absent, never defaulted into a
  * lower withholding): es_grupo_cotizacion (1–11), es_situacion_laboral
  * (activo/pensionista/desempleado), es_ano_nacimiento (AÑOPER).
+ * es_regimen (general/hogar, absent is general) selects the General
+ * Regime bands or the Sistema Especial de Empleados de Hogar table.
  * The es_145 certificate carries situacion_familiar plus hijos/ascendientes
  * counts and a discapacidad flag: counts above zero or a set flag refuse by
  * name here, because the per-person rows (birth years, enteros, grados,
@@ -27,10 +29,11 @@ import "./employer-facts.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { requireEsFiscalResidence } from "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
-import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import type { PayrollStatutoryComputeContext, PushStatutoryFn } from "../statutory-context.ts";
 import { calculateEsIrpf2026, type EsContrato } from "./irpf-2026.ts";
 import type { EsSituacionFamiliar } from "./rates.ts";
 import { calculateEsSeguridadSocial2026 } from "./seguridad-social-2026.ts";
+import { calculateEsHogar2026 } from "./seguridad-social-hogar-2026.ts";
 
 const U = (s: string): bigint => toUnits(s);
 const D = (u: bigint): string => fromUnits(u);
@@ -132,6 +135,111 @@ export const ES_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ES_SS_ER: "Seguridad Social (empresa)",
   ES_EDITION: "Edition priced",
 };
+
+/**
+ * The hogar branch: reads the five household facts (named refusal for each
+ * missing one), prices the Sistema Especial table, and runs household IRPF
+ * through the general tipo on the month's pay. No grupo, no formación.
+ */
+function computeHogarStatutory(args: {
+  emp: Record<string, string | null>;
+  payDate: string;
+  situacion: string;
+  situacionLaboral: string;
+  ano: number;
+  temporal: string | null | undefined;
+  periodPay: bigint;
+  income: string;
+  nonPeriodic: string;
+  pushStatutory: PushStatutoryFn;
+}): Record<string, string> {
+  const { emp, payDate, situacion, situacionLaboral, ano, temporal } = args;
+  const { periodPay, income, nonPeriodic, pushStatutory } = args;
+  const retribucion = empFact("ES", emp, "es_hogar_retribucion_mensual");
+  if (retribucion == null || retribucion === "") {
+    fail(
+      "employee es_hogar_retribucion_mensual is missing: the household band prices the monthly "
+      + "retribution including proportional extra pays (art. 147.1 LGSS)",
+    );
+  }
+  const horasRaw = empFact("ES", emp, "es_hogar_horas_mes");
+  if (horasRaw == null || horasRaw === "") {
+    fail(
+      "employee es_hogar_horas_mes is missing: the art. 15.2 SMI floor scales to agreed monthly hours",
+    );
+  }
+  const horasMes = Number(horasRaw);
+  if (!Number.isInteger(horasMes) || horasMes < 1 || horasMes > 744) {
+    fail(`employee es_hogar_horas_mes "${horasRaw}" is not an integer 1–744`);
+  }
+  const porHorasRaw = empFact("ES", emp, "es_hogar_retribucion_por_horas");
+  if (porHorasRaw !== undefined && porHorasRaw !== null && porHorasRaw !== "" && porHorasRaw !== "true" && porHorasRaw !== "false") {
+    fail(`employee es_hogar_retribucion_por_horas "${porHorasRaw}" is not "true"/"false"`);
+  }
+  const beneficioRaw = empFact("ES", emp, "es_hogar_beneficio_cc");
+  if (beneficioRaw !== "alta_20" && beneficioRaw !== "familia_numerosa_45" && beneficioRaw !== "ninguno") {
+    fail(
+      `employee es_hogar_beneficio_cc "${beneficioRaw ?? ""}" is not alta_20/familia_numerosa_45/ninguno: `
+      + "the employer CC quota needs its benefit (20% alta reduction, 45% single large-family caregiver, or none)",
+    );
+  }
+  const atEpRate = empFact("ES", emp, "es_hogar_at_ep_rate");
+  if (atEpRate == null || atEpRate === "") {
+    fail(
+      "employee es_hogar_at_ep_rate is missing: professional-contingency premiums are activity-rated "
+      + "and tenant-entered — enter the TGSS-assigned tarifa rate",
+    );
+  }
+
+  // fail() above returns never, but empFact types string — the guard cannot
+  // narrow it, so the validated literal is re-stated (same shape as the
+  // situacion_familiar cast in the General Regime path).
+  const beneficioCc = beneficioRaw as "alta_20" | "familia_numerosa_45" | "ninguno";
+  const ss = calculateEsHogar2026({
+    retribucionMensual: retribucion,
+    horasMes,
+    retribucionPorHoras: porHorasRaw === "true",
+    contratoTemporal: temporal === "true",
+    beneficioCc,
+    atEpRate,
+  });
+
+  // Household IRPF follows the general tipo; COTIZACIONES annualise the
+  // household employee share (mid-year changes take the regularización
+  // path, refused by name like the General Regime).
+  const cotizacionesAnual = D(U(ss.trabajadorTotal) * 12n);
+  const retribAnual = D(dec(income, "income") * 12n + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic"));
+  const irpf = calculateEsIrpf2026({
+    payDate,
+    retribuciones: retribAnual,
+    cotizaciones: cotizacionesAnual,
+    situacionFamiliar: situacion as EsSituacionFamiliar,
+    birthYear: ano,
+    pensionista: situacionLaboral === "pensionista",
+    desempleado: situacionLaboral === "desempleado",
+  });
+  const [tipoEntero = "0", tipoDec = "00"] = irpf.tipo.split(".");
+  const tipoHundredths = BigInt(tipoEntero) * 100n + BigInt(tipoDec.padEnd(2, "0").slice(0, 2));
+  const irpfMes = roundDiv(periodPay * tipoHundredths, 10000n * 100n) * 100n;
+
+  pushStatutory("irpf", "deduction", "IRPF withholding", D(irpfMes), 110);
+  pushStatutory("ss_cc", "deduction", "Seguridad Social (employee)", ss.ccTrabajador, 120);
+  pushStatutory("ss_des", "deduction", "Desempleo (employee)", ss.desempleoTrabajador, 121);
+  pushStatutory("ss_mei", "deduction", "MEI (employee)", ss.meiTrabajador, 123);
+  pushStatutory("ss_cc_er", "employer_contribution", "Seguridad Social (employer)", ss.ccEmpresa, 210);
+  pushStatutory("ss_des_er", "employer_contribution", "Desempleo (employer)", ss.desempleoEmpresa, 211);
+  pushStatutory("ss_fogasa_er", "employer_contribution", "FOGASA (employer)", ss.fogasaEmpresa, 212);
+  pushStatutory("ss_mei_er", "employer_contribution", "MEI (employer)", ss.meiEmpresa, 214);
+  pushStatutory("ss_atep_er", "employer_contribution", "AT/EP hogar (employer)", ss.atEpEmpresa, 215);
+  return {
+    ES_TIPO_IRPF: irpf.tipo,
+    ES_IMPORTE_ANUAL: irpf.importeAnual,
+    ES_IRPF_MES: D(irpfMes),
+    ES_SS_EE: ss.trabajadorTotal,
+    ES_SS_ER: ss.empresaTotal,
+    ES_EDITION: irpf.edition,
+  };
+}
 
 export async function computeEsStatutory(
   ctx: PayrollStatutoryComputeContext,
@@ -248,13 +356,28 @@ export async function computeEsStatutory(
       + "SITUPER moves gastos and REDU, so it is never defaulted",
     );
   }
-  const grupoRaw = empFact("ES", emp, "es_grupo_cotizacion");
-  if (grupoRaw == null || grupoRaw === "") {
-    fail("employee es_grupo_cotizacion is missing: the TGSS contribution group 1–11 was never supplied");
+  // The régimen selects the contribution table before any group is read:
+  // household employment has no grupo 1–11. Absence is the General Regime —
+  // every existing profile predates the régimen input.
+  const regimenRaw = empFact("ES", emp, "es_regimen");
+  const regimen = regimenRaw == null || regimenRaw === "" ? "general" : regimenRaw;
+  if (regimen !== "general" && regimen !== "hogar") {
+    fail(
+      `employee es_regimen "${regimenRaw}" is not general/hogar: only the General Regime bands and `
+      + "the Sistema Especial de Empleados de Hogar table are transcribed",
+    );
   }
-  const grupo = Number(grupoRaw);
-  if (!Number.isInteger(grupo) || grupo < 1 || grupo > 11) {
-    fail(`employee es_grupo_cotizacion "${grupoRaw}" is not an integer 1–11`);
+  const esHogar = regimen === "hogar";
+  let grupo = 0;
+  if (!esHogar) {
+    const grupoRaw = empFact("ES", emp, "es_grupo_cotizacion");
+    if (grupoRaw == null || grupoRaw === "") {
+      fail("employee es_grupo_cotizacion is missing: the TGSS contribution group 1–11 was never supplied");
+    }
+    grupo = Number(grupoRaw);
+    if (!Number.isInteger(grupo) || grupo < 1 || grupo > 11) {
+      fail(`employee es_grupo_cotizacion "${grupoRaw}" is not an integer 1–11`);
+    }
   }
   const anoRaw = empFact("ES", emp, "es_ano_nacimiento");
   if (anoRaw == null || anoRaw === "") {
@@ -401,6 +524,16 @@ export async function computeEsStatutory(
   }
   const currentOrdinaryGross = D(currentGross - nonPeriodicUnits);
   await refuseIfPriorPayChanged(ctx, payDate, currentOrdinaryGross);
+
+  // Sistema Especial de Empleados de Hogar: monthly retribution (with
+  // proportional extras) selects the tramo, the SMI floor guards it, and
+  // household IRPF follows the general tipo on the month's pay.
+  if (esHogar) {
+    return computeHogarStatutory({
+      emp, payDate, situacion, situacionLaboral, ano, temporal,
+      periodPay, income, nonPeriodic, pushStatutory,
+    });
+  }
 
   // Monthly SS on the period bases; the employee share annualised feeds IRPF
   // COTIZACIONES (exact when the base holds all year; mid-year changes take
