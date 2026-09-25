@@ -91,6 +91,19 @@ test("OK blank OK-W-4 withholds as single with zero allowances", () => {
   assert.equal(empty.factors.OK_ALLOWANCE, money("0"));
 });
 
+test("Oklahoma nonresident withholding uses only Oklahoma-source wages", () => {
+  // Packet OW-2, semimonthly married/2 on $1,600 of Oklahoma-source wages: $27.
+  const result = OK_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "4000.00", basis: "nonresident",
+    certificate: cert({ filing_status: "married", allowances: "2" }),
+    wageAllocations: [{
+      region: "OK", subRegion: null, workShare: "0.4", source: "adequate_records",
+      sourceWagesCurrentPeriod: "1600.00",
+    }],
+  });
+  assert.equal(result.tax, money("27"));
+});
+
 test("OK extra withholding is added, exempt is zero, and an unpublished period is refused", () => {
   assert.equal(OK_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00",
