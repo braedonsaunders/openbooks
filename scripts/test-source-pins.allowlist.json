@@ -5,7 +5,7 @@
     "engine/src/inventory/costing.test.ts": 2,
     "engine/src/ledger/ledger-history-reporting.test.ts": 2,
     "engine/src/payroll/tax-year-scaffold.test.ts": 3,
-    "engine/src/projects/field-ticket-labor-evidence.test.ts": 3,
+    "engine/src/projects/field-ticket-labor-evidence.test.ts": 2,
     "engine/src/projects/types.test.ts": 3,
     "engine/src/provisioning/bootstrap-safety.test.ts": 3,
     "engine/src/receivables/dunning.test.ts": 2,
