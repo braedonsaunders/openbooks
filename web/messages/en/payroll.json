@@ -1633,6 +1633,12 @@
     "standingUnanswered": "Unanswered. This is a standing employment fact — answer it once and later periods stop asking.",
     "currentlyAnswered": "Currently answered: {answer}. Re-answer to correct it.",
     "paidOnCommission": "Paid on commission",
+    "employmentClassTitle": "employment-class status",
+    "employmentClass": "Employment class",
+    "employmentClassOptions": {
+      "route_salesperson": "Route salesperson",
+      "elect_to_work": "Elect-to-work contracts"
+    },
     "choose": "Choose…",
     "no": "No",
     "yesWholePart": "Yes, in whole or in part",

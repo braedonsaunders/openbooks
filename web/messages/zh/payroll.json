@@ -1633,6 +1633,12 @@
     "standingUnanswered": "尚未回答。这是持续有效的雇佣信息；回答一次后，后续期间不会再询问。",
     "currentlyAnswered": "当前回答：{answer}。如需更正，请重新回答。",
     "paidOnCommission": "按佣金支付",
+    "employmentClassTitle": "就业类别状态",
+    "employmentClass": "就业类别",
+    "employmentClassOptions": {
+      "route_salesperson": "路线销售员",
+      "elect_to_work": "自愿工作合同"
+    },
     "choose": "请选择…",
     "no": "否",
     "yesWholePart": "是，全部或部分",

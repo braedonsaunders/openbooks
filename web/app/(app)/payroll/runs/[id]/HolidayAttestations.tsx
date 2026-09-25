@@ -8,17 +8,17 @@ import { useTranslations } from 'next-intl'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
- * Inline attestation controls for statutory-holiday exceptions (migration
- * 0181). The calculation refuses BY NAME wherever a declaring rule's fact is
- * missing — commission-pay status, the last-and-first-shift absence
- * assertion — and neither fact is inferable from a timesheet, so the refusal
- * is correct and the remedy is an explicit answer filed HERE, on the row
- * that names what is missing.
+ * Inline attestation controls for statutory-holiday exceptions (migrations
+ * 0181, 0409). The calculation refuses BY NAME wherever a declaring rule's
+ * fact is missing — commission-pay status, employment class, the
+ * last-and-first-shift absence assertion — and no fact is inferable from a
+ * timesheet, so the refusal is correct and the remedy is an explicit answer
+ * filed HERE, on the row that names what is missing.
  *
  * Two different kinds of fact, two different homes:
- * - commission status is a STANDING employment attribute: answering it on
- *   the exception row writes the employee's payroll profile once, and later
- *   periods stop asking.
+ * - commission status and employment class are STANDING employment
+ *   attributes: answering either on the exception row writes the employee's
+ *   payroll profile once, and later periods stop asking.
  * - the absence assertion is PER (run, holiday): answering it files a row
  *   scoped to this run and this holiday occurrence, so a later period never
  *   inherits it.
@@ -39,7 +39,13 @@ export interface AttestationError {
   employeePartyId?: string
   holidayKey?: string
   holidayDate?: string
-  neededFact?: 'paidOnCommission' | 'absentWithoutConsent' | 'entitledDayAssessment'
+  neededFact?: 'paidOnCommission' | 'absentWithoutConsent' | 'entitledDayAssessment' | 'occupationClass'
+}
+
+interface OccupationClassOption {
+  classKey: string
+  label: string
+  citation: string
 }
 
 interface DemandingHoliday {
@@ -49,6 +55,7 @@ interface DemandingHoliday {
   needsCommissionStatus: boolean
   needsAbsenceAssertion: boolean
   needsEntitlementDayAssessment: boolean
+  needsOccupationClass: boolean
   evidencedDayCount?: number
   attestedDayCount?: number
 }
@@ -57,18 +64,21 @@ interface AttestationEmployee {
   employeePartyId: string
   name: string
   paidOnCommission: boolean | null
+  occupationClass: string | null
+  occupationClasses: OccupationClassOption[]
   assertions: { holidayKey: string; holidayDate: string; absentWithoutConsent: boolean }[]
   demanding: DemandingHoliday[]
 }
 
-type NeededFact = 'paidOnCommission' | 'absentWithoutConsent' | 'entitledDayAssessment' | null
+type NeededFact = 'paidOnCommission' | 'absentWithoutConsent' | 'entitledDayAssessment' | 'occupationClass' | null
 
 function classifyError(error: AttestationError): NeededFact {
   if (error.neededFact === 'paidOnCommission' || error.neededFact === 'absentWithoutConsent'
-      || error.neededFact === 'entitledDayAssessment') {
+      || error.neededFact === 'entitledDayAssessment' || error.neededFact === 'occupationClass') {
     return error.neededFact
   }
   if (/commission-pay status/.test(error.message)) return 'paidOnCommission'
+  if (/occupation class is not recorded/.test(error.message)) return 'occupationClass'
   if (/last-and-first-shift/.test(error.message)) return 'absentWithoutConsent'
   if (/entitlement-day evidence is complete/.test(error.message)) return 'entitledDayAssessment'
   return null
@@ -208,8 +218,19 @@ function AttestationRow(props: {
   const t = useTranslations('payroll.holidayAttestations')
   const { error, needed, attested, busy, onFile } = props
   const [commission, setCommission] = useState('')
+  const [employment, setEmployment] = useState('')
   const [absence, setAbsence] = useState<Record<string, string>>({})
   const [complete, setComplete] = useState<Record<string, string>>({})
+  // Pack-declared English reads as written where no locale key exists — the
+  // same arrangement the profile editor uses for pack data.
+  const classLabel = (classKey: string, fallback: string): string => {
+    const key = `employmentClassOptions.${classKey}`
+    try {
+      return t.has(key as never) ? (t(key as never) as unknown as string) : fallback
+    } catch {
+      return fallback
+    }
+  }
 
   if (needed === 'paidOnCommission') {
     const standing = attested.paidOnCommission
@@ -242,6 +263,57 @@ function AttestationRow(props: {
             onClick={() => void onFile({
               employeePartyId: attested.employeePartyId,
               paidOnCommission: commission === 'true',
+            })}
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+            {t('saveRecalculate')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (needed === 'occupationClass') {
+    const standing = attested.occupationClass
+    const options = attested.occupationClasses ?? []
+    // A stored answer the jurisdiction no longer offers stays answerable:
+    // hiding the control would strand it with no way to clear it.
+    const offered = standing && !options.some((option) => option.classKey === standing)
+      ? [...options, { classKey: standing, label: standing, citation: '' }]
+      : options
+    if (offered.length === 0) return null
+    return (
+      <div className="rounded-lg bg-white/70 px-3 py-2.5 dark:bg-slate-900/60">
+        <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+          {error.employee}: {t('employmentClassTitle')}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {standing === null
+            ? t('standingUnanswered')
+            : t('currentlyAnswered', { answer: classLabel(standing, standing) })}
+        </p>
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <div>
+            <Label htmlFor={`att-empclass-${attested.employeePartyId}`}>{t('employmentClass')}</Label>
+            <Select
+              id={`att-empclass-${attested.employeePartyId}`}
+              value={employment}
+              onChange={(e) => setEmployment(e.target.value)}
+            >
+              <option value="">{t('choose')}</option>
+              {offered.map((option) => (
+                <option key={option.classKey} value={option.classKey} title={option.citation}>
+                  {classLabel(option.classKey, option.label)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Button
+            size="sm"
+            disabled={busy || employment === ''}
+            onClick={() => void onFile({
+              employeePartyId: attested.employeePartyId,
+              occupationClass: employment,
             })}
           >
             {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}

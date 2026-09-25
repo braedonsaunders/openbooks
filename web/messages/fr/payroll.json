@@ -1633,6 +1633,12 @@
     "standingUnanswered": "Sans réponse. Il s’agit d’une donnée permanente sur l’emploi : répondez une fois pour ne plus être interrogé lors des périodes suivantes.",
     "currentlyAnswered": "Réponse actuelle : {answer}. Répondez de nouveau pour la corriger.",
     "paidOnCommission": "Rémunération à la commission",
+    "employmentClassTitle": "situation de la catégorie d'emploi",
+    "employmentClass": "Catégorie d'emploi",
+    "employmentClassOptions": {
+      "route_salesperson": "Vendeur itinérant",
+      "elect_to_work": "Contrats de travail facultatifs"
+    },
     "choose": "Choisir…",
     "no": "Non",
     "yesWholePart": "Oui, en tout ou en partie",

@@ -1633,6 +1633,12 @@
     "standingUnanswered": "未回答です。これは雇用に関する継続的な情報です。一度回答すると、以後の期間では再度確認されません。",
     "currentlyAnswered": "現在の回答：{answer}。修正するには再回答してください。",
     "paidOnCommission": "歩合給を受け取っている",
+    "employmentClassTitle": "雇用区分の状況",
+    "employmentClass": "雇用区分",
+    "employmentClassOptions": {
+      "route_salesperson": "ルートセールス",
+      "elect_to_work": "就労選択契約"
+    },
     "choose": "選択…",
     "no": "いいえ",
     "yesWholePart": "はい（全額または一部）",

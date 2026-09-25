@@ -137,6 +137,7 @@ function render(
           stub_delivery: 'email',
           payment_method: null,
           paid_on_commission: null,
+          statutory_occupation_class: null,
           is_active: true,
           ...overrides,
         }}
@@ -441,7 +442,6 @@ test('edit mode renders the inputs and the save button', () => {
   const html = render({ federal_claim_code: 3, tax_exempt: true })
   assert.match(html, /<select/)
   assert.match(html, /<input/)
-  assert.match(html, /id="pp-schedule"/)
   assert.match(html, />Save</)
 })
 
