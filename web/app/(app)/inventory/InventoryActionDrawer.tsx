@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { useBusinessToday } from '@/components/business-date-provider'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 
 interface ItemOpt { id: string; code?: string | null; name?: string | null }
 interface LocOpt { id: string; code?: string | null }
@@ -79,6 +80,12 @@ export function InventoryActionDrawer({
   const quantityLabel =
     action === 'landed' ? t('drawer.amount') : action === 'adjust' ? t('drawer.quantityDelta') : t('labels.quantity')
   const offsetLabel = action === 'landed' ? t('drawer.freightAccount') : t('drawer.offsetAccount')
+  const closeGuard = useDirtyClose({
+    dirty: action !== 'receive' || itemId !== '' || stockLocationId !== '' || toStockLocationId !== '' ||
+      quantity !== '' || unitCost !== '' || offsetAccountId !== '' || basis !== 'value' || memo !== '',
+    busy, onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   async function submit() {
     if (!itemId || !stockLocationId || !quantity) {
@@ -154,6 +161,7 @@ export function InventoryActionDrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
+      beforeClose={closeGuard.beforeClose}
       size="lg"
       title={t('drawer.title')}
       headerActions={
@@ -170,7 +178,7 @@ export function InventoryActionDrawer({
         ) : null}
         <div className={field}>
           <Label>{t('drawer.action')}</Label>
-          <Select value={action} onChange={(e) => setAction(e.target.value as Action)}>
+          <Select value={action} disabled={busy} onChange={(e) => setAction(e.target.value as Action)}>
             {ACTIONS.map((a) => (
               <option key={a} value={a}>
                 {t(`drawer.actions.${a}`)}
@@ -184,6 +192,7 @@ export function InventoryActionDrawer({
           <div className={field}>
             <Label>{itemLabel}<span className="text-red-500"> *</span></Label>
             <SearchSelect
+              disabled={busy}
               value={itemId}
               onChange={setItemId}
               options={itemOptions}
@@ -195,6 +204,7 @@ export function InventoryActionDrawer({
           <div className={field}>
             <Label>{action === 'transfer' ? t('drawer.fromLocation') : t('labels.location')}<span className="text-red-500"> *</span></Label>
             <SearchSelect
+              disabled={busy}
               value={stockLocationId}
               onChange={setStockLocationId}
               options={locOptions}
@@ -218,6 +228,7 @@ export function InventoryActionDrawer({
             <div className={field}>
               <Label>{t('drawer.toLocation')}<span className="text-red-500"> *</span></Label>
               <SearchSelect
+                disabled={busy}
                 value={toStockLocationId}
                 onChange={setToStockLocationId}
                 options={locOptions.filter((o) => o.value !== stockLocationId)}
@@ -232,12 +243,12 @@ export function InventoryActionDrawer({
               {quantityLabel}
               <span className="text-red-500"> *</span>
             </Label>
-            <Input inputMode="decimal" className="text-right tabular-nums" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+            <Input disabled={busy} inputMode="decimal" className="text-right tabular-nums" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
           </div>
           {action === 'landed' ? (
             <div className={field}>
               <Label>{t('drawer.basis')}</Label>
-              <Select value={basis} onChange={(e) => setBasis(e.target.value)}>
+              <Select value={basis} disabled={busy} onChange={(e) => setBasis(e.target.value)}>
                 {BASES.map((b) => (
                   <option key={b} value={b}>
                     {t(`drawer.bases.${b}`)}
@@ -252,13 +263,14 @@ export function InventoryActionDrawer({
                 {t('labels.unitCost')}
                 {needsCost ? <span className="text-red-500"> *</span> : null}
               </Label>
-              <Input inputMode="decimal" className="text-right tabular-nums" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
+              <Input disabled={busy} inputMode="decimal" className="text-right tabular-nums" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} />
             </div>
           ) : null}
           {needsOffset ? (
             <div className={`${field} sm:col-span-2`}>
               <Label>{offsetLabel}<span className="text-red-500"> *</span></Label>
               <SearchSelect
+                disabled={busy}
                 value={offsetAccountId}
                 onChange={setOffsetAccountId}
                 options={accountOptions}
@@ -273,7 +285,7 @@ export function InventoryActionDrawer({
           ) : null}
           <div className={`${field} sm:col-span-2`}>
             <Label>{tCommon('labels.memo')}</Label>
-            <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('drawer.memoPlaceholder')} />
+            <Input disabled={busy} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('drawer.memoPlaceholder')} />
           </div>
         </div>
       </div>

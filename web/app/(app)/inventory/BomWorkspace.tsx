@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { Button, Label, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
@@ -126,6 +127,16 @@ function BomDrawer({
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const initialLines = assembly?.components.map((line) => ({
+    componentItemId: line.componentItemId,
+    quantityPer: line.quantityPer,
+  })) ?? [{ componentItemId: '', quantityPer: '' }]
+  const closeGuard = useDirtyClose({
+    dirty: assemblyItemId !== (assembly?.assemblyItemId ?? '') ||
+      JSON.stringify(lines) !== JSON.stringify(initialLines) || reason !== '',
+    busy, onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   const usedAssemblies = new Set(assemblies.map((candidate) => candidate.assemblyItemId))
   const assemblyOptions = items
@@ -207,6 +218,7 @@ function BomDrawer({
     <UrlDrawer
       open
       closeHref="/inventory?inventoryView=bom"
+      beforeClose={closeGuard.beforeClose}
       size="2xl"
       title={tSetup('entities.bom-components.title')}
       description={tSetup('entities.bom-components.description')}
@@ -228,7 +240,7 @@ function BomDrawer({
             value={assemblyItemId}
             onChange={setAssemblyItemId}
             options={assemblyOptions}
-            disabled={!creating}
+            disabled={busy || !creating}
             placeholder={tSetup('fields.assemblyItemId')}
             sheetTitle={tSetup('fields.assemblyItemId')}
             ariaLabel={tSetup('fields.assemblyItemId')}
@@ -238,11 +250,13 @@ function BomDrawer({
           columns={lineColumns}
           rows={lines}
           onRowsChange={setLines}
+          readOnly={busy}
           emptyRow={() => ({ componentItemId: '', quantityPer: '' })}
         />
         <div className="space-y-1.5">
           <Label>{tCommon('amendment.reason')} <span className="text-red-500">*</span></Label>
           <Textarea
+            disabled={busy}
             value={reason}
             onChange={(event) => {
               setReason(event.target.value)
