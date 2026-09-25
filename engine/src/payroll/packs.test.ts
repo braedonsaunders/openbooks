@@ -188,8 +188,8 @@ test("the register social-insurance key set derives from the pack declarations",
   // pack's employee social insurance is present, and nothing that is not
   // withheld from the employee is.
   assert.deepEqual(employeeSocialInsuranceSystemKeys(), [
-    "arrco", "av", "ceg", "cet", "child_support", "co_famli_employee",
-    "cpf_ee", "cpp", "cpp2", "crds", "csg", "ct_pl_employee", "ei",
+    "ae_employee", "apec", "arrco", "av", "ca_sdi_employee", "ceg", "cet",
+    "child_support", "co_famli_employee", "cpf_ee", "cpp", "cpp2", "crds", "csg", "ct_pl_employee", "ei",
     "health", "inps", "inss", "irnr", "kv", "medicare", "medicare_addl",
     "mn_paid_leave_employee", "nic", "or_statewide_transit_tax",
     "pa_uc_employee", "pension", "postgraduate_loan", "prsi", "pv",
