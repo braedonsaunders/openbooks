@@ -64,26 +64,32 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
       "BR/br_fap",
       "BR/br_rat",
       "BR/br_terceiros",
+      "CA/ca_eht",
       "CA/ca_hsf",
       "DE/de_kvz",
       "FR/fr_atmp",
       "IT/it_addizionale_comunale",
       "IT/it_addizionale_regionale",
       "JP/jp_health_rate",
+      "PL/pl_wypadkowe",
       "US/us_ca_ett",
       "US/us_mi_city",
+      "US/us_mn_pl",
+      "US/us_mn_ple",
       "US/us_oh_municipal",
+      "US/us_or_ltd",
+      "US/us_or_trimet",
       "US/us_pa_local_eit",
       "US/us_sui",
     ],
   );
   assert.deepEqual(
     [...answers.entries()].filter(([, answer]) => answer === "zero").map(([key]) => key).sort(),
-    ["CA/ca_eht", "GB/gb_employment_allowance", "US/us_futa"],
+    ["FR/fr_allocfam", "GB/gb_employment_allowance", "US/us_futa", "US/us_pa_lst", "US/us_vt_ccce"],
   );
   assert.deepEqual(
     [...answers.entries()].filter(([, answer]) => answer === "legacy").map(([key]) => key).sort(),
-    ["AU/au_workers_comp", "FR/fr_versement_mobilite", "PL/pl_wypadkowe"],
+    ["AU/au_workers_comp", "FR/fr_versement_mobilite"],
   );
 });
 
@@ -150,7 +156,7 @@ test("a resolving SUI rate computes — no refusal", () => {
   );
 });
 
-test("QC HSF unconfigured refuses; ON never evaluates it", () => {
+test("QC HSF unconfigured refuses; ON refuses on its own EHT instead", () => {
   const resolution = buildResolution({
     country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [], legacy: [],
   });
@@ -160,21 +166,26 @@ test("QC HSF unconfigured refuses; ON never evaluates it", () => {
     ),
     /Jean Tremblay: no Health services fund is configured for QC in 2026 — nothing is being accrued for it/,
   );
-  assert.doesNotThrow(() =>
-    assertConfiguredStatutoryRates(
+  // ON's own levy is the EHT now (refuse per I6-payroll-235), so bare-ON names it.
+  assert.throws(
+    () => assertConfiguredStatutoryRates(
       resolution, { region: "ON", filingAccountId: null }, "Ontario Worker",
     ),
+    /Ontario Worker: no Employer health tax is configured for ON in 2026/,
   );
 });
 
-test("EHT in Ontario unconfigured is legitimate zero — no refusal", () => {
+test("EHT in Ontario unconfigured refuses — unknown liability, not zero", () => {
+  // I6-payroll-235, RSO 1990 c E.11: the rate turns on the employer's own
+  // Ontario remuneration, which no pack can know — explicit zero excepted.
   const resolution = buildResolution({
     country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [], legacy: [],
   });
-  assert.doesNotThrow(() =>
-    assertConfiguredStatutoryRates(
+  assert.throws(
+    () => assertConfiguredStatutoryRates(
       resolution, { region: "ON", filingAccountId: null }, "Ontario Worker",
     ),
+    /Ontario Worker: no Employer health tax is configured for ON in 2026 — nothing is being accrued for it/,
   );
 });
 
