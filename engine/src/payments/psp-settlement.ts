@@ -1408,8 +1408,15 @@ export async function postSettlementBatch(
 
     // Every journal write routes through the ONE ledger API.
     const entryId = randomUUID();
-    const entryNumber =
-      `PSP-${b.provider.toUpperCase()}-${b.external_ref}`.slice(0, 64);
+    // The full provider reference is the entry number, never truncated:
+    // distinct provider references stay distinct ledger identities, so two
+    // long references sharing a prefix can no longer collide on the
+    // (org_id, entry_number) integrity guard and block posting. Uniqueness
+    // holds because imports dedupe on (org_id, provider, external_ref),
+    // re-posting a posted batch returns its existing entry, and reversals
+    // suffix -VOID. Both entry_number and memo are unbounded text, so the
+    // complete external reference is retained in the ledger.
+    const entryNumber = `PSP-${b.provider.toUpperCase()}-${b.external_ref}`;
     const postedEntry = await postEntry(db, {
       id: entryId,
       orgId,
