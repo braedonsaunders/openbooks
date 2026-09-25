@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import '../dashboard/_dashboard-render-harness'
 import {
+  act,
   buttonsContaining,
   buttonsNamed,
   click,
@@ -68,13 +69,13 @@ function baseLines(): Record<string, unknown>[] {
 async function mountOrder(
   order: OrderPayload,
   kind: 'purchase_order' | 'quote',
-  extra: { initialMode?: 'view' | 'edit'; canOverrideCredit?: boolean } = {},
+  extra: { initialMode?: 'view' | 'edit'; canOverrideCredit?: boolean; parties?: { id: string; display_name: string }[] } = {},
 ) {
   return mountDashboard(
     <OrderDrawer
       order={order}
       kind={kind}
-      parties={[{ id: 'vendor-1', display_name: 'Acme Supplies' }]}
+      parties={extra.parties ?? [{ id: 'vendor-1', display_name: 'Acme Supplies' }]}
       accounts={[]}
       items={[{ id: 'item-expense', display_name: 'Consulting' }]}
       stockLocations={[]}
@@ -130,7 +131,6 @@ test('a refused delete pins instead of only toasting', async (t) => {
   const remove = buttonsNamed('Delete')[0]
   assert.ok(remove, 'a draft order must offer Delete')
   await click(remove)
-  await tick()
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the delete refusal must pin as an alert, not vanish with the toast')
   assert.match(alert.textContent ?? '', /already received/, "the alert must carry the server's reason")
@@ -164,7 +164,6 @@ test('a non-JSON delete refusal still pins the fallback and releases busy', asyn
   const remove = buttonsNamed('Delete')[0]
   assert.ok(remove, 'a draft order must offer Delete')
   await click(remove)
-  await tick()
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'even a bodyless refusal must pin the fallback alert')
   assert.match(alert.textContent ?? '', /Action failed/, 'the fallback names the failed action')
@@ -195,7 +194,6 @@ test('a refused void pins and keeps the order voidable', async (t) => {
   const voidButton = buttonsNamed('Void')[0]
   assert.ok(voidButton, 'an approved order must offer Void')
   await click(voidButton)
-  await tick()
   assert.deepEqual(
     (seen[0] as { reason?: unknown }).reason,
     'entered twice, voiding one leg',
@@ -278,11 +276,29 @@ test('a refused save releases busy and stays in edit mode', async (t) => {
   const save = buttonsNamed('Save')[0]
   assert.ok(save, 'edit mode must offer Save')
   await click(save)
-  await tick()
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the save refusal must pin as an alert')
   assert.match(alert.textContent ?? '', /needs an expense account/, "the alert must carry the server's reason")
   const again = buttonsNamed('Save')[0]
   assert.ok(again, 'a refused save must stay in edit mode with values intact')
   assert.equal(again.disabled, false, 'busy must release after a refused save')
+})
+
+test('a pending price for the previous customer cannot replace the selected customer price', async (t) => {
+  const pending: { body: string; resolve: (response: Response) => void }[] = []
+  const previousFetch = globalThis.fetch; globalThis.fetch = (async (input, init) => String(input) === '/api/items/price'
+    ? new Promise<Response>((resolve) => pending.push({ body: String(init?.body), resolve }))
+    : Response.json({})) as typeof fetch
+  t.after(() => { globalThis.fetch = previousFetch })
+  const { unmount } = await mountOrder({ doc: baseDoc({ id: DRAFT_ID, status: 'draft', party_id: 'customer-a' }), lines: [{ ...baseLines()[0], item_id: '' }], links: [] }, 'quote',
+    { initialMode: 'edit', parties: [{ id: 'customer-a', display_name: 'Customer A' }, { id: 'customer-b', display_name: 'Customer B' }] })
+  t.after(unmount)
+  await click(document.querySelector('[data-lg-row="0"][data-lg-col="0"] button')!)
+  await click(document.querySelector('[role="option"]')!)
+  await click([...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Customer A')!)
+  await click([...document.querySelectorAll('[role="option"]')].find((option) => option.textContent?.trim() === 'Customer B')!)
+  await act(async () => { pending[0]!.resolve(Response.json({ price: { unitPrice: '999.00', source: 'simple', scheduleId: null, priceLevelId: null, assignmentId: null, resolvedAt: '2026-09-25T00:00:00.000Z' } })); await tick() })
+  assert.notEqual((document.querySelector('[data-lg-row="0"][data-lg-col="5"] input') as HTMLInputElement).value, '999')
+  assert.equal(JSON.parse(pending[1]!.body).customerId, 'customer-b')
+  await act(async () => { pending[1]!.resolve(Response.json({ price: null })) })
 })
