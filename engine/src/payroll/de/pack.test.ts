@@ -8,6 +8,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveCertificate } from "../certificates.ts";
 import { DE_PAYROLL_PACK } from "./pack.ts";
 import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
 
@@ -89,9 +90,7 @@ test("certificates declare ELStAM (not a W-4/TD1 clone) plus the PV Kindernachwe
   // carries no PV child data.
   const pv = byKey.get("de_pv_nachweis");
   assert.ok(pv, "PV Kindernachweis declared");
-  const pvFields = new Map(pv.fields.map((field) => [field.key, field]));
-  assert.equal(pvFields.get("kinderlosenzuschlag")?.kind, "flag");
-  assert.equal(pvFields.get("abschlag_kinder")?.kind, "count");
+  assert.deepEqual(resolveCertificate({ certificate: pv, stored: [{ certificateKey: pv.key, answers: {}, effectiveFrom: "2026-01-01" }] }).missing, ["kinderlosenzuschlag", "abschlag_kinder"]);
 });
 
 test("de_kvz tenant slot declared (org-wide); no national average transcribed", () => {
