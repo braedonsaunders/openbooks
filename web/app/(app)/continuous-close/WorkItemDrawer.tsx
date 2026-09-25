@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Textarea, UrlDrawer } from '@openbooks/ui'
 import { ApplicationCommandCard } from '@/components/assistant/application-command-card'
 import type { FindingProposalCommand } from '@/lib/agents/proposals'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 import { displayRoleName } from '@/lib/role-display'
 import { readApiErrorMessage } from '../../../lib/api-error'
 type Evidence = {
@@ -92,6 +93,7 @@ export function WorkItemDrawer({
   const { money } = useMoney()
   const t = useTranslations('continuousClose')
   const ta = useTranslations('agents')
+  const tCommon = useTranslations('common')
   const locale = useLocale()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -157,6 +159,21 @@ export function WorkItemDrawer({
   const [assigneeRole, setAssigneeRole] = useState(assignment?.assigneeRole ?? '')
   const [dueDate, setDueDate] = useState(assignment?.dueAt ? assignment.dueAt.slice(0, 10) : '')
   const [noteBody, setNoteBody] = useState('')
+  // I4-webui-98: owner/due/note/reason/feedback drafts live in local state,
+  // so the shell close asks before discarding them — same house guard as
+  // the inventory drawers — and never dismisses an in-flight write.
+  const draftGuard = useDirtyClose({
+    dirty: reason !== '' ||
+      feedback !== item.feedback ||
+      assigneeUser !== (assignment?.assigneeUserId ?? '') ||
+      assigneeRole !== (assignment?.assigneeRole ?? '') ||
+      dueDate !== (assignment?.dueAt ? assignment.dueAt.slice(0, 10) : '') ||
+      noteBody !== '',
+    busy,
+    onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   async function saveAssignment(clear = false) {
     setBusy(true)
@@ -236,6 +253,7 @@ export function WorkItemDrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
+      beforeClose={draftGuard.beforeClose}
       size="lg"
       title={t(`findings.${item.findingType}.title` as never)}
       description={t(`findings.${item.findingType}.description` as never)}
