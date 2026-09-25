@@ -458,13 +458,17 @@ export async function folderAccessLevel(
   viewer: FileViewer,
   folderId: string,
   executor?: SqlExecutor,
+  options: { includeInactive?: boolean } = {},
 ): Promise<AccessLevel> {
   const exec = executor ?? db
   // Admins skip the tier query below (it binds the caller id into uuid
   // comparisons): existence alone decides, exactly as the anchor read did.
+  // Trash restores and trash renames evaluate the tier of trashed folders
+  // through includeInactive; liveness stays a read concern, enforced by the
+  // list/get predicates, not by the tier.
   if (viewer.isAdmin && (viewer.allowedSubsidiaryIds === null || viewer.allowedSubsidiaryIds === undefined)) {
     const exists = (await exec.execute(sql`
-      select 1 from folders where id = ${folderId} and org_id = ${orgId} and not is_inactive
+      select 1 from folders where id = ${folderId} and org_id = ${orgId} and ${options.includeInactive ? sql`true` : sql`not is_inactive`}
     `)).rows[0]
     if (!exists) return 'none'
     return 'manager'
@@ -473,7 +477,7 @@ export async function folderAccessLevel(
   const r = (await exec.execute<{ n: number; ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number; recordVisible: boolean }>(sql`
     with recursive ancestors as (
       select id, parent_folder_id, is_private, owner_id, record_table, record_id
-        from folders where id = ${folderId} and org_id = ${orgId} and not is_inactive
+        from folders where id = ${folderId} and org_id = ${orgId} and ${options.includeInactive ? sql`true` : sql`not is_inactive`}
       union all
       select f.id, f.parent_folder_id, f.is_private, f.owner_id, f.record_table, f.record_id
         from folders f join ancestors a on f.id = a.parent_folder_id and f.org_id = ${orgId}
@@ -1241,7 +1245,8 @@ export async function patchFolder(
        for update
     `)).rows[0]
     if (!before) return { ok: false as const, reason: 'not found' as const }
-    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) {
+    // Renames also apply inside the trash: evaluate the tier with inactive rows.
+    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager', { includeInactive: true }))) {
       return { ok: false as const, reason: 'forbidden' as const }
     }
 
@@ -1444,7 +1449,8 @@ export async function restoreFolder(
        for update
     `)
     if (beforeFolders.rows.length === 0) return false
-    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) return false
+    // Restores by definition operate on trashed folders: include inactive rows.
+    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager', { includeInactive: true }))) return false
 
     const beforeFiles = await tx.execute<{ id: string; isInactive: boolean }>(sql`
       select fi.id, fi.is_inactive as "isInactive"
@@ -2190,10 +2196,11 @@ async function viewerFolderGate(
   audit: FileMutationAudit | undefined,
   folderId: string,
   min: AccessLevel,
+  options: { includeInactive?: boolean } = {},
 ): Promise<boolean> {
   if (!audit?.viewer) return true
   await lockCabinetAuthorization(exec, orgId)
-  return accessAtLeast(await folderAccessLevel(orgId, audit.viewer, folderId, exec), min)
+  return accessAtLeast(await folderAccessLevel(orgId, audit.viewer, folderId, exec, options), min)
 }
 
 /**
