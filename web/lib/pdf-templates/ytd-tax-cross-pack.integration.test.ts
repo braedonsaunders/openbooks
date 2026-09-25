@@ -40,6 +40,14 @@ async function seedStub(
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${employee}, ${orgId}, 'person', ${`Emp ${stubId.slice(0, 8)}`}, true, '{}'::jsonb)`)
+    const employment = randomUUID()
+    await db.execute(sql`
+      insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
+      values (${employment}, ${orgId}, ${employee}, ${subId})`)
+    await db.execute(sql`
+      insert into worker_employment_versions (org_id, employment_id, version_no, status,
+                                              effective_from, effective_to, recorded_at)
+      values (${orgId}, ${employment}, 1, 'active', '2020-01-01'::date, null::date, now())`)
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active)
@@ -56,9 +64,10 @@ async function seedStub(
       values (${docId}, ${orgId}, ${scheduleId}, '2026-07-01', '2026-07-31',
               '2026-07-31', 2026, 'committed')`)
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
-                             periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
-      values (${stubId}, ${orgId}, ${docId}, ${employee}, ${opts.province},
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+                             province, periods_per_year, pay_date, tax_year, currency_code, gross,
+                             net_pay)
+      values (${stubId}, ${orgId}, ${docId}, ${employee}, ${employment}, ${opts.province},
               12, '2026-07-31', 2026, ${opts.currency}, ${opts.gross}, ${opts.net})`)
     for (const [systemKey, amount] of opts.lines) {
       await db.execute(sql`
