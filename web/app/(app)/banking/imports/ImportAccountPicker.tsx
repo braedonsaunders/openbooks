@@ -47,7 +47,12 @@ export function ImportAccountPicker({
           </option>
         ))}
       </Select>
-      <ImportStatementButton accountId={selected.id} />
+      {/*
+        The dialog keeps its preview/source state across renders. Remount it
+        per account so a statement previewed against A can never be imported
+        into B after the selector moves (I4-webui-188).
+      */}
+      <ImportStatementButton key={selected.id} accountId={selected.id} />
     </span>
   )
 }
