@@ -264,6 +264,23 @@ function buildUsPackFilings(): PayrollPackFilings {
   // that needed it would be refused by name, not fed zeros.
   yearEnd: [
     {
+      key: "940",
+      label: "Form 940 annual FUTA return",
+      cadence: "annual",
+      description: "Annual federal unemployment tax return, one per EIN.",
+      population: async () => {
+        throw new PayrollError(
+          "OpenBooks does not prepare Form 940 or Schedule A. File Form 940 with the IRS using its official instructions: "
+          + "https://www.irs.gov/instructions/i940 . Before filing, reconcile the EIN's committed FUTA-taxable wages by employee and year, state Schedule A credit-reduction allocations, FUTA accruals, deposits, and prior credits against payroll and remittance records — refused by name",
+        );
+      },
+      parseRowId: () => null,
+      amendment: {
+        supported: false,
+        refusal: "OpenBooks does not prepare or amend Form 940; use the IRS Form 940 instructions and reconcile the original filing and payment records before submitting a correction.",
+      },
+    },
+    {
       key: "941",
       label: "Form 941 quarterly worksheet",
       cadence: "quarterly",
