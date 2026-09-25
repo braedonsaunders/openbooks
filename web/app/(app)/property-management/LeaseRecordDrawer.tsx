@@ -43,6 +43,14 @@ export function LeaseRecordDrawer({
     reason: "",
   });
   const [form, setForm] = useState(() => leaseForm(lease ?? {}));
+  // A reload delivers a new lease object under the same drawer key (no
+  // remount): reseed while viewing, or a later Edit+Save sends the
+  // mount-time baseRent and status. An in-progress edit keeps its values.
+  const [prevLease, setPrevLease] = useState(lease);
+  if (prevLease !== lease) {
+    setPrevLease(lease);
+    if (mode === 'view') setForm(leaseForm(lease ?? {}));
+  }
   if (!lease) return null;
   const canEdit =
     permissions.manage && ["draft", "active", "notice"].includes(lease.status);
