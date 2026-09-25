@@ -154,7 +154,7 @@ test("the allocation service factory resolves report drivers for preview callers
   try {
     // The same composition the drivers preview route and the assistant use.
     const preview = await previewDriverVector(
-      { orgId: s.org.orgId, driverId: s.driverId, asOf: { periodId: s.org.periodId }, actorId: s.actor },
+      { orgId: s.org.orgId, driverId: s.driverId, asOf: { periodId: s.org.periodId }, actorId: s.actor, allowedSubsidiaryIds: null },
       allocationServiceDeps(),
     );
     assert.deepEqual(sortedVector(preview.vector), sortedVector([

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { daysInCivilMonth } from "../platform/business-date.ts";
 import { resolveAccountGroups } from "../records/account-groups.ts";
@@ -178,18 +178,33 @@ function asAccountScope(input: unknown): AccountScope {
   throw invalid("accountScope must be any, accounts, or account_group");
 }
 
-async function resolveScopeAccountIds(orgId: string, scope: AccountScope): Promise<string[] | null> {
+async function resolveScopeAccountIds(
+  orgId: string,
+  scope: AccountScope,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<string[] | null> {
+  if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null && allowedSubsidiaryIds.size === 0) return [];
   if (scope.kind === "any") return null;
-  if (scope.kind === "accounts") return [...new Set(scope.accountIds)];
-  const resolved = await resolveAccountGroups(scope.dimension, orgId);
-  const ids: string[] = [];
-  for (const [accountId, ref] of resolved.byAccount) {
-    if (ref.key === scope.groupKey) ids.push(accountId);
+  let ids: string[];
+  if (scope.kind === "accounts") {
+    ids = [...new Set(scope.accountIds)];
+  } else {
+    const resolved = await resolveAccountGroups(scope.dimension, orgId);
+    ids = [];
+    for (const [accountId, ref] of resolved.byAccount) {
+      if (ref.key === scope.groupKey) ids.push(accountId);
+    }
+    if (!resolved.groups.some((g) => g.key === scope.groupKey)) {
+      throw notFound(`account group "${scope.groupKey}" not found in dimension "${scope.dimension}"`);
+    }
   }
-  if (!resolved.groups.some((g) => g.key === scope.groupKey)) {
-    throw notFound(`account group "${scope.groupKey}" not found in dimension "${scope.dimension}"`);
-  }
-  return ids;
+  if (allowedSubsidiaryIds == null) return ids;
+  if (ids.length === 0) return [];
+  const visible = await db.execute<{ id: string }>(sql`
+    select id from accounts where org_id = ${orgId}
+      and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+      and subsidiary_id in (${sql.join([...allowedSubsidiaryIds].map((id) => sql`${id}`), sql`, `)})`);
+  return visible.rows.map((row) => row.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +221,8 @@ export type DriverResolveOptions = DriverResolveRequest & {
   excludeRuleIds?: string[];
   /** Posting book; defaults to the primary posting book. */
   bookId?: string | null;
+  /** Caller subsidiary fence for read previews; null is org-wide. */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 };
 
 export type ReportDriverRow = {
@@ -279,6 +296,12 @@ function lineageExclusion(orgId: string, excludeRuleIds: readonly string[]) {
   )`;
 }
 
+function subsidiaryFence(column: SQL, scope?: ReadonlySet<string> | null) {
+  if (scope === undefined || scope === null) return sql``;
+  if (scope.size === 0) return sql`and false`;
+  return sql`and ${column} in (${sql.join([...scope].map((id) => sql`${id}`), sql`, `)})`;
+}
+
 // ---------------------------------------------------------------------------
 // statistical_journal
 // ---------------------------------------------------------------------------
@@ -287,7 +310,7 @@ async function resolveStatistical(
   orgId: string,
   driver: AllocationDriver,
   window: ResolvedWindow,
-  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[] },
+  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<DriverVector> {
   const config = validateDriverConfig("statistical_journal", driver.config);
   const unit = config["unit"];
@@ -309,6 +332,7 @@ async function resolveStatistical(
       and l.unit = ${unit}
       ${accountList ? sql`and l.account_id in (${sql.join(accountList.map((id) => sql`${id}`), sql`, `)})` : sql``}
       ${opts.subsidiaryId ? sql`and l.subsidiary_id = ${opts.subsidiaryId}` : sql``}
+      ${subsidiaryFence(sql`l.subsidiary_id`, opts.allowedSubsidiaryIds)}
       and ${dim} is not null
       ${lineageExclusion(orgId, opts.excludeRuleIds)}
     group by 1
@@ -324,12 +348,18 @@ async function resolveManual(
   orgId: string,
   driver: AllocationDriver,
   asOf: DriverAsOf,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<DriverVector> {
+  if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null && driver.dimension !== "subsidiary") {
+    throw invalid("manual drivers for this dimension cannot be partitioned by subsidiary; use an org-wide preview or a subsidiary dimension");
+  }
+  if (allowedSubsidiaryIds?.size === 0) return new Map();
   validateDriverConfig("manual", driver.config);
   const date = await resolveValueDate(orgId, asOf);
   const rows = await listDriverValues(orgId, driver.id, { onDate: date });
   const vector: DriverVector = new Map();
   for (const row of rows) {
+    if (allowedSubsidiaryIds != null && !allowedSubsidiaryIds.has(row.dimensionValueId)) continue;
     vector.set(row.dimensionValueId, canonicalWeight(row.value));
   }
   return vector;
@@ -359,7 +389,7 @@ async function resolveGlAggregate(
   bookId: string,
   window: ResolvedWindow,
   balance: boolean,
-  subsidiaryId?: string | null,
+  opts: { subsidiaryId?: string | null; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<DriverVector> {
   if (scopeAccountIds !== null && scopeAccountIds.length === 0) return new Map();
   const month = `${window.from.slice(0, 7)}-01`;
@@ -370,7 +400,8 @@ async function resolveGlAggregate(
       and g.book_id = ${bookId}
       ${balance ? sql`and g.month <= ${month}` : sql`and g.month = ${month}`}
       ${scopeAccountIds ? sql`and g.account_id in (${sql.join(scopeAccountIds.map((id) => sql`${id}`), sql`, `)})` : sql``}
-      ${subsidiaryId ? sql`and g.subsidiary_id = ${subsidiaryId}` : sql``}
+      ${opts.subsidiaryId ? sql`and g.subsidiary_id = ${opts.subsidiaryId}` : sql``}
+      ${subsidiaryFence(sql`g.subsidiary_id`, opts.allowedSubsidiaryIds)}
     group by 1
   `)).rows;
   return toVector(rows);
@@ -383,7 +414,7 @@ async function resolveGlLines(
   bookId: string,
   window: ResolvedWindow,
   balance: boolean,
-  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[] },
+  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<DriverVector> {
   if (scopeAccountIds !== null && scopeAccountIds.length === 0) return new Map();
   const dim = journalDimExpr(driver.dimension);
@@ -398,6 +429,7 @@ async function resolveGlLines(
       and e.posting_date <= ${window.to}
       ${scopeAccountIds ? sql`and l.account_id in (${sql.join(scopeAccountIds.map((id) => sql`${id}`), sql`, `)})` : sql``}
       ${opts.subsidiaryId ? sql`and l.subsidiary_id = ${opts.subsidiaryId}` : sql``}
+      ${subsidiaryFence(sql`l.subsidiary_id`, opts.allowedSubsidiaryIds)}
       and ${dim} is not null
       ${lineageExclusion(orgId, opts.excludeRuleIds)}
     group by 1
@@ -410,16 +442,17 @@ async function resolveGl(
   driver: AllocationDriver,
   asOf: DriverAsOf,
   balance: boolean,
-  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; bookId?: string | null },
+  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; bookId?: string | null; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<DriverVector> {
   const window = await resolveWindow(orgId, asOf);
   const kind = balance ? "gl_balance" : "gl_activity";
   const config = validateDriverConfig(kind, driver.config);
   const scope = asAccountScope(config["accountScope"]);
-  const scopeAccountIds = await resolveScopeAccountIds(orgId, scope);
+  const scopeAccountIds = await resolveScopeAccountIds(orgId, scope, opts.allowedSubsidiaryIds);
+  if (scopeAccountIds?.length === 0) return new Map();
   const bookId = opts.bookId ?? (await primaryPostingBookId(orgId));
   if (fitsAggregate(driver.dimension, opts.excludeRuleIds, window)) {
-    return resolveGlAggregate(orgId, scopeAccountIds, bookId, window, balance, opts.subsidiaryId);
+    return resolveGlAggregate(orgId, scopeAccountIds, bookId, window, balance, opts);
   }
   return resolveGlLines(orgId, driver, scopeAccountIds, bookId, window, balance, opts);
 }
@@ -448,7 +481,9 @@ async function resolveHeadcount(
   orgId: string,
   window: ResolvedWindow,
   subsidiaryId?: string | null,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<DriverVector> {
+  if (allowedSubsidiaryIds?.size === 0) return new Map();
   // Employee roles active at any point in the window (the payroll-side
   // headcount, not time-entry presence — someone on leave still counts).
   const rows = (await db.execute<VectorRow>(sql`
@@ -461,6 +496,7 @@ async function resolveHeadcount(
       and (er.terminated_on is null or er.terminated_on >= ${window.from})
       and er.department_id is not null
       ${subsidiaryId ? sql`and p.subsidiary_id = ${subsidiaryId}` : sql``}
+      ${subsidiaryFence(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
     group by 1
   `)).rows;
   return toVector(rows);
@@ -472,19 +508,22 @@ async function resolveTimeHours(
   window: ResolvedWindow,
   billedOnly: boolean,
   subsidiaryId?: string | null,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<DriverVector> {
+  if (allowedSubsidiaryIds?.size === 0) return new Map();
   // Approved time only: draft, submitted, and rejected hours are not worked
   // reality (the same approved-only rule as utilization and project costing).
   const dim = driver.dimension === "project" ? sql`t.project_id` : sql`t.department_id`;
   const rows = (await db.execute<VectorRow>(sql`
     select ${dim}::text as dim, coalesce(sum(t.hours), 0) as total
     from time_entries t
-    ${subsidiaryId ? sql`join parties p on p.id = t.employee_party_id and p.org_id = t.org_id` : sql``}
+    ${subsidiaryId || allowedSubsidiaryIds != null ? sql`join parties p on p.id = t.employee_party_id and p.org_id = t.org_id` : sql``}
     where t.org_id = ${orgId}
       and t.status = 'approved'
       and t.worked_on >= ${window.from} and t.worked_on <= ${window.to}
       ${billedOnly ? sql`and t.is_billable` : sql``}
       ${subsidiaryId ? sql`and p.subsidiary_id = ${subsidiaryId}` : sql``}
+      ${subsidiaryFence(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
       and ${dim} is not null
     group by 1
   `)).rows;
@@ -496,7 +535,7 @@ async function resolveNativeGl(
   driver: AllocationDriver,
   measure: string,
   window: ResolvedWindow,
-  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; bookId?: string | null },
+  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; bookId?: string | null; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<DriverVector> {
   // The True Cost base vocabulary (web/lib/analytics/true-cost-data.ts):
   // labor dollars, revenue, and direct cost straight from posted GL.
@@ -522,6 +561,7 @@ async function resolveNativeGl(
       and a.is_summary = false
       ${accountFilter}
       ${opts.subsidiaryId ? sql`and l.subsidiary_id = ${opts.subsidiaryId}` : sql``}
+      ${subsidiaryFence(sql`l.subsidiary_id`, opts.allowedSubsidiaryIds)}
       and ${dim} is not null
       ${lineageExclusion(orgId, opts.excludeRuleIds)}
     group by 1
@@ -532,7 +572,9 @@ async function resolveNativeGl(
 async function resolveRentableArea(
   orgId: string,
   subsidiaryId?: string | null,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<DriverVector> {
+  if (allowedSubsidiaryIds?.size === 0) return new Map();
   // Rentable area is a point-in-time attribute of live units, not a flow:
   // every unit of an active property counts, whatever the period.
   const rows = (await db.execute<VectorRow>(sql`
@@ -544,6 +586,7 @@ async function resolveRentableArea(
       and mp.location_id is not null
       and pu.rentable_area is not null
       ${subsidiaryId ? sql`and mp.subsidiary_id = ${subsidiaryId}` : sql``}
+      ${subsidiaryFence(sql`mp.subsidiary_id`, allowedSubsidiaryIds)}
     group by 1
   `)).rows;
   return toVector(rows);
@@ -553,25 +596,25 @@ async function resolveNative(
   orgId: string,
   driver: AllocationDriver,
   asOf: DriverAsOf,
-  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; bookId?: string | null },
+  opts: { subsidiaryId?: string | null; excludeRuleIds: readonly string[]; bookId?: string | null; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<DriverVector> {
   const measure = nativeMeasureOf(driver);
   const window = await resolveWindow(orgId, asOf);
   switch (measure) {
     case "headcount":
       requireDimension(driver, measure, ["department"]);
-      return resolveHeadcount(orgId, window, opts.subsidiaryId);
+      return resolveHeadcount(orgId, window, opts.subsidiaryId, opts.allowedSubsidiaryIds);
     case "labor_hours":
     case "billed_hours":
       requireDimension(driver, measure, ["department", "project"]);
-      return resolveTimeHours(orgId, driver, window, measure === "billed_hours", opts.subsidiaryId);
+      return resolveTimeHours(orgId, driver, window, measure === "billed_hours", opts.subsidiaryId, opts.allowedSubsidiaryIds);
     case "labor_cost":
     case "revenue":
     case "direct_cost":
       return resolveNativeGl(orgId, driver, measure, window, opts);
     case "rentable_area":
       requireDimension(driver, measure, ["location"]);
-      return resolveRentableArea(orgId, opts.subsidiaryId);
+      return resolveRentableArea(orgId, opts.subsidiaryId, opts.allowedSubsidiaryIds);
     default:
       throw invalid(`unknown native measure "${measure}"`);
   }
@@ -656,7 +699,12 @@ async function resolveDriverVectorInner(
     throw invalid(`unknown source_kind "${String(driver.sourceKind)}"`);
   }
   const excludeRuleIds = opts.excludeRuleIds ?? [];
-  const shared = { subsidiaryId: request.subsidiaryId, excludeRuleIds, bookId: opts.bookId ?? null };
+  const shared = {
+    subsidiaryId: request.subsidiaryId,
+    excludeRuleIds,
+    bookId: opts.bookId ?? null,
+    allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
+  };
   let vector: DriverVector;
   let temporal: ReportDriverTemporal | null = null;
   switch (driver.sourceKind) {
@@ -664,7 +712,7 @@ async function resolveDriverVectorInner(
       vector = await resolveStatistical(orgId, driver, await resolveWindow(orgId, asOf), shared);
       break;
     case "manual":
-      vector = await resolveManual(orgId, driver, asOf);
+      vector = await resolveManual(orgId, driver, asOf, opts.allowedSubsidiaryIds);
       break;
     case "gl_activity":
       vector = await resolveGl(orgId, driver, asOf, false, shared);
@@ -676,6 +724,9 @@ async function resolveDriverVectorInner(
       vector = await resolveNative(orgId, driver, asOf, shared);
       break;
     case "report_definition": {
+      if (opts.allowedSubsidiaryIds != null) {
+        throw invalid("report-backed driver previews require org-wide subsidiary access because their query cannot be partitioned by subsidiary");
+      }
       const reported = await resolveReport(orgId, driver, asOf, request.actorId, deps.reportRunner);
       vector = reported.vector;
       temporal = reported.temporal;
@@ -684,9 +735,11 @@ async function resolveDriverVectorInner(
   }
   const include = request.include ? new Set(request.include) : null;
   const exclude = request.exclude ? new Set(request.exclude) : null;
-  if (!include && !exclude) return { vector, temporal };
+  const allowed = opts.allowedSubsidiaryIds;
+  if (!include && !exclude && (allowed == null || driver.dimension !== "subsidiary")) return { vector, temporal };
   const filtered: DriverVector = new Map();
   for (const [key, value] of vector) {
+    if (allowed != null && driver.dimension === "subsidiary" && !allowed.has(key)) continue;
     if (include && !include.has(key)) continue;
     if (exclude?.has(key)) continue;
     filtered.set(key, value);
@@ -726,6 +779,7 @@ export type DriverPreviewRequest = {
   orgId: string;
   driverId: string;
   asOf: DriverAsOf;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   include?: string[];
   exclude?: string[];
   subsidiaryId?: string | null;
@@ -753,7 +807,16 @@ export async function previewDriverVector(
   request: DriverPreviewRequest,
   deps: DriverResolverDeps = {},
 ): Promise<DriverPreview> {
-  const driver = await getDriver(request.orgId, request.driverId);
+  if (!Object.hasOwn(request, "allowedSubsidiaryIds") || request.allowedSubsidiaryIds === undefined) {
+    throw invalid("driver preview requires an explicit subsidiary scope");
+  }
+  if (request.allowedSubsidiaryIds !== null && request.allowedSubsidiaryIds.size === 0) {
+    throw invalid("driver preview requires access to at least one subsidiary");
+  }
+  if (request.subsidiaryId && request.allowedSubsidiaryIds !== null && !request.allowedSubsidiaryIds.has(request.subsidiaryId)) {
+    throw notFound(`subsidiary ${request.subsidiaryId} not found`);
+  }
+  const driver = await getDriver(request.orgId, request.driverId, undefined, request.allowedSubsidiaryIds);
   if (!driver) throw notFound(`allocation driver ${request.driverId} not found`);
   const window = await resolveWindow(request.orgId, request.asOf);
   const resolveRequest: DriverResolveOptions = {
@@ -766,6 +829,7 @@ export async function previewDriverVector(
     actorId: request.actorId,
     excludeRuleIds: request.excludeRuleIds,
     bookId: request.bookId,
+    allowedSubsidiaryIds: request.allowedSubsidiaryIds,
   };
   const { vector, temporal } = await resolveDriverVectorInner(resolveRequest, deps);
   const entries = [...vector.entries()]
