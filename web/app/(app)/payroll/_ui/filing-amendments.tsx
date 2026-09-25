@@ -576,14 +576,37 @@ function FilingCorrectionSectionBody({
     }
   }
 
+  const amendmentPreviewLoaded = preview.status === 'ready'
+    && preview.revision === 'amended'
+    && preview.rowId === review.rowId
+  const cancellationPreviewLoaded = preview.status === 'ready'
+    && preview.revision === 'cancelled'
+    && preview.rowId === review.rowId
+
   async function issue(revision: 'amended' | 'cancelled') {
     setError('')
 
     const reason = cancellationReason.trim()
+    if (revision === 'amended') {
+      if (!amendmentPreviewLoaded) {
+        setError(text(
+          'lifecycle.amendPreviewRequired',
+          'Load and review the amendment preview for this slip before issuing it.',
+        ))
+        return
+      }
+      const confirmed = await confirmDialog({
+        title: text('lifecycle.amendConfirmTitle', 'Confirm amendment'),
+        message: text(
+          'lifecycle.amendConfirmMessage',
+          'This records an amended filing for the reviewed slip. The issued correction becomes part of the filing history. Continue?',
+        ),
+        confirmLabel: text('lifecycle.confirmAmendment', 'Issue amendment'),
+        tone: 'danger',
+      })
+      if (!confirmed) return
+    }
     if (revision === 'cancelled') {
-      const cancellationPreviewLoaded = preview.status === 'ready'
-        && preview.revision === 'cancelled'
-        && preview.rowId === review.rowId
       if (!cancellationPreviewLoaded) {
         setError(text(
           'lifecycle.cancelPreviewRequired',
@@ -649,9 +672,6 @@ function FilingCorrectionSectionBody({
     && amendment.supported
     && amendment.revisions.includes('cancelled')
     && (review.status === 'absent' || review.status === 'changed' || review.status === 'unchanged')
-  const cancellationPreviewLoaded = preview.status === 'ready'
-    && preview.revision === 'cancelled'
-    && preview.rowId === review.rowId
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
@@ -800,7 +820,7 @@ function FilingCorrectionSectionBody({
                 <Button size="sm" variant="outline" onClick={() => void loadPreview('amended')}>
                   {text('lifecycle.previewAmended', 'Preview correction')}
                 </Button>
-                <Button size="sm" disabled={busy != null} onClick={() => void issue('amended')}>
+                <Button size="sm" disabled={busy != null || !amendmentPreviewLoaded} onClick={() => void issue('amended')}>
                   {text('lifecycle.issueAmended', 'Issue amendment')}
                 </Button>
               </>
