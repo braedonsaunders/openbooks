@@ -313,6 +313,15 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     conflict: "s.org_id = d.org_id and s.tax_year = d.tax_year",
   },
   {
+    // 0393: the IT addizionali assessed saldo is unique on (org, party,
+    // year) — two rows collide only when both parties carry an assessment
+    // for the SAME tax year. The conflicting row stays on the absorbed
+    // party, never folded into the survivor's saldo.
+    table: "it_addizionali_opening_balances",
+    column: "employee_party_id",
+    conflict: "s.org_id = d.org_id and s.tax_year = d.tax_year",
+  },
+  {
     table: "payroll_parallel_findings",
     column: "employee_party_id",
     conflict:
