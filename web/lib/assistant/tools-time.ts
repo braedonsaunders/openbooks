@@ -573,6 +573,9 @@ const timeClockStatus: AssistantToolDef = {
         if (!can(authz, "time.read")) {
           return { ok: false, error: "team clock status needs time.read — own scope is available with time.clock" };
         }
+        if (authz.allowedSubsidiaryIds !== null) {
+          return { ok: false, error: "team clock status is only available when access covers the whole organization" };
+        }
         const team = await teamClockedIn(authz.user.orgId, authz.user.id, await orgToday(authz.user.orgId));
         return { ok: true, data: { scope: "team", clockedIn: team, href: "/time/crew" } };
       }

@@ -103,6 +103,7 @@ async function seedTime(org: { orgId: string; subsidiaryId: string }) {
 test('time assistant reads: week, search, project time, unbilled, tickets', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   await enableFeature(org.orgId, 'fieldTickets');
+  await enableFeature(org.orgId, 'fieldTime');
   try {
     const seed = await seedTime(org);
     const timeAuthz = {
@@ -170,6 +171,12 @@ test('time assistant reads: week, search, project time, unbilled, tickets', { sk
       assert.equal(ticket.ok, true, JSON.stringify(ticket));
       assert.ok(ticket.ok);
       assert.equal((ticket.data as { ticket: { documentNumber: string } }).ticket.documentNumber, 'FT-1001');
+
+      const restrictedTeamStatus = await executeAssistantTool(timeAuthz, 'time_clock_status', { scope: 'team' });
+      assert.deepEqual(restrictedTeamStatus, {
+        ok: false,
+        error: 'team clock status is only available when access covers the whole organization',
+      });
     });
   } finally {
     await dropScratchOrg(org.orgId);
