@@ -167,10 +167,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as NeFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
-  // A derived supplemental base can go negative when deferrals exceed that
-  // period's supplemental pay; pay itself never is, so the artifact must not
-  // drag the period wages (and the special-procedure floor) below the income base.
-  const wages = U(input.wages) + max0(U(input.supplemental ?? "0"));
+  const wages = U(input.wages) + U(input.supplemental ?? "0");
   const exempt = certificateFlag(input.certificate, "exempt");
   if (exempt) trace("NE_EXEMPT", 1n);
   const annualWages = wages * BigInt(P);
