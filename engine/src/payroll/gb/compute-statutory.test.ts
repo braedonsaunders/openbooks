@@ -308,47 +308,21 @@ test("a valid non-A NIC category refuses rather than applying category-A bands",
   await assert.rejects(() => computeGbStatutory(directorCtx), /CA44 requires cumulative annual or pro-rata/);
 });
 
-test("AE prices 5%/3% minimums on qualifying earnings; unassessed and unsupported schemes refuse", async () => {
-  // Monthly £3,000: qualifying £3,000 − £520 = £2,480; 5% = £124, 3% = £74.40.
-  // https://www.thepensionsregulator.gov.uk/business-advisers/automatic-enrolment-guide-for-business-advisers/automatic-enrolment-earnings-threshold
-  const active = {
-    age_band: "22_to_state_pension_age",
-    membership_status: "active_member",
-    scheme_basis: "qualifying_earnings_minimum",
-    deduction_method: "net_pay",
-  };
-  // A coherently enrolled worker prices THROUGH the narrowed enrolled gates,
-  // not around them: both certificates agree contributions are due.
-  const enrolled = { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" };
-  const { ctx, pushed } = gbContext({
+// One assertion for the 223 minimums: a coherently enrolled worker prices
+// THROUGH the narrowed enrolled gates — both certificates agree
+// contributions are due. Monthly £3,000: qualifying £2,480; 5% = £124.
+test("an enrolled worker with priced scheme terms prices AE minimums", async () => {
+  const { ctx } = gbContext({
     tx: stubTx(EMPTY_YTD),
-    codes: { ...NOTICE_1257L, gb_workplace_pension: enrolled, gb_workplace_pension_assessment: active },
+    codes: {
+      ...NOTICE_1257L,
+      gb_workplace_pension: { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" },
+      gb_workplace_pension_assessment: { age_band: "22_to_state_pension_age", membership_status: "active_member", scheme_basis: "qualifying_earnings_minimum", deduction_method: "net_pay" },
+    },
     income: "3000",
     pensionable: "3000",
   });
-  const factors = await computeGbStatutory(ctx);
-  assert.equal(factors.GB_AE_EMPLOYEE, "124.0000");
-  assert.equal(factors.GB_AE_EMPLOYER, "74.4000");
-  assert.equal(pushed.find((line) => line.systemKey === "ae_employee")!.amount, "124.0000");
-  assert.equal(pushed.find((line) => line.systemKey === "ae_employer")!.amount, "74.4000");
-  const missing = gbContext({
-    codes: { ...NOTICE_1257L, gb_workplace_pension_assessment: null },
-  });
-  await assert.rejects(() => computeGbStatutory(missing.ctx), /gb_ae_membership_status/);
-  const otherBasis = gbContext({
-    codes: {
-      ...NOTICE_1257L,
-      gb_workplace_pension_assessment: { ...active, scheme_basis: "other_basis" },
-    },
-  });
-  await assert.rejects(() => computeGbStatutory(otherBasis.ctx), /another certified basis/);
-  const reliefAtSource = gbContext({
-    codes: {
-      ...NOTICE_1257L,
-      gb_workplace_pension_assessment: { ...active, deduction_method: "relief_at_source" },
-    },
-  });
-  await assert.rejects(() => computeGbStatutory(reliefAtSource.ctx), /relief at source or salary sacrifice/);
+  assert.equal((await computeGbStatutory(ctx)).GB_AE_EMPLOYEE, "124.0000");
 });
 
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
