@@ -14,7 +14,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
   } | null;
   categoryId: string | null;
 }
@@ -142,17 +142,17 @@ async function holdEquipmentRow(fixture: Fixture): Promise<InstanceType<typeof C
   return holder;
 }
 
-function post(fixture: Fixture): Promise<Response> {
+function post(fixture: Fixture, id = fixture.equipmentId): Promise<Response> {
   routeState.authz = {
     user: { orgId: fixture.org.orgId, id: fixture.actorId },
     permissions: new Set(["*"]),
-    allowedSubsidiaryIds: null,
+    allowedSubsidiaryIds: routeState.authz?.allowedSubsidiaryIds ?? null,
   };
   return POST(
-    new Request(`http://openbooks.test/api/equipment/${fixture.equipmentId}/capitalize`, {
+    new Request(`http://openbooks.test/api/equipment/${id}/capitalize`, {
       method: "POST",
     }),
-    { params: Promise.resolve({ id: fixture.equipmentId }) },
+    { params: Promise.resolve({ id }) },
   );
 }
 
@@ -200,21 +200,15 @@ test(
       const state = await db.execute<{
         fixed_asset_id: string | null;
         asset_count: number;
-        orphan_count: number;
       }>(sql`
         select
           (select fixed_asset_id from equipment_units where id = ${fixture.equipmentId}) as fixed_asset_id,
-          (select count(*)::int from fixed_assets where org_id = ${fixture.org.orgId}) as asset_count,
-          (select count(*)::int
-             from fixed_assets fa
-            where fa.org_id = ${fixture.org.orgId}
-              and not exists (
-                select 1 from equipment_units eu
-                 where eu.org_id = fa.org_id and eu.fixed_asset_id = fa.id
-              )) as orphan_count`);
+          (select count(*)::int from fixed_assets where org_id = ${fixture.org.orgId}) as asset_count`);
       assert.equal(state.rows[0]?.fixed_asset_id, winnerBody.assetId, "the winner's id remains linked");
       assert.equal(state.rows[0]?.asset_count, 1, "the race must not duplicate the fixed asset");
-      assert.equal(state.rows[0]?.orphan_count, 0, "the losing transaction must not leave an orphan");
+      routeState.authz = { user: { orgId: fixture.org.orgId, id: fixture.actorId }, permissions: new Set(["*"]), allowedSubsidiaryIds: new Set() };
+      const [hidden, missing] = await Promise.all([post(fixture), post(fixture, randomUUID())]);
+      assert.deepEqual([hidden.status, missing.status, await hidden.json()], [404, 404, await missing.json()]);
     } finally {
       if (holderOpen) await holder.query("rollback").catch(() => undefined);
       await holder.end();
