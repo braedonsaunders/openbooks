@@ -21,6 +21,7 @@ const WEEKLY = {
   medicareExemption: "none",
   tfnQuoted: true,
   stslDebt: false,
+  ytdQualifying: "0",
   periodsPerYear: 52,
 } as const;
 

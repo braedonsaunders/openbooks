@@ -33,6 +33,7 @@ const RESIDENT = {
   medicareExemption: "none",
   tfnQuoted: true,
   stslDebt: false,
+  ytdQualifying: "0",
   periodsPerYear: 12,
 } as const;
 
@@ -274,6 +275,7 @@ function stubCtx(overrides: Record<string, unknown> = {}): Parameters<typeof com
         working_holiday_maker: "false",
         tax_free_threshold: "true",
         stsl_debt: "false",
+        qualifying_ytd: "0",
       },
       missing: [],
     }),

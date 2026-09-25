@@ -34,7 +34,8 @@
  *
  * Refused by name: no-TFN payees (scale 4), foreign residents claiming a
  * Medicare exemption (no quotable scale covers the combination), working
- * holiday makers (Schedule 15), pay frequencies outside
+ * holiday makers (Schedule 15), SG accrual without verified YTD qualifying
+ * earnings (the annual maximum base cannot price without history), pay frequencies outside
  * weekly/fortnightly/monthly/quarterly/bi-monthly, the family/spouse levy adjustment
  * (WLA) machinery, and every other schedule — see AU_REFUSED_2027.
  *
@@ -102,6 +103,13 @@ export interface Au2027Input {
   stslDebt: boolean;
   /** Period ordinary-time earnings (qualifying-earnings proxy), decimal. */
   pensionable: string;
+  /**
+   * Verified qualifying earnings already paid this financial year by this
+   * employer (opening balance plus committed current-year payroll), decimal.
+   * Null only from wiring that could not establish the history — the engine
+   * refuses SG rather than posting uncapped.
+   */
+  ytdQualifying: string | null;
   /** One of 52 (weekly), 26 (fortnightly), 24 (semi-monthly), 12 (monthly), 4 (quarterly). */
   periodsPerYear: number;
 }
@@ -219,10 +227,31 @@ export function calculateAu2027(input: Au2027Input): Au2027Result {
         : input.periodsPerYear === 24
           ? ((weekly * 13n * 2n + 3n) / 6n) / 2n
           : weekly * 13n;
-  // Super Guarantee: 12% of period qualifying earnings (SGAA 17A(2)). No
-  // annual maximum-contributions-base cap: the 2026–27 concessional-cap
-  // input is refused by name (see AU_REFUSED_2027).
-  const sg = r2(mulRate(U(input.pensionable), AU_SUPER_2027.chargeRate));
+  // Super Guarantee: 12% of period qualifying earnings (SGAA 17A(2)),
+  // capped at the annual maximum contributions base (SGAA 10A(5),
+  // AU_SUPER_2027.maxBase): only the headroom remaining after verified
+  // year-to-date qualifying earnings accrues. Unknown history refuses by
+  // name — see AU_REFUSED_2027 — instead of posting uncapped SG.
+  if (input.ytdQualifying == null || input.ytdQualifying === "") {
+    throw new PayrollPackError(
+      "AU Super Guarantee cannot accrue without verified year-to-date "
+      + "qualifying earnings: the $270,830 annual maximum contributions base "
+      + "(SGAA s10A(5)) prices only the remaining headroom. Record the "
+      + "employee's verified FY qualifying-earnings year-to-date on the "
+      + "au_sg_administration certificate (qualifying_ytd) before running payroll",
+    );
+  }
+  const maxBase = U(AU_SUPER_2027.maxBase);
+  const ytd = U(input.ytdQualifying);
+  if (ytd < 0n) {
+    throw new PayrollPackError(
+      `AU Super Guarantee year-to-date qualifying earnings cannot be negative, got ${D(ytd)}`,
+    );
+  }
+  const headroom = maxBase > ytd ? maxBase - ytd : 0n;
+  const pensionable = U(input.pensionable);
+  const cappedBase = pensionable > headroom ? headroom : pensionable;
+  const sg = r2(mulRate(cappedBase, AU_SUPER_2027.chargeRate));
   return { payg: D(period * DOLLAR), sg: D(sg) };
 }
 
@@ -271,6 +300,11 @@ export async function computeAuStatutory(
   // ordinary-time earnings, which salary sacrifice does NOT reduce — the
   // pensionable leg arrives whole and is passed through untouched.
   const paygIncome = reducedBases.income;
+  // The SG annual maximum base needs verified YTD qualifying earnings; the
+  // employer's SG administration record carries it, and its absence refuses
+  // (see calculateAu2027) rather than posting uncapped SG.
+  const sgAdmin = certificateFor("au_sg_administration");
+  const ytdRaw = sgAdmin?.answers["qualifying_ytd"] ?? null;
   const result = calculateAu2027({
     income: paygIncome,
     residency,
@@ -280,6 +314,7 @@ export async function computeAuStatutory(
     tfnQuoted: (answers["tax_file_number"] ?? "") !== "",
     stslDebt: bool(answers["stsl_debt"] ?? null),
     pensionable,
+    ytdQualifying: ytdRaw === null || ytdRaw === "" ? null : ytdRaw,
     periodsPerYear,
   });
   pushStatutory("payg_withholding", "deduction", "PAYG withholding", result.payg, 110);

@@ -179,9 +179,53 @@ const MEDICARE_VARIATION_DECLARATION: PayrollCertificate = {
   ],
 };
 
+/**
+ * Employer SG administration (the employer's own per-employee record,
+ * not an ATO form).
+ *
+ * SGAA section 10A(5) caps SG at the annual maximum contributions base
+ * ($270,830 for 2026–27), so the engine must know the qualifying earnings
+ * already paid this financial year by this employer. There is no lawful
+ * default — zero is only correct for an employee paid nothing yet this
+ * year — so the amount is absent until declared and the engine refuses to
+ * accrue SG without it rather than posting uncapped SG. For a mid-year
+ * hire or a mid-year conversion, copy the verified opening balance from
+ * the prior provider's report; the employer's own committed current-year
+ * payroll must already be folded into the declared figure.
+ */
+const SG_ADMINISTRATION: PayrollCertificate = {
+  key: "au_sg_administration",
+  form: "Superannuation guarantee administration (employer record)",
+  label: "SG facts (qualifying year-to-date)",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "SGAA 1992 s10A(5) (maximum contributions base); 2026–27 base $270,830 "
+    + "(see AU_SUPER_2027)",
+  summary:
+    "The employer's per-employee SG record for the annual maximum "
+    + "contributions base: verified qualifying earnings already paid this "
+    + "financial year, for the $270,830 cap.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "qualifying_ytd",
+      label: "Qualifying earnings year-to-date",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      help: "Verified qualifying earnings already paid this financial year by "
+        + "this employer, for the $270,830 annual maximum contributions base. "
+        + "Zero only when the employee was paid nothing yet this year; copied "
+        + "from the prior provider's report for a mid-year hire. No default "
+        + "exists, so the engine refuses to accrue SG without it.",
+    },
+  ],
+};
+
 export const AU_CERTIFICATES: PayrollPackCertificates = {
   country: "AU",
-  certificates: [TFN_DECLARATION, MEDICARE_VARIATION_DECLARATION],
+  certificates: [TFN_DECLARATION, MEDICARE_VARIATION_DECLARATION, SG_ADMINISTRATION],
 };
 
 // ===========================================================================
