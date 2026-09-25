@@ -996,7 +996,8 @@
         "justificationLabel": "Justification",
         "saveLabel": "Enregistrer la note",
         "revertLabel": "Revenir",
-        "revertReasonLabel": "Motif du retour"
+        "revertReasonLabel": "Motif du retour",
+        "detailLoadFailed": "Le détail du calibrage n'a pas pu être chargé. Réessayez."
       },
       "talent": {
         "title": "Talents & succession",
@@ -1032,7 +1033,8 @@
         "modeTalentLabel": "Revue de talent",
         "modeSuccessionLabel": "Plan de succession",
         "employeeLabel": "Collaborateur",
-        "positionLabel": "Poste"
+        "positionLabel": "Poste",
+        "loadFailed": "La grille des talents n'a pas pu être chargée. Réessayez."
       },
       "feedback": {
         "settingsTitle": "Paramètres des retours",
@@ -1052,7 +1054,8 @@
         "bodyPlaceholder": "Dites précisément ce qui s'est passé",
         "submitLabel": "Envoyer",
         "praiseAction": "Féliciter",
-        "respondLabel": "Répondre"
+        "respondLabel": "Répondre",
+        "settingsLoadFailed": "Les paramètres de feedback n'ont pas pu être chargés. Réessayez."
       }
     }
   },

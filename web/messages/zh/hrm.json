@@ -996,7 +996,8 @@
         "justificationLabel": "依据",
         "saveLabel": "保存评分",
         "revertLabel": "撤销",
-        "revertReasonLabel": "撤销原因"
+        "revertReasonLabel": "撤销原因",
+        "detailLoadFailed": "无法加载校准详情，请重试。"
       },
       "talent": {
         "title": "人才与继任",
@@ -1032,7 +1033,8 @@
         "modeTalentLabel": "人才评估",
         "modeSuccessionLabel": "继任计划",
         "employeeLabel": "员工",
-        "positionLabel": "职位"
+        "positionLabel": "职位",
+        "loadFailed": "无法加载人才矩阵，请重试。"
       },
       "feedback": {
         "settingsTitle": "反馈设置",
@@ -1052,7 +1054,8 @@
         "bodyPlaceholder": "请具体说明发生了什么",
         "submitLabel": "发送",
         "praiseAction": "表扬",
-        "respondLabel": "回复"
+        "respondLabel": "回复",
+        "settingsLoadFailed": "无法加载反馈设置，请重试。"
       }
     }
   },
