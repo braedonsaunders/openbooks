@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, integer, boolean, jsonb, uuid, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, jsonb, uuid, uniqueIndex, index, foreignKey } from "drizzle-orm/pg-core";
 import { id, orgRef, auditColumns } from "./helpers";
 
 /**
@@ -129,5 +129,10 @@ export const accountGroupMembers = pgTable(
   (t) => [
     uniqueIndex("account_group_members_org_dimension_account").on(t.orgId, t.dimension, t.accountId),
     index("account_group_members_account").on(t.accountId),
+    foreignKey({
+      name: "account_group_members_group_id_fkey",
+      columns: [t.groupId],
+      foreignColumns: [accountGroups.id],
+    }).onDelete("restrict"),
   ],
 );
