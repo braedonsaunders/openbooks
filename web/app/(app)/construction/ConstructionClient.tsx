@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { cmp } from "@openbooks/engine/src/money/money.ts";
 
 export interface ApplicationIncomeAccount {
   id: string;
@@ -994,7 +995,7 @@ function RetainageSection({
             <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money(held)}</div>
             <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500 dark:text-slate-400">{t("workspaceHint")}</p>
           </div>
-          {canInvoice ? <Button size="sm" disabled={Number(held) <= 0} onClick={() => setFormOpen(true)}>{t("release")}</Button> : null}
+          {canInvoice ? <Button size="sm" disabled={cmp(held, "0") <= 0} onClick={() => setFormOpen(true)}>{t("release")}</Button> : null}
         </CardContent>
       </Card>
 
