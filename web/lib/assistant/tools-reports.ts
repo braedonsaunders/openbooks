@@ -306,6 +306,10 @@ const cashFlowIndirectTool: AssistantToolDef = {
     const range = await resolveToolRange(authz.user.orgId, raw as RangeArgs);
     if ("error" in range) return { ok: false, error: range.error };
     const r = await cashFlowIndirect(range.from, range.to, reportDims(authz), authz.user.orgId);
+    const adjustments = capList(r.adjustments, 50);
+    const workingCapital = capList(r.workingCapital, 50);
+    const investing = capList(r.investing, 50);
+    const financing = capList(r.financing, 50);
     return {
       ok: true,
       data: {
@@ -313,10 +317,18 @@ const cashFlowIndirectTool: AssistantToolDef = {
         fromDate: range.from,
         toDate: range.to,
         ...r,
-        adjustments: capList(r.adjustments, 50).items,
-        workingCapital: capList(r.workingCapital, 50).items,
-        investing: capList(r.investing, 50).items,
-        financing: capList(r.financing, 50).items,
+        adjustments: adjustments.items,
+        adjustmentsTotal: r.adjustments.length,
+        adjustmentsTruncated: adjustments.truncated,
+        workingCapital: workingCapital.items,
+        workingCapitalTotal: r.workingCapital.length,
+        workingCapitalTruncated: workingCapital.truncated,
+        investing: investing.items,
+        investingTotal: r.investing.length,
+        investingTruncated: investing.truncated,
+        financing: financing.items,
+        financingTotal: r.financing.length,
+        financingTruncated: financing.truncated,
         href: `/reports/cash-flow-indirect?period=custom&from=${range.from}&to=${range.to}`,
       },
     };

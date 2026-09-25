@@ -412,6 +412,15 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
           assert.equal(typeof record.ok, "boolean", `tool ${tool.name} returned no ok flag`);
           if (record.ok) {
             assert.ok("data" in record, `tool ${tool.name} returned ok without data`);
+            if (tool.name === "cash_flow_indirect") {
+              const data = record.data as Record<string, unknown>;
+              for (const group of ["adjustments", "workingCapital", "investing", "financing"]) {
+                assert.equal(typeof data[`${group}Total`], "number", `${group} total missing`);
+                assert.equal(typeof data[`${group}Truncated`], "boolean", `${group} truncation signal missing`);
+                assert.ok((data[`${group}Total`] as number) >= (data[group] as unknown[]).length);
+                assert.equal(data[`${group}Truncated`], (data[`${group}Total`] as number) > (data[group] as unknown[]).length);
+              }
+            }
           } else {
             const error = record.error;
             const documented =
