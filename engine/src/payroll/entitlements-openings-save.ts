@@ -3,6 +3,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { db } from "../platform/db.ts";
 import { lockScopeRows } from "../organization/subsidiary-scope.ts";
+import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./fences.ts";
 import { cmp, neg, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { recordEntitlementMovements } from "./entitlements-stub.ts";
@@ -123,6 +124,14 @@ export async function saveEntitlementOpenings(input: {
     // The route's preliminary check cannot protect this later write. Hold the
     // same employee rows that a rehome updates, and authorize the locked value.
     await lockScopeRows(tx, input.orgId, input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })), input.allowedSubsidiaryIds ?? null, "share");
+    // A bank carry-in dated in a payroll year changes that employee's run
+    // inputs. Share the run calculation/commit fence so neither side can read
+    // stale entitlement history and still calculate or commit.
+    const taxYear = Number(movementDate.slice(0, 4));
+    await takeEmployeeTaxYearFences(
+      tx,
+      input.rows.map((row) => employeeTaxYearFenceKey(input.orgId, row.employeePartyId, taxYear)),
+    );
     const plans = await entitlementPlans(input.orgId, tx);
     if (plans.length === 0) {
       throw new PayrollError(
