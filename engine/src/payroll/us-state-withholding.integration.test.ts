@@ -729,7 +729,15 @@ test(
     // although $92,250 of it sits above the threshold.
     const fx = await usPayrollOrg();
     try {
-      const employee = await usEmployee(fx, "Bay Stater", { state: "MA" });
+      // The routed MA engine reads the filed M-4 (the direct expectation
+      // below resolves the same bare form), so the hire files one with zero
+      // exemptions — the engine refuses an unfiled certificate by name.
+      const employee = await usEmployee(fx, "Bay Stater", {
+        state: "MA",
+        certificates: [{
+          key: "us_ma_m4", region: "MA", answers: { total_exemptions: "0" },
+        }],
+      });
       const bonusComponent = ((await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${fx.orgId} and code = 'BONUS'
       `))).rows[0]!;
