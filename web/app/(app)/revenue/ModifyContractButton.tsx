@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { cloneElement, isValidElement, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -27,10 +27,14 @@ function Field({
   label: string;
   children: React.ReactNode;
 }) {
+  const controlId = useId();
+  const control = isValidElement<{ id?: string }>(children)
+    ? cloneElement(children, { id: children.props.id ?? controlId })
+    : children;
   return (
     <div className="space-y-1">
-      <Label>{label}</Label>
-      {children}
+      <Label htmlFor={controlId}>{label}</Label>
+      {control}
     </div>
   );
 }
