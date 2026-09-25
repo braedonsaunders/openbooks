@@ -692,14 +692,14 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}
      where org_id = ${orgId} and system_key = 'qc_income_tax' and kind = 'deduction'`);
-  // A QC employer always owes the HSF at its own rate: a live-but-
-  // unconfigured slot refuses by name at calculate, so the fixture carries a
-  // rate and points the slot at the same payable for the same reason as
+  // A QC employer always owes the HSF at its own rate: an unclassified
+  // employer refuses by name at calculate, so the fixture classifies
+  // ordinary-sector and points the slot at the same payable as
   // above. This test asserts holiday pay, never HSF.
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                          rate_values, created_by, updated_by)
-    values (${orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+    values (${orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
             ${actorId}, ${actorId})`);
   await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}

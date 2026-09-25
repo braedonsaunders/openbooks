@@ -905,10 +905,12 @@ const CA_EHT_SLOT: PayrollStatutoryRateSlot = {
  * Québec health services fund (HSF). ONE province levies it, but the rate is
  * still tenant-entered: under TP-1015.F-V s. 5 it is a function of the
  * employer's own total payroll (2026 threshold $7.8M for a reduced rate) and
- * sector class (other / primary-and-manufacturing / public sector at 4.26%),
- * which no pack can know from one employee's stub. There is no annual
- * exemption — the contribution is the rate times the remuneration subject —
- * so the slot carries a rate and nothing else.
+ * sector class (ordinary / primary-and-manufacturing / public sector at
+ * 4.26%), which no pack can know from one employee's stub. There is no
+ * annual exemption — the contribution is the rate times the remuneration
+ * subject — so the slot carries exactly one sector-class flag. The engine
+ * prices the statutory formula off year-to-date payroll with a cumulative
+ * true-up; without a class the run refuses instead of guessing a rate.
  *
  * Source: Revenu Québec, "Total Payroll Threshold and Health Services Fund
  * Contribution Rate" (2026 table: other-sector 1.65% floor rising by
@@ -939,10 +941,34 @@ const CA_HSF_SLOT: PayrollStatutoryRateSlot = {
   fields: [
     {
       key: "rate", label: "Rate (%)", kind: "percent", decimals: 4,
-      min: "0", max: "10", required: true,
-      help: "As a percent, as Revenu Québec states it: 1.65 is 1.65%. Your rate depends on "
-        + "total payroll and sector class — look it up in Revenu Québec's \"Total Payroll "
-        + "Threshold and Health Services Fund Contribution Rate\" table for the year.",
+      min: "0", max: "10", required: false,
+      help: "Retained for reference only and never priced: the engine computes the statutory HSF rate "
+        + "from the sector class below and year-to-date payroll. Leave blank on new rows.",
+    },
+    {
+      key: "sectorOther", label: "Ordinary-sector employer", kind: "flag", required: false,
+      decimals: 0, min: "false", max: "true",
+      help: "Ordinary employer: 1.65% floor rising by the year's formula to 4.26%. Set exactly one "
+        + "sector flag — the engine refuses an unclassified employer rather than guessing.",
+    },
+    {
+      key: "sectorPublic", label: "Public-sector employer", kind: "flag", required: false,
+      decimals: 0, min: "false", max: "true",
+      help: "Public-sector employer taxed at the flat 4.26% HSF rate. Set at most one sector flag — "
+        + "the engine refuses an ambiguous classification.",
+    },
+    {
+      key: "sectorPrimaryManufacturing", label: "Primary or manufacturing sector", kind: "flag", required: false,
+      decimals: 0, min: "false", max: "true",
+      help: "Primary-and-manufacturing employer: 1.25% floor rising by the year's formula to 4.26%. "
+        + "Set at most one sector flag.",
+    },
+    {
+      key: "sectorExempt2026", label: "2026 agriculture/forestry/fishing exemption", kind: "flag", required: false,
+      decimals: 0, min: "false", max: "true",
+      help: "Agriculture, forestry or fishing employer covered by the separately authorized 2026 "
+        + "temporary HSF exemption: no contribution prices while set (2026 only). Set at most one "
+        + "sector flag.",
     },
   ],
 };

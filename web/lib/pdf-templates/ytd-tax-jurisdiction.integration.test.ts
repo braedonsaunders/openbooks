@@ -170,13 +170,13 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
   try {
     const ontario = await caEmployee(fx, 'Ontario Hourly', 'ON')
     const quebec = await caEmployee(fx, 'Quebec Hourly', 'QC')
-    // A QC employer always owes the health services fund, so a live-but-
-    // unconfigured ca_hsf slot refuses that employee by name at calculate.
+    // A QC employer always owes the health services fund, so an unclassified
+    // ca_hsf slot refuses that employee by name at calculate.
     // This test is about what a printed stub counts, not about the levy.
     await withBypassContext(() => db.execute(sql`
       insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                            rate_values, created_by, updated_by)
-      values (${fx.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+      values (${fx.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
               ${fx.actorId}, ${fx.actorId})`))
     const run = await withOrgContext(fx.orgId, () => createPayRun({
       orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
