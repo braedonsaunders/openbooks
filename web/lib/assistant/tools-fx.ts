@@ -7,7 +7,7 @@ import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { closeScopeDenied } from "./tools-close";
-import { dateInput, uuidInput } from "./tools-shared";
+import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
 
 /**
  * Foreign-exchange read tools for the agentic assistant. Rates come from the
@@ -202,57 +202,66 @@ const getConsolidationView: AssistantToolDef = {
     if (!period) return { ok: false, error: "period_not_found" };
     const [rates, runs, entries] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
-        select from_currency, to_currency, current_rate::text as current_rate,
+        select count(*) over() as total_count, from_currency, to_currency, current_rate::text as current_rate,
                average_rate::text as average_rate, historical_rate::text as historical_rate,
                source, updated_at
           from consolidated_fx_rates
          where org_id = ${authz.user.orgId} and period_id = ${a.periodId}
          order by from_currency, to_currency
-         limit 200
+         limit 201
       `),
       db.execute<Record<string, unknown>>(sql`
-        select id, status, error, started_at, finished_at
+        select count(*) over() as total_count, id, status, error, started_at, finished_at
           from ownership_consolidation_runs
          where org_id = ${authz.user.orgId} and period_id = ${a.periodId}
          order by started_at desc
-         limit 20
+         limit 21
       `),
       db.execute<Record<string, unknown>>(sql`
-        select e.kind, j.entry_number, j.posting_date, j.status
+        select count(*) over() as total_count, e.kind, j.entry_number, j.posting_date, j.status
           from ownership_consolidation_entries e
           join journal_entries j on j.id = e.journal_entry_id and j.org_id = e.org_id
           join ownership_consolidation_runs r on r.id = e.run_id and r.org_id = e.org_id
          where e.org_id = ${authz.user.orgId} and r.period_id = ${a.periodId}
          order by j.posting_date desc, j.entry_number desc
-         limit 100
+         limit 101
       `),
     ]);
+    const ratesMapped = rates.rows.map((r) => ({
+      fromCurrency: r.from_currency,
+      toCurrency: r.to_currency,
+      currentRate: r.current_rate,
+      averageRate: r.average_rate,
+      historicalRate: r.historical_rate,
+      source: r.source,
+      updatedAt: r.updated_at,
+    }));
+    const runsMapped = runs.rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      error: r.error,
+      startedAt: r.started_at,
+      finishedAt: r.finished_at,
+    }));
+    const entriesMapped = entries.rows.map((e) => ({
+      kind: e.kind,
+      entryNumber: e.entry_number,
+      postingDate: e.posting_date,
+      status: e.status,
+    }));
+    const ratesPage = assistantListPage(ratesMapped, 200, Number(rates.rows[0]?.total_count ?? 0));
+    const runsPage = assistantListPage(runsMapped, 20, Number(runs.rows[0]?.total_count ?? 0));
+    const entriesPage = assistantListPage(entriesMapped, 100, Number(entries.rows[0]?.total_count ?? 0));
     return {
       ok: true,
       data: {
         period: { id: period.id, name: period.name, startsOn: period.starts_on, endsOn: period.ends_on, fiscalYear: period.fiscal_year },
-        rates: rates.rows.map((r) => ({
-          fromCurrency: r.from_currency,
-          toCurrency: r.to_currency,
-          currentRate: r.current_rate,
-          averageRate: r.average_rate,
-          historicalRate: r.historical_rate,
-          source: r.source,
-          updatedAt: r.updated_at,
-        })),
-        runs: runs.rows.map((r) => ({
-          id: r.id,
-          status: r.status,
-          error: r.error,
-          startedAt: r.started_at,
-          finishedAt: r.finished_at,
-        })),
-        entries: entries.rows.map((e) => ({
-          kind: e.kind,
-          entryNumber: e.entry_number,
-          postingDate: e.posting_date,
-          status: e.status,
-        })),
+        rates: ratesPage.items,
+        ratesPage: { total: ratesPage.total, returned: ratesPage.returned, truncated: ratesPage.truncated, dropped: ratesPage.dropped },
+        runs: runsPage.items,
+        runsPage: { total: runsPage.total, returned: runsPage.returned, truncated: runsPage.truncated, dropped: runsPage.dropped },
+        entries: entriesPage.items,
+        entriesPage: { total: entriesPage.total, returned: entriesPage.returned, truncated: entriesPage.truncated, dropped: entriesPage.dropped },
         href: "/close",
       },
     };
