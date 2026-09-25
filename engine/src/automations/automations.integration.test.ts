@@ -638,6 +638,19 @@ test("correct defaults to a pre-filled reapproval request; direct when allowed",
     `)).rows[0]!;
     assert.equal(verb.verb, "correct");
     assert.equal(verb.corrected, target.changeId);
+    // I3-people-21: the manage grant without subsidiary scope cannot directly correct.
+    const scopedId = await createScratchUser(h.org.orgId, "Scoped corrector", "scoped_corrector");
+    await grant(h.org.orgId, scopedId, ["hrm.employment.manage"]);
+    await assert.rejects(
+      correctEmploymentChange({
+        orgId: h.org.orgId,
+        actorId: scopedId,
+        changeId: target.changeId,
+        reason: "cross-scope correction",
+        correctedFields: { status: "active" },
+      }),
+      /not visible/,
+    );
   });
 });
 
