@@ -67,6 +67,7 @@
     "uploading": "Uploading…",
     "uploadComplete": "{count, plural, one {# document queued} other {# documents queued}}.",
     "uploadFailed": "The documents could not be uploaded.",
+    "uploadPartial": "{count, plural, one {# document could not be completed} other {# documents could not be completed}}: {files}",
     "notConfigured": "Document capture is not operational because it is disabled or missing its organization provider configuration.",
     "configure": "Configure it under Admin Center → AI.",
     "search": "Search files, vendors, invoice numbers…",

@@ -67,6 +67,7 @@
     "uploading": "Wird hochgeladen…",
     "uploadComplete": "{count, plural, one {# Dokument in Warteschlange} other {# Dokumente in Warteschlange}}.",
     "uploadFailed": "Die Dokumente konnten nicht hochgeladen werden.",
+    "uploadPartial": "{count, plural, one {# Dokument konnte nicht abgeschlossen werden} other {# Dokumente konnten nicht abgeschlossen werden}}: {files}",
     "notConfigured": "Die Dokumentenerfassung ist nicht funktionsfähig, da sie deaktiviert ist oder die Anbieterkonfiguration der Organisation fehlt.",
     "configure": "Konfigurieren Sie sie unter Admin-Center → KI.",
     "search": "Dateien, Lieferanten, Rechnungsnummern suchen…",

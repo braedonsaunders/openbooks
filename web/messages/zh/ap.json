@@ -67,6 +67,7 @@
     "uploading": "上传中…",
     "uploadComplete": "{count, plural, one {已排队 # 份文档} other {已排队 # 份文档}}。",
     "uploadFailed": "无法上传这些文档。",
+    "uploadPartial": "{count} 份文档无法完成：{files}",
     "notConfigured": "文档采集未运行，因为它已被禁用或缺少组织提供方配置。",
     "configure": "请在管理中心 → AI 中进行配置。",
     "search": "搜索文件、供应商、发票号…",

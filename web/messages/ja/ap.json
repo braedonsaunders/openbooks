@@ -67,6 +67,7 @@
     "uploading": "アップロード中…",
     "uploadComplete": "{count, plural, one {# 件のドキュメントをキューに追加しました} other {# 件のドキュメントをキューに追加しました}}。",
     "uploadFailed": "ドキュメントをアップロードできませんでした。",
+    "uploadPartial": "{count} 件のドキュメントを完了できませんでした: {files}",
     "notConfigured": "ドキュメント取込は、無効になっているか組織のプロバイダー設定が欠落しているため、動作していません。",
     "configure": "管理センター → AI で設定してください。",
     "search": "ファイル、仕入先、請求書番号を検索…",

@@ -67,6 +67,7 @@
     "uploading": "Enviando…",
     "uploadComplete": "{count, plural, one {# documento na fila} other {# documentos na fila}}.",
     "uploadFailed": "Não foi possível enviar os documentos.",
+    "uploadPartial": "{count, plural, one {# documento não pôde ser concluído} other {# documentos não puderam ser concluídos}}: {files}",
     "notConfigured": "A captura de documentos não está operacional porque está desativada ou sem a configuração do provedor da organização.",
     "configure": "Configure em Central de administração → IA.",
     "search": "Buscar arquivos, fornecedores, números de fatura…",

@@ -67,6 +67,7 @@
     "uploading": "Téléversement…",
     "uploadComplete": "{count, plural, one {# document mis en file} other {# documents mis en file}}.",
     "uploadFailed": "Les documents n’ont pas pu être téléversés.",
+    "uploadPartial": "{count, plural, one {# document n’a pas pu être traité} other {# documents n’ont pas pu être traités}} : {files}",
     "notConfigured": "La capture de documents n’est pas opérationnelle, car elle est désactivée ou la configuration fournisseur de l’organisation manque.",
     "configure": "Configurez-la dans Centre d’administration → IA.",
     "search": "Rechercher fichiers, fournisseurs, numéros de facture…",
