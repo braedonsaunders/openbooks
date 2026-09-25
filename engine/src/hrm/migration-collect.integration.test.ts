@@ -641,13 +641,14 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     const dry = runCli([`--org=${org.orgId}`, `--input=${rowsPath}`]);
     assert.equal(dry.status, 0, `dry run failed: ${dry.stderr}\n${dry.stdout}`);
     const dryReport = reportJson(dry.stdout);
-    assert.equal(dryReport.totals.wouldMigrate, 2);
+    assert.equal(dryReport.totals.wouldMigrate, 0);
+    assert.equal(dryReport.totals.alreadyMigrated, 2);
     assert.equal(dryReport.totals.refused, 0);
 
     const applied = runCli([`--org=${org.orgId}`, `--input=${rowsPath}`, "--apply"]);
     assert.equal(applied.status, 0, `apply failed: ${applied.stderr}\n${applied.stdout}`);
     const appliedReport = reportJson(applied.stdout);
-    assert.equal(appliedReport.totals.migrated, 2);
+    assert.equal(appliedReport.totals.migrated, 0);
     assert.equal(appliedReport.totals.refused, 0);
     const stored = await withBypassContext(async () => {
       const result = (await db.execute<{ n: string }>(sql`
@@ -656,13 +657,12 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
       };
       return result.rows[0]?.n;
     });
-    // Two fixture employments (one per stub party, required by the stub
-    // employment FK) plus exactly the two the apply created — still an
-    // exact count, so an extra or missing employment fails here.
-    assert.equal(stored, "4");
+    // The two stub-support employments are reused, never duplicated: the
+    // apply writes nothing, so the count stays an exact two.
+    assert.equal(stored, "2");
 
-    // Re-collection after migration is byte-identical, and the dry run
-    // reports the settled persons instead of migrating again.
+    // Re-collection is byte-identical; the dry run reports ready persons,
+    // then reuses their live employments (reuse writes no binding).
     const recollected = runCli([`--collect=${org.orgId}`]);
     assert.equal(recollected.status, 0, `re-collect failed: ${recollected.stderr}`);
     assert.equal(evidenceHashFrom(recollected.stderr), firstHash);
@@ -675,7 +675,7 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     assert.equal(againReport.totals.refused, 0);
     assert.equal(againReport.persons.length, 2, "the re-run reports both persons");
     for (const person of againReport.persons) {
-      assert.equal(person.classification, "already_migrated");
+      assert.equal(person.classification, "ready");
       assert.equal(person.outcome, "already_migrated");
     }
     assert.equal(migrationExitCode(againReport), 0);
