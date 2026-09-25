@@ -286,16 +286,19 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
       }
     },
     async write(rows, mode: ImportMode, ctx: WriteCtx) {
+      // Fail closed before any database access: an unscoped caller must be
+      // refused by name, never queried with (see the feature fence below,
+      // which touches orgs and would otherwise leak a driver error).
+      const allowedSubsidiaryIds = ctx.allowedSubsidiaryIds
+      if (allowedSubsidiaryIds === undefined) {
+        throw new Error('prior payroll register import requires an explicit subsidiary scope')
+      }
       return db.transaction(async (tx) => {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, 'payroll'))) {
         outcome.failed = rows.length
         outcome.errors.push(...rows.map((_, index) => ({ row: index + 1, message: 'Payroll feature is disabled' })))
         return outcome
-      }
-      const allowedSubsidiaryIds = ctx.allowedSubsidiaryIds
-      if (allowedSubsidiaryIds === undefined) {
-        throw new Error('prior payroll register import requires an explicit subsidiary scope')
       }
       const all = await slots()
       const componentSlots = all.filter((slot) => slot.kind !== 'total')
