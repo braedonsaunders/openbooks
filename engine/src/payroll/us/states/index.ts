@@ -40,7 +40,7 @@ import { ID_WITHHOLDING } from "./id.ts";
 import { IL_WITHHOLDING } from "./il.ts";
 import { IN_WITHHOLDING } from "./in.ts";
 import { KS_WITHHOLDING } from "./ks.ts";
-import { KY_WITHHOLDING } from "./ky.ts";
+import { KY_WITHHOLDING, LOUISVILLE_WITHHOLDING } from "./ky.ts";
 import { LA_WITHHOLDING } from "./la.ts";
 import { MA_WITHHOLDING } from "./ma.ts";
 import { ME_WITHHOLDING } from "./me.ts";
@@ -146,6 +146,7 @@ const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   PHILADELPHIA_WITHHOLDING,
   DETROIT_WITHHOLDING,
   WILMINGTON_WITHHOLDING,
+  LOUISVILLE_WITHHOLDING,
 ];
 
 const BY_STATE = new Map<string, UsStateWithholdingEngine>(
@@ -258,7 +259,7 @@ export { SC_WITHHOLDING, SC_RATES_2026 } from "./sc.ts";
 export { VT_WITHHOLDING, VT_RATES_2026 } from "./vt.ts";
 export { IA_WITHHOLDING, IA_RATES_2026 } from "./ia.ts";
 export { IN_WITHHOLDING, IN_RATES_2026, IN_COUNTIES_2026 } from "./in.ts";
-export { KY_WITHHOLDING, KY_RATES_2026 } from "./ky.ts";
+export { KY_WITHHOLDING, KY_RATES_2026, LOUISVILLE_WITHHOLDING, LOUISVILLE_RATES, louisvilleRateFor } from "./ky.ts";
 export { MD_WITHHOLDING, MD_RATES_2026, MD_COUNTIES_2026 } from "./md.ts";
 export { OR_WITHHOLDING, OR_RATES_2026 } from "./or.ts";
 export { MN_WITHHOLDING, MN_RATES_2026 } from "./mn.ts";
