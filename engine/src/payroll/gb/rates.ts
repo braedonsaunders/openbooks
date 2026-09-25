@@ -287,13 +287,28 @@ const GB_EMPLOYMENT_ALLOWANCE_SLOT: PayrollStatutoryRateSlot = {
  * 2027 will continue to be set at £6,240", "the value of the UEL for 2026 to
  * 2027 will continue to be set at £50,270."
  * (Review of the Automatic Enrolment Earnings Trigger and Qualifying Earnings
- * Band for 2026/27). Declared so the band is on the record; minimum
- * contributions ride each employer's scheme, so there is no slot and no
- * engine (see jurisdictions.ts header).
+ * Band for 2026/27). Pay-reference-period thresholds are the Pension
+ * Regulator's published values, not annual figures divided by a guessed
+ * frequency. Minimum contributions (5% employee, 3% employer) are priced by
+ * the engine in compute-statutory.ts for qualifying-earnings-minimum
+ * net-pay schemes only.
  */
 export const GB_AE_TRIGGER_ANNUAL = "10000";
 export const GB_AE_QUALIFYING_BAND_LOWER = "6240";
 export const GB_AE_QUALIFYING_BAND_UPPER = "50270";
+
+/** Published 2026/27 pay-reference thresholds; keys are periods per year. */
+export const GB_AE_THRESHOLDS: Readonly<Record<number, {
+  trigger: string; lower: string; upper: string;
+}>> = {
+  1: { trigger: "10000", lower: "6240", upper: "50270" },
+  2: { trigger: "4998", lower: "3120", upper: "25135" },
+  4: { trigger: "2499", lower: "1560", upper: "12568" },
+  12: { trigger: "833", lower: "520", upper: "4189" },
+  13: { trigger: "768", lower: "480", upper: "3867" },
+  26: { trigger: "384", lower: "240", upper: "1934" },
+  52: { trigger: "192", lower: "120", upper: "967" },
+};
 
 const GB_YEAR_MODULE_TEMPLATE = `/**
  * GB payroll pack rate declarations: the transcribed {year} HMRC tables.

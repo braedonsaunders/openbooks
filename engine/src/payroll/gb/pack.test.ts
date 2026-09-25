@@ -43,11 +43,11 @@ test("withholding implements all four nations, guesses no cross-border rule", ()
   assert.equal(scotland.unimplementedReason, undefined);
 });
 
-test("certificates are a starter checklist and a coding notice, not a W-4 clone", () => {
+test("certificates are a starter checklist, a coding notice, a NIC record, and two pension records", () => {
   assert.equal(GB_CERTIFICATES.country, "GB");
   assert.deepEqual(
     GB_CERTIFICATES.certificates.map((certificate) => certificate.key),
-    ["gb_starter_checklist", "gb_tax_code_notice", "gb_nic_category", "gb_workplace_pension"],
+    ["gb_starter_checklist", "gb_tax_code_notice", "gb_nic_category", "gb_workplace_pension", "gb_workplace_pension_assessment"],
   );
   const [checklist, notice] = GB_CERTIFICATES.certificates;
   const declaration = checklist!.fields.find((field) => field.key === "starter_declaration")!;
@@ -76,10 +76,10 @@ test("certificates are a starter checklist and a coding notice, not a W-4 clone"
   assert.equal(taxCode.kind, "code");
 });
 
-test("slots declare PAYE, employee/employer NIC, both loan repayments, and the Apprenticeship Levy", () => {
+test("slots declare PAYE, employee/employer NIC, both loan repayments, the Apprenticeship Levy, and AE shares", () => {
   assert.deepEqual(
     GB_PACK.statutorySlots.map((slot) => slot.key),
-    ["paye", "nic", "student-loans", "apprenticeship-levy"],
+    ["paye", "nic", "student-loans", "apprenticeship-levy", "workplace-pension"],
   );
   const [paye, nic, loans] = GB_PACK.statutorySlots;
   assert.equal(paye!.components[0]!.assessedOn, "taxable_income");
@@ -93,6 +93,11 @@ test("slots declare PAYE, employee/employer NIC, both loan repayments, and the A
   assert.deepEqual(
     loans!.components.map((component) => [component.systemKey, component.kind]),
     [["student_loan", "deduction"], ["postgraduate_loan", "deduction"]],
+  );
+  const pension = GB_PACK.statutorySlots.find((slot) => slot.key === "workplace-pension")!;
+  assert.deepEqual(
+    pension.components.map((component) => [component.systemKey, component.kind]),
+    [["ae_employee", "deduction"], ["ae_employer", "employer_contribution"]],
   );
 });
 
