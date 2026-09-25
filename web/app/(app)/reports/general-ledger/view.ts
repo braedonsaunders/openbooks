@@ -30,7 +30,8 @@ import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
-import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import { resolvePeriod } from '../../../../lib/periods'
 import { isReportUuidParam, parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -110,7 +111,11 @@ export interface GeneralLedgerData {
   /** Set when underived consolidated rates block the report (F-t06-027):
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
-  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  /** Set when the viewed set spans more than one functional currency: the
+   * page renders the named refusal (whose remedy is the subsidiary picker
+   * beside it) instead of numbers or a generic error page. */
+  currencyBasisBlocked: CurrencyBasisNotice | null
+  /** False when either refusal is set; the paper hides with either. */
   ratesReady: boolean
   accounts: LedgerAccount[]
   dimensions: DimensionOptions
@@ -140,38 +145,48 @@ export async function loadGeneralLedger(
   const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
   // Underived consolidated rates must not throw out of SSR (F-t06-027):
   // the page renders a typed banner with a derive link instead of any
-  // numbers. Anything else is a real defect and still throws. The ledger
-  // runs only with a resolved subsidiary scope — never scope-less.
+  // numbers. A multi-currency viewed set refuses the same way, with the
+  // subsidiary picker as its remedy. Anything else is a real defect and
+  // still throws. The ledger runs only with a resolved subsidiary scope —
+  // never scope-less.
+  const authz = await getAuthz()
+  const canSeePayroll = !!authz && can(authz, 'payroll.read')
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let ratesBlocked: RatesBlockedNotice | null = null
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  let gl: Awaited<ReturnType<typeof generalLedger>> | null = null
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    gl = await generalLedger(period.from, period.to, {
+      accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
+      dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
+      bookId: selectedBook?.id,
+      canSeePayroll,
+    })
   } catch (e) {
-    if (!(e instanceof MissingRatesError)) throw e
-    ratesBlocked = {
-      code: 'rates-not-derived',
-      title: t('statement.ratesBlockedTitle'),
-      description: (e as Error).message,
-      deriveLabel: t('statement.ratesBlockedAction'),
-      deriveHref: '/close',
+    if (e instanceof ReportCurrencyBasisError) {
+      currencyBasisBlocked = {
+        code: 'multi-currency-basis',
+        title: t('statement.currencyBasisBlockedTitle'),
+        description: e.message,
+      }
+    } else {
+      if (!(e instanceof MissingRatesError)) throw e
+      ratesBlocked = {
+        code: 'rates-not-derived',
+        title: t('statement.ratesBlockedTitle'),
+        description: (e as Error).message,
+        deriveLabel: t('statement.ratesBlockedAction'),
+        deriveHref: '/close',
+      }
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const authz = await getAuthz()
-  const canSeePayroll = !!authz && can(authz, 'payroll.read')
   const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
-  const [gl, opts, org] = subView
-    ? await Promise.all([
-        generalLedger(period.from, period.to, {
-          accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
-          dims,
-          bookId: selectedBook?.id,
-          canSeePayroll,
-        }),
-        dimensionOptions(undefined, dims.projectId, optionScope),
-        orgInfo(),
-      ])
-    : [null, await dimensionOptions(undefined, dims.projectId, optionScope), await orgInfo()]
+  const [opts, org] = await Promise.all([
+    dimensionOptions(undefined, dims.projectId, optionScope),
+    orgInfo(),
+  ])
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
@@ -199,7 +214,8 @@ export async function loadGeneralLedger(
     columnCredits: t('trialBalance.columns.credits'),
     columnBalance: tc('labels.balance'),
     ratesBlocked,
-    ratesReady: ratesBlocked === null,
+    currencyBasisBlocked,
+    ratesReady: ratesBlocked === null && currencyBasisBlocked === null,
     accounts: (gl?.accounts ?? []).map((a) => ({
       id: a.id,
       number: a.number,
@@ -335,6 +351,19 @@ export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
+      // The multi-currency refusal renders without an action: the remedy is
+      // the subsidiary picker in the filter bar above, not a link.
+      ...(data.currencyBasisBlocked
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.currencyBasisBlocked?.title ?? '',
+                description: data.currencyBasisBlocked?.description,
+              }),
+              when: f('currencyBasisBlocked'),
+            },
+          ]
+        : []),
       paper({
         company: f('company'),
         title: f('title'),

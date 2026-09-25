@@ -27,7 +27,8 @@ import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
-import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -101,7 +102,11 @@ export interface JournalData {
   /** Set when underived consolidated rates block the report (F-t06-027):
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
-  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  /** Set when the viewed set spans more than one functional currency: the
+   * page renders the named refusal (whose remedy is the subsidiary picker
+   * beside it) instead of numbers or a generic error page. */
+  currencyBasisBlocked: CurrencyBasisNotice | null
+  /** False when either refusal is set; the paper hides with either. */
   ratesReady: boolean
   entries: JournalEntry[]
   dimensions: DimensionOptions
@@ -129,33 +134,47 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
   const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
   // Underived consolidated rates must not throw out of SSR (F-t06-027):
   // the page renders a typed banner with a derive link instead of any
-  // numbers. Anything else is a real defect and still throws. The report
-  // runs only with a resolved subsidiary scope — never scope-less.
+  // numbers. A multi-currency viewed set refuses the same way, with the
+  // subsidiary picker as its remedy. Anything else is a real defect and
+  // still throws. The report runs only with a resolved subsidiary scope —
+  // never scope-less.
+  const authz = await getAuthz()
+  const canSeePayroll = !!authz && can(authz, 'payroll.read')
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let ratesBlocked: RatesBlockedNotice | null = null
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  let journal: Awaited<ReturnType<typeof journalReport>> | null = null
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    journal = await journalReport(period.from, period.to, {
+      dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
+      bookId: selectedBook?.id,
+      canSeePayroll,
+    })
   } catch (e) {
-    if (!(e instanceof MissingRatesError)) throw e
-    ratesBlocked = {
-      code: 'rates-not-derived',
-      title: t('statement.ratesBlockedTitle'),
-      description: (e as Error).message,
-      deriveLabel: t('statement.ratesBlockedAction'),
-      deriveHref: '/close',
+    if (e instanceof ReportCurrencyBasisError) {
+      currencyBasisBlocked = {
+        code: 'multi-currency-basis',
+        title: t('statement.currencyBasisBlockedTitle'),
+        description: e.message,
+      }
+    } else {
+      if (!(e instanceof MissingRatesError)) throw e
+      ratesBlocked = {
+        code: 'rates-not-derived',
+        title: t('statement.ratesBlockedTitle'),
+        description: (e as Error).message,
+        deriveLabel: t('statement.ratesBlockedAction'),
+        deriveHref: '/close',
+      }
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const authz = await getAuthz()
-  const canSeePayroll = !!authz && can(authz, 'payroll.read')
   const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
-  const [journal, opts, org] = subView
-    ? await Promise.all([
-        journalReport(period.from, period.to, { dims, bookId: selectedBook?.id, canSeePayroll }),
-        dimensionOptions(undefined, undefined, optionScope),
-        orgInfo(),
-      ])
-    : [null, await dimensionOptions(undefined, undefined, optionScope), await orgInfo()]
+  const [opts, org] = await Promise.all([
+    dimensionOptions(undefined, undefined, optionScope),
+    orgInfo(),
+  ])
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
 
   return {
@@ -172,7 +191,8 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
     columnDebits: t('trialBalance.columns.debits'),
     columnCredits: t('trialBalance.columns.credits'),
     ratesBlocked,
-    ratesReady: ratesBlocked === null,
+    currencyBasisBlocked,
+    ratesReady: ratesBlocked === null && currencyBasisBlocked === null,
     entries: (journal?.entries ?? []).map((e) => {
       const target: TxnTarget = { kind: 'transaction', entryId: e.id, docKind: e.docKind, docId: e.docId }
       return {
@@ -271,6 +291,19 @@ export function journalSpec(data: JournalData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
+      // The multi-currency refusal renders without an action: the remedy is
+      // the subsidiary picker in the filter bar above, not a link.
+      ...(data.currencyBasisBlocked
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.currencyBasisBlocked?.title ?? '',
+                description: data.currencyBasisBlocked?.description,
+              }),
+              when: f('currencyBasisBlocked'),
+            },
+          ]
+        : []),
       paper({
         company: f('company'),
         title: f('title'),

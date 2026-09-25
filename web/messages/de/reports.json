@@ -73,7 +73,8 @@
     "currentYearEarnings": "Jahresüberschuss",
     "translationAdjustment": "Kumulierte Währungsumrechnungsdifferenz",
     "ratesBlockedTitle": "Konsolidierte Wechselkurse sind noch nicht abgeleitet",
-    "ratesBlockedAction": "Kurse im Periodenabschluss ableiten"
+    "ratesBlockedAction": "Kurse im Periodenabschluss ableiten",
+    "currencyBasisBlockedTitle": "Diese Ansicht umfasst mehrere Währungen"
   },
   "saveView": {
     "namePrompt": "Diese Ansicht benennen:",

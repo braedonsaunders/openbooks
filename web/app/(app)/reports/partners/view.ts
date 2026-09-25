@@ -22,12 +22,15 @@ import {
   text,
   toggleLinks,
   widget,
+  widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { buildHref, parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
+import { reportSubsidiaryView, type CurrencyBasisNotice } from '../../../../lib/consolidation'
+import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -95,13 +98,21 @@ export interface PartnersData {
   scheduleDefId: string | null
   scheduleParams: Record<string, string>
   exportParams: Record<string, string>
+  subsidiaries: SubsidiaryPicker
+  /** Set when the viewed set spans more than one functional currency: the
+   * page renders the named refusal (whose remedy is the subsidiary picker
+   * beside it) instead of numbers or a generic error page. */
+  currencyBasisBlocked: CurrencyBasisNotice | null
+  /** False exactly when the multi-currency refusal is set. */
+  currencyBasisReady: boolean
 }
+
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
 
 export async function loadPartners(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PartnersData> {
   const authz = await requirePermission('reports.read')
-  const scope = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('reports.partners')
   const tr = await getTranslations('reports')
@@ -112,10 +123,34 @@ export async function loadPartners(
   const kind = sp.kind === 'receivable' ? 'receivable' : 'payable'
   const scheduleDefId = await reportScheduleAnchor('partners', { kind })
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
-  const [all, org] = await Promise.all([
-    partnerBalances(kind, authz.user.orgId, undefined, selectedBook.id, { subsidiaryIds: scope }),
-    orgInfo(),
-  ])
+  const asOf = await businessToday(await resolveOrgId())
+  // Legal-entity scope resolves through the subsidiary view — the same
+  // contract as the statement pages: a restricted reader's view resolves to
+  // the subsidiaries they may see, and the picker offers the
+  // single-currency choice a multi-currency viewed set refuses with.
+  const subRaw = sp.sub
+  const subsidiaryParam = Array.isArray(subRaw) ? subRaw[0] : subRaw
+  const orgPromise = orgInfo()
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let all: Awaited<ReturnType<typeof partnerBalances>> = []
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(subsidiaryParam, asOf)
+    all = await partnerBalances(kind, authz.user.orgId, asOf, selectedBook.id, {
+      subsidiaryIds: subView.subsidiary?.ids,
+    })
+  } catch (e) {
+    // A multi-currency viewed set is a NAMED refusal, not a defect: the
+    // banner carries the remedy (choose a single-currency subsidiary view)
+    // and the filter-bar picker beside it offers that choice.
+    if (!(e instanceof ReportCurrencyBasisError)) throw e
+    currencyBasisBlocked = {
+      code: 'multi-currency-basis',
+      title: tr('statement.currencyBasisBlockedTitle'),
+      description: e.message,
+    }
+  }
+  const org = await orgPromise
 
   const m = (value: string) => formatMoney(value, { currency: org?.base_currency })
   const q = params.q?.toLowerCase()
@@ -124,7 +159,6 @@ export async function loadPartners(
   const presented = (value: string) => (kind === 'payable' ? decimalNeg(value) : value)
   const total = presented(decimalSum(filtered.map((row) => row.balance)))
   const pageRows = filtered.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE)
-  const asOf = await businessToday(await resolveOrgId())
   const accountTypes = [kind === 'payable' ? 'liability_payable' : 'asset_receivable']
   const noPartyLabel = t('noPartyOnLines')
   // OM-06: the partyless row is control-account GL lines with no
@@ -188,6 +222,9 @@ export async function loadPartners(
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: { ...stringParams(sp), side: kind },
+    subsidiaries: subView?.picker ?? [],
+    currencyBasisBlocked,
+    currencyBasisReady: currencyBasisBlocked === null,
   }
 }
 
@@ -215,9 +252,10 @@ export function partnersSpec(data: PartnersData): PageSpec {
         back: { href: f('backHref'), label: f('backLabel') },
       }),
       filterBar(
-        { search: true, period: false },
+        { search: true, period: false, subsidiary: true },
         {
           searchPlaceholder: f('searchPlaceholder'),
+          subsidiaries: f('subsidiaries'),
           leading: toggleLinks([
             { href: f('payableHref'), label: f('payableLabel'), activeWhen: f('isPayable') },
             { href: f('receivableHref'), label: f('receivableLabel'), activeWhen: f('isReceivable') },
@@ -236,10 +274,24 @@ export function partnersSpec(data: PartnersData): PageSpec {
       summaryLine(f('totalLabel'), drill(f('totalDrill'), money(f('total')))),
     ],
     body: [
+      // The multi-currency refusal renders without an action: the remedy is
+      // the subsidiary picker in the filter bar above, not a link.
+      ...(data.currencyBasisBlocked
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.currencyBasisBlocked?.title ?? '',
+                description: data.currencyBasisBlocked?.description,
+              }),
+              when: f('currencyBasisBlocked'),
+            },
+          ]
+        : []),
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
+        when: f('currencyBasisReady'),
         blocks: [
           table({
             variant: 'report',

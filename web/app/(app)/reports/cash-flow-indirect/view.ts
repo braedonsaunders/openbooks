@@ -17,7 +17,8 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { cashFlowIndirect, dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
-import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -60,7 +61,11 @@ export interface CashFlowIndirectData {
   /** Set when underived consolidated rates block the statement (F-t06-025):
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
-  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  /** Set when the viewed set spans more than one functional currency: the
+   * page renders the named refusal (whose remedy is the subsidiary picker
+   * beside it) instead of numbers or a generic error page. */
+  currencyBasisBlocked: CurrencyBasisNotice | null
+  /** False when either refusal is set; the paper hides with either. */
   ratesReady: boolean
   rows: StatementRow[]
   dimensions: DimensionOptions
@@ -92,17 +97,29 @@ export async function loadCashFlowIndirect(
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let cf: Awaited<ReturnType<typeof cashFlowIndirect>> | null = null
   let ratesBlocked: RatesBlockedNotice | null = null
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
     cf = await cashFlowIndirect(from, to, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
   } catch (e) {
-    if (!(e instanceof MissingRatesError)) throw e
-    ratesBlocked = {
-      code: 'rates-not-derived',
-      title: tr('statement.ratesBlockedTitle'),
-      description: (e as Error).message,
-      deriveLabel: tr('statement.ratesBlockedAction'),
-      deriveHref: '/close',
+    // A multi-currency viewed set is a NAMED refusal, not a defect: the
+    // banner carries the remedy (choose a single-currency subsidiary view)
+    // and the filter-bar picker beside it offers that choice.
+    if (e instanceof ReportCurrencyBasisError) {
+      currencyBasisBlocked = {
+        code: 'multi-currency-basis',
+        title: tr('statement.currencyBasisBlockedTitle'),
+        description: e.message,
+      }
+    } else {
+      if (!(e instanceof MissingRatesError)) throw e
+      ratesBlocked = {
+        code: 'rates-not-derived',
+        title: tr('statement.ratesBlockedTitle'),
+        description: (e as Error).message,
+        deriveLabel: tr('statement.ratesBlockedAction'),
+        deriveHref: '/close',
+      }
     }
   }
   const authz = await getAuthz()
@@ -323,7 +340,8 @@ export async function loadCashFlowIndirect(
         : t('offBy', { amount: m(cf.reconciliationGap) }),
     reconciled,
     ratesBlocked,
-    ratesReady: ratesBlocked === null,
+    currencyBasisBlocked,
+    ratesReady: ratesBlocked === null && currencyBasisBlocked === null,
     rows,
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
@@ -389,6 +407,19 @@ export function cashFlowIndirectSpec(data: CashFlowIndirectData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
+      // The multi-currency refusal renders without an action: the remedy is
+      // the subsidiary picker in the filter bar above, not a link.
+      ...(data.currencyBasisBlocked
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.currencyBasisBlocked?.title ?? '',
+                description: data.currencyBasisBlocked?.description,
+              }),
+              when: f('currencyBasisBlocked'),
+            },
+          ]
+        : []),
       paper({
         company: f('company'),
         title: f('title'),

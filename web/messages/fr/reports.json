@@ -73,7 +73,8 @@
     "currentYearEarnings": "Résultat de l'exercice",
     "translationAdjustment": "Écart de conversion cumulatif",
     "ratesBlockedTitle": "Taux consolidés non encore calculés",
-    "ratesBlockedAction": "Calculer les taux dans la clôture"
+    "ratesBlockedAction": "Calculer les taux dans la clôture",
+    "currencyBasisBlockedTitle": "Cette vue couvre plusieurs devises"
   },
   "saveView": {
     "namePrompt": "Nommez cette vue :",

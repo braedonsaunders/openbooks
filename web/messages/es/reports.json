@@ -73,7 +73,8 @@
     "currentYearEarnings": "Resultado del ejercicio",
     "translationAdjustment": "Ajuste de conversión acumulado",
     "ratesBlockedTitle": "Tipos consolidados aún no calculados",
-    "ratesBlockedAction": "Calcular los tipos en el cierre"
+    "ratesBlockedAction": "Calcular los tipos en el cierre",
+    "currencyBasisBlockedTitle": "Esta vista abarca varias monedas"
   },
   "saveView": {
     "namePrompt": "Nombre para esta vista:",
