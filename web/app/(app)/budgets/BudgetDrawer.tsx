@@ -363,6 +363,34 @@ export function BudgetDrawer({
   // happening once it dismisses (F-t13-006).
   const [actionError, setActionError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
+  function actionRefusal(message: string): string | null {
+    if (message === 'budget_requires_lines') return t('feedback.budgetRequiresLines')
+    if (message === 'self_approval_forbidden') return t('feedback.selfApprovalForbidden')
+    if (message === 'revision_conflict') return t('feedback.revisionConflict')
+    if (message === 'target_year_has_no_periods') return t('feedback.targetYearHasNoPeriods')
+    if (message.startsWith('unmapped_periods:')) {
+      const year = /no (\d+) period matches/.exec(message)?.[1] ?? ''
+      const periods = /period\(s\) (.+)$/.exec(message)?.[1] ?? ''
+      return t('feedback.unmappedPeriods', { year, periods })
+    }
+    if (message.startsWith('non_pnl_account:')) {
+      const accounts = /only: (.+)$/.exec(message)?.[1] ?? ''
+      return t('feedback.nonPnlAccounts', { accounts })
+    }
+    if (message.startsWith('out_of_scope_subsidiaries:')) {
+      const names = message.slice('out_of_scope_subsidiaries:'.length).trim()
+      return t('feedback.outOfScopeSubsidiaries', { names })
+    }
+    if (message === 'only_drafts_can_be_submitted') return t('feedback.onlyDraftsCanBeSubmitted')
+    if (message === 'only_pending_budgets_can_be_decided') return t('feedback.onlyPendingCanBeDecided')
+    if (message === 'budget_is_locked') return t('feedback.budgetIsLocked')
+    if (message === 'invalid_subsidiary') return t('feedback.invalidSubsidiary')
+    if (message === 'invalid_source_scenario') return t('feedback.invalidSourceScenario')
+    if (message === 'invalid_status_transition') return t('feedback.invalidStatusTransition')
+    if (message === 'approved_budget_requires_approver') return t('feedback.approvedBudgetRequiresApprover')
+    if (message === 'not_found') return t('feedback.budgetNotFound')
+    return null
+  }
   async function action(actionName: string, extra: Record<string, unknown> = {}) {
     if (unsaved) return
     if (actionName === 'archive' && !window.confirm(t('confirm.archive'))) return
@@ -400,10 +428,9 @@ export function BudgetDrawer({
       toast.success(t(`feedback.${feedback[actionName]}`))
       router.refresh()
     } catch (error) {
-      if (error instanceof Error && error.message === 'budget_requires_lines') {
-        setActionError(t('feedback.budgetRequiresLines'))
-      } else if (error instanceof Error && error.message === 'self_approval_forbidden') {
-        setActionError(t('feedback.selfApprovalForbidden'))
+      const refusal = error instanceof Error ? actionRefusal(error.message) : null
+      if (refusal) {
+        setActionError(refusal)
       } else {
         setSaveState('error')
         toast.error(t('feedback.actionFailed'))
