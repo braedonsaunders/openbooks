@@ -193,6 +193,7 @@ test('generic cabinet readers require AP read for AP capture even with a file gr
       values (${org.orgId}, ${org.customerId}, ${actorId}, ${fileId}, '[]'::jsonb)`)
     assert.equal(await getFile(org.orgId, fileId, withApPermission), null)
     assert.equal(await getFileBlob(org.orgId, fileId, withApPermission), null)
+    assert.equal(await fileAccessLevel(org.orgId, { userId: actorId, isAdmin: true }, fileId, undefined, { includeInactive: true }), 'none')
   } finally {
     await dropScratchOrg(org.orgId)
   }
