@@ -23,6 +23,7 @@ import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
+import { paUcEmployeeWithholding } from "./states/pa.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -426,6 +427,16 @@ export async function computeUsStatutory(
         ? `STATUTORY_${levy.statutoryComponent.systemKey}`
         : `${levy.level === "region" ? "SIT" : "LIT"}_${withheld.code}`]: withheld.tax,
     };
+  }
+  // Pennsylvania UC employee withholding (2026: 0.07% of all gross wages,
+  // no cap) is an employee deduction, not income tax: the state engine only
+  // traces it, so the pass posts it here through the declared slot. Same
+  // base the PA levy priced (periodic plus supplemental), keeping the posted
+  // line and the PA_UC_EMPLOYEE trace identical by construction.
+  if (region === "PA") {
+    const paUc = paUcEmployeeWithholding(run.pay_date!, sum([income, nonPeriodic]));
+    pushStatutory("pa_uc_employee", "deduction", "Pennsylvania UC (employee)", paUc, 147);
+    factors.PA_UC_EMPLOYEE = paUc;
   }
   factors.WITHHOLDING_RESIDENCE = resolution.residenceRegion;
   factors.WITHHOLDING_RESIDENCE_SOURCE = resolution.residenceSource;

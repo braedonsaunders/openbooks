@@ -375,6 +375,10 @@ test(
       // refusal names the REV-419 anyway, so the operator learns the form
       // changes the answer.
       const jersey = await usEmployee(fx, "Jersey June", { state: "PA", residence: "NJ" });
+      // Pennsylvania work in the plain case: PA UC employee withholding
+      // (2026: 0.07% of all gross wages, no cap) posts as its own deduction
+      // line, never inside state income tax. $2,000 × 0.07% = $1.40.
+      const paula = await usEmployee(fx, "Pennsylvania Paula", { state: "PA" });
 
       const { run, result } = await runPayroll(fx);
 
@@ -417,6 +421,12 @@ test(
       assert.ok(jerseyRefusal, "the NJ resident is refused by name");
       assert.match(jerseyRefusal!.message, /resides in NJ and works in PA/);
       assert.match(jerseyRefusal!.message, /us_pa_rev419 is not on file/);
+
+      const paulaStub = await stubOf(fx, run.documentId, paula);
+      assert.ok(paulaStub, "the plain Pennsylvania employee is paid");
+      const paulaUc = (await deductionsOf(fx, paulaStub!.id))
+        .find((line) => line.system_key === "pa_uc_employee");
+      assert.equal(paulaUc?.amount, "1.4000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
