@@ -371,6 +371,9 @@
       "noValue": "（无值）",
       "valuePlaceholder": "值",
       "listPlaceholder": "以逗号分隔的多个值",
+      "moneyValue": "金额 {index}",
+      "addMoneyValue": "添加金额",
+      "removeMoneyValue": "移除金额 {index}",
       "removeConditionAria": "移除条件"
     },
     "resultView": {

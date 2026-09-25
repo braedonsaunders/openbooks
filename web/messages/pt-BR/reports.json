@@ -371,6 +371,9 @@
       "noValue": "(sem valor)",
       "valuePlaceholder": "valor",
       "listPlaceholder": "valores separados por vírgula",
+      "moneyValue": "Valor {index}",
+      "addMoneyValue": "Adicionar valor",
+      "removeMoneyValue": "Remover valor {index}",
       "removeConditionAria": "Remover condição"
     },
     "resultView": {

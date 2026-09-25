@@ -371,6 +371,9 @@
       "noValue": "(no value)",
       "valuePlaceholder": "value",
       "listPlaceholder": "comma-separated values",
+      "moneyValue": "Amount {index}",
+      "addMoneyValue": "Add amount",
+      "removeMoneyValue": "Remove amount {index}",
       "removeConditionAria": "Remove condition"
     },
     "resultView": {

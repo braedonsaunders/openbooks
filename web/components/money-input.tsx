@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Input } from '@openbooks/ui'
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
+import { decimalNullCause, decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 
 /**
  * One operator-typed money (or hours) answer, refused with a named cause
@@ -34,6 +34,27 @@ export function moneyFieldError(
   }
   if (canonicalDecimal(text, maxScale) !== null) return null
   return decimalNullRefusal(field, noun, raw, maxScale)
+}
+
+/**
+ * Parse a single localized money token exactly. The shared decimal-refusal
+ * classifier resolves decimal-comma forms by its last-separator rule and
+ * refuses genuinely ambiguous commas; this adds no second numeric grammar.
+ */
+export function parseLocalizedMoneyValue(
+  field: string,
+  raw: string,
+  maxScale = 4,
+): { value: string; error: null } | { value: null; error: string } {
+  const canonical = canonicalDecimal(raw, maxScale)
+  if (canonical !== null) return { value: canonical, error: null }
+  const cause = decimalNullCause(raw)
+  if (cause.cause === 'decimal-comma') {
+    const localized = canonicalDecimal(cause.dotted, maxScale)
+    if (localized !== null) return { value: localized, error: null }
+    return { value: null, error: decimalNullRefusal(field, 'a money amount', cause.dotted, maxScale) }
+  }
+  return { value: null, error: decimalNullRefusal(field, 'a money amount', raw, maxScale) }
 }
 
 export function MoneyInput({

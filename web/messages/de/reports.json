@@ -371,6 +371,9 @@
       "noValue": "(kein Wert)",
       "valuePlaceholder": "Wert",
       "listPlaceholder": "durch Komma getrennte Werte",
+      "moneyValue": "Betrag {index}",
+      "addMoneyValue": "Betrag hinzufügen",
+      "removeMoneyValue": "Betrag {index} entfernen",
       "removeConditionAria": "Bedingung entfernen"
     },
     "resultView": {

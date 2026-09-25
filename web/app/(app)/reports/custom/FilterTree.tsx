@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Select } from '@openbooks/ui'
+import { MoneyFilterValues } from '@/components/money-filter-values'
 import {
   operatorsForKind,
   PERIOD_PRESETS,
@@ -212,6 +213,16 @@ function RuleRow({
             </optgroup>
           ))}
         </Select>
+      ) : needsValue === 'list' && column?.kind === 'money' ? (
+        <MoneyFilterValues
+          key={JSON.stringify(rule.value)}
+          values={Array.isArray(rule.value) ? rule.value.filter((value): value is string => typeof value === 'string') : []}
+          onChange={(value) => onChange({ ...rule, value })}
+          valueLabel={(index) => t('moneyValue', { index: index + 1 })}
+          addLabel={t('addMoneyValue')}
+          removeLabel={(index) => t('removeMoneyValue', { index: index + 1 })}
+          placeholder={t('valuePlaceholder')}
+        />
       ) : needsValue === 'one' && options?.length ? (
         <Select
           className="h-8 w-44"

@@ -371,6 +371,9 @@
       "noValue": "（値なし）",
       "valuePlaceholder": "値",
       "listPlaceholder": "カンマ区切りの値",
+      "moneyValue": "金額 {index}",
+      "addMoneyValue": "金額を追加",
+      "removeMoneyValue": "金額 {index} を削除",
       "removeConditionAria": "条件を削除"
     },
     "resultView": {

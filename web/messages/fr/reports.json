@@ -371,6 +371,9 @@
       "noValue": "(aucune valeur)",
       "valuePlaceholder": "valeur",
       "listPlaceholder": "valeurs séparées par des virgules",
+      "moneyValue": "Montant {index}",
+      "addMoneyValue": "Ajouter un montant",
+      "removeMoneyValue": "Retirer le montant {index}",
       "removeConditionAria": "Retirer la condition"
     },
     "resultView": {

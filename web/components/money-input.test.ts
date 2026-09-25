@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { moneyFieldError } from './money-input'
+import { moneyFieldError, parseLocalizedMoneyValue } from './money-input'
 
 // The shared money-input classifier: every client money answer is refused
 // through the single engine decimal classifier, so each of its seven causes
@@ -65,4 +65,8 @@ test('a currency symbol and scientific notation are refused by name', () => {
 
 test('gibberish is refused as not a number', () => {
   assert.match(moneyFieldError('Amount', 'a money amount', 'abc') ?? '', /is not a number/)
+})
+
+test('localized money parsing accepts an exact decimal-comma form', () => {
+  assert.deepEqual(parseLocalizedMoneyValue('Amount', '12,34'), { value: '12.34', error: null })
 })
