@@ -194,8 +194,8 @@ export function LaborCostingWorkspace(props: {
           settings: {
             mode,
             allowUnratedTime,
-            hoursPerDay: Number(hoursPerDay),
-            annualHours: Number(annualHours),
+            hoursPerDay: hoursPerDay || '8',
+            annualHours: annualHours || '2080',
             components,
           },
           laborWip: laborWip || null,
@@ -350,8 +350,8 @@ export function LaborCostingWorkspace(props: {
           setSavedSnap(makeSnap(next))
         }}
         accounts={props.accounts}
-        hoursPerDay={Number(hoursPerDay) || 8}
-        annualHours={Number(annualHours) || 2080}
+        hoursPerDay={hoursPerDay || '8'}
+        annualHours={annualHours || '2080'}
       />
 
       {/* ---- guided status ---- */}

@@ -24,8 +24,8 @@ export function LaborCostingWizard(props: {
   closeHref: string
   onApplied: (applied: { mode: 'off' | 'post'; components: LaborCostComponent[]; laborWip: string | null; laborClearing: string | null; payrollVariance: string | null }) => void
   accounts: { id: string; label: string }[]
-  hoursPerDay: number
-  annualHours: number
+  hoursPerDay: string
+  annualHours: string
 }) {
   const { money, currency } = useMoney()
   const today = useBusinessToday()
@@ -48,17 +48,22 @@ export function LaborCostingWizard(props: {
   const [clrAcct, setClrAcct] = useState(() => guessAccount([/labou?r.*clearing/i, /clearing/i, /accrued (wages|labou?r|payroll)/i]))
   const [varAcct, setVarAcct] = useState(() => guessAccount([/payroll.*variance/i, /labou?r.*variance/i, /variance/i]))
 
+  // Custom burden stays decimal text end to end: the settings boundary only
+  // reads strings, so the wizard validates the spelling itself and the Next
+  // gate below stays closed until it parses — never a JSON number, never a
+  // silently dropped burden.
+  const customExact = canonicalDecimal(customPct, 4)
+  const customPositive = customExact !== null && compareDecimal(customExact, '0') > 0
   const components = useMemo<LaborCostComponent[]>(() => {
     if (burden === 'skip') return []
     if (burden === 'custom') {
-      const v = Number(customPct)
-      return Number.isFinite(v) && v > 0
+      return customPositive
         ? [
             {
               key: 'burden',
               name: t('customBurdenName'),
               kind: 'percent_of_wage',
-              value: v,
+              value: customExact as string,
               scaleWithOvertime: true,
             },
           ]
@@ -69,11 +74,11 @@ export function LaborCostingWizard(props: {
         key: 'burden',
         name: burden === 'canada' ? tc('presetCaName') : tc('presetUsName'),
         kind: 'percent_of_wage',
-        value: burden === 'canada' ? 13 : 30,
+        value: burden === 'canada' ? '13' : '30',
         scaleWithOvertime: true,
       },
     ]
-  }, [burden, customPct, t, tc])
+  }, [burden, customExact, customPositive, t, tc])
 
   const exactFallbackRate = canonicalDecimal(fallbackRate, 4)
   const hasFallbackRate = exactFallbackRate !== null && compareDecimal(exactFallbackRate, '0') > 0
@@ -91,7 +96,7 @@ export function LaborCostingWizard(props: {
 
   if (!props.open) return null
 
-  const canNext = step === 0 ? burden !== 'custom' || Number(customPct) > 0 : step === 1 ? true : step === 2 ? posting === 'off' || (wipAcct !== '' && clrAcct !== '') : true
+  const canNext = step === 0 ? burden !== 'custom' || customPositive : step === 1 ? true : step === 2 ? posting === 'off' || (wipAcct !== '' && clrAcct !== '') : true
 
   async function finish() {
     setBusy(true)

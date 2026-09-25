@@ -29,7 +29,7 @@ test("stored garbage components refuse by name instead of pricing without the bu
     await assert.rejects(laborCostingSettings(org.orgId), (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /component 1/);
-      assert.match(error.message, /at most 4 decimals/);
+      assert.match(error.message, /is not a number/);
       return true;
     });
   } finally {

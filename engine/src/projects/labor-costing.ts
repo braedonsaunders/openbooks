@@ -15,6 +15,7 @@ import {
   normalizeMoney,
 } from "../money/money.ts";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
+import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import {
   postProjectGlEntryWithinTransaction,
   recognitionAccounts,
@@ -69,7 +70,7 @@ export function parseLaborCostComponents(input: unknown): LaborCostComponent[] {
     }
     const canonical = canonicalDecimal(c.value, 4);
     if (canonical === null) {
-      throw new LaborCostingSettingsError(`${label}: value must be a decimal string with at most 4 decimals`);
+      throw new LaborCostingSettingsError(decimalNullRefusal(`${label} value`, "an exact decimal amount", c.value, 4));
     }
     if (compareDecimal(canonical, "0") < 0) {
       throw new LaborCostingSettingsError(`${label}: value cannot be negative`);
