@@ -6,9 +6,14 @@
  *   province off committed stubs, each rendering the certificado de
  *   retenciones e ingresos a cuenta the employer must hand the employee
  *   (RIRPF art. 108.3). Clave A, no subclave — ./modelo-190.ts.
- * - Modelo 111 (trimestral autoliquidación, AEAT): one aggregate row per
- *   quarter off committed stubs (casillas 01/02/03). The US 941 is the shape
- *   copied: population + slip + amendment real, download refused by name.
+ * - Modelo 111 trimestral (AEAT): one aggregate row per quarter off
+ *   committed stubs (casillas 01/02/03). The US 941 is the shape copied:
+ *   population + slip + amendment real, download refused by name. For
+ *   trimestral filers only — monthly filers use the mensual worksheet.
+ * - Modelo 111 mensual (AEAT): one aggregate row per month off the same
+ *   stubs — the return large enterprises and qualifying public
+ *   administrations file (Instrucciones del Modelo 111). Same boxes, same
+ *   cash basis, monthly period rows.
  * - Modelo 216 (trimestral autoliquidación IRNR, AEAT): the 111's shape over
  *   committed stubs carrying IRNR lines — resident-only quarters file no 216.
  * - Modelo 296 (resumen anual IRNR, AEAT): the 190's per-perceptor shape over
@@ -26,6 +31,8 @@
  */
 import type { PayrollFilingRowScope, PayrollPackFilings } from "../filing-registry.ts";
 import {
+  es111MonthlyPopulation,
+  es111MonthlySlip,
   es111Population,
   es111Slip,
   es190CorrectionSlip,
@@ -69,6 +76,15 @@ export function parseEs190RowId(rowId: string): PayrollFilingRowScope | null {
  */
 export function parseEs111RowId(rowId: string): PayrollFilingRowScope | null {
   if (!/^Q[1-4]$/.test(rowId)) return null;
+  return { employees: [], accounts: [] };
+}
+
+/**
+ * The mensual 111 row grammar, as the inverse of es111MonthlyPopulation's
+ * `MN` construction. Same employer-NIF scope as the quarterly path.
+ */
+export function parseEs111MonthlyRowId(rowId: string): PayrollFilingRowScope | null {
+  if (!/^M(1[0-2]|[1-9])$/.test(rowId)) return null;
   return { employees: [], accounts: [] };
 }
 
@@ -156,7 +172,8 @@ function buildEsPackFilings(): PayrollPackFilings {
         description:
           "Quarterly IRPF withholding worksheet for ES-pack employees: perceptores, "
           + "percepciones and retenciones per calendar quarter off committed stubs "
-          + "(casillas 01/02/03).",
+          + "(casillas 01/02/03). For trimestral filers only — a monthly filer "
+          + "(gran empresa o administración obligada) files the mensual worksheet.",
         emptyText: "No committed ES pay stubs for this year.",
         population: (orgId, taxYear) => es111Population(orgId, taxYear),
         parseRowId: parseEs111RowId,
@@ -173,6 +190,33 @@ function buildEsPackFilings(): PayrollPackFilings {
           refusal:
             "a filed Modelo 111 is corrected outside the product by presenting a declaración "
             + "complementaria through AEAT Sede — the quarter re-rendered from committed stubs "
+            + "above carries the corrected figures; OpenBooks builds no AEAT correction vehicle "
+            + "of its own",
+        },
+      },
+      {
+        key: "111-mensual",
+        label: "Modelo 111 — Retenciones e ingresos a cuenta (mensual)",
+        cadence: "monthly",
+        description:
+          "Monthly IRPF withholding worksheet for ES-pack employees obliged to self-assess "
+          + "monthly — grandes empresas and qualifying public administrations (annual budget "
+          + "above €6m, Instrucciones del Modelo 111): perceptores, percepciones and "
+          + "retenciones per calendar month off committed stubs (casillas 01/02/03).",
+        emptyText: "No committed ES pay stubs for this year.",
+        population: (orgId, taxYear) => es111MonthlyPopulation(orgId, taxYear),
+        parseRowId: parseEs111MonthlyRowId,
+        slip: { build: (orgId, taxYear, rowId) => es111MonthlySlip(orgId, taxYear, rowId) },
+        downloadRefusal:
+          "the ES pack produces no Modelo 111 electronic transmission — the monthly "
+          + "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
+        // Same correction posture as the trimestral worksheet: the re-computed
+        // month above IS the corrected figure set.
+        amendment: {
+          supported: false,
+          refusal:
+            "a filed Modelo 111 is corrected outside the product by presenting a declaración "
+            + "complementaria through AEAT Sede — the month re-rendered from committed stubs "
             + "above carries the corrected figures; OpenBooks builds no AEAT correction vehicle "
             + "of its own",
         },

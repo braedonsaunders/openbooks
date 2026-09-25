@@ -43,16 +43,20 @@ import type { PayrollSubsidiaryScope } from "./scope.ts";
  * answer, because the generic layer cannot guess a statute's rhythm.
  *
  *   - `annual`: one filing per employer-year (T4, W-2, RL-1, P60).
- *   - `quarterly`: one filing per employer-quarter (Form 941).
+ *   - `quarterly`: one filing per employer-quarter (Form 941, Modelo 111
+ *     trimestral).
+ *   - `monthly`: one filing per employer-month (Modelo 111 mensual for the
+ *     retenedores the AEAT obliges to file monthly).
  *   - `separation`: one filing per interruption of earnings, due within days
  *     of the employee event (the ROE, a UK P45) — an event document, never a
  *     year-end one, so the year-end surface must not list it.
  */
-export type PayrollFilingCadence = "annual" | "quarterly" | "separation";
+export type PayrollFilingCadence = "annual" | "quarterly" | "monthly" | "separation";
 
 export const PAYROLL_FILING_CADENCES: readonly PayrollFilingCadence[] = [
   "annual",
   "quarterly",
+  "monthly",
   "separation",
 ];
 
