@@ -5567,6 +5567,7 @@
     "asOfPeriod": "As-of period",
     "choosePeriod": "Choose a period…",
     "periodOption": "{name} · ends {endsOn} · {calendar}",
+    "periodCount": "{count} eligible periods available",
     "create": "Create sandbox",
     "cutoffDescription": "The clone includes ledger entries posted on or before the chosen period’s end date, whatever calendar their period belongs to.",
     "reviewChanges": "Review change sets",

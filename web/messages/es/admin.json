@@ -5567,6 +5567,7 @@
     "asOfPeriod": "Período de referencia",
     "choosePeriod": "Elige un período…",
     "periodOption": "{name} · termina {endsOn} · {calendar}",
+    "periodCount": "{count} períodos disponibles",
     "create": "Crear sandbox",
     "cutoffDescription": "La copia incluye asientos registrados hasta la fecha de fin del período elegido, independientemente del calendario al que pertenezca.",
     "reviewChanges": "Revisar conjuntos de cambios",

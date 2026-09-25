@@ -5567,6 +5567,7 @@
     "asOfPeriod": "截止期间",
     "choosePeriod": "选择期间…",
     "periodOption": "{name} · 截止 {endsOn} · {calendar}",
+    "periodCount": "共有 {count} 个可用期间",
     "create": "创建沙箱",
     "cutoffDescription": "副本包含所选期间结束日期当天及之前过账的分录，与其所属日历无关。",
     "reviewChanges": "查看变更集",
