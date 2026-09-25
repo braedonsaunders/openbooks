@@ -65,9 +65,14 @@ export async function recordFilingOriginal(
   return body.fileRefusal ?? null
 }
 
-/** Per-row issue-declaration key, so two issue filings never share state. */
-const issueKey = (section: YearEndFilingSection, row: FilingRow) =>
-  `${section.country}:${section.key}:${String(row[section.data.rowKey] ?? '')}`
+/**
+ * Per-row issue-declaration key. The filing year is part of every key, so a
+ * declaration made for one year's event can never be reused for another
+ * year's event for the same employee (I4-webui-59): a new separation event
+ * starts with no declaration and requires a deliberate new one.
+ */
+const issueKey = (section: YearEndFilingSection, year: number, row: FilingRow) =>
+  `${section.country}:${section.key}:${year}:${String(row[section.data.rowKey] ?? '')}`
 
 const fileHref = (section: YearEndFilingSection, year: number) =>
   `/api/payroll/year-end/file?country=${encodeURIComponent(section.country)}`
@@ -93,22 +98,37 @@ export function useFilingIssues(year: number) {
   const [downloadError, setDownloadError] = useState<Record<string, string>>({})
   const [downloadBusy, setDownloadBusy] = useState<string | null>(null)
 
+  // The hook instance survives query-only year navigation, so declarations
+  // and errors are dropped the moment the year changes (I4-webui-59).
+  const [prevYear, setPrevYear] = useState(year)
+  if (prevYear !== year) {
+    setPrevYear(year)
+    setReasons({})
+    setComments({})
+    setDownloadError({})
+    setDownloadBusy(null)
+  }
+
+  // Year-closed key: external callers keep the (section, row) shape and
+  // automatically get the active year's declarations.
+  const keyFor = (section: YearEndFilingSection, row: FilingRow) => issueKey(section, year, row)
+
   const issueSelection = (section: YearEndFilingSection): string => {
     if (!section.issue) return ''
     const idColumn = section.issue.idColumn
     return section.data.rows
-      .filter((row) => reasons[issueKey(section, row)])
+      .filter((row) => reasons[keyFor(section, row)])
       .map((row) => [
         String(row[idColumn] ?? ''),
-        reasons[issueKey(section, row)],
-        encodeURIComponent(comments[issueKey(section, row)] ?? ''),
+        reasons[keyFor(section, row)],
+        encodeURIComponent(comments[keyFor(section, row)] ?? ''),
       ].join(':'))
       .join(',')
   }
 
   const issueSelectionCount = (section: YearEndFilingSection): number => {
     if (!section.issue) return 0
-    return section.data.rows.filter((row) => reasons[issueKey(section, row)]).length
+    return section.data.rows.filter((row) => reasons[keyFor(section, row)]).length
   }
 
   /** Fetch-based download so a refusal (422) lands as a callout, not a JSON tab. */
@@ -165,15 +185,15 @@ export function useFilingIssues(year: number) {
   return {
     reasons,
     comments,
-    issueKey,
+    issueKey: keyFor,
     issueSelection,
     downloadBusy,
     downloadError,
     downloadFile,
     setReason: (section: YearEndFilingSection, row: FilingRow, value: string) =>
-      setReasons((prev) => ({ ...prev, [issueKey(section, row)]: value })),
+      setReasons((prev) => ({ ...prev, [keyFor(section, row)]: value })),
     setComment: (section: YearEndFilingSection, row: FilingRow, value: string) =>
-      setComments((prev) => ({ ...prev, [issueKey(section, row)]: value })),
+      setComments((prev) => ({ ...prev, [keyFor(section, row)]: value })),
   }
 }
 
