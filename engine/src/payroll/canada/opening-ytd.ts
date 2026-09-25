@@ -26,6 +26,12 @@ import type { PayrollOpeningYtdField } from "../packs.ts";
  * These declarations live with the CA pack, not in the generic opening
  * balance layer. The generic layer iterates pack declarations so another
  * country can add its own carry-in facts without country branching here.
+ *
+ * Québec income-tax withheld rides it for a fourth reason: slip-box
+ * reconciliation. The federal `tax_ytd` column is the T4-box-22 money, so
+ * without its own carry-in the RL-1 Box E reconciles to the committed
+ * stubs alone and understates the year's Québec tax by exactly the prior
+ * provider's amount.
  */
 export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
   {
@@ -59,5 +65,11 @@ export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
     column: "eht_remuneration_ytd",
     label: "EHT remuneration paid before adoption",
     help: "EHT-subject remuneration already paid this year before adoption (Ontario, British Columbia, Manitoba). Counts toward the employer's annual EHT exemption in the employee's current payroll province.",
+  },
+  {
+    key: "qcTaxYtd",
+    column: "qc_tax_ytd",
+    label: "Québec income tax withheld before adoption",
+    help: "Québec income tax already withheld this year before adoption, as the prior provider's year-to-date report shows it (RL-1 Box E year-to-date). Distinct from federal tax withheld: do not copy the T4-box-22 figure here.",
   },
 ];

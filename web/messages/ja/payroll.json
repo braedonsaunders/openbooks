@@ -1313,7 +1313,8 @@
       "qcCsbYtd": "賞与追加QPP拠出",
       "ficaWithheldYtd": "源泉徴収FICA税",
       "qpipEmployerYtd": "雇用主QPIP保険料",
-      "wcbAssessableYtd": "WCB算定対象賃金"
+      "wcbAssessableYtd": "WCB算定対象賃金",
+      "qcTaxYtd": "ケベック州源泉徴収所得税"
     },
     "componentHelp": "前給与システムで従業員が当年すでに使用した、この項目の年額上限の消費分。なければ上限がゼロから再開し、従業員は年額上限いっぱいまで2回拠出できる状態になります。",
     "componentCap": "年額上限",

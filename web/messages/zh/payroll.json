@@ -1313,7 +1313,8 @@
       "qcCsbYtd": "奖金额外 QPP 缴款",
       "ficaWithheldYtd": "已代扣 FICA 税",
       "qpipEmployerYtd": "雇主 QPIP 缴款",
-      "wcbAssessableYtd": "WCB 应评税工资"
+      "wcbAssessableYtd": "WCB 应评税工资",
+      "qcTaxYtd": "已代扣魁北克所得税"
     },
     "componentHelp": "该员工本年度在原工资系统已使用的该组成年度上限额度。缺了它上限从零起算,员工可能缴足第二次全年限额。",
     "componentCap": "年度上限",

@@ -172,6 +172,13 @@ export interface OpeningYearEndYtd {
   taxableYtd: string;
   /** tax_ytd — income tax withheld before adoption (box 22 / W-2 box 2). */
   taxYtd: string;
+  /**
+   * qc_tax_ytd — Québec income tax withheld before adoption (RL-1 Box E).
+   * Optional because only the RL-1 reads it: the T4/W-2 carry-ins never set
+   * it, and the RL-1 treats an absent value as no Québec carry-in, never a
+   * guess. Distinct from taxYtd, which is the federal money.
+   */
+  qcTaxYtd?: string;
   /** fica_withheld_ytd — combined SS/Medicare tax withheld before adoption (W-2 boxes 4/6). */
   ficaWithheldYtd: string;
   /**

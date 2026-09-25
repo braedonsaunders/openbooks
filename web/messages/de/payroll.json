@@ -1313,7 +1313,8 @@
       "qcCsbYtd": "Zusätzliche QPP-Beiträge auf Boni",
       "ficaWithheldYtd": "Einbehaltene FICA-Steuer",
       "qpipEmployerYtd": "Arbeitgeber-QPIP-Beiträge",
-      "wcbAssessableYtd": "WCB-pflichtiges Entgelt"
+      "wcbAssessableYtd": "WCB-pflichtiges Entgelt",
+      "qcTaxYtd": "Einbehaltene Québec-Steuer"
     },
     "componentHelp": "Wie viel von der Jahresobergrenze dieses Bestandteils der Mitarbeiter dieses Jahr bereits verbraucht hat, im früheren Lohnsystem. Ohne das startet die Grenze bei null und der Mitarbeiter kann eine zweite volle Jahresgrenze einzahlen.",
     "componentCap": "Jahresobergrenze",

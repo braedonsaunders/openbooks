@@ -137,7 +137,8 @@ test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () =
 test("RL-1 carry-in leaves boxes E and F alone: no opening source exists", () => {
   // tax_ytd is the T4-box-22 federal money — not Québec income tax — and the
   // model collects no union-dues YTD, so carrying them into boxes E/F would
-  // invent a Québec return the same way the T4 refuses box 44.
+  // invent a Québec return the same way the T4 refuses box 44. (The distinct
+  // qc_tax_ytd carry-in below is the only opening source box E reads.)
   const before = aggregates();
   const carried = openingYtdIntoRl1Aggregates(
     before,
@@ -147,8 +148,20 @@ test("RL-1 carry-in leaves boxes E and F alone: no opening source exists", () =>
       eiYtd: "3.00", qpipYtd: "1.00",
     }),
   );
-  assert.equal(carried.qcIncomeTax, before.qcIncomeTax);
+  // Unchanged in value, normalized to the 4dp every other carried box reads.
+  assert.equal(carried.qcIncomeTax, "6100.0000");
   assert.equal(carried.unionDues, before.unionDues);
+});
+
+test("RL-1 Box E carries pre-adoption Québec income tax additively with stubs", () => {
+  // $1,000 of stubs plus $2,000 carried reads $3,000, never $1,000 — while
+  // the $9,999.99 of federal tax_ytd in the same opening leaks nothing in.
+  const carried = openingYtdIntoRl1Aggregates(
+    aggregates({ qcIncomeTax: "1000.00" }),
+    opening({ taxYtd: "9999.99", qcTaxYtd: "2000.00" }),
+  );
+  assert.equal(carried.qcIncomeTax, "3000.0000");
+  assert.equal(assembleRl1Slip(carried, rl1YearCaps(2026)).boxE, "3000.0000");
 });
 
 test("RL-1 carry-in folds the program's own base into box I, capped at the QPIP maximum (C-13)", () => {
