@@ -17,6 +17,7 @@ import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
 
 interface RouteState {
   gate: { user: { id: string; orgId: string } } | { status: number };
+  deniedPermissions: string[];
   featureOn: boolean;
   calls: Array<{ fn: string; args: unknown }>;
   serviceThrow: unknown;
@@ -27,6 +28,7 @@ const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
+  deniedPermissions: [],
   featureOn: true,
   calls: [],
   serviceThrow: null,
@@ -42,9 +44,12 @@ const mockSources = new Map<string, string>([
         if (permission !== 'hrm.leave.read' && permission !== 'hrm.leave.request') {
           throw new Error('unexpected permission ' + permission)
         }
+        const NextResponse = globalThis.openbooksHrmLeaveRouteNextResponse
         if (state.gate && 'status' in state.gate) {
-          const NextResponse = globalThis.openbooksHrmLeaveRouteNextResponse
           return NextResponse.json({ error: 'denied' }, { status: state.gate.status })
+        }
+        if ((state.deniedPermissions ?? []).includes(permission)) {
+          return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
         }
         return state.gate
       }
@@ -114,6 +119,7 @@ const TYPE_ID = "00000000-0000-4000-8000-000000000022";
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
+  routeState.deniedPermissions = [];
   routeState.featureOn = true;
   routeState.calls = [];
   routeState.serviceThrow = null;
@@ -166,6 +172,18 @@ test("GET refuses unknown status and non-uuid employment before the service", as
   const badId = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=nope"));
   assert.equal(badId.status, 400);
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
+});
+
+test("GET mine admits the filing grant while a specified employment still needs read", async () => {
+  reset();
+  routeState.deniedPermissions = ["hrm.leave.read"];
+  const res = await collectionRoute!.GET(new Request("http://x/api/hrm/leave-requests?employmentId=mine"));
+  assert.equal(res.status, 200);
+  const denied = await collectionRoute!.GET(
+    new Request(`http://x/api/hrm/leave-requests?employmentId=${EMPLOYMENT_ID}`),
+  );
+  assert.equal(denied.status, 403);
+  assert.equal(routeState.calls.length, 1, "the service runs only past the boundary");
 });
 
 test("GET forwards the gate and the feature switch", async () => {
