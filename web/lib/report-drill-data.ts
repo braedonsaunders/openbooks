@@ -425,7 +425,9 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
   }
   return {
     title: target.label,
-    description: tr('drillDrawer.supporting'),
+    description: allRows.length >= 10_000
+      ? tr('drillDrawer.supportingCapped')
+      : tr('drillDrawer.supporting'),
     summary: [{ label: tr('custom.runner.columns.rows'), value: allRows.length.toLocaleString() }],
     columns: visible.map((key) => {
       const column = entity.columns.find((c) => c.key === key)

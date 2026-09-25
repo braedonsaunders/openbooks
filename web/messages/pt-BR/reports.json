@@ -2204,6 +2204,7 @@
   "drillDrawer": {
     "title": "Registros de suporte",
     "supporting": "Os registros que compõem o valor selecionado do relatório.",
+    "supportingCapped": "Exibindo no máximo 10.000 registros de suporte; o resultado é limitado e pode estar incompleto.",
     "loadFailed": "Não foi possível carregar os registros de suporte.",
     "recordLoadFailed": "Não foi possível abrir a transação."
   },

@@ -2184,6 +2184,7 @@
   "drillDrawer": {
     "title": "Registros de respaldo",
     "supporting": "Los registros que componen el valor seleccionado del informe.",
+    "supportingCapped": "Se muestran como máximo 10.000 registros de respaldo; el resultado está limitado y puede estar incompleto.",
     "loadFailed": "No se pudieron cargar los registros de respaldo.",
     "recordLoadFailed": "No se pudo abrir la transacción."
   },

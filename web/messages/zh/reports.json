@@ -2204,6 +2204,7 @@
   "drillDrawer": {
     "title": "支持记录",
     "supporting": "构成所选报表数值的记录。",
+    "supportingCapped": "最多显示 10,000 条支持记录；结果有上限，可能不完整。",
     "loadFailed": "无法加载支持记录。",
     "recordLoadFailed": "无法打开交易。"
   },
