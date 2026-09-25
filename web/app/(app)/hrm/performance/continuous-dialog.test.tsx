@@ -75,6 +75,7 @@ async function mount(posts: Post[]): Promise<{
     return { ok: true, status: 200, json: async () => ({}) }
   }
   const labels = {
+    cycleId: 'cycle-1',
     perfLabel: 'Performance',
     potLabel: 'Potential',
     impactLabel: 'Impact',
