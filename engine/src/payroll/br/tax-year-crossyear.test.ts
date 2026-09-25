@@ -44,7 +44,7 @@ import {
 } from "./tax-year-2025.ts";
 import { brTablesForPayDate } from "./year-tables.ts";
 
-const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8" };
+const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8", regimeTributario: "geral" };
 
 function brContext(overrides: Record<string, unknown> = {}): PayrollStatutoryComputeContext {
   return {

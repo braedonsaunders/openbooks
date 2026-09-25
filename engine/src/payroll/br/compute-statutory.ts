@@ -32,6 +32,8 @@ import { calculateBrIrrfFromTables } from "./irrf-year.ts";
 import { brTablesForPayDate } from "./year-tables.ts";
 import { BR_PACK_RATES } from "./rates.ts";
 import { BR_2026_FGTS, BR_2026_PATRONAL, BR_2026_SALARIO_FAMILIA } from "./tax-year-2026.ts";
+import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
+import { BR_CPP_IN_DAS, BR_REGIME_TRIBUTARIO_CHOICES } from "./employer-facts.ts";
 
 function fail(message: string): never {
   throw new PayrollPackError(`BR payroll 2026: ${message}`);
@@ -96,6 +98,12 @@ export interface BrEmployerRates {
   fap: string | null;
   /** Aggregate terceiros percent; null = undeclared. */
   terceirosPct: string | null;
+  /**
+   * Establishment tax regime (one of BR_REGIME_TRIBUTARIO_CHOICES);
+   * null = undeclared → named refusal, never defaulted to general-regime
+   * CPP. Decides whether patronal/RAT/terceiros accrue separately at all.
+   */
+  regimeTributario: string | null;
 }
 
 export async function computeBrStatutoryWithRates(
@@ -224,45 +232,71 @@ export async function computeBrStatutoryWithRates(
     }
   }
 
-  // 3. Employer cost: patronal 20% (published) + RAT×FAP + terceiros
-  // (tenant-declared, refused by name when the lookup finds nothing) +
-  // FGTS 8% (employer obligation, never withheld).
-  if (rates.ratPct === null) {
+  // 3. Employer cost: patronal 20% + RAT×FAP + terceiros — but only where
+  // the establishment's tax regime leaves CPP outside the Simples DAS
+  // (LC 123/2006 art. 13 VI vs art. 18 §5-C). Simples I/II/III/V accrue no
+  // separate patronal, RAT or terceiros; Simples IV accrues patronal + RAT
+  // but no terceiros; general-regime accrues all three. FGTS 8% always
+  // (employer obligation, never withheld, never in DAS).
+  const regimeTributario = rates.regimeTributario;
+  if (regimeTributario == null || regimeTributario === "") {
     fail(
-      "the br_rat statutory rate is not declared for this establishment — the CNAE risk class "
-      + "(1%/2%/3%) is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
+      "the establishment br_regime_tributario is not declared — Simples Nacional annexes I, II, III and V "
+      + "pay employer CPP inside the monthly DAS while Annex IV and general-regime employers accrue it "
+      + "separately (LC 123/2006 art. 13 VI, art. 18 §5-C). Declare the regime in Payroll Setup → Employer facts",
     );
   }
-  if (rates.fap === null) {
+  if (!(BR_REGIME_TRIBUTARIO_CHOICES as readonly string[]).includes(regimeTributario)) {
     fail(
-      "the br_fap statutory rate is not declared for this establishment — the FAP factor (0.5–2.0) "
-      + "is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
+      `establishment br_regime_tributario "${regimeTributario}" is not a declared regime — expected one of `
+      + `${BR_REGIME_TRIBUTARIO_CHOICES.join(", ")}`,
     );
   }
-  if (rates.terceirosPct === null) {
-    fail(
-      "the br_terceiros statutory rate is not declared for this establishment — the aggregate "
-      + "terceiros percent for its FPAS code is tenant-entered, never table-supplied",
-    );
+  const cppInDas = BR_CPP_IN_DAS.has(regimeTributario);
+  const terceirosApplies = regimeTributario === "geral";
+  let rat = { num: 0n, den: 1n };
+  let fap = { num: 0n, den: 1n };
+  if (!cppInDas) {
+    if (rates.ratPct === null) {
+      fail(
+        "the br_rat statutory rate is not declared for this establishment — the CNAE risk class "
+        + "(1%/2%/3%) is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
+      );
+    }
+    if (rates.fap === null) {
+      fail(
+        "the br_fap statutory rate is not declared for this establishment — the FAP factor (0.5–2.0) "
+        + "is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
+      );
+    }
+    rat = percentParts(rates.ratPct, "br_rat aliquota");
+    if (rat.num * 100n < rat.den || rat.num * 100n > rat.den * 3n) {
+      fail(`br_rat aliquota "${rates.ratPct}" is not 1, 2 or 3 percent`);
+    }
+    fap = factorParts(rates.fap, "br_fap fator");
+    if (fap.num * 2n < fap.den || fap.num > fap.den * 2n) {
+      fail(`br_fap fator "${rates.fap}" is outside 0.5–2.0`);
+    }
   }
-  const rat = percentParts(rates.ratPct, "br_rat aliquota");
-  if (rat.num * 100n < rat.den || rat.num * 100n > rat.den * 3n) {
-    fail(`br_rat aliquota "${rates.ratPct}" is not 1, 2 or 3 percent`);
+  let terceiros = { num: 0n, den: 1n };
+  if (terceirosApplies) {
+    if (rates.terceirosPct === null) {
+      fail(
+        "the br_terceiros statutory rate is not declared for this establishment — the aggregate "
+        + "terceiros percent for its FPAS code is tenant-entered, never table-supplied",
+      );
+    }
+    terceiros = percentParts(rates.terceirosPct, "br_terceiros aliquota");
   }
-  const fap = factorParts(rates.fap, "br_fap fator");
-  if (fap.num * 2n < fap.den || fap.num > fap.den * 2n) {
-    fail(`br_fap fator "${rates.fap}" is outside 0.5–2.0`);
-  }
-  const terceiros = percentParts(rates.terceirosPct, "br_terceiros aliquota");
   // Patronal 20% and FGTS 8% every transcribed year (Lei 8.212/1991 art. 22,
   // I; Lei 8.036/1990 art. 15) — read off the year's own module, never
   // borrowed across years.
   const patronalRate = percentParts(priorTables?.patronal ?? BR_2026_PATRONAL, "patronal");
   const fgtsRate = percentParts(priorTables?.fgts ?? BR_2026_FGTS, "FGTS");
 
-  const patronal = truncCents(remuneracao * patronalRate.num, patronalRate.den);
-  const ratEr = truncCents(remuneracao * rat.num * fap.num, rat.den * fap.den);
-  const terceirosEr = truncCents(remuneracao * terceiros.num, terceiros.den);
+  const patronal = cppInDas ? 0n : truncCents(remuneracao * patronalRate.num, patronalRate.den);
+  const ratEr = cppInDas ? 0n : truncCents(remuneracao * rat.num * fap.num, rat.den * fap.den);
+  const terceirosEr = !terceirosApplies ? 0n : truncCents(remuneracao * terceiros.num, terceiros.den);
   const fgts = truncCents(remuneracao * fgtsRate.num, fgtsRate.den);
 
   pushStatutory("irrf", "deduction", "IRRF", brl4(centsOf2dp(irrf.irrf)), 110);
@@ -337,13 +371,35 @@ export async function computeBrStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   if (ctx.taxYear !== 2026 && ctx.taxYear !== 2025 && ctx.taxYear !== 2024) {
-    return computeBrStatutoryWithRates(ctx, { ratPct: null, fap: null, terceirosPct: null });
+    // Unknown regime (transcription-gap fallback): no Simples gate applies.
+    return computeBrStatutoryWithRates(ctx, { ratPct: null, fap: null, terceirosPct: null, regimeTributario: null });
   }
   const resolution = await resolveStatutoryRates(ctx.orgId, BR_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
   const at = brRateLookupScope(ctx);
+  // The establishment's tax regime is an effective-dated employer fact, not
+  // a rate: Simples annexes decide whether CPP accrues separately at all.
+  if (!ctx.subsidiaryId) {
+    fail(
+      "the establishment br_regime_tributario cannot resolve without the paying subsidiary — "
+      + "the Simples-vs-general CPP treatment is per establishment (LC 123/2006)",
+    );
+  }
+  const payDate = ctx.run.pay_date;
+  if (payDate === undefined || payDate === "") {
+    fail("the run has no pay date, so the establishment br_regime_tributario cannot resolve (effective-dated employer fact)");
+  }
+  const regimeTributario = await resolveStoredEmployerFact({
+    tx: ctx.tx,
+    orgId: ctx.orgId,
+    subsidiaryId: ctx.subsidiaryId,
+    country: "BR",
+    factKey: "br_regime_tributario",
+    asOf: payDate,
+  });
   return computeBrStatutoryWithRates(ctx, {
     ratPct: resolution.values("br_rat", at)?.["aliquota"] ?? null,
     fap: resolution.values("br_fap", at)?.["fator"] ?? null,
     terceirosPct: resolution.values("br_terceiros", at)?.["aliquota"] ?? null,
+    regimeTributario,
   });
 }
