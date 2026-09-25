@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
@@ -39,15 +40,32 @@ export function ComplianceActions({
   failedLabel: string
 }) {
   const router = useRouter()
+  // A second click while the first transition POST is in flight would
+  // acknowledge/approve/submit twice: the ref drops re-entrant calls in
+  // the same tick as the click, and the buttons disable while it is set.
+  const pendingRef = useRef(false)
+  const [pending, setPending] = useState(false)
   if (!canManage) return null
 
   async function call(url: string, init: RequestInit, failed: string) {
-    const res = await fetch(url, init)
-    if (!res.ok) {
-      toast.error(await readApiErrorMessage(res, failed))
-      return
+    if (pendingRef.current) return
+    pendingRef.current = true
+    setPending(true)
+    try {
+      const res = await fetch(url, init)
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, failed))
+        return
+      }
+      router.refresh()
+    } catch {
+      // Offline or another transport failure rejects instead of
+      // resolving: the refusal toast is the only evidence.
+      toast.error(failed)
+    } finally {
+      pendingRef.current = false
+      setPending(false)
     }
-    router.refresh()
   }
 
   async function acknowledge() {
@@ -133,7 +151,7 @@ export function ComplianceActions({
   return (
     <span className="inline-flex items-center gap-1.5">
       {buttons.map((button) => (
-        <Button key={button.key} size="sm" variant="outline" onClick={button.run}>
+        <Button key={button.key} size="sm" variant="outline" onClick={button.run} disabled={pending}>
           {button.label}
         </Button>
       ))}
