@@ -6,7 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
 import { getHeadcountAsOf, getHeadcountTotalsAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
-import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
+import { countChangeRequests, HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
 import { loadRecruitingOverview } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
 import { getOnboardingOverview } from '@openbooks/engine/src/hrm/processes-read.ts'
@@ -220,12 +220,11 @@ export interface HrmHomeData {
 }
 
 /**
- * Bounded reads beside the headcount hero. The pending queue mirrors the
- * queue page's own bound so the two counts can never disagree about what
- * was fetched; the upcoming window is capped defensively (a 30-day window
- * is naturally small).
+ * Bounded reads beside the headcount hero. The pending tile counts a
+ * scope-checked total while the preview shows the newest pending rows;
+ * the upcoming window is capped defensively (a 30-day window is naturally
+ * small).
  */
-const HOME_QUEUE_LIMIT = 500
 const HOME_PENDING_SHOWN = 5
 const HOME_WINDOW_DAYS = 30
 const HOME_WINDOW_LIMIT = 100
@@ -308,13 +307,22 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       : Promise.resolve(null),
     (async () => {
       try {
+        // The pending tile counts the scope-checked total, never a bounded
+        // preview: an older pending request must not vanish because the
+        // newest mixed-status rows filled the fetch window. The five-row
+        // preview is itself status-filtered so it always shows real work.
+        const [rows, pendingTotal] = await Promise.all([
+          listChangeRequests({ orgId, actorId: authz.user.id, status: 'pending_approval', limit: HOME_PENDING_SHOWN }),
+          countChangeRequests({ orgId, actorId: authz.user.id, status: 'pending_approval' }),
+        ])
         return {
-          rows: await listChangeRequests({ orgId, actorId: authz.user.id, limit: HOME_QUEUE_LIMIT }),
+          rows,
+          pendingTotal,
           refusal: null as string | null,
         }
       } catch (error) {
         if (error instanceof HrmAuthorizationError || error instanceof HrmChangeRequestError) {
-          return { rows: [], refusal: (error as Error).message }
+          return { rows: [], pendingTotal: 0, refusal: (error as Error).message }
         }
         throw error
       }
@@ -475,9 +483,10 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   let pendingCount = 0
   let pending: PendingRequestItem[] = []
   if (pendingRefusal === null) {
-    const awaiting = queueLoad.rows.filter((row) => row.status === 'pending_approval')
-    pendingCount = awaiting.length
-    const shown = awaiting.slice(0, HOME_PENDING_SHOWN)
+    // Rows already arrive status-filtered (newest pending first); the tile
+    // counts the independent scope-checked total, not the preview length.
+    pendingCount = queueLoad.pendingTotal
+    const shown = queueLoad.rows.slice(0, HOME_PENDING_SHOWN)
     const { workerByEmployment } = await loadQueueLabels(orgId, [...new Set(shown.map((row) => row.employmentId))], [])
     const present = t('employment.episodes.present')
     pending = shown.map((row) => {

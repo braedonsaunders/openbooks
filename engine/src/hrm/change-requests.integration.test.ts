@@ -12,6 +12,7 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import {
+  countChangeRequests,
   createChangeRequestDraft,
   getChangeRequest,
   HrmChangeRequestError,
@@ -901,6 +902,8 @@ test("change-request list applies subsidiary scope before its visible-row limit"
     });
     const allVisible = await listChangeRequests({ orgId: h.org.orgId, actorId: scopedReader, limit: 500 });
     assert.deepEqual(new Set(allVisible.map((request) => request.id)), new Set([visibleRequest.id, ownProfileRequest.id]));
+    // The dashboard tile counts through the same scope predicates, never the preview length.
+    assert.equal(await countChangeRequests({ orgId: h.org.orgId, actorId: scopedReader }), 2);
   });
 });
 
