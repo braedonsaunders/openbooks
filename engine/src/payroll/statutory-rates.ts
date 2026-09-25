@@ -482,7 +482,7 @@ export async function lockStatutoryRatesForPayRun(
     select country, rate_key, region, sub_region, filing_account_id
       from payroll_statutory_rates
      where org_id = ${orgId} and tax_year = ${taxYear}
-       and country = any(${countries}::text[]) and superseded_on is null
+       and country = any(${sql.param(countries)}::text[]) and superseded_on is null
      order by country, rate_key, region nulls first, sub_region nulls first,
               filing_account_id nulls first
   `);
