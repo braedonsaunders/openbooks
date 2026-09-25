@@ -55,7 +55,7 @@ function adapterInput(
     periodsPerYear: 26,
     wages: '2000.0000',
     supplemental: '0.0000',
-    certificateFor: () => stale,
+    certificateFor: (key) => key === certificateKey ? stale : null,
     tenantRates: () => undefined,
     // This is the paycheck's computed FIT. Before the fix the adapter silently
     // dropped it because the state input contract had no current-FIT field.
@@ -149,7 +149,7 @@ test('Ohio school-district dispatch applies the IT 4 exemption count', () => {
   assert.equal(result?.tax, '24.6900')
 
   const without = computeUsWithholding({
-    ...input, certificateFor: () => certificate('us_oh_it4', {}),
+    ...input, certificateFor: (key) => key === 'us_oh_it4' ? certificate('us_oh_it4', {}) : null,
   })
   assert.equal(without?.tax, '25.0000')
 })
@@ -230,7 +230,7 @@ test('Alabama separately paid bonus uses the 5% rate effective in 2026', () => {
     payDate: '2026-01-01', periodEnd: PERIOD_END, periodsPerYear: 26,
     wages: '0.0000', supplemental: '1000.0000',
     supplementalPaymentTiming: 'separate',
-    certificateFor: () => certificate('us_al_a4', { exemption: '0', dependents: '0' }),
+    certificateFor: (key) => key === 'us_al_a4' ? certificate('us_al_a4', { exemption: '0', dependents: '0' }) : null,
     tenantRates: () => undefined, federalIncomeTax: '0.0000',
   } as Parameters<typeof computeUsWithholding>[0])
 
@@ -261,7 +261,7 @@ test('Georgia separately paid bonus uses the effective flat supplemental rate', 
     payDate: '2026-05-11', periodEnd: PERIOD_END, periodsPerYear: 26,
     wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate' as const,
-    certificateFor: () => certificate('us_ga_g4', {}), tenantRates: () => undefined,
+    certificateFor: (key) => key === 'us_ga_g4' ? certificate('us_ga_g4', {}) : null, tenantRates: () => undefined,
     federalIncomeTax: '0.0000',
   } as Parameters<typeof computeUsWithholding>[0]
   const result = computeUsWithholding(input)
@@ -283,7 +283,7 @@ test('Michigan separately paid bonus uses 4.25% without the period exemption', (
     payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
     wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate',
-    certificateFor: () => certificate('us_mi_miw4', { exemptions: '99' }),
+    certificateFor: (key) => key === 'us_mi_miw4' ? certificate('us_mi_miw4', { exemptions: '99' }) : null,
     tenantRates: () => undefined, federalIncomeTax: '0.0000',
   } as Parameters<typeof computeUsWithholding>[0])
   assert.equal(result?.tax, '21.2500')
@@ -298,7 +298,7 @@ test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () =>
     payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
     wages: '0.0000', supplemental: '4000.0000',
     supplementalPaymentTiming: 'separate',
-    certificateFor: () => certificate('us_mn_w4mn', { marital_status: 'married', allowances: '9' }),
+    certificateFor: (key) => key === 'us_mn_w4mn' ? certificate('us_mn_w4mn', { marital_status: 'married', allowances: '9' }) : null,
     tenantRates: () => undefined, federalIncomeTax: '0.0000',
   } as Parameters<typeof computeUsWithholding>[0])
   assert.equal(result?.tax, '250.0000')
@@ -313,7 +313,7 @@ test('Montana separately paid supplemental wages use the guide’s 5% option', (
     levy: levy('MT', 'us_mt_mw4'),
     payDate: '2026-06-01', periodEnd: PERIOD_END, periodsPerYear: 26,
     wages: '0.0000', supplemental: '500.0000', supplementalPaymentTiming: 'separate',
-    federalIncomeTax: '0.00', certificateFor: () => certificate('us_mt_mw4', {}),
+    federalIncomeTax: '0.00', certificateFor: (key) => key === 'us_mt_mw4' ? certificate('us_mt_mw4', {}) : null,
     tenantRates: () => undefined,
   })
   assert.equal(result?.tax, '25.0000')
@@ -328,7 +328,7 @@ test('North Carolina separate supplementals use 4.09% only with regular withhold
     levy: levy('NC', 'us_nc_nc4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate' as const, federalIncomeTax: '0.00',
-    certificateFor: () => certificate('us_nc_nc4', {}), tenantRates: () => undefined,
+    certificateFor: (key) => key === 'us_nc_nc4' ? certificate('us_nc_nc4', {}) : null, tenantRates: () => undefined,
   }
   const result = computeUsWithholding({ ...input, regularWageTaxWithheldThisYear: true })
   assert.equal(result?.tax, '20.0000')
@@ -345,7 +345,7 @@ test('North Dakota and Nebraska separate supplementals use their published flat 
     levy: levy('ND', 'us_nd_w4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate', federalIncomeTax: '0.00',
-    certificateFor: () => certificate('us_nd_w4', {}), tenantRates: () => undefined,
+    certificateFor: (key) => key === 'us_nd_w4' ? certificate('us_nd_w4', {}) : null, tenantRates: () => undefined,
   })
   assert.equal(nd?.tax, '7.5000')
   assert.equal(nd?.factors.US_SUPPLEMENTAL_RATE, '0.015')
@@ -355,7 +355,7 @@ test('North Dakota and Nebraska separate supplementals use their published flat 
     levy: levy('NE', 'us_ne_w4n'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, employerEmployeeCount: 2, wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate', federalIncomeTax: '0.00',
-    certificateFor: () => certificate('us_ne_w4n', {}), tenantRates: () => undefined,
+    certificateFor: (key) => key === 'us_ne_w4n' ? certificate('us_ne_w4n', {}) : null, tenantRates: () => undefined,
   })
   assert.equal(ne?.tax, '17.5000')
   assert.equal(ne?.factors.US_SUPPLEMENTAL_RATE, '0.035')
@@ -372,7 +372,7 @@ test('Arkansas combined bonus uses the bonus rate beside the regular formula', (
     levy: levy('AR', 'us_ar_ar4ec'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '900.0000', supplemental: '1000.0000',
     supplementalPaymentTiming: 'combined', federalIncomeTax: '0.00',
-    certificateFor: () => certificate('us_ar_ar4ec', {}), tenantRates: () => undefined,
+    certificateFor: (key) => key === 'us_ar_ar4ec' ? certificate('us_ar_ar4ec', {}) : null, tenantRates: () => undefined,
   })
   assert.equal(result?.tax, '55.3100')
   assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.039')
@@ -386,7 +386,7 @@ test('Virginia separate supplemental flat election requires regular withholding 
     levy: levy('VA', 'us_va_va4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate' as const, federalIncomeTax: '0.00',
-    certificateFor: () => certificate('us_va_va4', {}), tenantRates: () => undefined,
+    certificateFor: (key) => key === 'us_va_va4' ? certificate('us_va_va4', {}) : null, tenantRates: () => undefined,
   }
   const result = computeUsWithholding({ ...input, regularWageTaxWithheldThisYear: true })
   assert.equal(result?.tax, '28.7500')
@@ -405,7 +405,7 @@ test('New York separate supplemental rates follow the NYS and NYC schedules', ()
     levy: levy('NY', 'us_ny_it2104'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate', regularWageTaxWithheldThisYear: true,
-    federalIncomeTax: '0.00', certificateFor: () => certificate('us_ny_it2104', {}),
+    federalIncomeTax: '0.00', certificateFor: (key) => key === 'us_ny_it2104' ? certificate('us_ny_it2104', {}) : null,
     tenantRates: () => undefined,
   })
   assert.equal(nys?.tax, '58.5000')
@@ -418,7 +418,7 @@ test('New York separate supplemental rates follow the NYS and NYC schedules', ()
   const nycInput = {
     levy: nycLevy, payDate: '2026-06-01', periodEnd: PERIOD_END, periodsPerYear: 26,
     wages: '0.0000', supplemental: '500.0000', supplementalPaymentTiming: 'separate' as const,
-    federalIncomeTax: '0.00', certificateFor: () => certificate('us_ny_it2104', {}),
+    federalIncomeTax: '0.00', certificateFor: (key) => key === 'us_ny_it2104' ? certificate('us_ny_it2104', {}) : null,
     tenantRates: () => undefined,
   }
   assert.throws(
@@ -517,7 +517,7 @@ test('US states declare methods and California applies the classified bonus rate
   assert.equal(computeUsWithholding({ levy: levy('CA', 'us_ca_de4'), payDate: PAY_DATE,
     periodEnd: PERIOD_END, periodsPerYear: 26, wages: '0', supplemental: '1000',
     supplementalPaymentTiming: 'separate', supplementalWageAmounts: [{ category: 'bonus_or_stock_option', amount: '1000' }],
-    certificateFor: () => certificate('us_ca_de4', { filing_status: 'single_or_dual', regular_allowances: '0', estimated_deduction_allowances: '0' }),
+    certificateFor: (key) => key === 'us_ca_de4' ? certificate('us_ca_de4', { filing_status: 'single_or_dual', regular_allowances: '0', estimated_deduction_allowances: '0' }) : null,
     tenantRates: () => undefined, federalIncomeTax: '0',
   } as Parameters<typeof computeUsWithholding>[0])?.tax, '102.3000')
 })
