@@ -6,6 +6,7 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { validateCriteria, validateOutcome } from '../../../../lib/banking-rules-validate'
+import { lockBankMatchRuleSet } from '../../../../lib/banking-rule-set-lock'
 
 export const runtime = 'nodejs'
 
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
   // Match rules decide how imported bank lines are categorized and posted, so
   // every write lands in the audit trail inside the same transaction.
   const created = await db.transaction(async (tx) => {
+    await lockBankMatchRuleSet(user.orgId)
     const row = (await tx.execute<Record<string, unknown>>(sql`
       insert into bank_match_rules (org_id, name, criteria, outcome, priority, is_active, created_by)
       values (${user.orgId}, ${String(body.name).trim()}, ${JSON.stringify(built.criteria)}::jsonb,
@@ -94,6 +96,7 @@ export async function PATCH(req: Request) {
   const prio = priority(body)
   if ('error' in prio) return NextResponse.json({ error: prio.error }, { status: 400 })
   const missing = await db.transaction(async (tx) => {
+    await lockBankMatchRuleSet(user.orgId)
     // Serialize rule edits from the row snapshot that supplies the audit
     // before-image. A concurrent PATCH waits here, then PostgreSQL's
     // READ COMMITTED snapshot is refreshed to the winner's committed row

@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { lockBankMatchRuleSet } from '../../../../../lib/banking-rule-set-lock'
 
 export const runtime = 'nodejs'
 
@@ -18,6 +19,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const missing = await db.transaction(async (tx) => {
+    await lockBankMatchRuleSet(user.orgId)
     // Snapshot the rule first: deletion removes the record of what used to
     // auto-categorize bank lines.
     const existing = (await tx.execute<Record<string, unknown>>(sql`
