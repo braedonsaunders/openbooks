@@ -1,27 +1,34 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../platform/db.ts";
+import { db, pool, withBypassContext } from "../platform/db.ts";
 import { runId, sourceSha } from "../platform/provenance.ts";
-import { runScenario } from "./scenario.ts";
+import { runScenarioForOrg } from "./scenario.ts";
 
 /**
  * Golden-fixture harness runner.
  *   npm run harness -- [orgId]
- * Runs the non-destructive scenario checks for one org (default: first org),
+ * Runs checks for one org (default: oldest sandbox org; pass an org id to
+ * inspect a seeded org explicitly, as the upgrade rehearsal does),
  * prints a report, writes a diffable checkpoint under engine/harness-checkpoints/,
  * and exits non-zero if any hard check fails (so it can gate CI).
  */
 
 const argOrg = process.argv[2];
-const orgId = argOrg ?? ((await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`))).rows[0]?.id;
+// Default discovery is trusted, but limited to sandboxes so a bare command
+// cannot select an arbitrary production tenant. Explicit ids support rehearsal.
+const orgId = argOrg ?? (await withBypassContext(async () =>
+  (await db.execute<{ id: string }>(sql`
+    select id from orgs where env_kind = 'sandbox' order by created_at, id limit 1
+  `)).rows[0]?.id,
+));
 if (!orgId) { console.error("no org"); process.exit(1); }
 
 const gitSha = sourceSha();
 const producerRunId = runId();
 
 const at = new Date().toISOString();
-const cp = await runScenario(orgId, { at, gitSha, runId: producerRunId });
+const cp = await runScenarioForOrg(orgId, { at, gitSha, runId: producerRunId });
 
 const pad = (s: string, n: number) => s.padEnd(n);
 console.log(`\n=== Golden fixture: ${cp.orgName} (${cp.orgId}) ===`);

@@ -12,7 +12,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import { runScenario, type Checkpoint } from "./scenario.ts";
+import { runScenarioForOrg, type Checkpoint } from "./scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -107,7 +107,7 @@ test("inventory-subledger-gl-tieout holds across receipt, issue, PPV and standar
     const stdValue = await getOnHand(org.orgId, org.items.standard, loc);
     assert.equal(toUnits(stdValue.value), toUnits("30"), "layers must carry 10 × 3.00 after revision");
 
-    const cp = await runScenario(org.orgId, { at: org.date });
+    const cp = await runScenarioForOrg(org.orgId, { at: org.date });
     const check = invCheck(cp);
     assert.equal(check.ok, true, `tie-out must hold: ${check.detail}`);
     assert.equal(cp.pass, true, "the whole fixture must pass on a tied ledger");
@@ -161,7 +161,7 @@ test("inventory-subledger-gl-tieout fails when layers are rewritten while the co
       select count(*) n from journal_lines where entry_id = ${probeEntryId}`);
     assert.equal(Number(dr.rows[0]!.n), 2);
 
-    const cp = await runScenario(org.orgId, { at: org.date });
+    const cp = await runScenarioForOrg(org.orgId, { at: org.date });
     const check = invCheck(cp);
     assert.equal(check.ok, false, "the tie-out MUST fail on the diverged ledger");
     assert.equal(cp.pass, false, "a diverged fixture cannot be golden");
