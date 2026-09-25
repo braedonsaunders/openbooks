@@ -225,7 +225,7 @@ export const AU_REFUSED_2027: readonly string[] = [
   "Medicare levy surcharge tiers 1–3 (thresholds live in the Private Health Insurance Act 2007 and liability turns on daily private patient hospital cover the pack cannot see)",
   "Medicare levy family reduction s8 (needs spouse income and dependant counts not on the TFN declaration)",
   "Medicare levy section-160AAAA rebate thresholds (no such question on the TFN declaration)",
-  "Superannuation Guarantee YTD qualifying-earnings history (the $270,830 annual maximum base prices only the remaining headroom, so the engine refuses SG when verified year-to-date qualifying earnings are undeclared rather than posting uncapped SG)",
+  "Superannuation Guarantee YTD qualifying-earnings history (the $270,830 annual maximum contributions base prices only the remaining headroom, so the engine refuses SG when verified year-to-date qualifying earnings are undeclared rather than posting uncapped SG)",
   "HELP repayable-debt cap (the employee's accumulated HELP debt is not visible to the pack)",
   "53-week / 27-fortnight additional withholding (voluntary shortfall top-ups the pack does not apply)",
   "State payroll tax (employer-aggregate state levy, not PAYG — out of scope, not a region of this pack)",
