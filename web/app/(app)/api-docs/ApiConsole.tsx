@@ -280,7 +280,13 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
             <Select
               aria-label={t('console.recordTypes')}
               value={selectedKey}
-              onChange={(e) => setSelectedKey(e.target.value)}
+              onChange={(e) => {
+                // Retire any in-flight request, exactly as the desktop rail
+                // does: without the bump a late response lands under the new
+                // type and the Send fence never engages.
+                if (e.target.value !== selectedKey) requestGeneration.current += 1
+                setSelectedKey(e.target.value)
+              }}
               className="h-8 min-w-0 flex-1 text-xs lg:hidden"
             >
               {schema.map((rt) => (
