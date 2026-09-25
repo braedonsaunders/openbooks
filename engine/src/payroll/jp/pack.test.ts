@@ -95,7 +95,7 @@ test("all 47 prefectures are known, all supported, withholding implemented", () 
   );
   for (const region of JP_WITHHOLDING.regions) {
     assert.equal(region.implemented, true, region.region);
-    assert.equal(region.taxesNonresidentWages, false, region.region);
+    assert.equal(region.taxesNonresidentWages, true, region.region);
     assert.equal(region.residentWithholding, "required", region.region);
     assert.equal(region.residentWithholdingImplemented, true, region.region);
     assert.equal(region.certificateKey, "jp_fuyo", region.region);
@@ -105,12 +105,11 @@ test("all 47 prefectures are known, all supported, withholding implemented", () 
 
 test("the certificate carries the 甲欄 inputs; absence means 乙欄", () => {
   assert.equal(JP_CERTIFICATES.country, "JP");
-  // Since 0191 a second, column-backed declaration carries the payer-held
-  // 標準報酬 grade and kaigo status (`jp_hyojun`) — the 扶養控除等申告書
-  // itself is unchanged, still first, still the only row-backed form.
+  // `jp_hyojun` carries social-insurance inputs; `jp_tax_residency` selects
+  // resident-table or nonresident/source withholding.
   assert.deepEqual(
     JP_CERTIFICATES.certificates.map((certificate) => [certificate.key, certificate.storage]),
-    [["jp_fuyo", "certificate_rows"], ["jp_hyojun", "profile_columns"], ["jp_employment_insurance", "certificate_rows"]],
+    [["jp_fuyo", "certificate_rows"], ["jp_hyojun", "profile_columns"], ["jp_employment_insurance", "certificate_rows"], ["jp_tax_residency", "certificate_rows"]],
   );
   const cert = JP_CERTIFICATES.certificates[0]!;
   assert.equal(cert.key, "jp_fuyo");
@@ -180,6 +179,7 @@ function fakeCtx(overrides: {
   answers?: Record<string, string | null> | null;
   employmentInsurance?: string | null;
   payDate?: string;
+  taxResidence?: string;
 }): { ctx: PayrollStatutoryComputeContext; pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] } {
   const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
   const answers = overrides.answers === undefined
@@ -237,12 +237,12 @@ function fakeCtx(overrides: {
           missing: [],
         };
       }
-      return key === "jp_fuyo" && answers !== null
+      return key === "jp_tax_residency" || key === "jp_fuyo" && answers !== null
         ? {
-          certificate: JP_CERTIFICATES.certificates[0]!,
+          certificate: JP_CERTIFICATES.certificates[key === "jp_tax_residency" ? 3 : 0]!,
           onFile: true,
           effectiveFrom: null,
-          answers,
+          answers: key === "jp_tax_residency" ? { status: overrides.taxResidence ?? "resident" } : answers,
           missing: [],
         }
         : null;
@@ -284,7 +284,7 @@ test("adapter: a monthly 甲 payslip includes effective child contributions", as
   const { ctx, pushed } = fakeCtx({ payDate: "2026-04-01" });
   const factors = await computeJpStatutoryWithRates(ctx, TOKYO_RATE);
   assert.equal(factors["JP_GENSEN_BASE"], "257430");
-  assert.equal(factors["JP_GENSEN"], "6430");
+  assert.deepEqual([factors["JP_GENSEN"], (await computeJpStatutoryWithRates(fakeCtx({ payDate: "2026-04-01", taxResidence: "nonresident_japan_source" }).ctx, TOKYO_RATE))["JP_GENSEN"]], ["6430", "61260"]);
   assert.deepEqual([factors["JP_CHILD_SUPPORT_W"], factors["JP_CHILD_SUPPORT_ER"], factors["JP_CHILD_CARE_ER"]], ["345", "345", "1080"]);
   assert.deepEqual(pushed.map((p) => [p.systemKey, p.kind, p.amount, p.sequence]), [
     ["income_tax", "deduction", "6430", 110],

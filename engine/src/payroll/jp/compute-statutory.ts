@@ -15,6 +15,8 @@
  * - emp jp_kaigo_dainigou: "true"/"false". "true" (a 介護保険第2号被保険者,
  *   40–64) refuses — the 介護 premium has no channel; anything else refuses
  *   too, because silently pricing health without 介護 under-withholds.
+ * - jp_tax_residency is required: residents use 月額表, nonresident Japan-source
+ *   wages use 20.42%, and non-Japan-source wages use no Japanese withholding.
  * - jp_fuyo certificate on file → 甲欄 at its 扶養親族等の数; absent → 乙欄
  *   (exactly the statute: no declaration, no 甲欄).
  * - jp_health_rate tenant slot per prefecture (scope region); unconfigured
@@ -58,7 +60,7 @@ export interface JpStatutoryRates {
  * (源泉徴収, pension and health half-shares) — see withholding-2026.ts.
  */
 export const JP_FACTOR_LABELS: Readonly<Record<string, string>> = {
-  JP_GENSEN_BASE: "源泉徴収 base (after social insurance)",
+  JP_GENSEN_BASE: "源泉徴収 basis (resident net pay or nonresident source payment)",
   JP_GENSEN: "源泉徴収 income tax",
   JP_PENSION_W: "厚生年金 (employee share)",
   JP_PENSION_ER: "厚生年金 (employer share)",
@@ -97,6 +99,26 @@ export async function computeJpStatutoryWithRates(
   const payDate = ctx.run.pay_date;
   if (payDate == null || !/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
     fail("run pay_date is required to determine the effective month of the 2026 child-related contributions");
+  }
+  const taxResidence = certificateFor("jp_tax_residency")?.answers?.status;
+  if (taxResidence == null) {
+    fail("Japanese tax residence and wage-source status is required; record jp_tax_residency before payroll");
+  }
+  if (taxResidence === "nonresident_mixed_source") {
+    fail("Japan-source wage allocation is unavailable for nonresidents with Japan and foreign work; calculate the split in supported Japanese payroll software before payroll");
+  }
+  if (taxResidence === "nonresident_treaty_or_exemption") {
+    fail("nonresident treaty relief or exemption is not implemented; calculate the applicable treaty relief in supported Japanese payroll software before payroll");
+  }
+  if (taxResidence === "nonresident_domestic_corporation_officer") {
+    fail("a nonresident officer's salary may be Japan-source even for overseas duties; confirm source treatment in supported Japanese payroll software before payroll");
+  }
+  if (![
+    "resident",
+    "nonresident_japan_source",
+    "nonresident_foreign_source",
+  ].includes(taxResidence)) {
+    fail(`Japanese tax residence and wage-source status "${taxResidence}" is not supported`);
   }
   // Amounts arrive as decimal strings (money.ts 4dp, e.g. "300000.0000");
   // JPY has no minor unit, so anything below the yen refuses here.
@@ -189,6 +211,7 @@ export async function computeJpStatutoryWithRates(
     dependents,
     healthRate: rates.healthRate,
     childContributionsEffective: payDate >= "2026-04-01",
+    taxResidence: taxResidence as "resident" | "nonresident_japan_source" | "nonresident_foreign_source",
   });
 
   pushStatutory("income_tax", "deduction", "源泉徴収 (gensen withholding)", String(result.gensen), 110);

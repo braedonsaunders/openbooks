@@ -13,9 +13,9 @@
  * known, and refuses the missing rate at the rate channel — never by
  * emptying `supported`.
  *
- * Non-residents are outside the 月額表 entirely: pay to a 非居住者 faces the
- * separate 20.42% withholding (所得税法第212条), which no pack engine
- * computes — hence `taxesNonresidentWages: false` everywhere below.
+ * Nonresidents with Japan-source salary are subject to the separate 20.42%
+ * withholding (所得税法第212条), computed by the statutory pass. Each run also
+ * requires a declared tax-residence/source classification before it can price.
  */
 import type {
   PayrollPackWithholding,
@@ -28,9 +28,9 @@ const JP_REGIONS: readonly PayrollRegionWithholding[] = JP_PREFECTURES.map(
     region: prefecture.code,
     label: `源泉徴収 (${prefecture.name})`,
     implemented: true,
-    // Domestic employment income of a resident is subject to withholding at
-    // source (所得税法第183条); the 月額表 prices it (同法第185条).
-    taxesNonresidentWages: false,
+    // Resident salary uses the 月額表; Japan-source nonresident salary uses
+    // the separate 20.42% method. The statutory pass requires the status.
+    taxesNonresidentWages: true,
     residentWithholding: "required",
     residentWithholdingImplemented: true,
     certificateKey: "jp_fuyo",
