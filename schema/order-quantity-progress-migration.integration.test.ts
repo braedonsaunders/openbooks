@@ -280,7 +280,18 @@ test("0064 upgrades and replays without losing the governed view contract",
       // at their published digests so they cannot rebuild this view after the
       // repair (the data-upgrade and empty-database runs below exercise the
       // full tail for real, and the static guard above pins the allowlisted
-      // explicit rebuilds).
+      // explicit rebuilds). One exception: 0399's bypass predicate must
+      // REALLY exist, because production bootstrap's environments.sql backstop
+      // emits policies calling public.app_bypass_rls_active() and CREATE
+      // POLICY refuses a missing function. 0399 is schema-agnostic (one
+      // predicate plus a generic rewrite converging on this older catalog),
+      // so its published body runs for real while the repair proof stays on
+      // 0064; the ledger mark below then matches what bootstrap would record.
+      const predicateFile = postMigrationFiles.find((file) =>
+        file.name.startsWith("0399_"),
+      );
+      assert.ok(predicateFile, "0399 bypass predicate must be a published migration");
+      await isolated.client.query(predicateFile.body);
       await seedLedger(isolated.client, [...preMigrationFiles, ...postMigrationFiles]);
 
       await isolated.client.query(
