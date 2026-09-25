@@ -2,12 +2,6 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-/**
- * Pay-run evidence stamping: every PDF in the approval package (the two
- * report definitions plus the GL preview) carries the org business day as
- * its generation stamp — never the render instant's UTC day.
- */
-
 const STAMP = '2026-03-15'
 const evidenceKey = Symbol.for('openbooks.payroll-evidence-stamp-test')
 const evidenceState: { stamps: unknown[]; uploaded: unknown } = { stamps: [], uploaded: null }
@@ -57,9 +51,12 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.payroll-evidence-stamp-test')]
       const sqlText = globalThis.openbooksEvidenceSqlText
+      export async function withOrgTransaction(orgId, work) { return work() }
       export const db = {
         async execute(query) {
           const text = sqlText(query)
+          if (text.includes('from documents d')) return { rows: [{ subsidiary_id: 'sub-1', run_status: 'calculated' }] }
+          if (text.includes('from parties p')) return { rows: [] }
           if (text.includes('from pay_runs r')) {
             return { rows: [{
               document_number: 'RUN-7',
@@ -165,6 +162,7 @@ test('every evidence PDF carries the org business day as its generation stamp', 
   const result = await assemblePayRunEvidence('org-1', 'user-1', 'doc-1')
 
   assert.equal(result.fileId, 'file-1')
+  assert.equal(typeof (evidenceState.uploaded as { executor?: unknown } | null)?.executor, 'object')
   assert.equal(result.filename, 'RUN-7-payroll-evidence.pdf')
   assert.deepEqual(result.parts, ['Payroll journal', 'Payroll register', 'GL preview RUN-7'])
   assert.equal(evidenceState.stamps.length, 3, 'both definitions and the GL preview stamp their PDF')

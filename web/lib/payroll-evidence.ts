@@ -3,12 +3,14 @@ import { sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { previewPayRunGl } from "@openbooks/engine/src/payroll/run-commit.ts";
 import {
+  lockAndCheckPayrollRunPopulation,
   payrollRunPopulationScopeFilter,
+  payrollSubsidiaryInScope,
   type PayrollSubsidiaryScope,
 } from '@openbooks/engine/src/payroll/scope.ts'
 import { resolveDefinitionToExportData } from './report-run'
@@ -173,14 +175,32 @@ export async function assemblePayRunEvidence(
     for (const copied of pages) merged.addPage(copied)
   }
   const filename = `${run.document_number}-payroll-evidence.pdf`.replace(/\s+/g, '-')
-  const stored = await uploadAndAttach({
-    orgId,
-    targetTable: 'documents',
-    targetId: documentId,
-    filename,
-    contentType: 'application/pdf',
-    bytes: Buffer.from(await merged.save()),
-    createdBy: userId,
+  const bytes = Buffer.from(await merged.save())
+  const stored = await withOrgTransaction(orgId, async () => {
+    const locked = (await db.execute<{ subsidiary_id: string | null; run_status: string }>(sql`
+      select d.subsidiary_id, r.run_status
+        from documents d
+        join pay_runs r on r.document_id = d.id and r.org_id = d.org_id
+       where d.org_id = ${orgId} and d.id = ${documentId}
+       for update of d
+    `)).rows[0]
+    if (!locked || !payrollSubsidiaryInScope(allowedSubsidiaryIds, locked.subsidiary_id)) {
+      throw new PayrollError('pay run not found')
+    }
+    if (locked.run_status === 'draft') {
+      throw new PayrollError('calculate the pay run before submitting it for approval')
+    }
+    await lockAndCheckPayrollRunPopulation(db, orgId, documentId, allowedSubsidiaryIds)
+    return uploadAndAttach({
+      orgId,
+      targetTable: 'documents',
+      targetId: documentId,
+      filename,
+      contentType: 'application/pdf',
+      bytes,
+      createdBy: userId,
+      executor: db,
+    })
   })
   return { fileId: stored.id, filename, parts }
 }
