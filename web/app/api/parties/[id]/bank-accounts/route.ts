@@ -137,14 +137,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (partyDenied) return partyDenied
   // Keep the OCC token in PostgreSQL's six-digit wire form. Mapping
   // timestamptz to Date first would discard microseconds before the CAS.
-  const existing = (await db.execute<{ approvalStatus: string; updatedAt: string }>(sql`
-    select approval_status as "approvalStatus",
-           ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
-      from party_bank_accounts
-     where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
-  `))
-  if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
-
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Body
@@ -168,12 +160,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'a change reason between 5 and 500 characters is required' }, { status: 422 })
   }
   const expectedUpdatedAt = canonicalRevision(body.expectedUpdatedAt)
-  if (!expectedUpdatedAt || expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
-    return NextResponse.json(
-      { error: 'these bank details changed after you opened them; reload and review the latest revision' },
-      { status: 409 },
-    )
-  }
   // A material edit re-enters approval (below), so it must never mutate the
   // evidence an in-flight payment instruction was approved against: those
   // instructions keep paying exactly what their file generation locked, but a
@@ -186,8 +172,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // db handle follows this pinned context, so a failure cannot publish only
   // part of the new bank-detail revision.
   return withOrgTransaction(user.orgId, async () => {
+    // A stale unlocked preflight must never reveal whether a rehomed party's
+    // bank account exists or which revision it has.
     const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
     if (lockedDenied) return lockedDenied
+    const existing = (await db.execute<{ approvalStatus: string; updatedAt: string }>(sql`
+      select approval_status as "approvalStatus",
+             ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+        from party_bank_accounts
+       where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+    `))
+    if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!expectedUpdatedAt || expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
+      return NextResponse.json(
+        { error: 'these bank details changed after you opened them; reload and review the latest revision' },
+        { status: 409 },
+      )
+    }
     const dependencies = (await db.execute<{ inFlightPayment: boolean }>(sql`
       select exists (
         select 1
