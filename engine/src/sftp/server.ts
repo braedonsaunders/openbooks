@@ -82,6 +82,12 @@ export interface SftpResolver {
    * process serves the daemon.
    */
   checkSession?(config: SftpServerConfig): Promise<SessionLiveness>;
+  /**
+   * Recheck and hold the authority that backs a mutation until it completes.
+   * The DB resolver holds share locks on the daemon, login, and org feature
+   * rows, so a disable either wins before the mutation or commits after it.
+   */
+  withMutationGuard?(config: SftpServerConfig, operation: (live: SessionLiveness) => Promise<void>): Promise<void>;
 }
 
 interface OpenFile { path: string; backend: SftpBackend; write: boolean; append: boolean; buf: Buffer<ArrayBufferLike> }
@@ -369,6 +375,12 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             return false;
           };
 
+          const refuseMutation = (reqid: number, live: SessionLiveness) => {
+            sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED,
+              live.alive ? "sftp login mutations require a serialized authority check; reconnect" : live.reason);
+            client.end();
+          };
+
           // Single choke point for the liveness fence: EVERY operation
           // handler below is registered through fenced(), so a new handler
           // cannot skip the check the way RMDIR did — after a disable or
@@ -376,8 +388,22 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // refused and the connection ends.
           const fenced = <A extends unknown[]>(
             handler: (reqid: number, ...args: A) => Promise<void> | void,
+            mutation = false,
           ): ((reqid: number, ...args: A) => Promise<void>) => {
             return async (reqid: number, ...args: A) => {
+              if (mutation && opts.resolve.checkSession) {
+                const guard = opts.resolve.withMutationGuard;
+                if (!guard) return refuseMutation(reqid, { alive: true });
+                try {
+                  await guard(config!, async (live) => {
+                    if (!live.alive) return refuseMutation(reqid, live);
+                    await handler(reqid, ...args);
+                  });
+                } catch {
+                  refuseMutation(reqid, { alive: false, reason: "sftp login could not be re-validated; reconnect" });
+                }
+                return;
+              }
               if (!(await checkAlive(reqid))) return;
               await handler(reqid, ...args);
             };
@@ -560,20 +586,20 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               }
             } else dirs.delete(key);
             sftp.status(reqid, STATUS_CODE.OK);
-          }));
+          }, true));
 
           // Deleting or moving an in-flight publish's temp sibling would
           // break the atomic rename the writer is about to perform, so temp
           // names refuse here exactly as they do for open and stat.
-          const wrap = (what: string, op: (p: string) => Promise<void>) => fenced(async (reqid: number, p: string) => {
+          const wrap = (what: string, op: (p: string) => Promise<void>, mutation = false) => fenced(async (reqid: number, p: string) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, p)) return;
               await op(p); sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) { fail(reqid, e, what); }
-          });
-          sftp.on("REMOVE", wrap("remove", (p) => backend.remove(p)));
-          sftp.on("MKDIR", wrap("make folder", (p) => backend.mkdir(p)));
+          }, mutation);
+          sftp.on("REMOVE", wrap("remove", (p) => backend.remove(p), true));
+          sftp.on("MKDIR", wrap("make folder", (p) => backend.mkdir(p), true));
           sftp.on("RMDIR", fenced(async (reqid: number, p: string) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
@@ -586,14 +612,14 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               if (e instanceof SftpDirectoryNotEmptyError) return sftp.status(reqid, STATUS_CODE.FAILURE, e.message);
               fail(reqid, e, "remove folder");
             }
-          }));
+          }, true));
           sftp.on("RENAME", fenced(async (reqid: number, from: string, to: string) => {
             try {
               if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, from) || denyPublished(reqid, to)) return;
               await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) { fail(reqid, e, "rename"); }
-          }));
+          }, true));
           // Attribute mutation is not implemented and SftpBackend exposes no
           // attribute-update method, so SETSTAT/FSETSTAT must refuse instead
           // of answering OK: an OK for a no-op tells a partner its
