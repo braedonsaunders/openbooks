@@ -324,7 +324,7 @@ test('late writer failure rolls back everything: zero row, zero audit, zero sequ
     await withOrgContext(org.orgId, async () => {
       const refused = await post(bad, key)
       assert.equal(refused.status, 404)
-      assert.deepEqual(await refused.json(), { error: 'account not found in this organization' })
+      assert.deepEqual(await refused.json(), { error: 'account not found for this subsidiary' })
     })
     assert.equal(await docCount(org.orgId, key), 0, 'no document row')
     assert.equal((await auditRows(org.orgId, key)).length, 0, 'no audit insert')
@@ -384,7 +384,7 @@ test('tenant and field refusals name the remedy with exact drawer messages', asy
         randomUUID(),
       )
       assert.equal(response.status, 404)
-      assert.deepEqual(await response.json(), { error: 'account not found in this organization' })
+      assert.deepEqual(await response.json(), { error: 'account not found for this subsidiary' })
       // Unknown subsidiary.
       response = await post({ ...all.vendor_bill, subsidiaryId: randomUUID() }, randomUUID())
       assert.equal(response.status, 422)

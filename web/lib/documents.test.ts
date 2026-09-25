@@ -798,7 +798,7 @@ test(
           (error: unknown) =>
             error instanceof DocumentEditError
             && error.status === 404
-            && error.message === 'account not found in this organization',
+            && error.message === 'account not found for this subsidiary',
         )
 
         const retained = await loadStoredDocument(org.orgId, rollbackId)
