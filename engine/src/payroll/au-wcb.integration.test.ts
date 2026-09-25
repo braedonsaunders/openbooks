@@ -8,6 +8,7 @@ import { AU_PACK_RATES } from "./au/rates.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { payrollStatutoryRateGaps } from "./readiness.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -19,15 +20,10 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 /**
  * AU workers' compensation: a configured regional premium rate must accrue.
  *
- * Observed shape: readiness warned "no Workers' compensation premium is
- * configured for NSW / VIC / QLD — nothing is being accrued", the operator
- * saved NSW 0.012 / VIC 0.014 / QLD 0.011 through the rates surface, the
- * warning cleared — and the committed, posted run carried zero WCB lines on
- * every stub, in the journal, and in employer cost. The ledger still
- * balanced, because nothing was ever pushed.
- *
- * Each employee works 80h × $30 = $2,400 gross, so the regional premiums are:
- * NSW 2400 × 0.012 = 28.80, VIC 2400 × 0.014 = 33.60, QLD 2400 × 0.011 = 26.40.
+ * Observed shape: readiness warned "nothing is being accrued" for NSW / VIC /
+ * QLD, the operator saved 0.012 / 0.014 / 0.011, the warning cleared — and the
+ * committed run carried zero WCB lines anywhere, though the ledger balanced.
+ * Each employee works 80h × $30 = $2,400 gross (NSW 28.80, VIC 33.60, QLD 26.40).
  */
 test(
   "AU WCB: configured regional rates accrue per region and leave net pay untouched",
@@ -85,6 +81,9 @@ test(
                                    created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Fortnightly AU', 'biweekly', 26, '2026-07-18', 3,
                 ${auSubId}, true, ${actorId}, ${actorId})`);
+      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, subsidiaryId: auSubId,
+        country: "AU", factKey: "payroll_tax_position", effectiveFrom: "2026-07-01",
+        value: "below_threshold_ungrouped", changeReason: "test employer below every state threshold" });
 
       const seedEmployee = async (name: string, province: string) => {
         const employeeId = randomUUID();

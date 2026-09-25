@@ -92,6 +92,8 @@ export interface PayrollEmployerLevyContext {
   pushStatutory: PushStatutoryFn;
   /** ISO pay date the tenant-rate resolution is as-of; absent reads current. */
   payDate?: string;
+  /** Paying legal employer, for employer-level facts. Absent refuses where a pack needs it. */
+  subsidiaryId?: string | null;
 }
 
 /** Verified share of current-period wages sourced to one subregion. */
