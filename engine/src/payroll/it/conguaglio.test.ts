@@ -426,10 +426,14 @@ test("monthly adapter preserves missing post-1995 status instead of defaulting i
 test("somma band uses recurring annualized pay plus one-off employment income", async () => {
   // L. 207/2024 art. 1 c. 4 selects the percentage from total annual
   // employment income, including the non-periodic bonus, then applies it to
-  // net employment income: €14,000 recurring + €2,000 bonus selects 4.8%.
+  // net employment income: €18,200 recurring + €1,500 bonus selects 4.8%,
+  // paying 4.8% of the €17,889.57 lavoroNet over 12 months = €71.56.
+  // The recurring leg must clear the IVS full-time daily-minimum floor
+  // (€18,136.56): below it the engine refuses without contribution-day
+  // facts rather than guessing a prorated base.
   // https://www.gazzettaufficiale.it/eli/id/2024/12/31/24G00229/sg
-  const lines = await monthlyRun("1166.6667", "2000.0000");
-  assert.equal(sumBy(lines, "somma_payout"), "58.1200");
+  const lines = await monthlyRun("1516.6667", "1500.0000");
+  assert.equal(sumBy(lines, "somma_payout"), "71.5600");
 });
 
 test("untranscribed year refuses in the pure core too", () => {

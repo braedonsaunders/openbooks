@@ -158,7 +158,16 @@ test("missing post-1995 seniority stays unknown and refuses when it changes IVS 
   // pre-1996 status. Sources:
   // https://www.normattiva.it/uri/N2Ls?urn:nir:stato:legge:1995-08-08;335
   // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2026/02/Circolare_15162/Allegati/16561_Circolare-numero-14-del-09-02-2026.pdf
-  const certificate = resolveCertificate({ certificate: IT_CERTIFICATES.certificates[0]! });
+  // The contract term is answered (indeterminate) so the run reaches the
+  // IVS seniority gate: an unanswered term refuses first, by design.
+  const certificate = resolveCertificate({
+    certificate: IT_CERTIFICATES.certificates[0]!,
+    stored: [{
+      certificateKey: "it_detrazioni",
+      answers: { tempo_determinato: "false" },
+      effectiveFrom: "2026-01-01",
+    }],
+  });
   assert.equal(certificate.answers["anzianita_post_1995"], null);
   const { ctx: base } = fakeCtx({ taxYear: 2026 });
   const highBase = {
@@ -284,7 +293,8 @@ test("the statutory pass computes 2026 and refuses untranscribed years by name",
       municipalRate: null,
       municipalExemption: null,
     }),
-    /it_addizionale_regionale.*03/,
+    // Names the slot and the scope point: regione 01 in 2026.
+    /it_addizionale_regionale.*regione 01 in 2026/,
   );
   // Both sides of the transcribed window refuse with the year before
   // touching rates: 2024 (prior) and 2027 (future). Never extrapolate.
@@ -313,7 +323,8 @@ test("missing declared rates refuse naming the scope point", async () => {
       municipalRate: null,
       municipalExemption: null,
     }),
-    /it_addizionale_regionale.*03/,
+    // Names the slot and the scope point: regione 01 in 2025.
+    /it_addizionale_regionale.*regione 01 in 2025/,
   );
   await assert.rejects(
     computeItStatutoryWithRates(fakeCtx({}).ctx, {
@@ -325,13 +336,23 @@ test("missing declared rates refuse naming the scope point", async () => {
   );
 });
 
-test("monthly adapter refuses surtax without prior-year balances or withholding history", async () => {
-  const { ctx } = fakeCtx({ income: "791.67", pensionable: "0.00" });
-  await assert.rejects(computeItStatutoryWithRates(ctx, {
+test("monthly adapter prices the surtax advance instead of refusing without balances", async () => {
+  // I6-payroll-50: the statutory saldo/advance schedule needs assessed
+  // balances and withholding history no adapter channel carries, so an
+  // adapter-level refusal would refuse every configured run permanently.
+  // Rated runs price the 1/12 advance the December conguaglio reconciles.
+  const { ctx, pushed } = fakeCtx({ income: "791.67", pensionable: "0.00" });
+  const result = await computeItStatutoryWithRates(ctx, {
     regionalRate: "1.23",
     municipalRate: "0.8",
     municipalExemption: null,
-  }), /prior-year regional balance.*municipal balance\/paid-to-date amounts/);
+  });
+  const regional = pushed.find((line) => line.systemKey === "regional_surtax");
+  const municipal = pushed.find((line) => line.systemKey === "municipal_surtax");
+  assert.ok(regional && cmp(regional.amount, "0") !== 0, "the regional advance prices, never zero");
+  assert.ok(municipal && cmp(municipal.amount, "0") !== 0, "the municipal advance prices, never zero");
+  assert.equal(result.ADDREG, regional!.amount);
+  assert.equal(result.ADDCOM, municipal!.amount);
 });
 
 test("CU is populated with a slip; the 770 stays declared and refused", async () => {
