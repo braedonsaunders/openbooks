@@ -73,6 +73,7 @@ function bad(error: string, field?: string, status = 422) {
 
 // FieldRefusal code → drawer field, so the refusal pins to its input.
 const REFUSAL_FIELD: Record<string, string> = {
+  invalid_subsidiary: "subsidiaryId",
   invalid_method: "method",
   invalid_convention: "convention",
   invalid_life: "lifeMonths",
@@ -216,11 +217,11 @@ export async function POST(request: Request) {
     checkOpeningPair(openingAccumulated, openingAsOf);
     checkOpeningBasis(openingAccumulated, cost, salvage);
     checkOpeningMonth(openingAccumulated, openingAsOf, inServiceOn);
-    assetAccountId = (await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.assetAccountId, "invalid_asset_account")) ?? null;
+    assetAccountId = (await parseAccountOverride(db, user.orgId, subsidiaryId, body.assetAccountId, "invalid_asset_account")) ?? null;
     accumAccountId =
-      (await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.accumulatedDepreciationAccountId, "invalid_accumulated_account")) ?? null;
+      (await parseAccountOverride(db, user.orgId, subsidiaryId, body.accumulatedDepreciationAccountId, "invalid_accumulated_account")) ?? null;
     expenseAccountId =
-      (await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.depreciationExpenseAccountId, "invalid_expense_account")) ?? null;
+      (await parseAccountOverride(db, user.orgId, subsidiaryId, body.depreciationExpenseAccountId, "invalid_expense_account")) ?? null;
     customBag = await parseCustomBag(user.orgId, body.custom);
     const taxClean = await parseTaxDepreciation(db, user.orgId, body.taxDepreciation);
     if (taxClean !== undefined) customBag.taxDepreciation = taxClean;
@@ -268,7 +269,7 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const outcome = await db.transaction(async (tx) => {
-          await lockAccountOverridesForAssetWrite(tx, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, [
+          await lockAccountOverridesForAssetWrite(tx, user.orgId, subsidiaryId, [
             { id: assetAccountId, code: "invalid_asset_account" },
             { id: accumAccountId, code: "invalid_accumulated_account" },
             { id: expenseAccountId, code: "invalid_expense_account" },

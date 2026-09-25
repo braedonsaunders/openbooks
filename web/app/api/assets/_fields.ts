@@ -233,14 +233,14 @@ export function assetAccountScopeSql(
 export async function parseAccountOverride(
   exec: SqlExecutor,
   orgId: string,
-  allowedSubsidiaryIds: readonly string[] | null,
+  targetSubsidiaryId: string,
   v: unknown,
   code: string,
 ): Promise<string | null | undefined> {
   if (v === undefined) return undefined;
   const candidate = strOrNull(v);
   if (candidate === null) return null;
-  if (!isUuid(candidate) || !(await accountExists(exec, candidate, orgId, allowedSubsidiaryIds))) {
+  if (!isUuid(targetSubsidiaryId) || !isUuid(candidate) || !(await accountExists(exec, candidate, orgId, [targetSubsidiaryId]))) {
     throw new FieldRefusal(code);
   }
   return candidate.toLowerCase();
@@ -253,9 +253,14 @@ export async function parseAccountOverride(
 export async function lockAccountOverridesForAssetWrite(
   tx: SqlExecutor,
   orgId: string,
-  allowedSubsidiaryIds: readonly string[] | null,
+  targetSubsidiaryId: string,
   overrides: readonly { id: string | null | undefined; code: string }[],
 ): Promise<void> {
+  const target = await tx.execute(sql`
+    select id from subsidiaries
+     where id = ${targetSubsidiaryId} and org_id = ${orgId} and is_active and not is_elimination
+     for share`)
+  if (!target.rows[0]) throw new FieldRefusal('invalid_subsidiary')
   const byId = new Map<string, string>();
   for (const override of overrides) {
     if (override.id) byId.set(override.id, override.code);
@@ -267,7 +272,7 @@ export async function lockAccountOverridesForAssetWrite(
       if (error instanceof ScopeNotFoundError) throw new FieldRefusal(code);
       throw error;
     }
-    if (!(await accountExists(tx, id, orgId, allowedSubsidiaryIds))) {
+    if (!(await accountExists(tx, id, orgId, [targetSubsidiaryId]))) {
       throw new FieldRefusal(code);
     }
   }

@@ -34,12 +34,12 @@ test("asset account overrides accept shared and caller-visible accounts and refu
              (${sharedAccountId}, ${org.orgId}, 'ASSET-SHARED', 'Shared account', 'asset_fixed', null, false),
              (${inheritableAccountId}, ${org.orgId}, 'ASSET-PARENT', 'Parent account inherited by child', 'asset_fixed', ${org.subsidiaryId}, true)`);
 
-    const scope = [childId];
-    assert.equal(await parseAccountOverride(db, org.orgId, scope, childAccountId, "invalid_asset_account"), childAccountId);
-    assert.equal(await parseAccountOverride(db, org.orgId, scope, sharedAccountId, "invalid_asset_account"), sharedAccountId);
-    assert.equal(await parseAccountOverride(db, org.orgId, scope, inheritableAccountId, "invalid_asset_account"), inheritableAccountId);
+    const scope = [childId, siblingId];
+    assert.equal(await parseAccountOverride(db, org.orgId, childId, childAccountId, "invalid_asset_account"), childAccountId);
+    assert.equal(await parseAccountOverride(db, org.orgId, childId, sharedAccountId, "invalid_asset_account"), sharedAccountId);
+    assert.equal(await parseAccountOverride(db, org.orgId, childId, inheritableAccountId, "invalid_asset_account"), inheritableAccountId);
     await assert.rejects(
-      parseAccountOverride(db, org.orgId, scope, siblingAccountId, "invalid_asset_account"),
+      parseAccountOverride(db, org.orgId, childId, siblingAccountId, "invalid_asset_account"),
       (error: unknown) => error instanceof FieldRefusal && error.code === "invalid_asset_account",
     );
 
@@ -51,7 +51,7 @@ test("asset account overrides accept shared and caller-visible accounts and refu
     `);
     assert.deepEqual(
       new Set(pickerAccounts.rows.map((row) => row.id)),
-      new Set([childAccountId, sharedAccountId, inheritableAccountId]),
+      new Set([childAccountId, siblingAccountId, sharedAccountId, inheritableAccountId]),
     );
   } finally {
     await dropScratchOrg(org.orgId);
