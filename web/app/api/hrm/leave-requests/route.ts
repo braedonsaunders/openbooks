@@ -19,14 +19,32 @@ export const runtime = "nodejs";
  * against the caller's own employment — the engine scopes the subject, and
  * the list for "mine" never accepts a caller-supplied worker.
  */
+/**
+ * Self-service inbox gate: the engine's own-read path authorizes EITHER
+ * hrm.leave.request (the normal filing grant) or hrm.leave.read — the
+ * route must mirror that split, or employees holding only the filing
+ * grant get a 403 before myLeaveRequests can run. A specified employment
+ * still needs the manager read grant; the engine re-checks ownership
+ * per employment either way.
+ */
+async function guardSelfServiceRead() {
+  const read = await guardPermission("hrm.leave.read");
+  if (!(read instanceof NextResponse)) return read;
+  if (read.status === 403) return guardPermission("hrm.leave.request");
+  return read;
+}
+
 export async function GET(req: Request) {
-  const gate = await guardPermission("hrm.leave.read");
+  const url = new URL(req.url);
+  const employmentId = url.searchParams.get("employmentId");
+  const gate =
+    employmentId === "mine" || employmentId === null
+      ? await guardSelfServiceRead()
+      : await guardPermission("hrm.leave.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const url = new URL(req.url);
-  const employmentId = url.searchParams.get("employmentId");
   const status = url.searchParams.get("status");
   const statuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"];
   if (status !== null && !statuses.includes(status)) {
