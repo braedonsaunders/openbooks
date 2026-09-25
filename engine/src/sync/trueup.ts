@@ -121,6 +121,30 @@ export async function trueUpResidualGl(
         throw new Error(`invalid true-up source month ${row.month}`);
       }
     }
+    // Refuse by name before posting anything: the ledger would reject an
+    // inactive account mid-run, after earlier months already posted. Name
+    // each inactive account and the remedy instead.
+    const touchedAccountIds = [
+      ...new Set(
+        [...srcRows, ...openingRows]
+          .map((row) => idByRef.get(row.accountRef))
+          .filter((id): id is string => id !== undefined),
+      ),
+    ];
+    if (touchedAccountIds.length > 0) {
+      const inactive = (
+        await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${orgId}
+             and id in (${sql.join(touchedAccountIds.map((id) => sql`${id}::uuid`), sql`, `)})
+             and is_active is distinct from true`)
+      ).rows.map((row) => row.id);
+      if (inactive.length > 0) {
+        throw new Error(
+          `true-up account ${inactive.sort().join(", ")} is inactive; reactivate the account before re-syncing ${source.name}`,
+        );
+      }
+    }
 
     const byAccountTotal = new Map<string, bigint>();
     let entries = 0;
