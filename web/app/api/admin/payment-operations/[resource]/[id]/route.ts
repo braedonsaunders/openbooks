@@ -194,7 +194,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       // observe.
       const mandateWrite = await db.transaction(async (tx) => {
         const before = (await tx.execute<Record<string, unknown>>(sql`
-          select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
+          select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId} for update
         `))
         if (!before.rows[0]) return 'missing' as const
         const updated = (await tx.execute<Record<string, unknown>>(sql`
