@@ -23,6 +23,7 @@ type Event = {
 };
 /** Same native stacked drawer as the asset change workpaper. */
 export function GroupValuationButton({ assetId }: { assetId: string }) {
+  const t = useTranslations("assets.groupValuation");
   const router = useRouter();
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false),
@@ -59,16 +60,14 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
       const response = await fetch(`/api/assets/${assetId}/group-valuations`);
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.error ?? "Unable to load group valuations");
+        throw new Error(error.error ?? t("loadFailed"));
       }
       const body = await response.json();
       setEvents(body.events);
       setOpen(true);
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Unable to load group valuations",
+        error instanceof Error ? error.message : t("loadFailed"),
       );
     } finally {
       setBusy(false);
@@ -94,7 +93,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.error ?? "Group valuation could not be proposed");
+        throw new Error(error.error ?? t("submitFailed"));
       }
       const body = await response.json();
       setOpen(false);
@@ -103,9 +102,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
       );
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Group valuation could not be proposed",
+        error instanceof Error ? error.message : t("submitFailed"),
       );
     } finally {
       setBusy(false);
@@ -114,23 +111,18 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
   return (
     <>
       <Button variant="outline" onClick={show} disabled={busy}>
-        Group valuation
+        {t("actionName")}
       </Button>
       <Drawer
         open={open}
         onClose={closeGuard.close}
-        title="Group asset valuation"
+        title={t("title")}
         size="lg"
         stacked
       >
         <fieldset disabled={busy} className="min-w-0 space-y-4 p-4">
-          <p>
-            Assess group recoverability independently from the receiving
-            company&apos;s valuation. Approval preserves prior depreciation and
-            revises only future group service. Consolidation posts the resulting
-            adjustment.
-          </p>
-          <Label id="group-valuation-event-label">Posted valuation</Label>
+          <p>{t("description")}</p>
+          <Label id="group-valuation-event-label">{t("postedValuation")}</Label>
           <SearchSelect
             value={eventId}
             onChange={(value) => {
@@ -139,17 +131,17 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
             }}
             options={events.map((e) => ({
               value: e.id,
-              label: `${e.date} · ${e.book_name} · ${e.kind} ${e.amount}${e.recorded ? " · revise group assessment" : ""}`,
+              label: `${e.date} · ${e.book_name} · ${e.kind} ${e.amount}${e.recorded ? ` · ${t("reviseSuffix")}` : ""}`,
             }))}
-            placeholder="Select the source valuation"
+            placeholder={t("selectSource")}
             ariaLabelledBy="group-valuation-event-label"
-            ariaLabel="Posted valuation"
+            ariaLabel={t("postedValuation")}
           />
-          {!events.length ? (
-            <p>No unreversed valuation of a transferred asset is available.</p>
-          ) : null}
+          {!events.length ? <p>{t("empty")}</p> : null}
           <Label htmlFor="group-valuation-carrying">
-            Group carrying amount ({event?.group_currency ?? "group currency"})
+            {t("carryingAmount", {
+              currency: event?.group_currency ?? t("currencyFallback"),
+            })}
           </Label>
           <Input
             id="group-valuation-carrying"
@@ -159,7 +151,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
               changed();
             }}
           />
-          <Label htmlFor="group-valuation-rate">Buyer functional currency to group currency rate</Label>
+          <Label htmlFor="group-valuation-rate">{t("buyerRate")}</Label>
           <Input
             id="group-valuation-rate"
             value={rate}
@@ -168,7 +160,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
               changed();
             }}
           />
-          <Label htmlFor="group-valuation-assessment">Group recoverability and remaining-service assessment</Label>
+          <Label htmlFor="group-valuation-assessment">{t("assessment")}</Label>
           <Textarea
             id="group-valuation-assessment"
             value={assessment}
@@ -177,7 +169,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
               changed();
             }}
           />
-          <Label htmlFor="group-valuation-reason">Reason</Label>
+          <Label htmlFor="group-valuation-reason">{t("reason")}</Label>
           <Textarea
             id="group-valuation-reason"
             value={reason}
@@ -187,11 +179,11 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
             }}
           />
           <fieldset className="space-y-3">
-            <legend>Remaining group depreciation in group currency</legend>
+            <legend>{t("planLegend")}</legend>
             {plan.map((line, index) => (
               <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
                 <Input
-                  aria-label="Accounting period end"
+                  aria-label={t("periodEnd")}
                   type="date"
                   value={line.date}
                   onChange={(e) => {
@@ -204,7 +196,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
                   }}
                 />
                 <Input
-                  aria-label="Group depreciation amount"
+                  aria-label={t("planAmount")}
                   value={line.amount}
                   onChange={(e) => {
                     setPlan((rows) =>
@@ -222,7 +214,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
                     changed();
                   }}
                 >
-                  Remove
+                  {tCommon("actions.remove")}
                 </Button>
               </div>
             ))}
@@ -233,11 +225,11 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
                 changed();
               }}
             >
-              Add period
+              {t("addPeriod")}
             </Button>
           </fieldset>
           <Button onClick={submit} disabled={busy || !event}>
-            Create approval proposal
+            {t("createProposal")}
           </Button>
         </fieldset>
       </Drawer>

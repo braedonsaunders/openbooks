@@ -39,7 +39,8 @@ export function AssetChangeButton({
 }) {
   const router = useRouter(),
     today = useBusinessToday();
-  const tCommon = useTranslations("common");
+  const t = useTranslations("assets.change"),
+    tCommon = useTranslations("common");
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [setup, setSetup] = useState<Setup | null>(null);
@@ -97,14 +98,12 @@ export function AssetChangeButton({
       const response = await fetch(`/api/assets/${assetId}/changes`);
       if (!response.ok) {
         const e = await response.json().catch(() => ({}));
-        throw new Error(e.error ?? "Unable to load asset change options");
+        throw new Error(e.error ?? t("loadFailed"));
       }
       setSetup(await response.json());
       setOpen(true);
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Unable to open asset change",
-      );
+      toast.error(e instanceof Error ? e.message : t("openFailed"));
     } finally {
       setBusy(false);
     }
@@ -129,7 +128,7 @@ export function AssetChangeButton({
         value={values[name] ?? ""}
         onChange={(v) => set(name, v)}
         options={options}
-        placeholder={`Select ${label.toLowerCase()}`}
+        placeholder={t("selectPlaceholder")}
         ariaLabelledBy={`asset-change-${name}-label`}
         ariaLabel={label}
       />
@@ -217,15 +216,13 @@ export function AssetChangeButton({
       });
       if (!response.ok) {
         const e = await response.json().catch(() => ({}));
-        throw new Error(e.error ?? "Asset change could not be proposed");
+        throw new Error(e.error ?? t("submitFailed"));
       }
       const result = (await response.json()) as { changeId: string };
       setOpen(false);
       router.push(`/accounting/changes?change=${result.changeId}`);
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Asset change could not be proposed",
-      );
+      toast.error(e instanceof Error ? e.message : t("submitFailed"));
     } finally {
       setBusy(false);
     }
@@ -233,25 +230,25 @@ export function AssetChangeButton({
   return (
     <>
       <Button variant="outline" onClick={show} disabled={busy}>
-        Partial disposal / transfer
+        {t("actionName")}
       </Button>
       <Drawer
         stacked
         open={open}
         onClose={closeGuard.close}
-        title="Change asset ownership or dispose a component"
-        description="Review the book-specific impact, then submit the proposal for independent approval."
+        title={t("title")}
+        description={t("description")}
         size="2xl"
         footer={
           <Button onClick={submit} disabled={busy}>
-            {busy ? "Preparing…" : "Prepare proposal"}
+            {busy ? t("preparing") : t("prepare")}
           </Button>
         }
       >
         <fieldset disabled={busy} className="min-w-0 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="asset-change-operation">Change type</Label>
+              <Label htmlFor="asset-change-operation">{t("changeType")}</Label>
               <Select
                 id="asset-change-operation"
                 value={operation}
@@ -260,23 +257,18 @@ export function AssetChangeButton({
                   setKey(crypto.randomUUID());
                 }}
               >
-                <option value="partial_disposal">
-                  Partial disposal or write-off
-                </option>
+                <option value="partial_disposal">{t("partialDisposal")}</option>
                 <option value="intercompany_transfer">
-                  Intercompany asset transfer
+                  {t("intercompanyTransfer")}
                 </option>
               </Select>
             </div>
-            {field("effectiveOn", "Effective date", "date")}
+            {field("effectiveOn", t("effectiveDate"), "date")}
           </div>
-          {memo("reason", "Reason for the change")}
-          {memo(
-            "assessment",
-            "Component identification and carrying-value assessment",
-          )}
+          {memo("reason", t("reason"))}
+          {memo("assessment", t("assessment"))}
           <div>
-            <Label htmlFor="asset-change-mode">Measurement of the disposed portion</Label>
+            <Label htmlFor="asset-change-mode">{t("measurement")}</Label>
             <Select
               id="asset-change-mode"
               value={mode}
@@ -285,14 +277,12 @@ export function AssetChangeButton({
                 setKey(crypto.randomUUID());
               }}
             >
-              <option value="percent">Homogeneous physical percentage</option>
-              <option value="component">
-                Identified component amounts by book
-              </option>
+              <option value="percent">{t("percentMode")}</option>
+              <option value="component">{t("componentMode")}</option>
             </Select>
           </div>
           {mode === "percent" ? (
-            field("percent", "Disposed percentage (100 for the entire asset)")
+            field("percent", t("percentLabel"))
           ) : (
             <div className="space-y-4">
               {setup?.books.map((b) => (
@@ -301,13 +291,10 @@ export function AssetChangeButton({
                   <div className="grid grid-cols-3 gap-3">
                     {(
                       [
-                        ["cost", "Cost"],
-                        ["accumulated", "Accumulated depreciation"],
-                        ["salvage", "Residual value"],
-                        [
-                          "remainingProductionUnits",
-                          "Remaining production units (production method only)",
-                        ],
+                        ["cost", t("cost")],
+                        ["accumulated", t("accumulated")],
+                        ["salvage", t("salvage")],
+                        ["remainingProductionUnits", t("remainingUnits")],
                       ] as const
                     ).map(([k, label]) => (
                       <div key={k}>
@@ -361,25 +348,22 @@ export function AssetChangeButton({
             </div>
           )}
           <div className="grid grid-cols-2 gap-4">
-            {field(
-              "proceeds",
-              "Seller proceeds in its functional currency (0 for write-off)",
-            )}
+            {field("proceeds", t("proceeds"))}
             {choice(
               "proceedsAccountId",
               operation === "intercompany_transfer"
-                ? "Seller due-from account"
-                : "Proceeds account",
+                ? t("sellerDueFrom")
+                : t("proceedsAccount"),
               accounts,
             )}
           </div>
           {operation === "intercompany_transfer" && setup ? (
             <>
-              <h3 className="font-semibold">Receiving company and asset</h3>
+              <h3 className="font-semibold">{t("receivingTitle")}</h3>
               <div className="grid grid-cols-2 gap-4">
                 {choice(
                   "subsidiaryId",
-                  "Receiving company",
+                  t("receivingCompany"),
                   setup.subsidiaries
                     .filter((s) => !s.is_elimination)
                     .map((s) => ({
@@ -389,27 +373,22 @@ export function AssetChangeButton({
                 )}
                 {choice(
                   "categoryId",
-                  "Receiving category",
+                  t("receivingCategory"),
                   categories.map((c) => ({ value: c.id, label: c.name })),
                 )}
-                {field("assetNumber", "Receiving asset number")}
-                {field("name", "Receiving asset name")}
-                {field("buyerAmount", "Buyer cost in its functional currency")}
-                {field("buyerSalvage", "Buyer residual value")}
-                {field(
-                  "buyerProductionUnits",
-                  "Buyer lifetime production units (production method only)",
-                )}
-                {field("lifeMonths", "Buyer useful life (months)", "number")}
-                {choice("payableAccountId", "Buyer due-to account", accounts)}
+                {field("assetNumber", t("receivingNumber"))}
+                {field("name", t("receivingName"))}
+                {field("buyerAmount", t("buyerAmount"))}
+                {field("buyerSalvage", t("buyerSalvage"))}
+                {field("buyerProductionUnits", t("buyerUnits"))}
+                {field("lifeMonths", t("buyerLife"), "number")}
+                {choice("payableAccountId", t("buyerDueTo"), accounts)}
               </div>
-              <h3 className="font-semibold">
-                Group basis and internal profit elimination
-              </h3>
+              <h3 className="font-semibold">{t("groupTitle")}</h3>
               <div className="grid grid-cols-2 gap-4">
                 {choice(
                   "eliminationSubsidiaryId",
-                  "Elimination company",
+                  t("eliminationCompany"),
                   setup.subsidiaries
                     .filter((s) => s.is_elimination)
                     .map((s) => ({
@@ -417,72 +396,50 @@ export function AssetChangeButton({
                       label: `${s.name} (${s.base_currency})`,
                     })),
                 )}
-                {field(
-                  "sellerToGroupRate",
-                  "Seller-to-group historical rate (1 if same currency)",
-                )}
-                {field(
-                  "buyerToGroupRate",
-                  "Buyer-to-group historical rate (1 if same currency)",
-                )}
-                {field(
-                  "sellerToBuyerRate",
-                  "Seller-to-buyer transaction rate (1 if same currency)",
-                )}
-                {choice(
-                  "ctaAccountId",
-                  "Currency translation adjustment account",
-                  accounts,
-                )}
-                {choice("groupAssetAccountId", "Group asset account", accounts)}
+                {field("sellerToGroupRate", t("sellerToGroup"))}
+                {field("buyerToGroupRate", t("buyerToGroup"))}
+                {field("sellerToBuyerRate", t("sellerToBuyer"))}
+                {choice("ctaAccountId", t("ctaAccount"), accounts)}
+                {choice("groupAssetAccountId", t("groupAsset"), accounts)}
                 {choice(
                   "groupAccumulatedAccountId",
-                  "Group accumulated depreciation",
+                  t("groupAccumulated"),
                   accounts,
                 )}
                 {choice(
                   "groupDepreciationAccountId",
-                  "Group depreciation expense",
+                  t("groupDepreciation"),
                   accounts,
                 )}
                 {choice(
                   "groupGainLossAccountId",
-                  "Group gain/loss account",
+                  t("groupGainLoss"),
                   accounts,
                 )}
-                {field("taxRatePercent", "Applicable deferred-tax rate (%)")}
+                {field("taxRatePercent", t("taxRate"))}
                 {choice(
                   "deferredTaxAccountId",
-                  "Deferred-tax balance account",
+                  t("deferredTax"),
                   accounts,
                 )}
                 {choice(
                   "taxExpenseAccountId",
-                  "Deferred-tax expense account",
+                  t("taxExpense"),
                   accounts,
                 )}
               </div>
-              {memo("exchangeRateEvidence", "Exchange-rate evidence")}
-              {memo(
-                "groupAssessment",
-                "Group accounting and deferred-tax assessment (explain a zero rate)",
-              )}
+              {memo("exchangeRateEvidence", t("fxEvidence"))}
+              {memo("groupAssessment", t("groupAssessment"))}
               <details>
-                <summary className="cursor-pointer">
-                  Input-driven group depreciation plan
-                </summary>
-                <p className="py-2 text-sm text-slate-500">
-                  Formula schedules reuse the seller’s remaining plan. For
-                  manual or production-based depreciation, provide the approved
-                  future group charges in seller currency.
-                </p>
+                <summary className="cursor-pointer">{t("planTitle")}</summary>
+                <p className="py-2 text-sm text-slate-500">{t("planHelp")}</p>
                 {setup.books.map((b) => (
                   <fieldset key={b.id} className="mb-4 space-y-2">
                     <legend>{b.name}</legend>
                     {(plans[b.id] ?? []).map((line, i) => (
                       <div key={i} className="flex gap-2">
                         <Input
-                          aria-label="Group depreciation date"
+                          aria-label={t("planDate")}
                           type="date"
                           value={line.date}
                           onChange={(e) => {
@@ -496,7 +453,7 @@ export function AssetChangeButton({
                           }}
                         />
                         <Input
-                          aria-label="Group depreciation amount"
+                          aria-label={t("planAmount")}
                           value={line.amount}
                           onChange={(e) => {
                             setPlans((p) => ({
@@ -518,7 +475,7 @@ export function AssetChangeButton({
                             setKey(crypto.randomUUID());
                           }}
                         >
-                          Remove
+                          {tCommon("actions.remove")}
                         </Button>
                       </div>
                     ))}
@@ -535,7 +492,7 @@ export function AssetChangeButton({
                         setKey(crypto.randomUUID());
                       }}
                     >
-                      Add charge
+                      {t("addCharge")}
                     </Button>
                   </fieldset>
                 ))}
