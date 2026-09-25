@@ -13,7 +13,6 @@ import {
   dropScratchOrg,
 } from "../../../engine/src/testing/fixtures.ts";
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const migrationSql = readFileSync(
   new URL("./0011_payment_run_live_selection.sql", import.meta.url),
   "utf8",
@@ -33,7 +32,7 @@ function errorChainMatches(error: unknown, pattern: RegExp): boolean {
 }
 
 test("outbound payment-run creation claims each source once and ignores cross-run instruction transitions",
-  { skip: !DB },
+  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const org = await createScratchOrg();
     try {
@@ -102,6 +101,7 @@ test("outbound payment-run creation claims each source once and ignores cross-ru
       const createOpts = {
         orgId: org.orgId,
         createdBy: actorId,
+        allowedSubsidiaryIds: null,
         paymentBankProfileId: profileId,
         billDocumentIds: [racedBillId],
       };
@@ -126,7 +126,7 @@ test("outbound payment-run creation claims each source once and ignores cross-ru
       assert.ok(losers[0]!.reason instanceof PaymentError);
       assert.match(
         losers[0]!.reason.message,
-        /already reserved by another live payment run/,
+        /already (reserved by|selected in) another live payment run/,
       );
 
       const artifacts = await db.execute<{
