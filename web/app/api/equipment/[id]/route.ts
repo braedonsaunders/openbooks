@@ -9,6 +9,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { loadEquipment, loadEquipmentInWrite } from '../_lib'
+import { ScopeNotFoundError, lockScopeRows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
 function bad(error: string) { return NextResponse.json({ error, code: error }, { status: 422 }) }
@@ -94,6 +95,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // indistinguishable from a missing row, even with a stale token.
       if (Number(current.revision) !== revision) return staleRevision()
 
+      const fixedAssetId = body.fixedAssetId !== undefined ? text(body.fixedAssetId) : current.fixed_asset_id
+      const rateBookId = body.rateBookId !== undefined ? text(body.rateBookId) : current.rate_book_id
+      const assetIds = body.fixedAssetId !== undefined || body.subsidiaryId !== undefined
+        ? [...new Set([current.fixed_asset_id, fixedAssetId].filter((value): value is string => typeof value === 'string' && isUuid(value)))]
+        : []
+      let lockedAssets: Awaited<ReturnType<typeof lockScopeRows>> = []
+      if (assetIds.length) {
+        try {
+          lockedAssets = await lockScopeRows(
+            tx,
+            gate.user.orgId,
+            assetIds.map((assetId) => ({ kind: 'fixed_asset' as const, id: assetId })),
+            gate.allowedSubsidiaryIds,
+            'share',
+          )
+        } catch (error) {
+          if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+          throw error
+        }
+      }
+
       // Effective values: body-supplied fields over the locked row. Only
       // supplied references are re-validated — a previously valid link the
       // caller did not touch is not the caller's to break.
@@ -160,8 +182,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           }, { status: 422 })
         }
       }
-      const fixedAssetId = body.fixedAssetId !== undefined ? text(body.fixedAssetId) : current.fixed_asset_id
-      const rateBookId = body.rateBookId !== undefined ? text(body.rateBookId) : current.rate_book_id
       for (const [value, label] of [[fixedAssetId, 'Fixed asset'], [rateBookId, 'Rate book']] as const) {
         if (value !== undefined && text(value) && !isUuid(text(value)!)) return bad(label === 'Fixed asset' ? 'invalid_fixed_asset' : 'invalid_rate_book')
       }
@@ -170,15 +190,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // unit out from under a live link is refused. A write touching
       // neither side cannot introduce a mismatch, so the locked pair stands.
       if (body.fixedAssetId !== undefined && fixedAssetId) {
-        const found = ((await tx.execute(sql`select subsidiary_id from fixed_assets where id = ${fixedAssetId} and org_id = ${gate.user.orgId}`)))
-        if (!found.rows[0]) return bad('fixed_asset_not_found')
-        if (String((found.rows[0] as { subsidiary_id: string }).subsidiary_id) !== String(subsidiaryId)) {
+        const found = lockedAssets.find((asset) => asset.id === fixedAssetId)
+        if (!found) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+        if (String(found.subsidiaryId) !== String(subsidiaryId)) {
           return bad('subsidiary_mismatch')
         }
       }
       if (body.fixedAssetId === undefined && body.subsidiaryId !== undefined && fixedAssetId) {
-        const linked = ((await tx.execute(sql`select subsidiary_id from fixed_assets where id = ${fixedAssetId} and org_id = ${gate.user.orgId}`)))
-        if (linked.rows[0] && String((linked.rows[0] as { subsidiary_id: string }).subsidiary_id) !== String(subsidiaryId)) {
+        const linked = lockedAssets.find((asset) => asset.id === String(fixedAssetId))
+        if (!linked) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+        if (String(linked.subsidiaryId) !== String(subsidiaryId)) {
           return bad('subsidiary_mismatch')
         }
       }

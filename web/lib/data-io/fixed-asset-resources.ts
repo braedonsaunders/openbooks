@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/assets/depreciation.ts'
+import { refuseFixedAssetRehomeWithEquipment } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
@@ -663,6 +664,13 @@ export function fixedAssetsResource(orgId: string): DataResource {
           if (history && basisChanged) {
             throw new Error('posted depreciation or lifecycle events already reference this asset — change only name, description, or serial number')
           }
+          await refuseFixedAssetRehomeWithEquipment(
+            tx,
+            ctx.orgId,
+            stored.id,
+            String(stored.subsidiary_id),
+            parsed.subsidiaryId,
+          )
           if (ctx.dryRun) {
             outcome.updated++
             return

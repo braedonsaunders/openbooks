@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/assets/depreciation.ts'
+import { FixedAssetEquipmentLinkConflict, refuseFixedAssetRehomeWithEquipment } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -427,6 +428,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
          for update`))
       const lockedExisting = lockedRes.rows[0]
       if (!lockedExisting) throw new Error('asset not found')
+      await refuseFixedAssetRehomeWithEquipment(
+        tx,
+        user.orgId,
+        id,
+        lockedExisting.subsidiary_id,
+        subsidiaryId ?? lockedExisting.subsidiary_id,
+      )
       if (lockedExisting.updated_at !== body.expectedUpdatedAt) {
         throw new PostedBasisEditConflict('The asset has changed. Reload it before saving.')
       }
@@ -551,6 +559,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (error) {
     if (error instanceof FieldRefusal) return patchFieldBad(error)
     if (error instanceof PostedBasisEditConflict) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
+    if (error instanceof FixedAssetEquipmentLinkConflict) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
     return bad(error instanceof Error ? error.message : 'Could not build depreciation schedule')

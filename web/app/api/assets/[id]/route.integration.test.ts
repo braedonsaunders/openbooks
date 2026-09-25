@@ -6,11 +6,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { Client } from "pg";
 
-// Live-Postgres regression for fnd_mtcbagp3_y0gebx: an asset PATCH used to
-// decide posted-basis immutability before opening its transaction. A posting
-// could then commit while the PATCH waited on its UPDATE, and the stale basis
-// change would commit after it. The route now locks and reloads fixed_assets
-// inside the transaction, so the loser rechecks posted history and rolls back.
+// Live-Postgres regression for posted-basis immutability and fixed-asset/equipment rehome locking.
 
 const stateKey = Symbol.for("openbooks.asset-route-test");
 interface RouteState {
@@ -223,6 +219,13 @@ test(
          where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`);
       assert.equal(state.rows[0]?.acquisition_cost, "13000.0000");
       assert.equal(state.rows[0]?.audits, 1);
+
+      const sourceSubsidiary = (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`)).rows[0]!.subsidiary_id
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${randomUUID()},${fixture.orgId},${sourceSubsidiary},'Other entity','CAD','CA')`)
+      const target = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${fixture.orgId} and name = 'Other entity'`)).rows[0]!.id
+      await db.execute(sql`insert into equipment_units(org_id,subsidiary_id,name,unit_number,status,purchase_price,fixed_asset_id) values (${fixture.orgId},${sourceSubsidiary},'Linked unit','LINK-ASSET','draft','100.0000',${fixture.assetId})`)
+      const refused = await PATCH(await patchRequest(fixture, { subsidiaryId: target }), { params: Promise.resolve({ id: fixture.assetId }) })
+      assert.deepEqual([refused.status, (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`)).rows[0]?.subsidiary_id], [409, sourceSubsidiary])
     } finally {
       routeState.authz = null;
       await dropScratchOrgReporting(fixture.orgId);

@@ -5,6 +5,7 @@ import { db, schema, withOrg, withOrgContext } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { refuseFixedAssetRehomeWithEquipment } from "../organization/subsidiary-scope.ts";
 import { lockAssetCategoryTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { buildNativeContext } from "./native.ts";
 import { NetSuiteSource, type NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
@@ -419,16 +420,23 @@ export async function syncNetSuiteFixedAssets(
           alternateDepreciation: assetAlternateDepreciation,
         },
       };
-      const existing = (await db.execute<{ id: string }>(sql`
-        select id from fixed_assets
+      const existing = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
+        select id, subsidiary_id from fixed_assets
          where org_id = ${options.orgId}
            and custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
            and custom->'netsuiteFam'->>'sourceId' = ${state.sourceId}
-         limit 1
+         limit 1 for update
       `));
       let assetId: string;
       if (existing.rows[0]) {
         assetId = existing.rows[0].id;
+        await refuseFixedAssetRehomeWithEquipment(
+          db,
+          options.orgId,
+          assetId,
+          existing.rows[0].subsidiary_id,
+          subsidiaryId,
+        );
         await db.execute(sql`
           update fixed_assets
              set subsidiary_id = ${subsidiaryId}, category_id = ${categoryId},

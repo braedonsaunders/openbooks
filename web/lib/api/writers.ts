@@ -15,6 +15,7 @@ import {
   DeleteError,
 } from "@openbooks/engine/src/ledger/document-delete.ts";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { FixedAssetEquipmentLinkConflict, refuseFixedAssetRehomeWithEquipment } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import {
   resolveDefaultValue,
   type FieldValueMap,
@@ -951,6 +952,20 @@ async function updateEntity(
     )
   ) {
     return err(403, "forbidden subsidiary");
+  }
+  if (table === "fixed_assets" && v.columns.subsidiary_id !== undefined) {
+    try {
+      await refuseFixedAssetRehomeWithEquipment(
+        db,
+        user.orgId,
+        id,
+        existingSubsidiary ?? null,
+        v.columns.subsidiary_id as string | null,
+      );
+    } catch (error) {
+      if (error instanceof FixedAssetEquipmentLinkConflict) return err(409, error.message);
+      throw error;
+    }
   }
   // Native reference columns on the partial patch: shape is proven by
   // coerceScalar, ownership here. v.columns carries supplied keys only, so
