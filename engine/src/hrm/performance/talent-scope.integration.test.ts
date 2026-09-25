@@ -77,9 +77,12 @@ async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string
 }
 
 async function mkTemplate(orgId: string, actorId: string): Promise<string> {
+  // Template names are unique per org: every call mints its own, since the
+  // harness already owns one 'Annual' and several tests mint more.
+  const name = `Annual ${randomUUID().slice(0, 8)}`;
   const templateId = (await db.execute<{ id: string }>(sql`
     insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${orgId}, 'Annual', '{"min": 1, "max": 5, "labels": ["low", "high"]}'::jsonb, ${actorId}, ${actorId})
+    values (${orgId}, ${name}, '{"min": 1, "max": 5, "labels": ["low", "high"]}'::jsonb, ${actorId}, ${actorId})
     returning id`)).rows[0]!.id;
   const sectionId = (await db.execute<{ id: string }>(sql`
     insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
@@ -375,12 +378,17 @@ test("succession plans and candidates stay inside the fence", async () => {
     const remainingBeforeDraft = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_succession_candidates
        where org_id = ${h.org.orgId} and plan_id = ${planA.id}`)).rows[0]!.n;
-    assert.equal(remainingBeforeDraft, "2");
+    // Two API-added candidates plus the out-of-scope row planted raw above
+    // (I3-people-55 changed that plant from a refused duplicate rank to a
+    // succeeding fence probe without rebasing these counts).
+    assert.equal(remainingBeforeDraft, "3");
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrAll, id: planA.id, status: "draft" });
     await removeSuccessionCandidate({ orgId: h.org.orgId, actorId: h.hrAll, planId: planA.id, candidateId: candidate.id });
     const remaining = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_succession_candidates
        where org_id = ${h.org.orgId} and plan_id = ${planA.id}`)).rows[0]!.n;
-    assert.equal(remaining, "1");
+    // Removing the one targeted candidate drops the count by exactly one;
+    // the second API candidate and the planted out-of-scope row stay.
+    assert.equal(remaining, "2");
   });
 });
