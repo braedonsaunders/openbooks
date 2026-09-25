@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
@@ -220,6 +220,13 @@ export function ProfileEditor(props: {
   derivedColumns?: Record<string, string>
   onClose: () => void
   onSaved: () => void
+  /**
+   * Unsaved-draft signal for embedding drawers (the employee drawer's close
+   * guard): reported true while the draft differs from the last saved state,
+   * false again after a successful save. Optional; the standalone editor
+   * omits it.
+   */
+  onDirtyChange?: (dirty: boolean) => void
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
   inline?: boolean
   /**
@@ -377,6 +384,32 @@ export function ProfileEditor(props: {
       ...prev,
       [certificateKey]: { ...(prev[certificateKey] ?? {}), [fieldKey]: value },
     }))
+
+  // Unsaved-draft signal (see onDirtyChange): the whole draft serializes
+  // against the baseline captured at mount. A successful save re-baselines
+  // (in save() below), so the guard clears with it; derived-column prefill
+  // never populates state, so an untouched draft reads clean.
+  const draftSnapshot = JSON.stringify([
+    payScheduleId, country, province, labourJurisdiction, payBasis,
+    federalClaimCode, federalClaimAmount, provincialClaimCode, provincialClaimAmount,
+    additionalTax, prescribedZoneDeduction, authorizedAnnualDeductions,
+    authorizedFederalCredits, authorizedProvincialCredits,
+    cppExempt, eiExempt, taxExempt, filingStatus, multipleJobs,
+    dependentCredits, otherIncomeAnnual, deductionsAnnual,
+    w4Pre2020, w4Allowances, ficaExempt, futaExempt, suiExempt,
+    vacationPercent, vacationMethod, isActive, sin,
+    filingAccountId, stubDelivery, paymentMethod, paidOnCommission,
+    extraColumns, rowAnswers,
+  ])
+  const [baseline, setBaseline] = useState<string | null>(null)
+  const reportedRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    const dirty = draftSnapshot !== (baseline ?? draftSnapshot)
+    if (reportedRef.current !== dirty) {
+      reportedRef.current = dirty
+      props.onDirtyChange?.(dirty)
+    }
+  })
 
   // Display strings: the locale wins where a key exists for the data concept
   // (keyed by column, never by country), otherwise the pack's declared
@@ -579,6 +612,10 @@ export function ProfileEditor(props: {
       if (committed) props.onSaved()
       if (failures.length === 0) {
         toast.success(t('saved'))
+        // The draft now matches the server: re-baseline so onDirtyChange
+        // clears with the save (the effect above reports the flip). A
+        // partial save keeps the draft dirty — unsaved work remains.
+        setBaseline(draftSnapshot)
       } else {
         for (const failure of failures) toast.error(failure)
       }
