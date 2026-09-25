@@ -342,7 +342,7 @@ export function CategoryManager({
                 </div>
                 <div>
                   <label className={labelCls}>{tForm('threshold')}</label>
-                  <input type="number" min={0} value={draft.significantPaymentThreshold ?? 0} onChange={(e) => set({ significantPaymentThreshold: Number(e.target.value) })} className={numCls} />
+                  <input type="number" min={0} step="0.0001" value={draft.significantPaymentThreshold ?? '0'} onChange={(e) => set({ significantPaymentThreshold: e.target.value })} className={numCls} />
                   <span className={helpCls}>{tForm('thresholdHelp')}</span>
                 </div>
               </div>

@@ -1280,14 +1280,15 @@ function CustomCategoryManager({ data }: { data: TrueCostData }) {
   }
   const add = () => {
     const cat: CustomCategory = { id: `cat_${crypto.randomUUID().slice(0, 8)}`, name: name.trim(), type, color: '#64748b', allocationBase: 'billed_hours', rateFormat: 'per_hour', includeInComposite: true }
-    if (type === 'manual') cat.manualConfig = { entryMode: 'fixed_total', fixedTotal: Number(fixedTotal) || 0 }
-    else if (type === 'derived') cat.derivedConfig = { sourceCategory, percentage: Number(percentage) || 0, allocationBase: 'same' }
+    if (type === 'manual') cat.manualConfig = { entryMode: 'fixed_total', fixedTotal }
+    else if (type === 'derived') cat.derivedConfig = { sourceCategory, percentage, allocationBase: 'same' }
     else cat.formulaConfig = { formula }
     setName(''); setFixedTotal(''); setFormula('')
     void run(() => mutateActiveProfile((p) => { p.customCategories ??= []; p.customCategories.push(cat) }))
   }
   const remove = (id: string) => run(() => mutateActiveProfile((p) => { p.customCategories = (p.customCategories ?? []).filter((c: CustomCategory) => c.id !== id) }))
-  const addDisabled = busy || !name.trim() || (type === 'manual' && !(Number(fixedTotal) > 0)) || (type === 'derived' && !sourceCategory) || (type === 'formula' && !formula.trim())
+  const fixedTotalIsZero = /^[-+]?0+(?:\.0+)?$/.test(fixedTotal.trim())
+  const addDisabled = busy || !name.trim() || (type === 'manual' && (!fixedTotal.trim() || fixedTotalIsZero)) || (type === 'derived' && !sourceCategory) || (type === 'formula' && !formula.trim())
   const typeLabel = (value: string) => value === 'manual'
     ? t('custom.typeManual')
     : value === 'derived'

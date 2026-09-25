@@ -180,7 +180,7 @@ export interface ForecastCategory {
   partyIds?: string[];
   // credit_card_cycle
   cardAccountIds?: string[];
-  significantPaymentThreshold?: number;
+  significantPaymentThreshold?: string;
   // manual_recurring
   amount?: Money;
   frequency?: "weekly" | "biweekly" | "bi_weekly" | "monthly";
@@ -1016,8 +1016,9 @@ export async function categoryWeekly(
     }
 
     const dailyBurnRate = divideMoney(grandTotalSpend, String(lookbackDays));
-    const effectiveThreshold = (cat.significantPaymentThreshold ?? 0) > 0
-      ? normalizeMoneyValue(String(cat.significantPaymentThreshold))
+    const configuredThreshold = cat.significantPaymentThreshold;
+    const effectiveThreshold = configuredThreshold !== undefined && compareMoney(configuredThreshold, ZERO_MONEY) > 0
+      ? normalizeMoneyValue(configuredThreshold)
       : compareMoney(medianPayment, ZERO_MONEY) > 0 ? multiplyMoney(medianPayment, "0.5") : normalizeMoneyValue("10000");
     const significantPayments = days.filter((d) => compareMoney(d.paid, effectiveThreshold) > 0).sort((a, b) => b.date.getTime() - a.date.getTime());
     const lastPaymentDate = significantPayments[0]?.date ?? null;
