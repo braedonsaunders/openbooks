@@ -156,11 +156,11 @@ const PROVINCES_2025_JAN: Partial<Record<Province, ProvincialRates>> = {
       { upTo: null, rate: "0.21", k: "9137" },
     ],
     lowestRate: "0.0879",
-    // Flat 11,744 (the maximum BPANS): the engine models no BPANS formula in
-    // any year — the same level as the landed 2026 module. The January BPANS
-    // formula (11,744 − (A−25,000)×6%, floor 8,744) and the July catch-up
-    // formula (+6%, cap 14,744) refine high earners only.
+    // 120th ed. Jan–Jun: BPANS = 11,744 − (A−25,000)×6%, floored at 8,744.
     tcpDefault: "11744",
+    tcpIncomePhaseOut: {
+      max: "11744", min: "8744", phaseStart: "25000", phaseEnd: "75000", rate: "0.06",
+    },
     claimCodes: NS_TCP_2025,
     lcp: { cap: "2000", rate: "0.20" },
   },
@@ -337,6 +337,12 @@ export const RATES_2025_JUL: EditionRates = {
   },
   provinces: {
     ...PROVINCES_2025_JAN,
+    NS: {
+      ...PROVINCES_2025_JAN.NS!,
+      // 121st ed. July uses the maximum BPANS; catch-up is an employer option.
+      tcpDefault: "11744",
+      tcpIncomePhaseOut: null,
+    },
     AB: {
       ...PROVINCES_2025_JAN.AB!,
       brackets: [

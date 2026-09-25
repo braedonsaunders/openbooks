@@ -87,6 +87,14 @@ export interface ProvincialRates {
   lowestRate: string;
   /** TD1 default when none filed: a flat amount or a formula BPA. */
   tcpDefault: string | "BPAF" | "BPAMB";
+  /** Income-tested provincial TCP default, calculated from T4127's annual A. */
+  tcpIncomePhaseOut?: {
+    max: string;
+    min: string;
+    phaseStart: string;
+    phaseEnd: string;
+    rate: string;
+  } | null;
   /**
    * Manitoba's income-tested BPAMB parameters for this edition, in the
    * guide's own form (BPAMB = max − (NI − phaseStart) × slopeNum/slopeDen).

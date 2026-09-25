@@ -344,6 +344,14 @@ export function calculateT4127(input: T4127Input): T4127Result {
       TCP = U(claimCodeAmount(prov.claimCodes, input.provincialClaimCode));
     } else if (prov.tcpDefault === "BPAF") TCP = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
     else if (prov.tcpDefault === "BPAMB") TCP = prov.bpamb ? bpaPhaseOut(netIncomeForBpa, prov.bpamb) : bpamb(netIncomeForBpa);
+    else if (prov.tcpIncomePhaseOut) {
+      const phase = prov.tcpIncomePhaseOut;
+      const phaseStart = U(phase.phaseStart);
+      const phaseEnd = U(phase.phaseEnd);
+      if (aWithBonus <= phaseStart) TCP = U(phase.max);
+      else if (aWithBonus >= phaseEnd) TCP = U(phase.min);
+      else TCP = bmax(U(phase.min), U(phase.max) - mulRateCents(aWithBonus - phaseStart, phase.rate));
+    }
     else TCP = U(prov.tcpDefault);
   }
   trace("TC", TC); trace("TCP", TCP);
