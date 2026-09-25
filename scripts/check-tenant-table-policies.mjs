@@ -25,5 +25,19 @@ for (const f of files) {
 }
 const policy = new Set([...readFileSync(join(root, 'engine/src/sandbox/tenant-table-policies.ts'), 'utf8').matchAll(/^\s+"([a-z0-9_]+)":\s*"/gm)].map((m) => m[1]))
 const missing = [...tables].filter(([t, org]) => org && !policy.has(t)).map(([t]) => t).sort()
-console.log(`checked tenant table policies; tables=${tables.size} org-owned=${[...tables.values()].filter(Boolean).length} policies=${policy.size} missing=${missing.length}`)
+// catalog.ts keeps two hand lists the policies must agree with, and the clone
+// refuses at runtime when they drift (storage_cleanup_outbox, 2026-09-25, found
+// only by CI's restore drill): every skip:no-copy table is in EXCLUDE, and every
+// clone:parent-filter table has a PARENT_FILTER entry. Compare them here too.
+const policies = new Map([...readFileSync(join(root, 'engine/src/sandbox/tenant-table-policies.ts'), 'utf8').matchAll(/^\s+"([a-z0-9_]+)":\s*"([^"]+)"/gm)].map((m) => [m[1], m[2]]))
+const catalog = readFileSync(join(root, 'engine/src/sandbox/catalog.ts'), 'utf8').replace(/^\s*\/\/.*$/gm, '')
+const block = (start, end) => { const a = catalog.indexOf(start); return a < 0 ? '' : catalog.slice(a + start.length, catalog.indexOf(end, a)) }
+const exclude = new Set([...block('export const EXCLUDE = new Set([', ']);').matchAll(/"([a-z0-9_]+)"/g)].map((m) => m[1]))
+const parentFilter = new Set([...block('export const PARENT_FILTER', '\n};').matchAll(/^\s+"?([a-z0-9_]+)"?:/gm)].map((m) => m[1]))
+const drift = [...policies].flatMap(([t, p]) => [
+  ...((p === 'skip:no-copy') !== exclude.has(t) ? [`${t} (${p}${exclude.has(t) ? ', in EXCLUDE' : ', missing from EXCLUDE in engine/src/sandbox/catalog.ts'})`] : []),
+  ...((p === 'clone:parent-filter') !== parentFilter.has(t) ? [`${t} (${p}${parentFilter.has(t) ? ', has a PARENT_FILTER entry' : ', missing from PARENT_FILTER'})`] : []),
+])
+console.log(`checked tenant table policies; tables=${tables.size} org-owned=${[...tables.values()].filter(Boolean).length} policies=${policy.size} missing=${missing.length} catalog-drift=${drift.length}`)
 if (missing.length) { console.error(`unclassified tenant tables (add to engine/src/sandbox/tenant-table-policies.ts): ${missing.join(', ')}`); process.exitCode = 1 }
+if (drift.length) { console.error(`tenant table policies disagree with the sandbox catalog: ${drift.join('; ')}`); process.exitCode = 1 }

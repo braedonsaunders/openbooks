@@ -91,6 +91,9 @@ export const EXCLUDE = new Set([
   // goes with them.
   "scheduler_outbox",
   "scheduler_outbox_terminal_audit",
+  // The storage cleanup outbox holds object deletes queued against the
+  // source org's files; a sandbox that replayed them would delete them.
+  "storage_cleanup_outbox",
   // Bearer-equivalent tokens are never copied: like api_keys.key_hash, a
   // verbatim copy either collides on a global unique (invitation token_hash,
   // kiosk device_token_hash) or resolves a production credential to the
