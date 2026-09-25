@@ -149,6 +149,10 @@
     "apply": "インポートを適用",
     "imported": "{count, plural, one {# 件の予算セルをインポートしました} other {# 件の予算セルをインポートしました}}",
     "failed": "ワークシートをインポートできませんでした。",
+    "refused": "インポートが拒否されました: {reason}",
+    "duplicateColumns": "列が重複しています: {detail}",
+    "fileHasNoRows": "選択したファイルにデータ行がありません。",
+    "budgetIsLocked": "この予算はロックされているため、インポートできません。",
     "rowError": "行 {row}、{field}: {message}"
   }
 }

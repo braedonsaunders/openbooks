@@ -149,6 +149,10 @@
     "apply": "Appliquer l’importation",
     "imported": "{count, plural, one {# cellule budgétaire importée} other {# cellules budgétaires importées}}",
     "failed": "La feuille n’a pas pu être importée.",
+    "refused": "Import refusé : {reason}",
+    "duplicateColumns": "Colonnes en double : {detail}",
+    "fileHasNoRows": "Le fichier sélectionné ne contient aucune ligne de données.",
+    "budgetIsLocked": "Ce budget est verrouillé et ne peut pas recevoir d’importation.",
     "rowError": "Ligne {row}, {field} : {message}"
   }
 }

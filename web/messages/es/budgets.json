@@ -149,6 +149,10 @@
     "apply": "Aplicar importación",
     "imported": "{count, plural, one {# celda de presupuesto importada} other {# celdas de presupuesto importadas}}",
     "failed": "No se pudo importar la hoja.",
+    "refused": "Importación rechazada: {reason}",
+    "duplicateColumns": "Columnas duplicadas: {detail}",
+    "fileHasNoRows": "El archivo seleccionado no contiene filas de datos.",
+    "budgetIsLocked": "Este presupuesto está bloqueado y no puede aceptar una importación.",
     "rowError": "Fila {row}, {field}: {message}"
   }
 }

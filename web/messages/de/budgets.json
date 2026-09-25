@@ -149,6 +149,10 @@
     "apply": "Import anwenden",
     "imported": "{count, plural, one {# Budgetzelle importiert} other {# Budgetzellen importiert}}",
     "failed": "Das Arbeitsblatt konnte nicht importiert werden.",
+    "refused": "Import abgelehnt: {reason}",
+    "duplicateColumns": "Doppelte Spalten: {detail}",
+    "fileHasNoRows": "Die ausgewählte Datei enthält keine Datenzeilen.",
+    "budgetIsLocked": "Dieses Budget ist gesperrt und kann keinen Import annehmen.",
     "rowError": "Zeile {row}, {field}: {message}"
   }
 }

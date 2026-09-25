@@ -149,6 +149,10 @@
     "apply": "Aplicar importação",
     "imported": "{count, plural, one {# célula de orçamento importada} other {# células de orçamento importadas}}",
     "failed": "Não foi possível importar a planilha.",
+    "refused": "Importação recusada: {reason}",
+    "duplicateColumns": "Colunas duplicadas: {detail}",
+    "fileHasNoRows": "O arquivo selecionado não contém linhas de dados.",
+    "budgetIsLocked": "Este orçamento está bloqueado e não pode receber uma importação.",
     "rowError": "Linha {row}, {field}: {message}"
   }
 }
