@@ -7,7 +7,8 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { AR_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
-import { accountOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import type { DocKindConfig } from '../../../../lib/document-kinds'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
@@ -144,7 +145,12 @@ export async function loadArInvoices(
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
-          partyOptions('customer', authz.user.orgId, documentOptionScope),
+          listScopedPartyOptionsWithCurrent(
+            authz.user.orgId,
+            documentOptionScope,
+            'customer',
+            openDoc?.doc.party_id ? String(openDoc.doc.party_id) : undefined,
+          ),
           accountOptions(DOC_KINDS[drawerKind! as 'customer_invoice']!, authz.user.orgId, documentOptionScope),
           taxCodeOptions(),
           taxGroupOptions(),

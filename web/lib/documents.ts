@@ -24,7 +24,7 @@ import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMone
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { resolveDraftSubsidiary, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { resolveDraftSubsidiary, subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { allowedSubsidiaryIds } from './subsidiaries'
 import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
 
@@ -1110,6 +1110,21 @@ export async function applyDocumentEdit(
   for (const ref of headerOwners) {
     const owned = await runner.execute(sql`select 1 from ${sql.raw(`"${ref.table}"`)} where id = ${ref.value} and org_id = ${orgId}`)
     if (!owned.rows.length) throw new DocumentEditError(404, `${ref.label} not found in this organization`)
+  }
+  // Subsidiary scope of a newly assigned party. The pickers only offer
+  // subsidiary-visible parties, so a scoped-out party id arrives only by
+  // hand-crafted request: refuse it with the uniform not-found rather than
+  // bind a document the caller may not reference. An unchanged party is
+  // grandfathered — its binding predates scope and no new reference forms.
+  // Null-subsidiary parties are org-wide shared, like the option lists.
+  if (body.partyId !== undefined && body.partyId !== null && body.partyId !== current.partyId) {
+    const partyScope = await runner.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`)
+    const partySubsidiaryId = partyScope.rows[0]?.subsidiary_id ?? null
+    const allowed = await allowedSubsidiaryIds(ctx.userId, orgId)
+    if (!subsidiaryScopeAllows(allowed, partySubsidiaryId, { orgWideNull: true })) {
+      throw new DocumentEditError(404, 'not found')
+    }
   }
 
   if (body.currency !== undefined && !(await isFeatureEnabled(orgId, 'multiCurrency'))) {
