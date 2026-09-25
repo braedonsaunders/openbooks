@@ -16,6 +16,7 @@ import {
 } from "../money/money.ts";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
+import type { Money } from "../money/brands.ts";
 import {
   postProjectGlEntryWithinTransaction,
   recognitionAccounts,
@@ -282,8 +283,9 @@ export async function resolveWage(
 }
 
 /** Convert a wage to functional currency using an exact decimal FX rate. */
-export function convertLaborWage(wage: string, fxRate: string): string {
-  return mulRate(wage, fxRate);
+export function convertLaborWage(wage: string, fxRate: string): Money {
+  // mulRate emits fromUnits-fixed 4dp: the converted wage is canonical Money.
+  return mulRate(wage, fxRate) as Money;
 }
 
 /** Convert only fixed-amount components; percentage components are unitless. */
