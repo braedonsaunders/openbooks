@@ -87,7 +87,7 @@ export class ErpNextSource implements MigrationSource {
 
   /** ERPNext list filter for an incremental pull. */
   private sinceFilter(since?: Date | null): (string | number)[][] {
-    return since ? [["modified", ">", since.toISOString().slice(0, 19).replace("T", " ")]] : [];
+    return since ? [["modified", ">=", since.toISOString().slice(0, 19).replace("T", " ")]] : [];
   }
 
   async accountingPeriods(): Promise<SourceEntity[]> {
@@ -222,7 +222,10 @@ export class ErpNextSource implements MigrationSource {
 
   async nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges> {
     const sinceStr = since ? since.toISOString().slice(0, 19).replace("T", " ") : null;
-    const filt = sinceStr ? [["modified", ">", sinceStr]] : [];
+    // ERPNext exposes modified at second precision. Inclusive overlap is
+    // required when the stored cursor has sub-second precision; downstream
+    // sourceRef reconciliation makes replaying the boundary idempotent.
+    const filt = sinceStr ? [["modified", ">=", sinceStr]] : [];
 
     const documents: NativeDocument[] = [];
     const unbuildable: { ref: string; reason: string }[] = [];
