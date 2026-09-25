@@ -7,6 +7,7 @@ interface RouteState {
   calls: string[];
   enqueueCalls: number;
   enqueueError?: Error;
+  raceStatus?: string;
   runId: string;
 }
 const routeState: RouteState = {
@@ -45,7 +46,8 @@ const mockSources = new Map<string, string>([
           if (text.includes('insert into backup_runs')) {
             return { rows: [{ id: state.runId }] }
           }
-          if (text.includes('update backup_runs')) return { rows: [{ id: state.runId }] }
+          if (text.includes('update backup_runs')) return { rows: state.raceStatus ? [] : [{ id: state.runId }] }
+          if (text.includes('select status from backup_runs')) return { rows: [{ status: state.raceStatus }] }
           return { rows: [] }
         },
       }
@@ -110,20 +112,16 @@ const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 function reset(): void {
-  routeState.calls = [];
-  routeState.enqueueCalls = 0;
-  routeState.enqueueError = undefined;
+  routeState.calls = []; routeState.enqueueCalls = 0; routeState.enqueueError = undefined; routeState.raceStatus = undefined;
 }
 
-test("a successfully enqueued backup returns its run id", async () => {
+test("an ambiguous enqueue ack returns the id after the worker claims the run", async () => {
   reset();
-
+  routeState.enqueueError = new Error("Redis response lost"); routeState.raceStatus = "running";
   const response = await POST();
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, runId: routeState.runId });
-  assert.equal(routeState.enqueueCalls, 1);
-  assert.equal(routeState.calls.filter((text) => text.includes("set status = 'failed'")).length, 0);
 });
 
 test("an enqueue failure marks the queued run failed and releases the in-flight slot", async () => {
