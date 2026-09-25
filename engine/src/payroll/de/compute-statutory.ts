@@ -34,8 +34,8 @@
  * Versorgungsbezüge/Altersentlastungsbetrag PAP paths stay refused by name
  * (pap.ts). Kirchenlohnsteuer is 8% in BY/BW, 9% elsewhere (the pack's
  * declared split, EStG §51a base = PAP BK), Cent ↓, computed only when the
- * ELStAM Konfession is non-empty. Umlagen U1/U2/U3 and the
- * Berufsgenossenschaft accrue nothing here — employer levies with no engine.
+ * ELStAM Konfession is non-empty. U1/U2/U3 and Berufsgenossenschaft are not
+ * priced; the adapter refuses the run until employer-specific rates/bases resolve.
  *
  * Money: integer Cent throughout (PAP convention); SV halves are
  * half-up to the Cent (kaufmännisch). No floating point on money.
@@ -51,6 +51,18 @@ import {
 import { DE_2026_CEILINGS, DE_2026_RATES, DE_PACK_RATES } from "./rates.ts";
 
 export class DePayrollRefusal extends PayrollPackError {}
+
+function deEmployerLevyRefusal(): string | null {
+  // A successful run must include the employer levies that this pack declares.
+  // U1/U2 are Krankenkasse-specific (AAG §7), U3 is owed under SGB III §358,
+  // and the BG assessment depends on the employer's risk class (SGB VII §150).
+  // Until their effective employer-specific bases/rates are carried, refusing
+  // the whole run is safer than presenting a partial employer cost as complete.
+  return "DE 2026 statutory payroll refuses because employer levies are not priced: U1 (AAG §7), "
+    + "U2 (AAG §7), U3 (SGB III §358), and Berufsgenossenschaft accident insurance (SGB VII §150). "
+    + "Do not post this run as complete; have a qualified German payroll provider price these "
+    + "employer charges before posting until the pack can resolve their effective employer-specific rates and bases.";
+}
 
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the factor
@@ -109,6 +121,9 @@ export async function computeDeStatutory(
       + "plus SVRV 2026 — see engine/src/payroll/de/rates.ts).",
     );
   }
+  const levyRefusal = deEmployerLevyRefusal();
+  if (levyRefusal !== null) throw new DePayrollRefusal(levyRefusal);
+
   const resolution = await resolveStatutoryRates(ctx.orgId, DE_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
   const kvzRaw = resolution.values("de_kvz")?.rate ?? null;
   const kvz = kvzRaw == null ? null : Number(kvzRaw);

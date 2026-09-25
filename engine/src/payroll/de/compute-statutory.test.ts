@@ -4,8 +4,7 @@
  * Klasse-I assumption, no silent childlessness).
  *
  * Lohnsteuer/Soli/BK wiring is proven against the PAP engine direct (the PAP
- * itself is proven by the 516/516 Prüftabellen goldens in pap.test.ts); the
- * SV branches and KiSt carry hand-computed expectations in the comments.
+ * itself is proven by the 516/516 Prüftabellen goldens in pap.test.ts).
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -15,8 +14,7 @@ import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { buildResolution } from "../statutory-rates.ts";
 import {
-  computeDeStatutoryWithRates,
-  DePayrollRefusal,
+  computeDeStatutory, computeDeStatutoryWithRates, DePayrollRefusal,
 } from "./compute-statutory.ts";
 import { computePapLaufend2026 } from "./pap.ts";
 import { DE_PACK_RATES } from "./rates.ts";
@@ -96,11 +94,12 @@ function fakeCtx(overrides: {
 const line = (pushed: Pushed[], systemKey: string, kind: string): string | null =>
   pushed.find((entry) => entry.systemKey === systemKey && entry.kind === kind)?.amount ?? null;
 
-test("full monthly period computes: PAP wiring + hand-checked SV", () => {
+test("full monthly period computes: PAP wiring + hand-checked SV and adapter names missing employer levies", async () => {
   // €3,000, StKl I, KVZ 2.90, childless, no confession, NW.
   // Hand SV: KV 3000 × 8.75% = 262.50; RV 3000 × 9.3% = 279.00;
   // AV 3000 × 1.3% = 39.00; PV-AN 3000 × 2.4% = 72.00; PV-AG 3000 × 1.8% = 54.00.
   const { ctx, pushed } = fakeCtx({});
+  await assert.rejects(computeDeStatutory(ctx), /refuses.*U1.*U2.*U3.*Berufsgenossenschaft/);
   const result = computeDeStatutoryWithRates(ctx, { kvz: 2.9 });
   const pap = computePapLaufend2026({
     lzz: 2, re4: 300000, stkl: 1, zkf: 0, af: 0, f: 1,
