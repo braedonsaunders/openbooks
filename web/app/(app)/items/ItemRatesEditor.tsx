@@ -268,6 +268,7 @@ export function ItemRatesEditor({
       {editing ? (
         <Card>
           <CardContent className="space-y-4 p-4">
+            <fieldset disabled={busy} className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1"><Label>{t('rateBook')}</Label><Select value={rateBookId} onChange={(event) => setRateBookId(event.target.value)}>
                 <option value="">{t('standardBook')}</option>{data?.books.map((book) => <option key={book.id} value={book.id}>{book.name} · {book.currency}</option>)}
@@ -302,6 +303,7 @@ export function ItemRatesEditor({
               <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
               <Button variant="outline" onClick={() => setEditingRequested(false)}>{common('actions.cancel')}</Button>
             </div>
+            </fieldset>
           </CardContent>
         </Card>
       ) : null}
