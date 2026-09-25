@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -402,7 +402,8 @@ export function OrderDrawer({
     order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)],
   )
   const resolvedPriceRef = useRef(new Map<number, { itemId: string; unitPrice: string; basis: PriceBasis }>())
-  const priceRequestRef = useRef(new Map<number, number>())
+  const priceRequestRef = useRef(new Map<string, string>())
+  const priceRequestSequence = useRef(0)
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // Saves, statuses, issues, deletes and converts run on the shared action
@@ -468,20 +469,37 @@ export function OrderDrawer({
 
   // -- selecting an item defaults description/price/account/tax/unit ----------
   const resolveSellingPrice = (index: number, row: LineRow, allRows: LineRow[]) => {
-    if (kind === 'purchase_order' || !row.itemId || !row.quantity) return
+    if (kind === 'purchase_order' || !row.itemId || !row.quantity) {
+      priceRequestRef.current.delete(row.clientKey)
+      return
+    }
     let overallItemQuantity: string
     try {
       overallItemQuantity = sum(allRows.filter((candidate) => candidate.itemId === row.itemId).map((candidate) => candidate.quantity || '0'))
-      if (cmp(row.quantity, '0') <= 0 || cmp(overallItemQuantity, '0') <= 0) return
-    } catch { return }
-    const requestNumber = (priceRequestRef.current.get(index) ?? 0) + 1
-    priceRequestRef.current.set(index, requestNumber)
-    // The response lands asynchronously: bind it to the row's identity, not
-    // its position, so a reorder mid-flight cannot price the wrong line.
+      if (cmp(row.quantity, '0') <= 0 || cmp(overallItemQuantity, '0') <= 0) {
+        priceRequestRef.current.delete(row.clientKey)
+        return
+      }
+    } catch {
+      priceRequestRef.current.delete(row.clientKey)
+      return
+    }
+    const priceInputs = JSON.stringify({
+      itemId: row.itemId,
+      customerId: partyId || null,
+      currency: doc.currency,
+      onDate: documentDate,
+      lineQuantity: row.quantity,
+      overallItemQuantity,
+    })
+    const requestIdentity = `${priceInputs}:${++priceRequestSequence.current}`
+    priceRequestRef.current.set(row.clientKey, requestIdentity)
+    // The response lands asynchronously: bind it to the row and every
+    // pricing input, not just the row's former position.
     const rowKey = row.clientKey
     void fetch('/api/items/price', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: row.itemId, customerId: partyId || null, currency: doc.currency, onDate: documentDate, lineQuantity: row.quantity, overallItemQuantity }),
+      body: priceInputs,
     }).then(async (response) => {
       if (!response.ok) return null
       return response.json() as Promise<{ price: {
@@ -493,7 +511,7 @@ export function OrderDrawer({
         resolvedAt: string
       } | null }>
     }).then((payload) => {
-      if (!payload?.price || priceRequestRef.current.get(index) !== requestNumber) return
+      if (!payload?.price || priceRequestRef.current.get(rowKey) !== requestIdentity) return
       const price = payload.price
       const basis: PriceBasis = {
         kind: price.source,
@@ -504,18 +522,23 @@ export function OrderDrawer({
         resolvedAt: price.resolvedAt,
       }
       setRows((current) => current.map((candidate, rowIndex) => {
-        if (rowIndex !== index || candidate.clientKey !== rowKey || candidate.itemId !== row.itemId || candidate.quantity !== row.quantity) return candidate
-        resolvedPriceRef.current.set(index, { itemId: row.itemId, unitPrice: price.unitPrice, basis })
+        if (candidate.clientKey !== rowKey || candidate.itemId !== row.itemId || candidate.quantity !== row.quantity) return candidate
+        resolvedPriceRef.current.set(rowIndex, { itemId: row.itemId, unitPrice: price.unitPrice, basis })
         return { ...candidate, unitPrice: price.unitPrice }
       }))
     }).catch(() => undefined)
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     for (const [index, tracked] of resolvedPriceRef.current) {
       const row = rows[index]
       if (row?.itemId === tracked.itemId) resolveSellingPrice(index, row, rows)
     }
+    rows.forEach((row, index) => {
+      if (priceRequestRef.current.has(row.clientKey) && !resolvedPriceRef.current.has(index)) {
+        resolveSellingPrice(index, row, rows)
+      }
+    })
     // Only customer, currency, and pricing date changes re-resolve rows whose
     // price still came from the hierarchy. Row edits are handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -552,7 +575,10 @@ export function OrderDrawer({
     // merely inherited the position.
     if (merged.length !== prev.length || merged.some((row, i) => row.clientKey !== prev[i]?.clientKey)) {
       resolvedPriceRef.current.clear()
-      priceRequestRef.current.clear()
+      const liveKeys = new Set(merged.map((row) => row.clientKey))
+      for (const key of priceRequestRef.current.keys()) {
+        if (!liveKeys.has(key)) priceRequestRef.current.delete(key)
+      }
     }
     setRows(merged)
     merged.forEach((row, index) => {
@@ -560,9 +586,13 @@ export function OrderDrawer({
       const itemChanged = Boolean(row.itemId && row.itemId !== prior?.itemId)
       const tracked = resolvedPriceRef.current.get(index)
       const manuallyChanged = Boolean(prior && row.unitPrice !== prior.unitPrice && !itemChanged)
-      if (manuallyChanged) resolvedPriceRef.current.delete(index)
+      if (manuallyChanged) {
+        resolvedPriceRef.current.delete(index)
+        priceRequestRef.current.delete(row.clientKey)
+      }
       const trackedQuantityChanged = Boolean(tracked && tracked.itemId === row.itemId && prior && row.quantity !== prior.quantity && prior.unitPrice === tracked.unitPrice)
-      if (itemChanged || trackedQuantityChanged) resolveSellingPrice(index, row, merged)
+      const pendingQuantityChanged = Boolean(priceRequestRef.current.has(row.clientKey) && prior && row.quantity !== prior.quantity)
+      if (itemChanged || trackedQuantityChanged || pendingQuantityChanged) resolveSellingPrice(index, row, merged)
     })
   }
 
