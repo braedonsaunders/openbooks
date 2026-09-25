@@ -13,7 +13,7 @@ import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { assertSafePaymentFilename } from "./payment-filenames.ts";
 import { decryptAccountNumber, isValidBic, isValidIban } from "./rail-settings.ts";
-import { lockRunBankEvidence } from "./run-readiness.ts";
+import { assertPaymentPartiesInScope, lockRunBankEvidence } from "./run-readiness.ts";
 import { validateNachaSettings, type NachaSettings } from "./rail-nacha.ts";
 import { validateSepaSettings, type SepaSettings } from "./rail-sepa.ts";
 import { loadRunFile, type RunFileOptions } from "./run-files.ts";
@@ -724,13 +724,17 @@ function sepaDebit(ctx: FormatContext, evidence: SepaDebitEvidence): { filename:
   return { filename: `SEPA-DEBIT-${String(ctx.run.run_number)}.xml`, content, contentType: ctx.format.contentType };
 }
 
-async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date, fileOpts?: RunFileOptions) {
+async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date, fileOpts?: RunFileOptions, allowedSubsidiaryIds?: ReadonlySet<string> | null) {
   // The org's calendar day backs every formatter's "no scheduled date" default,
   // so bank files never inherit the server's UTC day by accident.
   const scoped: FormatContext = { ...ctx, businessDate: await businessToday(orgId) };
   if (["cpa005_credit", "nacha_credit", "sepa_credit"].includes(scoped.format.rail)) {
-    return loadRunFile(String(scoped.run.id), orgId, fileOpts);
+    return loadRunFile(String(scoped.run.id), orgId, { ...fileOpts, allowedSubsidiaryIds });
   }
+  // Every other rail renders from pre-read payment rows instead of locked
+  // bank evidence: hold the payee party rows and fail a caller outside any
+  // payee's scope before a byte renders, uniformly with the evidence rails.
+  await assertPaymentPartiesInScope(orgId, scoped.payments.map((p) => p.partyId), allowedSubsidiaryIds);
   if (scoped.format.rail === "nacha_debit") return { ...nachaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail === "sepa_debit") {
     // Same locked-evidence mechanism as the credit writers: debtor bank
@@ -739,7 +743,7 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date, f
     // partial file, never a stored artifact, never a status flip. The locks
     // are released when the evidence transaction commits; the render is pure
     // and the artifact transaction below re-judges the run lifecycle.
-    const evidence = await lockRunBankEvidence("sepa", String(scoped.run.id), orgId);
+    const evidence = await lockRunBankEvidence("sepa", String(scoped.run.id), orgId, allowedSubsidiaryIds);
     return { ...sepaDebit(scoped, evidence), runNumber: String(scoped.run.run_number) };
   }
   if (scoped.format.rail === "cheque") return { ...chequeRegister(scoped), runNumber: String(scoped.run.run_number) };
@@ -856,7 +860,7 @@ export async function generatePaymentFileArtifact(
   runId: string,
   orgId: string,
   userId: string,
-  opts?: { reprocessFileId?: string | null; now?: Date },
+  opts?: { reprocessFileId?: string | null; now?: Date; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<{ id: string; filename: string; contentType: string; content: Buffer }> {
   const ctx = await loadFormatContext(runId, orgId);
   const status = String(ctx.run.status);
@@ -885,7 +889,7 @@ export async function generatePaymentFileArtifact(
   if (Number.isNaN(fileCreatedAt.getTime())) {
     throw new PaymentError("payment run file creation stamp is not a valid timestamp");
   }
-  const rendered = await renderPaymentFile(ctx, orgId, now, { fileCreatedAt });
+  const rendered = await renderPaymentFile(ctx, orgId, now, { fileCreatedAt }, opts?.allowedSubsidiaryIds);
   // File names are attacker-influenced (a custom formatter returns an
   // arbitrary string) and later concatenated onto the SFTP outbound folder,
   // so the merged name of EVERY rail is validated here — before anything is

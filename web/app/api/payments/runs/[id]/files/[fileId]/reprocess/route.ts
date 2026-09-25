@@ -9,6 +9,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id) || !isUuid(fileId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
-  try { const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id, { reprocessFileId: fileId }); return NextResponse.json({ id: file.id, filename: file.filename }) }
+  try { const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id, { reprocessFileId: fileId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }); return NextResponse.json({ id: file.id, filename: file.filename }) }
   catch (e) { return paymentErrorResponse(e) }
 }

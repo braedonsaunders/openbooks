@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/src/payments/operations.ts'
+import { assertRunPayeesInScope } from '@openbooks/engine/src/payments/run-readiness.ts'
 import { refuseMaskedStorageKind } from '../../../../../../lib/file-storage'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
@@ -19,6 +20,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
 
   try {
+    // Serving stored bytes re-discloses current bank coordinates: refuse a
+    // caller outside any current payee's scope exactly like generation.
+    await assertRunPayeesInScope(gate.user.orgId, id, gate.allowedSubsidiaryIds)
     const result = (await db.execute<{ id: string; filename: string; content_type: string; storage_kind: string; bytes: Buffer | null }>(sql`
       select pf.id, pf.filename, pf.content_type, fv.storage_kind, fb.bytes
         from payment_files pf
@@ -56,7 +60,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   try {
-    const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id)
+    const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id, {
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     const state = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id}`))
     return NextResponse.json({ id: file.id, filename: file.filename, status: state.rows[0]?.status })
   } catch (e) {
