@@ -36,6 +36,60 @@ function refusal(message: string): Error {
   return new Error(`[bootstrap] ${message}; ask the database host to repair the provisioning in docs/operations/communal-postgres.md, then retry bootstrap`);
 }
 
+/** Live posture row behind the constrained schema-owner check (pg_roles for current_user). */
+export interface ConstrainedSchemaOwnerPosture {
+  current_user: string;
+  current_database: string;
+  /** rolsuper/rolbypassrls/rolcreatedb/rolcreaterole/rolreplication — any one disqualifies. */
+  unsafe: boolean;
+  unowned_tables: number;
+}
+
+/**
+ * Pure refusal behind assertConstrainedSchemaOwnerMigrationRole: the decision
+ * without the pool query, so the fail-closed posture has a behavioral test
+ * that fails when the rule weakens instead of a source-text pin that fails
+ * on reformat. Returns the refusal message, or null when the posture
+ * verifies. An unset NODE_ENV is production: hand-run maintenance scripts
+ * fail closed.
+ */
+export function constrainedSchemaOwnerRefusal(
+  posture: ConstrainedSchemaOwnerPosture | null | undefined,
+  migrationUrl: URL,
+  runtimeUrl: URL,
+  runtimeRoleName: string,
+  nodeEnv: string | undefined,
+): string | null {
+  const sameTarget = (a: URL, b: URL): boolean =>
+    a.hostname === b.hostname &&
+    (a.port || "5432") === (b.port || "5432") &&
+    decodeURIComponent(a.pathname) === decodeURIComponent(b.pathname);
+  if (
+    posture?.current_user === runtimeRoleName &&
+    nodeEnv !== "development" &&
+    nodeEnv !== "test"
+  ) {
+    return (
+      "constrained schema-owner migration refuses a runtime role identical to the migration login outside development/test; " +
+      "provision a separate non-owner runtime role and set OPENBOOKS_RUNTIME_DB_URL to it — " +
+      "see docs/operations/communal-postgres.md and deploy/README.md"
+    );
+  }
+  if (
+    !posture ||
+    posture.current_database !== decodeURIComponent(runtimeUrl.pathname.replace(/^\//, "")) ||
+    !sameTarget(migrationUrl, runtimeUrl) ||
+    posture.unsafe ||
+    posture.unowned_tables !== 0
+  ) {
+    return (
+      "constrained schema-owner migration requires a restricted role that owns every public table, " +
+      "with the runtime URL targeting the same host, port and database"
+    );
+  }
+  return null;
+}
+
 /** Probe SET itself: inherited privileges (USAGE) do not imply SET permission on PG16+. */
 export async function verifyReadRoleAssumption(pool: pg.Pool, label: string): Promise<void> {
   const client = await pool.connect();
