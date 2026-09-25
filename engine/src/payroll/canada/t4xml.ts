@@ -391,7 +391,7 @@ export function renderT4Xml(input: {
         `   <BN>${esc(bn)}</BN>\n` +
         `   <EMPT_PROV_CD>${esc(slip.province)}</EMPT_PROV_CD>\n` +
         `   <RPT_TCD>${rpt}</RPT_TCD>\n` +
-        `   <EMPT_INC_AMT>${amt(slip.box14EmploymentIncome)}</EMPT_INC_AMT>\n` +
+        `   <empt_incamt>${amt(slip.box14EmploymentIncome)}</empt_incamt>\n` +
         pension +
         `   <EMPE_CPP2_AMT>${amt(slip.box16aCpp2)}</EMPE_CPP2_AMT>\n` +
         `   <EIP_AMT>${amt(slip.box18Ei)}</EIP_AMT>\n` +
@@ -411,7 +411,7 @@ export function renderT4Xml(input: {
       `   <tx_yr>${taxYear}</tx_yr>\n` +
       `   <slp_cnt>${ret.slips.length}</slp_cnt>\n` +
       `   <RPT_TCD>${returnRpt}</RPT_TCD>\n` +
-      `   <TOT_EMPT_INC_AMT>${amt(ret.summary.employmentIncome)}</TOT_EMPT_INC_AMT>\n` +
+      `   <tot_empt_incamt>${amt(ret.summary.employmentIncome)}</tot_empt_incamt>\n` +
       `   <TOT_EMPE_CPP_AMT>${amt(ret.summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
       `   <TOT_EMPE_CPP2_AMT>${amt(ret.summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
       `   <TOT_EMPR_CPP_AMT>${amt(ret.summary.employerCpp)}</TOT_EMPR_CPP_AMT><tot_empr_cppe_amt>${amt(ret.summary.employerCpp2)}</tot_empr_cppe_amt>\n` +

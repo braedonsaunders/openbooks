@@ -297,7 +297,7 @@ test("T4 XML files one return per payroll program account", () => {
   assert.match(xml, /<bn>123456789RP0001<\/bn>/);
   assert.match(xml, /<bn>123456789RP0002<\/bn>/);
   assert.ok(!xml.includes("999999999RP0001"), "the transmitter BN never stands in for an account");
-  assert.match(xml, /<TOT_EMPT_INC_AMT>70000\.00<\/TOT_EMPT_INC_AMT>/);
+  assert.match(xml, /<tot_empt_incamt>70000\.00<\/tot_empt_incamt>/);
 });
 
 test("T4 XML falls back to the transmitter BN for unassigned employees", () => {
@@ -326,8 +326,8 @@ test("T4 XML formats amounts by exact decimal arithmetic, never a float round-tr
       summary: summary("86.6150"),
     }],
   });
-  assert.match(xml, /<EMPT_INC_AMT>86\.62<\/EMPT_INC_AMT>/);
-  assert.match(xml, /<TOT_EMPT_INC_AMT>86\.62<\/TOT_EMPT_INC_AMT>/);
+  assert.match(xml, /<empt_incamt>86\.62<\/empt_incamt>/);
+  assert.match(xml, /<tot_empt_incamt>86\.62<\/tot_empt_incamt>/);
 });
 
 test("T4 XML keeps large magnitudes exact beyond double precision", () => {
@@ -345,8 +345,8 @@ test("T4 XML keeps large magnitudes exact beyond double precision", () => {
       summary: summary("70368744177663.9850"),
     }],
   });
-  assert.match(xml, /<EMPT_INC_AMT>70368744177663\.99<\/EMPT_INC_AMT>/);
-  assert.match(xml, /<TOT_EMPT_INC_AMT>70368744177663\.99<\/TOT_EMPT_INC_AMT>/);
+  assert.match(xml, /<empt_incamt>70368744177663\.99<\/empt_incamt>/);
+  assert.match(xml, /<tot_empt_incamt>70368744177663\.99<\/tot_empt_incamt>/);
 });
 
 test("a region-scoped remittance vendor splits the group; same-vendor provinces fold into one line", () => {

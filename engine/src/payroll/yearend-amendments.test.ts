@@ -302,7 +302,7 @@ const T4_AMENDED_XML = `<?xml version="1.0" encoding="UTF-8"?>
    <BN>123456789RP0002</BN>
    <EMPT_PROV_CD>ON</EMPT_PROV_CD>
    <RPT_TCD>A</RPT_TCD>
-   <EMPT_INC_AMT>54500.00</EMPT_INC_AMT>
+   <empt_incamt>54500.00</empt_incamt>
    <CPP_CNTRB_AMT>3200.50</CPP_CNTRB_AMT>
    <EMPE_CPP2_AMT>188.00</EMPE_CPP2_AMT>
    <EIP_AMT>834.20</EIP_AMT>
@@ -316,7 +316,7 @@ const T4_AMENDED_XML = `<?xml version="1.0" encoding="UTF-8"?>
    <tx_yr>2026</tx_yr>
    <slp_cnt>1</slp_cnt>
    <RPT_TCD>A</RPT_TCD>
-   <TOT_EMPT_INC_AMT>54500.00</TOT_EMPT_INC_AMT>
+   <tot_empt_incamt>54500.00</tot_empt_incamt>
    <TOT_EMPE_CPP_AMT>3200.50</TOT_EMPE_CPP_AMT>
    <TOT_EMPE_CPP2_AMT>188.00</TOT_EMPE_CPP2_AMT>
    <TOT_EMPR_CPP_AMT>3200.50</TOT_EMPR_CPP_AMT><tot_empr_cppe_amt>188.00</tot_empr_cppe_amt>
@@ -337,7 +337,7 @@ const T4_AMENDED_XML = `<?xml version="1.0" encoding="UTF-8"?>
  */
 const T4_CANCELLED_XML = T4_AMENDED_XML
   .replace("<sbmt_ref_id>T4-2026-A-abcdef12</sbmt_ref_id>", "<sbmt_ref_id>T4-2026-C-abcdef12</sbmt_ref_id>")
-  .replace("<RPT_TCD>A</RPT_TCD>\n   <EMPT_INC_AMT>", "<RPT_TCD>C</RPT_TCD>\n   <EMPT_INC_AMT>")
+  .replace("<RPT_TCD>A</RPT_TCD>\n   <empt_incamt>", "<RPT_TCD>C</RPT_TCD>\n   <empt_incamt>")
 
 test("the amended T4 XML is byte-identical to the CRA-coded golden", () => {
   assert.equal(goldenT4("A"), T4_AMENDED_XML);
@@ -848,7 +848,7 @@ test(
       assert.equal(issued.submission.slipCount, 1);
       assert.ok(issued.file, "the CA pack builds the T4 XML");
       assert.match(issued.file!.body, /<rpt_tcd>O<\/rpt_tcd>/);
-      assert.match(issued.file!.body, /<EMPT_INC_AMT>52000\.00<\/EMPT_INC_AMT>/);
+      assert.match(issued.file!.body, /<empt_incamt>52000\.00<\/empt_incamt>/);
       const originalBytes = issued.file!.body;
 
       // A second original is refused — the agency would hold two returns.
@@ -895,7 +895,7 @@ test(
       assert.equal(amended.submission.supersedesId, issued.submission.id);
       assert.match(amended.file!.body, /<rpt_tcd>A<\/rpt_tcd>/);
       assert.match(amended.file!.body, /<RPT_TCD>A<\/RPT_TCD>/);
-      assert.match(amended.file!.body, /<EMPT_INC_AMT>53500\.00<\/EMPT_INC_AMT>/);
+      assert.match(amended.file!.body, /<empt_incamt>53500\.00<\/empt_incamt>/);
       assert.match(amended.file!.filename, /amended/);
       assert.deepEqual(
         amended.corrections[0]!.changes.map((change) => change.code),
@@ -906,7 +906,7 @@ test(
       // THE ORIGINAL IS EVIDENCE AND IS STILL THERE, UNCHANGED.
       const evidence = await filingArtifact(fx.orgId, issued.submission.id);
       assert.equal(evidence!.body, originalBytes);
-      assert.match(evidence!.body, /<EMPT_INC_AMT>52000\.00<\/EMPT_INC_AMT>/);
+      assert.match(evidence!.body, /<empt_incamt>52000\.00<\/empt_incamt>/);
       const history = await filingSubmissions(fx.orgId, "CA", "t4", 2026);
       assert.deepEqual(history.map((s) => [s.revisionNumber, s.revision]), [[1, "original"], [2, "amended"]]);
       assert.deepEqual(
@@ -1441,7 +1441,7 @@ test(
       // The CRA's instruction: a cancelled slip carries the SAME information
       // as the original — which is only possible from the snapshot, because
       // the ledger no longer holds it.
-      assert.match(cancelled.file!.body, /<EMPT_INC_AMT>52000\.00<\/EMPT_INC_AMT>/);
+      assert.match(cancelled.file!.body, /<empt_incamt>52000\.00<\/empt_incamt>/);
       assert.match(cancelled.file!.body, /<SIN>046454286<\/SIN>/);
       assert.match(cancelled.file!.body, /<TOT_EMPR_CPP_AMT>3200\.50<\/TOT_EMPR_CPP_AMT>/);
 
