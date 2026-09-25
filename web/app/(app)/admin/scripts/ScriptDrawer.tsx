@@ -28,16 +28,41 @@ const RUN_STATUSES = new Set(['ok', 'aborted', 'error', 'timeout'])
 const TABS = ['general', 'code', 'runs', 'log'] as const
 type Tab = (typeof TABS)[number]
 
+const SCRIPT_MONEY_HELPERS = `// Exact numeric(19,4) helpers for money strings returned by the API/ob.query.
+function _obMoneyUnits(value) {
+  var raw = String(value).trim()
+  if (!/^[+-]?\\d+(?:\\.\\d{0,4})?$/.test(raw)) throw new Error('money value must be a decimal with at most 4 places')
+  var negative = raw.charAt(0) === '-'
+  if (negative || raw.charAt(0) === '+') raw = raw.slice(1)
+  var parts = raw.split('.')
+  var units = BigInt(parts[0]) * 10000n + BigInt((parts[1] || '').padEnd(4, '0') || '0')
+  return negative ? -units : units
+}
+function _obMoneyText(units) {
+  var negative = units < 0n
+  var magnitude = negative ? -units : units
+  return (negative ? '-' : '') + String(magnitude / 10000n) + '.' + String(magnitude % 10000n).padStart(4, '0')
+}
+function moneyCompare(left, right) {
+  var a = _obMoneyUnits(left), b = _obMoneyUnits(right)
+  return a < b ? -1 : a > b ? 1 : 0
+}
+function moneyAdd(left, right) {
+  return _obMoneyText(_obMoneyUnits(left) + _obMoneyUnits(right))
+}
+`
+
 const TEMPLATE = `// ctx = { trigger, document?, lines?, org, user? } — deep-frozen.
 // ob.log(...) records to the run log; ob.abort('reason') vetoes.
 // ob.query("SELECT ...") runs read-only SQL -> rows array.
 // ob.journal.create({ lines: [...] }) — governed ledger write (draft here).
 // ob.record.load(table, id) -> one row; ob.search(table, {col: val}) -> rows[]
 // Return { set: { field: value } } to change whitelisted header fields.
+${SCRIPT_MONEY_HELPERS}
 function main(ctx) {
-  const total = Number(ctx.document.total)
+  const total = String(ctx.document.total || '0.0000')
   ob.log('checking', ctx.document.documentNumber, 'total', total)
-  if (total > 10000 && !ctx.document.memo) {
+  if (moneyCompare(total, '10000.0000') > 0 && !ctx.document.memo) {
     ob.abort('documents over $10,000 need a memo')
   }
 }
@@ -70,12 +95,13 @@ function main(ctx) {
 const BULK_TEMPLATE = `// Bulk script — long-budget background job (30s deadline), run on the worker
 // via the scripts queue ("Run now" enqueues it; inline fallback without Redis).
 // ctx = { trigger: 'bulk', org }
+${SCRIPT_MONEY_HELPERS}
 function main(ctx) {
   function sqlVal(v) { return "'" + String(v).replace(/'/g, "''") + "'" }
   var rows = ob.query("SELECT id, document_number, total FROM documents WHERE org_id = " + sqlVal(ctx.org.id) + " AND kind = 'vendor_bill' LIMIT 5000")
-  var total = 0
-  rows.forEach(function(r) { total += Number(r.total) })
-  ob.log('processed', rows.length, 'bills; total', total.toFixed(2))
+  var total = '0.0000'
+  rows.forEach(function(r) { total = moneyAdd(total, r.total) })
+  ob.log('processed', rows.length, 'bills; total', total)
   return { processed: rows.length, total: total }
 }
 `
@@ -85,9 +111,10 @@ const CLIENT_TEMPLATE = `// Client script — runs in the user's browser inside 
 // custom records (pick the record type above; blank = every form).
 // ctx = { kind, doc } — the about-to-save payload.
 // Return { abort: 'reason' } to block the save, or { warnings: ['...'] }.
+${SCRIPT_MONEY_HELPERS}
 function main(ctx) {
   var doc = ctx.doc || {}
-  if (!doc.memo && Number(doc.total || 0) > 10000) {
+  if (!doc.memo && moneyCompare(String(doc.total || '0.0000'), '10000.0000') > 0) {
     return { abort: 'documents over $10,000 need a memo' }
   }
   return { warnings: [] }
@@ -101,7 +128,7 @@ const CUSTOM_GL_LINES_TEMPLATE = `// Custom GL lines — extra balanced lines on
 // Amounts are signed (debit +) and must balance per subsidiary (max 200 lines).
 // Needs gl.post; ob.journal.create is unavailable here; no clock or randomness.
 function main(ctx) {
-  var total = Number(ctx.document.total || 0)
+  var total = String(ctx.document.total || '0.0000')
   ob.log('posting', ctx.document.documentNumber, 'total', total)
   return { lines: [] }
 }
