@@ -22,8 +22,6 @@ const PERIOD_END = '2026-07-18'
 const CURRENT_FIT = '35.1900'
 const STALE_FIT = '1000.0000'
 
-void PAYROLL_COUNTRY_PACKS
-
 function certificate(
   key: string,
   answers: Record<string, string>,
@@ -334,6 +332,21 @@ test('Idaho separately paid bonus uses the 5.3% supplemental rate to the whole d
   assert.equal(result?.tax, '53.0000')
   assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.053')
   assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '53.0000')
+})
+
+test('Kansas separately paid bonus uses 5% of gross under KW-100', () => {
+  // Kansas DOR KW-100, "Supplemental Wages": https://www.ksrevenue.gov/kw100.html
+  const result = computeUsWithholding({
+    levy: levy('KS', 'us_ks_k4'),
+    payDate: '2026-03-15', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '1000.0000',
+    supplementalPaymentTiming: 'separate',
+    certificateFor: () => certificate('us_ks_k4', { filing_status: 'single', allowances: '0' }),
+    tenantRates: () => undefined, federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0])
+  assert.equal(result?.tax, '50.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.05')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '50.0000')
 })
 
 test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () => {

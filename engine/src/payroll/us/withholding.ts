@@ -202,6 +202,18 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     }],
     rounding: "whole_dollar",
   } as const,
+  KS: {
+    kind: "flat",
+    // Kansas DOR KW-100, "Supplemental Wages": Kansas follows the federal
+    // method, so a separately stated supplemental payment under federal
+    // percentage-method withholding takes 5% of gross. This declaration
+    // serves the separately paid path only; supplements paid together with
+    // regular wages keep the ordinary combined state-formula path.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.05",
+      source: "https://www.ksrevenue.gov/kw100.html",
+    }],
+  } as const,
   MA: {
     kind: "engine",
     // Massachusetts Circular M (Rev. 12/25), section G, p. 13: a
