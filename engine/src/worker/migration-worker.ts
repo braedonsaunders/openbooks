@@ -14,6 +14,7 @@ import {
   runSync,
   runTargetedRepair,
   SyncRunAlreadyActiveError,
+  claimSyncRun,
 } from "../sync/sync.ts";
 import { syncProjectFinancialInputs } from "../sync/project-financial-inputs.ts";
 import {
@@ -62,20 +63,14 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
           throw new Error(
             "attachment migration is only supported by NetSuite connections",
           );
-        await db.execute(sql`
-          update sync_runs
-             set status = 'failed', finished_at = now(),
-                 error_message = 'Attachment sync was interrupted before the worker could finish it.'
-           where org_id = ${orgId} and connection_id = ${connectionId}
-             and kind = 'attachments' and status = 'running'
-        `);
-        const started = (await db.execute<{ id: string }>(sql`
-          insert into sync_runs (org_id, connection_id, source, kind, status, triggered_by, progress)
-          values (${orgId}, ${connectionId}, ${conn.source}, 'attachments', 'running', ${triggeredBy ?? "worker"},
-                  ${JSON.stringify({ phase: "attachments" })}::jsonb)
-          returning id
-        `));
-        const runId = started.rows[0]!.id;
+        let started: { id: string };
+        try {
+          [started] = await claimSyncRun({ orgId, connectionId, kind: "attachments", sourceName: conn.source, triggeredBy: triggeredBy ?? "worker" });
+        } catch (error) {
+          if (error instanceof SyncRunAlreadyActiveError) return { skipped: "run_already_active" as const };
+          throw error;
+        }
+        const runId = started.id;
         try {
           const summary = await importNetSuiteAttachments({
             org: orgId,
@@ -108,27 +103,14 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
 
       const source = buildSource(conn);
       if (mode === "project_financials") {
-        await db.execute(sql`
-          update sync_runs
-             set status = 'failed', finished_at = now(),
-                 error_message = 'Project-financial sync was interrupted before the worker could finish it.'
-           where org_id = ${orgId} and connection_id = ${connectionId}
-             and kind = 'project_financials' and status = 'running'
-        `);
-        const started = (await db.execute<{ id: string }>(sql`
-          insert into sync_runs
-            (org_id, connection_id, source, kind, status, triggered_by, progress)
-          values
-            (${orgId}, ${connectionId}, ${conn.source}, 'project_financials',
-             'running', ${triggeredBy ?? "worker"},
-             ${JSON.stringify({
-               phase: "project_financials",
-               message:
-                 "Reconciling complete source time-entry billing state…",
-             })}::jsonb)
-          returning id
-        `));
-        const runId = started.rows[0]!.id;
+        let started: { id: string };
+        try {
+          [started] = await claimSyncRun({ orgId, connectionId, kind: "project_financials", sourceName: conn.source, triggeredBy: triggeredBy ?? "worker" });
+        } catch (error) {
+          if (error instanceof SyncRunAlreadyActiveError) return { skipped: "run_already_active" as const };
+          throw error;
+        }
+        const runId = started.id;
         try {
           const summary = await syncProjectFinancialInputs(source, {
             orgId,

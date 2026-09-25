@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { enqueueMigration, getMigrationQueue } from "@openbooks/jobs";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { syncConnectionRunLockKey } from "@openbooks/engine/src/sync/sync.ts";
 import type { ConnectionRow } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
@@ -20,6 +21,13 @@ const ACTIVE_MIGRATION_JOB_STATES = new Set([
   "waiting",
   "waiting-children",
 ]);
+const MUTATING_MIGRATION_MODES = [
+  "full_migration",
+  "mirror",
+  "project_financials",
+  "attachments",
+  "targeted_repair",
+] as const;
 
 /**
  * Enqueue a migration or mirror pass for this connection onto the worker.
@@ -112,21 +120,14 @@ export async function POST(
   }
   const mode = body.mode;
 
-  const runKind =
-    mode === "mirror"
-      ? "incremental"
-      : mode === "preflight"
-        ? "full_preflight"
-        : mode;
+  const readOnly = mode === "preflight";
   const outcome = await db.transaction(async (tx) => {
-    // The worker creates the sync_runs row after it starts consuming the job.
-    // Serialize the database check and queue claim so concurrent requests cannot
-    // both pass the pre-worker window. The stable job id closes that same window
-    // across replicas, where the transaction lock cannot cover Redis alone.
+    // Match the worker's connection-wide lock. Preflight is the explicit
+    // read-only exception; all other modes may rewrite shared sourceRefs.
     await tx.execute(sql`
       select pg_advisory_xact_lock(
         hashtext(${orgId}),
-        hashtext(${`connection-run:${id}:${mode}`})
+        hashtext(${syncConnectionRunLockKey(id)})
       )`);
 
     const live = await tx.execute(sql`
@@ -138,24 +139,35 @@ export async function POST(
        limit 1`);
     if (live.rows.length === 0) return { kind: "changed" as const };
 
-    const running = await tx.execute(sql`
-      select 1 from sync_runs
-       where org_id = ${orgId} and connection_id = ${id}
-         and kind = ${runKind} and status = 'running'
-       limit 1`);
-    if (running.rows.length > 0) return { kind: "active" as const };
-
     const queue = getMigrationQueue();
     const jobId = `migration|${id}|${mode}`;
-    const existing = await queue.getJob(jobId);
-    if (existing) {
-      const state = await existing.getState();
-      if (ACTIVE_MIGRATION_JOB_STATES.has(state)) return { kind: "active" as const };
-      // Completed/failed jobs are retained by the queue for operational
-      // history. Remove the terminal record before reusing its stable id for a
-      // deliberate later run; active and waiting records returned above remain
-      // the one authoritative request for this connection/mode.
-      await existing.remove();
+    if (!readOnly) {
+      const running = await tx.execute(sql`
+        select 1 from sync_runs
+         where org_id = ${orgId} and connection_id = ${id}
+           and kind in ('incremental', 'full_migration', 'targeted_repair', 'project_financials', 'attachments')
+           and status = 'running'
+         limit 1`);
+      if (running.rows.length > 0) return { kind: "active" as const };
+
+      for (const queuedMode of MUTATING_MIGRATION_MODES) {
+        const queued = await queue.getJob(`migration|${id}|${queuedMode}`);
+        if (!queued) continue;
+        const state = await queued.getState();
+        if (ACTIVE_MIGRATION_JOB_STATES.has(state)) return { kind: "active" as const };
+        if (queuedMode === mode) {
+          // The requested mode's terminal record must be removed before its
+          // stable id can be deliberately reused. Other terminal records are
+          // history and do not hold the connection claim.
+          await queued.remove();
+        }
+      }
+    } else {
+      const existing = await queue.getJob(jobId);
+      if (existing) {
+        if (ACTIVE_MIGRATION_JOB_STATES.has(await existing.getState())) return { kind: "active" as const };
+        await existing.remove();
+      }
     }
 
     const job = await enqueueMigration(
