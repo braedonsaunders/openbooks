@@ -55,12 +55,17 @@ async function bankAccountSubsidiary(orgId: string, accountId: string, lock = fa
   return row?.subsidiaryId
 }
 
-/** Scope-gate a bank account through the canonical module: out-of-scope is uniform not-found. */
+/**
+ * Scope-gate a bank account through the canonical module: out-of-scope is
+ * uniform not-found. Contra-leg callers pass `orgWideNull` so org-wide
+ * shared accounts stay usable; the primary/bank leg always fails closed.
+ */
 function requireBankAccountInScope(
   subsidiaryId: string | null | undefined,
   scope: ReadonlySet<string> | null,
+  opts: { orgWideNull?: boolean } = {},
 ): void {
-  if (!subsidiaryScopeAllows(scope, subsidiaryId ?? null)) {
+  if (!subsidiaryScopeAllows(scope, subsidiaryId ?? null, opts)) {
     throw new ScopeNotFoundError()
   }
 }
@@ -565,7 +570,17 @@ export async function addJournalMatchFromLine(
   // the chosen offset account. The session itself is gated again inside
   // createMatchWithJournal.
   requireBankAccountInScope(line.subsidiaryId, scope)
-  requireBankAccountInScope(await bankAccountSubsidiary(orgId, opts.offsetAccountId), scope)
+  // The contra leg follows the shared-account policy: the offset picker
+  // offers the caller's own subsidiaries' accounts plus org-wide shared
+  // accounts (listScopedAccountOptions with orgWideNull), and journal
+  // posting itself validates line accounts by org-postability rather than
+  // subsidiary — the same rule that lets auto-categorize rules post shared
+  // splits with no per-split gate above. Another subsidiary's account stays
+  // refused here. A missing account is still uniform not-found: without the
+  // explicit check it would resolve null and pass as shared.
+  const offsetSubsidiary = await bankAccountSubsidiary(orgId, opts.offsetAccountId)
+  if (offsetSubsidiary === undefined) throw new ScopeNotFoundError()
+  requireBankAccountInScope(offsetSubsidiary, scope, { orgWideNull: true })
   await createMatchWithJournal(
     {
       reconciliationId: opts.reconciliationId,
