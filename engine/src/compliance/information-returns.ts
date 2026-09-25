@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, orgContext, withOrg, withOrgContext } from "../platform/db.ts";
 import { add, cmp, fromUnits, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal, isZeroDecimal } from "../money/exact-decimal.ts";
+import type { Money } from "../money/brands.ts";
 
 /**
  * Year-end information returns: 1099-NEC, 1099-MISC and T4A.
@@ -220,16 +221,17 @@ const CORPORATE_REPORTABLE_BOXES: ReadonlySet<string> = new Set(["misc6", "misc8
  * All-zero weights put everything on the first bucket rather than losing it —
  * cash that left the bank has to land somewhere.
  */
-export function allocateProportionally(total: string, weights: readonly string[]): string[] {
+export function allocateProportionally(total: string, weights: readonly string[]): Money[] {
   if (weights.length === 0) return [];
   const totalUnits = toUnits(total);
-  if (totalUnits === 0n) return weights.map(() => "0.0000");
+  // Every exit below emits fromUnits-fixed or literal 4dp text: canonical Money.
+  if (totalUnits === 0n) return weights.map(() => "0.0000" as Money);
   const w = weights.map((x) => {
     const u = toUnits(x);
     return u < 0n ? -u : u;
   });
   const weightSum = w.reduce((a, b) => a + b, 0n);
-  if (weightSum === 0n) return weights.map((_, i) => (i === 0 ? fromUnits(totalUnits) : "0.0000"));
+  if (weightSum === 0n) return weights.map((_, i) => (i === 0 ? (fromUnits(totalUnits) as Money) : ("0.0000" as Money)));
 
   const negative = totalUnits < 0n;
   const absTotal = negative ? -totalUnits : totalUnits;
@@ -244,7 +246,7 @@ export function allocateProportionally(total: string, weights: readonly string[]
     allocated += 1n;
     cursor += 1;
   }
-  return shares.map((s) => fromUnits(negative ? -s : s));
+  return shares.map((s) => fromUnits(negative ? -s : s) as Money);
 }
 
 // ---------------------------------------------------------------------------
