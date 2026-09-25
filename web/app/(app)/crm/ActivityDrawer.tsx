@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { isIsoTimestamp } from '../../../lib/crm-dates'
 
 /** One activity row as the drawer reads it: stamps arrive as Dates. */
 export interface ActivityRecord {
@@ -35,13 +36,29 @@ export interface ActivityOwnerOption { id: string; name: string }
 export interface ActivityAccountOption { id: string; name: string }
 export interface ActivityOpportunityOption { id: string; opportunity_number: string; title: string }
 
+/**
+ * datetime-local wants `YYYY-MM-DDTHH:mm`. Loader-projected stamps arrive as
+ * Dates, for which String(date) renders `Thu Sep 24 2026 ...` — undisplayable
+ * in the input and refused by the API as a non-ISO timestamp. Normalize
+ * through the instant (UTC wall time, the same reading the ISO-string slice
+ * path already produces) so a saved value round-trips instead of wedging
+ * the form.
+ */
+function toDateTimeLocal(value: Date | string | null): string {
+  if (value === null || value === '') return ''
+  if (typeof value === 'string' && isIsoTimestamp(value)) return value.slice(0, 16)
+  const instant = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(instant.getTime())) return ''
+  return instant.toISOString().slice(0, 16)
+}
+
 export function ActivityDrawer({ data, owners, accounts, opportunities, closeHref, canManage }: { data: ActivityDrawerData; owners: ActivityOwnerOption[]; accounts: ActivityAccountOption[]; opportunities: ActivityOpportunityOption[]; closeHref: string; canManage: boolean }) {
   const t = useTranslations('crm')
   const tc = useTranslations('common')
   const router = useRouter()
   const row = data.activity
   const link = data.links[0]
-  const [form, setForm] = useState({ kind: row.kind, status: row.status, priority: row.priority, subject: row.subject === 'New activity' ? '' : row.subject, body: row.body ?? '', assignedUserId: row.assigned_user_id ?? '', startsAt: row.starts_at ? String(row.starts_at).slice(0, 16) : '', endsAt: row.ends_at ? String(row.ends_at).slice(0, 16) : '', dueAt: row.due_at ? String(row.due_at).slice(0, 16) : '', subjectKind: link?.subject_kind ?? 'account', subjectId: link?.subject_id ?? '' })
+  const [form, setForm] = useState({ kind: row.kind, status: row.status, priority: row.priority, subject: row.subject === 'New activity' ? '' : row.subject, body: row.body ?? '', assignedUserId: row.assigned_user_id ?? '', startsAt: toDateTimeLocal(row.starts_at), endsAt: toDateTimeLocal(row.ends_at), dueAt: toDateTimeLocal(row.due_at), subjectKind: link?.subject_kind ?? 'account', subjectId: link?.subject_id ?? '' })
   const [busy, setBusy] = useState(false)
   const set = (key: string, value: unknown) => setForm((current) => ({ ...current, [key]: value }))
   async function save() {
