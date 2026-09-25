@@ -5,6 +5,10 @@
       "tag": "v0.1.0-alpha.22",
       "knownHarnessDefects": [
         {
+          "check": "subledger-gl-tieout",
+          "reason": "The tagged harness counts governed void pairs in the tie-out buckets, so every voided bill or invoice breaks the tie by exactly its amount (the edge endurance halt: a 222.22 void-probe bill breaks the AP tie by 222.2200). Fixed on main (b5ab43f1a476); the candidate harness hides void pairs effective on/before the cutoff and re-checks with no tolerance."
+        },
+        {
           "check": "open-balance-fresh",
           "reason": "The tagged harness recomputes open_balance in functional currency (sum of abs(amount) minus application amount), but since migration 0100 the stored balance is in the document's own currency, so every foreign-currency document reads as stale. Fixed on main (R1.10)."
         },
@@ -17,6 +21,10 @@
     {
       "tag": "v0.1.0-alpha.23",
       "knownHarnessDefects": [
+        {
+          "check": "subledger-gl-tieout",
+          "reason": "The tagged harness counts governed void pairs in the tie-out buckets, so every voided bill or invoice breaks the tie by exactly its amount (the edge endurance halt: a 222.22 void-probe bill breaks the AP tie by 222.2200). Fixed on main (b5ab43f1a476); the candidate harness hides void pairs effective on/before the cutoff and re-checks with no tolerance."
+        },
         {
           "check": "open-balance-fresh",
           "reason": "The tagged harness recomputes open_balance in functional currency (sum of abs(amount) minus application amount), but since migration 0100 the stored balance is in the document's own currency, so every foreign-currency document reads as stale. Fixed on main (R1.10)."
