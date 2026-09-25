@@ -1,9 +1,3 @@
-// Run with: node --import tsx --test web/lib/apps/store-audit.test.ts
-// The source-level checks stay runnable without PostgreSQL (and guard the
-// ordering that makes the evidence durable). When a test database is
-// available, the integration cases below exercise the actual store entry
-// points and verify rollback, audit evidence, and immutable revisions.
-
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
@@ -209,6 +203,8 @@ if (DB) {
         })
       }
       assert.equal((await withBypass(() => getAppByKey(fx.org.orgId, fx.key)))?.status, 'disabled')
+      await withBypass(() => db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features,apps}','false'::jsonb,true) where id=${fx.org.orgId}`))
+      await assert.rejects(withOrgContext(fx.org.orgId, () => setAppStatus(fx.org.orgId, fx.actorId, fx.key, 'installed')), /Apps feature is disabled/)
     } finally {
       await withBypass(() => dropScratchOrg(fx.org.orgId))
     }
