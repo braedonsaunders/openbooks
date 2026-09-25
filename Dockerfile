@@ -17,6 +17,7 @@ COPY packages/customization/package.json packages/customization/
 COPY packages/emails/package.json packages/emails/
 COPY packages/forms-core/package.json packages/forms-core/
 COPY packages/jobs/package.json packages/jobs/
+COPY packages/networking/package.json packages/networking/
 COPY packages/office/package.json packages/office/
 COPY packages/pdf/package.json packages/pdf/
 COPY packages/reports/package.json packages/reports/
