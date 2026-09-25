@@ -53,7 +53,7 @@ const { EmployerLevyOpeningsView } = await import('./EmployerLevyOpeningsView')
 async function renderSection(
   t: TestContext,
   props: React.ComponentProps<typeof EmployerLevyOpeningsView>,
-): Promise<void> {
+): Promise<(props: React.ComponentProps<typeof EmployerLevyOpeningsView>) => Promise<void>> {
   const rootHandle = createRoot(document.body)
   t.after(async () => {
     await act(async () => {
@@ -61,13 +61,9 @@ async function renderSection(
     })
     for (const node of [...document.body.children]) node.remove()
   })
-  await act(async () => {
-    rootHandle.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <EmployerLevyOpeningsView {...props} />
-      </NextIntlClientProvider>,
-    )
-  })
+  const render = (next: React.ComponentProps<typeof EmployerLevyOpeningsView>) => <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><EmployerLevyOpeningsView {...next} /></NextIntlClientProvider>
+  await act(async () => rootHandle.render(render(props)))
+  return async (next) => act(async () => rootHandle.render(render(next)))
 }
 
 function bodyText(): string {
@@ -85,7 +81,7 @@ const levies = [
 ]
 
 test('declared levies render with their stored base year-to-date', async (t) => {
-  await renderSection(t, {
+  const changeYear = await renderSection(t, {
     year: 2026,
     levies,
     rows: [{ country: 'CA', levyKey: 'eht', region: 'ON', baseYtd: '150000.0000' }],
@@ -95,7 +91,7 @@ test('declared levies render with their stored base year-to-date', async (t) => 
   assert.ok(bodyText().includes('ON'), 'the stored region renders');
   const input = document.querySelector('input[aria-label="Employer health tax base year-to-date, ON"]') as HTMLInputElement | null
   assert.ok(input, 'the base cell is editable');
-  assert.equal(input.value, '150000');
+  await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '200000'); input.dispatchEvent(new window.Event('input', { bubbles: true })) }); await changeYear({ year: 2027, levies, rows: [{ country: 'CA', levyKey: 'eht', region: 'ON', baseYtd: '160000' }], canManage: true }); assert.equal((document.querySelector('input[aria-label="Employer health tax base year-to-date, ON"]') as HTMLInputElement).value, '160000', 'the prior year edit is not reused in this year')
   await act(async () => { const addRegion = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Add a region')); assert.ok(addRegion); addRegion.click() });
   assert.ok(document.querySelector('input[aria-label="Employer health tax · New region base year-to-date"]'), 'new-row base field names its levy as well as its function');
 })
