@@ -7,6 +7,7 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
+import type { Money } from "../money/brands.ts";
 import { advanceAnchoredMonth } from "./cadence.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
@@ -362,9 +363,10 @@ export function lifecycleAnchorDay(input: { termStartsOn: string | null; trialEn
   return Number(source.slice(8, 10));
 }
 
-export function subscriptionComponentTotal(lines: Array<{ quantity: string; unitPrice: string }>): string {
-  let total = "0.0000";
-  for (const line of lines) total = add(total, mul(line.quantity, line.unitPrice));
+export function subscriptionComponentTotal(lines: Array<{ quantity: string; unitPrice: string }>): Money {
+  // add/mul emit fromUnits-fixed 4dp: the component total is canonical Money.
+  let total = "0.0000" as Money;
+  for (const line of lines) total = add(total, mul(line.quantity, line.unitPrice)) as Money;
   return total;
 }
 
