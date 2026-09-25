@@ -11,6 +11,7 @@ import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEnt
 import { buildRow, coerceBoolean, idColumn, type Coerced } from '../setup/coerce'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
+import { validateEntityIntegrity } from '../setup/write'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
 import { setupReadProjection, setupReadSource } from '../setup/read-shape'
@@ -358,6 +359,19 @@ async function writeSetup(
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: `already exists (${entity.naturalKey}=${String(src[entity.naturalKey!])})` })
         continue
+      }
+
+      // Domain invariants the generic coercer cannot express run on the
+      // merged import row exactly as the interactive writer runs them — in
+      // preview and commit alike, before any persistence. The read sees the
+      // same committed state the row write below will see.
+      if (entity.key === 'tax-codes') {
+        const problem = await validateEntityIntegrity(entity, src, ctx.orgId, existingId ?? undefined)
+        if (problem) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: problem })
+          continue
+        }
       }
 
       if (isSetupBookEntity(entity)) {
