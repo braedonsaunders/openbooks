@@ -4,6 +4,7 @@ import 'server-only'
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/src/payroll/scope.ts'
 import { getTranslations } from 'next-intl/server'
 import {
   filterBar,
@@ -184,6 +185,7 @@ export async function loadReportRun(
         join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join pay_schedules ps on ps.id = r.pay_schedule_id and ps.org_id = r.org_id
        where r.org_id = ${authz.user.orgId}
+         ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by r.period_end desc
        limit 27
     `))
