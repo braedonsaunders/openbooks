@@ -124,12 +124,15 @@ async function seedRailRun(
     values (${runId}, ${org.orgId}, ${`BANKEV-${runId.slice(0, 8)}`}, ${org.accounts.bank},
             ${method}, 'approved', ${org.date}, 'CAD', ${profileId}, ${org.subsidiaryId},
             ${actorId}, ${actorId})`);
+  // Unsent instructions are `pending` (the status run creation writes):
+  // I1-refix-146 refuses to generate a file over any instruction that
+  // already left pending, so seeding `approved` here fails generation.
   await db.execute(sql`
     insert into payment_instructions
       (id, org_id, payment_run_id, payee_party_id, payee_bank_account_id,
        amount, currency, status, created_by, updated_by)
     values (${instructionId}, ${org.orgId}, ${runId}, ${org.vendorId}, ${accountId},
-            '100.00', 'CAD', 'approved', ${actorId}, ${actorId})`);
+            '100.00', 'CAD', 'pending', ${actorId}, ${actorId})`);
 
   return { method, actorId, runId, instructionId, accountId };
 }
