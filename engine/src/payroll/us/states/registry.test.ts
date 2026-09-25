@@ -922,6 +922,9 @@ test("every implemented sub-region levy posts to the pocket its declaration stat
         const employer = computeUsEmployerWithholding({
           levy: { ...resolution }, wages: "2000.00",
           tenantRates: (_rateKey, _subRegion) => stubRates(),
+          wageAllocations: [
+            { region: resolution.region, subRegion: resolution.subRegion ?? null, workShare: "1", source: "adequate_records", sourceWagesCurrentPeriod: "2000.00" },
+          ],
         });
         assert.ok(employer.tax, `${region.region}:${levy.code} computes on the employer path`);
         continue;
