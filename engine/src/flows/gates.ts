@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../platform/db.ts";
+import { db, pool, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -25,9 +26,11 @@ import { emailActionUrls } from "./email-tokens.ts";
  * re-runs on the SAME runId — flow_run_effects checkpoints keep earlier nodes
  * from double-firing.
  *
- * Reminders still stamp flow_gates.reminded_at. Escalations enqueue a durable
- * scheduler_outbox row (claim / fail with reason / backoff) so a crash cannot
- * drop the hop.
+ * Reminders hold a per-gate session lock through notification and stamp
+ * flow_gates.reminded_at only after the idempotent notification effect. A
+ * crashed process releases the lock and leaves the reminder due. Escalations
+ * enqueue a durable scheduler_outbox row (claim / fail with reason / backoff)
+ * so a crash cannot drop the hop.
  */
 
 type GateRow = typeof schema.flowGates.$inferSelect;
@@ -1311,16 +1314,19 @@ export async function delegateGate(
  * (engine/src/scheduling/scheduler.ts), which runs org-less/bypass like the
  * user_scripts scan.
  *
- * Reminders: remind_at <= now, not yet reminded → re-notify + email, stamp
- * reminded_at (fires once; the stamp is the claim, released on notify failure
- * so the next tick retries).
+ * Reminders: remind_at <= now, not yet reminded → acquire a session lease,
+ * re-notify + email, then stamp reminded_at. The in-app notification id and
+ * email job id are stable, so a crash after either effect can be retried.
  *
  * Escalations: escalate_at <= now, still pending → enqueue a scheduler_outbox
  * row. The outbox runner resolves escalateTo (fallback: supervisor, then org
  * admins), inserts replacement pending rows, and flips the overdue row to
  * 'escalated'. A thrown hop stays failed with a reason for retry.
  */
-export async function processGateTimers(now: Date = new Date()): Promise<{
+export async function processGateTimers(
+  now: Date = new Date(),
+  notifyReminder: (gate: GateRow) => Promise<void> = (gate) => notifyGateAssignee(gate, "reminder"),
+): Promise<{
   reminded: number;
   escalated: number;
 }> {
@@ -1346,40 +1352,59 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   `));
 
   for (const { id, orgId } of dueReminders.rows) {
-    // Claim via the reminded_at stamp so concurrent ticks fire once.
-    const claimed = await withBypassContext(() =>
-      db.execute(sql`
-      update flow_gates set reminded_at = ${now}
-       where id = ${id} and org_id = ${orgId} and status = 'pending' and reminded_at is null
-    `));
-    if (!claimed.rowCount) continue;
-    const [gate] = await withBypassContext(() =>
-      db.select().from(schema.flowGates).where(and(eq(schema.flowGates.id, id), eq(schema.flowGates.orgId, orgId))),
-    );
-    if (!gate) {
-      // Claim set, row gone (or unreadable) — release so a later tick can
-      // retry instead of silently retiring the reminder forever.
-      await withBypassContext(() =>
-        db.execute(sql`
-        update flow_gates set reminded_at = null
-         where id = ${id} and org_id = ${orgId} and status = 'pending' and reminded_at = ${now}
-      `));
-      continue;
-    }
+    const client = await pool.connect();
+    const lockKey = `openbooks:flow-gate-reminder:${orgId}:${id}`;
+    let locked = false;
+    let discardClient: Error | undefined;
     try {
-      await withOrgContext(gate.orgId, () => notifyGateAssignee(gate, "reminder"));
-      reminded++;
+      let lock;
+      try {
+        lock = await client.query<{ locked: boolean }>(
+          "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
+          [lockKey],
+        );
+      } catch (error) {
+        discardClient = error instanceof Error ? error : new Error(String(error));
+        throw error;
+      }
+      locked = lock.rows[0]?.locked === true;
+      if (!locked) continue;
+
+      // The session lock is the recoverable lease. Do not make the durable
+      // completion stamp until the notification effect has returned: a dead
+      // process releases this lock and the still-due reminder is rediscovered.
+      const [gate] = await withBypassContext(() =>
+        db.select().from(schema.flowGates).where(and(
+          eq(schema.flowGates.id, id),
+          eq(schema.flowGates.orgId, orgId),
+          eq(schema.flowGates.status, "pending"),
+          sql`${schema.flowGates.remindAt} <= ${now}`,
+          sql`${schema.flowGates.remindedAt} is null`,
+        )),
+      );
+      if (!gate) continue;
+
+      await withOrgContext(gate.orgId, () => notifyReminder(gate));
+      const completed = await withBypassContext(() => db.execute(sql`
+        update flow_gates set reminded_at = ${now}
+         where id = ${id} and org_id = ${orgId} and status = 'pending'
+           and remind_at <= ${now} and reminded_at is null
+         returning id
+      `));
+      if (completed.rowCount) reminded++;
     } catch (e) {
       console.error(`[flows] gate ${id} reminder failed:`, e);
-      // Release the claim so the next tick retries — a failed notify must not
-      // silence this gate's reminders forever. Conditional on the claimed
-      // stamp: only the tick that set it may clear it, so a concurrent tick
-      // (which saw the stamp and skipped) can never race a double-notify.
-      await withBypassContext(() =>
-        db.execute(sql`
-        update flow_gates set reminded_at = null
-         where id = ${id} and org_id = ${orgId} and status = 'pending' and reminded_at = ${now}
-      `));
+      // The completion stamp has not been written, so the next scan can retry.
+    } finally {
+      if (locked) {
+        try {
+          await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
+        } catch (error) {
+          // A broken connection is discarded by pg, releasing its session lock.
+          discardClient = error instanceof Error ? error : new Error(String(error));
+        }
+      }
+      client.release(discardClient);
     }
   }
 
@@ -1417,7 +1442,8 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
   const subjectLabel =
     adapter && subject ? adapter.label(gate.subjectId, subject.values) : gate.subjectKind;
 
-  await db.insert(schema.notifications).values({
+  const notification = db.insert(schema.notifications).values({
+    ...(kind === "reminder" ? { id: gateReminderNotificationId(gate, assignee.id) } : {}),
     orgId: gate.orgId,
     userId: assignee.id,
     kind: "approval",
@@ -1428,6 +1454,13 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
     body: subjectLabel,
     href: "/inbox",
   });
+  if (kind === "reminder") {
+    // This PK collision is expected only when a reminder retries after its
+    // inbox row committed but before the gate completion stamp.
+    await notification.onConflictDoNothing({ target: schema.notifications.id });
+  } else {
+    await notification;
+  }
 
   try {
     const [{ enqueueEmail }, emails] = await Promise.all([
@@ -1462,6 +1495,20 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
   } catch (e) {
     console.error(`[flows] gate ${gate.id} ${kind} email enqueue failed:`, e);
   }
+}
+
+/** Stable inbox effect identity for retries after a reminder worker crash. */
+function gateReminderNotificationId(gate: GateRow, assigneeId: string): string {
+  const bytes = createHash("sha256")
+    .update(`openbooks.flow-gate-reminder.v1\0${gate.orgId}\0${gate.id}\0${assigneeId}`)
+    .digest()
+    .subarray(0, 16);
+  // Format the digest as a standards-shaped UUID so the identity fits the
+  // notifications primary key without introducing another persistence table.
+  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /**
