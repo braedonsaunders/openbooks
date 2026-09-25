@@ -251,38 +251,7 @@ export function attachmentMutationRefusal(error: unknown): NextResponse | null {
   return NextResponse.json({ error: error.message }, { status: error.status })
 }
 
-/** Owning resource permission for a target (or its document kind). */
-export function attachmentReadPermission(targetTable: string, kind?: string | null): string | null {
-  if (targetTable === 'documents') {
-    const documentPermissions: Record<string, string> = {
-      vendor_bill: 'ap.read',
-      vendor_payment: 'ap.pay',
-      vendor_credit: 'ap.read',
-      purchase_order: 'ap.read',
-      check: 'ap.read',
-      card_charge: 'ap.read',
-      card_refund: 'ap.read',
-      customer_invoice: 'ar.read',
-      customer_credit: 'ar.read',
-      customer_payment: 'ar.pay',
-      sales_order: 'ar.read',
-      quote: 'ar.read',
-      expense_report: 'expenses.read',
-      field_ticket: 'time.read',
-      project_charge: 'projects.read',
-      pay_run: 'payroll.read',
-      journal: 'gl.read',
-      deposit: 'gl.read',
-      transfer: 'gl.read',
-    }
-    return kind ? (documentPermissions[kind] ?? null) : null
-  }
-  if (targetTable === 'parties') return 'parties.read'
-  if (targetTable === 'item_rate_versions') return 'admin.setup.manage'
-  if (targetTable === 'fixed_assets') return 'assets.read'
-  if (targetTable === 'compliance_records' || targetTable === 'lien_waivers') return 'compliance.read'
-  return null
-}
+export { attachmentReadPermission } from '../../../lib/file-cabinet'
 
 /**
  * List only attachment metadata whose file is visible to this caller. The

@@ -4,7 +4,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { generateInvoiceFromBillingRequest, BillingError } from '../../../../../lib/billing'
 import { isRendererUnavailable } from '../../../../../lib/api/pdf-renderer'
-import { assembleInvoiceBackup, type BackupType } from '../../../../../lib/invoice-backup'
+import { assembleInvoiceBackup, InvoiceBackupSourceAccessError, type BackupType } from '../../../../../lib/invoice-backup'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
@@ -38,9 +38,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         // retry that would fail identically.
         backup = {
           status: 'failed',
-          error: isRendererUnavailable(e) && e instanceof Error
+          error: e instanceof InvoiceBackupSourceAccessError
             ? e.message
-            : 'The backup packet could not be generated — generate it from the billing request, then submit the invoice',
+            : isRendererUnavailable(e) && e instanceof Error
+              ? e.message
+              : 'The backup packet could not be generated — generate it from the billing request, then submit the invoice',
         }
       }
     }

@@ -3,11 +3,12 @@ import { PDFDocument } from 'pdf-lib'
 import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { allocateProportionally } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { can, getAuthz, type Authz } from './authz'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { add, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
-import { deleteS3Blobs, getS3Blob, refuseMaskedStorageKind } from './file-storage'
-import { listAttachments, uploadAndAttach } from './file-cabinet'
+import { deleteS3Blobs } from './file-storage'
+import { attachmentReadPermission, getFileBlob, listAttachments, uploadAndAttach, type FileViewer } from './file-cabinet'
 import { recordFileEvent } from './file-audit'
 import { resolvePdfTemplate, type PdfTemplateProvenance, type ResolvedPdfTemplate } from './pdf-templates/store'
 
@@ -75,6 +76,14 @@ export class InvoiceBackupNotFoundError extends Error {
   constructor() { super('Invoice not found') }
 }
 
+export class InvoiceBackupSourceAccessError extends Error {
+  constructor(readonly permission: string | null) {
+    super(permission
+      ? `Missing permission: ${permission} to include this invoice backup source`
+      : 'An invoice backup source file is not visible in File Cabinet — ask an administrator to grant you file access')
+  }
+}
+
 /**
  * Refusal when a caller tries to regenerate the backup packet of an issued
  * (approved/posted) invoice. Issued evidence is immutable: the packet frozen
@@ -133,25 +142,34 @@ function backupManifestScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | n
   )`
 }
 
-/** Read a stored file's bytes (db blob or S3), by file id. */
-async function readFileBytes(orgId: string, fileId: string): Promise<{ bytes: Buffer; contentType: string } | null> {
-  const r = (await db.execute<{ content_type: string; version_id: string | null; storage_kind: string; bytes: Buffer | null }>(sql`
-    select fi.content_type, fv.id as version_id, fv.storage_kind, fb.bytes
-      from files fi
-      join file_versions fv on fv.id = fi.current_version_id and fv.file_id = fi.id
-      left join file_blobs fb on fb.version_id = fv.id
-     where fi.id = ${fileId} and fi.org_id = ${orgId}
-  `))
-  const row = r.rows[0]
-  if (!row) return null
-  // Masked-clone tombstone: refuse by name before the byte fetch.
-  refuseMaskedStorageKind(row.storage_kind)
-  if (row.bytes) return { bytes: Buffer.from(row.bytes), contentType: row.content_type }
-  if (row.version_id) {
-    const s3 = await getS3Blob(row.version_id)
-    if (s3) return { bytes: s3, contentType: row.content_type }
+/** Backups read through the same live, viewer-gated cabinet byte path as downloads. */
+async function readFileBytes(orgId: string, fileId: string, viewer: FileViewer): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const file = await getFileBlob(orgId, fileId, viewer)
+  return file ? { bytes: file.bytes, contentType: file.contentType } : null
+}
+
+async function backupViewer(orgId: string, userId: string | null) {
+  const authz = await getAuthz()
+  if (!authz || authz.user.orgId !== orgId || (userId !== null && authz.user.id !== userId)) throw new InvoiceBackupNotFoundError()
+  const viewerUserId = userId ?? authz.user.id
+  const viewer: FileViewer = {
+    userId: viewerUserId,
+    isAdmin: can(authz, '*'),
+    baseline: 'viewer',
+    canReadApCapture: can(authz, 'ap.read'),
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
   }
-  return null
+  return { authz, viewer }
+}
+
+async function requireSourceDocumentPermission(orgId: string, documentId: string, authz: Authz) {
+  if (!authz) throw new InvoiceBackupNotFoundError()
+  const source = (await db.execute<{ kind: string }>(sql`
+    select kind from documents where id = ${documentId} and org_id = ${orgId}
+  `)).rows[0]
+  if (!source) throw new InvoiceBackupSourceAccessError(null)
+  const permission = attachmentReadPermission('documents', source.kind)
+  if (!permission || !can(authz, permission)) throw new InvoiceBackupSourceAccessError(permission)
 }
 
 /** Merge a source PDF buffer into the master document, returning page count. */
@@ -318,6 +336,17 @@ export async function assembleInvoiceBackup(
   const format = await getMoneyFormatter(orgId, inv.currency)
 
   const recipe = BACKUP_RECIPES[backupType] ?? BACKUP_RECIPES.costed_timesheets
+  const attachmentContext = recipe.includes('attachments') ? await (async () => {
+    const context = await backupViewer(orgId, userId)
+    const sources = (await db.execute<{ document_id: string }>(sql`
+      select distinct src.document_id
+        from document_lines inv_line
+        join document_lines src on src.billed_by_line_id = inv_line.id and src.org_id = inv_line.org_id
+       where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
+    `)).rows
+    for (const source of sources) await requireSourceDocumentPermission(orgId, source.document_id, context.authz)
+    return { viewer: context.viewer, sources }
+  })() : null
   const out = await PDFDocument.create()
   const manifest: BackupManifestEntry[] = []
 
@@ -364,17 +393,12 @@ export async function assembleInvoiceBackup(
       }
     } else if (kind === 'attachments') {
       // Source cost documents this invoice billed → their attachments.
-      const sources = (await db.execute<{ document_id: string }>(sql`
-        select distinct src.document_id
-          from document_lines inv_line
-          join document_lines src on src.billed_by_line_id = inv_line.id and src.org_id = inv_line.org_id
-         where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
-      `))
-      for (const s of sources.rows) {
+      if (!attachmentContext) throw new InvoiceBackupNotFoundError()
+      for (const s of attachmentContext.sources) {
         const atts = await listAttachments(orgId, 'documents', s.document_id)
         for (const att of atts) {
-          const file = await readFileBytes(orgId, att.id)
-          if (!file) continue
+          const file = await readFileBytes(orgId, att.id, attachmentContext.viewer)
+          if (!file) throw new InvoiceBackupSourceAccessError(null)
           let pages = 0
           if (file.contentType === 'application/pdf') {
             pages = await mergePdfInto(out, file.bytes)
@@ -543,8 +567,9 @@ export async function requireInvoiceBackup(
 
 /** The stored backup (file id + bytes) for an invoice, if assembled. */
 export async function loadInvoiceBackup(orgId: string, documentId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
-  const r = (await db.execute<{ file_id: string; name: string; can_read: boolean }>(sql`
-    select ib.file_id, fi.name, exists (
+  const { authz, viewer } = await backupViewer(orgId, null)
+  const r = (await db.execute<{ file_id: string; name: string; can_read: boolean; component_manifest: unknown }>(sql`
+    select ib.file_id, fi.name, ib.component_manifest, exists (
       select 1 from documents d where d.id = ib.document_id and d.org_id = ib.org_id
         ${backupScopeFilter(allowedSubsidiaryIds)}
         ${backupManifestScopeFilter(allowedSubsidiaryIds)}
@@ -557,7 +582,20 @@ export async function loadInvoiceBackup(orgId: string, documentId: string, allow
   // Refused existing artifacts must not be mistaken for a cache miss and
   // regenerated by a reader with narrower access to their original sources.
   if (!row.can_read) throw new InvoiceBackupNotFoundError()
-  const file = await readFileBytes(orgId, row.file_id)
+  const linkedSources = (await db.execute<{ document_id: string }>(sql`
+    select distinct src.document_id from document_lines invoice_line
+      join document_lines src on src.billed_by_line_id = invoice_line.id and src.org_id = invoice_line.org_id
+     where invoice_line.org_id = ${orgId} and invoice_line.document_id = ${documentId}
+  `)).rows
+  for (const source of linkedSources) await requireSourceDocumentPermission(orgId, source.document_id, authz)
+  const manifest = Array.isArray(row.component_manifest) ? row.component_manifest as BackupManifestEntry[] : []
+  for (const component of manifest) {
+    if (component.sourceDocumentId) await requireSourceDocumentPermission(orgId, component.sourceDocumentId, authz)
+    if (component.sourceFileId && !(await readFileBytes(orgId, component.sourceFileId, viewer))) {
+      throw new InvoiceBackupSourceAccessError(null)
+    }
+  }
+  const file = await readFileBytes(orgId, row.file_id, viewer)
   if (!file) return null
   return { fileId: row.file_id, filename: row.name, bytes: file.bytes }
 }
