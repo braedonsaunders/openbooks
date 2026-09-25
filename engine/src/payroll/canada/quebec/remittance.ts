@@ -30,8 +30,9 @@ import type {
  * $25,000 or more twice a month. A new employer remits monthly in its first
  * calendar year, which is why `defaultFrequency` is monthly rather than a
  * guess from partial-year history: the product's in-year stub lines are only
- * part of what Revenu Québec counts (the CNT and WSDRF levies are not
- * computed — see RLZ1S_GAPS; the health services fund accrues per stub at
+ * part of what Revenu Québec counts (the CNT levy is not computed — see
+ * RLZ1S_GAPS — and the WSDRF shortfall is an annual RL-1 summary figure,
+ * never a per-stub accrual; the health services fund accrues per stub at
  * the tenant-entered rate), so deriving the band from them
  * can only UNDERSTATE the frequency and push a deadline late. The org's
  * frequency is explicit configuration (`rqRemittanceFrequency`, validated
