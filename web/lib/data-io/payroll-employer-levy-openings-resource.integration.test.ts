@@ -33,6 +33,7 @@ const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
+  seedWorkerEmployment,
 } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
 /**
@@ -110,21 +111,22 @@ async function seedHarness(orgId: string, actorId: string): Promise<void> {
   await setPackSlotAccount(orgId, actorId, "CA", "eht", ehtPayable);
 }
 
-async function seedWorkforce(orgId: string, actorId: string, scheduleId: string): Promise<string> {
+async function seedWorkforce(orgId: string, actorId: string, scheduleId: string, subsidiaryId: string): Promise<string> {
   const employeeId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${employeeId}, ${orgId}, 'person', 'Amy Aggregate', true, '{}'::jsonb)`);
+  const amyEmploymentId = await seedWorkerEmployment(orgId, employeeId, subsidiaryId);
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                   is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, 'CAD', '50', 'hour', '2026-01-01', true,
             ${actorId}, ${actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            is_active, created_by, updated_by)
-    values (${orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+    values (${orgId}, ${employeeId}, ${amyEmploymentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
@@ -159,7 +161,7 @@ test(
                                      pay_date_offset_days, is_active, created_by, updated_by)
           values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                   ${actorId}, ${actorId})`);
-        await seedWorkforce(org.orgId, actorId, scheduleId);
+        await seedWorkforce(org.orgId, actorId, scheduleId, org.subsidiaryId);
       });
       await withDeclarations([thresholdLevy()], async () => {
         const resource = payrollEmployerLevyOpeningsResource(org.orgId);
