@@ -205,7 +205,7 @@ test(
         importSettlementBatch(org.orgId, actor, stripeParsed(`payout-hidden-account-${org.orgId}`, org.date), {
           bankAccountId: org.accounts.bank,
         }, new Set([org.subsidiaryId])),
-        /outside the authorized subsidiary scope/,
+        (error) => error instanceof ScopeNotFoundError,
       );
       const externalRef = `payout-cross-subsidiary-${org.orgId}`;
       const original = stripeParsed(externalRef, org.date);
@@ -242,7 +242,7 @@ test(
           ...accounts,
           subsidiaryId: org.subsidiaryId,
         }, new Set([org.subsidiaryId])),
-        (error) => error instanceof ScopeNotFoundError,
+        /settlement bank account is outside the authorized subsidiary scope/,
       );
 
       const after = (await db.execute(sql`
