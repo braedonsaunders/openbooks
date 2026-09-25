@@ -110,7 +110,7 @@
       "received": "Recebido"
     },
     "saving": "Salvando correções…",
-    "unsaved": "Correções não salvas",
+    "unsaved": "Correções não salvas", "unsavedClose": "As últimas correções não puderam ser salvas. Fechar e descartá-las?",
     "saved": "Todas as correções salvas",
     "saveFailed": "Não foi possível salvar as correções.",
     "processing": "Extraindo evidências do documento…",

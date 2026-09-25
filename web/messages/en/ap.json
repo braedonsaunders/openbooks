@@ -110,6 +110,7 @@
       "received": "Received"
     },
     "saving": "Saving corrections…",
+    "unsavedClose": "The latest corrections could not be saved. Close and discard them?",
     "unsaved": "Unsaved corrections",
     "saved": "All corrections saved",
     "saveFailed": "Could not save the corrections.",

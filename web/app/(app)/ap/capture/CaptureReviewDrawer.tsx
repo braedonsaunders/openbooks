@@ -214,6 +214,20 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
     return () => window.clearTimeout(timer)
   }, [dirty, editable, save, form, vendorId, purchaseOrderId, documentKind])
 
+  // Closing with a debounced edit still pending must not drop it: flush the
+  // serialized save first (it joins any in-flight request, so it never 409s
+  // against itself). If the flush fails, name the loss and keep the capture
+  // open on refusal instead of silently discarding the edit.
+  const beforeClose = useCallback(async (): Promise<boolean> => {
+    if (!dirtyRef.current) return true
+    if (await save()) return true
+    return confirmDialog({
+      message: t('unsavedClose'),
+      confirmLabel: tc('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }, [save, t, tc])
+
   async function runBulkAction(kind: 'reprocess' | 'reject', extra: Record<string, unknown> = {}) {
     const response = await fetch('/api/ap-capture/actions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: kind, ids: [initial.id], ...extra }) })
     // The status is checked before the body parses, and the single
@@ -288,7 +302,7 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
   ) : undefined
 
   return (
-    <UrlDrawer open closeHref="/ap/capture" size="full" initialFullscreen title={<span className="flex items-center gap-2"><FileText size={17} />{initial.original_filename}<Badge variant={STATUS_VARIANT[status] ?? 'outline'}>{t(`status.${status}`)}</Badge></span>} description={saving ? t('saving') : dirty ? t('unsaved') : t('saved')} headerActions={headerActions} bodyClassName="overflow-hidden p-0">
+    <UrlDrawer open closeHref="/ap/capture" size="full" initialFullscreen beforeClose={beforeClose} title={<span className="flex items-center gap-2"><FileText size={17} />{initial.original_filename}<Badge variant={STATUS_VARIANT[status] ?? 'outline'}>{t(`status.${status}`)}</Badge></span>} description={saving ? t('saving') : dirty ? t('unsaved') : t('saved')} headerActions={headerActions} bodyClassName="overflow-hidden p-0">
       <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,1.05fr)_minmax(32rem,.95fr)]">
         <section className="min-h-[38vh] border-b border-slate-200 bg-slate-100 lg:min-h-0 lg:border-r lg:border-b-0 dark:border-slate-800 dark:bg-slate-950">
           {initial.contentType.startsWith('image/') && initial.contentType !== 'image/tiff' ? (
