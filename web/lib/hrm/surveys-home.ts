@@ -3,6 +3,8 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { actorAllowedSubsidiaryIds } from '@openbooks/engine/src/organization/actor-subsidiaries.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { getSurvey, listSurveys } from '@openbooks/engine/src/hrm/surveys/surveys.ts'
 import { getSurveyResults } from '@openbooks/engine/src/hrm/surveys/responses.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
@@ -156,10 +158,20 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
         getSurvey({ orgId: authz.orgId, actorId: authz.userId, surveyId }),
         getSurveyResults({ orgId: authz.orgId, actorId: authz.userId, surveyId }),
       ])
+      // The invite picker names people, so it follows the same
+      // employment/subsidiary visibility rule as openSurvey: only parties
+      // holding at least one employment in the actor's allowed subsidiaries.
+      // Employment-less parties are omitted — inviting them refuses anyway.
+      const allowed = await actorAllowedSubsidiaryIds(db, authz.orgId, authz.userId)
       const people = (await db.execute<{ id: string; name: string }>(sql`
-        select id::text as id, display_name as name from parties
-         where org_id = ${authz.orgId}::uuid and kind = 'person' and is_active
-         order by display_name`)).rows
+        select p.id::text as id, p.display_name as name from parties p
+         where p.org_id = ${authz.orgId}::uuid and p.kind = 'person' and p.is_active
+           and exists (
+             select 1 from worker_employments e
+              where e.org_id = p.org_id and e.worker_party_id = p.id
+              ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
+           )
+         order by p.display_name`)).rows
       drawer = {
         closeHref: hrefFor(status, null, false),
         title: survey.name,
