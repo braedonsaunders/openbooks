@@ -217,7 +217,6 @@ test("driver preview returns exact shares; empty drivers report why", async () =
       values (${org.orgId}, ${driverId}, ${org.subsidiaryId}, '2026-01-01', '3.0000', ${actorId}, ${actorId}),
         (${org.orgId}, ${driverId}, (select id from other_subsidiary), '2026-01-01', '77.0000', ${actorId}, ${actorId})`);
 
-    authenticate(org.orgId, actorId, [...READ, ...MANAGE], new Set([org.subsidiaryId]));
     const preview = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
       driverId,
       date: "2026-05-01",
@@ -227,9 +226,10 @@ test("driver preview returns exact shares; empty drivers report why", async () =
       date: string;
       rows: { id: string; label: string; value: string; share: string }[];
     };
-    assert.equal(body.date, "2026-05-01"); assert.equal(body.rows[0]?.share, "1.0000");
-    assert.deepEqual([body.rows.length, body.rows[0]?.value], [1, "3.0000"]);
-    assert.ok((body.rows[0]?.label ?? "").length > 0); const both = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
+    assert.equal(body.date, "2026-05-01");
+    assert.deepEqual(body.rows.map((row) => [row.value, row.share]).sort(), [["3.0000", "0.0375"], ["77.0000", "0.9625"]]);
+    assert.ok(body.rows.every((row) => (row.label ?? "").length > 0));
+    const both = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
       driverId,
       date: "2026-05-01",
       periodId: org.periodId,

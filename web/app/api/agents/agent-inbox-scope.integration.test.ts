@@ -6,8 +6,8 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../../../lib/auth'
 
-// H-AGENTSCOPE: an assistant.use holder restricted to one subsidiary must
-// see only that entity's account-subject findings — never B's subjects,
+// H-AGENTSCOPE: an assistant.use holder restricted to one subsidiary sees
+// only that entity's plus shared-account findings — never B's subjects,
 // names, summaries, materiality, or evidence — and must not move B's
 // findings through the item, lifecycle, feedback, or report endpoints.
 // Record-level denials answer exactly like not-found; the narrative PDF
@@ -95,8 +95,8 @@ test('a restricted caller lists only their entity’s findings', async () => {
       f.asScoped()
       const scoped = await (await getInbox(new Request('https://x/api/agents/inbox'))).json() as { ok: boolean; total: number; rows: { id: string }[] }
       assert.equal(scoped.ok, true)
-      assert.deepEqual(scoped.rows.map((i) => i.id), [f.itemA])
-      assert.equal(scoped.total, 1)
+      assert.deepEqual(scoped.rows.map((i) => i.id).sort(), [f.itemA, f.itemN].sort())
+      assert.equal(scoped.total, 2)
       f.asOwner()
       const full = await (await getInbox(new Request('https://x/api/agents/inbox'))).json() as { ok: boolean; total: number }
       assert.equal(full.ok, true)
@@ -114,7 +114,9 @@ test('a restricted caller reads only their entity’s finding detail', async () 
       f.asScoped()
       const hit = await (await getItem(new Request('https://x/'), f.itemParams(f.itemA))).json() as { item: { id: string } }
       assert.equal(hit.item.id, f.itemA)
-      for (const [label, id] of [['other entity', f.itemB], ['unattributed', f.itemN], ['unresolved subject', f.itemX]] as const) {
+      const shared = await (await getItem(new Request('https://x/'), f.itemParams(f.itemN))).json() as { item: { id: string } }
+      assert.equal(shared.item.id, f.itemN)
+      for (const [label, id] of [['other entity', f.itemB], ['unresolved subject', f.itemX]] as const) {
         const res = await getItem(new Request('https://x/'), f.itemParams(id))
         assert.equal(res.status, 404, label)
       }
