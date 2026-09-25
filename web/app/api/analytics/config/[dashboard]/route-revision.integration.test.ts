@@ -22,7 +22,7 @@ const mockAuthz = `
   export { guardUnrestrictedScope } from '${realAuthzUrl}'
   const state = globalThis[Symbol.for('openbooks.analytics-config-revision-integration')]
   export async function guardPermission() {
-    return state.authz
+    return { allowedSubsidiaryIds: null, ...state.authz }
   }
 `;
 

@@ -25,6 +25,6 @@ test("direct browser export refuses with the restore-grade recovery path", async
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   assert.deepEqual(await response.json(), {
     error: "direct browser export is disabled because it cannot include restore-grade hash evidence",
-    recovery: "create a stored backup and download both Archive and Manifest, or use backup-local-cli.ts",
+    recovery: "create a stored backup and download both Archive and Manifest, or run src/backup/local-cli.ts from the engine directory",
   });
 });

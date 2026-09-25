@@ -140,9 +140,8 @@ test('analytics party drill refuses by name on missing FX coverage', async () =>
         new Request(`http://drillfx.local/api/analytics/drill?party=${customer}&from=${FROM}&to=${TO}`),
       );
       assert.equal(response.status, 422);
-      const body = await response.json() as { error: string; message: string };
-      assert.equal(body.error, 'missing exchange rate');
-      assert.ok(body.message.includes('USD') && body.message.includes('CAD'), `refusal must name the pair, got: ${body.message}`);
+      const body = await response.json() as { error: string };
+      assert.equal(body.error, 'no spot rate for USD→CAD on or before 2026-07-15');
     });
   } finally {
     state.user = null;

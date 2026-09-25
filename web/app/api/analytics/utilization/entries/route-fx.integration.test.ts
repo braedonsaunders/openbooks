@@ -75,9 +75,8 @@ test('utilization entries drill refuses by name on missing FX coverage', async (
         new Request(`http://fx.local/api/analytics/utilization/entries?employee=${employee}&from=2026-07-01&to=2026-07-31`),
       );
       assert.equal(response.status, 422);
-      const body = await response.json() as { error: string; message: string };
-      assert.equal(body.error, 'missing exchange rate');
-      assert.ok(body.message.includes('EUR') && body.message.includes('CAD'), `refusal must name the pair, got: ${body.message}`);
+      const body = await response.json() as { error: string };
+      assert.equal(body.error, 'no spot rate for EUR→CAD on or before 2026-07-15');
     });
   } finally {
     state.user = null;
