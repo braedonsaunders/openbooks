@@ -1204,15 +1204,13 @@ test("positive adjustment values stock at the average prevailing under the posit
     // advisory key behind this holder. The GL legs book exactly what a real
     // receipt blending the layer to 20.00 would leave behind (+100 asset),
     // keeping GL = Σ layer value intact for the invariant below.
-    const competitor = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    const competitor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
     await competitor.connect();
     let committed = false;
     let adjustment: ReturnType<typeof adjustInventory> | undefined;
     try {
       await competitor.query("begin");
-      await competitor.query(
-        "select set_config('app.bypass_rls', 'on', true)",
-      );
+      // 0399 gates the bypass GUC by session role: the competitor connects as the privileged test login above.
       const lockKey = `inventory:${org.items.movingAvg}:${loc}`;
       await competitor.query(
         "select pg_advisory_xact_lock(hashtextextended($1, 0))",

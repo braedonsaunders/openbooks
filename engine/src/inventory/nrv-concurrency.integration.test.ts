@@ -11,7 +11,7 @@ import { writeDownInventoryToNrv, reverseInventoryWritedown } from "./nrv.ts";
 
 test("NRV serializes its layer snapshot with an in-flight receipt", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
-  const receiptWriter = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  const receiptWriter = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
   let pending: ReturnType<typeof writeDownInventoryToNrv> | undefined;
   try {
     assert.ok(env.OPENBOOKS_DB_URL, "explicit disposable database connection is required");
@@ -20,7 +20,7 @@ test("NRV serializes its layer snapshot with an in-flight receipt", { skip: !pro
     const receipt = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "10", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: "2026-07-15" };
     await receiveInventory(org.orgId, actor, receipt);
     await receiptWriter.query("begin");
-    await receiptWriter.query("select set_config('app.bypass_rls','on',true)");
+    // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
     await receiptWriter.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`inventory:${org.items.fifo}:${org.stockLocationId}`]);
     await receiptWriter.query("select id from cost_layers where org_id=$1 and item_id=$2 for update", [org.orgId, org.items.fifo]);
     const pid = (await receiptWriter.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
@@ -51,7 +51,7 @@ test("NRV serializes its layer snapshot with an in-flight receipt", { skip: !pro
 for (const operation of ["write-down", "reversal"] as const) {
   test(`NRV waits for reviewed accounting configuration: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg();
-    const editor = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    const editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
     let pending: ReturnType<typeof writeDownInventoryToNrv> | undefined;
     try {
       await editor.connect();
@@ -64,7 +64,7 @@ for (const operation of ["write-down", "reversal"] as const) {
       const common = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: org.date };
       if (operation === "reversal") await writeDownInventoryToNrv(org.orgId, actor, { ...common, nrvPerUnit: "6" });
       await editor.query("begin");
-      await editor.query("select set_config('app.bypass_rls','on',true)");
+      // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
       await editor.query("update item_inventory_profiles set adjustment_account_id=$1 where org_id=$2 and item_id=$3", [org.accounts.freight, org.orgId, org.items.fifo]);
       const pid = (await editor.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
       pending = operation === "reversal"
