@@ -78,6 +78,7 @@ export function SetupNav({
   canExport,
   canImport,
   canManageSetup,
+  canManagePeriods,
   hiddenEntityKeys = [],
   projectsEnabled = true,
   currencyEnabled = true,
@@ -90,6 +91,7 @@ export function SetupNav({
   canExport: boolean
   canImport: boolean
   canManageSetup: boolean
+  canManagePeriods?: boolean
   hiddenEntityKeys?: string[]
   projectsEnabled?: boolean
   currencyEnabled?: boolean
@@ -132,7 +134,9 @@ export function SetupNav({
           const items: NavItem[] =
             group.key === 'accounting'
               ? [
-                  { href: '/admin/setup/period-close', label: tClose('title'), iconKey: 'calendar' },
+                  ...(canManagePeriods
+                    ? [{ href: '/admin/setup/period-close', label: tClose('title'), iconKey: 'calendar' }]
+                    : []),
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),

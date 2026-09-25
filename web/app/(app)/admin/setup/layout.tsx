@@ -54,6 +54,7 @@ export default async function SetupLayout({ children }: { children: ReactNode })
             canExport={canExport}
             canImport={canImport}
             canManageSetup={canManageSetup}
+            canManagePeriods={can(authz, 'periods.manage')}
             hiddenEntityKeys={hiddenEntityKeys}
             projectsEnabled={featureEnabled(features, 'projects')}
             currencyEnabled={featureEnabled(features, 'multiCurrency')}
