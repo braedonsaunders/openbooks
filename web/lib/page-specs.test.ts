@@ -85,7 +85,7 @@ const precedenceHooks = registerHooks({
   },
 })
 
-const { loadPageSpec, savePageSpec, clearPageSpec, restorePageSpec, pickPageSpecRow } =
+const { loadPageSpec, savePageSpec, clearPageSpec, listPageSpecHistory, restorePageSpec, pickPageSpecRow } =
   await import('./page-specs.ts')
 precedenceHooks.deregister()
 
@@ -380,12 +380,6 @@ test('same-rank ties break toward the most recent write', () => {
   assert.equal(pickPageSpecRow(rows)?.id, 'row-module-new')
 })
 
-/**
- * The SQL wiring around the core, asserted through the canned-response mock:
- * the read fetches provenance and currency, tenant writes touch tenant rows
- * only, and read validation still gates the winner.
- */
-
 test('an installed module spec resolves when the tenant stored nothing', async () => {
   resetPrecedenceDb([{ rows: [candidateRow('from-module', { extensionVersionId: 'mv-1', isCurrent: true })] }])
   const result = await loadPageSpec('org-1', PRECEDENCE_ROUTE, registries)
@@ -519,4 +513,10 @@ test('restoring a version supersedes tenant rows only', async () => {
   const updates = recordedUpdates()
   assert.ok(updates.length >= 1, 'expected a supersession update')
   for (const q of updates) assert.match(q, /extension_version_id is null/)
+})
+
+test('history identifies personal versions for a layer-preserving restore', async () => {
+  resetPrecedenceDb([{ rows: [{ id: 'personal', is_active: false, note: null, created_at: '2026-01-01', created_by: 'user-1', author: 'Ada', user_id: 'user-1' }] }])
+  const [version] = await listPageSpecHistory('org-1', PRECEDENCE_ROUTE, 'user-1')
+  assert.equal(version?.scope, 'user')
 })

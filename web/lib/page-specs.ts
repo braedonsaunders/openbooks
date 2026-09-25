@@ -286,6 +286,8 @@ export async function savePageSpec(opts: {
 
 export interface PageSpecVersion {
   id: string
+  /** The layer this version belongs to, so restore republishes in that layer. */
+  scope: LayoutScope
   /** The layout this org renders for the route right now. */
   active: boolean
   note: string | null
@@ -315,8 +317,9 @@ export async function listPageSpecHistory(orgId: string, route: string, userId?:
     created_at: string
     created_by: string | null
     author: string | null
+    user_id: string | null
   }>(sql`
-    select s.id, s.is_active, s.note, s.created_at, s.created_by, u.name as author
+    select s.id, s.is_active, s.note, s.created_at, s.created_by, s.user_id, u.name as author
       from page_specs s
       left join users u on u.id = s.created_by and u.org_id = s.org_id
      where s.org_id = ${orgId} and s.route = ${route}
@@ -324,6 +327,7 @@ export async function listPageSpecHistory(orgId: string, route: string, userId?:
      order by s.created_at desc`)
   return rows.rows.map((row) => ({
     id: row.id,
+    scope: row.user_id === null ? 'org' : 'user',
     active: row.is_active,
     note: row.note,
     // `created_at`, not `updated_at`. A superseded row's `updated_at` is when
