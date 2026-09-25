@@ -733,7 +733,10 @@ export function computeStatutoryHolidayPay(
   }
 
   const { qualifying } = rule;
-  if (qualifying.minEmploymentDays !== undefined) {
+  if (
+    qualifying.minEmploymentDays !== undefined
+    && !(qualifying.minEmploymentDaysWhenUnworked && cmp(context.hoursWorked, "0") > 0)
+  ) {
     if (context.employmentDays === null) {
       throw new PayrollHolidayError(
         `${context.employee}: ${context.holiday.name} needs a hire date to test the `
