@@ -122,6 +122,9 @@ export async function loadArInvoices(
   const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
     ? loadedDoc : null
+  const documentOptionScope = openDoc
+    ? new Set([String(openDoc.doc.subsidiary_id)])
+    : authz.allowedSubsidiaryIds
   const openKind = openDoc?.doc.kind as string | undefined
   // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
   // over a blank in-memory payload. The kind must belong to this page, the
@@ -141,11 +144,11 @@ export async function loadArInvoices(
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
-          partyOptions('customer'),
-          accountOptions(DOC_KINDS[drawerKind! as 'customer_invoice']!),
+          partyOptions('customer', authz.user.orgId, documentOptionScope),
+          accountOptions(DOC_KINDS[drawerKind! as 'customer_invoice']!, authz.user.orgId, documentOptionScope),
           taxCodeOptions(),
           taxGroupOptions(),
-          dimensionOptions(),
+          dimensionOptions(authz.user.orgId, undefined, documentOptionScope),
           db.execute(sql`
             select it.id, it.code, it.name,
                    exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
