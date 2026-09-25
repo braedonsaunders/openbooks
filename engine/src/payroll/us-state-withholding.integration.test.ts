@@ -135,11 +135,16 @@ async function usPayrollOrg(): Promise<Fixture> {
   // SUI refuses by name at calculate, and these tests assert withholding,
   // never SUI amounts. Nested merge — a top-level `||` would replace the
   // whole payroll blob and drop the accounts above.
+  // Presence-only FUTA the same way: the 2026 Schedule A is not transcribed,
+  // so an unconfigured FUTA refuses by name; the ordinary 0.6% full-credit
+  // figure below is the TEST entering a number as an employer would, and no
+  // expectation below asserts a FUTA amount.
   await db.execute(sql`
     update orgs set settings = jsonb_set(
       coalesce(settings, '{}'::jsonb),
       '{payroll,us}',
       coalesce(settings#>'{payroll,us}', '{}'::jsonb) || ${JSON.stringify({
+        futaRate: "0.006",
         sui: Object.fromEntries(
           ["AL", "CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"].map((state) => [
             state, { rate: "0.03", wageBase: "7000" },
@@ -208,6 +213,17 @@ async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Pro
               ${JSON.stringify(certificate.answers ?? {})}::jsonb, '2026-01-01',
               ${fx.actorId}, ${fx.actorId})`);
   }
+  // The federal calculation refuses payroll without a tax-residency status
+  // (Pub. 15-T nonresident-alien rules), so every synthetic employee states
+  // one — U.S. person, like the single filing status above. The refusal
+  // itself stays covered at the pure boundary in us/pub15t.test.ts.
+  await db.execute(sql`
+    insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                           region, sub_region, answers, effective_from,
+                                           created_by, updated_by)
+    values (${fx.orgId}, ${id}, 'US', 'us_w4_tax_residency', null, null,
+            '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+            ${fx.actorId}, ${fx.actorId})`);
   return id;
 }
 
