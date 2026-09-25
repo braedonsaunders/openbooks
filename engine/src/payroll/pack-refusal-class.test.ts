@@ -207,7 +207,6 @@ test(
          where org_id = ${org.orgId} and pay_run_document_id = ${documentId}`);
 
       const sections = await orgYearEndFilings(org.orgId, 2026);
-      assert.ok(sections.length > 0, "the page must still enumerate its filings");
       const refused = sections.filter((section) => section.populationRefusal != null);
       assert.ok(refused.length > 0, "at least one filing must carry the named refusal");
       // The stub's unknown country fires the shared guard in every population
@@ -218,6 +217,7 @@ test(
       const t4 = sections.find((section) => section.country === "CA" && section.key === "t4");
       assert.ok(t4?.populationRefusal, "the CA T4 must carry the named refusal");
       assert.match(t4.populationRefusal, /unknown historical country/);
+      assert.match(sections.find((section) => section.country === "US" && section.key === "940")?.populationRefusal ?? "", /Form 940 or Schedule A.*https:\/\/www\.irs\.gov\/instructions\/i940.*reconcile the EIN's committed FUTA-taxable wages/);
       for (const section of refused) {
         assert.ok(section.populationRefusal!.length > 0);
       }
