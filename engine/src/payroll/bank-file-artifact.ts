@@ -1095,12 +1095,12 @@ export async function releasePayRunBankFile(
     // can never show a release the log does not explain, or vice versa.
     const updated = await tx.execute<{ releaseCount: number }>(sql`
       update pay_run_bank_files
-         set status = case when status = 'superseded' then status else 'released' end,
+         set status = 'released',
              release_count = release_count + 1,
              first_released_at = coalesce(first_released_at, now()),
              last_released_at = now(),
              updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${artifactId}
+       where org_id = ${orgId} and id = ${artifactId} and status <> 'superseded'
        returning release_count as "releaseCount"
     `);
     const releaseNumber = updated.rows[0]?.releaseCount;
@@ -1119,9 +1119,6 @@ export async function releasePayRunBankFile(
         contentHash: row.contentHash,
         controlTotal: row.controlTotal,
         entryCount: row.entryCount,
-        // A superseded file leaving the building is the dangerous release, so
-        // it is called out in the evidence rather than inferred later.
-        supersededAtRelease: row.status === "superseded",
         releaseNumber,
       },
     });

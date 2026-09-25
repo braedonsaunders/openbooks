@@ -1308,6 +1308,8 @@ test(
     assert.equal(reloadedFirst.filename, first.filename);
     assert.equal(all.find((a) => a.id === second.id)!.status, "generated");
 
+    // The superseded file must not leave the building after its replacement.
+    await assert.rejects(releasePayRunBankFile(fx.orgId, first.id, fx.actorId), /was superseded/);
   },
 );
 
