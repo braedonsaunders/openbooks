@@ -259,6 +259,20 @@ export function buildRow(
     if (res.value === null && (opts.forCreate || field.keepDefault)) continue
     cols.push(res)
   }
+  if (entity.key === 'tax-rates') {
+    // The tax-rate domain, enforced for every buildRow caller — including the
+    // bulk importer, which never runs the interactive writer's merged-row
+    // integrity check. The generic percent coercer admits FX-scale (10dp)
+    // values that numeric(19,4) silently rounds on storage, so an explicitly
+    // supplied out-of-domain rate is refused here with the same codes the
+    // interactive path returns. A blank on update keeps the stored rate and
+    // is not checked.
+    const raw = body.ratePercent
+    if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+      const problem = taxRatePercentProblem(raw)
+      if (problem) return { error: problem }
+    }
+  }
   return { cols }
 }
 
