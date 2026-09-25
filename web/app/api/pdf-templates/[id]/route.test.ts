@@ -67,9 +67,7 @@ const mockSources = new Map<string, string>([
         state.lookups.push(id)
         return state.template
       }
-      // GET reads through the visibility-filtered accessor (eb6fc845b); the
-      // documents double reports every kind enabled, so the visible read
-      // resolves exactly like the raw one against this spied store.
+      // GET reads via getVisiblePdfTemplate (eb6fc845b); kinds report enabled, so it resolves like the raw read.
       export async function getVisiblePdfTemplate(_orgId, id) {
         state.lookups.push(id)
         return state.template

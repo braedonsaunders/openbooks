@@ -37,8 +37,7 @@ const mockSources = new Map<string, string>([
         async execute() {
           state.executeCalls += 1
           if (state.executeCalls === 2) return { rows: [{ id: '${TICKET_ID}', status: 'approved', document_number: 'FT-1' }] }
-          // Slot serialization (bdd8d171f) claims the request (4) before the
-          // signature evidence row (5); both return their ids.
+          // Slot serialization (bdd8d171f): request claim is call 4, signature insert is call 5.
           if (state.executeCalls === 4) return { rows: [{ id: '00000000-0000-4000-8000-00000000c004' }] }
           if (state.executeCalls === 5) return { rows: [{ id: '00000000-0000-4000-8000-00000000c006' }] }
           return { rows: [] }

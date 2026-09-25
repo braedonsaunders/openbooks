@@ -79,19 +79,7 @@ test('a pre-flow bank account submits into the current flow exactly once', async
     await withBypassContext(async () => {
       await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key = 'accountant'`)
     })
-    const accountId = randomUUID()
-    await withBypassContext(async () => {
-      await db.execute(sql`
-        insert into party_bank_accounts
-          (id, org_id, party_id, bank_name, country, currency, routing,
-           account_number_encrypted, account_last_four,
-           approval_status, is_active, approved_at, approved_by,
-           submitted_by, submitted_at, created_by, updated_by)
-        values (${accountId}, ${org.orgId}, ${org.vendorId}, 'Pre-flow Bank', 'CA', 'CAD', '{}'::jsonb,
-                ${encryptAccountNumber('123456789')}, '6789',
-                'pending', false, null, null,
-                ${manager}, now(), ${manager}, ${manager})`)
-    })
+    const accountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Pre-flow Bank')
     const params = paramsFor(org.vendorId)
     state.user = asUser(manager, org.orgId, 'manager')
 
@@ -175,17 +163,8 @@ test('the party payload carries a submittable revision token for bank accounts',
     const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Token manager', 'bank_token_manager'))
     await withBypassContext(async () => {
       await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key = 'bank_token_manager'`)
-      await db.execute(sql`
-        insert into party_bank_accounts
-          (id, org_id, party_id, bank_name, country, currency, routing,
-           account_number_encrypted, account_last_four,
-           approval_status, is_active, approved_at, approved_by,
-           submitted_by, submitted_at, created_by, updated_by)
-        values (${randomUUID()}, ${org.orgId}, ${org.vendorId}, 'Token Bank', 'CA', 'CAD', '{}'::jsonb,
-                ${encryptAccountNumber('987654321')}, '4321',
-                'pending', false, null, null,
-                ${manager}, now(), ${manager}, ${manager})`)
     })
+    await seedPendingAccount(org.orgId, org.vendorId, manager, 'Token Bank')
     state.user = asUser(manager, org.orgId, 'manager')
 
     // The drawer edits with the token the party payload publishes: the two
