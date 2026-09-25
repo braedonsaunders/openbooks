@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { DecisionFailedError, GateError } from '@openbooks/engine/src/flows/index.ts'
+import {
+  lockScopeRow,
+  ScopeNotFoundError,
+} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { canReadFlowSubject } from '../../../lib/flow-subject-authz'
@@ -9,22 +13,23 @@ import { allocationScopeVisible } from '@openbooks/engine/src/allocations/subsid
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
 export async function requireFlowsSession(): Promise<Authz | NextResponse> {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!(await isFeatureEnabled(authz.user.orgId, 'flows'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const authz = await getAuthz();
+  if (!authz)
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await isFeatureEnabled(authz.user.orgId, "flows"))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  return authz
+  return authz;
 }
 
 /** Shared helpers for the /api/flows/* gate endpoints. */
 
 export type GateHeader = {
-  id: string
-  org_id: string
-  status: string
-  assignee_user_id: string | null
-  assignee_role: string | null
+  id: string;
+  org_id: string;
+  status: string;
+  assignee_user_id: string | null;
+  assignee_role: string | null;
   /** Legal entity owning the approval subject (null = unavailable/rootless). */
   subsidiary_id: string | null
   subject_kind: string
@@ -123,7 +128,85 @@ export async function loadFlowSubjectSubsidiary(
              )
            end as "subsidiaryId"
   `))
-  return r.rows[0]?.subsidiaryId ?? null
+  return r.rows[0]?.subsidiaryId ?? null;
+}
+
+/** Lock the canonical scope owner for the complete record-level flow read.
+ * Call inside an organization transaction and keep that transaction open
+ * through status, gate, run, and history reads. */
+export async function lockFlowSubjectScope(
+  subjectKind: string,
+  subjectId: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<void> {
+  if (subjectKind === "party_bank_account") {
+    const row = (
+      await db.execute<{ partyId: string }>(sql`
+      select party_id as "partyId" from party_bank_accounts
+       where id = ${subjectId} and org_id = ${orgId}
+    `)
+    ).rows[0];
+    if (!row) throw new ScopeNotFoundError();
+    await lockScopeRow(
+      db,
+      orgId,
+      "party",
+      row.partyId,
+      allowedSubsidiaryIds,
+      "share",
+    );
+    return;
+  }
+  if (subjectKind === "timesheet_week") {
+    const row = (
+      await db.execute<{ partyId: string }>(sql`
+      select employee_party_id as "partyId" from timesheet_weeks
+       where id = ${subjectId} and org_id = ${orgId}
+    `)
+    ).rows[0];
+    if (!row) throw new ScopeNotFoundError();
+    await lockScopeRow(
+      db,
+      orgId,
+      "party",
+      row.partyId,
+      allowedSubsidiaryIds,
+      "share",
+    );
+    return;
+  }
+  if (subjectKind === "allocation_run") {
+    // I1-refix-148's visibility predicate, evaluated under the run row lock
+    // so a concurrent computation rewrite cannot slip between check and read.
+    const run = (
+      await db.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
+      select subsidiary_id, computation from allocation_runs
+       where id = ${subjectId} and org_id = ${orgId}
+       for share
+    `)
+    ).rows[0];
+    if (
+      !run ||
+      !allocationScopeVisible(allowedSubsidiaryIds, run.subsidiary_id, run.computation)
+    )
+      throw new ScopeNotFoundError();
+    return;
+  }
+  if (subjectKind === "budget_scenario" || subjectKind === "close_run") {
+    // These org-wide subjects have no subsidiary owner. Restricted readers
+    // retain the same fail-closed result as the unlocked resolver.
+    if (allowedSubsidiaryIds !== null) throw new ScopeNotFoundError();
+    return;
+  }
+  await lockScopeRow(
+    db,
+    orgId,
+    "document",
+    subjectId,
+    allowedSubsidiaryIds,
+    "share",
+  );
 }
 
 /**
@@ -136,7 +219,9 @@ export async function loadFlowSubjectSubsidiary(
  * callers (null scope) keep every subject. Duplicate subjects resolve
  * once. Returns the in-scope subset, preserving order.
  */
-export async function filterFlowRunSubjectsToScope<T extends { kind: string; id: string }>(
+export async function filterFlowRunSubjectsToScope<
+  T extends { kind: string; id: string },
+>(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   subjects: readonly T[],
@@ -144,19 +229,19 @@ export async function filterFlowRunSubjectsToScope<T extends { kind: string; id:
 ): Promise<T[]> {
   const readableSubjects = authz
     ? subjects.filter((subject) => canReadFlowSubject(authz, subject.kind))
-    : [...subjects]
-  if (allowedSubsidiaryIds === null) return readableSubjects
-  if (readableSubjects.length === 0) return []
-  const subsidiaryBySubject = new Map<string, string | null>()
-  const keyOf = (kind: string, id: string) => `${kind}\0${id}`
+    : [...subjects];
+  if (allowedSubsidiaryIds === null) return readableSubjects;
+  if (readableSubjects.length === 0) return [];
+  const subsidiaryBySubject = new Map<string, string | null>();
+  const keyOf = (kind: string, id: string) => `${kind}\0${id}`;
   // Document subjects (every kind the loader resolves through the
   // documents table) batch one query per kind.
-  const documentKinds = new Map<string, { ids: string[] }>()
-  const individual: { key: string; kind: string; id: string }[] = []
+  const documentKinds = new Map<string, { ids: string[] }>();
+  const individual: { key: string; kind: string; id: string }[] = [];
   for (const subject of readableSubjects) {
-    const key = keyOf(subject.kind, subject.id)
-    if (subsidiaryBySubject.has(key)) continue
-    subsidiaryBySubject.set(key, null)
+    const key = keyOf(subject.kind, subject.id);
+    if (subsidiaryBySubject.has(key)) continue;
+    subsidiaryBySubject.set(key, null);
     if (
       subject.kind === 'party_bank_account' ||
       subject.kind === 'timesheet_week' ||
@@ -164,21 +249,25 @@ export async function filterFlowRunSubjectsToScope<T extends { kind: string; id:
       subject.kind === 'budget_scenario' ||
       subject.kind === 'close_run'
     ) {
-      individual.push({ key, kind: subject.kind, id: subject.id })
+      individual.push({ key, kind: subject.kind, id: subject.id });
     } else {
-      const group = documentKinds.get(subject.kind) ?? { ids: [] }
-      group.ids.push(subject.id)
-      documentKinds.set(subject.kind, group)
+      const group = documentKinds.get(subject.kind) ?? { ids: [] };
+      group.ids.push(subject.id);
+      documentKinds.set(subject.kind, group);
     }
   }
   await Promise.all([
     ...[...documentKinds].map(async ([kind, group]) => {
-      const uniqueIds = [...new Set(group.ids)]
-      const r = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      const uniqueIds = [...new Set(group.ids)];
+      const r = await db.execute<{
+        id: string;
+        subsidiaryId: string | null;
+      }>(sql`
         select id, subsidiary_id as "subsidiaryId" from documents
-         where org_id = ${orgId} and kind = ${kind} and id = any(${`{${uniqueIds.join(',')}}`}::uuid[])
-      `))
-      for (const row of r.rows) subsidiaryBySubject.set(keyOf(kind, row.id), row.subsidiaryId)
+         where org_id = ${orgId} and kind = ${kind} and id = any(${`{${uniqueIds.join(",")}}`}::uuid[])
+      `);
+      for (const row of r.rows)
+        subsidiaryBySubject.set(keyOf(kind, row.id), row.subsidiaryId);
     }),
     ...individual.map(async (item) => {
       subsidiaryBySubject.set(
@@ -186,15 +275,21 @@ export async function filterFlowRunSubjectsToScope<T extends { kind: string; id:
         await loadFlowSubjectSubsidiary(item.kind, item.id, orgId, allowedSubsidiaryIds),
       )
     }),
-  ])
+  ]);
   // Fail-closed scope predicate, mirroring subsidiaryScopeAllows (kept
   // inline so this module's import surface — and the neighbouring unit
   // mock — stays exactly as it was): an unresolved or missing subsidiary
   // is never in scope for a restricted caller.
   return readableSubjects.filter((subject) => {
-    const subsidiaryId = subsidiaryBySubject.get(keyOf(subject.kind, subject.id))
-    return subsidiaryId !== null && subsidiaryId !== undefined && allowedSubsidiaryIds.has(subsidiaryId)
-  })
+    const subsidiaryId = subsidiaryBySubject.get(
+      keyOf(subject.kind, subject.id),
+    );
+    return (
+      subsidiaryId !== null &&
+      subsidiaryId !== undefined &&
+      allowedSubsidiaryIds.has(subsidiaryId)
+    );
+  });
 }
 
 /**
@@ -217,32 +312,36 @@ export function gateErrorResponse(e: unknown): NextResponse {
   // non-retryable failure is a defect in the decide path, and only that
   // stays a 500. Every non-422 path logs.
   if (e instanceof DecisionFailedError) {
-    if (e.retryable && e.causeKind === 'infrastructure') {
-      console.error('[flows] approval decision hit infrastructure:', e)
+    if (e.retryable && e.causeKind === "infrastructure") {
+      console.error("[flows] approval decision hit infrastructure:", e);
       return NextResponse.json(
-        { error: 'The approval service is temporarily unavailable, try again.' },
+        {
+          error: "The approval service is temporarily unavailable, try again.",
+        },
         { status: 503 },
-      )
+      );
     }
     if (e.retryable) {
-      const status = /already resolved|only a pending/.test(e.message) ? 409 : 422
-      if (status === 409) console.error('[flows] approval decision raced:', e)
-      return NextResponse.json({ error: e.message }, { status })
+      const status = /already resolved|only a pending/.test(e.message)
+        ? 409
+        : 422;
+      if (status === 409) console.error("[flows] approval decision raced:", e);
+      return NextResponse.json({ error: e.message }, { status });
     }
-    console.error('[flows] approval decision failed:', e)
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    console.error("[flows] approval decision failed:", e);
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
   if (e instanceof GateError) {
-    const msg = e.message
+    const msg = e.message;
     const status = /not found/.test(msg)
       ? 404
       : /already resolved|only a pending/.test(msg)
         ? 409
         : /not an approver|only the assignee/.test(msg)
           ? 403
-          : 422
-    return NextResponse.json({ error: msg }, { status })
+          : 422;
+    return NextResponse.json({ error: msg }, { status });
   }
-  console.error('[flows] gate endpoint failed:', e)
-  return NextResponse.json({ error: 'internal error' }, { status: 500 })
+  console.error("[flows] gate endpoint failed:", e);
+  return NextResponse.json({ error: "internal error" }, { status: 500 });
 }
