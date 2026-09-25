@@ -384,6 +384,29 @@ export async function computeSgStatutory(
   const status = (certificate.answers["cpf_status"] ?? "") as SgCpfStatus;
   const ageBand = (certificate.answers["age_band"] ?? "") as SgAgeBand;
 
+  // IR21 tax-clearance hold (I6-payroll-220): cessation of a non-citizen's
+  // employment withholds ALL monies due — the monthly engine must not settle
+  // a final payment it would then have to recover. Only citizens are exempt
+  // (IRAS, Tax Clearance for Foreign & SPR Employees (IR21)); every other
+  // known CPF status owes clearance. Cessation is evidenced by the
+  // termination run type (the engine scopes those runs to ended employment)
+  // or by a termination date on/before this pay date. Unknown statuses fall
+  // through to the pricing refusal below, never to this hold.
+  const runType = ctx.run["run_type"] ?? "regular";
+  const terminatedOn = ctx.emp["terminated_on"] ?? null;
+  const payDate = ctx.run["pay_date"] ?? "";
+  const ceased = runType === "termination"
+    || (terminatedOn != null && terminatedOn !== "" && (payDate === "" || terminatedOn <= payDate));
+  if (status !== "citizen" && (STATUSES as readonly string[]).includes(status) && ceased) {
+    throw new PayrollError(
+      `the SG payroll pack withholds all monies due to ${ctx.employeeName}: ${status} employment has ceased, `
+      + "and IRAS requires the employer to file Form IR21 and withhold all monies for tax clearance (Tax "
+      + "Clearance for Foreign & SPR Employees (IR21)) — file the IR21 with IRAS at least one month before "
+      + "cessation and pay the balance only on IRAS clearance; this pack settles no final pay and builds "
+      + "no IR21 file",
+    );
+  }
+
   const result = calculateSgStatutory({
     taxYear,
     ordinaryWages: income,
