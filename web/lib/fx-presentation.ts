@@ -106,6 +106,15 @@ export interface FlowRates {
   rateAt: (func: string | null, date: string) => string;
 }
 
+export class MissingExchangeRateError extends Error {
+  readonly status = 422
+
+  constructor(func: string, base: string, date: string) {
+    super(`no spot rate for ${func}→${base} on or before ${date}`)
+    this.name = 'MissingExchangeRateError'
+  }
+}
+
 /**
  * Rate timelines covering every (functional, date) in `rows` — one
  * timeline query per functional in view. Callers translating several buckets
@@ -162,9 +171,7 @@ export async function flowRates(
       if (resolved === base) return "1";
       const rate = timelines.get(resolved)!.find((t) => t.asOf <= date)?.rate;
       if (!rate) {
-        throw new Error(
-          `no spot rate for ${resolved}→${base} on or before ${date}`,
-        );
+        throw new MissingExchangeRateError(resolved, base, date)
       }
       return rate;
     },

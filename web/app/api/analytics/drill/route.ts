@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -50,10 +51,7 @@ async function translateLegs(
   if (!ratesResult.ok) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "missing exchange rate", message: ratesResult.error instanceof Error ? ratesResult.error.message : String(ratesResult.error) },
-        { status: 422 },
-      ),
+      response: await apiErrorResponse(ratesResult.error),
     };
   }
   const rates = ratesResult.rates;
@@ -64,10 +62,7 @@ async function translateLegs(
   } catch (error) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "missing exchange rate", message: error instanceof Error ? error.message : String(error) },
-        { status: 422 },
-      ),
+      response: await apiErrorResponse(error),
     };
   }
 }

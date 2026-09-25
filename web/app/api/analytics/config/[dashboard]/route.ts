@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -233,7 +234,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
     cleaned = cleanDashboardOverrides(dashboard as AnalyticsDashboard, body.values);
   } catch (error) {
     if (error instanceof InvalidDashboardValue) {
-      return NextResponse.json({ error: error.message }, { status: 422 });
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
     throw error;
   }
