@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardPermission, can } from '../../../../../lib/authz'
 import { isMaskedFileContentError } from '../../../../../lib/file-storage'
 import { getFileBlob } from '../../../../../lib/file-cabinet'
@@ -28,6 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  return withScopeSnapshot(gate.user.orgId, async () => {
   const capture = (await db.execute<{ file_id: string }>(sql`
     select ci.file_id
       from ap_capture_items ci
@@ -54,4 +56,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   if (!blob) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return blobResponse(request, blob, { fallbackName: 'document' })
+  })
 }

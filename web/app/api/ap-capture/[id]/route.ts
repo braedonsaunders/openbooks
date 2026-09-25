@@ -2,6 +2,7 @@ import { exactMoney, jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import type { CaptureLine, NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
@@ -128,6 +129,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // A malformed id names nothing: same answer as an unknown one, never a
   // PostgreSQL uuid cast error escaping as a 500.
   if (!UUID.test(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  return withScopeSnapshot(gate.user.orgId, async () => {
   const result = (await db.execute<Record<string, unknown>>(sql`
     select ci.*, f.content_type, f.size_bytes
       from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
@@ -149,6 +151,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     `),
   ])
   return NextResponse.json({ item: result.rows[0], fields: ((fields)).rows, events: ((events)).rows })
+  })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
