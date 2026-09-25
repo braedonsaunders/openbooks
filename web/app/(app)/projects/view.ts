@@ -118,13 +118,24 @@ export async function loadProjects(
     getLocale(),
   ])
 
+  // Custom-field definitions serve both the form layout and the create
+  // payload: a required project custom field must render in the create
+  // drawer, or creation is impossible and the server refuses unnamed.
+  const projectFieldDefs = openProject || creating ? await loadFieldDefs('projects') : []
+  const createFieldDefs = projectFieldDefs.map((d) => ({
+    key: d.key,
+    label: d.label,
+    fieldType: d.fieldType,
+    config: d.config,
+    isRequired: d.isRequired,
+  }))
   const resolvedForm = openProject || creating
     ? await resolveFormLayout({
         orgId,
         userId: authz.user.id,
         recordType: 'project',
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: await loadFieldDefs('projects'),
+        headerDefs: projectFieldDefs,
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),
       })
@@ -169,7 +180,7 @@ export async function loadProjects(
                   foremanName: null,
                   managerName: null,
                   tasks: [],
-                  customFieldDefs: [],
+                  customFieldDefs: createFieldDefs,
                 }
               : openProject) as unknown as ProjectDrawerProps['payload'],
             parties,

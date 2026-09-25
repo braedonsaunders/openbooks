@@ -199,7 +199,10 @@ export async function POST(request: Request) {
 
   const defs = await loadFieldDefs('projects')
   const customResult = validateCustomValues(defs, asRecord(body.custom))
-  if (!customResult.ok) return bad('invalid_custom_fields', 'custom')
+  // The validator names the field in each error ("Label is required"): echo
+  // the first one so a required custom field names itself instead of
+  // refusing as an anonymous invalid_custom_fields.
+  if (!customResult.ok) return bad(Object.values(customResult.errors)[0] ?? 'invalid_custom_fields', 'custom')
   // Reference custom values are uuid-SHAPED at this point but nothing proves
   // the referenced row belongs to the caller: refuse foreign or dangling ids
   // instead of persisting a cross-tenant pointer.
