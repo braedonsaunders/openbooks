@@ -99,7 +99,7 @@ test('AL and OR state withholding use computed current-period FIT, not stale cer
 
   const neBases = reduceTaxBases([{ kind: 'deduction', amount: '300.0000', taxTreatment: 'pension_f' }, { kind: 'deduction', amount: '200.0000', taxTreatment: 'union_dues' }], { income: '805.0000', nonPeriodic: '0.0000', pensionable: '805.0000', insurable: '805.0000', 'state:US:NE:income': '805.0000', 'state:US:NE:nonPeriodic': '0.0000' }, PAYROLL_COUNTRY_PACKS.US!.deductionTreatments)
   // Circular EN §8: 1.5% of $505 state wages; dues are post-tax.
-  assert.equal(computeUsWithholding({ ...adapterInput('NE', 'us_ne_w4n', certificate('us_ne_w4n', { filing_status: 'single', allowances: '100' })), periodsPerYear: 52, wages: '805.0000', taxableWageBases: neBases, employerEmployeeCount: 25 })?.tax, '7.5800')
+  assert.equal(computeUsWithholding({ ...adapterInput('NE', 'us_ne_w4n', certificate('us_ne_w4n', { filing_status: 'single', allowances: '99' })), periodsPerYear: 52, wages: '805.0000', taxableWageBases: neBases, employerEmployeeCount: 25 })?.tax, '7.5800')
 })
 
 function subRegionLevy(
@@ -388,6 +388,7 @@ test('North Carolina separate supplementals use 4.09% only with regular withhold
   const input = {
     levy: levy('NC', 'us_nc_nc4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
+    taxableWageBases: { income: '0.0000', nonPeriodic: '500.0000', pensionable: '0.0000', insurable: '0.0000', 'state:US:NC:income': '0.0000', 'state:US:NC:nonPeriodic': '500.0000' },
     supplementalPaymentTiming: 'separate' as const, federalIncomeTax: '0.00',
     certificateFor: (key: string) => key === 'us_nc_nc4' ? certificate('us_nc_nc4', {}) : null, tenantRates: () => undefined,
   }
