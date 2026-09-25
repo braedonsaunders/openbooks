@@ -210,7 +210,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-goal-dialog': { props: ['closeHref', 'dialog'] },
   'hrm-leave-balances': { props: ['balances', 'empty', 'timeKindLabel', 'unlimitedLabel', 'valueKindLabel'] },
   'hrm-leave-calendar': { props: ['days', 'empty'] },
-  'hrm-leave-dialog': { props: ['canWithdrawCancel', 'closeHref', 'requestId'] },
+  'hrm-leave-dialog': { props: ['canWithdrawCancel', 'closeHref', 'recordOpen', 'requestId'] },
   'hrm-leave-panel': { props: ['empty', 'items', 'pendingCount', 'pendingLabel', 'queueHref', 'viewAllLabel'] },
   'hrm-me-document-actions': { props: ['acknowledgeLabel', 'acknowledgeable', 'actionFailed', 'documentId', 'signLabel', 'signNameLabel', 'signable'] },
   'hrm-me-export-dialog': { props: ['actionFailed', 'partyId', 'requestExportDone', 'requestExportLabel'] },

@@ -14,7 +14,8 @@ import { ActionError } from '@braedonsaunders/appkit-errors'
  * Leave filing and detail drawer. Opens blank for filing (employment, type,
  * range, hours, reason) — or, for actors holding manageable employments, in
  * a manager on-behalf mode naming the target employee and posting
- * onBehalf — or on a request id for detail: the request with its
+ * onBehalf — or in record mode for the manager absence action, posting the
+ * absence route instead of a draft — or on a request id for detail: the request with its
  * TIME balance and, where a payroll bank exists, its VALUE balances — each
  * labelled with its unit so the two are never conflated.
  *
@@ -49,11 +50,18 @@ interface Detail {
 export function LeaveDrawer({
   requestId,
   canWithdrawCancel,
+  record = false,
   onClose,
 }: {
   requestId: string | null
   /** Holds hrm.leave.request (mirrors the withdraw/cancel route guard). */
   canWithdrawCancel: boolean
+  /**
+   * Absence-recording mode for the manager ?record=1 action: the drawer
+   * renders the record form, which posts the absence route instead of
+   * filing a draft request. Only meaningful without a request id.
+   */
+  record?: boolean
   onClose: () => void
 }) {
   const t = useTranslations('hrm')
@@ -121,7 +129,7 @@ export function LeaveDrawer({
   }
 
   return (
-    <Drawer open onClose={() => void filingClose.close()} size="md" title={requestId ? t('leave.drawerTitle') : t('leave.fileTitle')}>
+    <Drawer open onClose={() => void filingClose.close()} size="md" title={requestId ? t('leave.drawerTitle') : record ? t('leave.recordTitle') : t('leave.fileTitle')}>
       {loading ? <p className="text-sm text-slate-500">{t('leave.detailLoading')}</p> : null}
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -241,12 +249,21 @@ export function LeaveDrawer({
         </div>
       ) : null}
       {!loading && !requestId ? (
-        <LeaveFileForm
-          onCancel={filingClose.close}
-          onSaved={onClose}
-          onDirtyChange={setFilingDirty}
-          onBusyChange={setFilingBusy}
-        />
+        record ? (
+          <LeaveRecordForm
+            onCancel={filingClose.close}
+            onSaved={onClose}
+            onDirtyChange={setFilingDirty}
+            onBusyChange={setFilingBusy}
+          />
+        ) : (
+          <LeaveFileForm
+            onCancel={filingClose.close}
+            onSaved={onClose}
+            onDirtyChange={setFilingDirty}
+            onBusyChange={setFilingBusy}
+          />
+        )
       ) : null}
     </Drawer>
   )
@@ -597,6 +614,209 @@ function LeaveFileForm({
         </Button>
         <Button size="sm" disabled={saving} onClick={() => void save()}>
           {t('leave.fileButton')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Absence-recording form for the manager ?record=1 action. Posts the
+ * absence route (employment, type, single day, hours) — never a draft
+ * request: a recorded absence is fact, not a proposal, so there is no
+ * draft, no evidence step, and no submit. Server refusals render with
+ * their message intact; transport failures fall back to the generic
+ * action copy through the shared action path.
+ */
+function LeaveRecordForm({
+  onCancel,
+  onSaved,
+  onDirtyChange,
+  onBusyChange,
+}: {
+  onCancel: () => void | Promise<void>
+  onSaved: () => void
+  onDirtyChange: (dirty: boolean) => void
+  onBusyChange: (busy: boolean) => void
+}) {
+  const t = useTranslations('hrm')
+  const tCommon = useTranslations('common')
+  const router = useRouter()
+  const [employmentId, setEmploymentId] = useState('')
+  const [leaveTypeId, setLeaveTypeId] = useState('')
+  const [typeOptions, setTypeOptions] = useState<{ value: string; label: string }[]>([])
+  const [employmentOptions, setEmploymentOptions] = useState<{ value: string; label: string }[]>([])
+  const [employmentsLoaded, setEmploymentsLoaded] = useState(false)
+  const [onDate, setOnDate] = useState('')
+  const [hours, setHours] = useState('')
+  const [status, setStatus] = useState<string | undefined>(undefined)
+  const { busy: saving, execute } = useAppAction()
+
+  // Leave-type options ride the HRM options route with its refusals; the
+  // form submits ids, never labels.
+  useEffect(() => {
+    let live = true
+    fetch('/api/hrm/options?source=leave-types&limit=200', { method: 'GET' })
+      .then(async (res) => {
+        if (!live) return
+        if (!res.ok) {
+          setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { id?: unknown; label?: unknown }[]
+        }
+        if (!live) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        setTypeOptions(
+          page.flatMap((row) =>
+            typeof row.id === 'string' && typeof row.label === 'string'
+              ? [{ value: row.id, label: row.label }]
+              : [],
+          ),
+        )
+      })
+      .catch(() => {
+        if (live) setStatus(t('leave.actionFailed'))
+      })
+    return () => {
+      live = false
+    }
+  }, [t])
+
+  // Recording is manager-held (the route requires hrm.leave.manage), so
+  // the employee picker lists the manageable employments behind that
+  // grant. A refusal surfaces with its message intact — it names the
+  // missing grant, which is the remedy.
+  useEffect(() => {
+    let live = true
+    fetch('/api/hrm/options?source=leave-filing-employments&limit=100', { method: 'GET' })
+      .then(async (res) => {
+        if (!live) return
+        if (!res.ok) {
+          setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
+          setEmploymentsLoaded(true)
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { id?: unknown; label?: unknown }[]
+        }
+        if (!live) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        setEmploymentOptions(
+          page.flatMap((row) =>
+            typeof row.id === 'string' && typeof row.label === 'string'
+              ? [{ value: row.id, label: row.label }]
+              : [],
+          ),
+        )
+        setEmploymentsLoaded(true)
+      })
+      .catch(() => {
+        if (live) {
+          setStatus(t('leave.actionFailed'))
+          setEmploymentsLoaded(true)
+        }
+      })
+    return () => {
+      live = false
+    }
+  }, [t])
+
+  const save = async (): Promise<void> => {
+    if (saving) return
+    setStatus(undefined)
+    onBusyChange(true)
+    try {
+      await execute(
+        async () => {
+          try {
+            const res = await fetch('/api/hrm/leave-absences', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ employmentId, leaveTypeId, onDate, hours }),
+            })
+            if (!res.ok) {
+              setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
+              return { ok: true as const, status: res.status, data: null }
+            }
+            router.refresh()
+            onDirtyChange(false)
+            onSaved()
+            return { ok: true as const, status: 200, data: null }
+          } catch {
+            return {
+              ok: false as const,
+              error: new ActionError({ kind: 'transport', serverMessage: t('leave.actionFailed') }),
+            }
+          }
+        },
+        {
+          fallbackMessage: t('leave.actionFailed'),
+          onRefused: (error) => setStatus(error.displayMessage(t('leave.actionFailed'))),
+        },
+      )
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
+  function markDirty<T>(update: (value: T) => void, value: T) {
+    update(value)
+    onDirtyChange(true)
+  }
+
+  return (
+    <div className="space-y-3">
+      {employmentsLoaded && employmentOptions.length === 0 ? (
+        <p className="text-sm text-slate-500">{t('leave.onBehalfEmploymentRequired')}</p>
+      ) : (
+        <div>
+          <Label htmlFor="leave-record-employment">{t('leave.onBehalfEmployeeLabel')}</Label>
+          <Select
+            id="leave-record-employment"
+            value={employmentId}
+            onChange={(event) => markDirty(setEmploymentId, event.target.value)}
+          >
+            <option value="">{t('leave.onBehalfEmployeePlaceholder')}</option>
+            {employmentOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+      <div>
+        <Label htmlFor="leave-record-type">{t('leave.fileTypeLabel')}</Label>
+        <Select id="leave-record-type" value={leaveTypeId} onChange={(event) => markDirty(setLeaveTypeId, event.target.value)}>
+          <option value="">{t('leave.fileTypePlaceholder')}</option>
+          {typeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="leave-record-date">{t('leave.calendarFromLabel')}</Label>
+        <Input id="leave-record-date" type="date" value={onDate} onChange={(event) => markDirty(setOnDate, event.target.value)} />
+      </div>
+      <div>
+        <Label htmlFor="leave-record-hours">{t('leave.fileHoursLabel')}</Label>
+        <Input id="leave-record-hours" inputMode="decimal" value={hours} onChange={(event) => markDirty(setHours, event.target.value)} placeholder="8" />
+      </div>
+      {status ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {status}
+        </p>
+      ) : null}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => void onCancel()}>
+          {tCommon('actions.cancel')}
+        </Button>
+        <Button size="sm" disabled={saving} onClick={() => void save()}>
+          {t('leave.recordButton')}
         </Button>
       </div>
     </div>
