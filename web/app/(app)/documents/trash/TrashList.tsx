@@ -45,6 +45,8 @@ export function TrashList({ items }: { items: TrashRow[] }) {
       } else {
         toast.error(t('restoreFailed'))
       }
+    } catch {
+      toast.error(t('restoreFailed'))
     } finally {
       setBusy(null)
     }
@@ -67,6 +69,8 @@ export function TrashList({ items }: { items: TrashRow[] }) {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
         toast.error(err.error ?? t('purgeFailed'))
       }
+    } catch {
+      toast.error(t('purgeFailed'))
     } finally {
       setBusy(null)
     }
