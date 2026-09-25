@@ -1,6 +1,7 @@
 import 'server-only'
 
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { BookOpen } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { TrueCostView } from '../../../analytics/true-cost/TrueCostView'
@@ -9,7 +10,7 @@ import { OverheadApplication, type ApplicationRow } from './OverheadApplication'
 import { OverheadLifecycle, type DriftRow } from './OverheadLifecycle'
 import { RatesTab } from './RatesTab'
 import type { TrueCostData } from '../../../../../lib/analytics/true-cost-data'
-import { getAuthz } from '../../../../../lib/authz'
+import { getAuthz, guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
@@ -25,6 +26,13 @@ import {
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { sql } from 'drizzle-orm'
 import type { OverheadPolicy, OverheadStep } from './view'
+
+async function getRootScopeAuthz() {
+  const authz = await getAuthz()
+  if (!authz) return null
+  if (await guardRootSubsidiaryScope(authz)) notFound()
+  return authz
+}
 
 /**
  * Shared chrome and tab-body slots for the Overhead Model setup workspace.
@@ -184,7 +192,7 @@ export async function OverheadRatesTabSlot({
 }: {
   sp: Record<string, string | string[] | undefined>
 }) {
-  const authz = await getAuthz()
+  const authz = await getRootScopeAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
   const rowParam = typeof sp.row === 'string' ? sp.row : null
@@ -193,7 +201,7 @@ export async function OverheadRatesTabSlot({
 
 /** Lifecycle tab slot: mode/cadence switch plus the drift table. */
 export async function OverheadLifecycleTabSlot() {
-  const authz = await getAuthz()
+  const authz = await getRootScopeAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
   const today = await businessToday(orgId)
@@ -219,7 +227,7 @@ export async function OverheadLifecycleTabSlot() {
 
 /** Application tab slot: mode switch, ledger postings, unapplied prompt. */
 export async function OverheadApplicationTabSlot() {
-  const authz = await getAuthz()
+  const authz = await getRootScopeAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
   const [application, applications, unapplied, accountsRes, systemRule] = await Promise.all([
