@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema } from "../platform/db.ts";
+import { lockScopeRow } from "../organization/subsidiary-scope.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 
@@ -154,77 +155,118 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
         `bank-detail approval release is engine-enforced; approve through an approval gate`,
       );
     }
-    const row = await loadRow(subjectId, ctx.orgId);
-    if (!row) throw new Error(`bank account ${subjectId} not found`);
     const legalFrom = STATUS_TRANSITIONS[to];
     if (!legalFrom) throw new Error(`unknown bank-detail status "${to}"`);
-    if (row.approvalStatus === to) return; // idempotent no-op (replays)
-    if (!legalFrom.includes(row.approvalStatus)) {
-      throw new Error(`illegal bank-detail transition ${row.approvalStatus} → ${to}`);
-    }
-    await db
-      .update(schema.partyBankAccounts)
-      .set({
-        approvalStatus: to as BankRow["approvalStatus"],
-        approvedAt: null,
-        approvedBy: null,
-        isActive: false,
-        updatedAt: new Date(),
-        updatedBy: ctx.userId ?? null,
-      })
-      .where(
-        and(
-          eq(schema.partyBankAccounts.id, subjectId),
-          eq(schema.partyBankAccounts.orgId, ctx.orgId),
-        ),
-      );
+    await db.transaction(async (tx) => {
+      // Pre-read the party link so locks order party-then-bank (the submit
+      // route's order); the link is re-verified once both locks are held.
+      const link = (await tx.execute<{ partyId: string }>(sql`
+        select party_id as "partyId" from party_bank_accounts
+         where id = ${subjectId} and org_id = ${ctx.orgId}
+      `)).rows[0];
+      if (!link) throw new Error(`bank account ${subjectId} not found`);
+      // Locked subsidiary recheck (I1-refix-108): the route's precheck can
+      // pass while a concurrent party rehome lands before this write
+      // commits. Under the party lock the verdict sees the latest
+      // subsidiary — never the precheck's stale one — and the rehome
+      // blocks until this transaction commits. Answers exactly like a
+      // missing record. System dispatches carry no request scope
+      // (undefined) and keep their legacy behavior.
+      if (ctx.allowedSubsidiaryIds !== undefined) {
+        await lockScopeRow(tx, ctx.orgId, "party", link.partyId, ctx.allowedSubsidiaryIds, "update", {
+          orgWideNull: true,
+        });
+      }
+      const row = (await tx.execute<{
+        partyId: string;
+        approvalStatus: string;
+      }>(sql`
+        select party_id as "partyId", approval_status as "approvalStatus"
+          from party_bank_accounts
+         where id = ${subjectId} and org_id = ${ctx.orgId}
+         for update
+      `)).rows[0];
+      if (!row) throw new Error(`bank account ${subjectId} not found`);
+      if (row.partyId !== link.partyId) {
+        throw new Error(`bank account ${subjectId} changed while its flow ran — retry the action`);
+      }
+      if (row.approvalStatus === to) return; // idempotent no-op (replays)
+      if (!legalFrom.includes(row.approvalStatus)) {
+        throw new Error(`illegal bank-detail transition ${row.approvalStatus} → ${to}`);
+      }
+      const written = (await tx.execute(sql`
+        update party_bank_accounts
+           set approval_status = ${to}, approved_at = null, approved_by = null,
+               is_active = false, updated_at = now(), updated_by = ${ctx.userId ?? null}
+         where id = ${subjectId} and org_id = ${ctx.orgId}
+      `)).rowCount ?? 0;
+      if (written !== 1) {
+        throw new Error(`bank account ${subjectId} changed while its flow ran — retry the action`);
+      }
+    });
   },
 
   async releaseApproval(subjectId, outcome, ctx): Promise<void> {
-    const row = await loadRow(subjectId, ctx.orgId);
-    if (!row || row.retiredAt || row.approvalStatus !== "pending") return;
     const today = await businessToday(ctx.orgId);
-    await db
-      .update(schema.partyBankAccounts)
-      .set(
-        outcome === "approved"
-          ? {
-              approvalStatus: "approved",
-              approvedAt: today,
-              approvedBy: ctx.userId ?? null,
-              isActive: true,
-              updatedAt: new Date(),
-              updatedBy: ctx.userId ?? null,
-            }
-          : {
-              approvalStatus: "rejected",
-              approvedAt: null,
-              approvedBy: null,
-              isActive: false,
-              updatedAt: new Date(),
-              updatedBy: ctx.userId ?? null,
-            },
-      )
-      .where(
-        and(
-          eq(schema.partyBankAccounts.id, subjectId),
-          eq(schema.partyBankAccounts.orgId, ctx.orgId),
-        ),
-      );
-    await db.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values (
-        ${ctx.orgId}, 'party_bank_accounts', ${subjectId},
-        ${outcome === "approved" ? "approve" : "reject"},
-        ${JSON.stringify({
-          mode: "bank_detail_approval",
-          outcome,
-          submittedBy: row.submittedBy ?? row.createdBy,
-        })}::jsonb,
-        ${ctx.userId ?? null}, 'flows'
-      )
-    `);
+    await db.transaction(async (tx) => {
+      const link = (await tx.execute<{ partyId: string }>(sql`
+        select party_id as "partyId" from party_bank_accounts
+         where id = ${subjectId} and org_id = ${ctx.orgId}
+      `)).rows[0];
+      if (!link) return;
+      // Same locked subsidiary recheck as changeStatus: an approval that
+      // was in scope when its gate was decided must not release onto a
+      // party rehomed out of scope before the release commits.
+      if (ctx.allowedSubsidiaryIds !== undefined) {
+        await lockScopeRow(tx, ctx.orgId, "party", link.partyId, ctx.allowedSubsidiaryIds, "update", {
+          orgWideNull: true,
+        });
+      }
+      const row = (await tx.execute<{
+        partyId: string;
+        approvalStatus: string;
+        retiredAt: string | null;
+        submittedBy: string | null;
+        createdBy: string | null;
+      }>(sql`
+        select party_id as "partyId", approval_status as "approvalStatus",
+               retired_at as "retiredAt", submitted_by as "submittedBy",
+               created_by as "createdBy"
+          from party_bank_accounts
+         where id = ${subjectId} and org_id = ${ctx.orgId}
+         for update
+      `)).rows[0];
+      if (!row || row.retiredAt || row.approvalStatus !== "pending") return;
+      if (row.partyId !== link.partyId) {
+        throw new Error(`bank account ${subjectId} changed while its approval released — retry the action`);
+      }
+      const written = (await tx.execute(sql`
+        update party_bank_accounts
+           set approval_status = ${outcome === "approved" ? "approved" : "rejected"},
+               approved_at = ${outcome === "approved" ? today : null},
+               approved_by = ${outcome === "approved" ? (ctx.userId ?? null) : null},
+               is_active = ${outcome === "approved"},
+               updated_at = now(), updated_by = ${ctx.userId ?? null}
+         where id = ${subjectId} and org_id = ${ctx.orgId}
+      `)).rowCount ?? 0;
+      if (written !== 1) {
+        throw new Error(`bank account ${subjectId} changed while its approval released — retry the action`);
+      }
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (
+          ${ctx.orgId}, 'party_bank_accounts', ${subjectId},
+          ${outcome === "approved" ? "approve" : "reject"},
+          ${JSON.stringify({
+            mode: "bank_detail_approval",
+            outcome,
+            submittedBy: row.submittedBy ?? row.createdBy,
+          })}::jsonb,
+          ${ctx.userId ?? null}, 'flows'
+        )
+      `);
+    });
   },
 
   async setField(): Promise<void> {
