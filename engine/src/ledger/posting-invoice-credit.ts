@@ -1,4 +1,5 @@
-import { cmp, normalizeMoney } from "../money/money.ts";
+import { cmp } from "../money/money.ts";
+import { parseMoney } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import {
   findMixedCurrencyExposure,
@@ -65,7 +66,7 @@ export async function assertCustomerInvoiceCredit(
       `customer credit limit has no currency; set a currency on the customer section of the party record before posting invoice ${invoice.documentNumber}`,
     );
   }
-  const limit = normalizeMoney(role.credit_limit);
+  const limit = parseMoney(role.credit_limit);
   if (cmp(limit, "0") < 0) {
     throw new PostingError(
       `customer credit limit cannot be negative; correct the credit limit on the customer section of the party record before posting invoice ${invoice.documentNumber}`,
@@ -85,9 +86,10 @@ export async function assertCustomerInvoiceCredit(
   }
 
   const exposure = await measureCustomerExposure(tx, invoice.orgId, invoice.partyId, role.currency);
-  const openOrderExposure = normalizeMoney(exposure.openOrderExposure);
-  const unpaidInvoiceExposure = normalizeMoney(exposure.unpaidInvoiceExposure);
-  const invoiceTotal = normalizeMoney(invoice.total);
+  // Parse once at the intake: identical values, named refusal on garbage.
+  const openOrderExposure = parseMoney(exposure.openOrderExposure);
+  const unpaidInvoiceExposure = parseMoney(exposure.unpaidInvoiceExposure);
+  const invoiceTotal = parseMoney(invoice.total);
   const relief = await measureLinkedOrderRelief(
     tx,
     invoice.orgId,
@@ -107,7 +109,7 @@ export async function assertCustomerInvoiceCredit(
     // approved sales_order_credit_override. A direct invoice has no override
     // path at posting — the refusal must say so, not imply one exists.
     const overridePath =
-      cmp(normalizeMoney(relief), "0") > 0
+      cmp(parseMoney(relief), "0") > 0
         ? ", or bill through a sales order that carries an approved sales_order_credit_override"
         : " — a direct invoice has no override path at posting";
     throw new PostingError(
