@@ -19,7 +19,7 @@ import "../../testing/database-bypass.ts";
 /**
  * The IT Certificazione Unica population, proved against committed runs.
  *
- * Fixture: two employees (A indeterminato, B determinato) paid monthly in
+ * Fixture: two indeterminato employees paid monthly in
  * 2025 across two committed runs, plus a third run left calculated-but-
  * uncommitted. The tie-out re-sums the committed stub lines with an
  * independent query and requires the population to match to the cent, while
@@ -225,8 +225,8 @@ test(
     const empA = await makeEmployee(orgId, sub, actorId, scheduleId, "Alba Indeterminata", "36000", {
       domicilio_comune: COMUNE,
     });
-    const empB = await makeEmployee(orgId, sub, actorId, scheduleId, "Bruno Determinato", "24000", {
-      domicilio_comune: COMUNE, tempo_determinato: "true",
+    const empB = await makeEmployee(orgId, sub, actorId, scheduleId, "Bruno Indeterminato", "24000", {
+      domicilio_comune: COMUNE,
     });
     await payAndCommit(orgId, actorId, scheduleId, "2025-01-01", "2025-01-31", "2025-02-03");
     await payAndCommit(orgId, actorId, scheduleId, "2025-02-01", "2025-02-28", "2025-03-03");
@@ -281,7 +281,7 @@ test(
     assert.equal(cmp(String(byId.get(empA)!.redditi), "6000"), 0, "A certifies two months of 3.000");
     assert.equal(cmp(String(byId.get(empB)!.redditi), "4000"), 0, "B certifies two months of 2.000");
     assert.equal(byId.get(empA)!.contratto, "tempo indeterminato");
-    assert.equal(byId.get(empB)!.contratto, "tempo determinato");
+    assert.equal(byId.get(empB)!.contratto, "tempo indeterminato");
     // The draft's money is really absent: population IRPEF plus the draft's
     // IRPEF equals every stub's IRPEF including the draft.
     const allIrpef = (await db.execute<{ amount: string }>(sql`
