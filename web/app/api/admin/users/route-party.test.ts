@@ -466,7 +466,7 @@ test('valid link audits exact before/after, reason, attestation, and kind/role s
   const response = await post(validLink({ partyId: PARTY_B, expectedPartyId: null, reason: 'Link Beta as approver' }))
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { ok: true, userId: TARGET_ID, partyId: PARTY_B.toLowerCase() })
-  assert.equal(state.currentPartyId, PARTY_B.toLowerCase())
+  assert.ok(state.currentPartyId === PARTY_B.toLowerCase() && state.executed.findIndex((query) => query.includes('for share')) < state.executed.findIndex((query) => query.includes('select id, party_id from users')))
   const audit = state.committed.find((t) => t.includes('insert into audit_log'))
   assert.ok(audit, 'link audit committed')
   // Exact before/after pair, reason, attestation, and signals (kind=company

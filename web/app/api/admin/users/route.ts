@@ -499,6 +499,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "attestation required" }, { status: 400 });
       }
       return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        // Lock the party before reading its subsidiary. The share lock blocks
+        // a concurrent rehome until the user link has committed.
+        if (partyId !== null) {
+          await db.execute(sql`
+            select id from parties where id = ${partyId} and org_id = ${actor.orgId} for share`);
+        }
         // Serialize link decisions on the target user row. Self-service
         // statement readers take FOR SHARE on this row before locking their
         // employment, so unlink waits for in-flight reads and later readers
