@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/src/money/money.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
@@ -794,25 +795,24 @@ const agingTool: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 30, 100);
     const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
     const r = await agingByParty(a.side, asOf, reportDims(authz), authz.user.orgId);
-    const sliceOf = (row: { current: string; b1: string; b2: string; b3: string; b4: string; total: string }): number => {
-      const n = (v: string) => Number(v);
+    const sliceOf = (row: { current: string; b1: string; b2: string; b3: string; b4: string; total: string }): string => {
       switch (a.bucket) {
-        case "current": return n(row.current);
-        case "days1to30": return n(row.b1);
-        case "days31to60": return n(row.b2);
-        case "days61to90": return n(row.b3);
-        case "over90": return n(row.b4);
-        case "over30": return n(row.b2) + n(row.b3) + n(row.b4);
-        case "over60": return n(row.b3) + n(row.b4);
-        case "overdue": return n(row.b1) + n(row.b2) + n(row.b3) + n(row.b4);
-        default: return n(row.total);
+        case "current": return row.current;
+        case "days1to30": return row.b1;
+        case "days31to60": return row.b2;
+        case "days61to90": return row.b3;
+        case "over90": return row.b4;
+        case "over30": return addMoney(addMoney(row.b2, row.b3), row.b4);
+        case "over60": return addMoney(row.b3, row.b4);
+        case "overdue": return addMoney(addMoney(row.b1, row.b2), addMoney(row.b3, row.b4));
+        default: return row.total;
       }
     };
     const ranked = a.bucket
-      ? r.rows.filter((row) => sliceOf(row) !== 0).sort((x, y) => Math.abs(sliceOf(y)) - Math.abs(sliceOf(x)))
+      ? r.rows.filter((row) => compareMoney(sliceOf(row), "0") !== 0).sort((x, y) => compareMoney(absMoney(sliceOf(y)), absMoney(sliceOf(x))))
       : r.rows;
     const bucketTotal = a.bucket
-      ? ranked.reduce((acc, row) => acc + sliceOf(row), 0)
+      ? ranked.reduce((acc, row) => addMoney(acc, sliceOf(row)), "0.0000")
       : null;
     return {
       ok: true,
@@ -820,7 +820,7 @@ const agingTool: AssistantToolDef = {
         side: a.side,
         asOf: r.asOf,
         totals: r.totals,
-        ...(a.bucket ? { bucket: a.bucket, bucketTotal: bucketTotal!.toFixed(4), partiesInBucket: ranked.length } : {}),
+        ...(a.bucket ? { bucket: a.bucket, bucketTotal: bucketTotal!, partiesInBucket: ranked.length } : {}),
         parties: r.rows.length,
         returned: Math.min(ranked.length, limit),
         truncated: ranked.length > limit,
@@ -832,7 +832,7 @@ const agingTool: AssistantToolDef = {
           days61to90: row.b3,
           over90: row.b4,
           total: row.total,
-          ...(a.bucket ? { bucketAmount: sliceOf(row).toFixed(4) } : {}),
+          ...(a.bucket ? { bucketAmount: sliceOf(row) } : {}),
         })),
         href: `/reports/aging?side=${a.side}&asOf=${asOf}`,
       },
