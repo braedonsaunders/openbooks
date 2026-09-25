@@ -185,13 +185,8 @@ test(
       const larry = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Larry Leaver", "ENG");
       await fileCertificate(org.orgId, amy, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
       await fileCertificate(org.orgId, hamish, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
-      // Outside automatic-enrolment age: no pension contributions price here.
-      for (const employee of [amy, hamish, larry]) {
-        await fileCertificate(org.orgId, employee, actorId, "gb_workplace_pension", {
-          age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder",
-          enrolment_status: "not_enrolled",
-        });
-      }
+      // Outside automatic enrolment: no pension contributions price here (the
+      // duties assessment below attests each worker non-eligible, not enrolled).
       await fileCertificate(org.orgId, larry, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
       await fileCertificate(org.orgId, amy, actorId, "gb_tax_code_notice", { tax_code: "1257L" });
       await fileCertificate(org.orgId, amy, actorId, "gb_starter_checklist", {
