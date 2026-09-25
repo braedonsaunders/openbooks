@@ -80,12 +80,18 @@ test("a stale unproven refreshing claim returns to ready for re-queue", { skip: 
 
     assert.equal(await releaseStaleSandboxClaims(async (jobId) =>
       jobId.includes(stale.sandboxId) ? "failed" : null,
-    ), 1);
+    ), 2);
     assert.deepEqual(await sandboxState(stale.sandboxId), {
       status: "ready",
       last_error: "refresh worker never started: stale scheduler claim released for re-queue",
     });
-    assert.equal((await sandboxState(proven.sandboxId)).status, "refreshing");
+    // I5-platform-65: a proof token without a live worker is an expired
+    // lease, not live work — the reaper fails it by name instead of leaving
+    // it refreshing forever. Only the fresh claim is preserved.
+    assert.deepEqual(await sandboxState(proven.sandboxId), {
+      status: "failed",
+      last_error: "refresh lease expired: worker stopped during clone verification; rerun refresh or delete this sandbox",
+    });
     assert.equal((await sandboxState(fresh.sandboxId)).status, "refreshing");
   } finally {
     for (const shellOrgId of shells) {
