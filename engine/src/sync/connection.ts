@@ -1,5 +1,4 @@
 import { sql } from "drizzle-orm";
-import { SUPPORTED_CURRENCIES } from "../fx/currencies.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
@@ -15,6 +14,8 @@ import { XeroSource } from "./xero-source.ts";
 import { DynamicsClient, type DynamicsApp, type DynamicsTokens } from "../connectors/dynamics.ts";
 import { DynamicsSource } from "./dynamics-source.ts";
 import { QbdSource } from "./qbd-source.ts";
+import { refusedConnectionBaseCurrency } from "./base-currency.ts";
+export { refusedConnectionBaseCurrency } from "./base-currency.ts";
 import { sealJson } from "../platform/secrets.ts";
 import type { MigrationSource } from "./source.ts";
 
@@ -91,7 +92,7 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
     configFields: [
       { key: "account", label: "Account ID", placeholder: "1234567", required: true, help: "Your NetSuite account id (the realm)." },
       { key: "host", label: "SuiteTalk host", placeholder: "https://<acct>.suitetalk.api.netsuite.com", required: true },
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
+      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies", required: true },
       {
         key: "accountingBookId",
         label: "Accounting book ID",
@@ -256,22 +257,6 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
 
 export function sourceType(source: string): SourceTypeManifest | undefined {
   return SOURCE_TYPES.find((s) => s.source === source);
-}
-
-const ISO_4217_CODES: ReadonlySet<string> = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
-
-/**
- * The single base-currency validator for connection configs. The save path
- * (validateSourceConfig) and the build path (buildSource) share it, so a
- * stored value the currency picker could never write is refused in both
- * places instead of silently defaulting downstream. Returns "missing" when
- * no code was supplied, "invalid" when it is not a usable ISO 4217 code, and
- * null when it is one (compared in registry form: trimmed, uppercase).
- */
-export function refusedConnectionBaseCurrency(value: unknown): "missing" | "invalid" | null {
-  const code = typeof value === "string" ? value.trim().toUpperCase() : "";
-  if (!code) return "missing";
-  return ISO_4217_CODES.has(code) ? null : "invalid";
 }
 
 export function validateSourceConfig(
@@ -516,6 +501,13 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
         `NetSuite connection is missing credentials: ${missing.join(", ")} — set them on the connection before syncing`,
       );
     }
+    const baseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (baseState === "missing") {
+      throw new Error("NetSuite connection needs its base currency — set it on the connection before syncing");
+    }
+    if (baseState === "invalid") {
+      throw new Error(`NetSuite connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
     const creds: NetSuiteCreds = {
       account: String(cfg.account),
       host: String(cfg.host),
@@ -525,7 +517,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       tokenSecret: String(secret?.tokenSecret),
     };
     return new NetSuiteSource(creds, {
-      baseCurrency: cfg.baseCurrency,
+      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
       bridge: {
         scriptId: cfg.bridgeScriptId || undefined,
         deploymentId: cfg.bridgeDeploymentId || undefined,

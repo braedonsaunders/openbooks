@@ -1,6 +1,7 @@
 import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../connectors/netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
 import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import { refusedConnectionBaseCurrency } from "./base-currency.ts";
 import { buildNativeFromNetSuite, netSuiteCurrencyIso, type NetSuiteTaxCodeFallbacks, type NsHeader, type NsLine } from "./netsuite-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -543,16 +544,23 @@ export class NetSuiteSource implements MigrationSource {
   constructor(
     creds: NetSuiteCreds,
     opts: {
-      baseCurrency?: string;
+      baseCurrency: string;
       bridge?: NetSuiteBridgeConfig;
       mappings?: unknown;
       accountingBookId?: string;
-    } = {},
+    },
   ) {
     this.bridge = new NetSuiteBridgeClient(creds, opts.bridge);
     this.expectedAccount = creds.account;
     this.mappings = parseNetSuiteMappings(opts.mappings);
-    this.baseCurrency = opts.baseCurrency ?? "CAD";
+    const baseCurrency = refusedConnectionBaseCurrency(opts.baseCurrency);
+    if (baseCurrency === "missing") {
+      throw new Error("NetSuite source needs its base currency — set it on the connection before syncing");
+    }
+    if (baseCurrency === "invalid") {
+      throw new Error(`NetSuite source has an invalid base currency ${JSON.stringify(opts.baseCurrency)} — set it on the connection before syncing`);
+    }
+    this.baseCurrency = opts.baseCurrency.trim().toUpperCase();
     const accountingBookId = String(opts.accountingBookId ?? "").trim();
     if (accountingBookId && !/^\d+$/.test(accountingBookId)) {
       throw new Error("NetSuite accounting book ID must be numeric");

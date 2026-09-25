@@ -19,7 +19,7 @@ test("NetSuite exposes posting account-month home-currency activity", async () =
     consumerSecret: "test",
     tokenKey: "test",
     tokenSecret: "test",
-  });
+  }, { baseCurrency: "USD" });
   (source as unknown as { q: (query: string) => Promise<Record<string, string>[]> }).q = async (query) => {
     if (/SELECT DISTINCT tal\.accountingbook AS id/i.test(query)) {
       return [{ id: "1" }];
@@ -57,7 +57,7 @@ test("NetSuite item import carries simple cost and base price", async () => {
     consumerSecret: "test",
     tokenKey: "test",
     tokenSecret: "test",
-  });
+  }, { baseCurrency: "USD" });
   (source as unknown as { q: (query: string) => Promise<Record<string, string>[]> }).q = async (query) => {
     if (/FROM pricing/i.test(query)) {
       assert.match(query, /quantity = 1/i);

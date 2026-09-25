@@ -14,7 +14,7 @@ const creds = {
 
 test("targeted NetSuite pulls include payment links touching either document side", async () => {
   const queries: string[] = [];
-  const source = new NetSuiteSource(creds);
+  const source = new NetSuiteSource(creds, { baseCurrency: "USD" });
   Object.defineProperty(source, "q", {
     value: async (query: string) => {
       queries.push(query);
