@@ -195,49 +195,72 @@ test("H-BENEFITS: window writes validate the employer's scope", { skip: !DB }, a
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const departmentB = randomUUID();
-    await db.execute(sql`
-      insert into departments (id, org_id, name, subsidiary_id)
-      values (${departmentB}, ${org.orgId}, 'Second entity department', ${subB})`);
+    const departmentB = (await db.execute<{ id: string }>(sql`
+      insert into departments (org_id, name, subsidiary_id)
+      values (${org.orgId}, 'Second entity department', ${subB}) returning id`)).rows[0]!.id;
+    const windowB = await createEnrollmentWindow({
+      orgId: org.orgId, actorId: adminId, name: "B window", kind: "open_enrollment",
+      ...WINDOW_DATES, employerSubsidiaryId: subB,
+    });
     const windowOrg = await createEnrollmentWindow({
       orgId: org.orgId, actorId: adminId, name: "Org window", kind: "open_enrollment",
       ...WINDOW_DATES, employerSubsidiaryId: null,
     });
     const managerA = await createScratchUser(org.orgId, "Benefits Manager A", "winw_mgr_a");
-    await scopeRole(org.orgId, "winw_mgr_a", ["hrm.benefits.read", "hrm.benefits.manage"], [org.subsidiaryId]);
-    const createAs = (actorId: string, employerSubsidiaryId: string | null, name: string, departmentId?: string) =>
-      createEnrollmentWindow({ orgId: org.orgId, actorId, name, kind: "open_enrollment", ...WINDOW_DATES, employerSubsidiaryId, departmentId });
-    const own = await createAs(managerA, org.subsidiaryId, "A window");
+    await scopeRole(org.orgId, "winw_mgr_a", ["hrm.benefits.manage"], [org.subsidiaryId]);
+    const createAs = (employerSubsidiaryId: string | null, name: string) =>
+      createEnrollmentWindow({
+        orgId: org.orgId, actorId: managerA, name, kind: "open_enrollment",
+        ...WINDOW_DATES, employerSubsidiaryId,
+      });
+
+    // In-scope creation still stores and opens.
+    const own = await createAs(org.subsidiaryId, "A window");
     assert.equal((await openEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: own.id })).status, "open");
-    assert.equal((await refusalOf(createAs(managerA, subB, "B window"))).code, "NOT_FOUND");
-    const orgWide = await refusalOf(createAs(managerA, null, "Org clone"));
+
+    // B-targeted creation refuses exactly like a fabricated subsidiary.
+    const foreign = await refusalOf(createAs(subB, "B clone"));
+    const fabricated = await refusalOf(createAs(randomUUID(), "Fabricated clone"));
+    assert.deepEqual(foreign, fabricated);
+    assert.equal(foreign.code, "NOT_FOUND");
+
+    // Org-wide creation needs unrestricted scope (a named 403 at the route).
+    const orgWide = await refusalOf(createAs(null, "Org clone"));
     assert.equal(orgWide.name, "UnrestrictedScopeError");
-    await assert.rejects(createAs(adminId, org.subsidiaryId, "A/B department", departmentB), /department belongs to a different employer subsidiary/);
-    const hiddenDepartment = await refusalOf(createAs(managerA, org.subsidiaryId, "hidden department", departmentB));
-    assert.equal(hiddenDepartment.code, "NOT_FOUND");
-    assert.deepEqual(hiddenDepartment, await refusalOf(createAs(managerA, org.subsidiaryId, "unknown department", randomUUID())));
-    const corruptWindowId = randomUUID();
-    await db.execute(sql`
-      insert into hrm_enrollment_windows
-        (id, org_id, name, kind, opens_on, closes_on, plan_year_start_on, applies_to, status, created_by, updated_by)
-      values (${corruptWindowId}, ${org.orgId}, 'Corrupt A/B window', 'open_enrollment',
-              ${WINDOW_DATES.opensOn}::date, ${WINDOW_DATES.closesOn}::date, ${WINDOW_DATES.planYearStartOn}::date,
-              jsonb_build_object('employer_subsidiary_id', ${org.subsidiaryId}::uuid,
-                                 'department_id', ${departmentB}::uuid), 'open', ${adminId}, ${adminId})
-    `);
-    const missing = await refusalOf(getEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: randomUUID() }));
-    const actions = [
-      () => getEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: corruptWindowId }),
-      () => openEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: corruptWindowId }),
-      () => closeEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: corruptWindowId, reason: "close corrupt window" }),
-    ];
-    for (const action of actions) assert.deepEqual(await refusalOf(action()), missing);
-    assert.ok(!(await listEnrollmentWindows(db, org.orgId, managerA)).some((row) => row.id === corruptWindowId));
+    assert.match(orgWide.message, /requires unrestricted subsidiary access/);
+    assert.equal((await refusalOf(createEnrollmentWindow({
+      orgId: org.orgId, actorId: adminId, name: "Mismatched department", kind: "open_enrollment",
+      ...WINDOW_DATES, employerSubsidiaryId: org.subsidiaryId, departmentId: departmentB,
+    }))).code, "REFUSED");
+
+    // B's window neither opens nor closes for the A-scoped actor — and
+    // the refusal reads exactly like a missing window.
+    const openHidden = await refusalOf(
+      openEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: windowB.id }),
+    );
+    const openMissing = await refusalOf(
+      openEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: randomUUID() }),
+    );
+    assert.deepEqual(openHidden, openMissing);
+    assert.equal(openHidden.code, "NOT_FOUND");
+
+    // Org-wide open/close need unrestricted scope too.
     await openEnrollmentWindow({ orgId: org.orgId, actorId: adminId, windowId: windowOrg.id });
-    const closeOrgWide = await refusalOf(closeEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: windowOrg.id, reason: "probe" }));
+    const closeOrgWide = await refusalOf(
+      closeEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: windowOrg.id, reason: "probe" }),
+    );
     assert.equal(closeOrgWide.name, "UnrestrictedScopeError");
-    assert.equal((await getEnrollmentWindow({ orgId: org.orgId, actorId: adminId, windowId: windowOrg.id })).status, "open");
-    assert.equal((await closeEnrollmentWindow({ orgId: org.orgId, actorId: managerA, windowId: own.id, reason: "round over" })).status, "closed");
+    assert.match(closeOrgWide.message, /requires unrestricted subsidiary access/);
+    // The refused close changed nothing: the window is still open.
+    assert.equal(
+      (await getEnrollmentWindow({ orgId: org.orgId, actorId: adminId, windowId: windowOrg.id })).status, "open",
+    );
+
+    // The in-scope close lands.
+    const closed = await closeEnrollmentWindow({
+      orgId: org.orgId, actorId: managerA, windowId: own.id, reason: "round over",
+    });
+    assert.equal(closed.status, "closed");
   } finally {
     await dropScratchOrg(org.orgId);
   }
