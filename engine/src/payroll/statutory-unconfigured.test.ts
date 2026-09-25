@@ -69,6 +69,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
       "IT/it_addizionale_comunale",
       "IT/it_addizionale_regionale",
       "JP/jp_health_rate",
+      "US/us_ca_ett",
       "US/us_mi_city",
       "US/us_oh_municipal",
       "US/us_pa_local_eit",
