@@ -86,23 +86,7 @@ const MATCHED_BY_KEYS = ['auto', 'manual', 'rule']
  * unreconciled posted GL lines (right). Click a bank line, tick 1..n GL lines,
  * Match. Sign-off unlocks only at a 0.00 difference.
  */
-export function ReconcileWorkspace({
-  basePath,
-  accountPath,
-  currentParams,
-  reconciliation,
-  difference,
-  canReconcile,
-  stmtRows,
-  stmtTotal,
-  stmtParams,
-  glRows,
-  glTotal,
-  glParams,
-  matchedRows,
-  matchedTotal,
-  mParams,
-}: {
+type ReconcileWorkspaceProps = {
   basePath: string
   accountPath: string
   currentParams: Search
@@ -118,7 +102,29 @@ export function ReconcileWorkspace({
   matchedRows: MatchedRow[]
   matchedTotal: number
   mParams: PaneParams
-}) {
+}
+
+export function ReconcileWorkspace(props: ReconcileWorkspaceProps) {
+  return <ReconcileWorkspaceForId key={props.reconciliation.id} {...props} />
+}
+
+function ReconcileWorkspaceForId({
+  basePath,
+  accountPath,
+  currentParams,
+  reconciliation,
+  difference,
+  canReconcile,
+  stmtRows,
+  stmtTotal,
+  stmtParams,
+  glRows,
+  glTotal,
+  glParams,
+  matchedRows,
+  matchedTotal,
+  mParams,
+}: ReconcileWorkspaceProps) {
   const { money: formatMoney } = useMoney(reconciliation.currency)
   const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 })
   const t = useTranslations('banking.workspace')
