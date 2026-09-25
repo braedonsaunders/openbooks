@@ -175,6 +175,12 @@
       "newExpense": "新建费用",
       "runReport": "运行报告"
     },
+    "hints": {
+      "create": "新建",
+      "open": "打开",
+      "navigate": "前往",
+      "app": "应用"
+    },
     "editor": {
       "title": "自定义快捷操作",
       "description": "添加、重新排序和移除快捷方式磁贴。",

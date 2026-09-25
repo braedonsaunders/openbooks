@@ -175,6 +175,12 @@
       "newExpense": "Neue Ausgabe",
       "runReport": "Bericht ausführen"
     },
+    "hints": {
+      "create": "Erstellen",
+      "open": "Öffnen",
+      "navigate": "Navigieren",
+      "app": "Anwendung"
+    },
     "editor": {
       "title": "Schnellaktionen anpassen",
       "description": "Verknüpfungskacheln hinzufügen, neu anordnen und entfernen.",

@@ -157,6 +157,18 @@ export async function listQuickActionOptions(): Promise<{
 
   const common: QuickActionOption[] = []
   const t = await getTranslations('dashboard')
+  const tNav = await getTranslations('nav')
+  // Module labels resolve exactly like the sidebar: the catalog translation
+  // wins, the English registry label is the fallback, and a missing message
+  // never throws out of the picker (MISSING_MESSAGE).
+  function navLabel(moduleKey: string, fallback: string): string {
+    try {
+      if (!tNav.has(`modules.${moduleKey}`)) return fallback
+      return tNav(`modules.${moduleKey}`)
+    } catch {
+      return fallback
+    }
+  }
 
   // One authoritative feature snapshot drives both curated create chips and
   // navigate options. hiddenNavModules is the SAME mapping the sidebar
@@ -176,7 +188,7 @@ export async function listQuickActionOptions(): Promise<{
       href: action.href,
       iconKey: action.iconKey,
       tone: action.tone,
-      hint: action.hint,
+      hint: t(`quickActions.hints.${action.hintKey}`),
     })
   }
 
@@ -185,11 +197,11 @@ export async function listQuickActionOptions(): Promise<{
     if (mod.requiredPermission && !can(authz, mod.requiredPermission)) continue
     if (hiddenModules.has(mod.key)) continue
     common.push({
-      label: mod.label,
+      label: navLabel(mod.key, mod.label),
       href: mod.href,
       iconKey: mod.iconKey,
       tone: 'slate',
-      hint: 'Navigate',
+      hint: t('quickActions.hints.navigate'),
     })
   }
 
@@ -202,7 +214,7 @@ export async function listQuickActionOptions(): Promise<{
         href: `/apps/${encodeURIComponent(app.key)}`,
         iconKey: app.iconKey,
         tone: 'teal',
-        hint: 'App',
+        hint: t('quickActions.hints.app'),
       })
     }
   }

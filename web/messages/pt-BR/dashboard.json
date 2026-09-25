@@ -175,6 +175,12 @@
       "newExpense": "Nova despesa",
       "runReport": "Executar relatório"
     },
+    "hints": {
+      "create": "Criar",
+      "open": "Abrir",
+      "navigate": "Navegar",
+      "app": "Aplicativo"
+    },
     "editor": {
       "title": "Personalizar ações rápidas",
       "description": "Adicione, reordene e remova blocos de atalho.",

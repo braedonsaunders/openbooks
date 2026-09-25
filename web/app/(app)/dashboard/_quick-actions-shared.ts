@@ -121,9 +121,11 @@ export function isExternalHref(href: string): boolean {
 
 export const MAX_QUICK_ACTIONS = 12
 
-type CuratedQuickAction = Omit<QuickActionOption, 'label' | 'id'> & {
+type CuratedQuickAction = Omit<QuickActionOption, 'label' | 'id' | 'hint'> & {
   id: string
   labelKey: string
+  /** Key into quickActions.hints, resolved in the request locale by the picker. */
+  hintKey: 'create' | 'open'
   requiredPermission: string | null
   /** Features switch — omit from the catalog and live chips when off. */
   requiredFeature?: string
@@ -136,7 +138,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     href: '/journal',
     iconKey: 'journal',
     tone: 'teal',
-    hint: 'Create',
+    hintKey: 'create',
     requiredPermission: 'gl.post',
   },
   {
@@ -145,7 +147,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     href: '/ap',
     iconKey: 'file',
     tone: 'orange',
-    hint: 'Create',
+    hintKey: 'create',
     requiredPermission: 'ap.create',
   },
   {
@@ -154,7 +156,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     href: '/ar',
     iconKey: 'file-check',
     tone: 'emerald',
-    hint: 'Create',
+    hintKey: 'create',
     requiredPermission: 'ar.create',
   },
   {
@@ -163,7 +165,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     href: '/payments',
     iconKey: 'receipt',
     tone: 'violet',
-    hint: 'Create',
+    hintKey: 'create',
     requiredPermission: 'ap.pay',
   },
   {
@@ -172,7 +174,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     href: '/expenses/reports',
     iconKey: 'clipboard',
     tone: 'amber',
-    hint: 'Create',
+    hintKey: 'create',
     requiredPermission: 'expenses.create',
     // Same switch as the shell create menu: the draft API 404s when Expenses is off.
     requiredFeature: 'expenses',
@@ -183,7 +185,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     href: '/reports',
     iconKey: 'chart',
     tone: 'slate',
-    hint: 'Open',
+    hintKey: 'open',
     requiredPermission: 'reports.read',
   },
 ]

@@ -175,6 +175,12 @@
       "newExpense": "Nouvelle dépense",
       "runReport": "Exécuter le rapport"
     },
+    "hints": {
+      "create": "Créer",
+      "open": "Ouvrir",
+      "navigate": "Naviguer",
+      "app": "Application"
+    },
     "editor": {
       "title": "Personnaliser les actions rapides",
       "description": "Ajouter, réorganiser et supprimer des raccourcis.",
