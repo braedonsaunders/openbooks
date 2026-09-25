@@ -24,6 +24,7 @@ export function CashTimeline({
   weeklyCap,
   restrictToSafe,
   deferredBeyondHorizon,
+  horizonWeeks,
   canPayRun = false,
   canCollectionRun = false,
 }: {
@@ -33,6 +34,9 @@ export function CashTimeline({
   weeklyCap: string
   restrictToSafe: boolean
   deferredBeyondHorizon: string
+  /** Weeks rendered: forwarded to the week flyout so its drill names the
+   * route's horizon instead of falling back to the 13-week default. */
+  horizonWeeks?: number
   /** Forwarded to the week flyout's run-builder action bar. */
   canPayRun?: boolean
   canCollectionRun?: boolean
@@ -95,7 +99,7 @@ export function CashTimeline({
         </tbody>
       </table>
 
-      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categories={categories} weekIndex={weeks.indexOf(flyout.week)} selectedSubsidiaryIds={selectedSubsidiaryIds} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
+      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categories={categories} weekIndex={weeks.indexOf(flyout.week)} horizonWeeks={horizonWeeks} selectedSubsidiaryIds={selectedSubsidiaryIds} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
     </>
   )
 }

@@ -149,6 +149,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
           initialSide="ap"
           categories={data.categories}
           weekIndex={drillWeek}
+          horizonWeeks={data.horizonWeeks}
           canPayRun={canPay}
           onClose={() => setDrillWeek(null)}
         />
