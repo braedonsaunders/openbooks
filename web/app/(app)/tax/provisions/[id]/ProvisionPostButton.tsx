@@ -15,18 +15,24 @@ export function ProvisionPostButton({ runId }: { runId: string }) {
   async function post() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/tax/provisions/${runId}/post`, { method: "POST" });
-    // The status is checked before the body is parsed: an empty or non-JSON
-    // error body (where `res.statusText` used to leak a bare "Conflict")
-    // falls back to a named message with the status, and a named refusal —
-    // which already carries its remedy — renders whole.
-    if (!res.ok) {
-      setError(await readApiErrorMessage(res, t("postFailed")));
+    try {
+      const res = await fetch(`/api/tax/provisions/${runId}/post`, { method: "POST" });
+      // The status is checked before the body is parsed: an empty or non-JSON
+      // error body (where `res.statusText` used to leak a bare "Conflict")
+      // falls back to a named message with the status, and a named refusal —
+      // which already carries its remedy — renders whole.
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, t("postFailed")));
+        return;
+      }
+      router.refresh();
+    } catch {
+      // A transport failure rejects the fetch: without this catch the
+      // button stays busy forever with no error shown.
+      setError(t("postFailed"));
+    } finally {
       setBusy(false);
-      return;
     }
-    setBusy(false);
-    router.refresh();
   }
 
   return (
