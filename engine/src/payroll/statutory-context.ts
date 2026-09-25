@@ -1,6 +1,6 @@
 import type { db } from "../platform/db.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
-import type { PayrollAssessedOn, PayrollTaxBaseKey } from "./packs.ts";
+import type { PayrollAssessedOn, PayrollTaxBases } from "./packs.ts";
 import type { StatutoryRateResolution } from "./statutory-rates.ts";
 import type { UsSupplementalWageAmount } from "./supplemental-wages.ts";
 
@@ -192,7 +192,7 @@ export interface PayrollStatutoryComputeContext {
    * never leak across packs. Engines that predate the channel keep reading
    * the raw legs plus `deduction()` and are untouched by it.
    */
-  reducedBases: Record<PayrollTaxBaseKey, string>;
+  reducedBases: PayrollTaxBases;
   deduction: (treatment: string) => string;
   pushStatutory: PushStatutoryFn;
   storedCertificates: readonly StoredCertificate[];

@@ -51,6 +51,7 @@ import {
 } from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
+import type { PayrollTaxBases } from "../packs.ts";
 import { D, mulRateCents, rate6, U } from "../canada/decimal.ts";
 import type { UsSupplementalWageAmount, UsSupplementalWageCategory } from "../supplemental-wages.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
@@ -354,6 +355,8 @@ export interface UsWithholdingInput {
   periodsPerYear: number;
   /** Periodic state-taxable wages. */
   wages: string;
+  /** Statutory wage bases declared by the resolved state's engine. */
+  taxableWageBases?: PayrollTaxBases;
   /** Federal W-4 Step 1(c) status for state methods that use the federal form. */
   federalFilingStatus?: "single" | "married_joint" | "head_household";
   /** Preserved status and allowances from an effective 2019-or-earlier federal W-4. */
@@ -421,6 +424,21 @@ export interface UsWithholdingResult {
  */
 export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingResult | null {
   const { levy } = input;
+  const regionalEngine = levy.level === "region" ? requireUsStateWithholding(levy.region) : null;
+  const declaredBase = (kind: "income" | "nonPeriodic", fallback: string): string => {
+    const key = regionalEngine?.taxableWageBases?.[kind];
+    if (!key) return fallback;
+    const value = input.taxableWageBases?.[key];
+    if (value == null) {
+      throw new UsWithholdingError(
+        `${regionalEngine?.label ?? levy.label} requires the declared ${kind} wage base ${key}; `
+        + "recalculate with the pack's deduction treatments before withholding — refused by name",
+      );
+    }
+    return value;
+  };
+  const stateWages = declaredBase("income", input.wages);
+  const stateSupplemental = declaredBase("nonPeriodic", input.supplemental ?? "0");
   const localTaxableWages = (() => {
     if (levy.level !== "sub_region") return undefined;
     if (levy.withholdingMethod) return undefined;
@@ -456,11 +474,11 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     ? totalResidentWages - waiverWages
     : 0n;
   const residentWages = waiverWages === 0n || totalResidentWages === 0n
-    ? input.wages
-    : fromUnits(roundDiv(toUnits(input.wages) * eligibleResidentWages, totalResidentWages));
+    ? stateWages
+    : fromUnits(roundDiv(toUnits(stateWages) * eligibleResidentWages, totalResidentWages));
   const residentSupplemental = waiverWages === 0n || totalResidentWages === 0n
-    ? fromUnits(supplemental)
-    : fromUnits(eligibleResidentWages - toUnits(residentWages));
+    ? stateSupplemental
+    : fromUnits(roundDiv(toUnits(stateSupplemental) * eligibleResidentWages, totalResidentWages));
   const waiverOutcome = levy.basis === "resident_out_of_region"
     && residentMethod.kind === "waive_when_work_region_withheld"
     && waiverWages > 0n
@@ -626,7 +644,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   if (levy.level === "region") {
     // Throws for a state that levies a tax the pack has not transcribed;
     // returns null ONLY for a state with no wage income tax at all.
-    const engine = requireUsStateWithholding(levy.region);
+    const engine = regionalEngine;
     if (!engine) return null;
     if (separateFlatRate || separateCategoryAmounts) {
       // Flat-rate supplemental methods do not consume the employee's regular

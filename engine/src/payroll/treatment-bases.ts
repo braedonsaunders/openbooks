@@ -1,6 +1,6 @@
 import { add, neg, sum } from "../money/money.ts";
 import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./packs.ts";
-import type { PayrollDeductionTreatment, PayrollTaxBaseKey } from "./packs.ts";
+import type { PayrollDeductionTreatment, PayrollTaxBaseKey, PayrollTaxBases } from "./packs.ts";
 
 /**
  * Pack-declared pre-tax treatments, computed generically.
@@ -41,9 +41,9 @@ export interface TreatmentLine {
  */
 export function reduceTaxBases(
   lines: readonly TreatmentLine[],
-  bases: Record<PayrollTaxBaseKey, string>,
+  bases: PayrollTaxBases,
   treatments: readonly PayrollDeductionTreatment[],
-): Record<PayrollTaxBaseKey, string> {
+): PayrollTaxBases {
   const reducing = (base: PayrollTaxBaseKey): Set<string> =>
     new Set(
       treatments
@@ -51,15 +51,17 @@ export function reduceTaxBases(
         .map((treatment) => treatment.key),
     );
   const out = { ...bases };
-  for (const base of TAX_BASE_KEYS) {
+  for (const base of Object.keys(bases) as PayrollTaxBaseKey[]) {
     const keys = reducing(base);
     if (keys.size === 0) continue;
+    const amount = bases[base];
+    if (amount == null) continue;
     const preTax = sum(
       lines
         .filter((line) => line.kind === "deduction" && line.taxTreatment != null && keys.has(line.taxTreatment))
         .map((line) => line.amount),
     );
-    out[base] = add(bases[base], neg(preTax));
+    out[base] = add(amount, neg(preTax));
   }
   return out;
 }

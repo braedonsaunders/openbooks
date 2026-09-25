@@ -233,6 +233,9 @@ export const NE_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: NE_TAX_YEAR_EDITIONS,
   printedPeriods: NE_PERIODS,
+  taxableWageBases: {
+    income: "state:US:NE:income", nonPeriodic: "state:US:NE:nonPeriodic",
+  },
   compute,
 };
 

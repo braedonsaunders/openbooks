@@ -148,7 +148,7 @@ export async function computeUsStatutory(
     tx, orgId, documentId, employeePartyId, employeeName, taxYear, country, region,
     run, emp, filingAccountId, periodsPerYear: P, income, nonPeriodic, pensionable,
     supplementalWageAmounts,
-    insurable, employerEmployeeCount, reducedBases, deduction, pushStatutory, storedCertificates, certificateFor, bool,
+    insurable, employerEmployeeCount, reducedBases, pushStatutory, storedCertificates, certificateFor, bool,
     assertRegionSupported,
   } = ctx;
 
@@ -314,13 +314,8 @@ export async function computeUsStatutory(
   let regionTax: string | undefined;
   const workRegionTaxes: { region: string; amount: string }[] = [];
   let sequence = 140;
-  // Nebraska's special minimum is measured on gross wages after tax-qualified
-  // deductions. The pack's deduction treatment is the authoritative source
-  // for which current-period lines qualify; no state-specific component query
-  // or floating-point recomputation is introduced here.
-  const taxQualifiedDeductions = sum([
-    deduction("pension_f"), deduction("union_dues"), deduction("alimony"),
-  ]);
+  // State withholding consumes the pack-declared reduced bases below;
+  // Nebraska's special minimum therefore uses that same statutory wage base.
   // Employer-pocket levies post below the deduction loop's sequence range:
   // federal employer lines take 210–250, so transit starts at 260.
   let transitSequence = 260;
@@ -356,12 +351,12 @@ export async function computeUsStatutory(
       employerEmployeeCount,
       periodEnd: run.period_end!,
       periodsPerYear: P,
-      // State engines price the reported wage under their own transcribed
-      // treatment (conformity differs by state — Pennsylvania taxes 401(k)
-      // deferrals, most states do not), so only the FIT leg above reads the
-      // reduced base. States that honor qualified deductions take them
-      // explicitly through taxQualifiedDeductions (the Nebraska minimum).
+      // Each state engine declares its wage-base keys. The generic treatment
+      // reducer supplies those bases from the deduction lines the pack says
+      // reduce them; a state's statutory base is never inferred from FIT or
+      // from a hard-coded list of component keys.
       wages: income,
+      taxableWageBases: reducedBases,
       federalFilingStatus: filingStatus,
       federalLegacyW4: bool(empFact("US", emp, "w4_pre_2020"))
         ? {
@@ -387,7 +382,10 @@ export async function computeUsStatutory(
         : undefined,
       federalIncomeTax: statutory.fit,
       federalWithholdingExempt: bool(empFact("US", emp, "tax_exempt")),
-      taxQualifiedDeductions,
+      // `wages` and `supplemental` are already the declared reduced bases;
+      // subtracting the deductions again would double-exclude them in NE's
+      // special-procedure floor.
+      taxQualifiedDeductions: "0.0000",
       certificateFor,
       residenceRegion,
       regionTax,

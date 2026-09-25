@@ -38,6 +38,7 @@ import { fromUnits, roundDiv, toUnits } from "../../../money/money.ts";
 import type { ResolvedCertificate } from "../../certificates.ts";
 import type { PayrollWorkAllocation } from "../../statutory-context.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import type { PayrollStateTaxBaseKey } from "../../packs.ts";
 
 /**
  * The printed pay periods a state's tables may be published for.
@@ -574,6 +575,12 @@ export interface UsStateWithholdingEngine {
   certificateKey: string | null;
   /** Additional pack-declared certificates read by this state calculation. */
   supportingCertificateKeys?: readonly string[];
+  /**
+   * State-specific taxable wage bases declared by this engine's statute.
+   * The shared adapter requires both bases when declared; it never guesses
+   * which deductions are excluded by a state.
+   */
+  taxableWageBases?: { income: PayrollStateTaxBaseKey; nonPeriodic: PayrollStateTaxBaseKey };
   /** The module a new edition is transcribed into — named in every refusal. */
   ratesModule: string;
   editions: readonly PayrollTaxYearEdition[];
