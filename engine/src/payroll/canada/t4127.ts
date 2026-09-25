@@ -16,6 +16,7 @@
  * Quebec employment ARE implemented).
  */
 import { PayrollError } from "../error.ts";
+import type { Money } from "../../money/brands.ts";
 import {
   bmax, bmin, D, divIntCents, max0, mulInt, mulRatioCents, mulRateCents, r2, rate6, truncCents, U,
 } from "./decimal";
@@ -124,31 +125,32 @@ export interface T4127Input {
 
 export interface T4127Result {
   edition: number;
+  // Every money leg below is a D() (fromUnits-fixed) output: canonical Money.
   /** C — CPP/QPP employee contribution this period (base + first additional). */
-  cpp: string;
+  cpp: Money;
   /** C2 — second-additional CPP/QPP this period. */
-  cpp2: string;
+  cpp2: Money;
   /** Employer CPP/QPP (match of C + C2). */
-  cppEmployer: string;
+  cppEmployer: Money;
   /** EI employee premium this period. */
-  ei: string;
+  ei: Money;
   /** EI employer premium (employee × multiple). */
-  eiEmployer: string;
+  eiEmployer: Money;
   /** QPIP employee / employer premiums (Quebec only, else "0.0000"). */
-  qpip: string;
-  qpipEmployer: string;
+  qpip: Money;
+  qpipEmployer: Money;
   /** F5 and its periodic / non-periodic split. */
-  f5: string;
-  f5A: string;
-  f5B: string;
+  f5: Money;
+  f5A: Money;
+  f5B: Money;
   /** T — tax on the periodic remuneration for this period (includes L). */
-  periodicTax: string;
+  periodicTax: Money;
   /** TB — tax payable now on the non-periodic payment. */
-  bonusTax: string;
+  bonusTax: Money;
   /** periodicTax + bonusTax. */
-  totalTax: string;
+  totalTax: Money;
   /** Every intermediate factor, for the explainability trace. */
-  factors: Record<string, string>;
+  factors: Record<string, Money>;
 }
 
 /**
@@ -244,8 +246,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const prov = rates.provinces[province];
   if (!prov && !isQuebec && !isOutside) throw new PayrollError(`unknown province: ${province}`);
 
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const factors: Record<string, Money> = {};
+  // D() emits fromUnits-fixed: every traced factor is canonical Money.
+  const trace = (key: string, value: bigint) => { factors[key] = D(value) as Money; };
 
   const income = U(input.income);
   const bonus = opt(input.nonPeriodic);
@@ -490,21 +493,22 @@ export function calculateT4127(input: T4127Input): T4127Result {
   trace("T", periodicTax);
   trace("TB", bonusTax);
 
+  // Every leg is a D() (fromUnits-fixed) output: canonical Money.
   return {
     edition: rates.edition,
-    cpp: D(C),
-    cpp2: D(C2),
-    cppEmployer: D(C + C2),
-    ei: D(EI),
-    eiEmployer: D(eiEmployer),
-    qpip: D(qpip),
-    qpipEmployer: D(qpipEmployer),
-    f5: D(F5),
-    f5A: D(F5A),
-    f5B: D(F5B),
-    periodicTax: D(periodicTax),
-    bonusTax: D(bonusTax),
-    totalTax: D(periodicTax + bonusTax),
+    cpp: D(C) as Money,
+    cpp2: D(C2) as Money,
+    cppEmployer: D(C + C2) as Money,
+    ei: D(EI) as Money,
+    eiEmployer: D(eiEmployer) as Money,
+    qpip: D(qpip) as Money,
+    qpipEmployer: D(qpipEmployer) as Money,
+    f5: D(F5) as Money,
+    f5A: D(F5A) as Money,
+    f5B: D(F5B) as Money,
+    periodicTax: D(periodicTax) as Money,
+    bonusTax: D(bonusTax) as Money,
+    totalTax: D(periodicTax + bonusTax) as Money,
     factors,
   };
 }
