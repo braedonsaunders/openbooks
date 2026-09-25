@@ -37,6 +37,7 @@
     "status": "Status",
     "time": "Time",
     "idPlaceholder": "record id (uuid)",
-    "selectType": "Select a record type to build a request."
+    "selectType": "Select a record type to build a request.",
+    "getList": "GET (list)"
   }
 }

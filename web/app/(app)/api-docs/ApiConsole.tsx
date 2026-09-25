@@ -80,9 +80,9 @@ function bodyTemplate(rt: RecordType): string {
   return JSON.stringify(obj, null, 2)
 }
 
-function methodsFor(rt: RecordType): { method: Method; label: string; op: Op }[] {
+function methodsFor(rt: RecordType, listLabel: string): { method: Method; label: string; op: Op }[] {
   const out: { method: Method; label: string; op: Op }[] = []
-  if (rt.operations.includes('list')) out.push({ method: 'GET', label: 'GET (list)', op: 'list' })
+  if (rt.operations.includes('list')) out.push({ method: 'GET', label: listLabel, op: 'list' })
   if (rt.operations.includes('get')) out.push({ method: 'GET_ONE', label: 'GET /{id}', op: 'get' })
   if (rt.operations.includes('create')) out.push({ method: 'POST', label: 'POST', op: 'create' })
   if (rt.operations.includes('update')) out.push({ method: 'PATCH', label: 'PATCH /{id}', op: 'update' })
@@ -111,7 +111,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
   const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   const selected = useMemo(() => schema.find((s) => s.key === selectedKey) ?? null, [schema, selectedKey])
-  const methods = useMemo(() => (selected ? methodsFor(selected) : []), [selected])
+  const methods = useMemo(() => (selected ? methodsFor(selected, t('console.getList')) : []), [selected, t])
 
   // When the selected type or method changes, reseed the body template.
   const resetBody = useCallback(() => {
@@ -423,7 +423,7 @@ function ReferencePane({ rt, t }: { rt: RecordType; t: ReturnType<typeof useTran
                 <td className="px-4 py-2 font-mono text-[12px] text-slate-700 dark:text-slate-300">
                   {f.name}
                   {f.custom ? <span className="ml-1.5 text-[10px] text-teal-600 dark:text-teal-400">{t('customBadge')}</span> : null}
-                  {!f.writable ? <span className="ml-1.5 text-[10px] text-slate-400">read-only</span> : null}
+                  {!f.writable ? <span className="ml-1.5 text-[10px] text-slate-400">{t('console.readOnly')}</span> : null}
                 </td>
                 <td className="px-4 py-2 font-mono text-[12px] text-slate-500 dark:text-slate-400">{f.type}</td>
                 <td className="px-4 py-2">{f.required ? <Badge variant="warning">{t('fields.yes')}</Badge> : null}</td>

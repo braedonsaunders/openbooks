@@ -37,6 +37,7 @@
     "status": "Status",
     "time": "Zeit",
     "idPlaceholder": "record id (uuid)",
-    "selectType": "Wählen Sie einen Datensatztyp aus, um eine Anfrage zu erstellen."
+    "selectType": "Wählen Sie einen Datensatztyp aus, um eine Anfrage zu erstellen.",
+    "getList": "GET (Liste)"
   }
 }

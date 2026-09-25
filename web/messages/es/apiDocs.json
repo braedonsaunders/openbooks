@@ -37,6 +37,7 @@
     "status": "Estado",
     "time": "Tiempo",
     "idPlaceholder": "id del registro (uuid)",
-    "selectType": "Seleccione un tipo de registro para construir una solicitud."
+    "selectType": "Seleccione un tipo de registro para construir una solicitud.",
+    "getList": "GET (lista)"
   }
 }

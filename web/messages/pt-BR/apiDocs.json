@@ -37,6 +37,7 @@
     "status": "Status",
     "time": "Tempo",
     "idPlaceholder": "id do registro (uuid)",
-    "selectType": "Selecione um tipo de registro para montar uma requisição."
+    "selectType": "Selecione um tipo de registro para montar uma requisição.",
+    "getList": "GET (lista)"
   }
 }

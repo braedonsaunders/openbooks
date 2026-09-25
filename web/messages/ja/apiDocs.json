@@ -37,6 +37,7 @@
     "status": "ステータス",
     "time": "時間",
     "idPlaceholder": "レコード id(uuid)",
-    "selectType": "リクエストを作成するレコードタイプを選択してください。"
+    "selectType": "リクエストを作成するレコードタイプを選択してください。",
+    "getList": "GET（一覧）"
   }
 }
