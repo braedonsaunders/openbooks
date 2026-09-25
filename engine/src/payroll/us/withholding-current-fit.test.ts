@@ -292,6 +292,22 @@ test('Michigan separately paid bonus uses 4.25% without the period exemption', (
   assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '21.2500')
 })
 
+test('Idaho separately paid bonus uses the 5.3% supplemental rate to the whole dollar', () => {
+  // Idaho State Tax Commission, Computing Withholding ("Supplemental wages"):
+  // https://tax.idaho.gov/taxes/income-tax/withholding/computing/
+  const result = computeUsWithholding({
+    levy: levy('ID', 'us_id_idw4'),
+    payDate: '2026-08-15', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '1000.0000',
+    supplementalPaymentTiming: 'separate',
+    certificateFor: () => certificate('us_id_idw4', { filing_status: 'single', allowances: '4' }),
+    tenantRates: () => undefined, federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0])
+  assert.equal(result?.tax, '53.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.053')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '53.0000')
+})
+
 test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () => {
   // Minnesota 2026 Withholding Tax Instructions, p. 7: https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf
   const result = computeUsWithholding({
