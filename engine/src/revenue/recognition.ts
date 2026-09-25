@@ -2532,6 +2532,34 @@ export async function cancelRevenueRecognitionForInvoice(input: {
             runId: pending.rows[0].run_id,
           };
         }
+        // The waiting-only probe above cannot see the rest of the gate
+        // lifecycle. A retry must never complete the void while approval is
+        // still in flight, nor after the approval run refused or errored —
+        // only a completed run (or no run at all) authorizes completion.
+        const lifecycle = await tx.execute<{ id: string; status: string }>(sql`
+          select run.id, run.status
+            from flow_runs run
+           where run.org_id = ${input.orgId}
+             and run.subject_id = ${input.documentId}
+             and run.trigger = 'before_void'
+             and run.started_at >= ${doc.void_requested_at}
+           order by run.started_at desc, run.id desc
+           limit 1
+        `);
+        const run = lifecycle.rows[0];
+        if (run && run.status === "running") {
+          return {
+            status: "pending_approval" as const,
+            recognitionReversalEntryIds: reversalIds,
+            invoiceReversalEntryId: null,
+            runId: run.id,
+          };
+        }
+        if (run && (run.status === "failed" || run.status === "cancelled")) {
+          throw new RevenueRecognitionCancellationError(
+            `the before-void approval ${run.status} — ask an approver to re-run the approval before cancelling; the invoice remains posted`,
+          );
+        }
         const invoiceReversalEntryId =
           await completeRequestedDocumentVoid(input.documentId, input.orgId);
         return {
