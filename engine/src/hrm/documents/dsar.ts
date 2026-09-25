@@ -32,7 +32,9 @@ import { dsarCoverageManifest } from "./dsar-coverage.ts";
  * record, employments and versions, change requests, leave, time entries,
  * the reviews they may see, benefits, HR documents with file bytes, and
  * payroll pay stubs with lines (the persisted historical records —
- * snapshots, never live re-resolution), writes export.json plus the
+ * snapshots, never live re-resolution) plus the employee's tax
+ * certificates and payroll profile (sealed SIN envelope excluded — only
+ * sin_last3 identifies the record), writes export.json plus the
  * files into a stored zip in the File Cabinet with a viewer grant to the
  * requester ONLY, and marks the row ready. A module that throws is
  * recorded in scope as failed with its reason — the export stays
@@ -840,6 +842,53 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           from hrm_travel_pay_entries
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by worked_on
+      `)).rows;
+      // The employee's own withholding elections and certificate answers, by
+      // direct employee_party_id link (not via employment — unstamped rows
+      // are still the subject's data): certificate answers with their
+      // effective history, and the payroll profile (residence/jurisdiction,
+      // payment method, claim codes). The sealed SIN/SSN envelope is
+      // deliberately NOT exported — the ciphertext is authentication-grade
+      // secret material (resealed, never revealed, everywhere else: the
+      // workbench excludes it, sandbox masking reseals it), and the
+      // subject identifies the record through sin_last3, which IS
+      // exported. Exporting sealed bytes the subject cannot decrypt would
+      // add exfiltration surface for zero subject-visible data.
+      payload.taxCertificates = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, country, certificate_key, region, sub_region,
+               answers, effective_from::text as effective_from,
+               superseded_on::text as superseded_on,
+               created_at::text as created_at, updated_at::text as updated_at
+          from employee_tax_certificates
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by country, certificate_key, effective_from nulls last
+      `)).rows;
+      payload.payrollProfiles = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, pay_schedule_id, country, province,
+               residence_region, labour_jurisdiction, pay_basis,
+               federal_claim_code, federal_claim_amount::text as federal_claim_amount,
+               provincial_claim_code, provincial_claim_amount::text as provincial_claim_amount,
+               additional_tax_per_period::text as additional_tax_per_period,
+               prescribed_zone_deduction::text as prescribed_zone_deduction,
+               authorized_annual_deductions::text as authorized_annual_deductions,
+               authorized_federal_credits::text as authorized_federal_credits,
+               authorized_provincial_credits::text as authorized_provincial_credits,
+               cpp_exempt, ei_exempt, sin_last3, tax_exempt, filing_status,
+               multiple_jobs, dependent_credits::text as dependent_credits,
+               other_income_annual::text as other_income_annual,
+               deductions_annual::text as deductions_annual,
+               w4_pre_2020, w4_allowances,
+               fica_exempt, futa_exempt, sui_exempt,
+               vacation_percent::text as vacation_percent, vacation_method,
+               union_agreement_id, union_classification_id, filing_account_id,
+               stub_delivery, payment_method, paid_on_commission,
+               pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion,
+               es_situacion_laboral, jp_hyojun_hoshu, jp_kaigo_dainigou,
+               br_dependentes, br_pensao_mensal::text as br_pensao_mensal,
+               is_active, created_at::text as created_at, updated_at::text as updated_at
+          from employee_payroll_profiles
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by created_at
       `)).rows;
     });
 
