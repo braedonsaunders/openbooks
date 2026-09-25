@@ -219,6 +219,34 @@ export async function revenueModificationOptions(
     books: books.rows,
   };
 }
+
+export async function revenueRecognitionCandidates(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<Array<{ obligationId: string; contractId: string; contractNumber: string; description: string }>> {
+  const rows = await db.execute<{
+    obligation_id: string
+    contract_id: string
+    contract_number: string
+    description: string
+  }>(sql`
+    select distinct o.id as obligation_id, c.id as contract_id,
+           c.contract_number, o.description
+      from performance_obligations o
+      join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
+      join recognition_schedules s on s.obligation_id = o.id and s.org_id = o.org_id
+      join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+     where o.org_id = ${orgId} and o.status <> 'cancelled'
+       and l.journal_entry_id is null and l.superseded_by_change_id is null
+       ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations source_o join document_lines dl on dl.id=source_o.document_line_id and dl.org_id=source_o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where source_o.contract_id=c.id and source_o.org_id=c.org_id order by source_o.id limit 1))`, allowedSubsidiaryIds)}
+     order by c.contract_number, o.description`)
+  return rows.rows.map((row) => ({
+    obligationId: row.obligation_id,
+    contractId: row.contract_id,
+    contractNumber: row.contract_number,
+    description: row.description,
+  }))
+}
 export type RevenueModificationOptions = Awaited<
   ReturnType<typeof revenueModificationOptions>
 >;

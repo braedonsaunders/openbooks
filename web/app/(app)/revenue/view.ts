@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isUuid, pickString } from "../../../lib/list-params";
 import { can, requirePermission } from "../../../lib/authz";
-import { loadContract, revenueModificationOptions } from "./_lib";
+import { loadContract, revenueModificationOptions, revenueRecognitionCandidates } from "./_lib";
 import type { ContractDrawer } from "./ContractDrawer";
 import type { RunRecognitionDrawer } from "./RunRecognitionDrawer";
 
@@ -96,23 +96,9 @@ export async function loadRevenue(
             from accounting_periods
            where org_id = ${orgId} and not is_adjustment
            order by starts_on desc`),
-        db.execute<{
-          obligation_id: string;
-          contract_id: string;
-          contract_number: string;
-          description: string;
-        }>(sql`
-          select distinct o.id as obligation_id, c.id as contract_id,
-                 c.contract_number, o.description
-            from performance_obligations o
-            join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
-            join recognition_schedules s on s.obligation_id = o.id and s.org_id = o.org_id
-            join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-           where o.org_id = ${orgId} and o.status <> 'cancelled'
-             and l.journal_entry_id is null and l.superseded_by_change_id is null
-           order by c.contract_number, o.description`),
+        revenueRecognitionCandidates(orgId, authz.allowedSubsidiaryIds),
       ])
-    : [{ rows: [] }, { rows: [] }, { rows: [] }];
+    : [{ rows: [] }, { rows: [] }, []];
 
   return {
     title: t("list.title"),
@@ -132,12 +118,7 @@ export async function loadRevenue(
       startsOn: row.starts_on,
       endsOn: row.ends_on,
     })),
-    candidates: candidates.rows.map((row) => ({
-      obligationId: String(row.obligation_id),
-      contractId: String(row.contract_id),
-      contractNumber: row.contract_number,
-      description: row.description,
-    })),
+    candidates,
   };
 }
 
