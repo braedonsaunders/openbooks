@@ -411,9 +411,10 @@ export function AssistantApp({
         completedTurnsRef.current = countAssistantTurns(server)
         firstTurnRef.current = server.length === 0
         // The fresh transcript carries every settled turn: drop redundant
-        // tails, but never a turn that is still streaming.
+        // tails, but never a turn that is still streaming — and never a
+        // failed turn, whose prompt and error live only in the tail.
         const entry = readTurn(activeId)
-        if (entry && !entry.streaming) settleTurn(activeId)
+        if (entry && !entry.streaming && !entry.error) settleTurn(activeId)
       } catch {
         // keep the loader-provided base
       }
@@ -576,9 +577,12 @@ export function AssistantApp({
           completeTurn(turnKey, lastParts)
         } else if (!resolvedConversationId) {
           // The turn never started server-side — drop the optimistic tail
-          // and release the provisional key.
-          dropTurn(turnKey)
-          setPendingKey(null)
+          // and release the provisional key. A failed turn keeps its prompt
+          // and error visible instead of settling them away unseen.
+          if (!readTurn(turnKey)?.error) {
+            dropTurn(turnKey)
+            setPendingKey(null)
+          }
         } else if (ac.signal.aborted) {
           // Reconcile with what actually got persisted for the stopped turn —
           // unless persistence has not caught up yet, in which case the
@@ -615,7 +619,10 @@ export function AssistantApp({
             ])
             completedTurnsRef.current += 1
           }
-          settleTurn(turnKey)
+          // A failed turn keeps its prompt and error visible: settling
+          // would remove the only record of both. The next send overwrites
+          // the tail.
+          if (!tail?.error) settleTurn(turnKey)
         } else {
           // Completed while viewing another conversation: keep the final
           // parts for instant adopt on return; the return's transcript load
