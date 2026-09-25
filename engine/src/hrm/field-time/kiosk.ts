@@ -327,6 +327,7 @@ export async function setWorkerPin(input: {
  */
 export async function kioskClockEvent(input: {
   kiosk: KioskRow;
+  deviceToken: string;
   employeePartyId: string;
   kind: RecordClockInput["kind"];
   occurredAt: string;
@@ -355,5 +356,6 @@ export async function kioskClockEvent(input: {
     photoFileId: input.photoFileId ?? null,
     clientEventId: input.clientEventId,
     kioskId: input.kiosk.id,
+    kioskDeviceToken: input.deviceToken,
   });
 }

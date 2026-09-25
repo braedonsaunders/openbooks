@@ -22,6 +22,7 @@ import { isUuid } from "../../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, isForeignKeyViolation, refuse } from "./errors.ts";
 import { isClockPhotoSql } from "./photos.ts";
+import { lockActiveKioskToken } from "./kiosk-token-lock.ts";
 import {
   FIELD_TIME_GEOFENCE_FEATURE,
   FIELD_TIME_FEATURE,
@@ -69,6 +70,7 @@ export interface RecordClockInput {
   photoFileId?: string | null;
   clientEventId: string;
   kioskId?: string | null;
+  kioskDeviceToken?: string | null;
 }
 
 export interface ClockRecordResult {
@@ -433,6 +435,10 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
   }
 
   return withOrgTransaction(input.orgId, async () => {
+    if (input.kioskId) {
+      if (!input.kioskDeviceToken) refuse("kiosk_unknown", "This kiosk link is unknown or retired — ask a manager for a current kiosk link");
+      await lockActiveKioskToken({ orgId: input.orgId, kioskId: input.kioskId, deviceToken: input.kioskDeviceToken });
+    }
     // Every transition for one worker shares this transaction lock. Acquire it
     // before claiming the event id or reading the open pair so distinct device
     // ids cannot both validate against the same empty state under READ COMMITTED.
