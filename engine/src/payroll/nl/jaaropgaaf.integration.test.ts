@@ -216,7 +216,7 @@ test(
     try {
       const jan = await nlEmployee(fx, {
         name: "Jan Modaal", annualSalary: "11988",
-        opgaaf: { apply_loonheffingskorting: "true" }, bsn: "111222333",
+        opgaaf: { apply_loonheffingskorting: "true", age_class: "under_aow" }, bsn: "111222333",
       });
       const piet = await nlEmployee(fx, {
         name: "Piet AOW", annualSalary: "38880",
@@ -287,7 +287,7 @@ test(
     try {
       const jan = await nlEmployee(fx, {
         name: "Jan Modaal", annualSalary: "11988",
-        opgaaf: { apply_loonheffingskorting: "true" }, bsn: "111222333",
+        opgaaf: { apply_loonheffingskorting: "true", age_class: "under_aow" }, bsn: "111222333",
       });
       const piet = await nlEmployee(fx, {
         name: "Piet AOW", annualSalary: "38880",

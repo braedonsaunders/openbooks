@@ -17,7 +17,7 @@ import {
   nlRatesForTaxYear,
 } from "./loonheffing.ts";
 
-const DECL = { awfLow: true, aofHigh: false, whkPercent: "1.25" } as const;
+const DECL = { ageClass: "under_aow" as const, awfLow: true, aofHigh: false, whkPercent: "1.25" } as const;
 
 const cents2 = (c: bigint): string => `${c / 100n}.${(c % 100n).toString().padStart(2, "0")}`;
 
@@ -34,12 +34,12 @@ test("year resolution: 2026 computes, every other year throws by name", () => {
 
 test("period factors: the five published tijdvakfactoren price, others throw", () => {
   for (const p of [4, 12, 13, 52, 260]) {
-    const r = calculateNlStatutory({ income: "100.00", periodsPerYear: p, applyKorting: false, svWage: "0" });
+    const r = calculateNlStatutory({ income: "100.00", periodsPerYear: p, applyKorting: false, ageClass: "under_aow", svWage: "0" });
     assert.ok(r.withholdingCents >= 0n, `${p}`);
   }
   for (const p of [1, 24, 26]) {
     assert.throws(
-      () => calculateNlStatutory({ income: "100.00", periodsPerYear: p, applyKorting: false, svWage: "0" }),
+      () => calculateNlStatutory({ income: "100.00", periodsPerYear: p, applyKorting: false, ageClass: "under_aow", svWage: "0" }),
       /tijdvakfactoren/,
       `${p} has no published factor`,
     );
@@ -139,9 +139,9 @@ test("AHK fully afgebouwd at € 78.426, ARK at € 132.920", () => {
 
 test("boundary sweep across every kink, each at a table-exact L", () => {
   const arkAt = (tvl: string): bigint =>
-    calculateNlStatutory({ income: tvl, periodsPerYear: 12, applyKorting: true, svWage: "0" }).applied.ark;
+    calculateNlStatutory({ income: tvl, periodsPerYear: 12, applyKorting: true, ageClass: "under_aow", svWage: "0" }).applied.ark;
   const ahkAt = (tvl: string): bigint =>
-    calculateNlStatutory({ income: tvl, periodsPerYear: 12, applyKorting: true, svWage: "0" }).applied.ahk;
+    calculateNlStatutory({ income: tvl, periodsPerYear: 12, applyKorting: true, ageClass: "under_aow", svWage: "0" }).applied.ahk;
   // AHK phase-out starts at 29.736: L = 29.700 prices the full € 3.115,
   // L = 29.754 prices 3.115 − 18 × 0,06398 = 3.113,85 → € 3.114.
   assert.equal(ahkAt("2475.00"), 3115n);
@@ -164,14 +164,14 @@ test("AOW-1946 goldens: lower schijf 1, OUK, and the AOK incl/excl pair", () => 
   // 0,00974 × 13.035 = 126,96 → 2.773,96 → 2.774.
   // X = 6.940 − (1.264 + 2.067 + 2.774) = 835 → 69,58 excl; with AOK € 540:
   // X = 295 → 24,58 incl. Tabel: 578,33 / 69,58 / 24,58 / 231,17. ✓
-  const excl = calculateNlStatutory({ income: "3240.00", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1946", ...DECL });
+  const excl = calculateNlStatutory({ ...DECL, income: "3240.00", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1946" });
   assert.equal(excl.grossAnnual, 6940n);
   assert.equal(excl.applied.ahk, 1264n);
   assert.equal(excl.applied.ouk, 2067n);
   assert.equal(excl.applied.ark, 2774n);
   assert.equal(cents2(excl.periodicCents), "69.58");
   assert.equal(cents2(excl.arkPeriodicCents), "231.17");
-  const incl = calculateNlStatutory({ income: "3240.00", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1946", aokApply: true, ...DECL });
+  const incl = calculateNlStatutory({ ...DECL, income: "3240.00", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1946", aokApply: true });
   assert.equal(incl.applied.aok, 540n);
   assert.equal(cents2(incl.periodicCents), "24.58");
 });
@@ -180,7 +180,7 @@ test("capping order is AHK-first: low AOW wage leaves ARK € 666, low wage leav
   // € 2.002,50 AOW 1946: X1 = 24.030 × 17,85% = 4.289,36 → 4.289 against
   // AHK 1.556 + OUK 2.067 + ARK 2.367 = 5.990. Reduction order AOK, ARK,
   // OUK, AHK keeps AHK+OUK whole and tops ARK to 666 → 55,50. Tabel: 55,50. ✓
-  const aow = calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1946", ...DECL });
+  const aow = calculateNlStatutory({ ...DECL, income: "2002.50", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1946" });
   assert.equal(cents2(aow.periodicCents), "0.00");
   assert.equal(aow.applied.ark, 666n);
   assert.equal(cents2(aow.arkPeriodicCents), "55.50");
@@ -229,7 +229,7 @@ test("jonggehandicaptenkorting: Tabel 13 slices, AOW+ herleiding from the worked
   assert.equal(cents2(jong.withholdingCents), "638.91");
   // AOW+: the §5.2 worked example herleids € 923 to € 210 (8,10/35,75) +
   // € 252 (9,75/35,75) = € 462; maandslice 462/12 = 38,50.
-  const aow = calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: false, ageClass: "aow_1946", jgkApply: true, jgkBasis: "wajong_benefit", ...DECL });
+  const aow = calculateNlStatutory({ ...DECL, income: "2002.50", periodsPerYear: 12, applyKorting: false, ageClass: "aow_1946", jgkApply: true, jgkBasis: "wajong_benefit" });
   assert.equal(cents2(aow.jgkReductionCents), "38.50");
   assert.equal(cents2(aow.withholdingCents), "318.92");
   // The reduction never drives the withholding below € 0 ("maar niet verder dan tot € 0").
@@ -242,7 +242,7 @@ test("jonggehandicaptenkorting: Tabel 13 slices, AOW+ herleiding from the worked
 });
 
 test("employer premiums: AWf low/high, Aof low/high, Whk beschikking, Zvw 6,10%", () => {
-  const base = { income: "5000.00", periodsPerYear: 12, applyKorting: false } as const;
+  const base = { income: "5000.00", periodsPerYear: 12, applyKorting: false, ageClass: "under_aow" as const };
   // AWf laag 2,74%: 5.000 × 2,74% = 137,00. Aof laag 6,27%: 313,50.
   // Whk 1,25%: 62,50. Zvw 6,10%: 305,00.
   const low = calculateNlStatutory({ ...base, awfLow: true, aofHigh: false, whkPercent: "1.25" });
@@ -260,14 +260,14 @@ test("employer premiums: AWf low/high, Aof low/high, Whk beschikking, Zvw 6,10%"
 
 test("maximumpremieloon: period cap and annual headroom", () => {
   // € 10.000 maandloon caps at the Tabel-11 maandmaximum € 6.617,41.
-  const capped = calculateNlStatutory({ income: "10000.00", periodsPerYear: 12, applyKorting: false, awfLow: false, aofHigh: true, whkPercent: "2.00" });
+  const capped = calculateNlStatutory({ income: "10000.00", periodsPerYear: 12, applyKorting: false, ageClass: "under_aow", awfLow: false, aofHigh: true, whkPercent: "2.00" });
   assert.equal(cents2(capped.svBaseCents), "6617.41");
   // 6.617,41 × 7,74% = 512,1875 → 512,19.
   assert.equal(cents2(capped.wwCents), "512.19");
   // Declared YTD consumes the € 79.409 annual maximum first.
-  const exhausted = calculateNlStatutory({ income: "5000.00", periodsPerYear: 12, applyKorting: false, svWageYtd: "77900.00", awfLow: true, aofHigh: false, whkPercent: "1.00" });
+  const exhausted = calculateNlStatutory({ income: "5000.00", periodsPerYear: 12, applyKorting: false, ageClass: "under_aow", svWageYtd: "77900.00", awfLow: true, aofHigh: false, whkPercent: "1.00" });
   assert.equal(cents2(exhausted.svBaseCents), "1509.00");
-  const over = calculateNlStatutory({ income: "5000.00", periodsPerYear: 12, applyKorting: false, svWageYtd: "79409.00", awfLow: true, aofHigh: false, whkPercent: "1.00" });
+  const over = calculateNlStatutory({ income: "5000.00", periodsPerYear: 12, applyKorting: false, ageClass: "under_aow", svWageYtd: "79409.00", awfLow: true, aofHigh: false, whkPercent: "1.00" });
   assert.equal(cents2(over.svBaseCents), "0.00");
   assert.equal(cents2(over.wwCents), "0.00");
 });
@@ -280,7 +280,7 @@ test("ZW posts nothing: Tabel 9 carries no ZW percentage", () => {
 });
 
 test("missing declarations throw by name, never priced by guess", () => {
-  const sv = { income: "5000.00", periodsPerYear: 12, applyKorting: false } as const;
+  const sv = { income: "5000.00", periodsPerYear: 12, applyKorting: false, ageClass: "under_aow" as const };
   assert.throws(() => calculateNlStatutory({ ...sv, aofHigh: false, whkPercent: "1.00" }), /AWf/);
   assert.throws(() => calculateNlStatutory({ ...sv, awfLow: true, whkPercent: "1.00" }), /Aof/);
   assert.throws(() => calculateNlStatutory({ ...sv, awfLow: true, aofHigh: false }), /Whk/);
@@ -289,7 +289,7 @@ test("missing declarations throw by name, never priced by guess", () => {
     /above 100%/,
   );
   // No SV wage, no declarations needed: an unpaid stub prices withholding only.
-  const zero = calculateNlStatutory({ income: "0.00", periodsPerYear: 12, applyKorting: true, svWage: "0" });
+  const zero = calculateNlStatutory({ income: "0.00", periodsPerYear: 12, applyKorting: true, ageClass: "under_aow", svWage: "0" });
   assert.equal(cents2(zero.withholdingCents), "0.00");
   assert.equal(cents2(zero.svBaseCents), "0.00");
 });
@@ -310,7 +310,7 @@ test("bonuses are refused by name: the bijzondere tarieven are not transcribed",
 
 test("unknown age class throws by name", () => {
   assert.throws(
-    () => calculateNlStatutory({ income: "1000.00", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1950" as never, ...DECL }),
+    () => calculateNlStatutory({ ...DECL, income: "1000.00", periodsPerYear: 12, applyKorting: true, ageClass: "aow_1950" as never }),
     /age class/,
   );
 });

@@ -127,8 +127,8 @@ export interface NlStatutoryInput {
   periodsPerYear: number;
   /** Whether the employee's signed opgaaf applies the loonheffingskorting here. */
   applyKorting: boolean;
-  /** AOW age class; default is jonger dan de AOW-leeftijd. */
-  ageClass?: NlAgeClass;
+  /** Required AOW age class; the pack cannot derive it without a birth-date input. */
+  ageClass?: NlAgeClass | null;
   /** Premieloon werknemersverzekeringen/Zvw per period; defaults to income. */
   svWage?: string | null;
   /** Declared cumulative SV wage this year (for the € 79.409 annual maximum). */
@@ -302,7 +302,13 @@ function priceAnnual(L: bigint, ageClass: NlAgeClass, applyKorting: boolean, aok
 }
 
 export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult {
-  const ageClass = input.ageClass ?? "under_aow";
+  const ageClass = input.ageClass;
+  if (ageClass == null) {
+    throw new PayrollError(
+      "the NL payroll pack cannot calculate without an AOW age class — record under_aow, aow_1945 or "
+      + "aow_1946 from the employee's date of birth before running payroll",
+    );
+  }
   if (!AGE_CLASSES.includes(ageClass)) {
     throw new PayrollError(
       `the NL payroll pack cannot price age class "${input.ageClass}" — declare "under_aow", "aow_1945" or "aow_1946"`,
@@ -536,7 +542,7 @@ function finishCalculation(args: {
  * names the country:
  *
  * - `nl_loonheffingen` (the opgaaf): `apply_loonheffingskorting` (absent form
- *   means not applied), `age_class` ("under_aow" default, "aow_1945" or
+ *   means not applied), `age_class` (required: "under_aow", "aow_1945" or
  *   "aow_1946"), `aok_apply` / `jgk_apply` (elected kortingen) with `jgk_basis`
  *   (the Wajong entitlement) and `jgk_evidence` (the UWV letter reference);
  * - `nl_premies` (the employer's SV administration): `awf_laag` /
@@ -587,9 +593,9 @@ export async function computeNlStatutory(
 
   const opgaaf = certificateFor("nl_loonheffingen");
   const applyKorting = opgaaf === null ? false : certificateFlag(opgaaf, "apply_loonheffingskorting");
-  const ageClass: NlAgeClass = opgaaf === null
-    ? "under_aow"
-    : (certificateChoice(opgaaf, "age_class") ?? "under_aow") as NlAgeClass;
+  const ageClass = opgaaf === null
+    ? null
+    : certificateChoice(opgaaf, "age_class") as NlAgeClass | null;
   const aokApply = opgaaf === null ? false : certificateFlag(opgaaf, "aok_apply");
   const jgkApply = opgaaf === null ? false : certificateFlag(opgaaf, "jgk_apply");
   const jgkBasis = opgaaf === null ? null : certificateChoice(opgaaf, "jgk_basis");
