@@ -147,7 +147,8 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // Employer-paid, assessed on the SV-loon (premieloon, capped at the
         // maximumpremieloon) and settled through the loonaangifte with the
         // Belastingdienst (administered by UWV): WW via the AWf (hoog/laag by
-        // declared contract type, 2026: 2,74%/7,74%), WIA via the Aof
+        // declared contract type, 2026: 2,74%/7,74%; Ufo-covered government
+        // employees instead owe Ufo 0,68% on the same leg, see computeNlStatutory), WIA via the Aof
         // basispremie (declared employer size, 2026: 6,27%/7,63%), the
         // differentiated Whk beschikking, and Opslag Wko (0.50% of the Aof base),
         // and ZW. No fixed ZW percentage is published (Tarieven Tabel 9
