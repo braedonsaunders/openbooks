@@ -257,7 +257,7 @@
       "needsDbReason": "Journal, rate-derivation and neededPairs paths resolve persisted subsidiary hierarchy, period locks and primary-book activity; the unit serialization-error predicate does not measure these paths."
     },
     {
-      "path": "engine/src/assets/depreciation.ts",
+      "path": "engine/src/assets/depreciation-schedule-build.ts",
       "tests": [
         "engine/src/assets/depreciation.test.ts",
         "engine/src/assets/depreciation-formula.test.ts",

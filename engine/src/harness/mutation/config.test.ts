@@ -22,7 +22,7 @@ const REQUIRED_COVERAGE = [
   "engine/src/tax/tax.ts",
   "engine/src/tax-returns/return.ts",
   "engine/src/consolidation/consolidation.ts",
-  "engine/src/assets/depreciation.ts",
+  "engine/src/assets/depreciation-schedule-build.ts",
 ];
 
 test("checked-in config covers the curated scope and every referenced file exists", () => {
