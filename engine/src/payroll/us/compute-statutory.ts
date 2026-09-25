@@ -12,7 +12,7 @@ import {
   packCertificates,
 } from "../certificates.ts";
 import { advisoryGaps, blockingGaps, resolveWithholding } from "../withholding-resolution.ts";
-import { subRegionLevy } from "../withholding-jurisdictions.ts";
+import { regionWithholding, subRegionLevy } from "../withholding-jurisdictions.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import {
@@ -235,6 +235,12 @@ export async function computeUsStatutory(
         if (found.side === side && !codes.includes(found.code)) codes.push(found.code);
       }
     }
+    const reach = side === "work" ? "nonresident" : "resident";
+    for (const declaration of regionWithholding(country, sideRegion).subRegions) {
+      if (declaration.automatic && declaration.reaches.includes(reach) && !codes.includes(declaration.code)) {
+        codes.push(declaration.code);
+      }
+    }
     return codes;
   };
 
@@ -403,8 +409,10 @@ export async function computeUsStatutory(
     if (levy.level === "region") regionTax = withheld.tax;
     const lineSequence = sequence++;
     pushStatutory(
-      levy.level === "region" ? "state_income_tax" : "local_income_tax",
-      "deduction", withheld.label, withheld.tax, lineSequence,
+      levy.statutoryComponent?.systemKey
+        ?? (levy.level === "region" ? "state_income_tax" : "local_income_tax"),
+      levy.statutoryComponent?.kind ?? "deduction",
+      withheld.label, withheld.tax, lineSequence,
     );
     if (levy.level === "sub_region" && withheld.localTaxableWages !== undefined) {
       factors[w2LocalWageTraceKey(lineSequence)] = withheld.localTaxableWages;
@@ -412,7 +420,9 @@ export async function computeUsStatutory(
     factors = {
       ...factors,
       ...withheld.factors,
-      [`${levy.level === "region" ? "SIT" : "LIT"}_${withheld.code}`]: withheld.tax,
+      [levy.statutoryComponent
+        ? `STATUTORY_${levy.statutoryComponent.systemKey}`
+        : `${levy.level === "region" ? "SIT" : "LIT"}_${withheld.code}`]: withheld.tax,
     };
   }
   factors.WITHHOLDING_RESIDENCE = resolution.residenceRegion;

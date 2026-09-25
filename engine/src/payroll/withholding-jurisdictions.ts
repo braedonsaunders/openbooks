@@ -82,6 +82,18 @@ export interface PayrollSubRegionLevy {
   kind: string;
   reaches: readonly PayrollLevyReach[];
   rateSource: PayrollLevyRateSource;
+  /** Resolve this levy without requiring an employee certificate. */
+  automatic?: boolean;
+  /** The independently posted statutory component declared by this pack. */
+  statutoryComponent?: {
+    systemKey: string;
+    kind: "deduction" | "employer_contribution";
+  };
+  /** Pack-owned arithmetic for simple effective-dated percentage levies. */
+  withholdingMethod?: {
+    kind: "flat_rate";
+    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+  };
   /** The certificate that sets withholding for this levy, when one exists. */
   certificateKey?: string;
   /**

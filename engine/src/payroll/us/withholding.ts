@@ -420,6 +420,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   const { levy } = input;
   const localTaxableWages = (() => {
     if (levy.level !== "sub_region") return undefined;
+    if (levy.withholdingMethod) return undefined;
     const compensation = addMoney(input.wages, input.supplemental ?? "0");
     if (levy.side === "residence") return compensation;
     const matching = (input.wageAllocations ?? []).filter(
@@ -479,6 +480,34 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     throw new UsWithholdingError(
       `separately paid or combined supplemental timing is missing for ${levy.label}; record whether this payment was issued with regular wages before calculating — refused by name`,
     );
+  }
+  if (levy.withholdingMethod?.kind === "flat_rate") {
+    const rate = levy.withholdingMethod.rates
+      .filter((entry) => entry.effectiveFrom <= input.payDate)
+      .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+      .at(-1);
+    if (!rate) {
+      throw new UsWithholdingError(
+        `${levy.label} has no published flat rate effective on ${input.payDate}; `
+        + "transcribe the official effective rate before calculating — refused by name",
+      );
+    }
+    let base = addMoney(input.wages, input.supplemental ?? "0");
+    if (levy.basis === "nonresident") {
+      const allocation = requireUsWageAllocation(input.wageAllocations, levy.region, null);
+      base = mulRatio(base, rate6(allocation.workShare), 1_000_000n);
+    }
+    const tax = D(mulRateCents(U(base), rate.rate));
+    return {
+      code: levy.subRegion ?? levy.region,
+      label: levy.label,
+      tax,
+      factors: {
+        STATUTORY_LEVY_RATE: rate.rate,
+        STATUTORY_LEVY_BASE: base,
+        STATUTORY_LEVY_TAX: tax,
+      },
+    };
   }
   if (supplemental > 0n && input.supplementalPaymentTiming === "separate") {
     const declaredMethod = US_SEPARATE_SUPPLEMENTAL_METHODS[
