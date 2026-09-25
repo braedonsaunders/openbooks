@@ -55,7 +55,7 @@ const XERO_ACCOUNT_TYPE: Record<string, string> = {
 
 interface XeroAccount {
   AccountID: string; Code?: string; Name: string; Type: string;
-  Status?: string; SystemAccount?: string;
+  Status?: string; SystemAccount?: string; CurrencyCode?: string;
 }
 interface XeroContact { ContactID: string; Name: string; EmailAddress?: string; ContactStatus?: string }
 interface XeroItem {
@@ -266,6 +266,7 @@ export class XeroSource implements MigrationSource {
     const accounts = await this.xeroAccounts();
     const opts: XeroBuildOpts = {
       accountIdByCode: new Map(accounts.filter((a) => a.Code).map((a) => [a.Code!, a.AccountID])),
+      accountCurrencyById: new Map(accounts.map((a) => [a.AccountID, a.CurrencyCode])),
       gstAccountRef: accounts.find((a) => a.SystemAccount === "GST")?.AccountID,
     };
 
