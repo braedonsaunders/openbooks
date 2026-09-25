@@ -1,8 +1,10 @@
 import 'server-only'
 
+import { redirect } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { accessDeniedHref } from '../../../lib/gate-targets'
 
 /**
  * The SQL console, split into a loader and a spec.
@@ -29,9 +31,13 @@ import { requireFeatureEnabled } from '../../../lib/feature-gates'
 export type QueryData = Record<string, unknown>
 
 export async function loadQuery(): Promise<QueryData> {
-  // layout.tsx gates, verbatim: permission first, then feature flag.
+  // layout.tsx gates, verbatim: permission first, then feature flag, then
+  // the unrestricted-scope fence both query endpoints enforce.
   const authz = await requirePermission('sql.execute')
   await requireFeatureEnabled(authz.user.orgId, 'queryConsole')
+  if (authz.allowedSubsidiaryIds !== null) {
+    redirect(accessDeniedHref({ permission: 'unrestricted subsidiary access' }))
+  }
   return {}
 }
 
