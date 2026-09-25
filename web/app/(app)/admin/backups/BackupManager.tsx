@@ -98,9 +98,8 @@ export function BackupManager({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled, frequency, hourUtc, dayOfWeek, dayOfMonth, maxKeep }),
       });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast.error(body.error ?? t("errors.couldNotSave"));
+        toast.error(t("errors.couldNotSave"));
         return;
       }
       toast.success(enabled ? t("toasts.scheduleSaved") : t("toasts.scheduleOff"));
@@ -110,9 +109,8 @@ export function BackupManager({
   const runNow = () =>
     start(async () => {
       const res = await fetch("/api/admin/backups/run", { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast.error(body.error ?? t("errors.couldNotStart"));
+        toast.error(t("errors.couldNotStart"));
         return;
       }
       toast.success(t("toasts.started"));
@@ -125,9 +123,8 @@ export function BackupManager({
     }
     start(async () => {
       const res = await fetch(`/api/admin/backups/${run.id}`, { method: "DELETE" });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast.error(body.error ?? t("errors.couldNotDelete"));
+        toast.error(t("errors.couldNotDelete"));
         return;
       }
       toast.success(t("toasts.deleted"));
