@@ -36,6 +36,7 @@ export interface BankingCashData {
   description: string
   subsidiaryPicker: SubsidiaryPicker
   subsidiaryValue: string
+  selectedSubsidiaryIds: string[] | undefined
   subsidiaryLabel: string
   tabs: Tabs
   data: CashPosition
@@ -146,6 +147,7 @@ export async function loadBankingCash(
     ratesReady: ratesBlocked === null,
     subsidiaryPicker: subView?.picker ?? [],
     subsidiaryValue: subView?.picker.find((p) => p.id === subId)?.id ?? subView?.picker[0]?.id ?? '',
+    selectedSubsidiaryIds: subView?.subsidiary?.ids,
     subsidiaryLabel: tBanking('home.subsidiary'),
     tabs: await groupTabs('banking', '/banking/cash', { subQs, orgId: authz.user.orgId }),
     data,
@@ -204,6 +206,7 @@ export function bankingCashSpec(data: BankingCashData): PageSpec {
       {
         ...widgetBlock('cash-cockpit', {
           data: data.data,
+          selectedSubsidiaryIds: data.selectedSubsidiaryIds,
           layoutPrefs: data.layoutPrefs,
           canConfigure: data.canConfigure,
           canPayRun: data.canPayRun,

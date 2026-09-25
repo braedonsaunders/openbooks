@@ -151,6 +151,7 @@ export const BANKING_WIDGETS = {
   'cash-cockpit': (props) => (
     <CashCockpit
       data={props.data as ComponentProps<typeof CashCockpit>['data']}
+      selectedSubsidiaryIds={props.selectedSubsidiaryIds as ComponentProps<typeof CashCockpit>['selectedSubsidiaryIds']}
       layoutPrefs={props.layoutPrefs as ComponentProps<typeof CashCockpit>['layoutPrefs']}
       canConfigure={props.canConfigure === true}
       canPayRun={props.canPayRun === true}

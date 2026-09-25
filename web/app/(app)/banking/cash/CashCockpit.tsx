@@ -54,12 +54,14 @@ const PAGE_KEY = 'banking-cash'
  */
 export function CashCockpit({
   data,
+  selectedSubsidiaryIds,
   layoutPrefs,
   canConfigure,
   canPayRun,
   canCollectionRun,
 }: {
   data: CashPosition
+  selectedSubsidiaryIds?: string[]
   layoutPrefs: PageLayoutPrefs
   canConfigure: boolean
   canPayRun: boolean
@@ -136,6 +138,7 @@ export function CashCockpit({
             <div className={hero ? 'h-full overflow-y-auto' : 'max-h-80 overflow-y-auto'}>
               <CashTimeline
                 weeks={data.weeks}
+                selectedSubsidiaryIds={selectedSubsidiaryIds}
                 categories={data.categories}
                 weeklyCap={data.apSettings.weeklyCap}
                 restrictToSafe={data.apSettings.restrictToSafe}

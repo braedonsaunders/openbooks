@@ -11,7 +11,7 @@ Object.assign(globalThis, { React });
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/fr")).default;
 const { MoneyProvider } = await import("../../../../components/money-provider");
-const { CashTimeline } = await import("./CashTimeline");
+const [{ CashTimeline }, { cashWeekEntriesUrl }] = await Promise.all([import("./CashTimeline"), import("./CashWeekFlyout")]);
 
 // The cash timeline must render its chrome from the banking.cash catalog:
 // hardcoded English headers read as untranslated copy under fr/es .
@@ -99,5 +99,5 @@ test("cash timeline transaction counts and spill banner render from the catalog"
   assert.match(html, /60 transactions/, "txn count is French");
   assert.match(html, /ne peuvent pas être payées/, "spill banner is French");
   assert.doesNotMatch(html, /txns/, "English txn abbreviation is gone");
-  assert.doesNotMatch(html, /of payables can/, "English banner is gone");
+  assert.doesNotMatch(html, /of payables can/, "English banner is gone"); assert.equal(cashWeekEntriesUrl("2026-09-13", ["sub-a", "sub-b"]), "/api/cash/week-entries?week=2026-09-13&sub=sub-a%2Csub-b");
 });
