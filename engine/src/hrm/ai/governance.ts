@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
-import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import {
+  lockScopeRow,
+  ScopeNotFoundError,
+  subsidiaryVisibleFilter,
+} from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
@@ -399,13 +403,30 @@ async function assertDraftReviewerAccess(
   const denied = (): AiRailsError => markDenied(decisionId);
   const has = (permission: string): Promise<boolean> =>
     actorHasPermission(exec, orgId, actorId, permission);
+  const lockEmployment = async (employmentId: string): Promise<string | null> => {
+    try {
+      const row = await lockScopeRow(
+        exec,
+        orgId,
+        "employment",
+        employmentId,
+        await actorAllowedSubsidiaryIds(exec, orgId, actorId),
+        "share",
+      );
+      return row.subsidiaryId;
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw denied();
+      throw error;
+    }
+  };
   if (subjectId === null) throw denied();
   if (subjectKind === "job_description") {
     if (!(await has("hrm.recruiting.read"))) throw denied();
     const req = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
       select employer_subsidiary_id as "employerSubsidiaryId"
-        from hrm_requisitions
-       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+       from hrm_requisitions
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
+       for share`)).rows[0];
     if (!req) throw denied();
     if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), req.employerSubsidiaryId)) {
       throw denied();
@@ -440,14 +461,7 @@ async function assertDraftReviewerAccess(
     if (partyId !== review.reviewerPartyId && !(await has("hrm.retention.read"))) {
       throw denied();
     }
-    const employment = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
-      select employer_subsidiary_id as "employerSubsidiaryId"
-        from worker_employments
-       where org_id = ${orgId} and id = ${review.employmentId}`)).rows[0];
-    if (!employment) throw denied();
-    if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), employment.employerSubsidiaryId)) {
-      throw denied();
-    }
+    await lockEmployment(review.employmentId);
     return;
   }
   if (subjectKind === "onboarding_plan") {
@@ -462,22 +476,16 @@ async function assertDraftReviewerAccess(
       select employment_id::text as "employmentId" from hrm_processes
        where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
     if (!process) throw denied();
-    const employment = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
-      select employer_subsidiary_id as "employerSubsidiaryId"
-        from worker_employments
-       where org_id = ${orgId} and id = ${process.employmentId}`)).rows[0];
-    if (!employment) throw denied();
-    if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), employment.employerSubsidiaryId)) {
-      throw denied();
-    }
+    await lockEmployment(process.employmentId);
     return;
   }
   if (subjectKind === "offer_letter_clauses") {
     if (!(await has("hrm.recruiting.manage"))) throw denied();
     const offer = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
       select employer_subsidiary_id as "employerSubsidiaryId"
-        from hrm_offers
-       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+       from hrm_offers
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
+       for share`)).rows[0];
     if (!offer) throw denied();
     if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), offer.employerSubsidiaryId)) {
       throw denied();
