@@ -38,8 +38,8 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
     } as never);
     return taxes;
   };
-  assert.ok(cmp((await tax("ON", { disabled_dependants: "0", dependants_under_19: "1" })).income_tax,
-    (await tax("ON")).income_tax) < 0);
+  assert.ok(cmp((await tax("ON", { disabled_dependants: "0", dependants_under_19: "1" })).income_tax ?? assert.fail("no ON income tax"),
+    (await tax("ON")).income_tax ?? assert.fail("no ON income tax")) < 0);
   const withFunds = await tax("QC", { ftq_shares_per_period: "100", fondaction_shares_per_period: "150" });
   assert.deepEqual([withFunds.income_tax, withFunds.qc_income_tax], ["9.6900", "13.9500"]);
 });
