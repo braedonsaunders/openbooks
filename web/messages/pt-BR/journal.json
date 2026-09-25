@@ -5,6 +5,7 @@
     "searchPlaceholder": "Buscar número do lançamento ou memorando…",
     "originFilter": "Origem",
     "draftsHeading": "Lançamentos em rascunho — ainda não lançados",
+    "noAvailableSubsidiary": "Sua função não tem uma subsidiária ativa disponível para criar um lançamento. Solicite acesso a um administrador.",
     "columns": {
       "entry": "Lançamento",
       "origin": "Origem",

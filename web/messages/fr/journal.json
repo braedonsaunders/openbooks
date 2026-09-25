@@ -5,6 +5,7 @@
     "searchPlaceholder": "Rechercher un numéro d’écriture ou un mémo…",
     "originFilter": "Origine",
     "draftsHeading": "Écritures brouillons — pas encore comptabilisées",
+    "noAvailableSubsidiary": "Votre rôle ne dispose d’aucune filiale active pour créer une écriture. Demandez l’accès à un administrateur.",
     "columns": {
       "entry": "Écriture",
       "origin": "Origine",

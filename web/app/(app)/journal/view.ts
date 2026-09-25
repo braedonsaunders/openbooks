@@ -8,6 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   page,
   pageHeader,
+  panel,
   ref,
   widget,
   widgetBlock,
@@ -61,6 +62,8 @@ export interface JournalData {
   /** The New button posts through gl.post — without it the button hides
    * rather than opening a drawer the loader refuses to fill. */
   canPost: boolean
+  scopeUnavailable: boolean
+  scopeUnavailableMessage: string
   currentParams: Record<string, string | string[] | undefined>
   hasDrafts: boolean
   draftsHeading: string
@@ -77,6 +80,8 @@ export async function loadJournal(
   const authz = await requirePermission('gl.read')
   const allowedSubsidiaries = authz.allowedSubsidiaryIds
   const allowedIds = allowedSubsidiaries ? [...allowedSubsidiaries] : []
+  const canCreate = can(authz, 'gl.post') && (allowedSubsidiaries === null || allowedSubsidiaries.size > 0)
+  const scopeUnavailable = can(authz, 'gl.post') && allowedSubsidiaries !== null && allowedSubsidiaries.size === 0
 
   // ?entry= drives the manual-journal drawer over DOCUMENT ids;
   // posted-entry links to /journal/[id] are a separate, untouched surface.
@@ -85,11 +90,11 @@ export async function loadJournal(
   // row. The loader ships pickers plus an empty payload; opening writes
   // nothing, Cancel writes nothing, and the drawer's explicit Save is the
   // single idempotent POST. Gated on gl.post like the draft flow was.
-  const creating = pickString(sp.entryNew) === '1' && can(authz, 'gl.post')
+  const creating = pickString(sp.entryNew) === '1' && canCreate
   if (entryParam === 'new') {
     // The legacy deep link minted a server-side draft on GET. It now lands
     // on the same unsaved drawer the New button opens — still zero writes.
-    redirect(can(authz, 'gl.post') ? '/journal?entryNew=1&mode=edit' : '/journal')
+    redirect(canCreate ? '/journal?entryNew=1&mode=edit' : '/journal')
   }
 
   // The header counts the list's own backing relation (JOURNAL_ENTRY_TABLE)
@@ -231,7 +236,9 @@ export async function loadJournal(
   return {
     title: t('list.title'),
     description: t('list.description', { count: total }),
-    canPost: can(authz, 'gl.post'),
+    canPost: canCreate,
+    scopeUnavailable,
+    scopeUnavailableMessage: t('list.noAvailableSubsidiary'),
     currentParams: sp,
     hasDrafts: drafts.length > 0,
     draftsHeading: t('list.draftsHeading'),
@@ -258,6 +265,16 @@ export function journalSpec(data: JournalData): PageSpec {
       }),
     ],
     body: [
+      {
+        ...panel({
+          title: f('scopeUnavailableMessage'),
+          iconKey: 'triangle-alert',
+          bodyClassName: 'p-0',
+          className: 'shrink-0',
+          blocks: [widgetBlock('attention-list', { items: [{ tone: 'warning', text: f('scopeUnavailableMessage') }], allClear: '' })],
+        }),
+        when: f('scopeUnavailable'),
+      },
       {
         ...widgetBlock('journal-drafts', {
           heading: data.draftsHeading,

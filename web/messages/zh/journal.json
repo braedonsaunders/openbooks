@@ -5,6 +5,7 @@
     "searchPlaceholder": "搜索分录编号或摘要……",
     "originFilter": "来源",
     "draftsHeading": "日记账草稿——尚未过账",
+    "noAvailableSubsidiary": "您的角色没有可用于创建日记账的有效子公司。请向管理员申请访问权限。",
     "columns": {
       "entry": "分录",
       "origin": "来源",
