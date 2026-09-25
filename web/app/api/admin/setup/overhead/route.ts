@@ -11,6 +11,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission, guardUnrestrictedScope, subsidiariesInScope } from '../../../../../lib/authz'
 import { acquireFeatureGateLock } from '../../../../../lib/features'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isCalendarDate } from '../../../../../lib/setup/coerce'
@@ -130,10 +131,16 @@ export async function POST(req: Request) {
           }
         }
       }
-      const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
+      const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined, gate.allowedSubsidiaryIds)
       if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
       return NextResponse.json({ ok: true, published: result.published })
     } catch (e) {
+      if (e instanceof ScopeNotFoundError) {
+        return NextResponse.json(
+          { error: 'unknown or out-of-scope department — publish only departments in your visible subsidiaries or ask an administrator for access' },
+          { status: 422 },
+        )
+      }
       // A malformed or unknown department id surfaces as a Postgres input
       // (22P02) or foreign-key (23503) throw. Refuse the publish as a
       // request-state failure instead of a raw 500; anything else (overlap
