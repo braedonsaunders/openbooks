@@ -7,6 +7,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { countInbox, listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
 import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
+import { nextPeriodAfter } from '@openbooks/engine/src/payroll/run-calendar.ts'
 import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { loadApprovalPerson, loadTeamEmploymentIdsForManager } from '@openbooks/engine/src/hrm/authorization.ts'
 import { listMyReviews } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
@@ -194,9 +195,28 @@ export async function loadPersonaMetrics(
     let nextPayDate: string | null = null
     const row = schedule.rows[0]
     if (row) {
+      if (row.frequency === 'semi_monthly') {
+        // Semi-monthly halves follow the calendar month, never a fixed
+        // 15-day step (which drifts against month boundaries): derive the
+        // next period end from the payroll calendar — the same call the
+        // run-creation preview uses — then apply the pay-date offset.
+        try {
+          const next = nextPeriodAfter(
+            { frequency: 'semi_monthly' as const, anchor_period_end: row.anchor },
+            today,
+          )
+          const payDate = new Date(`${next.periodEnd}T00:00:00Z`)
+          payDate.setUTCDate(payDate.getUTCDate() + (row.offset ?? 0))
+          nextPayDate = payDate.toISOString().slice(0, 10)
+        } catch {
+          // An anchor the calendar rejects leaves nextPayDate null; the
+          // tile still shows the last pay date instead of failing the
+          // dashboard. Anchor validity is enforced at schedule setup.
+        }
+      }
       const stepDays =
         row.frequency === 'weekly' ? 7 : row.frequency === 'biweekly' ? 14 : row.frequency === 'monthly' ? 0 : 15
-      if (stepDays > 0) {
+      if (stepDays > 0 && row.frequency !== 'semi_monthly') {
         let cursor = new Date(`${row.anchor}T12:00:00Z`).getTime()
         const horizon = new Date(`${today}T12:00:00Z`).getTime() + 370 * 86_400_000
         while (cursor <= new Date(`${today}T12:00:00Z`).getTime() && cursor < horizon) cursor += stepDays * 86_400_000
