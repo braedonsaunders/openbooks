@@ -253,12 +253,11 @@ test('a project save racing a Projects disable loses and stores nothing', async 
   // row exclusively. The save must wait on the fence, then refuse once the
   // disable commits — never land project lines first.
   const f = await fixture(true)
-  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL })
+  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL })
   let pending: Promise<Response> | undefined
   try {
     await writer.connect()
-    await writer.query('begin')
-    await writer.query("select set_config('app.bypass_rls','on',true)")
+    await writer.query('begin') // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
     await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [f.org.orgId])
     const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
     pending = f.save({})

@@ -44,7 +44,9 @@ const routeState: RouteState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
 
+const permsUrl = new URL("../../../../../engine/src/organization/permissions.ts", import.meta.url).href;
 const mockAuthz = `
+  import { permissionSetCovers } from '${permsUrl}';
   const state = globalThis[Symbol.for('openbooks.sftp-route-test')]
   export async function guardPermission(permission) {
     if (!state.authz) return state.deny(null)
@@ -55,6 +57,10 @@ const mockAuthz = `
   }
   export async function getAuthz() {
     return state.identity
+  }
+  export function can(authz, permission) { return permissionSetCovers(authz.permissions, permission) }
+  export async function resolveUserAuthz(user) {
+    return user.id === state.identity?.user.id ? state.identity : { user, permissions: new Set(), allowedSubsidiaryIds: null }
   }
 `;
 
@@ -142,6 +148,7 @@ async function seed(): Promise<Fixture> {
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'true'::jsonb)
        where id = ${org.orgId}`);
+    await db.execute(sql`update users set is_super_admin = true where id = ${actorId}`);
     return { orgId: org.orgId, actorId };
   });
 }
