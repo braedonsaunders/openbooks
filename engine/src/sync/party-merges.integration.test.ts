@@ -501,6 +501,15 @@ test("a merge re-points a frozen remittance snapshot through the paired authorit
                              is_active, custom, created_by, updated_by)
         values (${employeeId}, ${org.orgId}, 'person', 'Merge Accrual', ${org.subsidiaryId},
                 true, '{}'::jsonb, null, null)`);
+      // 0374 requires every stub to name the employment that produced it:
+      // one effective employment for this worker at the pay-run entity.
+      const employmentId = randomUUID();
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${employmentId}, ${org.orgId}, ${employeeId}, ${org.subsidiaryId}, 1)`);
+      await db.execute(sql`
+        insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
+        values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
       const period = (await db.execute<{ id: string }>(sql`
         select id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
       const runId = randomUUID();
@@ -519,11 +528,11 @@ test("a merge re-points a frozen remittance snapshot through the paired authorit
       const stubId = randomUUID();
       await db.execute(sql`
         insert into pay_stubs
-          (id, org_id, pay_run_document_id, employee_party_id, province,
+          (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
            periods_per_year, pay_date, tax_year, currency_code, gross,
            pensionable_earnings, insurable_earnings, net_pay, employer_cost,
            vacation_accrued, factors, created_by, updated_by)
-        values (${stubId}, ${org.orgId}, ${runId}, ${employeeId}, 'ON', 12,
+        values (${stubId}, ${org.orgId}, ${runId}, ${employeeId}, ${employmentId}, 'ON', 12,
                 '2026-07-21', 2026, 'USD', '200.00', '200.00', '200.00', '200.00',
                 '200.00', '0', '{}'::jsonb, null, null)`);
       const frozenLine = randomUUID();
