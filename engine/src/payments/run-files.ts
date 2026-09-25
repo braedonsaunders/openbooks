@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { businessTimeZone, businessToday, formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
@@ -15,8 +16,9 @@ import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
 /**
  * Assemble and build the CPA-005 file for a payment run. Throws PaymentError
  * with every blocking problem (settings or payee bank details) — no partial
- * or fake files. The file creation number derives from the run number
- * sequence, so re-downloading the same run reproduces the same number.
+ * or fake files. The file creation number derives from the run id, so
+ * re-downloading the same run reproduces the same number while distinct
+ * runs do not share one by sequence position.
  */
 /**
  * Options every run-file loader accepts. `fileCreatedAt` is the run's
@@ -95,8 +97,14 @@ export async function loadCpa005RunFile(
     };
   });
 
-  const numeric = run.runNumber.replace(/\D/g, "");
-  const fileCreationNumber = ((Number(numeric || "1") - 1) % 9999) + 1;
+  // The creation number must differ per FILE, not per position in the run
+  // sequence: a sequential mod-9999 derivation stamps runs 1 and 10000
+  // with the same number, so two distinct files carry identical item
+  // traces. Derive it from the run's unique id instead — re-downloads of
+  // the same run reproduce their bytes while distinct runs spread across
+  // the 1–9999 alphabet instead of colliding on a fixed cycle.
+  const fileCreationNumber =
+    (Number.parseInt(createHash("sha256").update(runId, "utf8").digest("hex").slice(0, 8), 16) % 9999) + 1;
   const stamp = await creationStamp(orgId, new Date(`${today}T00:00:00`), opts?.fileCreatedAt);
 
   const content = buildCpa005File({
