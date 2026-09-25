@@ -170,7 +170,11 @@
     "partialDeleted": "已将{done}项移入回收站 — 已跳过{skipped}项 ({reasons})",
     "deleteFailed": "无法删除所选内容",
     "downloadFailed": "无法下载所选内容",
-    "nothingDownloadable": "请选择要下载的文件"
+    "nothingDownloadable": "请选择要下载的文件",
+    "tooManyFiles": "最多可下载 {count} 个文件。请减少所选文件。",
+    "selectionTooLarge": "所选文件的未压缩大小超过 250 MB。请减少所选文件。",
+    "nothingAvailable": "所选文件均无法下载。请检查访问权限或选择其他文件。",
+    "downloadForbidden": "您无权下载这些文件。请联系管理员申请访问权限。"
   },
   "trash": {
     "title": "回收站",

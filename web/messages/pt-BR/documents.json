@@ -170,7 +170,11 @@
     "partialDeleted": "{done} movidos para a Lixeira — {skipped} ignorados ({reasons})",
     "deleteFailed": "Não foi possível excluir a seleção",
     "downloadFailed": "Não foi possível baixar a seleção",
-    "nothingDownloadable": "Selecione arquivos para baixar"
+    "nothingDownloadable": "Selecione arquivos para baixar",
+    "tooManyFiles": "O download aceita até {count} arquivos. Reduza a seleção.",
+    "selectionTooLarge": "Os arquivos selecionados excedem o limite descompactado de 250 MB. Reduza a seleção.",
+    "nothingAvailable": "Nenhum dos arquivos selecionados está disponível para download. Verifique o acesso ou escolha outros arquivos.",
+    "downloadForbidden": "Você não tem permissão para baixar estes arquivos. Peça acesso a uma pessoa administradora."
   },
   "trash": {
     "title": "Lixeira",

@@ -170,7 +170,11 @@
     "partialDeleted": "{done}件をごみ箱に移動しました — {skipped}件をスキップしました ({reasons})",
     "deleteFailed": "選択内容を削除できませんでした",
     "downloadFailed": "選択内容をダウンロードできませんでした",
-    "nothingDownloadable": "ダウンロードするファイルを選択してください"
+    "nothingDownloadable": "ダウンロードするファイルを選択してください",
+    "tooManyFiles": "ダウンロードできるファイルは {count} 件までです。選択数を減らしてください。",
+    "selectionTooLarge": "選択したファイルの未圧縮サイズが 250 MB を超えています。選択数を減らしてください。",
+    "nothingAvailable": "選択したファイルはダウンロードできません。アクセス権を確認するか、別のファイルを選択してください。",
+    "downloadForbidden": "これらのファイルをダウンロードする権限がありません。管理者にアクセスを依頼してください。"
   },
   "trash": {
     "title": "ごみ箱",

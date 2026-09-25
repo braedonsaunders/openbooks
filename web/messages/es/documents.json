@@ -170,7 +170,11 @@
     "partialDeleted": "{done} movidos a la Papelera — {skipped} omitidos ({reasons})",
     "deleteFailed": "No se pudo eliminar la selección",
     "downloadFailed": "No se pudo descargar la selección",
-    "nothingDownloadable": "Selecciona archivos para descargar"
+    "nothingDownloadable": "Selecciona archivos para descargar",
+    "tooManyFiles": "La descarga admite hasta {count} archivos. Reduce la selección.",
+    "selectionTooLarge": "Los archivos seleccionados superan el límite sin comprimir de 250 MB. Reduce la selección.",
+    "nothingAvailable": "Ninguno de los archivos seleccionados está disponible para descargar. Comprueba el acceso o elige otros archivos.",
+    "downloadForbidden": "No tienes permiso para descargar estos archivos. Solicita acceso a una persona administradora."
   },
   "trash": {
     "title": "Papelera",

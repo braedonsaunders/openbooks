@@ -170,7 +170,11 @@
     "partialDeleted": "{done} in den Papierkorb verschoben — {skipped} übersprungen ({reasons})",
     "deleteFailed": "Auswahl konnte nicht gelöscht werden",
     "downloadFailed": "Auswahl konnte nicht heruntergeladen werden",
-    "nothingDownloadable": "Wählen Sie Dateien zum Herunterladen aus"
+    "nothingDownloadable": "Wählen Sie Dateien zum Herunterladen aus",
+    "tooManyFiles": "Der Download unterstützt höchstens {count} Dateien. Verringern Sie Ihre Auswahl.",
+    "selectionTooLarge": "Die ausgewählten Dateien überschreiten das unkomprimierte Limit von 250 MB. Verringern Sie Ihre Auswahl.",
+    "nothingAvailable": "Keine der ausgewählten Dateien kann heruntergeladen werden. Prüfen Sie den Zugriff oder wählen Sie andere Dateien.",
+    "downloadForbidden": "Sie haben keine Berechtigung, diese Dateien herunterzuladen. Bitten Sie eine Administration um Zugriff."
   },
   "trash": {
     "title": "Papierkorb",
