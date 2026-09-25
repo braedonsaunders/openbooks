@@ -8,13 +8,13 @@
  *       $97,801; printed brackets and $100 phase-down adjustments;
  *       $29.00 per AR4EC exemption; official Gary $2,127 monthly /
  *       2-exemption example ($36.50).
- *   Employer's Instructions, Effective 01/01/2026 — Form AR4EC / AR4ECSP;
- *     optional 3.9% on separately-paid supplementals; daily × 260.
+ *   Act 2 of the First Extraordinary Session, 2026, §1 — 3.7% rates and
+ *     revised upper-income table and phase-down adjustments effective 2026.
  *   NFC Bulletin 1781190112, effective Pay Period 15, 2026 — low-income
  *     tax-credit formulas and their filing-status/exemption bands.
  *
  * Texarkana AR-TX-4EC and AR4ECSP exemption are honored as a zero
- * withholding flag. The 3.9% supplemental election is exported, not used
+ * withholding flag. The 3.7% supplemental election is exported, not used
  * by `compute` (this engine aggregates). No city tax is invented.
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
@@ -54,7 +54,7 @@ export const AR_RATES_2026: ArYearRates = {
   standardDeduction: "2470",
   exemptionCredit: "29",
   midrangeBelow: "97801",
-  supplementalRate: pctToRate("3.9"),
+  supplementalRate: pctToRate("3.7"),
 };
 
 const AR_EDITIONS_BY_YEAR: Record<number, ArYearRates> = {
@@ -63,12 +63,12 @@ const AR_EDITIONS_BY_YEAR: Record<number, ArYearRates> = {
 
 export const AR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   year: 2026,
-  label: "Arkansas Withholding Tax Formula Method, Effective 01/01/2026",
+  label: "Arkansas Act 2 of the First Extraordinary Session, 2026",
   effectiveFrom: "2026-01-01",
   citation:
-    "Arkansas Department of Finance and Administration, Withholding Tax Formula "
-    + "Method, Effective 01/01/2026 — Steps 1–6, $2,470 standard deduction, "
-    + "$50 midrange lookup, $29 exemption credit, Gary $2,127 monthly example",
+    "Arkansas Act 2 of the First Extraordinary Session, 2026, §1, amending "
+    + "Ark. Code §26-51-201(a)(4), effective for tax years beginning 01/01/2026; "
+    + "2026 withholding formula for the $2,470 standard deduction and $29 credit",
   status: "published",
   region: "AR",
 }];
@@ -105,22 +105,24 @@ interface ArBracket {
 }
 
 /**
- * Printed 2026 brackets. The $94,701–$97,800 phase-down is listed $100 at a
- * time on the publication; the adjustment falls $10.00 each band from
- * $399.30, which is what this walk reproduces.
+ * Act 2 §1 rates and $100 phase-down bands effective for tax years beginning
+ * 01/01/2026. Above $94,700, the law applies 2% to the first $4,700 and 3.7%
+ * thereafter, then subtracts its separately printed bracket adjustment.
  */
 function arBracket(income: bigint): ArBracket {
   if (income <= U("5599")) return { through: "5599", rate: pctToRate("0"), adjustment: "0" };
   if (income <= U("11199")) return { through: "11199", rate: pctToRate("2"), adjustment: "111.98" };
   if (income <= U("15999")) return { through: "15999", rate: pctToRate("3"), adjustment: "223.97" };
   if (income <= U("26399")) return { through: "26399", rate: pctToRate("3.4"), adjustment: "287.97" };
-  if (income <= U("94700")) return { through: "94700", rate: pctToRate("3.9"), adjustment: "419.96" };
-  if (income <= U("97800")) {
-    const band = Number((income - U("94701")) / U("100"));
-    const adjustment = U("399.30") - U("10") * BigInt(band);
-    return { through: "97800", rate: pctToRate("3.9"), adjustment: D(adjustment) };
-  }
-  return { through: null, rate: pctToRate("3.9"), adjustment: "89.30" };
+  if (income <= U("94700")) return { through: "94700", rate: pctToRate("3.7"), adjustment: "367.20" };
+  const statutoryAdjustment = income <= U("97600")
+    ? U("290") - U("10") * BigInt((income - U("94701")) / U("100"))
+    : 0n;
+  return {
+    through: null,
+    rate: pctToRate("3.7"),
+    adjustment: D(U("79.90") + statutoryAdjustment),
+  };
 }
 
 /** Annual gross tax after the $50 midrange lookup and dollar rounding. */
@@ -339,6 +341,6 @@ export const AR_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Arkansas DFA, Withholding Tax Formula Method, Effective 01/01/2026; "
+    "Arkansas Act 2 of the First Extraordinary Session, 2026; "
     + "Employer's Instructions, Effective 01/01/2026; Form AR4EC",
 };

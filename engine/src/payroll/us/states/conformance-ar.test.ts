@@ -29,7 +29,7 @@ test("AR certificate and region declarations are well formed", () => {
 
 test("AR printed percents, midrange lookup, and dollar rounding", () => {
   assert.equal(pctToRate("3.4"), "0.034");
-  assert.equal(pctToRate("3.9"), "0.039");
+  assert.equal(pctToRate("3.7"), "0.037");
   // Worked example: $23,054 → midrange of $23,000 and $23,100 = $23,050.
   assert.equal(arMidrangeLookup(U("23054"), AR_RATES_2026), U("23050"));
   assert.equal(arMidrangeLookup(U("23000"), AR_RATES_2026), U("23050"));
@@ -37,13 +37,12 @@ test("AR printed percents, midrange lookup, and dollar rounding", () => {
   // $23,050 × 3.4% − $287.97 = $495.73, rounded to $496.00.
   assert.equal(D(mulRateCents(U("23050"), pctToRate("3.4")) - U("287.97")), money("495.73"));
   assert.equal(arRoundToDollar(U("495.73")), U("496"));
-  assert.equal(arAnnualGrossTax(U("97815.26"), AR_RATES_2026), U("3725"));
-  // Published $100 phase-down cells: $96,001–$96,100 adjustment $269.30.
+  assert.equal(arAnnualGrossTax(U("97815.26"), AR_RATES_2026), U("3539"));
+  assert.equal(arAnnualGrossTax(U("23054"), AR_RATES_2026), U("496"));
+  assert.equal(arAnnualGrossTax(U("50000"), AR_RATES_2026), U("1485"));
+  // Act 2 adjustment for $96,001–$96,100 is $160.00.
   assert.equal(arMidrangeLookup(U("96050"), AR_RATES_2026), U("96050"));
-  assert.equal(
-    arAnnualGrossTax(U("96050"), AR_RATES_2026),
-    arRoundToDollar(mulRateCents(U("96050"), pctToRate("3.9")) - U("269.30")),
-  );
+  assert.equal(arAnnualGrossTax(U("96050"), AR_RATES_2026), U("3314"));
 });
 
 test("AR formula example adds the AR4EC per-paycheck amount", () => {
