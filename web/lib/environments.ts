@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { can, type Authz } from "./authz";
-import { accessibleProductionOrgs } from "./org-access";
+import { accessibleProductionOrgs, resolveActiveEnv } from "./org-access";
 
 /**
  * Data for the workspace switcher (inside the account menu). Lists every
@@ -49,11 +49,18 @@ export async function shellEnvironments(authz: Authz): Promise<WorkspaceEnvironm
     const tenants: TenantGroup[] = [];
     for (const o of accessible) {
       let sandboxes: EnvOption[] = [];
-      if (canManage && o.envKind === "production") {
-        sandboxes = (await db.execute<{ orgId: string; name: string; status: string; tier: string }>(sql`
+      if (o.envKind === "production") {
+        const candidates = (await db.execute<{ orgId: string; name: string; status: string; tier: string }>(sql`
           select org_id as "orgId", name, status, tier
             from sandboxes where production_org_id = ${o.orgId}
            order by created_at`)).rows;
+        // The switcher must not advertise an environment that the request
+        // resolver would refuse (for example, a cross-tenant super-admin with
+        // no explicit mapped identity in the sandbox's production org).
+        const enterable = await Promise.all(candidates.map(async (sandbox) =>
+          (await resolveActiveEnv(home, sandbox.orgId)) ? sandbox : null,
+        ));
+        sandboxes = enterable.filter((sandbox): sandbox is EnvOption => sandbox !== null);
       }
       tenants.push({
         productionOrgId: o.orgId,

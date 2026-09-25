@@ -66,7 +66,7 @@ export function rebaseUuid(oldId: string, seed: string): string {
 async function actingUserIn(
   home: HomeUser,
   targetOrgId: string,
-  envKind: "production" | "preview" = "production",
+  envKind: "production" | "preview" | "sandbox" = "production",
 ): Promise<string | null> {
   if (targetOrgId === home.orgId) return home.id;
   const r = (await db.execute(sql`
@@ -186,7 +186,10 @@ export async function resolveActiveEnv(
 
     if (org.envKind === "sandbox") {
       const prodId = org.sandboxOf as string;
-      const acting = await actingUserIn(home, prodId, "production");
+      // A sandbox needs an actual cloned tenant user. Super-admin's platform
+      // identity can inspect production without a tenant mapping, but it is
+      // not a valid source identity to rebase into another tenant's sandbox.
+      const acting = await actingUserIn(home, prodId, "sandbox");
       if (!acting) return null;
       // Entering a sandbox is a privileged act: the member must hold
       // admin.sandboxes.manage in the PRODUCTION org (super admins hold
