@@ -33,9 +33,12 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
+  evaluateUsNonresidentThreshold,
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsWageAllocation,
+  type UsNonresidentThresholdRule,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -216,6 +219,32 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     trace("ND_TRIBAL_SOURCE_WAGES", reservationWages);
   }
 
+  // §57-38-59.3 mobile-workforce exclusion: a qualifying nonresident present
+  // 20 days or fewer is excluded. Without the filed eligibility attestation
+  // the exclusion does not apply (fail closed); past 20 days withholding
+  // resumes on the ordinary base.
+  if (input.basis === "nonresident") {
+    const mobileCertificate = input.supportingCertificates?.[ND_MOBILE_KEY];
+    if (mobileCertificate?.onFile) {
+      const unmet = ND_MOBILE_FACTS.filter((fact) => !certificateFlag(mobileCertificate, fact.key));
+      if (unmet.length > 0) {
+        throw new PayrollError(
+          "North Dakota mobile-workforce exclusion requires proof that "
+          + unmet.map((fact) => fact.description).join("; "),
+        );
+      }
+      const allocation = requireUsWageAllocation(input.wageAllocations, "ND", null);
+      const threshold = evaluateUsNonresidentThreshold(
+        allocation, ND_MOBILE_WORKFORCE_RULE, P,
+      );
+      trace("ND_MOBILE_DAYS_YTD", BigInt(allocation.serviceDaysYearToDate ?? 0));
+      if (!threshold.crossed) {
+        factors.ND_MOBILE_EXCLUDED = "1";
+        return { state: "ND", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+      }
+    }
+  }
+
   const legacyW4 = input.federalLegacyW4;
   if (legacyW4) {
     const legacyRates = ND_LEGACY_PERIOD_RATES[period];
@@ -275,12 +304,41 @@ export const ND_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ND_W4_TAXABLE: "North Dakota wages after pre-2020 W-4 allowances",
   ND_W4_TAX: "North Dakota tax from pre-2020 W-4 method",
   ND_TRIBAL_SOURCE_WAGES: "North Dakota reservation-source wages exempt this period",
+  ND_MOBILE_DAYS_YTD: "North Dakota service days this year for a nonresident",
+  ND_MOBILE_EXCLUDED: "North Dakota 20-day mobile-workforce exclusion",
   ND_ANNUAL_WAGES: "North Dakota annualized wages",
   ND_ANNUAL_TAX: "North Dakota tax (annual)",
   ND_WITHHELD: "North Dakota tax withheld this period",
 };
 
 const ND_TRIBAL_KEY = "us_nd_tribal";
+const ND_MOBILE_KEY = "us_nd_mobile";
+
+/**
+ * N.D.C.C. §57-38-59.3 mobile-workforce exclusion: a nonresident with no
+ * other North Dakota-source income, present 20 days or fewer, whose
+ * residence state qualifies, is excluded. The exclusion is day-based with no
+ * retroactive catch-up stated — withholding resumes prospectively past 20.
+ */
+const ND_MOBILE_WORKFORCE_RULE: UsNonresidentThresholdRule = {
+  measure: "service_days",
+  threshold: 20,
+  crossing: ">",
+  catchUpPriorWages: false,
+  label: "North Dakota 20-day mobile-workforce exclusion",
+};
+
+/** Eligibility facts for the mobile-workforce exclusion, §57-38-59.3. */
+const ND_MOBILE_FACTS: readonly { key: string; description: string }[] = [
+  {
+    key: "no_other_nd_source_income",
+    description: "the nonresident has no other income from sources in North Dakota for the tax year",
+  },
+  {
+    key: "residence_state_qualifies",
+    description: "the nonresident's residence state provides a substantially similar exclusion or does not impose an individual income tax, or the income is exempt under the United States Constitution or federal statute",
+  },
+];
 
 /** Eligibility facts for the reservation-source exemption, Guideline p. 2. */
 const ND_TRIBAL_FACTS: readonly { key: string; description: string }[] = [
@@ -301,7 +359,7 @@ export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: ND_TAX_YEAR_EDITIONS,
   printedPeriods: ND_PERIODS,
-  supportingCertificateKeys: ["us_nd_ndwm", ND_TRIBAL_KEY],
+  supportingCertificateKeys: ["us_nd_ndwm", ND_TRIBAL_KEY, ND_MOBILE_KEY],
   taxableWageBases: {
     income: "state:US:ND:income", nonPeriodic: "state:US:ND:nonPeriodic",
   },
@@ -431,6 +489,34 @@ export const ND_TRIBAL_CERTIFICATE: PayrollCertificate = {
       required: true,
       help: "Wages for services the employee performed on the reservation this period (guideline condition 3). Off-reservation wages withhold normally.",
     },
+  ],
+};
+
+/**
+ * North Dakota mobile-workforce exclusion attestation (N.D.C.C. §57-38-59.3).
+ * The state publishes no form for it — the employer keeps the eligibility
+ * facts with its records — so the predicates the system cannot derive (other
+ * income, residence-state prong) are attested here while service days come
+ * from verified work allocations.
+ */
+export const ND_MOBILE_CERTIFICATE: PayrollCertificate = {
+  key: ND_MOBILE_KEY,
+  form: "(employer-determined)",
+  label: "North Dakota mobile-workforce exclusion attestation",
+  scope: { level: "region", region: "ND" },
+  purpose: "exemption",
+  citation:
+    "North Dakota Office of State Tax Commissioner, Income Tax Withholding & "
+    + "Information Returns Guideline, Section 1 p. 3; N.D.C.C. §57-38-59.3",
+  summary:
+    "Attests a nonresident's mobile-workforce eligibility (no other North "
+    + "Dakota income, qualifying residence state). With it on file, verified "
+    + "North Dakota service days at or under 20 exclude the wages. Without it, "
+    + "ordinary withholding applies.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "no_other_nd_source_income", label: "Nonresident has no other income from North Dakota sources for the tax year", kind: "flag", required: true, help: "§57-38-59.3 condition 1." },
+    { key: "residence_state_qualifies", label: "Residence state provides a substantially similar exclusion or does not impose an individual income tax, or the income is constitutionally or federally exempt", kind: "flag", required: true, help: "§57-38-59.3 condition 3." },
   ],
 };
 
