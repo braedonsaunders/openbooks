@@ -4,10 +4,6 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// Equipment ROI double-counted reversed direct costs: the metric summed
-// only positive expense lines across posted and reversed entries, so a
-// +100 expense and its −100 reversal still read as 100 direct cost. The
-// metric now sums signed amounts, netting reversals to zero.
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __equipmentConcurrencyState: state })
@@ -28,7 +24,7 @@ registerHooks({
 const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { GET } = await import('./route.ts')
+const { GET, PATCH } = await import('./route.ts')
 
 async function fixture(status = 'draft') {
   const org = await createScratchOrg()
@@ -44,8 +40,6 @@ async function fixture(status = 'draft') {
 test('reversed direct costs net to zero instead of hiding behind a positive filter', async () => {
   const { org, unitId } = await fixture()
   try {
-    // A +100 expense and its −100 reversal must read as zero direct cost,
-    // not 100. Both entries balance through the clearing account.
     for (const [entryId, costAmount] of [
       [randomUUID(), '100.0000'],
       [randomUUID(), '-100.0000'],
@@ -55,7 +49,6 @@ test('reversed direct costs net to zero instead of hiding behind a positive filt
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
         values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entryNumber}, ${org.date}, ${org.periodId}, 'direct cost', 'draft', 'manual')`)
       const contra = costAmount.startsWith('-') ? '100.0000' : '-100.0000'
-      // One statement: the balance trigger reads the entry per statement.
       await db.execute(sql`insert into journal_lines
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, equipment_unit_id)
         values (${org.orgId}, ${entryId}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${costAmount}, 'CAD', ${costAmount}, ${unitId}),
@@ -68,6 +61,13 @@ test('reversed direct costs net to zero instead of hiding behind a positive filt
     assert.equal(response.status, 200)
     const body = (await response.json()) as { metrics: { direct_costs: string } }
     assert.equal(body.metrics.direct_costs, '0.0000')
+    const destinationId = randomUUID()
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${destinationId},${org.orgId},${org.subsidiaryId},'Destination','CAD','CA')`)
+    const moved = await withOrgContext(state.orgId, () => PATCH(
+      new Request(`http://equipment.test/api/equipment/${unitId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subsidiaryId: destinationId, revision: 0 }) }),
+      { params: Promise.resolve({ id: unitId }) },
+    ))
+    assert.equal(moved.status, 422)
   } finally {
     await dropScratchOrg(org.orgId)
   }
