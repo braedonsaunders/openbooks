@@ -142,6 +142,16 @@ async function assertActiveActor(actorId: string, orgId: string): Promise<void> 
   if (!actor.rows[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
 }
 
+async function assertCapturedSandboxReady(sandboxOrgId: string | null, productionOrgId: string): Promise<void> {
+  if (!sandboxOrgId) throw new Error("change set has no source sandbox — recapture from a live sandbox");
+  const sandbox = (await db.execute<{ status: string }>(sql`
+    select status from sandboxes where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId}`)).rows[0];
+  if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
+  if (sandbox.status !== "ready") {
+    throw new Error(`change set's sandbox is ${sandbox.status}, not ready — wait until it is ready and recapture before reviewing or applying`);
+  }
+}
+
 /** Freeze the lifecycle actor's sandbox-management authority. Review and
  * approval consult this before any status write; apply also uses the returned
  * set to gate per-table writes and role grants. User administration takes the
@@ -346,12 +356,21 @@ export async function buildChangeSet(
         itemCount++;
       }
     }
+    const finalSandbox = (await db.execute<{ id: string }>(sql`
+      select id from sandboxes
+       where id = ${sid} and org_id = ${sbx} and production_org_id = ${prod} and status = 'ready'
+       for update`)).rows[0];
+    if (!finalSandbox) {
+      throw new Error("sandbox changed or was deleted during capture; no change set was published — wait for a ready sandbox and recapture");
+    }
     // The marker is written only after all item inserts have succeeded.  The
     // count is checked again by review and apply to detect any tampering.
-    await db.execute(sql`
+    const completed = await db.execute<{ id: string }>(sql`
       update change_sets
          set capture_complete = true, item_count = ${itemCount}, updated_at = now(), updated_by = ${creator}
-       where id = ${cs.id} and org_id = ${prod}`);
+       where id = ${cs.id} and org_id = ${prod} and capture_complete = false
+       returning id`);
+    if (!completed.rows[0]) throw new Error("change-set capture completion matched no row; the draft was not published");
     return { changeSetId: cs.id, itemCount };
   }));
 }
@@ -362,7 +381,7 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
   const actor = requireActor(reviewerId, "change-set review");
   await withMaintenanceTransaction(null, async () => {
     const result = await db.execute<ChangeSetRow>(sql`
-      select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
+      select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
     const c = result.rows[0];
     if (!c) throw new Error(`change set not found: ${id}`);
@@ -371,6 +390,7 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
     await promotionAuthority(actor, prod);
     if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
     if (!c.capture_complete) throw new Error("change set capture is incomplete");
+    await assertCapturedSandboxReady(c.sandbox_org_id, prod);
     await assertDistinctActors(actor, [["creator", c.created_by]]);
     const count = await db.execute<{ count: string }>(sql`
       select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`);
@@ -433,19 +453,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
     // to apply while its customization layer is anything but quiescent. The
     // per-item expected_before check below still guards drift that landed
     // between two ready states; this guards the mid-rewrite window itself.
-    if (c.sandbox_org_id) {
-      const sbx = (await db.execute<{ status: string }>(sql`
-        select status from sandboxes where org_id = ${c.sandbox_org_id}`)).rows[0];
-      if (!sbx) {
-        throw new Error("change set's sandbox is gone — recapture from a live sandbox before applying");
-      }
-      if (sbx.status !== "ready") {
-        throw new Error(
-          `change set's sandbox is ${sbx.status}, not ready — wait until it is ready again, ` +
-            `and recapture and re-review if the refresh changed customizations`,
-        );
-      }
-    }
+    await assertCapturedSandboxReady(c.sandbox_org_id, prod);
     await assertDistinctActors(actor, [
       ["creator", c.created_by],
       ["reviewer", c.reviewed_by],

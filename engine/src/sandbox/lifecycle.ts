@@ -661,6 +661,8 @@ export async function resetSandbox(sandboxId: string): Promise<void> {
 /** Permanently delete a sandbox: wipe all its rows, then drop the org (which
  * cascades the sandboxes row). */
 export async function deleteSandbox(sandboxId: string): Promise<void> {
+  const id = assertUuid(sandboxId);
+  await withSandboxRefreshLock(id, async () => {
   const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`));
   const orgId = requireFoundSandbox(sandboxId, row.rows[0]?.org_id as string | undefined);
   // A refresh that already marked 'refreshing' owns this sandbox: wiping
@@ -697,4 +699,5 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
        where id = ${sandboxId} and org_id = ${orgId}`);
     throw err;
   }
+  });
 }
