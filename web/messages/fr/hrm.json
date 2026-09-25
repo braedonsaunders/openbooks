@@ -391,6 +391,8 @@
     },
     "holdersCount": "{count, plural, one {# titulaire} other {# titulaires}}",
     "empty": "Aucun poste ne correspond à ce filtre.",
+    "invalidDateTitle": "Date invalide",
+    "invalidDate": "{date} n'est pas une date de calendrier valide — les positions sont affichées au {today}.",
     "total": "Total",
     "drawer": {
       "title": "Poste {code}",

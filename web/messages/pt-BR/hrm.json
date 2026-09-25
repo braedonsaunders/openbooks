@@ -391,6 +391,8 @@
     },
     "holdersCount": "{count, plural, one {# titular} other {# titulares}}",
     "empty": "Nenhuma posição corresponde a este filtro.",
+    "invalidDateTitle": "Data de referência inválida",
+    "invalidDate": "{date} não é uma data real do calendário — exibindo as posições em {today}.",
     "total": "Total",
     "drawer": {
       "title": "Posição {code}",

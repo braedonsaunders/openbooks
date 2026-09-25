@@ -391,6 +391,8 @@
     },
     "holdersCount": "{count, plural, one {# holder} other {# holders}}",
     "empty": "No positions match this filter.",
+    "invalidDateTitle": "Invalid as-of date",
+    "invalidDate": "{date} is not a real calendar date — showing positions as of {today} instead.",
     "total": "Total",
     "drawer": {
       "title": "Position {code}",
