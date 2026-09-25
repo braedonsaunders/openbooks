@@ -224,6 +224,14 @@ function reset(): void {
 const UUID = "00000000-0000-4000-8000-000000000001";
 const UUID2 = "00000000-0000-4000-8000-000000000002";
 
+function postRequest(url: string, body: unknown): Request {
+  return new Request(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 test("a missing feature flag 404s before the service runs", async () => {
   reset();
   routeState.featureOn = false;
@@ -243,10 +251,10 @@ test("an unauthenticated caller never reaches the service", async () => {
 test("record carries the caller's org and actor into the service", async () => {
   reset();
   const post = await ledgerRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ employmentId: UUID, typeId: UUID2, issuedOn: "2026-09-21" }),
+    postRequest("http://openbooks.test/api/hrm/qualifications", {
+      employmentId: UUID,
+      typeId: UUID2,
+      issuedOn: "2026-09-21",
     }),
   );
   assert.equal(post.status, 201);
@@ -261,10 +269,10 @@ test("record carries the caller's org and actor into the service", async () => {
 test("record refuses an impossible issuedOn date before calling the service", async () => {
   reset();
   const response = await ledgerRoute!.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ employmentId: UUID, typeId: UUID2, issuedOn: "2025-02-31" }),
+    postRequest("http://openbooks.test/api/hrm/qualifications", {
+      employmentId: UUID,
+      typeId: UUID2,
+      issuedOn: "2025-02-31",
     }),
   );
   assert.equal(response.status, 400);
@@ -276,10 +284,10 @@ test("an engine refusal maps with its message intact", async () => {
   reset();
   routeState.serviceThrow = new HrmQualificationError("expiry 2026-01-01 is before issue 2026-09-21 — fix the dates and record again.");
   const post = await ledgerRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ employmentId: UUID, typeId: UUID2, issuedOn: "2026-09-21" }),
+    postRequest("http://openbooks.test/api/hrm/qualifications", {
+      employmentId: UUID,
+      typeId: UUID2,
+      issuedOn: "2026-09-21",
     }),
   );
   assert.equal(post.status, 422);
@@ -290,11 +298,7 @@ test("an engine refusal maps with its message intact", async () => {
 test("an unshaped body never reaches the service", async () => {
   reset();
   const post = await ledgerRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ employmentId: UUID }),
-    }),
+    postRequest("http://openbooks.test/api/hrm/qualifications", { employmentId: UUID }),
   );
   assert.equal(post.status, 400);
   assert.deepEqual(routeState.calls, []);
@@ -303,10 +307,10 @@ test("an unshaped body never reaches the service", async () => {
 test("the gate check reads through with the caller's org", async () => {
   reset();
   const post = await checkRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/check", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ employmentId: UUID, subjectKind: "project", subjectId: UUID2 }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/check", {
+      employmentId: UUID,
+      subjectKind: "project",
+      subjectId: UUID2,
     }),
   );
   assert.equal(post.status, 200);
@@ -319,20 +323,12 @@ test("verify and revoke carry the path id into the service", async () => {
   reset();
   const params = Promise.resolve({ id: "q-9" });
   const verify = await verifyRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/q-9/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
-    }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/q-9/verify", {}),
     { params },
   );
   assert.equal(verify.status, 200);
   const revoke = await revokeRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/q-9/revoke", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ reason: "fraud" }),
-    }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/q-9/revoke", { reason: "fraud" }),
     { params: Promise.resolve({ id: "q-9" }) },
   );
   assert.equal(revoke.status, 200);
@@ -341,10 +337,8 @@ test("verify and revoke carry the path id into the service", async () => {
     { fn: "revoke", args: { orgId: "org-1", actorId: "user-1", qualificationId: "q-9", reason: "fraud" } },
   ]);
   const renew = await renewRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/q-9/renew", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ issuedOn: "2026-09-21" }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/q-9/renew", {
+      issuedOn: "2026-09-21",
     }),
     { params: Promise.resolve({ id: "q-9" }) },
   );
@@ -355,11 +349,7 @@ test("evidence attach admits the holder through the self grant", async () => {
   reset();
   routeState.perms = ["hrm.self.read"];
   const post = await evidenceRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/q-9/evidence", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ fileId: UUID }),
-    }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/q-9/evidence", { fileId: UUID }),
     { params: Promise.resolve({ id: "q-9" }) },
   );
   assert.equal(post.status, 200);
@@ -371,18 +361,19 @@ test("evidence attach admits the holder through the self grant", async () => {
 test("requirements set refuses an unreadable shape before the service", async () => {
   reset();
   const post = await requirementsRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualification-requirements", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ subjectKind: "project", subjectId: UUID, typeId: UUID2, severity: "block" }),
+    postRequest("http://openbooks.test/api/hrm/qualification-requirements", {
+      subjectKind: "project",
+      subjectId: UUID,
+      typeId: UUID2,
+      severity: "block",
     }),
   );
   assert.equal(post.status, 201);
   const bad = await requirementsRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualification-requirements", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ subjectKind: "planet", subjectId: UUID, typeId: UUID2 }),
+    postRequest("http://openbooks.test/api/hrm/qualification-requirements", {
+      subjectKind: "planet",
+      subjectId: UUID,
+      typeId: UUID2,
     }),
   );
   assert.equal(bad.status, 400);
@@ -391,20 +382,19 @@ test("requirements set refuses an unreadable shape before the service", async ()
 test("type creation carries code and category into the service", async () => {
   reset();
   routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: new Set([UUID]) };
-  const request = (url: string, body: unknown) => new Request(`http://openbooks.test${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const denied = await Promise.all([
-    typesRoute.POST(request("/api/hrm/qualification-types", { code: "A", name: "A", category: "other" })),
-    typeDetailRoute.PATCH(request("/api/hrm/qualification-types/x", { name: "A" }), { params: Promise.resolve({ id: UUID }) }),
-    categoriesRoute.POST(request("/api/hrm/qualification-types/categories", { category: "A" })),
+    typesRoute.POST(postRequest("http://openbooks.test/api/hrm/qualification-types", { code: "A", name: "A", category: "other" })),
+    typeDetailRoute.PATCH(postRequest("http://openbooks.test/api/hrm/qualification-types/x", { name: "A" }), { params: Promise.resolve({ id: UUID }) }),
+    categoriesRoute.POST(postRequest("http://openbooks.test/api/hrm/qualification-types/categories", { category: "A" })),
   ]);
   assert.deepEqual(denied.map((response) => response.status), [403, 403, 403]);
   assert.deepEqual(routeState.calls, []);
   routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null };
   const post = await typesRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualification-types", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code: "OSHA30", name: "OSHA 30", category: "certification" }),
+    postRequest("http://openbooks.test/api/hrm/qualification-types", {
+      code: "OSHA30",
+      name: "OSHA 30",
+      category: "certification",
     }),
   );
   assert.equal(post.status, 201);
@@ -418,37 +408,27 @@ test("F3-37: record, verify, renew and revoke refuse a read-only role before the
   routeState.perms = ["hrm.certifications.read", "hrm.self.read"];
   const params = { params: Promise.resolve({ id: "q-9" }) };
   const record = await ledgerRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ employmentId: UUID, typeId: UUID2, issuedOn: "2026-09-21" }),
+    postRequest("http://openbooks.test/api/hrm/qualifications", {
+      employmentId: UUID,
+      typeId: UUID2,
+      issuedOn: "2026-09-21",
     }),
   );
   assert.equal(record.status, 403);
   const verify = await verifyRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/q-9/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
-    }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/q-9/verify", {}),
     params,
   );
   assert.equal(verify.status, 403);
   const renew = await renewRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/q-9/renew", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ issuedOn: "2026-09-21" }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/q-9/renew", {
+      issuedOn: "2026-09-21",
     }),
     params,
   );
   assert.equal(renew.status, 403);
   const revoke = await revokeRoute.POST(
-    new Request("http://openbooks.test/api/hrm/qualifications/q-9/revoke", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ reason: "fraud" }),
-    }),
+    postRequest("http://openbooks.test/api/hrm/qualifications/q-9/revoke", { reason: "fraud" }),
     params,
   );
   assert.equal(revoke.status, 403);
