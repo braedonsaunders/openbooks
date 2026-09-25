@@ -217,6 +217,13 @@ test("nl validation accepts a well-formed definition", () => {
   assert.equal(def.limit, 100);
 });
 
+test("nl validation refuses the unsupported groupBy alias instead of dropping grouping", () => {
+  assert.throws(
+    () => validateNlDefinition({ entity: "payroll_stubs", columns: ["net_pay"], groupBy: ["pay_date"] }, CATALOG, []),
+    /unknown definition key "groupBy"/,
+  );
+});
+
 test("nl validation refuses unknown entities, columns, fns and gated entities by name", () => {
   assert.throws(() => validateNlDefinition({ entity: "payroll_stubs", columns: [] }, CATALOG, []),
     /at least one column/);
