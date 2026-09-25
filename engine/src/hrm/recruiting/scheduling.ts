@@ -10,6 +10,7 @@ import {
   pgUuidArray,
   requireDepthFeature,
   userIdsForParties,
+  type RecruitingEmailData,
   type RecruitingEmailEnqueuer,
 } from "./depth.ts";
 import {
@@ -383,7 +384,8 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
     );
   }
   const orgId = scope[0].orgId;
-  return withOrgTransaction(orgId, async () => {
+  const enqueue = query.enqueueEmail ?? enqueueRecruitingEmailJob;
+  const staged = await withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
     // The interview's own fate gates every booking: a cancel that lands
     // between the link lookup above and this transaction must still read
@@ -479,21 +481,28 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
         href: "/hrm/recruiting",
       })),
     });
-    const enqueue = query.enqueueEmail ?? enqueueRecruitingEmailJob;
-    if (chain.candidateEmail) {
-      await enqueue(
-        {
-          orgId,
-          to: chain.candidateEmail,
-          subject: "Your interview is booked",
-          html: `<p>Your interview is booked for ${escapeHtml(when)} (${escapeHtml(booked.timezone)}).</p>`,
-          text: `Your interview is booked for ${when} (${booked.timezone}).`,
-        },
-        { jobId: `interview-booked|${orgId}|${booked.id}` },
-      );
-    }
-    return toSlotDTO(booked);
+    // The confirmation is staged, not sent: the enqueue below runs only
+    // after this transaction commits, so a rolled-back booking never
+    // confirms a slot that was never taken. The deterministic job id keeps
+    // a caller retry idempotent at the queue.
+    const email = chain.candidateEmail
+      ? {
+          data: {
+            orgId,
+            to: chain.candidateEmail,
+            subject: "Your interview is booked",
+            html: `<p>Your interview is booked for ${escapeHtml(when)} (${escapeHtml(booked.timezone)}).</p>`,
+            text: `Your interview is booked for ${when} (${booked.timezone}).`,
+          } satisfies RecruitingEmailData,
+          jobId: `interview-booked|${orgId}|${booked.id}`,
+        }
+      : null;
+    return { slot: toSlotDTO(booked), email };
   });
+  if (staged.email) {
+    await enqueue(staged.email.data, { jobId: staged.email.jobId });
+  }
+  return staged.slot;
 }
 
 /** Read the live proposed slots for a booking link (public, sessionless). */

@@ -10,6 +10,7 @@ import { requireActorId, requireId, requireOrgId } from "./input.ts";
 import {
   enqueueRecruitingEmailJob,
   requireDepthFeature,
+  type RecruitingEmailData,
   type RecruitingEmailEnqueuer,
 } from "./depth.ts";
 
@@ -368,7 +369,8 @@ export async function evaluateRetentionRule(
   const now = options.now ?? new Date();
   const enqueue = options.enqueueEmail ?? enqueueRecruitingEmailJob;
   const removeFile = options.removeFile ?? deleteCabinetFile;
-  return withOrgTransaction(orgId, async () => {
+  const pendingEmails: { readonly data: RecruitingEmailData; readonly jobId: string }[] = [];
+  const run = await withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     // Authority first: a user run needs the manage grant plus the runner's
     // employer scope (null = unrestricted). The system tick runs as system
@@ -497,16 +499,20 @@ export async function evaluateRetentionRule(
              order by k.expires_at limit 1
           `)).rows[0];
           if (consentRow?.email) {
-            await enqueue(
-              {
+            // Staged, not sent: the drain below runs only after this
+            // transaction commits, so a rolled-back run never asks for an
+            // extension it never recorded. The deterministic job id keeps
+            // a duty retry idempotent at the queue.
+            pendingEmails.push({
+              data: {
                 orgId,
                 to: consentRow.email,
                 subject: "Keep your application on file?",
                 html: `<p>Your consent to keep your application on file expires soon. Reply to this email to extend it, or do nothing and it will lapse.</p>`,
                 text: `Your consent to keep your application on file expires soon. Reply to this email to extend it, or do nothing and it will lapse.`,
               },
-              { jobId: `consent-extension|${orgId}|${consentRow.id}` },
-            );
+              jobId: `consent-extension|${orgId}|${consentRow.id}`,
+            });
           }
           await db.execute(sql`
             update hrm_candidate_consents
@@ -557,6 +563,10 @@ export async function evaluateRetentionRule(
     if (!run) throw new RecruitingError("REFUSED", "the retention run was not recorded — no row was written; retry the request");
     return run;
   });
+  for (const pending of pendingEmails) {
+    await enqueue(pending.data, { jobId: pending.jobId });
+  }
+  return run;
 }
 
 /**
