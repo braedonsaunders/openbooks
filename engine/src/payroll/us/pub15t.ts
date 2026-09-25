@@ -102,11 +102,24 @@ export interface Pub15TInput {
   futaExempt?: boolean;
   suiExempt?: boolean;
 
-  /** Employer-configured effective FUTA rate for this state/account. */
+  /**
+   * Employer-configured NET FUTA rate for this state/account (the tenant
+   * us_futa rate). Absent accrues the statutory 0.6% default. Never carries
+   * a Schedule A credit reduction — that prices on the Form 940 year-end
+   * true-up (futaScheduleATrueUp), never in a pay run.
+   */
   futaEffectiveRate?: string;
-  /** State unemployment jurisdiction whose Form 940 Schedule A reduction applies. */
+  /**
+   * State unemployment jurisdiction, retained for caller attribution context.
+   * The per-period calculation ignores it (net rate everywhere); the year-end
+   * true-up resolves regions from its own input.
+   */
   futaRegion?: string;
-  /** Verified state work allocations used to detect unsupported multi-state Schedule A wages. */
+  /**
+   * Verified state work allocations, retained for caller attribution context.
+   * The per-period calculation ignores them (net rate needs no attribution);
+   * the year-end true-up prices from caller-attributed wages by region.
+   */
   futaWorkAllocations?: readonly { region: string }[];
   /** Org-configured SUI for the employee's state; omit to skip SUTA. */
   sui?: { rate: string; wageBase: string };
@@ -179,33 +192,74 @@ function cappedSlice(wages: bigint, cap: bigint, ytd: bigint): bigint {
 }
 
 /**
- * Form 940 Schedule A rates, keyed by the wage tax year. The schedules list
- * every state and DC; a missing state entry in a transcribed year means the
- * published table lists no credit reduction for that jurisdiction.
+ * Form 940 Schedule A credit-reduction rates, keyed by the wage tax year.
+ * The schedules list every state and DC; a missing state entry in a
+ * transcribed year means the published table lists no credit reduction for
+ * that jurisdiction.
+ *
+ * TIMING DOCTRINE. The reduction applies on the Form 940 year-end liability
+ * (futaScheduleATrueUp below), never in a pay run: USDOL publishes the
+ * year's credit-reduction states in November, so a per-period gate would
+ * turn a year-end true-up into a gate blocking all US payroll for most of
+ * the year. Per-period FUTA accrues at the net rate (the tenant us_futa
+ * rate, 0.6% by default).
  *
  * Official sources:
  * - IRS 2024 Schedule A: https://www.irs.gov/pub/irs-prior/f940sa--2024.pdf
- * - IRS 2025 Schedule A: https://www.irs.gov/pub/irs-prior/f940sa--2025.pdf
- * FUTA net rate is the ordinary 0.6% plus the Schedule A credit reduction.
+ * - IRS 2025 Schedule A (California 1.2% the only state; Connecticut and New
+ *   York repaid before 2025-11-10): https://www.irs.gov/pub/irs-prior/f940sa--2025.pdf
+ * The additional 940 liability is FUTA-taxable wages times the reduction;
+ * the per-period net rate stays the ordinary 0.6%.
  */
 const FUTA_CREDIT_REDUCTION: Readonly<Record<number, Readonly<Record<string, string>>>> = {
   2024: { CA: "0.009", NY: "0.009" },
   2025: { CA: "0.012" },
 };
 
-function effectiveFutaRate(year: number, region: string, fullCreditRate: string): string {
+/**
+ * The Schedule A reduction for one jurisdiction in a transcribed year — the
+ * year-end true-up's resolver. Refuses by name for a year whose Schedule A
+ * is absent (compute the true-up once USDOL publishes it), and for a
+ * jurisdiction outside the state table (territories price through the
+ * tenant's configured net rate, never through this table).
+ */
+function creditReductionRate(year: number, region: string): string {
   const reductions = FUTA_CREDIT_REDUCTION[year];
   if (!reductions) {
     throw new PayrollError(
-      `FUTA credit-reduction rates for ${year} are not transcribed from Form 940 Schedule A; configure the effective rate from the official schedule or update the pack — refused by name`,
+      `Form 940 year-end true-up refused: FUTA credit-reduction rates for ${year} are not transcribed from Schedule A `
+      + "(USDOL publishes the year's credit-reduction states in November) — compute the true-up once the schedule "
+      + "is transcribed — refused by name",
     );
   }
   if (!US_STATES.includes(region as (typeof US_STATES)[number])) {
     throw new PayrollError(
-      `FUTA credit-reduction rate cannot be resolved for jurisdiction ${region} in ${year}; configure a verified effective rate for the Schedule A jurisdiction — refused by name`,
+      `Form 940 year-end true-up refused: FUTA credit-reduction rate cannot be resolved for jurisdiction ${region} `
+      + `in ${year}; configure a verified effective rate for the Schedule A jurisdiction — refused by name`,
     );
   }
-  return D(U(fullCreditRate) + U(reductions[region] ?? "0"));
+  return reductions[region] ?? "0";
+}
+
+/**
+ * Form 940 year-end true-up: the additional FUTA liability from Schedule A
+ * credit reductions, summed state by state over the year's FUTA-taxable
+ * wages. Pure and DB-free: wages arrive attributed by state UI jurisdiction
+ * (multi-state attribution is the caller's job — per-period payroll never
+ * attributes, it accrues the net rate). Refuses by name for a year whose
+ * Schedule A is absent; never called from a pay run.
+ */
+export function futaScheduleATrueUp(
+  year: number,
+  futaTaxableWagesByRegion: Readonly<Record<string, string>>,
+): string {
+  let additional = ZERO;
+  for (const [region, wages] of Object.entries(futaTaxableWagesByRegion)) {
+    const taxable = U(wages);
+    if (taxable === ZERO) continue;
+    additional += mulRateCents(taxable, creditReductionRate(year, region));
+  }
+  return D(additional);
 }
 
 export function calculatePub15T(input: Pub15TInput): Pub15TResult {
@@ -344,17 +398,13 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   let futa = ZERO;
   let suta = ZERO;
   if (!input.futaExempt) {
-    const allocationRegions = [...new Set(input.futaWorkAllocations?.map(({ region }) => region) ?? [])];
-    if (!input.suiExempt && futaWages > ZERO && allocationRegions.length > 1) {
-      throw new PayrollError(
-        `US FUTA credit-reduction calculation refused: this employee's wages are allocated across state UI jurisdictions (${allocationRegions.join(", ")}), but state-specific FUTA taxable wages for Form 940 Schedule A are not represented. Resolve state UI wage attribution before calculating.`,
-      );
-    }
     const futaTaxable = cappedSlice(futaWages, U(rates.futa.wageBase), opt(ytd.futaWages));
     if (futaTaxable > ZERO) {
-      const rate = input.futaEffectiveRate === undefined
-        ? effectiveFutaRate(rates.year, allocationRegions[0] ?? input.futaRegion ?? "", rates.futa.fullCreditEffectiveRate)
-        : input.futaEffectiveRate;
+      // Net rate only: the tenant us_futa rate or the statutory 0.6% default.
+      // Schedule A credit reduction is a Form 940 year-end true-up
+      // (futaScheduleATrueUp), never a pay-run gate — the schedule publishes
+      // in November, after most of the year's pay runs.
+      const rate = input.futaEffectiveRate ?? rates.futa.fullCreditEffectiveRate;
       futa = mulRateCents(futaTaxable, rate);
     }
   }
