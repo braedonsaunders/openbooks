@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button, Drawer, Input, Label, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { useDirtyClose } from "@/lib/use-dirty-close";
+import { useTranslations } from "next-intl";
 export function ReverseAssetChange({
   id,
   domain = "asset",
@@ -15,11 +17,23 @@ export function ReverseAssetChange({
 }) {
   const router = useRouter(),
     today = useBusinessToday();
+  const tc = useTranslations("common");
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [date, setDate] = useState(effectiveOn ?? today),
     [reason, setReason] = useState(""),
     [key, setKey] = useState(() => crypto.randomUUID());
+  const dirty = reason !== "" || (domain === "asset" && date !== (effectiveOn ?? today));
+  const closeDrawer = () => {
+    setOpen(false);
+    setDate(effectiveOn ?? today);
+    setReason("");
+    setKey(crypto.randomUUID());
+  };
+  const closeGuard = useDirtyClose({
+    dirty, busy, onClose: closeDrawer,
+    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+  });
   async function propose() {
     setBusy(true);
     try {
@@ -42,7 +56,7 @@ export function ReverseAssetChange({
         throw new Error(refusal.error ?? "Could not propose reversal");
       }
       const value = (await r.json()) as { changeId: string };
-      setOpen(false);
+      closeDrawer();
       router.push(`/accounting/changes?change=${value.changeId}`);
     } catch (e) {
       toast.error(
@@ -60,7 +74,7 @@ export function ReverseAssetChange({
       <Drawer
         stacked
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeGuard.close}
         title={
           domain === "asset"
             ? "Reverse asset change"
@@ -79,6 +93,7 @@ export function ReverseAssetChange({
               <Label>Reversal date</Label>
               <Input
                 type="date"
+                disabled={busy}
                 value={date}
                 onChange={(e) => {
                   setDate(e.target.value);
@@ -96,6 +111,7 @@ export function ReverseAssetChange({
           <div>
             <Label>Reason</Label>
             <Textarea
+              disabled={busy}
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value);
