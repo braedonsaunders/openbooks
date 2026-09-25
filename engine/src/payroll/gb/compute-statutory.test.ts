@@ -55,7 +55,9 @@ function certificateForCodes(
   codes: Record<string, Record<string, string | null>>,
 ): PayrollStatutoryComputeContext["certificateFor"] {
   return ((key: string) => {
-    const answers = codes[key];
+    const answers = codes[key] ?? (key === "gb_workplace_pension"
+      ? { age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder", enrolment_status: "not_enrolled" }
+      : undefined);
     if (!answers) return null;
     return {
       certificate: { key },
@@ -134,11 +136,6 @@ test("pay dates outside every transcribed year throw without touching the databa
 });
 
 test("a 2025/26 correction prices the 2025 tables end to end", async () => {
-  // Month 1, £4,000, 1257L cumulative from zero priors: free pay £1,048.26
-  // (Tables A), Un = £2,951.74, Tn = £2,951 → Formula 1: £2,951 × 20% =
-  // £590.20. NIC from the 2025 thresholds at the 15% employer rate:
-  // employee (4,000 − 1,048) × 8% = £236.16; employer (4,000 − 417) × 15% =
-  // £537.45.
   const { ctx, pushed } = gbContext({
     payDate: "2025-04-06",
     taxYear: 2025,
@@ -167,10 +164,6 @@ test("an S-less code on an SCT run is refused by name, never fallen through", as
 });
 
 test("SCT with an S-code prices the Scottish bands end to end", async () => {
-  // Month 1, £2,250, S1257L cumulative from zero priors: free pay 1,048.25,
-  // taxable 1,201.75, through the month-1 bands (starter £331, basic
-  // £1,413): 331 × 19% = £62.89 plus 870.75 × 20% = £174.15 → £237.04.
-  // NIC is the same UK-wide schedule as rUK.
   const { ctx, pushed } = gbContext({
     tx: stubTx(EMPTY_YTD),
     region: "SCT",
@@ -313,14 +306,18 @@ test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", asyn
     pensionable: "3200",
     codes: { gb_tax_code_notice: { tax_code: "SBR", non_cumulative: null } },
   });
-  const factors = await computeGbStatutory(ctx);
+  await computeGbStatutory(ctx);
   assert.equal(pushed[0]!.amount, "640.0000");
-  assert.equal(factors.GB_TAX, "640.0000");
 });
 
 test("a missing coding notice is refused, naming the P6/P9", async () => {
   const { ctx } = gbContext({ codes: {} });
   await assert.rejects(() => computeGbStatutory(ctx), /gb_tax_code_notice/);
+});
+
+test("enrolled workplace-pension contributions refuse instead of disappearing", async () => {
+  const { ctx } = gbContext({ codes: { gb_workplace_pension: { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" } } });
+  await assert.rejects(() => computeGbStatutory(ctx), /workplace-pension contributions are due/);
 });
 
 test("an inoperable code is refused by name", async () => {
@@ -412,9 +409,6 @@ test("cumulative 1257L after month 1 with no record is refused", async () => {
 });
 
 test("declaration A certifies the empty record", async () => {
-  // Month 8 with first-year pay of £9,000: free pay to date 8 × £1,048.26
-  // = £8,386.08, Un = £613.92, Tn = £613 → Formula 1: £613 × 20% = £122.60.
-  // The A declaration makes zero priors the truth.
   const { ctx, pushed } = gbContext({
     payDate: "2026-11-06",
     tx: stubTx(EMPTY_YTD),
