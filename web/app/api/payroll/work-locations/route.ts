@@ -46,6 +46,20 @@ export async function GET(request: Request) {
       || !periodEnd || !dateShape.test(periodEnd) || periodStart > periodEnd) {
     return NextResponse.json({ error: "employment and a valid payroll period are required" }, { status: 422 });
   }
+  // Same predicate as POST/PATCH: the detail rows name work shares, service
+  // days and evidence for one employment, so an employment outside the
+  // caller payroll scope reads as missing instead of leaking by UUID.
+  const allowed = await db.execute(sql`
+    select employment.id
+      from worker_employments employment
+      join subsidiaries subsidiary
+        on subsidiary.org_id = employment.org_id and subsidiary.id = employment.employer_subsidiary_id
+     where employment.org_id = ${orgId} and employment.id = ${employmentId}
+       and subsidiary.is_active and not subsidiary.is_elimination
+       and (${gate.allowedSubsidiaryIds === null}::boolean
+         or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
+  `);
+  if (!allowed.rows[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
   const rows = await db.execute(sql`
     select id, region, subregion, service_days as "serviceDays", work_share::text as "workShare",
            source, evidence_document_id as "evidenceDocumentId", change_reason as "changeReason"
