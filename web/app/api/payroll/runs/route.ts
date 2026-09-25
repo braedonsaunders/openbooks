@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { createPayRun } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { type PayRunType } from "@openbooks/engine/src/payroll/run-contracts.ts";
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../../lib/authz'
@@ -138,6 +139,7 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
     throw e
   }
