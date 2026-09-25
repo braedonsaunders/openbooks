@@ -2,6 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
 import { loadDirectory, loadOrgChart } from '@openbooks/engine/src/hrm/org-chart.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmPeopleViewTabs } from './workspace-tabs'
@@ -47,7 +48,20 @@ export async function loadOrgChartHome(
   const tabs = await hrmGroupTabs(authz.session, '/hrm/org-chart')
   const peopleTabs = await hrmPeopleViewTabs(authz.session, '/hrm/org-chart')
   const today = await businessToday(authz.orgId)
-  const asOf = typeof sp.asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sp.asOf) ? sp.asOf : today
+  // Shape is not enough: 2026-02-30 passes the regex and then throws out
+  // of the chart reads as a VALIDATION error into the generic route
+  // error. The shared strict parser refuses by calendar at this boundary
+  // like the positions page: the chart corrects to the business date and
+  // names the correction.
+  const rawAsOf = typeof sp.asOf === 'string' ? sp.asOf : null
+  const asOf = rawAsOf !== null && isCivilDate(rawAsOf) ? rawAsOf : today
+  const dateRefusal =
+    rawAsOf !== null && !isCivilDate(rawAsOf)
+      ? {
+          title: t('positions.invalidDateTitle'),
+          description: t('positions.invalidDate', { date: rawAsOf, today: asOf }),
+        }
+      : null
   const view = sp.view === 'directory' ? 'directory' : 'tree'
   const search = typeof sp.q === 'string' ? sp.q.trim().toLowerCase() : ''
   const requestedDirectoryPage = Number(sp.page ?? 1)
@@ -100,6 +114,7 @@ export async function loadOrgChartHome(
     tabs,
     asOf,
     today,
+    dateRefusal,
     view,
     treeHref: `/hrm/org-chart?asOf=${asOf}`,
     directoryHref: `/hrm/org-chart?asOf=${asOf}&view=directory`,

@@ -48,6 +48,16 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
+        // An impossible bookmarked date corrects to the business date in
+        // the loader; the correction is named above the chart, never
+        // silent and never a route error.
+        {
+          ...widgetBlock('empty-state', {
+            title: data.dateRefusal?.title ?? '',
+            description: data.dateRefusal?.description ?? '',
+          }),
+          when: f('dateRefusal'),
+        },
         // Three tiles, not four: the as-of date is a toolbar CONTROL now, so
         // a tile repeating it back is one of two places showing the same
         // fact and the only one you cannot change.
