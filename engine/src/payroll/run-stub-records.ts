@@ -123,6 +123,34 @@ export function installablePackOrThrow(country: string) {
 }
 
 /**
+ * The employee's governing labour jurisdiction for employment-standards
+ * answers — the statutory-holiday phase AND the work-triggered
+ * alternate-day grant share this ONE resolver: the profile's
+ * `labour_jurisdiction` override where carried, else the region derivation.
+ * The grant previously re-derived from the province alone, so an employee
+ * overridden into CA-NS silently lost the grant while a province-NS
+ * employee overridden elsewhere wrongly gained it.
+ *
+ * Refuses exactly like the holiday gate always has: an explicit value no
+ * pack declares is a data fault, not a gap, and stops the run by name.
+ */
+export function resolveEmployeeJurisdiction(args: {
+  country: string;
+  province: string | null;
+  /** The profile record — its labour_jurisdiction overrides the region. */
+  emp: Record<string, string | null>;
+  employeeName: string;
+}): string {
+  const labourProblem = labourJurisdictionProblem(args.country, args.emp.labour_jurisdiction!);
+  if (labourProblem) {
+    throw new PayrollError(
+      `${args.employeeName} has a labour jurisdiction this payroll cannot honour — ${labourProblem}`,
+    );
+  }
+  return jurisdictionKey(args.country, args.province, args.emp.labour_jurisdiction);
+}
+
+/**
  * Phase 2 — statutory holiday pay lines for one employee, gated entirely on
  * JURISDICTION facts. A day's pay derived from a LOOKBACK over prior
  * earnings, plus the premium for hours actually worked on the day, where —
@@ -219,14 +247,7 @@ export async function statutoryHolidayLinesForStub(
   // exact substitution the attribute exists to prevent. The API validates it
   // with the same function (labourJurisdictionProblem), so reaching this is a
   // direct database write.
-  const labourProblem = labourJurisdictionProblem(country, emp.labour_jurisdiction!);
-  if (labourProblem) {
-    throw new PayrollError(
-      `${employeeName} has a labour jurisdiction this payroll cannot `
-      + `honour — ${labourProblem}`,
-    );
-  }
-  const employeeJurisdiction = jurisdictionKey(country, province, emp.labour_jurisdiction);
+  const employeeJurisdiction = resolveEmployeeJurisdiction({ country, province, emp, employeeName });
   if (!payrollJurisdictionDeclared(employeeJurisdiction)) {
     const conflict = undeclaredJurisdictionHolidayConflict({
       country, jurisdiction: employeeJurisdiction,

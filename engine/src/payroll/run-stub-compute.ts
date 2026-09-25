@@ -13,7 +13,7 @@ import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
 import { add, cmp, mulRatio, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
-import { packRates, PayrollPackError, assertPayrollRegionSupported, jurisdictionKey, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
+import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
@@ -29,7 +29,7 @@ import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
 import { resolveWorkSchedule, scheduledHoursPerWeek } from "./work-schedules.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate } from "./run-calculation-support.ts";
-import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot } from "./run-stub-records.ts";
+import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
@@ -345,7 +345,12 @@ export async function calculateStub(
       runDocumentId: documentId,
       employeePartyId,
       employeeName: emp.display_name ?? employeePartyId,
-      jurisdiction: jurisdictionKey(country, province),
+      // The SAME resolver the holiday phase uses — never a province-only
+      // re-derivation, so the labour-jurisdiction override moves the grant
+      // exactly the way it moves the holiday pay.
+      jurisdiction: resolveEmployeeJurisdiction({
+        country, province, emp, employeeName: emp.display_name ?? employeePartyId,
+      }),
       subsidiaryId: ctx.runContext.subsidiaryId ?? null,
       periodStart: run.period_start!,
       periodEnd: run.period_end!,
