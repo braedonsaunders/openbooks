@@ -11,7 +11,7 @@ import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO } from "./decimals";
-import { type DimFilter, dimWhere } from "./filters";
+import { type DimFilter, dimWhere, documentSubsidiaryScope } from "./filters";
 import { type AgingBucket, agingDetail, type AgingSide } from "./aging";
 
 interface AccountRegisterAccount extends Record<string, unknown> {
@@ -276,6 +276,8 @@ export async function partyRegister(
   // parallel book's mirror entries fuse into the register while the sibling
   // statement readers stay primary-only.
   const bookFilter = sql` and e.book_id = ${statementBookExpr(resolvedOrgId, opts.bookId)}`
+  // Source documents mask exactly where the lines do (I1-refix-77).
+  const sourceDocumentScope = documentSubsidiaryScope(opts.dims)
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${opts.to} and a.type = ${acctType} and ${dimWhere(opts.dims)} ${partyFilter} ${bookFilter}`)
   // Party attribution with the confidentiality remap folded in: restricted
   // readers see payroll-party lines under NULL (the unassigned section) in
@@ -298,7 +300,7 @@ export async function partyRegister(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
      where a.type = ${acctType} and e.posting_date < ${opts.from}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by ${partyIdExpr}
@@ -312,7 +314,7 @@ export async function partyRegister(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by ${partyIdExpr}
@@ -331,7 +333,7 @@ export async function partyRegister(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties pt on pt.id = l.party_id and pt.org_id = l.org_id
-      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      order by ${partyNameExpr} nulls last, e.posting_date, e.entry_number, l.line_number
@@ -506,7 +508,7 @@ async function preWindowBalance(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
-      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${documentSubsidiaryScope(dims)}
      where l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId}
        and e.status in ('posted', 'reversed') and a.type = ${acctType}
        and e.posting_date < ${from}
