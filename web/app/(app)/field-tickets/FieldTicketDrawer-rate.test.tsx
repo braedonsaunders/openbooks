@@ -201,6 +201,9 @@ test('a refused rate lookup keeps the last good rate and pins the named reason',
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the refused lookup must pin its reason instead of failing silently')
   assert.match(alert.textContent ?? '', /no rate book covers Excavation/)
+  const add = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Add line'))
+  assert.ok(add, 'the add-line action renders')
+  assert.equal((add as HTMLButtonElement).disabled, true, 'a refused rate must block adding the line')
   assert.ok(
     (document.querySelector('#ft-rate') as HTMLInputElement | null)?.value.includes('150'),
     'the last good rate must stay on screen beside the refusal',

@@ -44,8 +44,8 @@ export async function GET(req: Request) {
   const denied = guardSubsidiaryScope(gate, project.subsidiary_id)
   if (denied) return denied
 
-  const item = (await db.execute<{ default_rate: string | null; default_cost: string | null; unit: string | null; kind: string }>(sql`
-    select default_rate, default_cost, unit, kind from items
+  const item = (await db.execute<{ name: string; default_rate: string | null; default_cost: string | null; unit: string | null; kind: string }>(sql`
+    select name, default_rate, default_cost, unit, kind from items
      where id = ${itemId} and org_id = ${gate.user.orgId} and is_active
   `))
   if (!item.rows[0]) return NextResponse.json({ error: 'item not found' }, { status: 404 })
@@ -78,7 +78,16 @@ export async function GET(req: Request) {
     if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not resolve item rate' }, { status: 422 })
   }
-  const fallbackRate = item.rows[0].default_rate ?? item.rows[0].default_cost ?? '0'
+  // Absent pricing is not a zero price: when the rate book has no match and
+  // the item carries no default rate or cost, quoting '0' labeled
+  // item_default would persist a billable zero line. An explicitly stored
+  // zero default still quotes zero; only the unconfigured case refuses.
+  const defaultRate = item.rows[0].default_rate
+  const defaultCost = item.rows[0].default_cost
+  if (!resolved && defaultRate == null && defaultCost == null) {
+    return NextResponse.json({ error: `No price for ${item.rows[0].name} on ${onDate}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.` }, { status: 422 })
+  }
+  const fallbackRate = defaultRate ?? defaultCost ?? '0'
   const amount = resolved?.bill.amount ?? mul(quantity, fallbackRate)
   return NextResponse.json({
     rate: divRate(amount, quantity),
