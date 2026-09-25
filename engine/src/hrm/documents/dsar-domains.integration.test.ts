@@ -236,6 +236,14 @@ async function seedClock(h: Harness): Promise<void> {
   `);
 }
 
+async function seedPayrollIdentity(h: Harness): Promise<void> {
+  const { org } = h;
+  const scheduleId = randomUUID();
+  await db.execute(sql`insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end) values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-09'::date)`);
+  await db.execute(sql`insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, sin_encrypted, sin_last3) values (${org.orgId}, ${h.partyId}, ${h.employmentId}, ${scheduleId}, 'CA', 'ON', 'sealed-envelope-bytes', '123')`);
+  await db.execute(sql`insert into employee_tax_certificates (org_id, employee_party_id, employment_id, country, certificate_key, answers, effective_from) values (${org.orgId}, ${h.partyId}, ${h.employmentId}, 'CA', 'ca_td1_ON', '{"total_claim_amount": "15000.0000"}'::jsonb, '2026-01-01'::date)`);
+}
+
 async function seedPerformance(h: Harness): Promise<void> {
   const { org } = h;
   const templateId = randomUUID();
@@ -274,6 +282,7 @@ test("an export carries every new domain and the manifest names them all", { ski
     await seedStatement(h);
     await seedSurvey(h);
     await seedClock(h);
+    await seedPayrollIdentity(h);
     await seedPerformance(h);
     const prior = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
     const requested = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
@@ -297,6 +306,8 @@ test("an export carries every new domain and the manifest names them all", { ski
       surveyInvitations: unknown[];
       surveyResponses: unknown[];
       clockEvents: unknown[];
+      taxCertificates: { certificate_key: string }[];
+      payrollProfiles: Record<string, unknown>[];
       goals: unknown[];
       reviews: unknown[];
       reviewAnswers: unknown[];
@@ -329,6 +340,11 @@ test("an export carries every new domain and the manifest names them all", { ski
       manifest.priorExports.some((e) => e.id === prior.id),
       "the ledger carries the earlier export, never its bytes",
     );
+    assert.equal(manifest.taxCertificates.length, 1);
+    assert.equal(manifest.taxCertificates[0]?.certificate_key, "ca_td1_ON");
+    const profile = manifest.payrollProfiles[0] ?? {};
+    assert.equal(profile.sin_last3, "123");
+    assert.ok(!("sin_encrypted" in profile), "the sealed SIN envelope is never exported");
     const gathered = new Map(manifest.manifest.gathered.map((g) => [g.module, g.status]));
     for (const module of ["recruiting", "qualifications", "statements", "surveys", "clock_events", "exports"]) {
       assert.equal(gathered.get(module), "included", `${module} must be gathered`);

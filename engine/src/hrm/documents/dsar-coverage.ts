@@ -58,6 +58,8 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_allowance_payroll_inputs", domain: "payroll", linkage: "direct" },
   { table: "hrm_benefit_payroll_inputs", domain: "payroll", linkage: "direct" },
   { table: "hrm_payroll_inputs", domain: "payroll", linkage: "direct" },
+  { table: "employee_tax_certificates", domain: "payroll", linkage: "direct" },
+  { table: "employee_payroll_profiles", domain: "payroll", linkage: "direct" },
   { table: "hrm_per_diem_entries", domain: "payroll", linkage: "direct" },
   { table: "hrm_travel_pay_entries", domain: "payroll", linkage: "direct" },
   { table: "hrm_candidates", domain: "recruiting", linkage: "direct" },
@@ -131,6 +133,11 @@ export const DSAR_REMIT_EXTRA_TABLES: readonly string[] = [
   "time_clock_events",
   "pay_stubs",
   "pay_stub_lines",
+  // Non-hrm_-prefixed employee tables with direct employee_party_id links:
+  // without these entries the discovery query cannot see them and their
+  // omission fails silently instead of in the coverage test.
+  "employee_tax_certificates",
+  "employee_payroll_profiles",
   // Named so the worker_clock_pins exclusion below is enforced rather than
   // silently droppable: the table carries a person link but is credential
   // material, never exportable personal data.
