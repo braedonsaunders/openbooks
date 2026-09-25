@@ -25,8 +25,21 @@ export function CaptureUploadButton({ disabled = false }: { disabled?: boolean }
       // named refusal (not configured, oversized batch) is toasted — never
       // a SyntaxError or a generic fallback that hides the remedy.
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('uploadFailed')))
-      const body = (await response.json()) as { ids?: string[] }
-      toast.success(t('uploadComplete', { count: body.ids?.length ?? files.length }))
+      const body = (await response.json()) as {
+        ids?: string[]
+        results?: Array<{ filename: string; status: 'uploaded' | 'failed' }>
+      }
+      const failed = (body.results ?? []).filter((result) => result.status === 'failed')
+      if (failed.length > 0) {
+        const completedCount = (body.results ?? []).length - failed.length
+        if (completedCount > 0) toast.success(t('uploadComplete', { count: completedCount }))
+        toast.error(t('uploadPartial', {
+          count: failed.length,
+          files: failed.map((result) => result.filename).join(', '),
+        }))
+      } else {
+        toast.success(t('uploadComplete', { count: body.ids?.length ?? files.length }))
+      }
       router.refresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('uploadFailed'))

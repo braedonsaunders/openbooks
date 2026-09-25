@@ -53,17 +53,20 @@ export async function POST(request: Request) {
   }
   const folderId = await ensureApCaptureRoot(gate.user.orgId, gate.user.id)
   const created: string[] = []
+  const results: Array<{ filename: string; id?: string; status: 'uploaded' | 'failed'; error?: string }> = []
   for (const upload of prepared) {
-    const stored = await createFile({
-      orgId: gate.user.orgId,
-      folderId,
-      filename: upload.filename,
-      contentType: upload.file.type,
-      bytes: upload.bytes,
-      createdBy: gate.user.id,
-    })
-    let captureItemId: string
+    let storedId: string | null = null
+    let captureItemId: string | null = null
     try {
+      const stored = await createFile({
+        orgId: gate.user.orgId,
+        folderId,
+        filename: upload.filename,
+        contentType: upload.file.type,
+        bytes: upload.bytes,
+        createdBy: gate.user.id,
+      })
+      storedId = stored.id
       captureItemId = await db.transaction(async (tx) => {
         const inserted = (await tx.execute<{ id: string }>(sql`
           insert into ap_capture_items (org_id, file_id, status, source, original_filename,
@@ -81,28 +84,41 @@ export async function POST(request: Request) {
         `)
         return id
       })
-    } catch (error) {
-      await deleteFile(gate.user.orgId, stored.id).catch(() => false)
-      throw error
+      created.push(captureItemId!)
+    } catch {
+      if (storedId) await deleteFile(gate.user.orgId, storedId).catch(() => false)
+      results.push({ filename: upload.filename, status: 'failed', error: 'upload_failed' })
+      continue
     }
+    const committedId = captureItemId!
     try {
       // Capture the uploader's scope in the job: the worker acts as this
       // actor when it auto-materializes, and must not inherit an
       // unrestricted default there.
       await enqueueApCapture({
         orgId: gate.user.orgId,
-        captureItemId,
+        captureItemId: committedId,
         actorId: gate.user.id,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
       })
     } catch (error) {
       const message = error instanceof Error ? error.message.slice(0, 300) : 'queue_unavailable'
-      await db.execute(sql`
-        update ap_capture_items set status = 'failed', last_error = ${message}, updated_at = now()
-         where id = ${captureItemId} and org_id = ${gate.user.orgId}
-      `)
+      try {
+        await db.execute(sql`
+          update ap_capture_items set status = 'failed', last_error = ${message}, updated_at = now()
+           where id = ${committedId} and org_id = ${gate.user.orgId}
+        `)
+        results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
+      } catch {
+        // The item is committed and its id must remain observable even when
+        // recording the queue refusal also fails; reporting this file as a
+        // plain request failure would make a client retry create a duplicate.
+        results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
+      }
+      continue
     }
-    created.push(captureItemId)
+    results.push({ filename: upload.filename, id: committedId, status: 'uploaded' })
   }
-  return NextResponse.json({ ids: created }, { status: 201 })
+  const failed = results.some((result) => result.status === 'failed')
+  return NextResponse.json({ ids: created, results }, { status: failed ? 207 : 201 })
 }
