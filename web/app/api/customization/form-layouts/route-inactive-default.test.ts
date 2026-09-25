@@ -22,7 +22,12 @@ const mockGates = `
     return null
   }
 `
+const schemaUrl = new URL(
+  '../../../../../packages/customization/src/schema.ts',
+  import.meta.url,
+).href;
 const mockCustomization = `
+  export { defaultFormLayout, lockedFormEntriesUnchanged } from '${schemaUrl}'
   export const RECORD_TYPE_BY_KEY = { vendor_bill: { key: 'vendor_bill' } }
   export function parseFormLayout(input) {
     return { success: true, data: input ?? { schemaVersion: 1, recordType: 'vendor_bill' }, issues: [] }

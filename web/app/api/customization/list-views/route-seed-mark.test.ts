@@ -37,8 +37,13 @@ const seededViewsUrl = new URL(
   '../../../../../packages/customization/src/seeded-views.ts',
   import.meta.url,
 ).href
+const schemaUrl = new URL(
+  '../../../../../packages/customization/src/schema.ts',
+  import.meta.url,
+).href
 const mockCustomization = `
   export { stripSeededDefaultMark } from '${seededViewsUrl}'
+  export { defaultListView, lockedListEntriesUnchanged } from '${schemaUrl}'
   export const RECORD_TYPE_BY_KEY = { employee: { key: 'employee' } }
   export function parseListView(input) {
     return { success: true, data: input, issues: [] }
