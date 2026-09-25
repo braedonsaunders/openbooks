@@ -55,7 +55,7 @@ function exactDecimalParts(raw: string): { digits: bigint; scale: number } {
 }
 
 /** True when the exact decimal sum of `values` exceeds `limit` — no binary-float rounding. */
-function exactDecimalSumExceeds(values: number[], limit: number): boolean {
+function exactDecimalSumExceeds(values: (number | string)[], limit: number): boolean {
   const parts = values.map((v) => exactDecimalParts(String(v)))
   const limitPart = exactDecimalParts(String(limit))
   const maxScale = Math.max(limitPart.scale, 0, ...parts.map((p) => p.scale))
@@ -184,9 +184,18 @@ function validateSplitLine(raw: Record<string, unknown>): ValidationResult<RuleS
   const p = (raw.portion ?? {}) as Record<string, unknown>
   let portion: RuleSplitLine['portion']
   if (p.kind === 'percent') {
-    const v = Number(p.value)
-    if (!Number.isFinite(v) || v <= 0 || v > 100) return { ok: false, error: 'percent must be between 0 and 100' }
-    portion = { kind: 'percent', value: v }
+    if (typeof p.value === 'string') {
+      const exact = canonicalDecimal(p.value, 10)
+      if (exact === null) return { ok: false, error: 'percent must be a decimal string with at most 10 decimals' }
+      if (compareDecimal(exact, '0') <= 0 || compareDecimal(exact, '100') > 0) {
+        return { ok: false, error: 'percent must be between 0 and 100' }
+      }
+      portion = { kind: 'percent', value: exact }
+    } else {
+      const v = Number(p.value)
+      if (!Number.isFinite(v) || v <= 0 || v > 100) return { ok: false, error: 'percent must be between 0 and 100' }
+      portion = { kind: 'percent', value: v }
+    }
   } else if (p.kind === 'fixed') {
     const amount = persistNonNegativeMoney(p.value)
     if (amount === null || compareDecimal(amount, '0') <= 0) {
