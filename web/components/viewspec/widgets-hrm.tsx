@@ -362,7 +362,13 @@ export const HRM_WIDGETS = {
   'hrm-window-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof WindowDrawer>['drawer']
     if (!drawer) return null
-    return <WindowDrawer drawer={drawer} closeHref={str(props, 'closeHref') ?? '/hrm/benefits'} />
+    return (
+      <WindowDrawer
+        drawer={drawer}
+        closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
+        canManage={props.canManage === true}
+      />
+    )
   },
   /** One row's approve island inside the shared enrolments table:
    *  pending rows carry it for managers; every other status renders

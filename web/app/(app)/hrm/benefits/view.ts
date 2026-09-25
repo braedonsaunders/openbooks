@@ -146,7 +146,7 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
             ),
             widgetBlock(
               'hrm-window-drawer',
-              { drawer: data.drawer, closeHref: f('drawerCloseHref') },
+              { drawer: data.drawer, closeHref: f('drawerCloseHref'), canManage: f('canManage') },
               f('drawer'),
             ),
         ]),
