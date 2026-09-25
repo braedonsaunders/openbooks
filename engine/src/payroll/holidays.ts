@@ -642,6 +642,14 @@ export interface HolidayPayContext {
    * after. Only ever supplied deliberately; see `computeStatutoryHolidayPay`.
    */
   absentWithoutConsent?: boolean;
+  /**
+   * The employer asserting the employee worked under an averaging agreement in
+   * the qualifying window (BC ESA s. 37). Read only where the rule declares
+   * `averagingAgreementAlternative`; everywhere else it is ignored. Never
+   * inferred from hours or schedules — an agreement is a legal fact, and a
+   * pattern that looks like one is not one.
+   */
+  averagingAgreement?: boolean;
 }
 
 export interface HolidayPayResult {
@@ -733,6 +741,13 @@ export function computeStatutoryHolidayPay(
   }
 
   const { qualifying } = rule;
+  /**
+   * Set when the day-count arm fails but the rule's own averaging-agreement
+   * alternative carries the employee. Recorded here so the derivation below
+   * names the arm that qualified them — a stub that says "15 of 30" for an
+   * employee with 10 counted days is a lie the audit trail must not tell.
+   */
+  let averagingAgreementApplied = false;
   if (
     qualifying.minEmploymentDays !== undefined
     && !(qualifying.minEmploymentDaysWhenUnworked && cmp(context.hoursWorked, "0") > 0)
@@ -754,13 +769,22 @@ export function computeStatutoryHolidayPay(
     const { days, ofDays, counting } = qualifying.minDaysWorkedInWindow;
     const worked = context.daysWorkedInQualifyingWindow ?? context.daysWorked;
     if (worked < days) {
-      // The reason quotes the jurisdiction's OWN sentence. An employee refused
-      // in Nova Scotia was not "not working enough"; they were not entitled to
-      // pay on enough days, which is a different fact and a different appeal.
-      return deny(
-        `${describeDayCounting(counting)} on ${worked} of the ${ofDays} days before the `
-        + `holiday; ${days} are required`,
-      );
+      // A statute's own alternative to the count (BC ESA s. 44(b): an averaging
+      // agreement in the window) qualifies despite the short count — but only
+      // where the rule declares it AND the caller asserts the agreement. An
+      // unasserted agreement keeps the denial: the count is what the engine can
+      // see, and the agreement is what it cannot.
+      if (qualifying.averagingAgreementAlternative === true && context.averagingAgreement === true) {
+        averagingAgreementApplied = true;
+      } else {
+        // The reason quotes the jurisdiction's OWN sentence. An employee refused
+        // in Nova Scotia was not "not working enough"; they were not entitled to
+        // pay on enough days, which is a different fact and a different appeal.
+        return deny(
+          `${describeDayCounting(counting)} on ${worked} of the ${ofDays} days before the `
+          + `holiday; ${days} are required`,
+        );
+      }
     }
   }
   if (qualifying.lastAndFirstScheduledShift && context.absentWithoutConsent === true) {
@@ -908,6 +932,9 @@ export function computeStatutoryHolidayPay(
     }
   }
   if (irregularBecause !== null) basis = `${irregularBecause}, so ${basis}`;
+  if (averagingAgreementApplied) {
+    basis = `${basis} — qualified under the averaging-agreement alternative, not the day count`;
+  }
 
   // --- premium for hours actually worked -----------------------------------
   let premiumPay = "0";
@@ -982,6 +1009,13 @@ export interface StatutoryHolidayPayInput {
    */
   paidOnCommission?: boolean;
   absentWithoutConsent?: boolean;
+  /**
+   * Whether the employee worked under an averaging agreement in the qualifying
+   * window (BC ESA s. 37). Read only where the rule declares the
+   * `averagingAgreementAlternative`; no stored producer supplies it yet, so a
+   * run that needs the alternative asserts it here per employee.
+   */
+  averagingAgreement?: boolean;
   /** Audited complete-evidence assertions by holiday occurrence key. */
   entitledDayAttestations?: Readonly<Record<string, number>>;
 }
@@ -1174,6 +1208,7 @@ export async function resolveStatutoryHolidayPay(
         : undefined,
       paidOnCommission: input.paidOnCommission,
       absentWithoutConsent: input.absentWithoutConsent,
+      averagingAgreement: input.averagingAgreement,
       hoursWorked: await hoursOn(tx, input, holiday.date),
       hourlyRate: input.hourlyRate,
       schedule,
