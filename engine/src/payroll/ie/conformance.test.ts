@@ -174,6 +174,7 @@ describe("IE conformance: Revenue PAYE worked examples", () => {
       periodsPerYear: 26,
       taxablePayPeriod: "2000",
       reckonablePayPeriod: "2000",
+      reckonablePayWeeks: ["1000", "1000"],
     });
     assert.equal(r.paye, "307.6900");
   });
@@ -336,6 +337,7 @@ describe("IE conformance: DSP PRSI worked figures", () => {
       periodsPerYear: 26,
       taxablePayPeriod: "750",
       reckonablePayPeriod: "750",
+      reckonablePayWeeks: ["375", "375"],
     });
     assert.equal(r.prsiSubclass, "AX");
     assert.equal(r.prsiEmployee, "15.1600");

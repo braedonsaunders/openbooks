@@ -66,12 +66,13 @@ describe("IE payroll pack", () => {
   it("declares the RPN certificate, not a W-4 clone", () => {
     const declared = IE_PAYROLL_PACK.certificates();
     assert.equal(declared.country, "IE");
-    assert.equal(declared.certificates.length, 2);
-    const [rpn, prsiClass] = declared.certificates;
+    assert.equal(declared.certificates.length, 3);
+    const [rpn, fortnightWeeks, prsiClass] = declared.certificates;
     assert.ok(rpn, "RPN certificate declared");
     assert.equal(rpn.form, "RPN");
     assert.equal(rpn.key, "ie_rpn");
     assert.equal(rpn.storage, "certificate_rows");
+    assert.equal(fortnightWeeks?.key, "ie_fortnight_weeks");
     assert.equal(prsiClass?.key, "ie_prsi_class");
     const fields = new Set(rpn.fields.map((field) => field.key));
     for (const key of [
