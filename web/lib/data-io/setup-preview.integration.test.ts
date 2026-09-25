@@ -86,3 +86,19 @@ test('setup preview refuses unavailable audit evidence and leaves the outer tran
       await db.execute(sql.raw(`drop function if exists ${name}()`));await dropScratchOrg(org.orgId);
     }
   });
+
+test('setup import refuses a pay-component treatment the country pack does not declare',
+  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+    const org=await createScratchOrg();
+    try {
+      const actorId=(await seedFlowActors(org.orgId)).adminId;
+      const resource=setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId);
+      // pension_f is shape-valid but the AU pack declares only salary_sacrifice:
+      // the import must name the pack's declarations, not store an inert treatment.
+      const rows=[{code:'AUUNDECL',name:'Undeclared treatment',kind:'deduction',country:'AU',taxTreatment:'pension_f'}];
+      const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
+      assert.equal(preview.created,0);assert.equal(preview.failed,1);
+      assert.match(preview.errors[0]!.message,/pension_f.*is not declared by the .* payroll pack/);
+      assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`)).rows.length,0);
+    } finally {await dropScratchOrg(org.orgId);}
+  });
