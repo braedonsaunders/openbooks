@@ -1816,6 +1816,7 @@
     },
     "emptyTitle": "Aucune qualification enregistrée",
     "emptyDescription": "Enregistrez les licences et certifications de l'équipe pour contrôler les affectations.",
+    "ledgerTruncated": "Affichage de {shown} sur {total}.",
     "requirementsTitle": "Exigences d'affectation",
     "requirementsEmpty": "Aucune exigence déclarée pour le moment.",
     "requirementManager": {
@@ -1849,6 +1850,7 @@
     "coverageProjectLabel": "Projet",
     "coverageProjectAll": "Choisir un projet",
     "coverageEmpty": "Aucune équipe affectée à ce projet pour le moment.",
+    "coverageTruncated": "Équipe : affichage de {shown} sur {total}.",
     "coverage": {
       "qualified": "Qualifié",
       "missing": "Manquante",

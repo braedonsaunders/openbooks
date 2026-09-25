@@ -1816,6 +1816,7 @@
     },
     "emptyTitle": "尚未记录资质",
     "emptyDescription": "记录班组的执照和认证以管理派工。",
+    "ledgerTruncated": "共 {total} 条，显示 {shown} 条。",
     "requirementsTitle": "派工要求",
     "requirementsEmpty": "尚未声明要求。",
     "requirementManager": {
@@ -1849,6 +1850,7 @@
     "coverageProjectLabel": "项目",
     "coverageProjectAll": "选择项目",
     "coverageEmpty": "该项目尚未安排人员。",
+    "coverageTruncated": "共 {total} 人，显示 {shown} 人。",
     "coverage": {
       "qualified": "具备资质",
       "missing": "缺失",

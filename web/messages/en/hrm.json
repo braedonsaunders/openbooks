@@ -1872,6 +1872,7 @@
     },
     "emptyTitle": "No qualifications recorded",
     "emptyDescription": "Record the crew's licenses and certifications to gate dispatch.",
+    "ledgerTruncated": "Showing {shown} of {total}.",
     "requirementsTitle": "Dispatch requirements",
     "requirementsEmpty": "No requirements declared yet.",
     "requirementManager": {
@@ -1905,6 +1906,7 @@
     "coverageProjectLabel": "Project",
     "coverageProjectAll": "Choose project",
     "coverageEmpty": "No crew assigned to this project yet.",
+    "coverageTruncated": "Crew: showing {shown} of {total}.",
     "coverage": {
       "qualified": "Qualified",
       "missing": "Missing",

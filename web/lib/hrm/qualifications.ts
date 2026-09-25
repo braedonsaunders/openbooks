@@ -114,6 +114,7 @@ export interface QualificationsPageData {
   emptyDescription: string
   rows: QualificationRow[]
   truncated: boolean
+  ledgerHint: string
   dialogQualificationId: string | null
   dialogCloseHref: string
   dialogOpen: boolean
@@ -158,6 +159,7 @@ export interface QualificationsPageData {
   coverageTypes: CoverageColumn[]
   coverageRows: CoverageRowData[]
   coverageTruncated: boolean
+  coverageHint: string
   alertsTitle: string
   alertsEmpty: string
   alerts: AlertRow[]
@@ -244,17 +246,16 @@ export async function loadQualificationsPage(
   }
 
   // Projects with unmet block requirements: at least one assigned
-  // employment fails a block check as of today (bounded probe).
+  // employment fails a block check as of today. The probe is exhaustive —
+  // a bounded project/crew prefix reported a smaller count as exact.
   let projectsUnmet = 0
-  const probeProjects = gatedProjects.slice(0, 20)
-  for (const projectId of probeProjects) {
+  for (const projectId of gatedProjects) {
     const crew = (
       await db.execute<{ employment: string }>(sql`
         select distinct e.id::text as employment
           from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id = ${projectId}::uuid
-         limit 50
       `)
     ).rows.map((r) => r.employment)
     for (const employmentId of crew) {
@@ -323,7 +324,12 @@ export async function loadQualificationsPage(
   const coverageTypes = allCoverageTypes
   const coverageRows: CoverageRowData[] = []
   let coverageTruncated = false
+  let coverageCrewTotal = 0
   if (coverageProjectId) {
+    coverageCrewTotal = Number((await db.execute<{ n: string }>(sql`
+      select count(distinct r.party_id) as n from schedule_resources r
+       where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
+    `)).rows[0]?.n ?? 0)
     const crewParties = (
       await db.execute<{ party: string }>(sql`
         select distinct r.party_id::text as party from schedule_resources r
@@ -426,6 +432,7 @@ export async function loadQualificationsPage(
     emptyDescription: t('qualifications.emptyDescription'),
     rows: rows.map((r) => ({ ...r, statusLabel: statusLabel(t, r.status) })),
     truncated,
+    ledgerHint: truncated ? t('qualifications.ledgerTruncated', { shown: page.length, total: filtered.length }) : '',
     dialogQualificationId: sp.qualification && sp.qualification !== 'new' ? sp.qualification : null,
     dialogCloseHref: href(baseParams({ qualification: undefined, record: undefined })),
     dialogOpen: !!sp.qualification && sp.qualification !== 'new',
@@ -485,6 +492,9 @@ export async function loadQualificationsPage(
     coverageTypes: columns,
     coverageRows,
     coverageTruncated,
+    coverageHint: coverageTruncated
+      ? t('qualifications.coverageTruncated', { shown: coverageRows.length, total: coverageCrewTotal })
+      : '',
     alertsTitle: t('qualifications.alertsTitle'),
     alertsEmpty: t('qualifications.alertsEmpty'),
     alerts: alerts.map((a) => ({
