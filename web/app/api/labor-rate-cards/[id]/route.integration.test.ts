@@ -135,6 +135,16 @@ async function seed(): Promise<Fixture> {
   };
 }
 
+/** Seed a scratch rate book and run the body, always dropping the org. */
+async function withSeededFixture(fn: (fixture: Fixture) => Promise<void>): Promise<void> {
+  const fixture = await withBypass(seed);
+  try {
+    await fn(fixture);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+}
+
 function putBody(fixture: Fixture, keepLineIds?: string[], status = "draft") {
   const { storedLineIds, lineItems, locations, customers } = fixture;
   const kept = keepLineIds ?? storedLineIds;
@@ -203,8 +213,7 @@ function put(fixture: Fixture, body: Record<string, unknown>): Promise<Response>
 test(
   "PUT saves multi-element item/customer/location/line collections against live Postgres",
   async () => {
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       // Activating from the editor is the deepest legal save: children must
       // be rewritten while the stored status is still draft.
       const response = await withOrgContext(fixture.orgId, () =>
@@ -262,17 +271,13 @@ test(
              and row_id = ${fixture.versionId} and action = 'update'`));
         assert.equal(audit.rows[0]?.n, 1);
       });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
   "PUT prunes exactly the kept-line complement via not(id = any(multi-element))",
   async () => {
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       const first = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture)));
       assert.equal(first.status, 200, `initial save failed: ${JSON.stringify(await first.json())}`);
 
@@ -289,47 +294,35 @@ test(
            order by sort_order`));
         assert.deepEqual(remaining.rows.map((row) => row.id), keepTwo);
       });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
   "PUT rejects non-string rate-card names at the JSON boundary",
   async () => {
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       const response = await withOrgContext(fixture.orgId, () =>
         put(fixture, { ...putBody(fixture), name: 0 }),
       );
       assert.equal(response.status, 400);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
   "PUT rejects non-string rate-card codes at the JSON boundary",
   async () => {
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       const response = await withOrgContext(fixture.orgId, () =>
         put(fixture, { ...putBody(fixture), code: 0 }),
       );
       assert.equal(response.status, 400);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
   "PUT rejects an impossible effective date with the date error",
   async () => {
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       // February 30 passes a shape check but is not a calendar day: the
       // save must name the date field, not fail as a generic save error
       // from the DATE column, and must leave the stored version untouched.
@@ -343,10 +336,7 @@ test(
           select effective_from::text as "from", status from item_rate_versions where id = ${fixture.versionId}`));
         assert.deepEqual(version.rows[0], { from: "2026-07-01", status: "draft" });
       });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
@@ -384,8 +374,7 @@ test(
     // transaction_type and other have no matcher case: an adjustment saved
     // with one would measure nothing and bill zero forever. The save names
     // them rather than storing the silence.
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       for (const target of [
         { targetType: "transaction_type", targetValueText: "vendor_bill" },
         { targetType: "other", targetValueText: "Something bespoke" },
@@ -411,10 +400,7 @@ test(
       }
       const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`));
       assert.equal(stored.rows[0]?.n, 0, "refused targets store nothing");
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
@@ -422,8 +408,7 @@ test(
   async () => {
     // PRC10: labor/material are value-less selectors. The stored text echoes
     // the selector so the one-value CHECK stays satisfied; an id is refused.
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       const withId = await withOrgContext(fixture.orgId, () =>
         put(fixture, {
           ...putBody(fixture),
@@ -478,10 +463,7 @@ test(
         { target_type: "labor", target_value_id: null, target_value_text: "labor" },
         { target_type: "material", target_value_id: null, target_value_text: "material" },
       ]);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
@@ -489,8 +471,7 @@ test(
   async () => {
     // PRC11: percents store to 10dp and price exactly; a fixed 5.12345 the
     // ledger cannot store is refused at save, not at invoicing.
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       const fixed = (value: string) => ({
         ...putBody(fixture),
         adjustments: [
@@ -530,10 +511,7 @@ test(
       assert.equal(percent.status, 200, `10dp percent must save: ${JSON.stringify(await percent.json())}`);
       const stored = (await db.execute<{ value: string }>(sql`select value::text as value from labor_rate_adjustments where version_id = ${fixture.versionId}`));
       assert.deepEqual(stored.rows.map((row) => row.value), ["3.1234567891"]);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
 
 test(
@@ -542,8 +520,7 @@ test(
     // PRC12: distance names no mileage source the bill line carries and time
     // is undefined, so neither has a pricing case. Saving one billed zero
     // forever; the save names the calculation instead.
-    const fixture = await withBypass(seed);
-    try {
+    await withSeededFixture(async (fixture) => {
       for (const calculation of ["distance", "time"]) {
         const body = {
           ...putBody(fixture),
@@ -566,8 +543,5 @@ test(
       }
       const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`));
       assert.equal(stored.rows[0]?.n, 0, "refused calculations store nothing");
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
+    });  },
 );
