@@ -59,20 +59,20 @@ for (const view of ["current month", "completed month", "segments", "drivers", "
         }
         const month = result.monthly.find(row => row.month === '2026-07');
         assert.ok(month);
-        if (view === "current month" || view === "completed month") assert.equal(month.revenue, result.figures.revenue);
+        if (view === "current month" || view === "completed month") assert.equal(month.revenue, '150.0000');
         if (view === "segments") {
-          assert.equal(result.segments.department.find(row => row.id === department)?.revenue, 150);
-          assert.equal(result.segments.location.find(row => row.id === org.locationId)?.revenue, 150);
+          assert.equal(result.segments.department.find(row => row.id === department)?.revenue, '150.0000');
+          assert.equal(result.segments.location.find(row => row.id === org.locationId)?.revenue, '150.0000');
         }
-        if (view === "drivers") assert.equal(result.drivers.revenue.find(row => row.id === org.accounts.revenue)?.current, 100);
+        if (view === "drivers") assert.equal(result.drivers.revenue.find(row => row.id === org.accounts.revenue)?.current, '100.0000');
         if (view === "items") {
-          assert.equal(result.items.totalCurrent, result.figures.revenue);
-          assert.equal(result.items.rows.find(row => row.id === org.accounts.revenue)?.current, 100);
+          assert.equal(result.items.totalCurrent, '150.0000');
+          assert.equal(result.items.rows.find(row => row.id === org.accounts.revenue)?.current, '100.0000');
         }
         if (view === "operating income") {
-          assert.equal(month.operatingIncome, result.figures.operatingIncome);
-          assert.equal(month.netIncome, result.figures.netIncome);
-          assert.equal(result.segments.department.find(row => row.id === department)?.operatingIncome, 100);
+          assert.equal(month.operatingIncome, '100.0000');
+          assert.equal(month.netIncome, '150.0000');
+          assert.equal(result.segments.department.find(row => row.id === department)?.operatingIncome, '100.0000');
         }
       });
     } finally { await dropScratchOrg(org.orgId); }

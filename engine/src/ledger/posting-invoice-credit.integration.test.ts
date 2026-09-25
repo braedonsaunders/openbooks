@@ -280,7 +280,7 @@ test(
       );
       assert.deepEqual(exposure, {
         openOrderExposure: "10000.0000",
-        unpaidInvoiceExposure: "0",
+        unpaidInvoiceExposure: "0.0000",
       });
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
