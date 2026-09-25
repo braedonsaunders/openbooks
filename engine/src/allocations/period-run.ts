@@ -474,7 +474,7 @@ function dimensionFilterSql(filters: DimensionFilters): { clause: SQL; subsidiar
   }
   const extra = filters.extraDims ?? {};
   for (const [segment, values] of Object.entries(extra)) {
-    if (values.length > 0) parts.push(sql`and l.extra_dims ->> ${segment} = any(${values}::text[])`);
+    if (values.length > 0) parts.push(sql`and l.extra_dims ->> ${segment} = any(${sql.param(values)}::text[])`);
   }
   const untagged = filters.requireUntagged ?? [];
   for (const dimension of untagged) {

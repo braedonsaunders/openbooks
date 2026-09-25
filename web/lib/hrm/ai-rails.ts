@@ -131,7 +131,7 @@ async function employmentLabels(
     select e.id::text as id, p.display_name as label
       from worker_employments e
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-     where e.org_id = ${orgId} and e.id = any(${ids}::uuid[])`)).rows;
+     where e.org_id = ${orgId} and e.id = any(${sql.param(ids)}::uuid[])`)).rows;
   for (const row of rows) labels.set(row.id, row.label);
   return labels;
 }

@@ -74,17 +74,16 @@ async function closingSpotRates(
   const needed = [...new Set(froms.map((c) => c ?? base))].filter((c) => c !== base);
   const rates = new Map<string, string>([[base, "1"]]);
   if (needed.length === 0) return rates;
-  const list = `{${needed.join(",")}}`;
   const res = await db.execute<{ from_currency: string; rate: string }>(sql`
     select distinct on (s.from_currency) s.from_currency, s.rate::text as rate
       from (
         select from_currency, rate, as_of, 0 as priority from fx_rates
-         where org_id = ${orgId} and from_currency = any(${list}::text[])
+         where org_id = ${orgId} and from_currency = any(${sql.param(needed)}::text[])
            and to_currency = ${base} and rate_type = 'spot'
            and as_of <= ${refDate}::date
         union all
         select to_currency as from_currency, (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
-         where org_id = ${orgId} and to_currency = any(${list}::text[])
+         where org_id = ${orgId} and to_currency = any(${sql.param(needed)}::text[])
            and from_currency = ${base} and rate_type = 'spot'
            and as_of <= ${refDate}::date
       ) s
