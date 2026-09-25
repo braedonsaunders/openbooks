@@ -59,19 +59,19 @@ test('no view calls notFound directly after a feature check', () => {
 })
 
 test('route-gate loaders refuse by remedy, never by silent null', () => {
-  // The nullable-authz loaders behind the HRM and Me routes: a
-  // switched-off feature must redirect through requireFeatureEnabled while
-  // a missing session/grant still returns null (the view's 404).
-  const loaders = [
-    'documents-home.ts',
-    'surveys-home.ts',
-    'org-chart-home.ts',
-    'me-documents.ts',
-    'me-surveys.ts',
-    'compensation.ts',
-  ]
-  for (const name of loaders) {
-    const source = readFileSync(join(LIB_HRM, name), 'utf8')
+  // The nullable-authz loaders behind the HRM and Me routes, derived from
+  // the tree instead of a hand list: every lib/hrm module exporting a
+  // *Authz route-gate entry. A switched-off feature must redirect through
+  // requireFeatureEnabled while a missing session/grant still returns null
+  // (the view's 404).
+  const loaders = readdirSync(LIB_HRM)
+    .filter((entry) => entry.endsWith('.ts') && !entry.endsWith('.test.ts'))
+    .map((entry) => join(LIB_HRM, entry))
+    .filter((path) => /export async function \w*Authz\(/.test(readFileSync(path, 'utf8')))
+  assert.ok(loaders.length > 0, 'the tree still has nullable-authz route-gate loaders; the derivation found none')
+  for (const path of loaders) {
+    const name = path.split('/').pop() as string
+    const source = readFileSync(path, 'utf8')
     assert.match(source, /requireFeatureEnabled\(/, `${name}: the feature gate redirects to the remedy`)
     const silent = source.split('\n').filter((line) => line.includes('isFeatureEnabled(') && line.includes('return null'))
     assert.deepEqual(silent, [], `${name}: no feature check collapses to a silent null`)
