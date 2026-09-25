@@ -76,6 +76,10 @@ const BLOCKED_HOME: CustomersHome = {
   },
   ordersEnabled: false,
   crmEnabled: false,
+  // Rates-blocked keeps the existing empty-vitals render (F-t06-027): the
+  // omission here is rates, not permission, so the allow flags stay open.
+  arAllowed: true,
+  partiesAllowed: true,
 }
 
 export interface CustomersData {
@@ -92,6 +96,10 @@ export interface CustomersData {
   activeCustomersValue: string
   crmEnabled: boolean
   ordersEnabled: boolean
+  /** I4-webui-225b: false hides every AR-derived vital (omitted, not zero). */
+  arAllowed: boolean
+  /** I4-webui-225b: false hides the directory and customer count. */
+  partiesAllowed: boolean
   pipelineLabel: string
   pipelineValue: string
   pipelineSub: string
@@ -132,8 +140,16 @@ export async function loadCustomers(
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   // The workspace spans CRM + AR + records — any of the group's read
-  // permissions opens the home; panels stay org-wide counts.
-  if (!['ar.read', 'crm.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ar.read')
+  // permissions opens the home; every panel then keeps only its own
+  // family's grant (I4-webui-225b). 'crm.read' stays admitted for
+  // wildcard-era grants; the pipeline itself requires the granular
+  // crm.opportunities.read its board source requires.
+  if (!['ar.read', 'crm.read', 'crm.opportunities.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ar.read')
+  const grants = {
+    ar: can(authz, 'ar.read'),
+    crm: can(authz, 'crm.opportunities.read'),
+    parties: can(authz, 'parties.read'),
+  }
   const t = await getTranslations('customers')
   const locale = await getLocale()
   const tNav = await getTranslations('nav')
@@ -163,6 +179,7 @@ export async function loadCustomers(
           authz.user.orgId,
           subView.subsidiary?.ids,
           subView.subsidiary?.includeNullSubsidiary,
+          grants,
         )
       : BLOCKED_HOME,
     resolveNav(
@@ -190,23 +207,32 @@ export async function loadCustomers(
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
   const tabs = await customerGroupTabs(authz, '/customers', { subQs })
 
+  // I4-webui-225b: directory links are already permission-filtered by
+  // resolveNav; the badge VALUES need the same per-family grant, or a
+  // count from an unreadable family leaks beside an allowed link.
   const badgeFor = (href: string): DirectoryItem['badge'] => {
     switch (href) {
       case '/crm/opportunities':
+        if (!grants.crm) return undefined
         return { value: String(data.badges.openOpportunities), hint: t('home.directory.opportunitiesHint') }
       case '/estimates':
+        if (!grants.ar) return undefined
         return { value: String(data.badges.openQuotes), hint: t('home.directory.estimatesHint') }
       case '/sales-orders':
+        if (!grants.ar) return undefined
         return { value: String(data.badges.openSalesOrders), hint: t('home.directory.salesOrdersHint') }
       case '/ar/invoices':
+        if (!grants.ar) return undefined
         return {
           value: String(data.openInvoices),
           hint: t('home.directory.invoicesHint', { overdue: data.overdueInvoices }),
           tone: data.overdueInvoices > 0 ? 'warning' : 'neutral',
         }
       case '/receipts':
+        if (!grants.ar) return undefined
         return { value: String(data.badges.receipts7d), hint: t('home.directory.receiptsHint') }
       case '/entities/customers':
+        if (!grants.parties) return undefined
         return { value: String(data.badges.customers), hint: t('home.directory.customersHint') }
       default:
         return undefined
@@ -230,6 +256,8 @@ export async function loadCustomers(
     activeCustomersValue: String(data.activeCustomers),
     crmEnabled: data.crmEnabled,
     ordersEnabled: data.ordersEnabled,
+    arAllowed: data.arAllowed,
+    partiesAllowed: data.partiesAllowed,
     pipelineLabel: t('home.vitals.pipeline'),
     pipelineValue: moneyCompact(data.pipeline.total),
     pipelineSub: t('home.vitals.pipelineSub', { weighted: moneyCompact(data.pipeline.weighted) }),
@@ -345,7 +373,8 @@ export function customersSpec(data: CustomersData): PageSpec {
         // tile is orders-gated; `when` expresses that without the spec
         // gaining a conditional.
         grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
-          statTile({ iconKey: 'users', accent: 'teal', label: f('activeCustomersLabel'), value: f('activeCustomersValue') }),
+          // I4-webui-225b: the count reads behind parties.read.
+          statTile({ iconKey: 'users', accent: 'teal', label: f('activeCustomersLabel'), value: f('activeCustomersValue'), when: f('partiesAllowed') }),
           statTile({
             iconKey: 'trending-up',
             accent: 'violet',
@@ -377,6 +406,8 @@ export function customersSpec(data: CustomersData): PageSpec {
             value: f('collectedWeekValue'),
             sub: f('collectedWeekSub'),
             tone: 'positive',
+            // I4-webui-225b: collections read behind ar.read.
+            when: f('arAllowed'),
           }),
         ]),
 
@@ -387,6 +418,8 @@ export function customersSpec(data: CustomersData): PageSpec {
             hint: f('heroHint'),
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-[24rem] lg:col-span-2',
+            // I4-webui-225b: the roster is AR balances; hide it unread.
+            when: f('arAllowed'),
             blocks: [
               // The empty state lives inside the section component, not as a
               // negated conditional pair of blocks — see ./sections.
@@ -404,6 +437,8 @@ export function customersSpec(data: CustomersData): PageSpec {
               iconKey: 'gauge',
               bodyClassName: 'p-0',
               className: 'shrink-0',
+              // I4-webui-225b: AR pulse reads behind ar.read.
+              when: f('arAllowed'),
               blocks: [
                 widgetBlock('customer-ar-pulse', {
                   outstanding: data.arOutstanding,
@@ -420,6 +455,8 @@ export function customersSpec(data: CustomersData): PageSpec {
               iconKey: 'area-chart',
               hint: f('trendHint'),
               className: 'shrink-0',
+              // I4-webui-225b: the collections trend reads behind ar.read.
+              when: f('arAllowed'),
               blocks: [
                 widgetBlock('trend-chart', {
                   labels: data.trendLabels,
@@ -431,12 +468,15 @@ export function customersSpec(data: CustomersData): PageSpec {
             }),
             // The empty case is owned by the widget (it returns null with no
             // items), matching the native `directory.length > 0` guard.
-            widgetBlock('directory-section', { items: data.directory, title: data.directoryTitle }),
+            widgetBlock('directory-section', { items: data.directory, title: data.directoryTitle }, f('partiesAllowed')),
             panel({
               title: f('attentionTitle'),
               iconKey: 'triangle-alert',
               bodyClassName: 'p-0',
               className: 'shrink-0',
+              // I4-webui-225b: attention derives from AR exposure — never
+              // render its all-clear state to an AR-unreadable caller.
+              when: f('arAllowed'),
               blocks: [
                 // The all-clear state lives inside the shared AttentionList,
                 // not as a conditional pair of blocks.
