@@ -363,6 +363,7 @@ export function PropertyManagementWorkspace({
         busy={busy}
         fixedAssetsEnabled={fixedAssetsEnabled}
         multiCurrency={multiCurrency}
+        fieldDefs={customization.fieldDefs}
         onSave={async (payload: ActionPayload) => {
           const result = await act(
             { action: "createProperty", ...payload },
