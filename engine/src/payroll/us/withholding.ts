@@ -316,6 +316,14 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     }],
     requiresRegularWithholding: true,
   } as const,
+  WI: {
+    kind: "aggregate",
+    // Wisconsin DOR Publication W-166, Withholding Tax Guide (January
+    // 2026), Alternate Method (pp. 25–26): the separately paid supplement
+    // is the difference between withholding on (regular plus supplement)
+    // and withholding on regular alone, on the current period's wages.
+    source: "Wisconsin DOR Publication W-166, Withholding Tax Guide (January 2026), Alternate Method (pp. 25–26)",
+  } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
 
 /**
@@ -540,6 +548,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   let separateFlatRate: string | undefined;
   let separateFlatWholeDollar = false;
   let separateCategoryAmounts: { category: UsSupplementalWageCategory; amount: string; rate: string }[] | undefined;
+  // Aggregate method: the supplement is priced as the difference between
+  // withholding on (regular + supplement) and withholding on regular alone,
+  // both through the state engine on the current period's regular wages.
+  let separateAggregate = false;
   let combinedFlatRate: string | undefined;
   let combinedFlatHonorsCertificateExemption = false;
   if (supplemental > 0n && input.supplementalPaymentTiming == null) {
@@ -635,7 +647,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         factors: routed.factors, ...localWageTrace,
       };
     }
-    if (method.kind === "flat") {
+    if (method.kind === "aggregate") {
+      separateAggregate = true;
+    } else if (method.kind === "flat") {
       const hasRegularWithholding = input.levy.level === "region"
         ? input.regularWageTaxWithheldThisYear === true
         : input.regularWageTaxWithheldFor?.includes(
@@ -729,6 +743,55 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     // returns null ONLY for a state with no wage income tax at all.
     const engine = regionalEngine;
     if (!engine) return null;
+    if (separateAggregate) {
+      // Aggregate method (W-166 Alternate Method shape): the state engine
+      // prices regular wages alone, then regular plus supplement as one
+      // period amount; the supplement's share is the difference. Both legs
+      // run timing-free so no flat election leaks in. Region-level only:
+      // the basis is the current period's regular wages.
+      if (input.levy.level !== "region") {
+        throw new UsWithholdingError(
+          `${levy.label} separately paid supplemental wages use the aggregate difference, `
+          + "which prices region-level regular wages only — refused by name",
+        );
+      }
+      const aggregateBase = {
+        payDate: input.payDate,
+        periodStart: input.periodStart,
+        employerEmployeeCount: input.employerEmployeeCount,
+        periodEnd: input.periodEnd,
+        periodsPerYear: input.periodsPerYear,
+        federalFilingStatus: input.federalFilingStatus,
+        federalLegacyW4: input.federalLegacyW4,
+        supplemental: "0",
+        federalIncomeTax: input.federalIncomeTax,
+        federalWithholdingExempt: input.federalWithholdingExempt,
+        taxQualifiedDeductions: input.taxQualifiedDeductions,
+        certificate,
+        supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
+        basis: levy.reach,
+        wageAllocations: input.wageAllocations,
+        residentWithholdingFacts,
+        regionTax: input.regionTax,
+        socialInsuranceDeducted: input.socialInsuranceDeducted,
+        ytd: input.ytd,
+      };
+      const regular = engine.compute({ ...aggregateBase, wages: input.wages });
+      const combined = engine.compute({ ...aggregateBase, wages: addAmounts(input.wages, input.supplemental) });
+      const combinedExcess = U(combined.tax) - U(regular.tax);
+      const supplementalTax = combinedExcess > 0n ? combinedExcess : 0n;
+      return {
+        code: engine.state,
+        label: engine.label,
+        tax: addMoney(regular.tax, D(supplementalTax)),
+        ...localWageTrace,
+        factors: {
+          ...regular.factors,
+          US_SUPPLEMENTAL_METHOD: "aggregate",
+          US_SUPPLEMENTAL_TAX: D(supplementalTax),
+        },
+      };
+    }
     if (separateFlatRate || separateCategoryAmounts) {
       // Flat-rate supplemental methods do not consume the employee's regular
       // certificate exemptions. The state engine still computes the regular

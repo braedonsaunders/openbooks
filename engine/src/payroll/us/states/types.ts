@@ -464,6 +464,16 @@ export interface UsStateWithholdingInput {
   /** Required by the pack dispatcher whenever supplemental wages are present. */
   supplementalPaymentTiming?: UsSupplementalPaymentTiming;
   /**
+   * Nonresident wage facts for threshold states, as exact decimal strings.
+   * Wisconsin's W-166 $1,500 rule withholds nothing while expected annual
+   * Wisconsin wages sit below $1,500 and the running total has not reached
+   * it, then withholds the crossing check in full; that engine refuses a
+   * nonresident calculation without both figures rather than assuming
+   * either side of the threshold.
+   */
+  nonresidentExpectedAnnualWages?: string;
+  nonresidentYtdWages?: string;
+  /**
    * Federal income tax withheld by the CURRENT paycheck's Pub 15-T pass.
    * Alabama and Oregon subtract this amount in their state formulas; it is a
    * computed statutory result, never an employee certificate answer.

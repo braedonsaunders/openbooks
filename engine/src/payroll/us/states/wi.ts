@@ -208,6 +208,32 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     };
   }
 
+  // W-166 p. 8: wages are not subject to withholding while the nonresident
+  // expects under $1,500 of Wisconsin wages for the year and the running
+  // total (year-to-date plus this check) has not reached $1,500. The
+  // crossing check withholds in full on the whole current amount, and later
+  // checks price period-only. Both figures are assignment evidence the
+  // formula cannot infer, so a nonresident calculation without them refuses
+  // by name; residents never reach this branch.
+  if (input.basis === "nonresident") {
+    const expected = input.nonresidentExpectedAnnualWages;
+    const ytd = input.nonresidentYtdWages;
+    if (expected == null || ytd == null) {
+      throw new PayrollError(
+        "Wisconsin withholding for a nonresident needs the expected annual Wisconsin wages "
+        + "and the year-to-date Wisconsin wages (W-166: under $1,500 expected is exempt until "
+        + "the running total reaches $1,500). Record both figures before calculating — refused by name",
+      );
+    }
+    const current = U(input.wages) + U(input.supplemental ?? "0");
+    if (U(expected) < 150000n && U(ytd) + current < 150000n) {
+      return {
+        state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+        factors: { WI_NONRESIDENT_THRESHOLD_EXEMPT: "1", WI_NONRESIDENT_WAGES: D(current) },
+      };
+    }
+  }
+
   const schedule = wiScheduleFor(certificateChoice(input.certificate, "marital_status"));
   factors.WI_SCHEDULE = schedule;
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
@@ -252,6 +278,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const WI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "Wisconsin qualifying military-spouse wages exempt from withholding",
+  WI_NONRESIDENT_THRESHOLD_EXEMPT: "Wisconsin nonresident wages exempt under the $1,500 threshold",
+  WI_NONRESIDENT_WAGES: "Wisconsin nonresident wages this period",
   WI_EXEMPT: "Exempt from Wisconsin withholding",
   WI_WT4A_AGREED_WITHHOLDING: "Wisconsin WT-4A agreed withholding per period",
   WI_SCHEDULE: "Wisconsin schedule (marital status)",

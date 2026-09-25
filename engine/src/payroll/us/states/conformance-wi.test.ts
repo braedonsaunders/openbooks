@@ -32,7 +32,7 @@ test("WI certificate and region declarations are well formed", () => {
   assert.equal(WI_REGION.certificateKey, "us_wi_wt4");
 });
 
-test("WI filed WT-4A replaces table withholding with its agreed per-period amount", () => {
+test("WI filed WT-4A replaces table withholding, and sub-$1,500 nonresident checks are exempt", () => {
   const agreement = resolvedCertificate(WI_WT4A, { agreed_per_period: "4.25" });
   const result = WI_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "350.00", basis: "resident",
@@ -43,6 +43,13 @@ test("WI filed WT-4A replaces table withholding with its agreed per-period amoun
   // W-166 §3.B p. 8; 2026 Form WT-4A, employer instruction under line 3.
   assert.equal(result.tax, money("4.25"));
   assert.equal(result.factors.WI_WT4A_AGREED_WITHHOLDING, money("4.25"));
+  // W-166 p. 8: a nonresident expecting $1,400 for the year withholds nothing
+  // on a $250 check (running total $250).
+  assert.equal(WI_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "250.00", basis: "nonresident",
+    certificate: cert({ marital_status: "single", exemptions: "1" }),
+    nonresidentExpectedAnnualWages: "1400.00", nonresidentYtdWages: "0",
+  }).tax, money("0"));
 });
 
 test("WI Example 1 — weekly $350, single, 1 exemption: $7.59", () => {
