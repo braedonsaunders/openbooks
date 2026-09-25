@@ -19,6 +19,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
  */
 export function CashTimeline({
   weeks,
+  selectedSubsidiaryIds,
   categories,
   weeklyCap,
   restrictToSafe,
@@ -27,6 +28,7 @@ export function CashTimeline({
   canCollectionRun = false,
 }: {
   weeks: WeekRow[]
+  selectedSubsidiaryIds?: string[]
   categories: CategoryWeekly[]
   weeklyCap: string
   restrictToSafe: boolean
@@ -93,7 +95,7 @@ export function CashTimeline({
         </tbody>
       </table>
 
-      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categories={categories} weekIndex={weeks.indexOf(flyout.week)} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
+      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categories={categories} weekIndex={weeks.indexOf(flyout.week)} selectedSubsidiaryIds={selectedSubsidiaryIds} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
     </>
   )
 }

@@ -97,7 +97,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'capture-upload': { props: ['disabled'] },
   'card-name-cell': { props: ['description', 'href', 'name'] },
   'card-studio': { props: ['studio'] },
-  'cash-cockpit': { props: ['canCollectionRun', 'canConfigure', 'canPayRun', 'data', 'layoutPrefs'] },
+  'cash-cockpit': { props: ['canCollectionRun', 'canConfigure', 'canPayRun', 'data', 'layoutPrefs', 'selectedSubsidiaryIds'] },
   'cashflow-horizon-control': { props: ['value'] },
   'cashflow-view': { props: ['data'] },
   'change-set-drawer': { props: ['drawer'] },

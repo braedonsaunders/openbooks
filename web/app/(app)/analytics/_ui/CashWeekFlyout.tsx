@@ -35,6 +35,12 @@ import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
 const ZERO_MONEY = '0.0000'
 const PAGE_SIZE = 25
 
+export function cashWeekEntriesUrl(weekStart: string, selectedSubsidiaryIds?: string[]): string {
+  const params = new URLSearchParams({ week: weekStart })
+  if (selectedSubsidiaryIds !== undefined) params.set('sub', selectedSubsidiaryIds.join(','))
+  return `/api/cash/week-entries?${params}`
+}
+
 type SortCol = 'docNumber' | 'partyName' | 'predictedDate' | 'amount'
 type TabKey = 'ar' | 'ap' | `cat:${string}`
 
@@ -64,6 +70,7 @@ const MONEYISH = new Set(['sourceTotal','rawAverage','finalAverage','monthlyMedi
  */
 export function CashWeekFlyout({
   week,
+  selectedSubsidiaryIds,
   categories = [],
   weekIndex = 0,
   initialSide = 'ap',
@@ -72,6 +79,7 @@ export function CashWeekFlyout({
   onClose,
 }: {
   week: WeekRow
+  selectedSubsidiaryIds?: string[]
   /** Full forecast categories (weekly aligned with the horizon grid). */
   categories?: CategoryWeekly[]
   /** This week's index into each category's weekly[] array. */
@@ -109,8 +117,7 @@ export function CashWeekFlyout({
   useEffect(() => {
     if (fetched) return
     let cancelled = false
-    const params = new URLSearchParams({ week: week.weekStart })
-    fetch(`/api/cash/week-entries?${params}`)
+    fetch(cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
       .then((d) => {
         if (!cancelled) {
@@ -124,7 +131,7 @@ export function CashWeekFlyout({
     return () => {
       cancelled = true
     }
-  }, [week.weekStart, fetched, fetchAttempt])
+  }, [week.weekStart, selectedSubsidiaryIds, fetched, fetchAttempt])
   const weekCats = categories.filter((c) => compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
   const otherIn = sumMoney(weekCats.filter((c) => c.direction === 'inflow').map((c) => c.weekly[weekIndex] ?? ZERO_MONEY))
   const catOuts = weekCats.filter((c) => c.direction === 'outflow')
