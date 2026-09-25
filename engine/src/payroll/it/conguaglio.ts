@@ -62,7 +62,8 @@
  * integrativo and somma differences are VERIFIED but not pushed: their
  * correct year-end figure needs the periodo-di-lavoro rapportatura (D.L.
  * 3/2020 art. 1 c. 1; L. 207/2024 art. 1 c. 5) the v1 priors do not carry
- * (no days-worked), and indebiti oltre 60 euro recover in dieci rate per
+ * (the recomputation rapporta only when taxYearWorkDays is supplied, and
+ * the priors still carry no days-worked), and indebiti oltre 60 euro recover in dieci rate per
  * L. 207/2024 art. 1 c. 7 — a timing no in-product mechanism prices (see
  * IT_REFUSED_2025/2026). So when the annual credit figure differs from the
  * paid total beyond rounding dust, the settlement REFUSES the whole
@@ -170,6 +171,12 @@ export interface ItConguaglioInput {
   taxYear: number;
   /** Domicile regione (ISTAT code): domicile selects, never the workplace. */
   regionCode: string;
+  /**
+   * Days of employment in the tax year (I6-payroll-19): carried into the
+   * annual recomputation so detrazioni rapportano al periodo di lavoro.
+   * Absent keeps the full-year assumption the v1 priors always carried.
+   */
+  taxYearWorkDays?: number | null;
   /** All-in committed taxable gross for the tax year, current run included. */
   ytdGross: string;
   /** Committed stub sums by systemKey; absent keys read as "0". */
@@ -227,6 +234,7 @@ export function calculateItConguaglio(
       nonPeriodicAnnual: "0",
       presumedTotalIncome: declaration.presumedTotalIncome,
       periodsPerYear: 1,
+      taxYearWorkDays: input.taxYearWorkDays ?? null,
       regionCode: input.regionCode,
       comuneCode: declaration.comuneCode,
       regionalRate: rates.regionalRate,

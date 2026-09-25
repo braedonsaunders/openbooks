@@ -89,7 +89,7 @@ function monthlyCollector() {
   const pushed: Pushed[] = [];
   const ctx = {
     taxYear: 2026,
-    region: "03",
+    region: "01",
     periodsPerYear: 12,
     pushStatutory: (
       systemKey: string,
@@ -141,7 +141,7 @@ function settle(
   const factors = calculateItConguaglio(
     {
       taxYear: 2026,
-      regionCode: "03",
+      regionCode: "01",
       ytdGross,
       ytdBySystemKey,
       declaration,
@@ -261,7 +261,7 @@ test("cent dust is a real difference and pushes exactly", () => {
   const factors = calculateItConguaglio(
     {
       taxYear: 2026,
-      regionCode: "03",
+      regionCode: "01",
       ytdGross: "36000.0000",
       ytdBySystemKey: {
         income_tax: "5507.1000",
@@ -291,7 +291,7 @@ test("TI/somma indebito refuses the whole employee, naming figures and remedy", 
       calculateItConguaglio(
         {
           taxYear: 2026,
-          regionCode: "03",
+          regionCode: "01",
           ytdGross: "21000.0000",
           ytdBySystemKey: {
             income_tax: "4000.0000",
@@ -320,7 +320,7 @@ test("TI/somma indebito refuses the whole employee, naming figures and remedy", 
 test("unconfigured tenant rates refuse by name, never settle zero", () => {
   const base = {
     taxYear: 2026,
-    regionCode: "03",
+    regionCode: "01",
     ytdGross: "24000.0000",
     ytdBySystemKey: { income_tax: "1500.0000" },
     declaration: DECLARATION_FILED,
@@ -371,7 +371,7 @@ test("unconfigured tenant rates refuse by name, never settle zero", () => {
     /regione/i,
   );
   assert.throws(
-    () => calculateItConguaglio({ ...base, regionCode: "03" } as never, noop),
+    () => calculateItConguaglio({ ...base, regionCode: "01" } as never, noop),
     /tenant rates/i,
   );
 });
@@ -382,7 +382,7 @@ test("pension income refuses in parity with the monthly engine", () => {
       calculateItConguaglio(
         {
           taxYear: 2026,
-          regionCode: "03",
+          regionCode: "01",
           ytdGross: "24000.0000",
           ytdBySystemKey: { income_tax: "1500.0000" },
           declaration: { ...DECLARATION_FILED, isPensioner: true },
@@ -403,7 +403,7 @@ test("annual conguaglio refuses an unknown post-1995 status above the IVS massim
   assert.throws(
     () => calculateItConguaglio({
       taxYear: 2026,
-      regionCode: "03",
+      regionCode: "01",
       ytdGross: "130000.0000",
       ytdBySystemKey: {},
       declaration: { ...DECLARATION_FILED, isPost1995: undefined },
@@ -438,7 +438,7 @@ test("untranscribed year refuses in the pure core too", () => {
       calculateItConguaglio(
         {
           taxYear: 2024,
-          regionCode: "03",
+          regionCode: "01",
           ytdGross: "24000.0000",
           ytdBySystemKey: {},
           declaration: DECLARATION_FILED,

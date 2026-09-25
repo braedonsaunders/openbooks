@@ -21,7 +21,7 @@ import {
 
 const BASE = {
   periodsPerYear: 12,
-  regionCode: "03",
+  regionCode: "01",
   comuneCode: "H501",
   regionalRate: "0",
   municipalSurtax: { rate: "0" },
