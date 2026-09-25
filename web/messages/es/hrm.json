@@ -1767,7 +1767,21 @@
       "at": "Fecha"
     },
     "emptyHistory": "Sin eventos.",
+    "move": {
+      "title": "Ciclo de vida",
+      "open": "Abrir",
+      "submit": "Enviar",
+      "push": "Transferir",
+      "close": "Cerrar",
+      "cancel": "Cancelar"
+    },
     "settings": {
+      "title": "Configuración de compensación",
+      "attribute": "Atributo de comparación",
+      "threshold": "Umbral de brecha (%)",
+      "responseDays": "Días de respuesta",
+      "roundingLabel": "Redondeo de ETC",
+      "burden": "Tasa de carga",
       "rounding": {
         "upToWhole": "Redondear hacia arriba al entero",
         "nearestTenth": "Décima más cercana",

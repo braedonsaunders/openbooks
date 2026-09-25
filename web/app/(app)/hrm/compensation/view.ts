@@ -115,6 +115,18 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
       widgetBlock('setup-section', { entityKey: 'hrm-job-families', sp: data.setupParams, basePath: '/hrm/compensation', rowParam: 'family' }, f('canSetup')),
       widgetBlock('setup-section', { entityKey: 'hrm-job-levels', sp: data.setupParams, basePath: '/hrm/compensation', rowParam: 'level' }, f('canSetup')),
       widgetBlock('setup-section', { entityKey: 'hrm-pay-bands', sp: data.setupParams, basePath: '/hrm/compensation', rowParam: 'band' }, f('canSetup')),
+      // The compensation settings form (gap threshold, burden rate, FTE
+      // rounding): the loader arms it only for unrestricted compensation
+      // managers, so readers never see a form the PUT endpoint would
+      // refuse. This panel is the named remedy for a corrupt stored
+      // threshold — resaving here heals it.
+      {
+        ...panel({
+          title: f('settings.title'),
+          blocks: [widgetBlock('hrm-comp-settings', { settings: f('settings') })],
+        }),
+        when: f('settings'),
+      },
       // The create dialogs (?cycle=new / ?plan=new), mirroring the
       // change-request queue's propose/detail trio — the loader owns the
       // open state and the return href, closing navigates the param away.

@@ -212,9 +212,12 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'org-chart-tree',
   // HR-19 end
   'hrm-comp-cycle-dialog',
+  'hrm-comp-cycle-move',
   'hrm-comp-equity-dialog',
   'hrm-comp-line-drawer',
   'hrm-comp-plan-dialog',
+  'hrm-comp-settings',
+  'hrm-plan-line-approve',
   'hrm-cycle-dialog',
   'hrm-pay-info-request',
   'hrm-placement-summary',

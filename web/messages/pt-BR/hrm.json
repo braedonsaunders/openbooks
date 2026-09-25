@@ -1767,7 +1767,21 @@
       "at": "Data"
     },
     "emptyHistory": "Sem eventos.",
+    "move": {
+      "title": "Ciclo de vida",
+      "open": "Abrir",
+      "submit": "Enviar",
+      "push": "Transferir",
+      "close": "Fechar",
+      "cancel": "Cancelar"
+    },
     "settings": {
+      "title": "Configurações de remuneração",
+      "attribute": "Atributo de comparação",
+      "threshold": "Limite de disparidade (%)",
+      "responseDays": "Dias de resposta",
+      "roundingLabel": "Arredondamento de FTE",
+      "burden": "Taxa de encargos",
       "rounding": {
         "upToWhole": "Arredondar para cima ao inteiro",
         "nearestTenth": "Décimo mais próximo",

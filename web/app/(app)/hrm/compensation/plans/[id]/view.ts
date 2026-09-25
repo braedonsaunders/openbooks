@@ -8,13 +8,15 @@ import {
   page,
   pageHeader,
   panel,
+  rootRef,
   table,
   text,
   widget,
   widgetBlock,
+  widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { compensationAuthz, loadHeadcountPlanDetail } from '../../../../../../lib/hrm/compensation'
+import { compensationAuthz, loadHeadcountPlanDetail, type CompPlanDetailData } from '../../../../../../lib/hrm/compensation'
 
 /**
  * One headcount plan: costed plan lines with the costed total against
@@ -23,8 +25,33 @@ import { compensationAuthz, loadHeadcountPlanDetail } from '../../../../../../li
  */
 
 const f = item
+const rootF = rootRef<CompPlanDetailData>()
 
 export function compPlanSpec(data: NonNullable<Awaited<ReturnType<typeof loadHeadcountPlanDetail>>>): PageSpec {
+  // Managers get the per-line approve button: the island itself renders
+  // nothing unless the line is proposed, and the endpoint owns the grant
+  // and the transition — readers get no column at all.
+  const columns = [
+    column(f('columns.title'), text(item('title'))),
+    column(f('columns.kind'), badge(item('kindLabel'))),
+    column(f('columns.fte'), text(item('fte')), { align: 'right', className: 'tabular-nums' }),
+    column(f('columns.start'), text(item('startOn'))),
+    column(f('columns.cost'), text(item('cost')), { align: 'right', className: 'tabular-nums' }),
+    column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+  ]
+  if (data.canManage) {
+    columns.push(
+      column(
+        '',
+        widgetCell('hrm-plan-line-approve', {
+          planId: rootF('planId'),
+          lineId: item('id'),
+          lineStatus: item('status'),
+          approve: rootF('lineApprove'),
+        }),
+      ),
+    )
+  }
   return page({
     route: '/hrm/compensation/plans/[id]',
     layout: 'list',
@@ -52,14 +79,7 @@ export function compPlanSpec(data: NonNullable<Awaited<ReturnType<typeof loadHea
             rows: f('lines'),
             rowKey: item('id'),
             empty: { title: f('linesEmpty') },
-            columns: [
-              column(f('columns.title'), text(item('title'))),
-              column(f('columns.kind'), badge(item('kindLabel'))),
-              column(f('columns.fte'), text(item('fte')), { align: 'right', className: 'tabular-nums' }),
-              column(f('columns.start'), text(item('startOn'))),
-              column(f('columns.cost'), text(item('cost')), { align: 'right', className: 'tabular-nums' }),
-              column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-            ],
+            columns,
           }),
         ],
       }),

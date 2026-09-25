@@ -1823,7 +1823,21 @@
       "at": "At"
     },
     "emptyHistory": "No events yet.",
+    "move": {
+      "title": "Lifecycle",
+      "open": "Open",
+      "submit": "Submit",
+      "push": "Push",
+      "close": "Close",
+      "cancel": "Cancel"
+    },
     "settings": {
+      "title": "Compensation settings",
+      "attribute": "Comparison attribute",
+      "threshold": "Gap threshold (%)",
+      "responseDays": "Response days",
+      "roundingLabel": "FTE rounding",
+      "burden": "Burden rate",
       "rounding": {
         "upToWhole": "Up to a whole number",
         "nearestTenth": "Nearest tenth",

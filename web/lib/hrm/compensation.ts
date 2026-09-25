@@ -18,6 +18,7 @@ import {
   countBandHolders,
 } from '@openbooks/engine/src/hrm/compensation/band-headcounts.ts'
 import {
+  compensationSettings,
   listJobLevels,
 } from '@openbooks/engine/src/hrm/compensation/architecture.ts'
 import {
@@ -219,6 +220,26 @@ export interface CompHomeData {
    * Null when the snapshot read succeeded (or genuinely found no snapshot).
    */
   refusal: { title: string; message: string } | null
+  /**
+   * The compensation settings form payload (gap threshold, burden rate,
+   * FTE rounding, comparison attribute, response days). Present only for
+   * unrestricted compensation managers — the PUT endpoint requires
+   * hrm.compensation.manage on the whole org, so scoped managers never
+   * get a form that can only refuse. Readers get null.
+   */
+  settings: {
+    initial: { comparisonAttributeKey: string; gapThresholdPct: string; responseDays: string; fteRounding: string; burdenRate: string }
+    title: string
+    attributeLabel: string
+    thresholdLabel: string
+    responseDaysLabel: string
+    roundingLabel: string
+    roundingOptions: { value: string; label: string }[]
+    burdenLabel: string
+    failed: string
+    submit: string
+    cancel: string
+  } | null
 }
 
 function cycleStatusVariant(status: string): CompCycleRow['statusVariant'] {
@@ -493,6 +514,60 @@ export async function loadCompensationHome(
     // drawers from namespaced keys — one URL opens exactly one drawer.
     setupParams: setupSectionParams(sp, ['family', 'level', 'band']),
     refusal: gapRefusal,
+    settings: await loadCompensationSettingsBlock(orgId, canManage && authz.allowedSubsidiaryIds === null, t),
+  }
+}
+
+/**
+ * The settings form payload for unrestricted compensation managers. A
+ * stored-but-unparseable threshold throws INVALID_INPUT naming the
+ * Compensation settings remedy — this panel IS that remedy, so the
+ * failure surfaces here as data with the stored values blanked rather
+ * than failing the whole home page.
+ */
+async function loadCompensationSettingsBlock(
+  orgId: string,
+  editable: boolean,
+  t: Awaited<ReturnType<typeof getTranslations>>,
+): Promise<CompHomeData['settings']> {
+  if (!editable) return null
+  let initial = { comparisonAttributeKey: '', gapThresholdPct: '5', responseDays: '', fteRounding: 'up_to_whole', burdenRate: '' }
+  try {
+    const current = await compensationSettings(orgId)
+    initial = {
+      comparisonAttributeKey: current.comparisonAttributeKey ?? '',
+      gapThresholdPct: current.gapThresholdPct,
+      responseDays: current.responseDays === null ? '' : String(current.responseDays),
+      fteRounding: current.fteRounding,
+      burdenRate: current.burdenRate ?? '',
+    }
+  } catch (error) {
+    // A corrupt stored document keeps its defaults above: the panel IS
+    // the named remedy, so the operator can resave and heal it. Only the
+    // typed settings refusal is absorbed here — unexpected failures
+    // propagate, never a blanked form pretending the read succeeded.
+    if (!(error instanceof CompensationError)) throw error
+  }
+  return {
+    initial,
+    title: t('compensation.settings.title'),
+    attributeLabel: t('compensation.settings.attribute'),
+    thresholdLabel: t('compensation.settings.threshold'),
+    responseDaysLabel: t('compensation.settings.responseDays'),
+    roundingLabel: t('compensation.settings.roundingLabel'),
+    roundingOptions: (['up_to_whole', 'nearest_tenth', 'nearest_hundredth'] as const).map((value) => ({
+      value,
+      label:
+        value === 'up_to_whole'
+          ? t('compensation.settings.rounding.upToWhole')
+          : value === 'nearest_tenth'
+            ? t('compensation.settings.rounding.nearestTenth')
+            : t('compensation.settings.rounding.nearestHundredth'),
+    })),
+    burdenLabel: t('compensation.settings.burden'),
+    failed: t('compensation.drawer.failed'),
+    submit: t('compensation.drawer.submit'),
+    cancel: t('compensation.drawer.cancel'),
   }
 }
 
@@ -585,6 +660,26 @@ export interface CompCycleDetailData {
   }
   historyColumns: { event: string; reason: string; at: string }
   emptyHistory: string
+  /**
+   * The cycle lifecycle block (open/submit/push/close/cancel). Present
+   * only for compensation managers — the POST endpoint requires
+   * hrm.compensation.manage, so readers never get buttons that can only
+   * refuse. Invalid transitions for the current status refuse by name in
+   * the island; the service owns the transition table.
+   */
+  move: {
+    title: string
+    openLabel: string
+    submitLabel: string
+    pushLabel: string
+    closeLabel: string
+    cancelLabel: string
+    cancelReasonLabel: string
+    cancelReasonRequired: string
+    failed: string
+    submit: string
+    cancel: string
+  } | null
 }
 
 export async function loadCompCycleDetail(
@@ -750,6 +845,21 @@ export async function loadCompCycleDetail(
       at: t('compensation.historyColumns.at'),
     },
     emptyHistory: t('compensation.emptyHistory'),
+    move: can(authz, 'hrm.compensation.manage')
+      ? {
+          title: t('compensation.move.title'),
+          openLabel: t('compensation.move.open'),
+          submitLabel: t('compensation.move.submit'),
+          pushLabel: t('compensation.move.push'),
+          closeLabel: t('compensation.move.close'),
+          cancelLabel: t('compensation.move.cancel'),
+          cancelReasonLabel: t('compensation.drawer.cancelReasonLabel'),
+          cancelReasonRequired: t('compensation.drawer.cancelReasonRequired'),
+          failed: t('compensation.drawer.failed'),
+          submit: t('compensation.drawer.submit'),
+          cancel: t('compensation.drawer.cancel'),
+        }
+      : null,
   }
 }
 
@@ -769,6 +879,7 @@ export interface CompPlanLineRow {
 }
 
 export interface CompPlanDetailData {
+  planId: string
   title: string
   planName: string
   status: string
@@ -786,6 +897,13 @@ export interface CompPlanDetailData {
   backHref: string
   backLabel: string
   approveLabel: string
+  /**
+   * Per-line approve button labels. Present only for compensation
+   * managers — the approve endpoint requires hrm.compensation.manage.
+   * The island itself renders nothing unless the line is proposed; the
+   * service refuses anything else by name.
+   */
+  lineApprove: { failed: string; submit: string; cancel: string; approve: string } | null
 }
 
 export async function loadHeadcountPlanDetail(
@@ -804,6 +922,7 @@ export async function loadHeadcountPlanDetail(
   const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId })
   const total = planTotalCost(lines)
   return {
+    planId,
     title: plan.name,
     planName: plan.name,
     status: plan.status,
@@ -841,6 +960,14 @@ export async function loadHeadcountPlanDetail(
     backHref: '/hrm/compensation',
     backLabel: t('compensation.back'),
     approveLabel: t('compensation.approveLine'),
+    lineApprove: can(authz, 'hrm.compensation.manage')
+      ? {
+          failed: t('compensation.drawer.failed'),
+          submit: t('compensation.drawer.submit'),
+          cancel: t('compensation.drawer.cancel'),
+          approve: t('compensation.approveLine'),
+        }
+      : null,
   }
 }
 

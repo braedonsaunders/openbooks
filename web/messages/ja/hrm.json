@@ -1767,7 +1767,21 @@
       "at": "日時"
     },
     "emptyHistory": "イベントがありません。",
+    "move": {
+      "title": "ライフサイクル",
+      "open": "開く",
+      "submit": "提出する",
+      "push": "プッシュする",
+      "close": "閉じる",
+      "cancel": "キャンセルする"
+    },
     "settings": {
+      "title": "報酬設定",
+      "attribute": "比較属性",
+      "threshold": "格差しきい値（％）",
+      "responseDays": "回答日数",
+      "roundingLabel": "FTE丸め",
+      "burden": "付帯率",
       "rounding": {
         "upToWhole": "整数に切り上げ",
         "nearestTenth": "小数第1位に丸める",

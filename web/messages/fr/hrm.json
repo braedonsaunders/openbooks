@@ -1767,7 +1767,21 @@
       "at": "Date"
     },
     "emptyHistory": "Aucun événement.",
+    "move": {
+      "title": "Cycle de vie",
+      "open": "Ouvrir",
+      "submit": "Soumettre",
+      "push": "Transférer",
+      "close": "Clore",
+      "cancel": "Annuler"
+    },
     "settings": {
+      "title": "Paramètres de rémunération",
+      "attribute": "Attribut de comparaison",
+      "threshold": "Seuil d'écart (%)",
+      "responseDays": "Délai de réponse",
+      "roundingLabel": "Arrondi ETP",
+      "burden": "Taux de charges",
       "rounding": {
         "upToWhole": "Arrondir à l'entier supérieur",
         "nearestTenth": "Dixième le plus proche",
