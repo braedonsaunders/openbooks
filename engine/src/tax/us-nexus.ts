@@ -58,6 +58,12 @@ export const US_NEXUS_OVERRIDES: Record<string, Omit<StateNexusThreshold, 'state
   TX: { salesUsd: '500000', txnCount: null, measure: 'sales_only' },
   NY: { salesUsd: '500000', txnCount: 100, measure: 'sales_and_txn' },
   // Notable states that dropped the transaction-count trigger (sales-only):
+  // IN: S.B. 228 (2024), retroactive to 2024-01-01 — $100k gross revenue,
+  // current or preceding calendar year, transaction test removed.
+  IN: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
+  // ME: LD 1216 (2021), effective 2022-01-01 — $100k gross sales, current
+  // or previous calendar year, transaction test removed.
+  ME: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
   TN: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
   WI: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
   WA: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
