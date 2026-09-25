@@ -69,6 +69,8 @@ import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
 import { IT_PACK_RATES } from "./rates.ts";
 import { IT_REGION_CODES } from "./regions.ts";
+import { ItPayrollRefusal } from "./refusal.ts";
+import { pushItSurtaxSaldoInstallments } from "./surtax-balances.ts";
 import {
   IT_2025_DETRAZIONE_C2,
   IT_2025_DETRAZIONE_LAVORO,
@@ -96,7 +98,7 @@ import {
   IT_2026_ULTERIORE_DETRAZIONE,
 } from "./tax-year-2026.ts";
 
-export class ItPayrollRefusal extends PayrollError {}
+export { ItPayrollRefusal } from "./refusal.ts";
 
 /**
  * One transcribed year's tables, in the single shape the shared engine
@@ -1003,6 +1005,8 @@ export const IT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IRPEF: "IRPEF (imposta sul reddito delle persone fisiche)",
   ADDREG: "Addizionale regionale all'IRPEF",
   ADDCOM: "Addizionale comunale all'IRPEF",
+  IT_ADDREG_SALDO: "Addizionale regionale a saldo — prior-year assessment installment",
+  IT_ADDCOM_SALDO: "Addizionale comunale a saldo — prior-year assessment installment",
   INPS_W: "INPS — contributi IVS a carico del lavoratore",
   INPS_ER: "INPS — contributi IVS a carico del datore",
   TI: "Trattamento integrativo",
@@ -1208,16 +1212,15 @@ export async function computeItStatutoryWithRates(
       };
     })(),
   });
-  // The period figures below are 1/12 advances of the current-year liability,
-  // trued up by the December conguaglio (see ./conguaglio.ts), not the
-  // statutory saldo/advance schedule: regional saldo is the prior-year
-  // assessment in up to 11 instalments, and municipal saldo rides with a 30%
-  // current-year advance in up to 9 instalments from March. Pricing that
-  // schedule needs assessed balances and withholding history no adapter
-  // channel carries (I6-payroll-50 remainder), so an adapter-level refusal
-  // would refuse every configured run permanently. Refusals that CAN fire
-  // stay in the core: unconfigured regional/municipal rates and an unknown
-  // or malformed domicilio comune refuse by name there, before this point.
+  // The period figures below are 1/12 advances of the current-year liability
+  // (the previsionale the December conguaglio trues up — see ./conguaglio.ts).
+  // The statutory saldo schedule rides beside them, priced by the production
+  // entry after this core returns: the prior-year assessment in up to 11
+  // regionale instalments and up to 9 comunale instalments from March, from
+  // the assessed-saldo channel (see ./surtax-balances.ts), which refuses by
+  // name when neither source exists. Refusals that CAN fire stay in the core:
+  // unconfigured regional/municipal rates and an unknown or malformed
+  // domicilio comune refuse by name there, before this point.
   // https://www.inps.it/it/it/dettaglio-approfondimento.schede-informative.53546.pensioni-addizionali-irpef-regionali-e-comunali.html
   pushStatutory("income_tax", "deduction", "IRPEF", result.period.irpef, 110);
   pushStatutory("regional_surtax", "deduction", "Addizionale regionale all'IRPEF", result.period.addizionaleRegionale, 115);
@@ -1249,7 +1252,14 @@ export async function computeItStatutoryWithRates(
   };
 }
 
-/** Phase 9 — IT pack statutory pass for 2025 and 2026. Refuses every other year. */
+/**
+ * Phase 9 — IT pack statutory pass for 2025 and 2026. Refuses every other
+ * year. The production entry only: after the DB-free core prices the
+ * current-year advances, the assessed-saldo channel prices the prior-year
+ * balance installments (see ./surtax-balances.ts) and refuses by name when
+ * neither source exists. Unit tests drive the core with no database and see
+ * advances only.
+ */
 export async function computeItStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
@@ -1268,9 +1278,28 @@ export async function computeItStatutory(
   const comunale = comune
     ? resolution.values("it_addizionale_comunale", { region, subRegion: comune })
     : null;
-  return computeItStatutoryWithRates(ctx, {
+  const factors = await computeItStatutoryWithRates(ctx, {
     regionalRate: regionale?.rate ?? null,
     municipalRate: comunale?.rate ?? null,
     municipalExemption: comunale?.exemption ?? null,
   });
+  const payDate = ctx.run.pay_date;
+  if (payDate == null || payDate === "") {
+    throw new ItPayrollRefusal(
+      `IT ${ctx.taxYear} saldo installments accrue against the run versement date (run pay_date), `
+      + "which the run did not resolve — engine defect",
+    );
+  }
+  return {
+    ...factors,
+    ...(await pushItSurtaxSaldoInstallments({
+      tx: ctx.tx,
+      orgId: ctx.orgId,
+      employeePartyId: ctx.employeePartyId,
+      documentId: ctx.documentId,
+      taxYear: ctx.taxYear,
+      payDate,
+      pushStatutory: ctx.pushStatutory,
+    })),
+  };
 }

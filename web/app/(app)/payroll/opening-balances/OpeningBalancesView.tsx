@@ -213,9 +213,15 @@ function OpeningBalancesYearView({
         const amounts: Record<string, string> = {}
         for (const field of fields) {
           const edited = draft[employeePartyId]?.[field.key]
+          // Untouched-absent replays as blank, not '0': the server treats
+          // blank as omitted and keeps what is stored. Replaying '0' would
+          // conjure carry-ins the operator never entered — for the IT
+          // assessed-saldo columns a conjured zero would silence the
+          // installment channel's refusal. Generic amounts normalize blank
+          // to zero identically, so statutory behavior is unchanged.
           amounts[field.key] = edited !== undefined
             ? edited.trim()
-            : (row?.amounts?.[field.key] ?? '0')
+            : (row?.amounts?.[field.key] ?? '')
         }
         // Every EDITABLE component is sent, edited or not: the service replaces
         // the set, so an omitted one would silently survive a clear. Components
