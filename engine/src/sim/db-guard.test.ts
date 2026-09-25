@@ -1,24 +1,19 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   assertDisposableDatabaseUrl,
   isDedicatedSimDatabase,
 } from "./db-guard.ts";
 
-test("production OpenBooks URL is rejected before any database query", () => {
-  const productionUrl = "postgresql://10.0.0.85:5432/openbooks";
-
-  assert.throws(
-    () =>
-      assertDisposableDatabaseUrl(productionUrl, "ledger parity provisioning", {
-        requireLoopback: true,
-      }),
-    (error: unknown) => {
-      assert.match((error as Error).message, /127\.0\.0\.1 or localhost/);
-      return true;
-    },
-  );
-  assert.equal(isDedicatedSimDatabase(productionUrl), false);
+test("simulator CLI refuses provisioning against a non-loopback database", () => {
+  const result = spawnSync(process.execPath, ["--import", "tsx", "engine/src/sim/cli.ts", "provision"], {
+    env: { ...process.env, NODE_ENV: "production", OPENBOOKS_SIM: "1", OPENBOOKS_DB_URL: "postgresql://db.example.invalid/openbooks_prod" },
+    encoding: "utf8",
+    timeout: 5_000,
+  });
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /OPENBOOKS_DB_URL host must be 127\.0\.0\.1 or localhost/);
 });
 
 test("shared dedicated-database policy still accepts a remote test database", () => {
