@@ -359,7 +359,8 @@
     "leveling": {
       "heading": "Resource levelling",
       "description": "Delay activities so no crew, machine or subcontractor is booked past its daily capacity. Review the proposed moves before applying them."
-    }
+    },
+    "readOnly": "This schedule is read-only. Changes require project management access."
   },
   "invoicing": {
     "rateCardLapse": "When the rate card has lapsed",

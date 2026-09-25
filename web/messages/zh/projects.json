@@ -359,7 +359,8 @@
     "leveling": {
       "heading": "资源平衡",
       "description": "顺延作业，使施工队、机械或分包商的日预订量不超日产能。应用前请复核建议的调整。"
-    }
+    },
+    "readOnly": "此计划为只读。更改需要项目管理访问权限。"
   },
   "invoicing": {
     "rateCardLapse": "费率卡已失效时",

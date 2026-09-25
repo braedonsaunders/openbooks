@@ -359,7 +359,8 @@
     "leveling": {
       "heading": "Nivelación de recursos",
       "description": "Retrase actividades para que ninguna cuadrilla, máquina o subcontratista supere su capacidad diaria. Revise los movimientos propuestos antes de aplicarlos."
-    }
+    },
+    "readOnly": "Este cronograma es de solo lectura. Los cambios requieren acceso de gestión de proyectos."
   },
   "invoicing": {
     "rateCardLapse": "Cuando la tarifa ha caducado",

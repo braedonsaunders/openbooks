@@ -359,7 +359,8 @@
     "leveling": {
       "heading": "Ressourcenglättung",
       "description": "Verzögern Sie Aktivitäten, damit keine Kolonne, Maschine oder kein Nachunternehmer über die Tageskapazität hinaus gebucht wird. Prüfen Sie die vorgeschlagenen Verschiebungen vor der Anwendung."
-    }
+    },
+    "readOnly": "Dieser Zeitplan ist schreibgeschützt. Änderungen erfordern Projektverwaltungszugriff."
   },
   "invoicing": {
     "rateCardLapse": "Wenn die Preisliste abgelaufen ist",
