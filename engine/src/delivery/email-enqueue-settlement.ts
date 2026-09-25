@@ -30,12 +30,16 @@ import { deleteStoredEmailAttachments } from "./email-attachments.ts";
  *    exist: keep the refs and rethrow the original error for a retry.
  *    (An UNBUILDABLE plan is the opposite case — the real producer
  *    builds the identical plan before touching Redis, so it provably
- *    accepted nothing — and deletes like case 2.) Orphaned bytes are
- *    the lesser harm: the email worker drops staged bytes at every
- *    terminal delivery, unreferenced ids are never re-read, and only
- *    live job payloads reference storage ids. (No automated staged-blob
- *    sweep exists — see the `deleteEmailAttachmentBlobs` contract in
- *    platform/file-storage.ts — so kept orphans wait for an operator.)
+ *    accepted nothing — and deletes like case 2.) Kept refs are bounded,
+ *    not orphans: every producer stages under intent-derived storage keys
+ *    (`emailStagingKey`), so a retry overwrites the same blobs instead of
+ *    minting a fresh random generation per attempt. The email worker drops
+ *    staged bytes at every terminal delivery, unreferenced ids are never
+ *    re-read, and only live job payloads reference storage ids. (No
+ *    automated staged-blob sweep exists — see the
+ *    `deleteEmailAttachmentBlobs` contract in platform/file-storage.ts —
+ *    so bytes stranded outside an intent's key set still wait for an
+ *    operator.)
  *
  * The probe and the removal are injectable so unit tests can drive the
  * three queue states without Redis; production uses the live queue and

@@ -411,8 +411,9 @@ export async function processCloseDeliveryJobData(
       }
       // Stage the rendered bundle outside the queue payload: the email
       // worker fetches the bytes at send time instead of Redis holding
-      // report contents for days.
-      const attachments = await storeEmailAttachments(files);
+      // report contents for days. Keys derive from the content-bound intent
+      // key above, so a parent retry overwrites the same blobs.
+      const attachments = await storeEmailAttachments(files, { storageKeySeed: emailIntentKey });
       const emailData: EnqueueEmailData = {
         orgId,
         to: recipients,

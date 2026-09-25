@@ -536,8 +536,9 @@ export async function dispatchReportDeliveries(
     const mail = scheduledReportEmail({ orgName: row.org_name, reportName: row.report_name, attachmentName: row.filename });
     const jobId = `report-delivery|${row.id}|${row.dispatch_count}`;
     // Claim the outbox row BEFORE staging: concurrent dispatchers select the
-    // same pending row, and each stages its PDF under a fresh random key —
-    // only the claimant may stage, so the loser's blobs are never orphaned.
+    // same pending row and only the claimant may stage. Staging keys derive
+    // from the dispatch identity, so even a fenced-out loser's put lands on
+    // the same bytes the winner staged — never a fresh orphan generation.
     // The status + generation guard is the arbiter: exactly one claimant wins.
     const claimed = (await db.execute<{ id: string }>(sql`
       update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,
@@ -548,9 +549,11 @@ export async function dispatchReportDeliveries(
     if (!claimed.rows[0]) continue;
     // Stage the rendered bytes outside the queue payload: the worker fetches
     // them at send time instead of Redis holding file contents for days.
+    // Keys derive from the dispatch identity, so a same-generation retry
+    // overwrites the same blob instead of orphaning a fresh random key.
     const attachments = await storeEmailAttachments([
       { filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type },
-    ]);
+    ], { storageKeySeed: jobId });
     const emailData = {
       orgId: row.org_id,
       to: row.recipient,

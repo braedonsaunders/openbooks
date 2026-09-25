@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   assertValidEmailAttachmentPayloads,
   isEmailAttachmentRef,
@@ -30,21 +30,44 @@ import { sealSecret, unsealSecret } from "../platform/secrets.ts";
  * sealed-secret primitive otherwise. Legacy inline payloads still drain
  * through `loadEmailAttachments` so jobs enqueued before this change send
  * exactly once — but no new enqueue may produce them.
+ *
+ * Staged-blob ownership follows the durable enqueue intent: every producer
+ * stages under its deterministic queue job id (flow-email row, close-package
+ * binder intent, report dispatch generation), and the storage key derives
+ * from that intent plus the attachment position and filename. A retry of the
+ * same intent therefore overwrites the same keys instead of stranding a fresh
+ * random generation per attempt — the uncertain-enqueue orphan class. Keys
+ * stay unique per intent, so distinct deliveries never share bytes; the
+ * worker's terminal delete and the settlement's provable-non-acceptance
+ * delete remove exactly the intent's key set.
  */
+
+/**
+ * Derive one intent-bound storage key per attachment. Without a seed the key
+ * stays random (callers with no stable enqueue identity); with a seed the
+ * same (seed, position, filename) always maps to the same key, so retries of
+ * one enqueue intent overwrite rather than accumulate. Safe only because
+ * every seeded producer's bytes are a pure function of its intent identity.
+ */
+export function emailStagingKey(seed: string | undefined, index: number, filename: string): string {
+  if (!seed) return randomUUID();
+  return `d-${createHash("sha256").update(`${seed}:${index}:${filename}`).digest("hex").slice(0, 31)}`;
+}
 
 export async function storeEmailAttachments(
   attachments: EmailAttachmentPayload[] | undefined,
+  opts: { storageKeySeed?: string } = {},
 ): Promise<EmailAttachmentRef[]> {
   if (!attachments || attachments.length === 0) return [];
   assertValidEmailAttachmentPayloads(attachments);
   const stored: EmailAttachmentRef[] = [];
   const writtenStorageKeys: string[] = [];
   try {
-    for (const attachment of attachments) {
+    for (const [index, attachment] of attachments.entries()) {
       const bytes = Buffer.from(attachment.content, "base64");
       const contentType = attachment.contentType ?? "application/octet-stream";
       if (s3Enabled) {
-        const id = randomUUID();
+        const id = emailStagingKey(opts.storageKeySeed, index, attachment.filename);
         await putEmailAttachmentBlob(id, bytes, contentType);
         writtenStorageKeys.push(id);
         stored.push({ filename: attachment.filename, contentType: attachment.contentType, storageKey: id });

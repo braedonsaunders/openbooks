@@ -234,9 +234,12 @@ export async function deliverFlowEmail(
   // authored must fail this attempt loudly (retry → terminal failure with
   // operator visibility), never send garbage.
   const delivery = parseFlowEmailPayload(row.payload);
+  const jobId = flowEmailJobId(row.id);
   // Stage attachment bytes outside the queue payload; the worker fetches
-  // them at send time instead of Redis holding file contents for days.
-  const attachments = await storeEmailAttachments(delivery.attachments);
+  // them at send time instead of Redis holding file contents for days. The
+  // keys derive from the row's deterministic job id, so a retry overwrites
+  // the same blobs instead of orphaning a fresh random generation.
+  const attachments = await storeEmailAttachments(delivery.attachments, { storageKeySeed: jobId });
   const emailData = {
     orgId: row.org_id,
     to: delivery.to,
@@ -247,7 +250,6 @@ export async function deliverFlowEmail(
     ...(delivery.meta ? { meta: delivery.meta } : {}),
     ...(delivery.replyTo ? { replyTo: delivery.replyTo } : {}),
   };
-  const jobId = flowEmailJobId(row.id);
   try {
     await enqueue(
       emailData,
