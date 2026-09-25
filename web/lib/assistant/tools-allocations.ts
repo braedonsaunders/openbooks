@@ -103,17 +103,18 @@ async function resolveRuleId(
 /** Driver id from either address form. */
 async function resolveDriverId(
   orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   a: { driverId?: string; driverKey?: string },
 ): Promise<string | ToolResult> {
   if ((a.driverId === undefined) === (a.driverKey === undefined)) {
     return { ok: false, error: "driver_id_or_key_required" };
   }
   if (a.driverId !== undefined) {
-    const driver = await getDriver(orgId, a.driverId);
+    const driver = await getDriver(orgId, a.driverId, undefined, allowedSubsidiaryIds);
     if (!driver) return { ok: false, error: "allocation_driver_not_found" };
     return driver.id;
   }
-  const drivers = await listDrivers(orgId, { includeInactive: true });
+  const drivers = await listDrivers(orgId, { includeInactive: true, allowedSubsidiaryIds });
   const found = drivers.find((driver) => driver.key === a.driverKey);
   if (!found) return { ok: false, error: "allocation_driver_not_found" };
   return found.id;
@@ -344,7 +345,7 @@ const previewDriverVectorTool: AssistantToolDef = {
     const off = await allocationsOff(authz);
     if (off) return off;
     const a = raw as { driverId?: string; driverKey?: string; periodId?: string; period?: string };
-    const driverId = await resolveDriverId(authz.user.orgId, a);
+    const driverId = await resolveDriverId(authz.user.orgId, authz.allowedSubsidiaryIds, a);
     if (typeof driverId !== "string") return driverId;
     let asOf: { periodId: string } | { date: string };
     if ((a.periodId === undefined) === (a.period === undefined)) {
@@ -362,7 +363,7 @@ const previewDriverVectorTool: AssistantToolDef = {
       // with the engine report runner, so report_definition drivers read
       // the same numbers a run would apportion on.
       const result = await previewDriverVector(
-        { orgId: authz.user.orgId, driverId, asOf, actorId: authz.user.id },
+        { orgId: authz.user.orgId, driverId, asOf, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
         { reportRunner: { runReport: runDriverReport } },
       );
       const labels = await getDimensionValueLabels(

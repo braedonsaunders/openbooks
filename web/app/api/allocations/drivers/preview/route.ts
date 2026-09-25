@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   try {
     const asOf = periodId !== undefined ? { periodId } : { date: date! };
     const result = await previewDriverVector(
-      { orgId: gate.user.orgId, driverId, asOf, actorId: gate.user.id },
+      { orgId: gate.user.orgId, driverId, asOf, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
       allocationServiceDeps(),
     );
     const labels = await getDimensionValueLabels(

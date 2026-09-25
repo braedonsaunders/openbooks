@@ -243,6 +243,8 @@ test('drivers read: list gate, manual vector preview by key and period', { skip:
         driverKey: 'tool-manual', periodId: s.periodId,
       });
       assert.equal(preview.ok, true, JSON.stringify(preview));
+      const restrictedPreview = await executeAssistantTool(reader(s.orgId, s.actorId, FULL, new Set([s.subsidiaryId])), 'preview_driver_vector', { driverKey: 'tool-manual', periodId: s.periodId });
+      assert.equal(restrictedPreview.ok, false);
       const vector = preview.data as {
         driver: { key: string }; total: string;
         vector: { id: string; label: string; value: string; share: string }[];
@@ -251,10 +253,7 @@ test('drivers read: list gate, manual vector preview by key and period', { skip:
       assert.equal(vector.driver.key, 'tool-manual');
       assert.equal(vector.truncated, false);
       assert.equal(vector.vector.length, 1);
-      assert.equal(vector.vector[0]?.id, s.deptId);
-      assert.equal(vector.vector[0]?.label, 'Tool Dept');
-      assert.equal(vector.vector[0]?.value, '3.0000');
-      assert.equal(vector.vector[0]?.share, '1.0000');
+      assert.deepEqual([vector.vector[0]?.id, vector.vector[0]?.label, vector.vector[0]?.value, vector.vector[0]?.share], [s.deptId, 'Tool Dept', '3.0000', '1.0000']);
       assert.equal(vector.total, '3.0000');
 
       assert.deepEqual(await executeAssistantTool(authz, 'preview_driver_vector', {

@@ -823,7 +823,7 @@ test("drivers: period_activity refuses a report with no date field instead of we
     });
     await assert.rejects(
       previewDriverVector(
-        { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor },
+        { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor, allowedSubsidiaryIds: null },
         { reportRunner: { runReport: runDriverReport } },
       ),
       /period_activity/,
@@ -858,7 +858,7 @@ test("drivers: preview echoes the report temporal contract the runner enforced",
       config: { reportDefinitionId: randomUUID(), dimensionColumn: "d", valueColumn: "v" },
     });
     const preview = await previewDriverVector(
-      { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor },
+      { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor, allowedSubsidiaryIds: null },
       deps,
     );
     assert.deepEqual(
@@ -930,7 +930,7 @@ test("drivers: preview returns sorted entries plus the total", async () => {
     await createDriverValue(org.orgId, actor, driver.id, {
       dimensionValueId: deptA, effectiveFrom: "2026-07-01", effectiveTo: null, value: "75",
     });
-    const preview = await previewDriverVector({ orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId } });
+    const preview = await previewDriverVector({ orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, allowedSubsidiaryIds: null });
     assert.deepEqual(preview.from, "2026-07-01");
     assert.deepEqual(preview.to, "2026-07-31");
     assert.deepEqual(preview.vector, [
@@ -942,7 +942,7 @@ test("drivers: preview returns sorted entries plus the total", async () => {
       orgId: org.orgId,
       driverId: driver.id,
       asOf: { periodId: org.periodId },
-      include: [deptA],
+      include: [deptA], allowedSubsidiaryIds: null,
     });
     assert.deepEqual(scoped.vector, [{ key: deptA, value: "75.0000" }]);
     assert.equal(scoped.total, "75.0000");
@@ -1003,6 +1003,7 @@ test("drivers: preview resolves an admin-created gl driver end to end", async ()
       orgId: org.orgId,
       driverId: created.id,
       asOf: { periodId: org.periodId },
+      allowedSubsidiaryIds: null,
     });
     assert.deepEqual(preview.vector, [{ key: deptA, value: "400.0000" }]);
     assert.equal(preview.total, "400.0000");

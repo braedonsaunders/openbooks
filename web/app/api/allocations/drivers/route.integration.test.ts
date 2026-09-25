@@ -211,13 +211,17 @@ test("driver preview returns exact shares; empty drivers report why", { skip: !D
       dimension: "subsidiary",
       sourceKind: "manual",
     }));
-    const driverId = ((await created.json()) as { driver: { id: string } }).driver.id;
+    const driverId = ((await created.json()) as { driver: { id: string } }).driver.id; const otherSubsidiaryId = randomUUID();
     await db.execute(sql`
-      insert into allocation_driver_values
+      with other_subsidiary as (
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Branch', 'CAD', 'CA') returning id
+      ) insert into allocation_driver_values
         (org_id, driver_id, dimension_value_id, effective_from, value, created_by, updated_by)
-      values
-        (${org.orgId}, ${driverId}, ${org.subsidiaryId}, '2026-01-01', '3.0000', ${actorId}, ${actorId})`);
+      values (${org.orgId}, ${driverId}, ${org.subsidiaryId}, '2026-01-01', '3.0000', ${actorId}, ${actorId}),
+        (${org.orgId}, ${driverId}, (select id from other_subsidiary), '2026-01-01', '77.0000', ${actorId}, ${actorId})`);
 
+    authenticate(org.orgId, actorId, [...READ, ...MANAGE], new Set([org.subsidiaryId]));
     const preview = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
       driverId,
       date: "2026-05-01",
@@ -227,13 +231,9 @@ test("driver preview returns exact shares; empty drivers report why", { skip: !D
       date: string;
       rows: { id: string; label: string; value: string; share: string }[];
     };
-    assert.equal(body.date, "2026-05-01");
-    assert.equal(body.rows.length, 1);
-    assert.equal(body.rows[0]?.value, "3.0000");
-    assert.equal(body.rows[0]?.share, "1.0000");
-    assert.ok((body.rows[0]?.label ?? "").length > 0);
-
-    const both = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
+    assert.equal(body.date, "2026-05-01"); assert.equal(body.rows[0]?.share, "1.0000");
+    assert.deepEqual([body.rows.length, body.rows[0]?.value], [1, "3.0000"]);
+    assert.ok((body.rows[0]?.label ?? "").length > 0); const both = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
       driverId,
       date: "2026-05-01",
       periodId: org.periodId,
