@@ -1029,19 +1029,17 @@ test("NC's per-period standard deductions are the annual figures, divided", () =
   }
 });
 
-test("NC refuses a frequency it prints no table for, rather than scaling one", () => {
-  assert.throws(
-    () => NC_WITHHOLDING.compute({
-      payDate: "2026-03-06", periodsPerYear: 4, wages: "10000", basis: "resident",
-      certificate: nc4(),
-    }),
-    /publishes withholding tables for .*there is nothing to scale/s,
-  );
-  // The state's own answer for that payroll is the annualized method.
-  assert.ok(ncAnnualizedMethod({
-    payDate: "2026-03-06", periodsPerYear: 4, wages: "10000",
-    schedule: "single_married_surviving", allowances: 0,
-  }).tax);
+test("NC calculates a frequency it prints no table for with the annualized method", () => {
+  // Quarterly has no percentage table; NC-30 section 27's annualized method is
+  // the state's published answer: $40,000 annual wages less the $12,750 single
+  // standard deduction = $27,250 at 4.09% = $1,114.53 a year, $279 a quarter.
+  const quarterly = NC_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 4, wages: "10000", basis: "resident",
+    certificate: nc4(),
+  });
+  assert.equal(quarterly.factors.NC_METHOD, "annualized");
+  assert.equal(quarterly.factors.NC_ANNUAL_TAX, money("1114.53"));
+  assert.equal(quarterly.tax, money("279"));
 });
 
 /* ===================================================================== */
