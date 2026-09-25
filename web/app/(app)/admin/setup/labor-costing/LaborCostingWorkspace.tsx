@@ -530,7 +530,7 @@ export function LaborCostingWorkspace(props: {
                   <option value="per_hour">{t('components.perHour')}</option>
                   <option value="per_day">{t('components.perDay')}</option>
                 </Select>
-                <Input aria-label={t('components.value')} className="col-span-2" type="number" min="0" step="0.01" value={String(c.value)} onChange={(e) => setComponent(i, { value: Number(e.target.value) })} />
+                <Input aria-label={t('components.value')} className="col-span-2" type="number" min="0" step="0.01" value={String(c.value)} onChange={(e) => setComponent(i, { value: e.target.value })} />
                 <label className="col-span-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
                   <input type="checkbox" checked={c.scaleWithOvertime === true} onChange={(e) => setComponent(i, { scaleWithOvertime: e.target.checked })} disabled={c.kind === 'per_day'} />
                   {t('components.scalesOt')}
