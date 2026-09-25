@@ -44,22 +44,29 @@ export function CancelRecognitionButton({
     })
     if (!confirmed) return
     setBusy(true)
-    const requestBody = { documentId, reason } satisfies CancelRecognitionRequest
-    const res = await fetch('/api/revenue/cancel-recognition', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      toast.error(typeof data.error === 'string' ? data.error : t('cancel.failed'))
-    } else if (res.status === 202) {
-      toast.success(t('cancel.submitted'))
-    } else {
-      toast.success(t('cancel.done'))
+    try {
+      const requestBody = { documentId, reason } satisfies CancelRecognitionRequest
+      const res = await fetch('/api/revenue/cancel-recognition', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof data.error === 'string' ? data.error : t('cancel.failed'))
+      } else if (res.status === 202) {
+        toast.success(t('cancel.submitted'))
+      } else {
+        toast.success(t('cancel.done'))
+      }
+      router.refresh()
+    } catch {
+      // A network failure must toast like a refusal, never strand the
+      // button on busy with an unhandled rejection.
+      toast.error(t('cancel.failed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    router.refresh()
   }
 
   return (

@@ -40,6 +40,10 @@ export function ReconcileLegacyButton({ obligationId }: { obligationId: string }
       }
       toast.success(t('drawer.reconciled'))
       router.refresh()
+    } catch {
+      // A network failure must toast like a refusal: try/finally alone
+      // reset the button but left the throw unhandled and unnamed.
+      toast.error(t('drawer.reconcileFailed'))
     } finally {
       setBusy(false)
     }
