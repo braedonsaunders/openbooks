@@ -51,6 +51,7 @@ import {
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -298,8 +299,12 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // Pub 14: "Utah calculates withholding tax based on wages subject to federal
   // withholding tax." Supplemental wages are ordinary compensation here — the
   // publication prints no separate supplemental rate.
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const grossWages = U(input.wages) + U(input.supplemental ?? "0");
+  const wages = input.basis === "nonresident"
+    ? U(requireUsSourceWages(input.wageAllocations, "UT", null))
+    : grossWages;
   factors.UT_WAGES = D(wages);
+  if (input.basis === "nonresident") factors.UT_SOURCE_WAGES = D(wages);
 
   // Line 2.
   const line2 = utMulRateDollars(wages, edition.rate);
@@ -349,6 +354,7 @@ export const UT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   UT_SCHEDULE: "Utah schedule (filing status)",
   UT_PERIOD: "Utah payroll period",
   UT_WAGES: "Utah wages subject to federal withholding",
+  UT_SOURCE_WAGES: "Utah-source wages",
   UT_LINE2: "Utah line 2 (rate applied to wages)",
   UT_BASE_ALLOWANCE: "Utah base allowance (line 3)",
   UT_LINE4: "Utah line 4 (wages over threshold)",

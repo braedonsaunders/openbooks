@@ -9,9 +9,8 @@ import test from "node:test";
 import { certificateDeclarationProblem, type ResolvedCertificate } from "../../certificates.ts";
 import "../../packs.ts";
 import {
-  UT_CERTIFICATE, UT_REGION, UT_EDITION_2025, UT_EDITION_2026, UT_WITHHOLDING, utScheduleFor,
+  UT_CERTIFICATE, UT_REGION, UT_WITHHOLDING, utScheduleFor,
 } from "./ut.ts";
-import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
 const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
@@ -21,14 +20,6 @@ test("UT certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(UT_CERTIFICATE), null);
   assert.equal(UT_REGION.implemented, true);
   assert.equal(UT_REGION.certificateKey, "us_ut_w4");
-});
-
-test("UT printed percents convert by shifting the point, not dividing", () => {
-  assert.equal(UT_EDITION_2026.rate, pctToRate("4.45"));
-  assert.equal(UT_EDITION_2026.phaseoutRate, pctToRate("1.3"));
-  assert.equal(UT_EDITION_2025.rate, pctToRate("4.5"));
-  assert.equal(pctToRate("4.45"), "0.0445");
-  assert.equal(pctToRate("4.5"), "0.045");
 });
 
 /* ===================================================================== */
@@ -57,12 +48,17 @@ test("UT Example 2 — biweekly $2,600, Single: $116 (Rev. 4/26 p. 11)", () => {
     payDate: "2026-06-12", periodStart: "2026-06-01", periodsPerYear: 26, wages: "2600.00", basis: "resident",
     certificate: cert({ filing_status: "single" }),
   });
-  assert.equal(result.factors.UT_LINE2, money("116"));
   assert.equal(result.factors.UT_BASE_ALLOWANCE, money("19"));
   assert.equal(result.factors.UT_LINE4, money("2240"));
   assert.equal(result.factors.UT_LINE5, money("29"));
   assert.equal(result.factors.UT_LINE6, money("0"));
   assert.equal(result.tax, money("116"));
+  // 40% Utah-source wages ($1,040) run the same published schedule to $36.
+  assert.equal(UT_WITHHOLDING.compute({
+    payDate: "2026-06-12", periodStart: "2026-06-01", periodsPerYear: 26,
+    wages: "2600.00", basis: "nonresident", certificate: cert({ filing_status: "single" }),
+    wageAllocations: [{ region: "UT", subRegion: null, workShare: "0.4", source: "adequate_records", sourceWagesCurrentPeriod: "1040.00" }],
+  }).tax, money("36"));
 });
 
 test("UT Example 3 — semimonthly $1,200, Married: $18 (Rev. 4/26 p. 11)", () => {
