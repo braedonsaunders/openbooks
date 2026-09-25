@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { pickString } from '../../../../lib/list-params'
+import { isUuid, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { AR_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
 import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
@@ -106,7 +106,10 @@ export async function loadArInvoices(
   ])
   const onlinePaymentsEnabled = featureEnabled(featureState, 'onlinePayments')
   const t = await getTranslations('ar')
-  const docId = typeof sp.doc === 'string' ? sp.doc : undefined
+  const rawDocId = typeof sp.doc === 'string' ? sp.doc : undefined
+  // Only a real document id (or 'new') reaches the loader: a malformed
+  // ?doc= must never bind to a uuid column and render a 500.
+  const docId = rawDocId === 'new' || (typeof rawDocId === 'string' && isUuid(rawDocId)) ? rawDocId : undefined
 
   const newButton = {
     items: [

@@ -16,7 +16,7 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { isUuid, parseListParams, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import type { CaptureListRow } from './sections'
@@ -149,7 +149,10 @@ export async function loadApCapture(
   const rows = (rowsResult as unknown as { rows: CaptureListRow[] }).rows
   const total = Number(((totalResult) as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0)
   const counts = new Map<string, number>(((countsResult) as unknown as { rows: { status: string; n: number }[] }).rows.map((row) => [row.status, Number(row.n)]))
-  const selectedId = pickString(sp.capture)
+  // Only a real capture id reaches SQL: a malformed ?capture= must never
+  // bind to a uuid column and render a 500.
+  const rawSelectedId = pickString(sp.capture)
+  const selectedId = rawSelectedId && isUuid(rawSelectedId) ? rawSelectedId : undefined
   let detail: CaptureDetail | null = null
   let options: { vendors: { id: string; label: string }[]; accounts: { id: string; label: string }[]; purchaseOrders: { id: string; label: string }[] } | null = null
   let canLookupPurchaseOrders = false
