@@ -215,6 +215,7 @@ export const HRM_WIDGETS = {
       requestId={str(props, 'requestId') ?? null}
       closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
       canWithdrawCancel={props.canWithdrawCancel === true}
+      recordOpen={props.recordOpen === true}
     />
   ),
   // HR-14 begin: qualification record/detail entry point over a

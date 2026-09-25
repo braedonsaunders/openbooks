@@ -173,6 +173,18 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
                 },
                 f('dialogOpen'),
               ),
+              // Record absence posts the absence route, never a draft
+              // request: its own dialog over the same close href.
+              widgetBlock(
+                'hrm-leave-dialog',
+                {
+                  requestId: f('dialogRequestId'),
+                  closeHref: f('dialogCloseHref'),
+                  canWithdrawCancel: f('canWithdrawCancel'),
+                  recordOpen: f('recordOpen'),
+                },
+                f('recordOpen'),
+              ),
             ]),
             when: f('onRequests'),
           },

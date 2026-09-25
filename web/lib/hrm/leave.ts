@@ -109,6 +109,8 @@ export interface LeaveQueueData {
   dialogOpen: boolean
   dialogRequestId: string | null
   dialogCloseHref: string
+  /** The record-absence action opens its own dialog, never the file-leave one. */
+  recordOpen: boolean
 }
 
 function segmentOf(row: LeaveRequestSummary, today: string): 'pending' | 'upcoming' | 'today' | 'history' {
@@ -213,9 +215,13 @@ export async function loadLeaveQueue(
     // to the requests list.
     fileHref: leaveHref('/hrm/leave', sp.segment, { ...keepView, file: '1' }),
     recordHref: leaveHref('/hrm/leave', sp.segment, { ...keepView, record: '1' }),
-    dialogOpen: sp.file !== undefined || sp.record !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
+    dialogOpen: sp.file !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
     dialogRequestId: typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
     dialogCloseHref: leaveHref('/hrm/leave', sp.segment, keepView),
+    // ?record=1 is the manager absence-recording action, not a second
+    // spelling of ?file=1: it opens the record dialog below, which posts
+    // the absence route instead of filing a draft request.
+    recordOpen: sp.record !== undefined,
   }
 
   const segmentParam = sp.segment
