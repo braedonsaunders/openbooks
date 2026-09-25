@@ -1147,15 +1147,19 @@ export async function claimSyncRun(opts: {
   triggeredBy: string;
 }): Promise<{ id: string }[]> {
   return db.transaction(async (tx) => {
+    // QuickBooks Desktop captures are connection-scoped, not run-kind-scoped:
+    // a mirror and a full migration would otherwise supersede each other's
+    // live Web Connector capture in prepareCapture.
+    const qbd = opts.sourceName === "qbd";
     await tx.execute(sql`
       select pg_advisory_xact_lock(
         hashtext(${opts.orgId}),
-        hashtext(${`sync-run:${opts.connectionId}:${opts.kind}`})
+        hashtext(${`sync-run:${opts.connectionId}:${qbd ? "qbd" : opts.kind}`})
       )`);
     const live = await tx.execute(sql`
       select 1 from sync_runs
        where org_id = ${opts.orgId} and connection_id = ${opts.connectionId}
-         and kind = ${opts.kind} and status = 'running'
+         and (${qbd} or kind = ${opts.kind}) and status = 'running'
        limit 1`);
     if (live.rows.length > 0) throw new SyncRunAlreadyActiveError(opts.kind);
     return tx

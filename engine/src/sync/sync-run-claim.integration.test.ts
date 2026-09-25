@@ -34,20 +34,20 @@ async function ctx(): Promise<ScratchOrg> {
   return createScratchOrg();
 }
 
-async function newConnection(orgId: string): Promise<string> {
+async function newConnection(orgId: string, source = "netsuite"): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into connections (id, org_id, source, display_name)
-    values (${id}, ${orgId}, 'netsuite', ${`claim-test-${id.slice(0, 8)}`})`);
+    values (${id}, ${orgId}, ${source}, ${`claim-test-${id.slice(0, 8)}`})`);
   return id;
 }
 
-function claim(orgId: string, connectionId: string, kind: string) {
+function claim(orgId: string, connectionId: string, kind: string, sourceName = "netsuite") {
   return claimSyncRun({
     orgId,
     connectionId,
     kind,
-    sourceName: "netsuite",
+    sourceName,
     triggeredBy: "claim-test",
   });
 }
@@ -57,28 +57,24 @@ test(
   { skip: !DB, timeout: 120_000 },
   async () => {
     const o = await ctx();
-    const connectionId = await newConnection(o.orgId);
+    const connectionId = await newConnection(o.orgId, "qbd");
 
-    const [first] = await claim(o.orgId, connectionId, "full_migration");
+    const [first] = await claim(o.orgId, connectionId, "full_migration", "qbd");
     assert.ok(first?.id, "the first claim takes the connection");
 
-    // The stalled re-delivery: same connection, same kind, original still live.
+    // A different run kind cannot supersede the active QBD capture.
     await assert.rejects(
-      () => claim(o.orgId, connectionId, "full_migration"),
+      () => claim(o.orgId, connectionId, "incremental", "qbd"),
       (error: unknown) => error instanceof SyncRunAlreadyActiveError,
-      "a duplicate full migration must be refused, not run alongside the first",
+      "a QBD incremental run must wait for the active full migration capture",
     );
-
-    // A different kind is a different claim and must not be blocked.
-    const [other] = await claim(o.orgId, connectionId, "incremental");
-    assert.ok(other?.id, "an incremental run is a separate claim");
 
     // Terminal status releases the claim. This is also the path the stale-run
     // reaper uses to free a connection whose worker died mid-run.
     await db.execute(sql`
       update sync_runs set status = 'ok', finished_at = now()
        where id = ${first!.id} and org_id = ${o.orgId}`);
-    const [resumed] = await claim(o.orgId, connectionId, "full_migration");
+    const [resumed] = await claim(o.orgId, connectionId, "full_migration", "qbd");
     assert.ok(resumed?.id, "the connection is claimable again once the live run ends");
 
     const live = await db.execute<{ n: number }>(sql`
