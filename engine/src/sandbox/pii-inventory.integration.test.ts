@@ -567,6 +567,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "dunning_stages.name",
   "dunning_stages.subject_template",
   "employee_payroll_profiles.country",
+  "employee_payroll_profiles.es_contrato_temporal",
   "employee_payroll_profiles.es_situacion_laboral",
   "employee_payroll_profiles.filing_status",
   "employee_payroll_profiles.jp_kaigo_dainigou",
@@ -1237,6 +1238,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pay_applications.kind",
   "pay_applications.memo",
   "pay_applications.status",
+  "pay_component_earning_classifications.statutory_exemption_category",
   "pay_component_earning_classifications.statutory_reporting_category",
   "pay_component_earning_classifications.supplemental_wage_category",
   "pay_components.basis",
@@ -1971,12 +1973,12 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
     if (ALLOW_LISTED_NON_PERSONAL.has(key)) continue;
     offenders.push(`${key} (${col.udtName})`);
   }
+  const shown = offenders.slice(0, 20);
   assert.deepEqual(
-    offenders.slice(0, 20),
+    shown,
     [],
     `${offenders.length} sensitive column(s) copy verbatim into masked sandboxes ` +
-      `with neither a masking policy nor an allow-list entry (showing first 20): ` +
-      `${offenders.slice(0, 20).join(", ")}`,
+      `with neither a masking policy nor an allow-list entry (showing first 20): ${shown.join(", ")}`,
   );
   const stale: string[] = [];
   for (const key of ALLOW_LISTED_NON_PERSONAL) {
