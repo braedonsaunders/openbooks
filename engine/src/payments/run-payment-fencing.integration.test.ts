@@ -77,6 +77,19 @@ test("editing a payment claimed by an open run refuses; a closed run releases it
         return true;
       },
     );
+    // I1-refix-130: deleting the same claimed draft refuses with the run's
+    // identity and the release remedy instead of surfacing the deferred FK
+    // as a late 500; the draft remains.
+    const { deleteDocument } = await import("../ledger/document-delete.ts");
+    await assert.rejects(
+      deleteDocument(open.paymentId, userId, org.orgId, { allowedSubsidiaryIds: null }),
+      (error: unknown) => {
+        assert.match((error as Error).message, /payment is claimed by open payment run/);
+        assert.match((error as Error).message, new RegExp(open.runNumber));
+        assert.match((error as Error).message, /reject, roll back, or cancel/);
+        return true;
+      },
+    );
     const untouched = await withBypass(async () => (await db.execute<{ memo: string | null }>(sql`
       select memo from documents where id = ${open.paymentId} and org_id = ${org.orgId}
     `)).rows[0]);
