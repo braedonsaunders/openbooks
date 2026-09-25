@@ -134,14 +134,12 @@ test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () =
   assert.equal(carried.pensionable, "74000.0000");
 });
 
-test("RL-1 carry-in leaves boxes E and F alone: no opening source exists", () => {
-  // tax_ytd is the T4-box-22 federal money — not Québec income tax — and the
-  // model collects no union-dues YTD, so carrying them into boxes E/F would
-  // invent a Québec return the same way the T4 refuses box 44. (The distinct
+test("RL-1 carry-in leaves box E alone: no opening source exists", () => {
+  // tax_ytd is the T4-box-22 federal money — not Québec income tax — so
+  // carrying it into box E would invent a Québec return. (The distinct
   // qc_tax_ytd carry-in below is the only opening source box E reads.)
-  const before = aggregates();
   const carried = openingYtdIntoRl1Aggregates(
-    before,
+    aggregates(),
     opening({
       taxableYtd: "100.00", taxYtd: "20.00", pensionableYtd: "100.00",
       insurableYtd: "80.00", cppYtd: "5.00", cpp2Ytd: "2.00",
@@ -150,7 +148,17 @@ test("RL-1 carry-in leaves boxes E and F alone: no opening source exists", () =>
   );
   // Unchanged in value, normalized to the 4dp every other carried box reads.
   assert.equal(carried.qcIncomeTax, "6100.0000");
-  assert.equal(carried.unionDues, before.unionDues);
+});
+
+test("RL-1 carry-in folds pre-adoption union dues into box F (I6-payroll-250)", () => {
+  // Eligible dues withheld before adoption arrive in union_dues_ytd and add
+  // to the stubs; with none carried, the stubs pass through add() to 4dp.
+  const untouched = openingYtdIntoRl1Aggregates(aggregates(), opening({}));
+  assert.equal(untouched.unionDues, "520.0000");
+  const carried = openingYtdIntoRl1Aggregates(
+    aggregates(), opening({ unionDuesYtd: "100.00" }),
+  );
+  assert.equal(carried.unionDues, "620.0000");
 });
 
 test("RL-1 Box E carries pre-adoption Québec income tax additively with stubs", () => {

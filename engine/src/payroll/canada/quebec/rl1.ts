@@ -272,13 +272,14 @@ async function rl1SlipsInSnapshot(
  *
  * Carried: taxable (box A), QPP/QPP2 (boxes B.A/B.B — `cpp_ytd` is the QPP
  * column for Québec employment, as the T4's own box-17 mapping reads it), EI
- * premiums (box C), QPIP premiums (box H), and the QPP-pensionable base (box
- * G, capped with the stubs by `assembleRl1Slip` below, never after it).
+ * premiums (box C), QPIP premiums (box H), union dues (box F), and the
+ * QPP-pensionable base (box G, capped with the stubs by `assembleRl1Slip`
+ * below, never after it).
  *
- * Deliberately absent, like the T4's box 44: union dues (box F — the
- * model collects no union-dues YTD). Québec income tax (box E) IS carried,
- * but only from its own carry-in: `tax_ytd` is the T4-box-22 federal money,
- * not the Québec slice, so carrying it would invent a Québec return. Box I
+ * Each carried box reads its own carry-in column. Québec income tax (box E)
+ * reads only `qc_tax_ytd`: `tax_ytd` is the T4-box-22 federal money, not
+ * the Québec slice, so carrying it would invent a Québec return. Union
+ * dues (box F) read `union_dues_ytd`. Box I
  * IS carried: the QPIP program's OWN insurable base arrives in
  * `programBasesYtd` under the pack-declared program key and is capped at
  * the QPIP maximum with the stubs below — never the EI base
@@ -297,6 +298,7 @@ export function openingYtdIntoRl1Aggregates(
     qpp2: add(row.qpp2, opening.cpp2Ytd),
     ei: add(row.ei, opening.eiYtd),
     qpip: add(row.qpip, opening.qpipYtd),
+    unionDues: add(row.unionDues, opening.unionDuesYtd ?? "0"),
     pensionable: add(row.pensionable, opening.pensionableYtd),
     qpipInsurable: add(row.qpipInsurable, opening.programBasesYtd["qpip"] ?? "0"),
   };
@@ -317,11 +319,11 @@ async function openingRl1YtdByEmployee(
     employee_party_id: string;
     pensionable_ytd: unknown; insurable_ytd: unknown;
     cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
-    taxable_ytd: unknown; tax_ytd: unknown; qc_tax_ytd: unknown;
+    taxable_ytd: unknown; tax_ytd: unknown; qc_tax_ytd: unknown; union_dues_ytd: unknown;
   }>(sql`
     select b.employee_party_id,
            b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
-           b.taxable_ytd, b.tax_ytd, b.qc_tax_ytd
+           b.taxable_ytd, b.tax_ytd, b.qc_tax_ytd, b.union_dues_ytd
       from payroll_opening_balances b
       -- Strict country match, never a coalesce default: an opening whose
       -- employee has no profile row is refused by the unknown-country guard
@@ -336,6 +338,7 @@ async function openingRl1YtdByEmployee(
          or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
          or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
          or coalesce(b.qc_tax_ytd, 0) <> 0
+         or coalesce(b.union_dues_ytd, 0) <> 0
          -- A program-only carry-in still seeds slips: its base feeds box I
          -- with no statutory column alongside.
          or exists (
@@ -361,6 +364,7 @@ async function openingRl1YtdByEmployee(
     qcTaxYtd: normalizeMoney(String(row.qc_tax_ytd ?? "0")),
     // RL-1 is Québec employment: US FICA withholding never applies here.
     ficaWithheldYtd: "0",
+    unionDuesYtd: normalizeMoney(String(row.union_dues_ytd ?? "0")),
     programBasesYtd: programs.get(row.employee_party_id) ?? {},
   }]));
 }

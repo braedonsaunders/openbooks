@@ -193,6 +193,12 @@ export interface OpeningYearEndYtd {
   employerCpp2Ytd?: string;
   employerEiYtd?: string;
   /**
+   * union_dues_ytd — eligible union dues withheld before adoption (T4 box 44 /
+   * RL-1 box F). Optional so existing fixtures keep compiling: absent reads
+   * as zero, which is what "nothing carried in" has always meant here.
+   */
+  unionDuesYtd?: string;
+  /**
    * Per-program insurable-earnings carry-in, keyed by pack-declared program
    * key (C-13). The T4 folds the QPIP program's base into box 56 and the
    * RL-1 into box I; each is capped at its own program maximum with the
@@ -256,7 +262,7 @@ export function carryOpeningYearEndYtd<S extends { employeePartyId: string }>(
 }
 
 /**
- * T4 boxes a carry-in lands in: 14, 16, 16A, 18, 22, 24, 26, 55 and 56,
+ * T4 boxes a carry-in lands in: 14, 16, 16A, 18, 22, 24, 26, 44, 55 and 56,
  * plus the slip's employer CPP/CPP2/EI share for the T4 Summary.
  * Box 56 is the QPIP program's OWN insurable base — never the EI base
  * (`insurable_ytd`): a mid-year adopter's pre-adoption QPIP-insurable
@@ -274,6 +280,7 @@ export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningYearEndYtd): 
     box22IncomeTax: add(slip.box22IncomeTax, opening.taxYtd),
     box24EiInsurable: add(slip.box24EiInsurable, opening.insurableYtd),
     box26CppPensionable: add(slip.box26CppPensionable, opening.pensionableYtd),
+    box44UnionDues: add(slip.box44UnionDues, opening.unionDuesYtd ?? "0"),
     box55Qpip: add(slip.box55Qpip, opening.qpipYtd),
     box56QpipInsurable: add(slip.box56QpipInsurable, opening.programBasesYtd["qpip"] ?? "0"),
     // The employer share is carried alongside the employee boxes: the
@@ -303,11 +310,12 @@ async function openingYearEndYtdByEmployee(
     cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
     taxable_ytd: unknown; tax_ytd: unknown; fica_withheld_ytd: unknown;
     employer_cpp_ytd: unknown; employer_cpp2_ytd: unknown; employer_ei_ytd: unknown;
+    union_dues_ytd: unknown;
   }>(sql`
     select b.employee_party_id,
            b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
            b.taxable_ytd, b.tax_ytd, b.fica_withheld_ytd,
-           b.employer_cpp_ytd, b.employer_cpp2_ytd, b.employer_ei_ytd
+           b.employer_cpp_ytd, b.employer_cpp2_ytd, b.employer_ei_ytd, b.union_dues_ytd
       from payroll_opening_balances b
       -- Strict country match, never a coalesce default: an opening whose
       -- employee has no profile row is refused by the unknown-country guard
@@ -329,6 +337,7 @@ async function openingYearEndYtdByEmployee(
          or coalesce(b.employer_cpp_ytd, 0) <> 0
          or coalesce(b.employer_cpp2_ytd, 0) <> 0
          or coalesce(b.employer_ei_ytd, 0) <> 0
+         or coalesce(b.union_dues_ytd, 0) <> 0
          -- A program-only carry-in still seeds slips: its base feeds the
          -- program's slip box (T4 56) with no statutory column alongside.
          or exists (
@@ -352,6 +361,7 @@ async function openingYearEndYtdByEmployee(
     employerCppYtd: normalizeMoney(String(row.employer_cpp_ytd ?? "0")),
     employerCpp2Ytd: normalizeMoney(String(row.employer_cpp2_ytd ?? "0")),
     employerEiYtd: normalizeMoney(String(row.employer_ei_ytd ?? "0")),
+    unionDuesYtd: normalizeMoney(String(row.union_dues_ytd ?? "0")),
     programBasesYtd: programs.get(row.employee_party_id) ?? {},
   }]));
 }

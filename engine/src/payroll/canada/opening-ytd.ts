@@ -96,4 +96,10 @@ export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
     label: "Employer EI premiums before adoption",
     help: "Employer EI premiums already paid this year before adoption, as the prior provider's year-to-date report shows them (T4 Summary employer-share year-to-date). Distinct from the withheld EI premiums: do not copy the T4-box-18 figure here.",
   },
+  {
+    key: "unionDuesYtd",
+    column: "union_dues_ytd",
+    label: "Union dues withheld before adoption",
+    help: "Eligible union dues already withheld this year before adoption. Folds into T4 box 44 and RL-1 box F with the committed stubs.",
+  },
 ];

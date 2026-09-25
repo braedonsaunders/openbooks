@@ -59,7 +59,7 @@ test("every statutory opening amount is additive with committed stubs", () => {
       opening({
         pensionableYtd: "12000.50", insurableYtd: "11000.25", cppYtd: "700.00",
         cpp2Ytd: "120.00", eiYtd: "210.75", qpipYtd: "33.25",
-        taxableYtd: "21000.50", taxYtd: "3150.75",
+        taxableYtd: "21000.50", taxYtd: "3150.75", unionDuesYtd: "250.00",
       }),
     ]]),
     openingYtdIntoT4Slip,
@@ -71,6 +71,7 @@ test("every statutory opening amount is additive with committed stubs", () => {
   assert.equal(slip!.box22IncomeTax, "12150.7500");
   assert.equal(slip!.box24EiInsurable, "61000.2500");
   assert.equal(slip!.box26CppPensionable, "62000.5000");
+  assert.equal(slip!.box44UnionDues, "250.0000");
   assert.equal(slip!.box55Qpip, "33.2500");
   assert.equal(slip!.box56QpipInsurable, "0.0000", "no program base carried: box 56 keeps the stubs alone");
 });
