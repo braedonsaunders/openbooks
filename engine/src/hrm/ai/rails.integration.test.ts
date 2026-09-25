@@ -239,10 +239,11 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
     assert.equal(flags[0]?.severity, "block");
     assert.equal(flags[0]?.employmentId, employmentId);
     assert.ok((flags[0]?.explanation ?? "").includes("2026-08-15"));
-    // The scan logged its decision.
     assert.ok((await decisionCount(org.orgId)) > before);
 
-    // Rescan: same rows, already open, never duplicated.
+    const flagId = flags[0]?.id ?? "";
+    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId, to: "resolved", reason: "reviewed; verify if the condition recurs" });
+    // A repeated blocking condition reopens the same flag after resolution.
     const second = await scanAnomalies(db, {
       orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
     });
@@ -252,7 +253,7 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
       orgId: org.orgId, actorId: adminId,
       periodFrom: "2026-09-01", periodTo: "2026-09-30", kind: "terminated_with_pay",
     });
-    assert.equal(again.length, 1);
+    assert.deepEqual(again.map((flag) => flag.status), ["open"]);
 
     // THE finalize hook: open block refuses with the remedy.
     await assert.rejects(
@@ -261,7 +262,6 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
     );
 
     // Transitions need a reason; false-positive suppresses the next scan.
-    const flagId = flags[0]?.id ?? "";
     await assert.rejects(
       transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId, to: "resolved", reason: "  " }),
       /a reason is required/,
