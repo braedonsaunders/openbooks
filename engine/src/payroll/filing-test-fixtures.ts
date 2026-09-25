@@ -30,6 +30,28 @@ export async function seedOntarioEhtFixture(orgId: string, actorId: string, annu
   `);
 }
 
+/**
+ * ROE issuance prerequisites for ROE record tests: the employee's complete
+ * Block 9 default mailing address, a confirmed separation event, and a
+ * 'none' Block 17 classification for every component so calculated earning
+ * lines resolve. The event's last insurable date (2026-08-01) sits after the
+ * 2026 summer stubs the ROE window tests commit, so no late-earnings refusal
+ * fires; tests with later stubs declare their own event instead.
+ */
+export async function seedRoeIssuanceFixture(orgId: string, employeeId: string): Promise<void> {
+  await db.execute(sql`
+    insert into addresses (org_id, party_id, line1, city, region, postal_code, country)
+    values (${orgId}, ${employeeId}, '10 Main Street', 'Toronto', 'ON', 'M5V 2T6', 'CA')`);
+  await db.execute(sql`
+    insert into payroll_roe_separation_events
+      (org_id, employee_party_id, interruption_on, last_insurable_earnings_on, status, change_reason)
+    values (${orgId}, ${employeeId}, '2026-08-10', '2026-08-01', 'confirmed', 'ROE fixture separation')`);
+  await db.execute(sql`
+    insert into payroll_roe_component_classifications
+      (org_id, pay_component_id, effective_from, block, change_reason)
+    select ${orgId}, id, '2020-01-01', 'none', 'ROE fixture' from pay_components where org_id = ${orgId}`);
+}
+
 /** Standalone GB legal employer holding the whole £15,000 Apprenticeship Levy allowance. */
 export async function seedGbLevyAllowanceFixture(
   orgId: string, actorId: string, subsidiaryId: string,

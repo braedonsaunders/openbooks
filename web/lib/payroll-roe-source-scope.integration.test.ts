@@ -28,7 +28,7 @@ registerHooks({
 });
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { seedAdoption, calculatedRun } =
+const { seedAdoption, calculatedRun, seedRoeIssuanceFixture } =
   await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
 const { dropScratchOrgReporting } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
@@ -44,11 +44,10 @@ test(
   async () => {
     const fx = await withBypassContext(() => seedAdoption());
     try {
-      await withBypassContext(() =>
-        db.execute(
-          sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
-        ),
-      );
+      await withBypassContext(async () => {
+        await db.execute(sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
+        await seedRoeIssuanceFixture(fx.orgId, fx.employeeId);
+      });
       const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));
       await withOrgContext(fx.orgId, () => commitPayRun(input));
       const gate = {
@@ -257,9 +256,8 @@ test(
         await db.execute(
           sql`update pay_schedules set frequency='monthly',periods_per_year=12 where org_id=${fx.orgId} and id=${fx.scheduleId}`,
         );
-        await db.execute(
-          sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Historical source outside the window','CAD','CA')`,
-        );
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Historical source outside the window','CAD','CA')`);
+        await seedRoeIssuanceFixture(fx.orgId, fx.employeeId);
       });
       // Minimal committed source history for exercising the selector itself.
       // Thirteen monthly-window stubs supersede one older hidden source.
@@ -279,7 +277,7 @@ test(
             sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,run_type) values(${documentId},${fx.orgId},${fx.scheduleId},${date},${date},${date},2026,'committed','bonus')`,
           );
           await tx.execute(
-            sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,country,country_source,province,periods_per_year,pay_date,tax_year,currency_code,insurable_earnings) values(${stubId},${fx.orgId},${documentId},${fx.employeeId},'CA','calculation','ON',12,${date},2026,'CAD',${index === 0 ? "999" : "1"})`,
+            sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,employment_id,country,country_source,province,periods_per_year,pay_date,tax_year,currency_code,insurable_earnings) values(${stubId},${fx.orgId},${documentId},${fx.employeeId},${fx.employmentId},'CA','calculation','ON',12,${date},2026,'CAD',${index === 0 ? "999" : "1"})`,
           );
         }
       }));
