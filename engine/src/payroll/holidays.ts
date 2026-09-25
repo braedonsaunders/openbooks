@@ -874,9 +874,11 @@ export function computeStatutoryHolidayPay(
   }
 
   // The lookback arm: the rule's own basis, or a `normal_day` rule's declared
-  // fallback for an employee with no normal day.
+  // fallback for an employee with no normal day. Absent only where the
+  // statute states no fallback at all — then a fall-through refuses by name
+  // below instead of pricing a formula the law never wrote.
   const basisRule = holidayPayLookbackBasis(rule.basis);
-  const commission = basisRule.kind === "fixed_divisor" ? basisRule.commission : undefined;
+  const commission = basisRule?.kind === "fixed_divisor" ? basisRule.commission : undefined;
   const useCommission = Boolean(
     commission
     && context.paidOnCommission
@@ -885,6 +887,13 @@ export function computeStatutoryHolidayPay(
 
   if (holidayPay !== null) {
     // Already settled by the normal-day arm.
+  } else if (!basisRule) {
+    throw new PayrollHolidayError(
+      `${context.employee}: ${context.holiday.name} pays the wages of a normal working day, `
+      + "but this employee has no normal day and the governing statute states no fallback "
+      + "measure for that case — the run refuses rather than inventing a rate. Settle the day's "
+      + "pay as the statute provides, then file the answer",
+    );
   } else if (basisRule.kind === "fixed_divisor" && useCommission && commission) {
     const earnings = context.commissionEarnings ?? context.earnings;
     const base = holidayPayBase(earnings, rule.include);
@@ -1426,7 +1435,7 @@ export async function resolveStatutoryHolidayPay(
     // keys let every other declaring province pay the holiday without ever
     // asking the question its statute requires.
     if (
-      lookbackBasis.kind === "fixed_divisor"
+      lookbackBasis?.kind === "fixed_divisor"
       && lookbackBasis.commission
       && input.paidOnCommission === undefined
     ) {
@@ -1446,7 +1455,7 @@ export async function resolveStatutoryHolidayPay(
         + "the employee was absent without the employer's consent",
       );
     }
-    const commissionWindow = lookbackBasis.kind === "fixed_divisor" && lookbackBasis.commission
+    const commissionWindow = lookbackBasis?.kind === "fixed_divisor" && lookbackBasis.commission
       ? commissionWindowOf(rule, holiday.date, lookbackBasis.commission.lookbackWeeks, selectedWeekStartsOn)
       : null;
 
@@ -1455,7 +1464,7 @@ export async function resolveStatutoryHolidayPay(
     // qualifier are separate sentences in separate sections, and British
     // Columbia is the jurisdiction where they happen to be the same one.
     const payCounting: PayrollHolidayDayCounting =
-      lookbackBasis.kind === "average_day" ? lookbackBasis.counting : "worked";
+      lookbackBasis?.kind === "average_day" ? lookbackBasis.counting : "worked";
     const qualifyingCounting = rule.qualifying.minDaysWorkedInWindow?.counting ?? payCounting;
     /** True only where a statute counts more than the days actually worked. */
     const needsPaidDays = payCounting !== "worked" || qualifyingCounting !== "worked";
@@ -1516,7 +1525,7 @@ export async function resolveStatutoryHolidayPay(
       holiday,
       earnings,
       daysWorked,
-      hoursWorkedInLookback: lookbackBasis.kind === "average_hours_day"
+      hoursWorkedInLookback: lookbackBasis?.kind === "average_hours_day"
         ? await hoursWorkedInLookback(tx, input, window)
         : undefined,
       daysWorkedInQualifyingWindow,
@@ -1684,6 +1693,10 @@ export function lookbackWindow(
   employerWeekStartsOn?: number,
 ): { from: string; to: string } {
   const basis = holidayPayLookbackBasis(rule.basis);
+  // A `normal_day` rule with no declared fallback has no pay window: the
+  // holiday date itself keeps the evidence-window math total, and the amount
+  // path refuses before it ever reads earnings from it.
+  if (!basis) return { from: holidayDate, to: holidayDate };
   const to = lookbackWindowEnd(rule, holidayDate, employerWeekStartsOn);
   switch (basis.kind) {
     case "fixed_divisor":

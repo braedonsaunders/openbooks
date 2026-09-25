@@ -1294,6 +1294,12 @@ export type PayrollHolidayPayLookbackBasis =
  *   vary, …" — and that arm is always an ordinary lookback. Declaring both arms
  *   keeps the whole rule in one place, and keeps a varying-hours employee from
  *   being refused for a fact the statute already answers.
+ *
+ *   Omitted only where the statute states NO fallback — old Prince Edward
+ *   Island leaves the varying-hours rate to an inspector's discretion
+ *   (RSPEI 1988 c E-6.2 s. 10(4)), which is not a computable arm. The engine
+ *   refuses that case by name rather than inventing a formula, so an omitted
+ *   fallback is a transcription of silence, never a gap.
  */
 export type PayrollHolidayPayBasis =
   | PayrollHolidayPayLookbackBasis
@@ -1309,11 +1315,15 @@ export type PayrollHolidayPayBasis =
        * only on whether the hours vary, which is most of them.
        */
       minWeeklyHours?: number;
-      whenIrregular: PayrollHolidayPayLookbackBasis;
+      whenIrregular?: PayrollHolidayPayLookbackBasis;
     };
 
 /**
  * The lookback arm of any basis — itself, or a `normal_day`'s fallback.
+ * Undefined where a `normal_day` rule declares no fallback: callers that
+ * need a window degrade to the holiday date itself, and callers that need an
+ * amount refuse by name. Both are total on the absence — no caller branches
+ * on which jurisdiction omitted it.
  *
  * The lookback window is loaded unconditionally, because a `normal_day` rule
  * cannot know until it has resolved the employee's schedule whether it will
@@ -1322,7 +1332,7 @@ export type PayrollHolidayPayBasis =
  */
 export const holidayPayLookbackBasis = (
   basis: PayrollHolidayPayBasis,
-): PayrollHolidayPayLookbackBasis =>
+): PayrollHolidayPayLookbackBasis | undefined =>
   basis.kind === "normal_day" ? basis.whenIrregular : basis;
 
 /** Which earnings the lookback base includes. Overtime is excluded almost
