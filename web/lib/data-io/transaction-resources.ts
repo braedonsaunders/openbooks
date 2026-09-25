@@ -4,6 +4,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { loadEntryRuleByKey } from '@openbooks/engine/src/allocations/entry.ts'
 import { controlDeps } from "../../../engine/src/ledger/document-service.ts";
@@ -324,9 +325,15 @@ async function writeTransactions(
         continue
       }
       const documentDate = String(src.documentDate ?? '').trim()
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(documentDate)) {
+      if (!isIsoCalendarDate(documentDate)) {
         outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'documentDate must be YYYY-MM-DD' })
+        outcome.errors.push({ row: rowNo, message: 'documentDate must be a real YYYY-MM-DD calendar date' })
+        continue
+      }
+      const dueDate = cfg.hasDueDate && src.dueDate ? String(src.dueDate).trim() : null
+      if (dueDate && !isIsoCalendarDate(dueDate)) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: 'dueDate must be a real YYYY-MM-DD calendar date' })
         continue
       }
 
@@ -497,7 +504,7 @@ async function writeTransactions(
               // insert shape is unchanged otherwise (unit atomicity suite).
               ...(subsidiaryId ? { subsidiaryId } : {}),
               documentDate,
-              dueDate: cfg.hasDueDate && src.dueDate ? String(src.dueDate) : null,
+              dueDate,
               currency,
               referenceNumber: cfg.hasReference && src.reference ? String(src.reference) : null,
               memo: src.memo ? String(src.memo) : null,
@@ -540,17 +547,17 @@ async function writeTransactions(
       if (ctx.post && deps) {
         try {
           await postDocument(documentId, deps)
-        } catch (e) {
+        } catch {
           // Draft persists for review; report why posting failed.
           outcome.created++
-          outcome.errors.push({ row: rowNo, message: `created draft ${number}, but posting failed: ${(e as Error).message}` })
+          outcome.errors.push({ row: rowNo, message: `created draft ${number}, but posting failed; review the draft and retry` })
           continue
         }
       }
       outcome.created++
-    } catch (e) {
+    } catch {
       outcome.failed++
-      outcome.errors.push({ row: rowNo, message: (e as { message?: string })?.message ?? 'write failed' })
+      outcome.errors.push({ row: rowNo, message: 'could not save this row; check its values and try again' })
     }
   }
   return outcome

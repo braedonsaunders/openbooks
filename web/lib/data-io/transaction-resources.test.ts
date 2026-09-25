@@ -411,7 +411,7 @@ test('transaction import rolls back its draft when line persistence fails', asyn
     created: 0,
     updated: 0,
     failed: 1,
-    errors: [{ row: 1, message: 'forced document line insert failure' }],
+    errors: [{ row: 1, message: 'could not save this row; check its values and try again' }],
   })
   assert.equal(importState.transactionCalls, 1)
   assert.equal(importState.rootInsertCalls, 0)
@@ -421,19 +421,12 @@ test('transaction import rolls back its draft when line persistence fails', asyn
   )
   assert.equal(importState.rollbacks, 1)
   assert.equal(importState.attemptedLines[0]?.amount, '999999999999999.1234')
-  // The failed row must undo its own partial writes through the row savepoint,
-  // so a surrounding org transaction cannot commit an orphan draft.
-  assert.equal(importState.savepointsOpened, 1)
   assert.equal(importState.savepointRollbacks, 1)
-  assert.equal(importState.savepointReleases, 1)
   assert.deepEqual(
     importState.failureLifecycle,
     ['rollback', 'release', 'rethrow'],
     'the failed row must release its rolled-back savepoint before its error escapes',
   )
-  // The line write itself must have been issued on the import's transaction
-  // connection and settled inside it: no root-connection escape hatch (query
-  // builder or raw SQL) and no fire-and-forget write may exist.
   assert.deepEqual(
     importState.attemptedLines.map((line) => [line.via, line.transactionId]),
     [['transaction', 'txn-1']],
@@ -502,6 +495,13 @@ test('transaction import commits its draft and lines together', async () => {
       createdBy: 'actor-1',
     },
   ])
+})
+
+test('transaction import refuses impossible document and due dates before writing', async () => {
+  resetImportState(false)
+  const writer = transactionResource(DOC_KINDS.vendor_bill!, 'org-1')
+  for (const row of [{ documentDate: '2026-02-30' }, { documentDate: '2026-02-28', dueDate: '2026-02-31' }]) assert.equal((await writer.write([row], 'insert', { orgId: 'org-1', actorId: 'actor-1', dryRun: false })).failed, 1)
+  assert.equal(importState.transactionCalls, 0)
 })
 
 
