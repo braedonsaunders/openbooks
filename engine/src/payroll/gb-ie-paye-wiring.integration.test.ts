@@ -30,9 +30,7 @@ async function makeAccount(
   type: string,
 ): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`
-    insert into accounts (id, org_id, number, name, type, is_active, is_summary, created_by, updated_by)
-    values (${id}, ${orgId}, ${number}, ${name}, ${type}, true, false, ${actorId}, ${actorId})`);
+  await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_active, is_summary, created_by, updated_by) values (${id}, ${orgId}, ${number}, ${name}, ${type}, true, false, ${actorId}, ${actorId})`);
   return id;
 }
 
@@ -155,9 +153,11 @@ test(
       }, "2026-04-06");
       // Outside automatic-enrolment age: no pension contributions price here.
       await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_workplace_pension", {
-        age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder",
+        age_band: "under_22", worker_status: "noneligible_jobholder",
         enrolment_status: "not_enrolled",
       }, "2026-04-06");
+      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_workplace_pension_assessment",
+        { age_band: "under_22", membership_status: "not_eligible", scheme_basis: "not_applicable", deduction_method: "not_applicable" }, "2026-04-06");
       await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_starter_checklist", {
         starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false",
       }, "2026-04-06");
