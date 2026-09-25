@@ -185,21 +185,14 @@ test("H-BENEFIT-PAYINPUT: generation and void stay inside the actor's lens", { s
     });
     assert.equal(voided.status, "voided");
 
-    // A rehome racing generation: A's employment moves to B after the
-    // enrolment list is read, so the under-lock recheck refuses by name
-    // instead of materializing A's manager rows into B.
-    await db.execute(sql`
-      update worker_employments set employer_subsidiary_id = ${subB}
-       where org_id = ${org.orgId} and id = ${empA}`);
-    assert.deepEqual(
-      await refusalOf(
-        generateBenefitPayrollInputs({ orgId: org.orgId, actorId: managerA, coverageMonth: "2026-05" }),
-      ),
-      {
-        code: "NOT_FOUND",
-        message:
-          "an employment behind this month's enrolments is not visible in this organization and legal-entity scope — it may have been moved after the list was read; reload and regenerate",
-      },
+    // An in-place rehome is refused by the identity guard (transfer is
+    // terminate + rehire, never an edit), so the race above cannot happen;
+    // the employment lock still guards termination ordering.
+    await assert.rejects(
+      db.execute(sql`
+        update worker_employments set employer_subsidiary_id = ${subB}
+         where org_id = ${org.orgId} and id = ${empA}`),
+      /employer_subsidiary_id is immutable/,
     );
   } finally {
     await dropScratchOrg(org.orgId);
