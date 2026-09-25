@@ -197,12 +197,12 @@ test("FUTA cap and configured SUI", () => {
   assert.equal(result.suta, money("13.50"));
 });
 
-test("credit-reduction state: configurable effective FUTA rate", () => {
-  const result = calculateWithConfiguredFuta({
+test("FUTA refuses multi-state UI wages without Schedule A state allocation", () => {
+  // IRS Instructions for Form 940: FUTA wages excluded from state UI do not qualify (https://www.irs.gov/instructions/i940).
+  assert.throws(() => calculatePub15T({
     payDate: "2026-04-15", periodsPerYear: 26, wages: "1000.00", filingStatus: "single",
-    futaEffectiveRate: "0.012",
-  });
-  assert.equal(result.futa, money("12.00"));
+    futaEffectiveRate: "0.012", futaWorkAllocations: [{ region: "CA" }, { region: "TX" }],
+  }), /FUTA credit-reduction calculation refused.*state-specific FUTA taxable wages.*Schedule A/);
 });
 
 test("FUTA uses the effective 2025 Schedule A rate for California without an override", () => {

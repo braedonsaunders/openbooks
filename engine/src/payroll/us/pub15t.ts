@@ -84,6 +84,8 @@ export interface Pub15TInput {
   futaEffectiveRate?: string;
   /** State unemployment jurisdiction whose Form 940 Schedule A reduction applies. */
   futaRegion?: string;
+  /** Verified state work allocations used to detect unsupported multi-state Schedule A wages. */
+  futaWorkAllocations?: readonly { region: string }[];
   /** Org-configured SUI for the employee's state; omit to skip SUTA. */
   sui?: { rate: string; wageBase: string };
 
@@ -281,10 +283,16 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   let futa = ZERO;
   let suta = ZERO;
   if (!input.futaExempt) {
+    const allocationRegions = [...new Set(input.futaWorkAllocations?.map(({ region }) => region) ?? [])];
+    if (!input.suiExempt && futaWages > ZERO && allocationRegions.length > 1) {
+      throw new PayrollError(
+        `US FUTA credit-reduction calculation refused: this employee's wages are allocated across state UI jurisdictions (${allocationRegions.join(", ")}), but state-specific FUTA taxable wages for Form 940 Schedule A are not represented. Resolve state UI wage attribution before calculating.`,
+      );
+    }
     const futaTaxable = cappedSlice(futaWages, U(rates.futa.wageBase), opt(ytd.futaWages));
     if (futaTaxable > ZERO) {
       const rate = input.futaEffectiveRate === undefined
-        ? effectiveFutaRate(rates.year, input.futaRegion ?? "", rates.futa.fullCreditEffectiveRate)
+        ? effectiveFutaRate(rates.year, allocationRegions[0] ?? input.futaRegion ?? "", rates.futa.fullCreditEffectiveRate)
         : input.futaEffectiveRate;
       futa = mulRateCents(futaTaxable, rate);
     }
