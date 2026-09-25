@@ -331,6 +331,17 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       " and s.source_pay_run_document_id = d.source_pay_run_document_id",
   },
   {
+    // 0375: one OPEN separation event per employee — the partial unique
+    // index spans (org, employee) for draft/confirmed rows only. A
+    // conflicting open event stays on the absorbed party (retained with
+    // cause); closed events repoint freely since the index ignores them.
+    table: "payroll_roe_separation_events",
+    column: "employee_party_id",
+    conflict:
+      "s.org_id = d.org_id and s.status in ('draft', 'confirmed')" +
+      " and d.status in ('draft', 'confirmed')",
+  },
+  {
     table: "work_schedules",
     column: "employee_party_id",
     conflict:
