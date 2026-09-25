@@ -9,6 +9,7 @@ import { PaymentError } from "@openbooks/engine/src/payments/payment-errors.ts";
 import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
 import { type AllocationInput } from "@openbooks/engine/src/payments/settlement-policy.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
@@ -35,6 +36,7 @@ function isPaymentKind(kind: unknown): kind is PaymentKind {
 }
 
 function paymentFailure(error: unknown): never {
+  if (error instanceof ScopeNotFoundError) throw notFound("payment");
   if (error instanceof PaymentError || error instanceof PostingError) {
     throw new ApplicationError("invalid_input", error.message, 422);
   }
@@ -157,6 +159,9 @@ export async function postPayment(
         // A final-action draft save can retain book locks. Take the shared
         // setup fence before document/book locks, matching the posting kernel.
         await lockLedgerSetupFence(db, context.authz.user.orgId, "shared");
+        // Recheck the persisted scope while holding the outer boundary lock:
+        // a concurrent rehome must not authorize this save or post.
+        await lockScopeRow(db, context.authz.user.orgId, "document", input.documentId, context.authz.allowedSubsidiaryIds);
 
         if (header.status === "draft") {
           // Persist the final-action allocation set before submission. The
