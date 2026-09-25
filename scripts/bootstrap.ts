@@ -2085,6 +2085,27 @@ function pendingMigrationItems(
   return pending;
 }
 
+/**
+ * Contents of every migration without a ledger row, in ordinal order. The
+ * preflight floor (PREFLIGHT_MIN_ORDINAL) scopes which preflights run, but
+ * a deferred preflight can only be explained by ANY earlier migration that
+ * is still unapplied — including one below the floor, like the employment
+ * column an old HR migration adds for a newer guard's preflight.
+ */
+function readUnappliedContents(
+  generated: readonly string[],
+  applied: ReadonlySet<string>,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const f of generated) {
+    const filename = `generated/${f}`;
+    if (!applied.has(filename)) {
+      out.set(filename, readFileSync(join(migrationsDir, "generated", f), "utf8"));
+    }
+  }
+  return out;
+}
+
 function listPreflightEntries(): Set<string> {
   try {
     return new Set(readdirSync(preflightDirFor(repoRoot)));
@@ -2103,6 +2124,7 @@ function listPreflightEntries(): Set<string> {
 async function evaluatePendingMigrations(
   pending: readonly PendingMigrationItem[],
   options: { leastPrivilegeRole?: string },
+  unappliedContents: ReadonlyMap<string, string>,
 ): Promise<PendingPreflightReport> {
   const report: PendingPreflightReport = {
     findings: [],
@@ -2137,7 +2159,11 @@ async function evaluatePendingMigrations(
         continue;
       }
       const sqlText = readPreflightSql(preflightDir, decision.filename);
-      const earlierContents = pending.slice(0, index).map((earlier) => earlier.content);
+      const earlierContents: string[] = [];
+      for (const [filename, content] of unappliedContents) {
+        if (filename === item.filename) break;
+        earlierContents.push(content);
+      }
       let evaluation;
       try {
         evaluation = await evaluatePreflight(client, item.filename, item.ordinal, sqlText, {
@@ -2152,7 +2178,7 @@ async function evaluatePendingMigrations(
       }
       report.leastPrivilege = report.leastPrivilege && evaluation.leastPrivilege;
       if (evaluation.status === "deferred") {
-        if (!earlierPendingCreatesObject(evaluation.reason, earlierContents)) {
+        if (!earlierPendingCreatesObject(evaluation.reason, earlierContents, sqlText)) {
           throw new Error(
             `[bootstrap] migration preflight ${item.filename} cannot evaluate: ${evaluation.reason}; `
               + `no earlier pending migration creates that object, so this is not a deferral — fix the preflight or the schema`,
@@ -2200,12 +2226,15 @@ function throwOnMissingDecisions(report: PendingPreflightReport): void {
  * first migration. Any refuse finding stops bootstrap here, with every
  * finding printed and no migration applied.
  */
-async function runPreflightGate(pending: readonly PendingMigrationItem[]): Promise<DeferredPreflight[]> {
+async function runPreflightGate(
+  pending: readonly PendingMigrationItem[],
+  unappliedContents: ReadonlyMap<string, string>,
+): Promise<DeferredPreflight[]> {
   if (pending.length === 0) {
     console.log("[bootstrap] no pending migrations: nothing to preflight");
     return [];
   }
-  const report = await evaluatePendingMigrations(pending, {});
+  const report = await evaluatePendingMigrations(pending, {}, unappliedContents);
   printPreflightFindings(report.findings);
   throwOnMissingDecisions(report);
   const refusals = report.findings.filter((finding) => finding.severity === "refuse");
@@ -2334,7 +2363,11 @@ async function runUpgradeCheckMain(json: boolean): Promise<number> {
     emit();
     return 0;
   }
-  const report = await evaluatePendingMigrations(pending, { leastPrivilegeRole: "openbooks_read" });
+  const report = await evaluatePendingMigrations(
+    pending,
+    { leastPrivilegeRole: "openbooks_read" },
+    readUnappliedContents(generated, applied),
+  );
   result.noPreflight = report.noPreflight;
   result.missingDecisions = report.missingDecisions;
   result.evaluated = report.evaluated;
@@ -2379,7 +2412,7 @@ async function migrate(): Promise<void> {
   if (!ledgerPreexisted) {
     console.log("[bootstrap] fresh install: no _applied_migrations table, nothing to preflight");
   } else {
-    deferred = await runPreflightGate(pending);
+    deferred = await runPreflightGate(pending, readUnappliedContents(generated, applied));
   }
 
   const appliedThisRun: string[] = [];

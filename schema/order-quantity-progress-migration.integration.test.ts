@@ -118,7 +118,12 @@ async function runBootstrap(
         // harness flags that shape the SHARED test database must not leak in.
         // Ownership transfer refuses without OPENBOOKS_RUNTIME_DB_URL, which
         // is deliberately blank here, so inheriting it fails the bootstrap.
+        // The bypass pool prefers the admin login over the scratch URL, so
+        // blank it and the other diverting logins too.
         OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "",
+        OPENBOOKS_TEST_ADMIN_DB_URL: "",
+        OPENBOOKS_BYPASS_DB_URL: "",
+        OPENBOOKS_MIGRATION_DB_URL: "",
         // The isolated scratch uses the existing production schema-only mode:
         // migrate + currencies, no org, no provisioning. That is the honest
         // way to exercise 0064's repair without provisioning against a frozen
@@ -133,6 +138,25 @@ async function runBootstrap(
       maxBuffer: 2 * 1024 * 1024,
     },
   );
+}
+
+async function seedLedger(
+  client: pg.Client,
+  files: Array<{ name: string; body: string }>,
+): Promise<void> {
+  await client.query(`
+    create table public._applied_migrations (
+      filename text primary key,
+      sha256 text not null,
+      applied_at timestamptz not null default now()
+    )`);
+  for (const file of files) {
+    const digest = createHash("sha256").update(file.body).digest("hex");
+    await client.query(
+      `insert into public._applied_migrations (filename, sha256) values ($1, $2)`,
+      [`generated/${file.name}`, digest],
+    );
+  }
 }
 
 async function readViewMetadata(client: pg.Client): Promise<ViewMetadata> {
@@ -252,26 +276,12 @@ test("0064 upgrades and replays without losing the governed view contract",
       // honest way to hold the schema at 0064: production never provisions
       // against a frozen schema. The separate data-upgrade scratch below runs
       // the real tail with provisioning.
-      await isolated.client.query(`
-        create table public._applied_migrations (
-          filename text primary key,
-          sha256 text not null,
-          applied_at timestamptz not null default now()
-        )`);
       // Keep the isolated scratch focused on 0064. Later migrations are marked
       // at their published digests so they cannot rebuild this view after the
       // repair (the data-upgrade and empty-database runs below exercise the
       // full tail for real, and the static guard above pins the allowlisted
       // explicit rebuilds).
-      for (const file of [...preMigrationFiles, ...postMigrationFiles]) {
-        const digest = createHash("sha256")
-          .update(file.body)
-          .digest("hex");
-        await isolated.client.query(
-          `insert into public._applied_migrations (filename, sha256) values ($1, $2)`,
-          [`generated/${file.name}`, digest],
-        );
-      }
+      await seedLedger(isolated.client, [...preMigrationFiles, ...postMigrationFiles]);
 
       await isolated.client.query(
         "comment on view openbooks_query.document_lines is 'quantity-view-contract'",
@@ -322,21 +332,7 @@ test("0064 upgrades and replays without losing the governed view contract",
       // and then provisions org defaults against the current schema — exactly
       // the production order. Nothing is faked, so future provisioning columns
       // cannot break this path.
-      await upgrade.client.query(`
-        create table public._applied_migrations (
-          filename text primary key,
-          sha256 text not null,
-          applied_at timestamptz not null default now()
-        )`);
-      for (const file of preMigrationFiles) {
-        const digest = createHash("sha256")
-          .update(file.body)
-          .digest("hex");
-        await upgrade.client.query(
-          `insert into public._applied_migrations (filename, sha256) values ($1, $2)`,
-          [`generated/${file.name}`, digest],
-        );
-      }
+      await seedLedger(upgrade.client, preMigrationFiles);
 
       const orgA = randomUUID();
       const orgB = randomUUID();
