@@ -183,16 +183,14 @@ test('insert twice fails the duplicate; post-history opening edits lock', { skip
     })
     assert.equal(first.created, 1)
 
-    const duplicate = await resource.write([{ ...MID_LIFE_ROW }], 'insert', {
-      orgId: org.orgId,
-      actorId,
-      dryRun: false,
+    const hiddenSubsidiaryId = randomUUID()
+    await db.execute(sql`insert into subsidiaries
+      (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${hiddenSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Import Scope', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)
+    const hiddenCollision = await resource.write([{ ...MID_LIFE_ROW, subsidiary: 'Hidden Import Scope' }], 'insert', {
+      orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: new Set([hiddenSubsidiaryId]),
     })
-    assert.deepEqual(
-      { created: duplicate.created, failed: duplicate.failed },
-      { created: 0, failed: 1 },
-    )
-    assert.match(duplicate.errors[0]!.message, /already exists/)
+    assert.equal(hiddenCollision.errors[0]?.message, 'the asset row could not be imported; check your access and input, then retry')
 
     const run = await runDepreciation(org.orgId, '2026-01-31', actorId)
     assert.equal(run.posted, 1)
