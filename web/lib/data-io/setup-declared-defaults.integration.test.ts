@@ -24,7 +24,7 @@ for(const channel of ['interactive','import'] as const){
   const org=await createScratchOrg();
   try{
    const actorId=(await seedFlowActors(org.orgId)).adminId;auth.gate={user:{orgId:org.orgId,id:actorId}};
-   const body:Record<string,unknown>={code:'DEFAULT-FLAGS',name:'Default taxable earning',kind:'earning',value:'10',isActive:true};
+   const body:Record<string,unknown>={code:'DEFAULT-FLAGS',name:'Default taxable earning',kind:'earning',value:'10',isActive:true,programExclusions:[]};
    if(operation==='update'){
     const created=(await db.execute(sql`insert into pay_components(org_id,code,name,kind,value,is_active,created_by,updated_by) values(${org.orgId},'DEFAULT-FLAGS','Original earning','earning','10',true,${actorId},${actorId}) returning id`)).rows[0]!;
     body.id=created.id;
@@ -36,11 +36,11 @@ for(const channel of ['interactive','import'] as const){
     const outcome=await setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId).write([body],operation==='create'?'insert':'upsert',{orgId:org.orgId,actorId,dryRun:false});
     assert.equal(operation==='create'?outcome.created:outcome.updated,1,JSON.stringify(outcome));
    }
-   const stored=(await db.execute(sql`select taxable,pensionable,insurable,vacationable,include_in_disposable_earnings from pay_components where org_id=${org.orgId} and code='DEFAULT-FLAGS'`)).rows[0];
-   assert.deepEqual(stored,{taxable:true,pensionable:true,insurable:true,vacationable:true,include_in_disposable_earnings:true});
+   const stored=(await db.execute(sql`select taxable,pensionable,insurable,vacationable,include_in_disposable_earnings,program_exclusions from pay_components where org_id=${org.orgId} and code='DEFAULT-FLAGS'`)).rows[0];
+   assert.deepEqual(stored,{taxable:true,pensionable:true,insurable:true,vacationable:true,include_in_disposable_earnings:true,program_exclusions:[]});
    const evidence=(await db.execute<{actor_id:string;changes:{after:Record<string,unknown>}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='pay_components' and changes->'after'->>'code'='DEFAULT-FLAGS'`)).rows;
    assert.equal(evidence.length,1);assert.equal(evidence[0]!.actor_id,actorId);
-   for(const [key,value] of Object.entries(stored!))assert.equal(evidence[0]!.changes.after[key],value);
+   for(const [key,value] of Object.entries(stored!))assert.deepEqual(evidence[0]!.changes.after[key],value);
   }finally{auth.gate=null;await dropScratchOrg(org.orgId);}
  });
 }
