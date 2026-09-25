@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, signedDocumentAmount, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { isUuid } from '@/lib/list-params'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, RateAdjustmentPricingError, resolveRateAdjustments, resolveRateAdjustmentWindow, type AdjustmentCharge, type RateAdjustmentWindow } from './rate-adjustments'
@@ -552,7 +552,7 @@ export async function generateInvoiceFromBillingRequest(
                -- commitments are positive and discount lines remain negative.
                -- Credits are the only source kind whose positive document amount
                -- must be inverted when it becomes customer-billable value.
-               (case when d.kind = 'vendor_credit' then -dl.amount else dl.amount end) as amount,
+               (${signedDocumentAmount(sql`d.kind`, sql`dl.amount`)}) as amount,
                dl.cost_multiplier, dl.markup_percent, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
                coalesce(dl.department_id, d.department_id) as department_id, d.document_date,
