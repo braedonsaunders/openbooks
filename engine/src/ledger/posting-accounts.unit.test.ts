@@ -344,7 +344,7 @@ test("a missing required dimension names the segment and the account", async () 
       segment_names: { department: "Department" },
     },
   ];
-  const missing: KernelLine[] = [{ accountId: "acct-1", amount: "10.0000" }];
+  const missing: KernelLine[] = [{ accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] }];
   await assert.rejects(
     () => validateRequiredDimensions(scripted([{ sql: /required_dimensions/, rows }]).runner, "org-1", missing),
     (e: unknown) =>
@@ -352,7 +352,7 @@ test("a missing required dimension names the segment and the account", async () 
   );
   const ok = scripted([{ sql: /required_dimensions/, rows }]);
   await validateRequiredDimensions(ok.runner, "org-1", [
-    { accountId: "acct-1", amount: "10.0000", departmentId: "dept-1" },
+    { accountId: "acct-1", amount: "10.0000" as KernelLine["amount"], departmentId: "dept-1" },
   ]);
   ok.assertDrained();
 });
@@ -370,7 +370,7 @@ test("custom segments refuse by key while unknown accounts pass through", async 
   await assert.rejects(
     () =>
       validateRequiredDimensions(scripted([{ sql: /required_dimensions/, rows }]).runner, "org-1", [
-        { accountId: "acct-9", amount: "10.0000" },
+        { accountId: "acct-9", amount: "10.0000" as KernelLine["amount"] },
       ]),
     (e: unknown) => e instanceof PostingError && /region is required for account Misc/.test(e.message),
   );
@@ -378,8 +378,8 @@ test("custom segments refuse by key while unknown accounts pass through", async 
   // Real ledger math on the fixture: the passing pair still balances exactly.
   assert.equal(sum(["25.0000", "-25.0000"]), "0.0000");
   await validateRequiredDimensions(custom.runner, "org-1", [
-    { accountId: "acct-9", amount: "25.0000", extraDims: { region: "emea" } },
-    { accountId: "acct-unknown", amount: "-25.0000" },
+    { accountId: "acct-9", amount: "25.0000" as KernelLine["amount"], extraDims: { region: "emea" } },
+    { accountId: "acct-unknown", amount: "-25.0000" as KernelLine["amount"] },
   ]);
   custom.assertDrained();
 });

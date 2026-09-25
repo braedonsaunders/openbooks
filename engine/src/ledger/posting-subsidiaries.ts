@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { mulRate, normalizeDecimal } from "../money/money.ts";
-import { parseMoney, type Money } from "../money/brands.ts";
+import { normalizeDecimal } from "../money/money.ts";
+import { mulMoneyRate, type Money } from "../money/brands.ts";
 import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { type Doc, type KernelLine, PostingError } from "./posting-contracts.ts";
@@ -115,11 +115,12 @@ export async function applySubsidiaries(
     // PostgreSQL client. Resolve rates in a deterministic sequence instead of
     // issuing concurrent queries on that client. This also makes the cache
     // authoritative when several lines share a target currency.
-    // txnAmount re-states the kernel amount as canonical Money (parsed at
-    // each stamp below, fail closed — KernelLine itself is still plain
-    // text on this tree). fxRate stays plain string on purpose: it
+    // txnAmount re-states the kernel amount as canonical Money. KernelLine
+    // itself carries Money now (parsed once at the DocLine boundary, fail
+    // closed), so each stamp carries it directly — the type is the assert,
+    // no re-parse. fxRate stays plain string on purpose: it
     // preserves source text shape (header rate or spot lookup) for the
-    // stored fx_rate column; the math goes through mulRate, which reads
+    // stored fx_rate column; the math goes through mulMoneyRate, which reads
     // any rate-scale decimal exactly.
     const stamped: (KernelLine & {
       subsidiaryId: string;
@@ -136,9 +137,9 @@ export async function applySubsidiaries(
       stamped.push({
         ...line,
         subsidiaryId,
-        amount: mulRate(line.amount, fxRate),
+        amount: mulMoneyRate(line.amount, fxRate),
         currency: doc.currency,
-        txnAmount: parseMoney(line.amount),
+        txnAmount: line.amount,
         fxRate,
       });
     }
@@ -163,9 +164,9 @@ export async function applySubsidiaries(
         accountId: leg.accountId,
         amount: leg.amount,
         currency: leg.currency,
-        // Balancing legs are kernel-built text on this tree: parse at the
-        // stamp like the kernel lines above, fail closed.
-        txnAmount: parseMoney(leg.txnAmount),
+        // Balancing legs are kernel-built Money (IntercompanyLeg), so the
+        // stamp carries the amount directly like the kernel lines above.
+        txnAmount: leg.txnAmount,
         fxRate: leg.fxRate,
         subsidiaryId: leg.subsidiaryId,
         memo: leg.memo,

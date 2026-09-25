@@ -166,8 +166,8 @@ test("a same-currency single-entity document stamps subsidiaries with no fx read
   // Real ledger math: the kernel fixture balances exactly before stamping.
   assert.equal(sum(["100.0000", "-100.0000"]), "0.0000");
   const lines: KernelLine[] = [
-    { accountId: a1, amount: "100.0000" },
-    { accountId: a2, amount: "-100.0000" },
+    { accountId: a1, amount: "100.0000" as KernelLine["amount"] },
+    { accountId: a2, amount: "-100.0000" as KernelLine["amount"] },
   ];
   const out = await applySubsidiaries(s.runner, docOf({ subsidiaryId: null }), lines);
   assert.equal(out.docSubId, root.id, "a missing header subsidiary defaults to the root");
@@ -198,8 +198,8 @@ test("an explicit header rate prices every origin leg without a spot read", asyn
     s.runner,
     docOf({ currency: "USD", fxRate: headerRate }),
     [
-      { accountId: randomUUID(), amount: "100.0000" },
-      { accountId: randomUUID(), amount: "-100.0000" },
+      { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+      { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
     ],
   );
   assert.equal(out.originBaseCurrency, "CAD");
@@ -236,8 +236,8 @@ test("a default header rate is unset, so one spot read prices every line", async
     // document that means unset, not a 1:1 peg, so the spot lookup must run.
     docOf({ currency: "EUR", fxRate: "1.0000000000" }),
     [
-      { accountId: randomUUID(), amount: "100.0000" },
-      { accountId: randomUUID(), amount: "-100.0000" },
+      { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+      { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
     ],
   );
   assert.equal(out.originFxRate, spot);
@@ -263,8 +263,8 @@ test("a missing spot rate names the pair and the date as a posting refusal", asy
   await assert.rejects(
     () =>
       applySubsidiaries(s.runner, docOf({ currency: "EUR", fxRate: "1.0000000000" }), [
-        { accountId: randomUUID(), amount: "100.0000" },
-        { accountId: randomUUID(), amount: "-100.0000" },
+        { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+        { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
       ]),
     (e: unknown) =>
       e instanceof PostingError &&
@@ -280,7 +280,7 @@ test("an unknown document subsidiary is refused before any rate is read", async 
   await assert.rejects(
     () =>
       applySubsidiaries(s.runner, docOf({ subsidiaryId: "missing-sub" }), [
-        { accountId: randomUUID(), amount: "10.0000" },
+        { accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"] },
       ]),
     (e: unknown) => e instanceof PostingError && /subsidiary missing-sub does not exist/.test(e.message),
   );
@@ -293,7 +293,7 @@ test("a line stamped to an unknown subsidiary is refused", async () => {
   await assert.rejects(
     () =>
       applySubsidiaries(s.runner, docOf({ subsidiaryId: root.id }), [
-        { accountId: randomUUID(), amount: "10.0000", subsidiaryId: "ghost-sub" },
+        { accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"], subsidiaryId: "ghost-sub" },
       ]),
     (e: unknown) => e instanceof PostingError && /subsidiary ghost-sub does not exist/.test(e.message),
   );
@@ -308,10 +308,10 @@ test("a line on an inactive subsidiary is refused", async () => {
   await assert.rejects(
     () =>
       applySubsidiaries(s.runner, docOf({ subsidiaryId: root.id }), [
-        { accountId: randomUUID(), amount: "100.0000" },
-        { accountId: randomUUID(), amount: "-100.0000" },
-        { accountId: randomUUID(), amount: "50.0000", subsidiaryId: dormant.id },
-        { accountId: randomUUID(), amount: "-50.0000", subsidiaryId: dormant.id },
+        { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+        { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
+        { accountId: randomUUID(), amount: "50.0000" as KernelLine["amount"], subsidiaryId: dormant.id },
+        { accountId: randomUUID(), amount: "-50.0000" as KernelLine["amount"], subsidiaryId: dormant.id },
       ]),
     (e: unknown) => e instanceof PostingError && /"Dormant" is inactive/.test(e.message),
   );
@@ -331,8 +331,8 @@ test("a currency-restricted account is refused through subsidiary posting", asyn
   await assert.rejects(
     () =>
       applySubsidiaries(s.runner, docOf({ subsidiaryId: root.id }), [
-        { accountId, amount: "100.0000" },
-        { accountId: randomUUID(), amount: "-100.0000" },
+        { accountId, amount: "100.0000" as KernelLine["amount"] },
+        { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
       ]),
     (e: unknown) =>
       e instanceof PostingError && /2000 EUR-only only accepts EUR postings, not USD/.test(e.message),
@@ -366,10 +366,10 @@ test("a two-entity entry balances per subsidiary with intercompany legs", async 
     currencyStep(),
   ]);
   const out = await applySubsidiaries(s.runner, docOf({ subsidiaryId: rootId }), [
-    { accountId: randomUUID(), amount: "100.0000" },
-    { accountId: randomUUID(), amount: "-40.0000" },
-    { accountId: randomUUID(), amount: "-100.0000", subsidiaryId: childId },
-    { accountId: randomUUID(), amount: "40.0000", subsidiaryId: childId },
+    { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+    { accountId: randomUUID(), amount: "-40.0000" as KernelLine["amount"] },
+    { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"], subsidiaryId: childId },
+    { accountId: randomUUID(), amount: "40.0000" as KernelLine["amount"], subsidiaryId: childId },
   ]);
   assert.equal(out.multi, true);
   assert.equal(out.lines.length, 6, "four source lines plus two balancing legs");
@@ -395,7 +395,7 @@ test("subsidiary refusals arrive as PostingError while foreign failures propagat
   } as unknown as Runner;
   await assert.rejects(
     () =>
-      applySubsidiaries(failing, docOf(), [{ accountId: randomUUID(), amount: "10.0000" }]),
+      applySubsidiaries(failing, docOf(), [{ accountId: randomUUID(), amount: "10.0000" as KernelLine["amount"] }]),
     (e: unknown) => e instanceof TypeError && !(e instanceof PostingError),
   );
 });

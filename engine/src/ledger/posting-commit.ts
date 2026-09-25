@@ -4,6 +4,7 @@ import { db, inDbTransaction, schema, withTransactionSavepoint } from "../platfo
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 
 import { type ContributedLineWithSource } from "../allocations/post.ts";
+import { parseMoney } from "../money/brands.ts";
 
 import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "../close/period-policy.ts";
 import { applyBillInventoryReceipts } from "../inventory/documents-purchasing.ts";
@@ -404,7 +405,12 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         if (!book || !book.is_active || !book.posts_gl) {
           throw new PostingError("allocation target book is not an active posting book");
         }
-        const secApplied = await applySubsidiaries(tx, effectiveDoc, bookLines);
+        // Same cross-module intake as prepare: parse contributor amounts once.
+        const secApplied = await applySubsidiaries(
+          tx,
+          effectiveDoc,
+          bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
+        );
         assertFinalKernelBalance(secApplied.lines);
         await validateRequiredDimensions(tx, doc.orgId, secApplied.lines);
         try {

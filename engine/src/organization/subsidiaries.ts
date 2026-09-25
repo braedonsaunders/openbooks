@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
-import { add, fromUnits, isZero, mulRate, neg, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
+import { add, fromUnits, isZero, mulRate, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
+import { addMoney, mulMoneyRate, negMoney, type Money } from "../money/brands.ts";
 
 /**
  * Subsidiary context for the posting engine (a multi-entity model inside
@@ -263,9 +264,10 @@ export async function validateSubsidiaryRestrictions(
 
 export interface IntercompanyLeg {
   accountId: string;
-  amount: string;
+  /** Canonical Money: every construction below is kernel-closed. */
+  amount: Money;
   currency: string;
-  txnAmount: string;
+  txnAmount: Money;
   fxRate: string;
   subsidiaryId: string;
   memo: string;
@@ -382,7 +384,8 @@ export function absorbFxRoundingResidual<
         `functional-currency residual ${fromUnits(total)} on subsidiary ${subId} has no line that may absorb it — every line is a tax control or open-item leg`,
       );
     }
-    bucket.amount = fromUnits(toUnits(bucket.amount) - total);
+    // fromUnits-fixed: the adjusted bucket stays canonical Money.
+    bucket.amount = fromUnits(toUnits(bucket.amount) - total) as Money;
   }
 }
 
@@ -409,11 +412,11 @@ export async function intercompanyBalancingLegs(
   },
 ): Promise<IntercompanyLeg[]> {
   const { ctx, originSubId, lines } = opts;
-  const bySub = new Map<string, string>();
-  const txnBySub = new Map<string, string>();
+  const bySub = new Map<string, Money>();
+  const txnBySub = new Map<string, Money>();
   for (const l of lines) {
-    bySub.set(l.subsidiaryId, add(bySub.get(l.subsidiaryId) ?? "0", l.amount));
-    txnBySub.set(l.subsidiaryId, add(txnBySub.get(l.subsidiaryId) ?? "0", l.txnAmount ?? l.amount));
+    bySub.set(l.subsidiaryId, addMoney(bySub.get(l.subsidiaryId) ?? "0", l.amount));
+    txnBySub.set(l.subsidiaryId, addMoney(txnBySub.get(l.subsidiaryId) ?? "0", l.txnAmount ?? l.amount));
   }
   if (bySub.size <= 1) return [];
 
@@ -468,12 +471,12 @@ export async function intercompanyBalancingLegs(
       oneFxRate && mulRate(transactionTotal, firstFxRate) === total
         ? firstFxRate
         : aggregateFxRate(total, transactionTotal);
-    const originAmount = mulRate(transactionTotal, opts.originFxRate);
+    const originAmount = mulMoneyRate(transactionTotal, opts.originFxRate);
     legs.push({
       accountId: subAccount,
-      amount: neg(total),
+      amount: negMoney(total),
       currency: transactionCurrency,
-      txnAmount: neg(transactionTotal),
+      txnAmount: negMoney(transactionTotal),
       fxRate: subFxRate,
       subsidiaryId: subId,
       memo: `Intercompany with ${originName}`,
@@ -499,7 +502,7 @@ export async function intercompanyBalancingLegs(
     for (const leg of originLegs) residual = add(residual, leg.amount);
     if (!isZero(residual)) {
       const last = originLegs[originLegs.length - 1]!;
-      last.amount = add(last.amount, neg(residual));
+      last.amount = addMoney(last.amount, negMoney(residual));
     }
   }
 

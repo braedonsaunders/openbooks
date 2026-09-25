@@ -1,5 +1,6 @@
 /** Pure document-to-ledger projection rules. Posting phases are coordinated by posting-document.ts. */
-import { add, cmp, isZero, neg, sum, toUnits } from "../money/money.ts";
+import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
+import { addMoney, negMoney, parseMoney, sumMoney, type Money } from "../money/brands.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "./posting-contracts.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
 /**
@@ -48,7 +49,7 @@ const cardRule: RuleFn = (doc, lines, deps) => {
     ...dims(doc, l),
   }));
   const tax = purchaseTaxLines(doc, lines, deps, 1);
-  const total = sum([...expense, ...tax].map((l) => l.amount));
+  const total = sumMoney([...expense, ...tax].map((l) => l.amount));
   const cardLiability = controlOverride(doc) ?? deps.cardLiabilityAccountId;
   if (!cardLiability)
     throw new PostingError("card_charge requires a payment card");
@@ -57,7 +58,7 @@ const cardRule: RuleFn = (doc, lines, deps) => {
     ...tax,
     {
       accountId: cardLiability,
-      amount: neg(total),
+      amount: negMoney(total),
       paymentCardId: doc.paymentCardId,
       ...dims(doc),
     },
@@ -115,13 +116,13 @@ export function projectChargeKernelLines(
     }
     out.push({
       accountId,
-      amount: line.amount,
+      amount: parseMoney(line.amount),
       memo: line.description,
       ...dims(doc, line),
     });
     out.push({
       accountId: line.recoveryAccountId,
-      amount: neg(line.amount),
+      amount: negMoney(line.amount),
       memo: line.description,
       departmentId: doc.departmentId,
       locationId: doc.locationId,
@@ -134,7 +135,7 @@ export function projectChargeKernelLines(
   return out;
 }
 
-const lineTotal = (l: DocLine) => add(l.amount, l.taxAmount ?? "0");
+const lineTotal = (l: DocLine): Money => addMoney(l.amount, l.taxAmount ?? "0");
 
 /**
  * The payable/receivable/card-liability/bank control account a document should post
@@ -148,8 +149,10 @@ const controlOverride = (doc: Doc): string | undefined => {
   return typeof c === "string" && c ? c : undefined;
 };
 
-function signed(amount: string, direction: 1 | -1): string {
-  return direction === 1 ? amount : neg(amount);
+/** Direction application that also parses: every signed leg is canonical Money. */
+function signed(amount: string, direction: 1 | -1): Money {
+  const money = parseMoney(amount);
+  return direction === 1 ? money : negMoney(money);
 }
 
 /**
@@ -174,7 +177,7 @@ export function settlementOf(line: Pick<DocLine, "lineNumber" | "settlementType"
  * no meaning on a non-business charge, so they fail closed here instead of
  * posting a tax leg the receivable must never carry.
  */
-function personalReceivableAmount(line: DocLine, deps: PostingDeps): string {
+function personalReceivableAmount(line: DocLine, deps: PostingDeps): Money {
   let recoverable = "0";
   for (const c of componentsForLine(line, deps)) {
     if (c.calculationType !== "standard") {
@@ -184,17 +187,18 @@ function personalReceivableAmount(line: DocLine, deps: PostingDeps): string {
     }
     recoverable = add(recoverable, c.recoverableAmount);
   }
-  return add(purchaseBaseAmount(line, deps), recoverable);
+  return addMoney(purchaseBaseAmount(line, deps), recoverable);
 }
 
 /** Expense/inventory basis includes only the nonrecoverable purchase tax. */
-function purchaseBaseAmount(line: DocLine, deps: PostingDeps): string {
-  const nonrecoverable = sum(
+function purchaseBaseAmount(line: DocLine, deps: PostingDeps): Money {
+  const nonrecoverable = sumMoney(
     componentsForLine(line, deps)
       .filter((c) => c.calculationType !== "withholding")
       .map((c) => c.nonrecoverableAmount),
   );
-  return add(line.amount, nonrecoverable);
+  // DocLine boundary: document text is parsed here, fail closed.
+  return addMoney(parseMoney(line.amount), nonrecoverable);
 }
 
 /**
@@ -297,13 +301,13 @@ export const RULES: Record<string, RuleFn> = {
       ...dims(doc, l),
     }));
     const tax = purchaseTaxLines(doc, lines, deps, 1);
-    const total = sum([...expense, ...tax].map((l) => l.amount));
+    const total = sumMoney([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
       ...tax,
       {
         accountId: controlOverride(doc) ?? deps.control.ap,
-        amount: neg(total), // credit AP
+        amount: negMoney(total), // credit AP
         partyId: doc.partyId,
         dueDate: doc.dueDate,
         isOpenItem: true,
@@ -320,17 +324,17 @@ export const RULES: Record<string, RuleFn> = {
         l,
         deps.deferralAccountByLine?.get(l.id) ?? l.accountId,
       ),
-      amount: neg(l.amount), // credit income / deferred revenue
+      amount: negMoney(l.amount), // credit income / deferred revenue
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = salesTaxLines(doc, lines, deps, 1);
-    const total = sum([...income, ...tax].map((l) => l.amount));
+    const total = sumMoney([...income, ...tax].map((l) => l.amount));
     return [
       {
         accountId: controlOverride(doc) ?? deps.control.ar,
-        amount: neg(total), // debit AR (total is negative)
+        amount: negMoney(total), // debit AR (total is negative)
         partyId: doc.partyId,
         dueDate: doc.dueDate,
         isOpenItem: true,
@@ -342,7 +346,7 @@ export const RULES: Record<string, RuleFn> = {
   },
 
   vendor_payment: (doc, lines, deps) => {
-    const cash = sum(lines.map(lineTotal));
+    const cash = sumMoney(lines.map(lineTotal));
     const custom = (doc.custom ?? {}) as Record<string, unknown>;
     const discount =
       typeof custom.discountAmount === "string" ? custom.discountAmount : "0";
@@ -354,7 +358,7 @@ export const RULES: Record<string, RuleFn> = {
       throw new PostingError("vendor payment discount cannot be negative");
     if (!isZero(discount) && !discountAccountId)
       throw new PostingError("vendor payment discount account is required");
-    const payable = add(cash, discount);
+    const payable = addMoney(cash, discount);
     return [
       // The AP leg is an OPEN ITEM: it settles against the bills it paid, so it
       // must carry is_open_item to be a valid application source (from_line).
@@ -369,14 +373,14 @@ export const RULES: Record<string, RuleFn> = {
       }, // debit AP
       {
         accountId: lines[0]?.accountId ?? deps.control.bank,
-        amount: neg(cash),
+        amount: negMoney(cash),
         ...dims(doc),
       }, // credit bank
       ...(!isZero(discount)
         ? [
             {
               accountId: discountAccountId!,
-              amount: neg(discount),
+              amount: negMoney(discount),
               partyId: doc.partyId,
               ...dims(doc),
             },
@@ -386,7 +390,7 @@ export const RULES: Record<string, RuleFn> = {
   },
 
   customer_payment: (doc, lines, deps) => {
-    const total = sum(lines.map(lineTotal));
+    const total = sumMoney(lines.map(lineTotal));
     const custom = (doc.custom ?? {}) as Record<string, unknown>;
     // Optional payment-acceptance surcharge: the customer was charged
     // total = invoice portion + fee; the fee leg credits a fee-income account
@@ -409,7 +413,7 @@ export const RULES: Record<string, RuleFn> = {
       throw new PostingError("customer payment fee exceeds the receipt");
     if (!isZero(fee) && !feeAccountId)
       throw new PostingError("customer payment fee income account is required");
-    const receivable = add(total, neg(fee));
+    const receivable = addMoney(total, negMoney(fee));
     return [
       {
         accountId: lines[0]?.accountId ?? deps.control.bank,
@@ -419,13 +423,13 @@ export const RULES: Record<string, RuleFn> = {
       // The AR leg is an OPEN ITEM: it settles the invoices it paid (from_line).
       {
         accountId: controlOverride(doc) ?? deps.control.ar,
-        amount: neg(receivable),
+        amount: negMoney(receivable),
         partyId: doc.partyId,
         isOpenItem: true,
         ...dims(doc),
       }, // credit AR
       ...(!isZero(fee)
-        ? [{ accountId: feeAccountId!, amount: neg(fee), ...dims(doc) }]
+        ? [{ accountId: feeAccountId!, amount: negMoney(fee), ...dims(doc) }]
         : []), // credit fee income
     ];
   },
@@ -462,7 +466,7 @@ export const RULES: Record<string, RuleFn> = {
       }));
     const oopExpense = bookExpense(oop, false);
     const oopTax = purchaseTaxLines(doc, oop, deps, 1);
-    const oopTotal = sum([...oopExpense, ...oopTax].map((l) => l.amount));
+    const oopTotal = sumMoney([...oopExpense, ...oopTax].map((l) => l.amount));
     const oopControlId =
       controlOverride(doc) ??
       deps.control.employeePayable ??
@@ -486,8 +490,8 @@ export const RULES: Record<string, RuleFn> = {
       ),
       ...dims(doc, l),
     }));
-    const personalTotal = sum(personalDebit.map((l) => l.amount));
-    const cardSubtotal = sum([...cardExpense, ...cardTax].map((l) => l.amount));
+    const personalTotal = sumMoney(personalDebit.map((l) => l.amount));
+    const cardSubtotal = sumMoney([...cardExpense, ...cardTax].map((l) => l.amount));
     return [
       ...oopExpense,
       ...oopTax,
@@ -502,7 +506,7 @@ export const RULES: Record<string, RuleFn> = {
         : [
             {
               accountId: oopControlId,
-              amount: neg(oopTotal),
+              amount: negMoney(oopTotal),
               partyId: doc.partyId,
               isOpenItem: controlLineIsOpenItem(
                 oopControlId,
@@ -518,12 +522,12 @@ export const RULES: Record<string, RuleFn> = {
       // of every is_open_item reader at once — the dashboard tile, AP aging,
       // openItemsForParty, and the reimbursement run selection — so neither
       // kind can ever reach a reimbursement payment run.
-      ...(isZero(sum([cardSubtotal, personalTotal]))
+      ...(isZero(sumMoney([cardSubtotal, personalTotal]))
         ? []
         : [
             {
               accountId: deps.cardLiabilityAccountId!,
-              amount: neg(sum([cardSubtotal, personalTotal])),
+              amount: negMoney(sumMoney([cardSubtotal, personalTotal])),
               paymentCardId: doc.paymentCardId,
               isOpenItem: false,
               ...dims(doc),
@@ -548,7 +552,7 @@ export const RULES: Record<string, RuleFn> = {
       const accountId = resolvedLineAccount(l);
       return {
         accountId,
-        amount: l.amount,
+        amount: parseMoney(l.amount),
         subsidiaryId: l.subsidiaryId,
         memo: l.description,
         partyId,
@@ -576,7 +580,7 @@ export const RULES: Record<string, RuleFn> = {
       const partyId = l.partyId ?? null;
       return {
         accountId,
-        amount: l.amount,
+        amount: parseMoney(l.amount),
         memo: l.description,
         partyId,
         // commitPayRun puts a party ONLY on the per-employee net-pay legs —
@@ -614,7 +618,7 @@ export const RULES: Record<string, RuleFn> = {
       };
     });
     const tax = purchaseTaxLines(doc, lines, deps, 1);
-    const total = sum([...expense, ...tax].map((l) => l.amount));
+    const total = sumMoney([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
       ...tax,
@@ -623,7 +627,7 @@ export const RULES: Record<string, RuleFn> = {
         // org default bank — the same contract as `deposit`: a check drawn on
         // a non-default account must credit that account, not the default.
         accountId: controlOverride(doc) ?? deps.control.bank,
-        amount: neg(total), // credit bank
+        amount: negMoney(total), // credit bank
         ...dims(doc),
       },
     ];
@@ -640,7 +644,7 @@ export const RULES: Record<string, RuleFn> = {
       const accountId = resolvedLineAccount(l);
       return {
         accountId,
-        amount: neg(l.amount), // credit each source
+        amount: negMoney(parseMoney(l.amount)), // credit each source
         memo: l.description,
         partyId,
         // A deposit can settle an AR/AP credit (for example cash received for
@@ -654,7 +658,7 @@ export const RULES: Record<string, RuleFn> = {
         ...dims(doc, l),
       };
     });
-    const total = sum(lines.map((l) => l.amount)); // positive = money in
+    const total = sumMoney(lines.map((l) => l.amount)); // positive = money in
     return [
       {
         accountId: controlOverride(doc) ?? deps.control.bank,
@@ -699,12 +703,13 @@ export const RULES: Record<string, RuleFn> = {
     return [
       {
         accountId: dest.accountId,
-        amount: dest.amount,
+        // Validated positive above via toUnits: parse once for the brand.
+        amount: parseMoney(dest.amount),
         ...dims(doc),
       }, // debit destination
       {
         accountId: src.accountId,
-        amount: neg(dest.amount),
+        amount: negMoney(parseMoney(dest.amount)),
         ...dims(doc),
       }, // credit source
     ];
@@ -717,17 +722,17 @@ export const RULES: Record<string, RuleFn> = {
         l,
         deps.inventoryReturnOffsetByLine?.get(l.id) ?? l.accountId,
       ),
-      amount: neg(purchaseBaseAmount(l, deps)), // credit net + nonrecoverable tax
+      amount: negMoney(purchaseBaseAmount(l, deps)), // credit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = purchaseTaxLines(doc, lines, deps, -1);
-    const total = sum([...expense, ...tax].map((l) => l.amount));
+    const total = sumMoney([...expense, ...tax].map((l) => l.amount));
     return [
       {
         accountId: controlOverride(doc) ?? deps.control.ap,
-        amount: neg(total), // debit AP (total is negative)
+        amount: negMoney(total), // debit AP (total is negative)
         partyId: doc.partyId,
         dueDate: doc.dueDate,
         isOpenItem: true,
@@ -742,17 +747,17 @@ export const RULES: Record<string, RuleFn> = {
   customer_credit: (doc, lines, deps) => {
     const income: KernelLine[] = lines.map((l) => ({
       accountId: resolvedLineAccount(l),
-      amount: l.amount, // debit income (reverse of invoice)
+      amount: parseMoney(l.amount), // debit income (reverse of invoice)
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = salesTaxLines(doc, lines, deps, -1);
-    const total = sum([...income, ...tax].map((l) => l.amount));
+    const total = sumMoney([...income, ...tax].map((l) => l.amount));
     return [
       {
         accountId: controlOverride(doc) ?? deps.control.ar,
-        amount: neg(total), // credit AR (total is positive)
+        amount: negMoney(total), // credit AR (total is positive)
         partyId: doc.partyId,
         dueDate: doc.dueDate,
         isOpenItem: true,
