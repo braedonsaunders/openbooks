@@ -142,6 +142,10 @@ export function ChangeRequestDrawer({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // The draft this drawer created: a refused submit (or save) must retry
+  // against the same draft — creating again orphans the first one, and
+  // the next Submit would post a second draft beside it.
+  const [createdId, setCreatedId] = useState<string | null>(null)
   // 404 is the confirmed feature-off response. A failed fetch must keep
   // submission closed because the submit API may require classification.
   const [reasonLoadState, setReasonLoadState] = useState<'loading' | 'disabled' | 'loaded' | 'failed'>('loading')
@@ -460,12 +464,38 @@ export function ChangeRequestDrawer({
     return patchDraft(requestId, payload)
   }
 
-  async function submitDraft(requestId: string, submitReason: string): Promise<boolean> {
-    // HR-16: classification rides submit only while the feature is on.
+  /**
+   * The draft to save/submit against: the edited request, the draft this
+   * drawer already created (a retry patches it — creating again would
+   * orphan the first draft), or a fresh create whose id is remembered
+   * for the retry.
+   */
+  async function resolveDraftId(payload: Record<string, unknown>): Promise<string | null> {
+    if (editing && initialRequest) {
+      return (await patchDraftIfChanged(initialRequest.id, payload)) ? initialRequest.id : null
+    }
+    if (createdId) {
+      return (await patchDraftIfChanged(createdId, payload)) ? createdId : null
+    }
+    const id = await postCreate(payload)
+    if (id) setCreatedId(id)
+    return id
+  }
+
+  /** HR-16 classification gate, checked before any draft is created so a
+   * refused submit never leaves a draft behind. submitDraft keeps its own
+   * check as the second half of the guard. */
+  function requireAction(): boolean {
     if (reasonsOn && !action) {
       setError(t('employment.changeRequests.actionRequired'))
       return false
     }
+    return true
+  }
+
+  async function submitDraft(requestId: string, submitReason: string): Promise<boolean> {
+    // HR-16: classification rides submit only while the feature is on.
+    if (!requireAction()) return false
     const res = await fetch(`/api/hrm/change-requests/${requestId}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -516,12 +546,13 @@ export function ChangeRequestDrawer({
     const payload = buildPayload()
     let ok = false
     try {
-      if (editing && initialRequest) {
-        ok = await patchDraftIfChanged(initialRequest.id, payload)
-        if (ok) toast.success(t('employment.changeRequests.updatedToast'))
-      } else {
-        ok = (await postCreate(payload)) !== null
-        if (ok) toast.success(t('employment.changeRequests.savedDraftToast'))
+      // A retry patches the draft this drawer already created instead of
+      // posting a second one beside it.
+      ok = (await resolveDraftId(payload)) !== null
+      if (ok) {
+        toast.success(
+          t(editing ? 'employment.changeRequests.updatedToast' : 'employment.changeRequests.savedDraftToast'),
+        )
       }
     } catch {
       // I4-webui-127: transport/parse failure is distinct from an HTTP
@@ -546,17 +577,16 @@ export function ChangeRequestDrawer({
     if (!requirePositionLink()) return
     const submitReason = requireReason()
     if (submitReason === null) return
+    // Before any draft is created: a refused submit must not leave a
+    // draft behind for the next Submit to duplicate.
+    if (!requireAction()) return
     setBusy(true)
     setError(null)
     const payload = buildPayload()
     let requestId: string | null = null
     let submitted = false
     try {
-      if (editing && initialRequest) {
-        requestId = (await patchDraftIfChanged(initialRequest.id, payload)) ? initialRequest.id : null
-      } else {
-        requestId = await postCreate(payload)
-      }
+      requestId = await resolveDraftId(payload)
       submitted = requestId !== null && (await submitDraft(requestId, submitReason))
     } catch {
       // I4-webui-127: transport/parse failure is distinct from an HTTP
