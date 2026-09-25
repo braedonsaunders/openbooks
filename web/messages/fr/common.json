@@ -159,7 +159,8 @@
     "expectedPayDate": "Date de paiement prévue",
     "openBalance": "Solde impayé",
     "defaultForm": "Formulaire par défaut",
-    "asOf": "Au"
+    "asOf": "Au",
+    "unknownValue": "Valeur inconnue"
   },
   "status": {
     "draft": "Brouillon",
@@ -181,7 +182,8 @@
     "pending_approval": "Soumis",
     "calculated": "Calculé",
     "committed": "Validé",
-    "retired": "Retiré"
+    "retired": "Retiré",
+    "paused": "En pause"
   },
   "filters": {
     "showInactive": "Afficher les inactifs"

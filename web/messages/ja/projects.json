@@ -482,6 +482,9 @@
       "releaseHold": "保留を解除",
       "releaseReason": "解除理由",
       "release": "解除"
+    },
+    "status": {
+      "converted": "変換済み"
     }
   },
   "duplicates": {

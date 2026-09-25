@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { enumLabel } from '@/lib/enum-label'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { ArrowLeft, Play } from 'lucide-react'
@@ -37,6 +38,12 @@ type CommitResult = {
 export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; runId: string | null }) {
   const t = useTranslations('close')
   const tc = useTranslations('common')
+  const transactionKindLabels = {
+    vendor_bill: tc('transactionTypes.vendorBill'),
+    customer_invoice: tc('transactionTypes.customerInvoice'),
+    sales_order: tc('transactionTypes.salesOrder'),
+    purchase_order: tc('transactionTypes.purchaseOrder'),
+  } satisfies Record<'vendor_bill' | 'customer_invoice' | 'sales_order' | 'purchase_order', string>
   const [rows, setRows] = useState<Candidate[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CommitResult | null>(null)
@@ -167,7 +174,7 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
                 {rows.map((row) => (
                   <tr key={row.documentId} className="border-t">
                     <td className="py-1 pr-2 font-mono">{row.documentNumber}</td>
-                    <td className="py-1 pr-2">{row.kind}</td>
+                    <td className="py-1 pr-2">{enumLabel(row.kind, transactionKindLabels, tc('labels.unknownValue'))}</td>
                     <td className="py-1 pr-2">{row.effectiveDate}</td>
                     <td className="py-1 pr-2">{row.periodName ?? '—'}</td>
                     <td className="py-1">

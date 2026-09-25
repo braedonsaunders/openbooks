@@ -31,6 +31,7 @@ import {
   financialChangeStatusLabel,
 } from "@openbooks/engine/src/platform/financial-change-labels.ts";
 import type { LeasePayload, LeaseDisplay } from "./_lib";
+import { enumLabel } from "@/lib/enum-label";
 type Option = { value: string; label: string };
 const frequencyMonths: Record<string, number> = {
   monthly: 1,
@@ -739,6 +740,7 @@ export function LeaseDrawer({
   subsidiaries,
 }: { payload: LeasePayload; canManage: boolean } & Choices) {
   const t = useTranslations("assets");
+  const tCommon = useTranslations("common");
   const router = useRouter(),
     { money } = useMoney(),
     [busy, setBusy] = useState(false),
@@ -779,16 +781,31 @@ export function LeaseDrawer({
     >
       <div className="space-y-5">
         <div className="flex gap-3">
-          <Badge>{l.status}</Badge>
+          <Badge>{enumLabel(l.status, {
+            draft: t("leases.statusDraft"),
+            active: t("leases.statusActive"),
+            terminated: t("leases.statusTerminated"),
+            complete: t("leases.statusComplete"),
+          }, tCommon("labels.unknownValue"))}</Badge>
           <span>
-            Revision {l.revision} · {l.classification} · {l.payment_timing}
+            {t("leases.revision")} {l.revision} · {enumLabel(l.classification, {
+              finance: t("leases.classFinance"),
+              operating: t("leases.classOperating"),
+            }, tCommon("labels.unknownValue"))} · {enumLabel(l.payment_timing, {
+              advance: t("leases.timeAdvance"),
+              arrears: t("leases.timeArrears"),
+            }, tCommon("labels.unknownValue"))}
           </span>
         </div>
         <dl className="grid grid-cols-2 gap-3">
           <div>
             <dt>{t("leases.summaryPayment")}</dt>
             <dd>
-              {money(l.payment_amount)} / {l.payment_frequency}
+              {money(l.payment_amount)} / {enumLabel(l.payment_frequency, {
+                monthly: t("leases.freqMonthly"),
+                quarterly: t("leases.freqQuarterly"),
+                annual: t("leases.freqAnnual"),
+              }, tCommon("labels.unknownValue"))}
             </dd>
           </div>
           <div>

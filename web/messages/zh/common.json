@@ -159,7 +159,8 @@
     "expectedPayDate": "预计付款日期",
     "openBalance": "未结余额",
     "defaultForm": "默认表单",
-    "asOf": "截至"
+    "asOf": "截至",
+    "unknownValue": "未知值"
   },
   "status": {
     "draft": "草稿",
@@ -181,7 +182,8 @@
     "pending_approval": "已提交",
     "calculated": "已计算",
     "committed": "已提交",
-    "retired": "已停用"
+    "retired": "已停用",
+    "paused": "已暂停"
   },
   "filters": {
     "showInactive": "显示已停用"

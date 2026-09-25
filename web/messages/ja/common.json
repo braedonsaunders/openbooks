@@ -159,7 +159,8 @@
     "expectedPayDate": "支払予定日",
     "openBalance": "未決済残高",
     "defaultForm": "既定のフォーム",
-    "asOf": "基準日"
+    "asOf": "基準日",
+    "unknownValue": "不明な値"
   },
   "status": {
     "draft": "下書き",
@@ -181,7 +182,8 @@
     "pending_approval": "提出済み",
     "calculated": "計算済み",
     "committed": "確定済み",
-    "retired": "廃止"
+    "retired": "廃止",
+    "paused": "一時停止"
   },
   "filters": {
     "showInactive": "無効も表示"

@@ -159,7 +159,8 @@
     "expectedPayDate": "Data prevista de pagamento",
     "openBalance": "Saldo em aberto",
     "defaultForm": "Formulário padrão",
-    "asOf": "Em"
+    "asOf": "Em",
+    "unknownValue": "Valor desconhecido"
   },
   "status": {
     "draft": "Rascunho",
@@ -181,7 +182,8 @@
     "pending_approval": "Enviado",
     "calculated": "Calculado",
     "committed": "Comprometido",
-    "retired": "Desativado"
+    "retired": "Desativado",
+    "paused": "Pausada"
   },
   "filters": {
     "showInactive": "Mostrar inativos"

@@ -512,6 +512,8 @@
     "statusPaidPending": "已付款；待计提",
     "statusPlanned": "计划中",
     "postToast": "已过账{posted}个计划事件；跳过{skipped}个",
-    "commenceToast": "租赁已开始"
+    "commenceToast": "租赁已开始",
+    "statusTerminated": "已终止",
+    "statusComplete": "已完成"
   }
 }

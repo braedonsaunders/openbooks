@@ -482,6 +482,9 @@
       "releaseHold": "Destravar",
       "releaseReason": "Motivo da liberação",
       "release": "Liberar"
+    },
+    "status": {
+      "converted": "Convertido"
     }
   },
   "duplicates": {

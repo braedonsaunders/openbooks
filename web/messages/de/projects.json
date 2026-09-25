@@ -482,6 +482,9 @@
       "releaseHold": "Sperre aufheben",
       "releaseReason": "Grund der Freigabe",
       "release": "Freigeben"
+    },
+    "status": {
+      "converted": "Umgewandelt"
     }
   },
   "duplicates": {
