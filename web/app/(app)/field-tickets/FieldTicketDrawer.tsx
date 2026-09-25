@@ -377,10 +377,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
   const selectedItem = props.catalogItems.find((item) => item.id === lineItem)
   const equipmentOptions = props.equipmentUnits.filter((unit) => unit.chargeItemId === lineItem)
-  /** New keys ship with the catalogue (web/messages is owned elsewhere); read
-   *  through a fallback so the field works today and translates later. */
-  const tOr = (key: string, english: string) => (t.has(key as never) ? t(key as never) : english)
-  const unclassifiedTimeTypeName = tOr('editor.crew.unclassified', 'Unclassified')
+  const unclassifiedTimeTypeName = t('editor.crew.unclassified')
   const gridTimeTypes = useMemo(() => {
     const hasUnclassified = grid.some((row) => Object.keys(row.cells).some((key) => key.startsWith(`${UNCLASSIFIED_TIME_TYPE_ID}|`)))
     return hasUnclassified
@@ -1356,14 +1353,14 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                   equipment incentive that refuses an unattributed month. */}
               {props.equipmentEnabled && lineEquipment && crewOperatorOptions.length > 0 ? (
                 <div className="min-w-0 md:col-span-2">
-                  <Label id={`${headerFieldId}-line-operator-label`}>{tOr('editor.lines.operator', 'Operator')}</Label>
+                  <Label id={`${headerFieldId}-line-operator-label`}>{t('editor.lines.operator')}</Label>
                   <SearchSelect
                     id={`${headerFieldId}-line-operator`}
                     ariaLabelledBy={`${headerFieldId}-line-operator-label`}
-                    options={[{ value: '', label: tOr('editor.lines.noOperator', 'Not recorded') }, ...crewOperatorOptions]}
+                    options={[{ value: '', label: t('editor.lines.noOperator') }, ...crewOperatorOptions]}
                     value={lineOperator}
                     onChange={(value) => setLineOperator(value ?? '')}
-                    placeholder={tOr('editor.lines.noOperator', 'Not recorded')}
+                    placeholder={t('editor.lines.noOperator')}
                   />
                 </div>
               ) : null}
@@ -1373,7 +1370,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                   {lineComponents.length > 0 ? ` · ${lineComponents.map((component) => `${Number(component.quantity)} ${component.unitName} × ${money(component.rate)}`).join(' + ')}` : ''}
                   {linePolicyProvenance === 'inferred' ? (
                     <span className="text-amber-600 dark:text-amber-400">
-                      {` · ${tOr('editor.lines.inferredPolicy', 'Inferred pre-upgrade policy — verify before billing')}`}
+                      {` · ${t('editor.lines.inferredPolicy')}`}
                     </span>
                   ) : null}
                 </div>
