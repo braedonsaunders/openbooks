@@ -614,7 +614,7 @@ export function PostingDrawerBody({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{posting.boardKey}</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{posting.boardKey === 'feed' ? extra.labels.feed : extra.labels.internal}</h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{posting.status}</p>
       </div>
       {extra.canManage ? (
@@ -622,7 +622,7 @@ export function PostingDrawerBody({
           postingId={posting.id}
           status={posting.statusCode}
           requisitionId={posting.requisitionId}
-          labels={{ publish: extra.labels.publish ?? 'Publish', pause: extra.labels.pause ?? 'Pause', close: extra.labels.close ?? 'Close', failed: extra.labels.failed ?? 'Save failed.' }}
+          labels={{ publish: extra.labels.publish ?? 'Publish', pause: extra.labels.pause ?? 'Pause', close: extra.labels.close ?? 'Close', failed: extra.labels.failed ?? 'Save failed.', board: extra.labels.board ?? 'board', internal: extra.labels.internal ?? 'internal', feed: extra.labels.feed ?? 'feed' }}
         />
       ) : null}
       <div>
@@ -666,7 +666,7 @@ export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
         <div>
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.labels.match}</h4>
           <div className="mt-2">
-            <PoolRediscoverIsland poolId={detail.id} labels={{ tags: detail.labels.tags ?? 'Tags (comma separated)', failed: detail.labels.failed ?? 'Save failed.' }} />
+            <PoolRediscoverIsland poolId={detail.id} labels={{ tags: detail.labels.tags ?? 'Tags (comma separated)', failed: detail.labels.failed ?? 'Save failed.', requisition: detail.labels.requisition ?? 'requisition', requisitionId: detail.labels.requisitionId ?? 'requisition id', match: detail.labels.matchAction ?? 'Match' }} />
           </div>
         </div>
       ) : null}

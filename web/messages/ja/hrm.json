@@ -773,6 +773,7 @@
     "depth": {
       "applies": "{count}件の応募",
       "blinded": "他の評価はあなたの提出後に開きます。",
+      "boardLabel": "掲示先",
       "bookedSlots": "予約済み{count}件",
       "close": "閉じる",
       "columns": {
@@ -796,6 +797,7 @@
       "empty": "まだ何もありません。",
       "failed": "保存できませんでした。",
       "kit": "キット",
+      "matchAction": "照合",
       "matchToOpening": "求人に照合",
       "members": "{count}名",
       "missing": "未提出",
@@ -809,6 +811,8 @@
       "publish": "公開",
       "questions": "質問",
       "remove": "外す",
+      "requisitionIdLabel": "求人ID",
+      "requisitionLabel": "求人",
       "retentionDate": "保持期限",
       "scorecards": "評価{submitted}/{total}",
       "sendLink": "署名リンクを送る",
@@ -830,6 +834,8 @@
       "starts": "開始",
       "ends": "終了",
       "timezone": "タイムゾーン",
+      "feedBoard": "フィード",
+      "internalBoard": "社内",
       "invalidTime": "組織のタイムゾーンで有効な現地時刻を入力してください。時計変更で存在しない時刻や重複する時刻は予約できません。",
       "bookingLink": "予約リンク",
       "email": "メールアドレス",

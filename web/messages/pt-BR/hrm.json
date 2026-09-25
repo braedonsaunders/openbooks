@@ -773,6 +773,7 @@
     "depth": {
       "applies": "{count} candidaturas",
       "blinded": "Os demais abrem após o seu envio.",
+      "boardLabel": "Portal",
       "bookedSlots": "{count} agendados",
       "close": "Fechar",
       "columns": {
@@ -796,6 +797,7 @@
       "empty": "Nada aqui ainda.",
       "failed": "Não foi possível salvar.",
       "kit": "Roteiro",
+      "matchAction": "Comparar",
       "matchToOpening": "Comparar com a vaga",
       "members": "{count} membros",
       "missing": "pendente",
@@ -809,6 +811,8 @@
       "publish": "Publicar",
       "questions": "Perguntas",
       "remove": "Remover",
+      "requisitionIdLabel": "ID da vaga",
+      "requisitionLabel": "Vaga",
       "retentionDate": "Retenção até",
       "scorecards": "{submitted}/{total} vereditos",
       "sendLink": "Enviar link de assinatura",
@@ -830,6 +834,8 @@
       "starts": "Início",
       "ends": "Fim",
       "timezone": "Fuso horário",
+      "feedBoard": "Feed",
+      "internalBoard": "Interno",
       "invalidTime": "Informe um horário local válido no fuso horário da organização. Horários inexistentes ou repetidos pela mudança do relógio não podem ser agendados.",
       "bookingLink": "Link de agendamento",
       "email": "E-mail",
