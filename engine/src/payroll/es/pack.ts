@@ -164,6 +164,10 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         // hours — fuerza mayor vs resto decide 2 % vs 4,70 % trabajadora.
         { code: "SS-HEX", name: "Horas extraordinarias (employee)", systemKey: "ss_hex_resto", kind: "deduction", sequence: 124, assessedOn: "earnings", remittance: "external" },
         { code: "SS-HEX-FM", name: "Horas extraordinarias fuerza mayor (employee)", systemKey: "ss_hex_fm", kind: "deduction", sequence: 125, assessedOn: "earnings", remittance: "external" },
+        // Art. 17.1: solidaridad above the tope máximo, per-tranche split
+        // (first tranche 0,19 % trabajadora). Distinct systemKey — the cuota
+        // prices off retribución, never the CC base alone.
+        { code: "SS-SOL", name: "Solidaridad (employee)", systemKey: "ss_solidaridad", kind: "deduction", sequence: 126, assessedOn: "earnings", remittance: "external" },
         // Art. 4.a: 23,60 % empresa. Distinct systemKey from the employee
         // share — the engine pushes ss_cc_er, never employer-side ss_cc.
         { code: "SS-CC-ER", name: "Seguridad Social (employer)", systemKey: "ss_cc_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "external" },
@@ -188,6 +192,11 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         // the landed AT/EP and corta-duración lines above.
         { code: "SS-HEX-ER", name: "Horas extraordinarias (employer)", systemKey: "ss_hex_resto_er", kind: "employer_contribution", sequence: 217, assessedOn: "earnings", remittance: "external" },
         { code: "SS-HEX-FM-ER", name: "Horas extraordinarias fuerza mayor (employer)", systemKey: "ss_hex_fm_er", kind: "employer_contribution", sequence: 218, assessedOn: "earnings", remittance: "external" },
+        // Art. 17.1: solidaridad above the tope máximo, per-tranche split
+        // (first tranche 0,96 % empresa). Distinct systemKey from the
+        // employee share — the engine pushes ss_solidaridad_er, never
+        // employer-side ss_solidaridad.
+        { code: "SS-SOL-ER", name: "Solidaridad (employer)", systemKey: "ss_solidaridad_er", kind: "employer_contribution", sequence: 219, assessedOn: "earnings", remittance: "external" },
       ],
     },
   ],

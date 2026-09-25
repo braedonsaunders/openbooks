@@ -56,27 +56,28 @@ test("ES slots name IRPF withholding and Seguridad Social, every pushed key decl
   const systems = ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
     slot.components.map((component) => component.systemKey),
   );
-  // Exactly the seventeen keys compute-statutory.ts pushes — one slot for
+  // Exactly the nineteen keys compute-statutory.ts pushes — one slot for
   // all SS lines, so no new slot labels were needed. The engine pushes
   // ss_cc_er, never employer-side ss_cc, hence the distinct employer keys.
   // ss_atep_er and ss_corta_er push only when the establishment tariff is
   // on file and the short-contract charge applies; the four ss_hex_* keys
-  // push only when classified overtime pay is priced.
+  // push only when classified overtime pay is priced; the two ss_solidaridad
+  // keys push only above the tope máximo (the push path skips zero lines).
   assert.deepEqual(systems, [
     "irpf", "irnr",
-    "ss_cc", "ss_des", "ss_for", "ss_mei", "ss_hex_resto", "ss_hex_fm",
+    "ss_cc", "ss_des", "ss_for", "ss_mei", "ss_hex_resto", "ss_hex_fm", "ss_solidaridad",
     "ss_cc_er", "ss_des_er", "ss_fogasa_er", "ss_for_er", "ss_mei_er",
-    "ss_atep_er", "ss_corta_er", "ss_hex_resto_er", "ss_hex_fm_er",
+    "ss_atep_er", "ss_corta_er", "ss_hex_resto_er", "ss_hex_fm_er", "ss_solidaridad_er",
   ]);
   const kinds = ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
     slot.components.map((component) => component.kind),
   );
   assert.deepEqual(kinds, [
-    "deduction", "deduction",
+    "deduction", "deduction", "deduction",
     "deduction", "deduction", "deduction", "deduction", "deduction", "deduction",
-    "employer_contribution", "employer_contribution", "employer_contribution",
-    "employer_contribution", "employer_contribution", "employer_contribution",
-    "employer_contribution", "employer_contribution", "employer_contribution",
+    "employer_contribution", "employer_contribution", "employer_contribution", "employer_contribution",
+    "employer_contribution", "employer_contribution", "employer_contribution", "employer_contribution",
+    "employer_contribution", "employer_contribution",
   ]);
   // IRPF moves with pre-tax deductions; every SS cuota is rate × base.
   const assessed = new Map(

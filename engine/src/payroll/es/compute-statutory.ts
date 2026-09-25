@@ -509,6 +509,10 @@ export async function computeEsStatutory(
   pushStatutory("ss_des", "deduction", "Desempleo (employee)", ss.desempleoTrabajador, 121);
   pushStatutory("ss_for", "deduction", "Formación profesional (employee)", ss.formacionTrabajador, 122);
   pushStatutory("ss_mei", "deduction", "MEI (employee)", ss.meiTrabajador, 123);
+  // Art. 17.1 solidaridad above the tope máximo, per-tranche split priced
+  // off retribución. Zero below the tope, so the push path skips it there
+  // and below-tope goldens are untouched.
+  pushStatutory("ss_solidaridad", "deduction", "Solidaridad (employee)", ss.solidaridadTrabajador, 126);
   pushStatutory("ss_cc_er", "employer_contribution", "Seguridad Social (employer)", ss.ccEmpresa, 210);
   pushStatutory("ss_des_er", "employer_contribution", "Desempleo (employer)", ss.desempleoEmpresa, 211);
   pushStatutory("ss_fogasa_er", "employer_contribution", "FOGASA (employer)", ss.fogasaEmpresa, 212);
@@ -520,6 +524,10 @@ export async function computeEsStatutory(
   if (ss.cortaDuracionEmpresa != null) {
     pushStatutory("ss_corta_er", "employer_contribution", "Cotización adicional contratos corta duración (employer)", ss.cortaDuracionEmpresa, 216);
   }
+  // Art. 17.1 solidaridad above the tope máximo (first tranche 0,96 %
+  // empresa). Distinct systemKey from the employee share — the engine pushes
+  // ss_solidaridad_er, never employer-side ss_solidaridad.
+  pushStatutory("ss_solidaridad_er", "employer_contribution", "Solidaridad (employer)", ss.solidaridadEmpresa, 219);
   // Art. 5 additional contributions exist only when classified overtime pay
   // exists: pushed when nonzero, never as zero lines on ordinary runs (so
   // the no-overtime line set the adapter goldens enumerate stays stable).
