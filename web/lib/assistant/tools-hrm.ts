@@ -2067,6 +2067,7 @@ const payrollAnomalies: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["payroll.manage", "time.approve", "hrm.employment.read"] },
   feature: "hrmPayrollAnomalies",
+  featureAnyOf: ["hrmPayrollAnomalies", "hrmTimeAnomalies"],
   tier: "module",
   inputSchema: z.object({
     action: z.enum(anomalyActions).describe("scan a period, list flags, transition one flag, or recompute baselines"),
@@ -2083,8 +2084,6 @@ const payrollAnomalies: AssistantToolDef = {
     windowPeriods: z.number().int().min(2).max(24).optional().describe("Baseline recompute window (default 6)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmPayrollAnomalies");
-    if (gated) return gated;
     const a = raw as {
       action: (typeof anomalyActions)[number];
       periodFrom?: string;
@@ -2099,6 +2098,13 @@ const payrollAnomalies: AssistantToolDef = {
       reason?: string;
       windowPeriods?: number;
     };
+    const featureKey = a.action === "scan"
+      ? a.timeOnly === true ? "hrmTimeAnomalies" : "hrmPayrollAnomalies"
+      : a.action === "compute_baselines" ? "hrmPayrollAnomalies" : null;
+    if (featureKey) {
+      const gated = await hr21FeatureRefused(authz.user.orgId, featureKey);
+      if (gated) return gated;
+    }
     try {
       const ai = await import("@openbooks/engine/src/hrm/ai/anomalies.ts");
       if (a.action === "scan") {

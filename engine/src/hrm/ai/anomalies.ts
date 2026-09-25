@@ -167,19 +167,23 @@ interface PendingFlag {
   explanation: string;
 }
 
-async function assertScanScope(exec: SqlExecutor, orgId: string, actorId: string): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "payroll.manage"))) {
-    throw new AiRailsError(
-      "ai_forbidden",
-      "running payroll checks needs the payroll manager — ask a payroll administrator to run the scan",
-    );
+async function assertScanScope(exec: SqlExecutor, orgId: string, actorId: string, timeOnly: boolean): Promise<void> {
+  if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) {
+    if ((await actorAllowedSubsidiaryIds(exec, orgId, actorId)) !== null) {
+      throw new AiRailsError(
+        "ai_forbidden",
+        "running organization-wide payroll checks needs a payroll manager with unrestricted subsidiary access — ask an unrestricted payroll administrator to run the scan",
+      );
+    }
+    return;
   }
-  if ((await actorAllowedSubsidiaryIds(exec, orgId, actorId)) !== null) {
-    throw new AiRailsError(
-      "ai_forbidden",
-      "running organization-wide payroll checks needs a payroll manager with unrestricted subsidiary access — ask an unrestricted payroll administrator to run the scan",
-    );
-  }
+  if (timeOnly && await actorHasPermission(exec, orgId, actorId, "time.approve")) return;
+  throw new AiRailsError(
+    "ai_forbidden",
+    timeOnly
+      ? "running timesheet checks needs a time approver — ask a time approver or payroll administrator to run the scan"
+      : "running payroll checks needs the payroll manager — ask a payroll administrator to run the scan",
+  );
 }
 
 async function assertAnomalyFeature(exec: SqlExecutor, orgId: string, timeOnly: boolean): Promise<void> {
@@ -718,7 +722,7 @@ export async function scanAnomalies(
     throw new AiRailsError("ai_invalid_input", "periodFrom/periodTo must be YYYY-MM-DD with periodFrom <= periodTo");
   }
   const timeOnly = input.options?.timeOnly === true;
-  await assertScanScope(exec, orgId, actorId);
+  await assertScanScope(exec, orgId, actorId, timeOnly);
   await assertAnomalyFeature(exec, orgId, timeOnly);
   const settings = await loadAiRailsSettings(exec, orgId);
 
