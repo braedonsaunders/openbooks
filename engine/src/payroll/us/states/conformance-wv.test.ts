@@ -100,6 +100,15 @@ test("WV with no IT-104 is two-earner, zero exemptions", () => {
   assert.equal(result.factors.WV_SCHEDULE, "two_earner");
   assert.equal(result.factors.WV_EXEMPTION, money("0"));
   assert.equal(result.tax, money("25"));
+  // §11-21-10 good-faith exclusion: $9,000 AGI/earned income under the
+  // $10,000 unmarried limit excludes the full $173.08 weekly wage to zero.
+  assert.equal(WV_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "173.08", basis: "resident",
+    certificate: cert({
+      low_income_exclusion_claim: "true", low_income_return_status: "unmarried_or_joint",
+      expected_annual_federal_agi: "9000.00", expected_annual_earned_income: "9000.00",
+    }),
+  }).tax, money("0"));
 });
 
 test("WV extra withholding is added AFTER dollar rounding", () => {

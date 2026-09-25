@@ -29,7 +29,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";
@@ -364,9 +364,39 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     : "two_earner";
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
   const grossWages = U(input.wages) + U(input.supplemental ?? "0");
-  const wages = input.basis === "nonresident"
+  let wages = input.basis === "nonresident"
     ? U(requireUsSourceWages(input.wageAllocations, "WV", null))
     : grossWages;
+  // §11-21-10 low-income earned-income exclusion, claimed in good faith on
+  // the certificate: the capped annual exclusion spreads over the declared
+  // payroll periods before the percentage method. §11-21-71(a) directs
+  // withholding methods to give it due regard when asserted.
+  const lowIncomeFactors: Record<string, string> = {};
+  if (certificateFlag(input.certificate, "low_income_exclusion_claim")) {
+    const filingStatus = certificateChoice(input.certificate, "low_income_return_status");
+    const expectedAgi = certificateAmount(input.certificate, "expected_annual_federal_agi");
+    const expectedEarnedIncome = certificateAmount(input.certificate, "expected_annual_earned_income");
+    if (filingStatus == null || expectedAgi == null || expectedEarnedIncome == null) {
+      throw new PayrollError(
+        "West Virginia low-income exclusion claim needs the expected return status, annual federal AGI, and annual earned income; complete all three verified facts before calculating; refused by name",
+      );
+    }
+    const separateReturn = filingStatus === "separate";
+    const eligibilityLimit = U(separateReturn ? "5000" : "10000");
+    const agi = U(expectedAgi);
+    const earnedIncome = U(expectedEarnedIncome);
+    if (agi < 0n || earnedIncome < 0n || agi > eligibilityLimit) {
+      throw new PayrollError(
+        `West Virginia low-income exclusion claim requires nonnegative annual facts and federal AGI at or below ${D(eligibilityLimit)} for the declared return status; correct the good-faith estimate or withdraw the claim; refused by name`,
+      );
+    }
+    const annualExclusionLimit = U(separateReturn ? "5000" : "10000");
+    const annualExclusion = earnedIncome < annualExclusionLimit ? earnedIncome : annualExclusionLimit;
+    const periodExclusion = divIntCents(annualExclusion, input.periodsPerYear);
+    wages = max0(wages - periodExclusion);
+    lowIncomeFactors.WV_LOW_INCOME_ANNUAL_EXCLUSION = D(annualExclusion);
+    lowIncomeFactors.WV_LOW_INCOME_PERIOD_EXCLUSION = D(periodExclusion);
+  }
 
   const { tax, factors } = wvPercentageMethod({
     payDate: input.payDate,
@@ -376,6 +406,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     exemptions,
   });
   if (input.basis === "nonresident") factors.WV_SOURCE_WAGES = D(wages);
+  Object.assign(factors, lowIncomeFactors);
 
   // IT-104 line 6 — additional withholding, added AFTER the rounded tax.
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
@@ -412,6 +443,8 @@ export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WV_SOURCE_WAGES: "West Virginia source wages",
   WV_BAND_OVER: "West Virginia band excess",
   WV_TAX: "West Virginia tax",
+  WV_LOW_INCOME_ANNUAL_EXCLUSION: "West Virginia low-income earned-income exclusion (annual)",
+  WV_LOW_INCOME_PERIOD_EXCLUSION: "West Virginia low-income earned-income exclusion (this period)",
   WV_RECIPROCAL_EXEMPTION_NOT_APPLIED: "West Virginia reciprocal exemption not applied",
 };
 
@@ -477,6 +510,34 @@ export const WV_CERTIFICATE: PayrollCertificate = {
       label: "Line 6 — Additional withholding per pay period",
       kind: "amount", decimals: 4, min: "0",
       help: "Added AFTER the percentage method is rounded to the dollar.",
+    },
+    {
+      key: "low_income_exclusion_claim",
+      label: "Claim the low-income earned-income exclusion",
+      kind: "flag",
+      help: "Claim in good faith only if your expected West Virginia return AGI meets the limit for your filing status; provide all three estimates below.",
+    },
+    {
+      key: "low_income_return_status",
+      label: "Expected West Virginia return status for the low-income exclusion",
+      kind: "choice",
+      choices: [
+        { value: "unmarried_or_joint", label: "Unmarried or married filing jointly" },
+        { value: "separate", label: "Married filing separately" },
+      ],
+      help: "The exclusion's AGI limit and maximum are $10,000 for an unmarried taxpayer or joint return, and $5,000 per separate return.",
+    },
+    {
+      key: "expected_annual_federal_agi",
+      label: "Expected federal adjusted gross income for this tax year",
+      kind: "amount", decimals: 2, min: "0",
+      help: "Enter a good-faith estimate of total federal AGI for the full tax year, including income beyond this West Virginia job.",
+    },
+    {
+      key: "expected_annual_earned_income",
+      label: "Expected annual earned income included in federal AGI",
+      kind: "amount", decimals: 2, min: "0",
+      help: "Enter a good-faith estimate of wages, compensation, and net self-employment income included in federal AGI; the statutory exclusion is limited to this amount and the filing-status cap.",
     },
     {
       key: "exempt",
