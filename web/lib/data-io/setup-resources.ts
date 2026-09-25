@@ -8,7 +8,9 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
-import { buildRow, coerceBoolean, idColumn } from '../setup/coerce'
+import { buildRow, coerceBoolean, idColumn, type Coerced } from '../setup/coerce'
+import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
+import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
 import { setupReadProjection, setupReadSource } from '../setup/read-shape'
@@ -224,6 +226,51 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
 }
 
 /**
+ * Pack-declaration fence for setup imports, mirroring the interactive setup
+ * route (web/lib/setup/write.ts). The DB constraints on pay_components and
+ * payroll_filing_accounts are shape-only by design, so the pack registry is
+ * asked at the API boundary for creates and edits alike — against the MERGED
+ * row (submitted columns over the stored row on update), never the raw
+ * submission alone. Runs inside writeSetup, so import preview (which
+ * exercises writeSetup under a savepoint) and commit share the refusal.
+ */
+async function setupPackProblem(
+  entity: SetupEntity,
+  cols: readonly Coerced[],
+  existingId: string | null,
+  orgId: string,
+): Promise<string | null> {
+  if (entity.key !== 'pay-components' && entity.key !== 'payroll-filing-accounts') return null
+  const col = (name: string): unknown => cols.find((c) => c.column === name)?.value
+  let current: Record<string, unknown> | null = null
+  if (existingId) {
+    const found = (await db.execute(entity.key === 'pay-components'
+      ? sql`select country, tax_treatment from pay_components where id = ${existingId} and org_id = ${orgId}`
+      : sql`select country, program_type, state_code from payroll_filing_accounts where id = ${existingId} and org_id = ${orgId}`)) as {
+      rows: Record<string, unknown>[]
+    }
+    current = found.rows[0] ?? null
+    if (!current) return 'row no longer exists'
+  }
+  if (entity.key === 'pay-components') {
+    return payComponentTreatmentProblem({
+      country: (col('country') as string | null | undefined)
+        ?? (current?.country as string | null | undefined)
+        ?? null,
+      taxTreatment: (col('tax_treatment') as string | null | undefined)
+        ?? (current?.tax_treatment as string | null | undefined)
+        ?? null,
+    })
+  }
+  const rawState = col('state_code') !== undefined ? col('state_code') : current?.state_code
+  return filingAccountProblem({
+    country: String(col('country') ?? current?.country ?? ''),
+    programType: String(col('program_type') ?? current?.program_type ?? ''),
+    stateCode: rawState == null || rawState === '' ? null : String(rawState),
+  })
+}
+
+/**
  * Bulk insert/upsert into a Setup-registry table. Mirrors the interactive
  * route (api/admin/setup/[entity]): coerce via the shared registry validator,
  * resolve reference columns from natural keys, match update-vs-insert by the
@@ -347,6 +394,12 @@ async function writeSetup(
           outcome.errors.push({ row: rowNo, message: built.error })
           continue
         }
+        const updatePackProblem = await setupPackProblem(entity, built.cols, existingId, ctx.orgId)
+        if (updatePackProblem) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: updatePackProblem })
+          continue
+        }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
         const storageCols = entity.key === 'pay-components'
           ? built.cols.filter((column) => column.column !== 'supplemental_wage_category')
@@ -412,6 +465,12 @@ async function writeSetup(
         if ('error' in built) {
           outcome.failed++
           outcome.errors.push({ row: rowNo, message: built.error })
+          continue
+        }
+        const insertPackProblem = await setupPackProblem(entity, built.cols, null, ctx.orgId)
+        if (insertPackProblem) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: insertPackProblem })
           continue
         }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
