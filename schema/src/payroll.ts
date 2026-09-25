@@ -518,6 +518,7 @@ export const employeePayrollProfiles = pgTable(
     jpKaigoDainigou: text("jp_kaigo_dainigou"),
     brDependentes: integer("br_dependentes"),
     brPensaoMensal: money("br_pensao_mensal"),
+    brSalarioFamiliaFilhos: integer("br_salario_familia_filhos"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -542,9 +543,10 @@ export const employeePayrollProfiles = pgTable(
       sql`${t.vacationPercent} is null or ${t.vacationPercent} >= 0`),
     check("employee_payroll_profiles_allowances",
       sql`${t.w4Allowances} is null or ${t.w4Allowances} >= 0`),
-    // 0191 pack-fact bounds, mirroring the migration CHECKs exactly: the ES
-    // año/grupo bands, the ES situación and JP kaigo closed sets, and the
-    // non-negative BR dependent count. PL rok urodzenia and JP hyōjun carry
+    // 0191 pack-fact bounds (plus the 0389 salário-família count), mirroring
+    // the migration CHECKs exactly: the ES año/grupo bands, the ES situación
+    // and JP kaigo closed sets, and the non-negative BR dependent and
+    // qualifying-children counts. PL rok urodzenia and JP hyōjun carry
     // no declared bounds, so they carry no CHECK either.
     check("employee_payroll_profiles_es_ano",
       sql`${t.esAnoNacimiento} is null or (${t.esAnoNacimiento} >= 1906 and ${t.esAnoNacimiento} <= 2026)`),
@@ -556,6 +558,8 @@ export const employeePayrollProfiles = pgTable(
       sql`${t.jpKaigoDainigou} is null or ${t.jpKaigoDainigou} in ('true', 'false')`),
     check("employee_payroll_profiles_br_dependentes",
       sql`${t.brDependentes} is null or ${t.brDependentes} >= 0`),
+    check("employee_payroll_profiles_br_salario_familia",
+      sql`${t.brSalarioFamiliaFilhos} is null or ${t.brSalarioFamiliaFilhos} >= 0`),
   ],
 );
 

@@ -256,7 +256,7 @@ test("Brazil's prose is not a producer: one explicit non-form declaration, typed
   assert.deepEqual(producers, [
     "br_dependentes:profile_column",
     "br_pensao_mensal:profile_column",
-    "br_salario_familia_filhos:none",
+    "br_salario_familia_filhos:profile_column",
     "br_regime:none",
   ]);
 });

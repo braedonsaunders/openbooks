@@ -165,6 +165,7 @@ export type ProfileRow = {
   jp_kaigo_dainigou: string | null
   br_dependentes: number | null
   br_pensao_mensal: string | null
+  br_salario_familia_filhos: number | null
   vacation_percent: string | null
   vacation_method: 'accrue' | 'pay_each_period'
   filing_account_id: string | null

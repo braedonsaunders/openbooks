@@ -25,15 +25,16 @@ const BR_CADASTRO: PayrollCertificate = {
   // Not a form and not filed: the employer-held cadastre facts the IRRF
   // engine prices, named for where the operator copies them from.
   form: "Cadastro (eSocial)",
-  label: "Dependentes and pensão alimentícia (eSocial cadastro)",
+  label: "Dependentes, pensão alimentícia and salário-família children (eSocial cadastro)",
   scope: { level: "country" },
   purpose: "withholding",
   citation:
     "eSocial cadastro (employer-held; evento de admissão/cadastro); Lei 9.250/1995 art. 4º/10 "
     + "(R$ 189,59 dependent deduction, 25% simplified discount); court order for pensão alimentícia",
   summary:
-    "The dependent count the R$ 189,59 IRRF deduction needs, and any court-ordered monthly "
-    + "alimony reducing the IRRF base. No employee-filed form exists for either.",
+    "The dependent count the R$ 189,59 IRRF deduction needs, any court-ordered monthly "
+    + "alimony reducing the IRRF base, and the qualifying-children count the R$ 67,54 "
+    + "salário-família quota needs. No employee-filed form exists for any of them.",
   storage: "profile_columns",
   fields: [
     {
@@ -58,6 +59,15 @@ const BR_CADASTRO: PayrollCertificate = {
       storage: { kind: "column", column: "br_pensao_mensal" },
       help: "Court-ordered monthly alimony reducing the IRRF base. Absent means none was ordered — "
         + "accepted, not refused.",
+    },
+    {
+      key: "salario_familia_filhos",
+      label: "Filhos qualificados salário-família (<14 ou inválidos)",
+      kind: "count",
+      min: "0",
+      storage: { kind: "column", column: "br_salario_familia_filhos" },
+      help: "Qualifying children for the R$ 67,54 salário-família quota, copied off the eSocial cadastro. "
+        + "Absent means none declared — accepted, not refused.",
     },
   ],
 };

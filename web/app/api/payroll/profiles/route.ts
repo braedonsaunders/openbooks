@@ -111,7 +111,7 @@ const PROFILE_AUDIT_COLUMNS = sql`
   filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
   w4_pre_2020, w4_allowances, fica_exempt, futa_exempt, sui_exempt,
   pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
-  jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal,
+  jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal, br_salario_familia_filhos,
   (sin_encrypted is not null) as sin_present, sin_last3,
   filing_account_id, stub_delivery, payment_method, paid_on_commission,
   created_at, created_by, updated_at, updated_by`
@@ -413,7 +413,7 @@ export async function GET(req: Request) {
                prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt, prof.sui_exempt,
                prof.pl_rok_urodzenia, prof.es_ano_nacimiento, prof.es_grupo_cotizacion,
                prof.es_situacion_laboral, prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
-               prof.br_dependentes, prof.br_pensao_mensal,
+               prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
                prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3,
                prof.filing_account_id, fa.account_number as filing_account_number,
                prof.stub_delivery, prof.payment_method, prof.paid_on_commission
@@ -495,7 +495,7 @@ export async function GET(req: Request) {
            prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt, prof.sui_exempt,
            prof.pl_rok_urodzenia, prof.es_ano_nacimiento, prof.es_grupo_cotizacion,
            prof.es_situacion_laboral, prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
-           prof.br_dependentes, prof.br_pensao_mensal,
+           prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
            prof.vacation_percent, prof.vacation_method, prof.is_active,
            prof.filing_account_id, fa.account_number as filing_account_number,
            prof.stub_delivery, prof.payment_method, prof.paid_on_commission
@@ -660,6 +660,7 @@ export async function POST(req: Request) {
     'es_grupo_cotizacion',
     'jp_hyojun_hoshu',
     'br_dependentes',
+    'br_salario_familia_filhos',
   ]) {
     const parsed = packFactCount(country, column, (body as Record<string, unknown>)[packFactBodyKey(column)])
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 422 })
@@ -938,7 +939,7 @@ export async function POST(req: Request) {
          w4_pre_2020, w4_allowances, fica_exempt, futa_exempt, sui_exempt,
          cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
          pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
-         jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal,
+         jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal, br_salario_familia_filhos,
          sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
          paid_on_commission,
          created_by, updated_by)
@@ -957,6 +958,7 @@ export async function POST(req: Request) {
               ${factValues['es_grupo_cotizacion'] ?? null}, ${factValues['es_situacion_laboral'] ?? null},
               ${factValues['jp_hyojun_hoshu'] ?? null}, ${factValues['jp_kaigo_dainigou'] ?? null},
               ${factValues['br_dependentes'] ?? null}, ${factValues['br_pensao_mensal'] ?? null},
+              ${factValues['br_salario_familia_filhos'] ?? null},
               ${sinEncrypted ?? null}, ${sinLast3 ?? null}, ${filingAccountId}, ${stubDelivery},
               ${paymentMethod},
               ${paidOnCommission},
@@ -993,6 +995,7 @@ export async function POST(req: Request) {
                     jp_kaigo_dainigou = excluded.jp_kaigo_dainigou,
                     br_dependentes = excluded.br_dependentes,
                     br_pensao_mensal = excluded.br_pensao_mensal,
+                    br_salario_familia_filhos = excluded.br_salario_familia_filhos,
                     filing_account_id = excluded.filing_account_id,
                     stub_delivery = excluded.stub_delivery,
                     payment_method = excluded.payment_method,

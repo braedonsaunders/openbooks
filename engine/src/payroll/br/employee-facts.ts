@@ -52,14 +52,7 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
       refusalReason:
         "The R$ 67,54 salário-família quota is per qualifying child — it is never defaulted.",
       required: false,
-      producer: {
-        kind: "none",
-        notes:
-          "No channel exists yet: the count needs a profile column (migration) plus a br_cadastro "
-          + "certificate field, neither of which this change ships. Until then absent is accepted as "
-          + "no qualifying children — the br_pensao_mensal precedent — so a qualifying case with no "
-          + "declared count is unpaid rather than refused without remedy.",
-      },
+      producer: { kind: "profile_column", column: "br_salario_familia_filhos" },
     },
     {
       key: "br_regime",
