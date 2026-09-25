@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
 import { requireConstructionScope } from "../authorization.ts";
 import { classificationAsOf } from "./classifications.ts";
+import { resolveEffectiveEmployment } from "../effective-employment.ts";
 import { recordFinding } from "./findings.ts";
 import { evaluateRatio } from "./pure.ts";
 import { lockScheduleScopeForWrite } from "./rates.ts";
@@ -174,17 +175,27 @@ async function checkDayInScope(
     `)
   ).rows;
   // Approved hours per employment for the day, resolved to as-of classifications.
-  const hours = (
-    await exec.execute<{ employmentId: string; hours: string }>(sql`
-      select w.id::text as "employmentId", sum(te.hours)::text as hours
+  const rawHours = (
+    await exec.execute<{ partyId: string; hours: string }>(sql`
+      select te.employee_party_id::text as "partyId", sum(te.hours)::text as hours
         from time_entries te
-        join worker_employments w
-          on w.org_id = te.org_id and w.worker_party_id = te.employee_party_id
        where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
          and te.worked_on = ${workedOn}::date and te.status = 'approved'
-       group by w.id
+       group by te.employee_party_id
     `)
   ).rows;
+  const hours: Array<{ employmentId: string; hours: string }> = [];
+  for (const row of rawHours) {
+    const employment = await resolveEffectiveEmployment(exec, {
+      orgId, partyId: row.partyId, workedOn, projectId,
+    });
+    if (!employment) {
+      throw new HrmConstructionError(
+        `Worker ${row.partyId} has no employment effective ${workedOn} for project ${projectId} — correct the employment dates and legal-entity assignment before measuring the apprentice ratio.`,
+      );
+    }
+    hours.push({ employmentId: employment.id, hours: row.hours });
+  }
   const byClass = new Map<string, { journey: string; apprentice: string }>();
   const journeyOf = new Map<string, string>();
   // Apprentice hours per employment per apprentice class: a breaching day

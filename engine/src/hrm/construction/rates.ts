@@ -5,6 +5,7 @@ import {
   requireUnrestrictedHrmScope,
 } from "../authorization.ts";
 import { classificationAsOf } from "./classifications.ts";
+import { primaryDepartmentForEmploymentAsOf } from "../effective-employment.ts";
 import { recordFinding } from "./findings.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { applyReciprocity, scopeScore, type AppliesTo, type Reciprocity } from "./pure.ts";
@@ -574,20 +575,7 @@ export async function resolveWage(
         from worker_employments where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
     `)
   ).rows[0]?.subsidiaryId ?? null;
-  const effectiveDepartments = (await exec.execute<{ departmentId: string | null }>(sql`
-    select department_id::text as "departmentId"
-      from employment_assignment_versions
-     where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
-       and is_primary and recorded_until is null
-       and effective_from <= ${workedOn}::date
-       and (effective_to is null or effective_to > ${workedOn}::date)
-     order by version_no desc
-     limit 2
-  `)).rows;
-  if (effectiveDepartments.length > 1) {
-    throw new HrmConstructionError(`Employment ${employmentId} has more than one primary department effective ${workedOn} — resolve the overlapping assignment versions before pricing.`);
-  }
-  const employmentDepartment = effectiveDepartments[0]?.departmentId ?? null;
+  const employmentDepartment = await primaryDepartmentForEmploymentAsOf(exec, { orgId, employmentId, workedOn });
   const assignment = await classificationAsOf(exec, orgId, employmentId, workedOn);
   if (!assignment) {
     await recordFinding(exec, {
