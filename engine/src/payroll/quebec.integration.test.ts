@@ -20,7 +20,7 @@ import { seedPayrollComponents } from "./run-setup.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 describe("quebec", () => {
 
@@ -115,6 +115,10 @@ describe("quebec", () => {
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
           values (${employeeId}, ${org.orgId}, 'person', 'Jean Tremblay', true, '{}'::jsonb)`);
+        // pay_stubs.employment_id is NOT NULL and the run refuses stubs
+        // without an HRM employment: every stub employee carries one, and
+        // the profile points at it (the run reads emp.employment_id).
+        const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
         await db.execute(sql`
           insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                         is_active, created_by, updated_by)
@@ -126,10 +130,10 @@ describe("quebec", () => {
           values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                   ${actorId}, ${actorId})`);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                                 pay_basis, federal_claim_code, vacation_percent,
-                                                 vacation_method, is_active, created_by, updated_by)
-          values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'QC', 'hourly', 1,
+          insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                                 country, province, pay_basis, federal_claim_code,
+                                                 vacation_percent, vacation_method, is_active, created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'QC', 'hourly', 1,
                   '0', 'accrue', true, ${actorId}, ${actorId})`);
 
         for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
@@ -387,6 +391,14 @@ describe("quebec-hsf", () => {
                                                rate_values, created_by, updated_by)
           values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
                   ${actorId}, ${actorId})`);
+        // The ON leg needs its own explicit EHT declaration: ca_eht refuses
+        // when unconfigured, and this test pins HSF gating, not EHT. Values
+        // are an explicit zero, asserted nowhere here.
+        await db.execute(sql`
+          insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                               rate_values, created_by, updated_by)
+          values (${org.orgId}, 'CA', 'ca_eht', 'ON', 2026, '{"rate": "0", "annualExemption": "0"}',
+                  ${actorId}, ${actorId})`);
 
         const scheduleId = randomUUID();
         await db.execute(sql`
@@ -399,15 +411,16 @@ describe("quebec-hsf", () => {
           await db.execute(sql`
             insert into parties (id, org_id, kind, display_name, is_active, custom)
             values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+          const hsfEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
           await db.execute(sql`
             insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                           is_active, created_by, updated_by)
             values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
           await db.execute(sql`
-            insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                                   pay_basis, federal_claim_code, vacation_percent,
-                                                   vacation_method, is_active, created_by, updated_by)
-            values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', ${province}, 'hourly', 1,
+            insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                                   country, province, pay_basis, federal_claim_code,
+                                                   vacation_percent, vacation_method, is_active, created_by, updated_by)
+            values (${org.orgId}, ${employeeId}, ${hsfEmploymentId}, ${scheduleId}, 'CA', ${province}, 'hourly', 1,
                     '0', 'accrue', true, ${actorId}, ${actorId})`);
           for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
             await db.execute(sql`
@@ -578,6 +591,7 @@ describe("qpip-employer-cap", () => {
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
           values (${employeeId}, ${org.orgId}, 'person', 'Jean Tremblay', true, '{}'::jsonb)`);
+        const qpipEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
         await db.execute(sql`
           insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                         is_active, created_by, updated_by)
@@ -589,10 +603,10 @@ describe("qpip-employer-cap", () => {
           values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                   ${actorId}, ${actorId})`);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                                 pay_basis, federal_claim_code, vacation_percent,
-                                                 vacation_method, is_active, created_by, updated_by)
-          values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'QC', 'hourly', 1,
+          insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                                 country, province, pay_basis, federal_claim_code,
+                                                 vacation_percent, vacation_method, is_active, created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${qpipEmploymentId}, ${scheduleId}, 'CA', 'QC', 'hourly', 1,
                   '0', 'accrue', true, ${actorId}, ${actorId})`);
 
         const employerQpip: string[] = [];
@@ -688,6 +702,7 @@ describe("rl1-openings", () => {
     const qcStubEmployee = randomUUID();
     const qcOpeningOnlyEmployee = randomUUID();
     const onOpeningOnlyEmployee = randomUUID();
+    let qcStubEmploymentId = "";
     for (const [id, name, province] of [
       [qcStubEmployee, "Marie Tremblay", "QC"],
       [qcOpeningOnlyEmployee, "Jean Lapointe", "QC"],
@@ -696,12 +711,14 @@ describe("rl1-openings", () => {
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
         values (${id}, ${org.orgId}, 'person', ${name}, true, ${org.subsidiaryId}, '{}'::jsonb)`);
+      const employmentId = await seedWorkerEmployment(org.orgId, id, org.subsidiaryId);
+      if (id === qcStubEmployee) qcStubEmploymentId = employmentId;
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, province,
                                                pay_basis, country, federal_claim_code,
                                                provincial_claim_code, vacation_percent, vacation_method,
                                                is_active, created_by, updated_by)
-        values (${org.orgId}, ${id}, ${scheduleId}, ${province}, 'hourly', 'CA', 1, 1, '4', 'accrue',
+        values (${org.orgId}, ${id}, ${employmentId}, ${scheduleId}, ${province}, 'hourly', 'CA', 1, 1, '4', 'accrue',
                 true, ${actorId}, ${actorId})`);
     }
 
@@ -722,10 +739,10 @@ describe("rl1-openings", () => {
     // 30,000 EI-insurable but only 22,000 QPIP-insurable (benefits the QPIP
     // program excludes). Box I must follow the program factor, never EI.
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                              periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
                              pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-      values (${stubId}, ${org.orgId}, ${documentId}, ${qcStubEmployee}, 'QC', 26, '2026-07-21',
+      values (${stubId}, ${org.orgId}, ${documentId}, ${qcStubEmployee}, ${qcStubEmploymentId}, 'QC', 26, '2026-07-21',
               2026, 'CAD', '30000.0000', '24000.0000', '30000.0000', '30000.0000',
               ${JSON.stringify({ C: "1500.00", EI: "390.00", QPIP: "129.00", IE_QPIP: "22000.00" })}::jsonb,
               ${actorId}, ${actorId})`);
