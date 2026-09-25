@@ -371,6 +371,9 @@
       "noValue": "(sin valor)",
       "valuePlaceholder": "valor",
       "listPlaceholder": "valores separados por comas",
+      "moneyValue": "Importe {index}",
+      "addMoneyValue": "Añadir importe",
+      "removeMoneyValue": "Quitar importe {index}",
       "removeConditionAria": "Quitar condición"
     },
     "resultView": {
