@@ -132,7 +132,7 @@ test("2024/25 Scottish bands are their own six-band table", () => {
   // "£12,571 to £14,876 19%", "£14,877 to £26,561 20%", "£26,562 to £43,662
   // 21%", "£43,663 to £75,000 42%" — each top exactly £12,570 above the
   // taxable-space top (14,876 = 12,570 + 2,306; 43,662 = 12,570 + 31,092; 75,000 = 12,570 + 62,430).
-  const grossTops = ["14876", "26561", "43662", "75000"];
+  const grossTops = ["14876.0000", "26561.0000", "43662.0000", "75000.0000"];
   GB_2024_SCT_BANDS.slice(0, 4).forEach((band, index) => {
     assert.equal(add(band.upTo ?? "0", "12570"), grossTops[index], `SCT band ${index}`);
   });
