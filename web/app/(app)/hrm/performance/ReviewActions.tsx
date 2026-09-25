@@ -62,6 +62,7 @@ export function ReviewActions({
         return
       }
       router.push(`/hrm/performance?cycle=${cycleId}&review=${reviewId}`)
+      setBusy(false)
       router.refresh()
     } catch {
       setError(failed)

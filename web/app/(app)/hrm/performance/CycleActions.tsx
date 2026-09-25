@@ -34,6 +34,7 @@ export function CycleActions({ cycleId, calibration }: { cycleId: string; calibr
         setBusy(false)
         return
       }
+      setBusy(false)
       router.refresh()
     } catch {
       setError(calibration.failed)
