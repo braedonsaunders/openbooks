@@ -6,6 +6,7 @@ import { db, env } from "../platform/db.ts";
 import { getOnHand } from "./position.ts";
 import { receiveInventory, issueInventory, adjustInventory } from "./movements.ts";
 import { transferInventory } from "./transfers.ts";
+import { deactivateItem, postedCounts } from "./integration-seeds.ts";
 import { reverseInventoryMovement } from "./reversal.ts";
 import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
@@ -20,22 +21,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * deactivation racing a posting serializes to exactly one outcome.
  * Controlled unwinds (reversals) stay possible after deactivation.
  */
-
-async function deactivateItem(orgId: string, itemId: string): Promise<void> {
-  const r = await db.execute<{ id: string }>(sql`
-    update items set is_active = false, updated_at = now()
-     where org_id = ${orgId} and id = ${itemId}
-    returning id`);
-  assert.equal(r.rows.length, 1, "deactivation must match exactly one row");
-}
-
-async function postedCounts(orgId: string): Promise<{ movements: number; entries: number; layers: number }> {
-  return (await db.execute<{ movements: number; entries: number; layers: number }>(sql`
-    select (select count(*)::int from inventory_movements where org_id = ${orgId}) as movements,
-           (select count(*)::int from journal_entries where org_id = ${orgId}) as entries,
-           (select count(*)::int from cost_layers where org_id = ${orgId}) as layers
-  `)).rows[0]!;
-}
 
 async function receiveWhileActive(org: ScratchOrg, quantity = "10"): Promise<string> {
   const posted = await receiveInventory(org.orgId, null, {

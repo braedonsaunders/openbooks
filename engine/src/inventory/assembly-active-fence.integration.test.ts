@@ -6,6 +6,7 @@ import { db, env } from "../platform/db.ts";
 import { getOnHand } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
 import { buildAssembly } from "./assembly.ts";
+import { deactivateItem, postedCounts } from "./integration-seeds.ts";
 import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -28,22 +29,6 @@ async function receiveComponents(org: ScratchOrg): Promise<void> {
     offsetAccountId: org.accounts.clearing,
     date: org.date,
   });
-}
-
-async function deactivateItem(orgId: string, itemId: string): Promise<void> {
-  const r = await db.execute<{ id: string }>(sql`
-    update items set is_active = false, updated_at = now()
-     where org_id = ${orgId} and id = ${itemId}
-    returning id`);
-  assert.equal(r.rows.length, 1, "deactivation must match exactly one row");
-}
-
-async function postedCounts(orgId: string): Promise<{ movements: number; entries: number; layers: number }> {
-  return (await db.execute<{ movements: number; entries: number; layers: number }>(sql`
-    select (select count(*)::int from inventory_movements where org_id = ${orgId}) as movements,
-           (select count(*)::int from journal_entries where org_id = ${orgId}) as entries,
-           (select count(*)::int from cost_layers where org_id = ${orgId}) as layers
-  `)).rows[0]!;
 }
 
 test("building an inactive finished item is refused by name with nothing posted", { skip: !DB }, async () => {
