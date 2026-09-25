@@ -54,22 +54,54 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
             + "Leave unanswered only when unknown: payroll will refuse rather than treat it as permanent.",
         },
         {
-          key: "aumenti_rinnovo_ccnl",
-          label: "Aumenti retributivi da rinnovo CCNL 2026 (sostitutiva 5%)",
-          kind: "flag",
-          help: "State whether this period's pay includes 2026 contractual-renewal increases priced under "
-            + "the L. 199/2025 art. 1 c. 7 imposta sostitutiva (5%, private-sector, 2025 lavoro income ≤ 33.000; "
-            + "AdE Circ. 2/E/2026). The pack does not price the substitute regime: asserted pay refuses by "
-            + "name instead of folding into ordinary IRPEF.",
+          key: "importo_aumenti_rinnovo",
+          label: "Aumenti da rinnovo CCNL del periodo (sostitutiva 5%)",
+          kind: "amount",
+          decimals: 2,
+          min: "0",
+          help: "This period's contractual-renewal increases priced under the L. 199/2025 art. 1 c. 7 imposta "
+            + "sostitutiva (5%, private-sector, 2025 lavoro income ≤ 33.000; AdE Circ. 2/E/2026). Recurring "
+            + "minima: the amount repeats every period. Requires reddito_lavoro_2025; the engine carves the "
+            + "amount out of ordinary IRPEF and prices the 5% line. Leave 0 when none was paid.",
         },
         {
-          key: "indennita_notturno_festivi",
-          label: "Indennità notturne/festive/di riposo/turni 2026 (sostitutiva 15%)",
+          key: "importo_indennita_turni",
+          label: "Indennità notturne/festive/di riposo/turni del periodo (sostitutiva 15%)",
+          kind: "amount",
+          decimals: 2,
+          min: "0",
+          help: "This period's night/holiday/rest-day/shift allowances priced under the L. 199/2025 art. 1 "
+            + "c. 10–11 imposta sostitutiva (15%, cap 1.500/year, 2025 lavoro income ≤ 40.000). One-off per "
+            + "period: declare what was actually paid. Requires reddito_lavoro_2025; the engine prices the "
+            + "15% line within the annual cap. Leave 0 when none was paid.",
+        },
+        {
+          key: "importo_premi_risultato",
+          label: "Premi di risultato del periodo (sostitutiva 1%)",
+          kind: "amount",
+          decimals: 2,
+          min: "0",
+          help: "This period's performance bonuses priced under the L. 208/2015 art. 1 c. 182–189 imposta "
+            + "sostitutiva at the 1% rate for 2026–2027 (cap 5.000/year). Requires premi_risultato_ammissibili; "
+            + "the engine prices the 1% line within the annual cap. Leave 0 when none was paid.",
+        },
+        {
+          key: "reddito_lavoro_2025",
+          label: "Reddito di lavoro dipendente 2025 (soglie sostitutive)",
+          kind: "amount",
+          decimals: 2,
+          min: "0",
+          help: "The worker's 2025 lavoro income: the ceiling for the 2026 substitute regimes (≤ 33.000 for "
+            + "renewal increases, ≤ 40.000 for shift allowances). Required whenever a substitute amount is "
+            + "declared; the run refuses while it is absent.",
+        },
+        {
+          key: "premi_risultato_ammissibili",
+          label: "Premi di risultato ammissibili (criteri L. 208/2015)",
           kind: "flag",
-          help: "State whether this period's pay includes 2026 night/holiday/rest-day/shift allowances priced "
-            + "under the L. 199/2025 art. 1 c. 10–11 imposta sostitutiva (15%, cap 1.500/year; AdE FAQ Circ. "
-            + "3/E/2026). The pack does not price the substitute regime: asserted pay refuses by name instead "
-            + "of folding into ordinary IRPEF.",
+          help: "State whether the declared performance bonuses meet the L. 208/2015 incrementality and "
+            + "registered-contract criteria for the substitute regime. Required whenever premi are declared; "
+            + "the run refuses while eligibility is unknown.",
         },
         {
           key: "anzianita_post_1995",

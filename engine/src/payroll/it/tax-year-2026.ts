@@ -377,9 +377,10 @@ export const IT_2026_SURTAX_MODEL = "tenant-declared-rate" as const;
 /**
  * Named refusals: everything the 2026 engine does not compute, with the
  * reason. The engine quotes these names back. Carries the full 2025 list
- * (same gaps, same law) plus the four 2026-specific entries at the end:
- * the two 2026-only substitute-tax regimes, the tourism-sector integrativo,
- * and the 200k sterilizzazione recording.
+ * (same gaps, same law) plus 2026-specific entries at the end. The 5%
+ * renewal, 15% allowance, and 1% premi substitute taxes are PRICED (see
+ * compute-statutory.ts), not refused; only the tourism-sector integrativo
+ * remains listed below.
  */
 export const IT_REFUSED_2026: readonly string[] = [
   "art. 12 TUIR family detrazioni (needs dependent relationship, income, age/disability status and deduction allocation facts the pack does not carry)",
@@ -400,8 +401,6 @@ export const IT_REFUSED_2026: readonly string[] = [
   "10-rate recovery of indebiti over 60 euro (L. 207/2024 c. 7: year-end timing, not per-period arithmetic)",
   "pensionati (art. 49 c. 2 lett. a): TABELLA 7 detrazioni, not transcribed)",
   "TFR accrual, tredicesima/quattordicesima timing, CU/770 population, INAIL",
-  "L. 199/2025 art. 1 c. 7 imposta sostitutiva 5% on 2026 contractual-renewal increases (private-sector, 2025 lavoro income ≤ 33.000; AdE Circ. 2/E/2026): the engine carries no CCNL-increase input, so no line can be priced under it",
-  "L. 199/2025 art. 1 c. 10–11 imposta sostitutiva 15% on 2026 night/holiday/rest-day/shift allowances (cap 1.500/year; AdE FAQ Circ. 3/E/2026): the engine carries no allowance inputs, so no line can be priced under it",
   "L. 199/2025 art. 1 c. 18–21 trattamento integrativo speciale 15% for tourism/hospitality/food-service night work and festive-holiday overtime (prestazioni 1 Jan–30 Sep 2026): a sector- and date-gated credit the engine has no sector input to gate on, so no line can be priced under it",
 ];
 

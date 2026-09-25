@@ -186,11 +186,15 @@ test("fixed-term employment refuses when NASpI surcharge renewals and exceptions
   assert.throws(() => calculateIt2026({ ...BASE, annualGrossEmployment: "35000", annualPensionable: "35000", isFixedTerm: null }), /employment term.*unknown.*NASpI.*1\.40%.*0\.50/);
 });
 
-test("2026 substitute-regime pay refuses by name instead of folding into IRPEF", () => {
-  // L. 199/2025 c. 7 (5% renewal) and c. 10–11 (15% allowances) price outside
-  // ordinary IRPEF; asserted components refuse rather than over-withhold.
-  assert.throws(() => calculateIt2026({ ...BASE, hasRenewalIncreases: true }), /CCNL-renewal increases.*5% substitute tax is not priced/);
-  assert.throws(() => calculateIt2026({ ...BASE, hasShiftAllowances: true }), /night\/holiday\/shift allowances.*15% substitute tax is not priced/);
+test("2026 substitute regimes price flat rates on carved-out bases", () => {
+  // Renewal 1.200 at 5% = 60.00; allowances 200 at 15% = 30.00; premi 1.000
+  // at 1% = 10.00 (within caps, ceilings satisfied); ordinary IRPEF prices
+  // the base net of the 2.400 carve-out.
+  const input = { ...BASE, annualGrossEmployment: "30000", annualPensionable: "30000", renewalIncrease: "1200.00", shiftAllowance: "200.00", premiRisultato: "1000.00", priorYearEmploymentIncome: "30000", premiRisultatoEligible: true };
+  const r = calculateIt2026(input);
+  const plain = calculateIt2026({ ...BASE, annualGrossEmployment: "30000", annualPensionable: "30000" });
+  assert.deepEqual([r.period.sostitutivaRinnovi, r.period.sostitutivaTurni, r.period.sostitutivaPremi], ["60.0000", "30.0000", "10.0000"]);
+  assert.equal(Number(plain.imponibileIrpef) - Number(r.imponibileIrpef), 2400);
 });
 
 test("missing rates refuse naming the 2026 scope point", () => {
@@ -236,8 +240,8 @@ test("refused list carries 2025's gaps plus the 2026-only substitute regimes", (
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("art. 12 TUIR")));
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("TFR")));
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("INAIL")));
-  assert.ok(IT_REFUSED_2026.some((r) => r.includes("5%")), "c. 7 rinnovi regime refused by name");
-  assert.ok(IT_REFUSED_2026.some((r) => r.includes("15%")), "c. 10–11 turni regime refused by name");
+  assert.ok(!IT_REFUSED_2026.some((r) => r.includes("rinnovi contrattuali")), "c. 7 rinnovi priced, not refused");
+  assert.ok(!IT_REFUSED_2026.some((r) => r.includes("c. 10–11")), "c. 10–11 turni priced, not refused");
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("200.000")), "sterilizzazione recorded, not branched");
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("c. 18–21")), "tourism integrativo refused by name");
 });

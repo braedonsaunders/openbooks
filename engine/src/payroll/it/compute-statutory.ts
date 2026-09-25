@@ -59,6 +59,8 @@
  * TRUNCATED to 4 decimals per 730/2026 TABELLA 6 note (2) (carried for 2026).
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { sql } from "drizzle-orm";
+import { db } from "../../platform/db.ts";
 import { PayrollError } from "../error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
@@ -181,7 +183,7 @@ const CENT = 100n;
 const ZERO = 0n;
 
 /** Round units half-up to the cent (CU istruzioni rule, carried for 2026). */
-function r2(u: bigint): bigint {
+export function r2(u: bigint): bigint {
   return roundDiv(u, CENT) * CENT;
 }
 
@@ -191,7 +193,7 @@ function mulFrac(u: bigint, frac: string): bigint {
 }
 
 /** amount x percent-number (e.g. "0.8" for 0,8%), exact. */
-function mulPct(u: bigint, pct: string): bigint {
+export function mulPct(u: bigint, pct: string): bigint {
   return (u * U(pct)) / (100n * 10_000n);
 }
 
@@ -350,10 +352,24 @@ export interface It2025Input {
    */
   hasFamilyCharges?: boolean;
   isFixedTerm?: boolean | null;
-  /** 2026 CCNL-renewal increases under the L. 199/2025 c. 7 substitute tax. */
-  hasRenewalIncreases?: boolean;
-  /** 2026 night/holiday/shift allowances under the L. 199/2025 c. 10–11 substitute tax. */
-  hasShiftAllowances?: boolean;
+  /**
+   * 2026 substitute-regime amounts for THIS period (euro strings, "0" when
+   * none): CCNL-renewal increases (L. 199/2025 c. 7, 5%), night/holiday/shift
+   * allowances (c. 10–11, 15%, annual base cap 1.500), performance bonuses
+   * (L. 208/2015 c. 182–189 at the 2026–2027 1% rate, annual base cap 5.000).
+   * 2026-only: any positive amount with 2025 tables refuses (no legal basis).
+   */
+  renewalIncrease?: string;
+  shiftAllowance?: string;
+  premiRisultato?: string;
+  /** Realized substitute bases already priced this year (committed stubs). */
+  renewalIncreaseYtd?: string;
+  shiftAllowanceYtd?: string;
+  premiRisultatoYtd?: string;
+  /** The worker's 2025 lavoro income: ceiling for the 33.000/40.000 gates. */
+  priorYearEmploymentIncome?: string | null;
+  /** Whether the declared premi meet the L. 208/2015 regime criteria. */
+  premiRisultatoEligible?: boolean | null;
   /** Art. 49 c. 2 lett. a) pension income: refused (TABELLA 7). */
   isPensioner?: boolean;
   /** Post-1995 seniority: the annual massimale applies; absent is unknown. */
@@ -377,6 +393,23 @@ export interface It2025Result {
   inpsEmployer: string;
   addizionaleRegionale: string;
   addizionaleComunale: string;
+  /**
+   * Substitute-regime figures. Annuals are realized-to-date (ytd + current),
+   * not annualized forecasts; period figures are this stub's priced shares.
+   */
+  sostitutivaRinnoviBase: string;
+  sostitutivaRinnovi: string;
+  sostitutivaTurniBase: string;
+  sostitutivaTurni: string;
+  sostitutivaPremiBase: string;
+  sostitutivaPremi: string;
+  /**
+   * This stub's priced bases (capped shares): the YTD accumulation inputs.
+   * The annuals above are ytd + priced; these are the priced increment alone.
+   */
+  sostitutivaRinnoviShare: string;
+  sostitutivaTurniShare: string;
+  sostitutivaPremiShare: string;
   /** Period figures (annual / periodsPerYear, half-up cent). */
   period: {
     irpef: string;
@@ -386,6 +419,9 @@ export interface It2025Result {
     addizionaleComunale: string;
     trattamentoIntegrativo: string;
     somma: string;
+    sostitutivaRinnovi: string;
+    sostitutivaTurni: string;
+    sostitutivaPremi: string;
   };
 }
 
@@ -474,26 +510,91 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + `required exemption facts; see ${refused}`,
     );
   }
-  if (input.hasRenewalIncreases) {
-    // L. 199/2025 art. 1 c. 7 prices 2026 contractual-renewal increases under
-    // a 5% imposta sostitutiva (private-sector, 2025 lavoro income ≤ 33.000;
-    // AdE Circ. 2/E/2026) — inside ordinary IRPEF they would over-withhold.
+  // 2026 substitute regimes: price the carved-out bases at their flat rates
+  // instead of folding them into ordinary IRPEF. Amounts are this period's;
+  // YTD bases are realized amounts already priced this year. Caps bind the
+  // ANNUAL base (ytd + current); the priced share is the capped increment.
+  // The carve-out below removes realized-to-date capped bases from the
+  // ordinary annual estimate, converging exact by year-end and trued at
+  // conguaglio; thresholds (detrazioni, TI) still read the inclusive R.
+  const rPlus = needNonNegative(input.renewalIncrease ?? "0", "renewalIncrease", year);
+  const aPlus = needNonNegative(input.shiftAllowance ?? "0", "shiftAllowance", year);
+  const pPlus = needNonNegative(input.premiRisultato ?? "0", "premiRisultato", year);
+  const rYtd = needNonNegative(input.renewalIncreaseYtd ?? "0", "renewalIncreaseYtd", year);
+  const aYtd = needNonNegative(input.shiftAllowanceYtd ?? "0", "shiftAllowanceYtd", year);
+  const pYtd = needNonNegative(input.premiRisultatoYtd ?? "0", "premiRisultatoYtd", year);
+  const hasSubst = rPlus > ZERO || aPlus > ZERO || pPlus > ZERO;
+  if (hasSubst && year !== 2026) {
     refuse(
-      `IT ${year} refuses pay including 2026 CCNL-renewal increases: the 5% substitute tax is not priced — `
-      + "remove them from the ordinary IRPEF base and settle externally until supported; "
-      + `see ${refused}`,
+      `IT ${year} refuses 2026 substitute-regime pay: the 5%/15%/1% imposte sostitutive have no legal basis `
+      + `outside 2026 — see ${refused}`,
     );
   }
-  if (input.hasShiftAllowances) {
-    // L. 199/2025 art. 1 c. 10–11 prices 2026 night/holiday/rest-day/shift
-    // allowances under a 15% imposta sostitutiva (cap 1.500/year; AdE FAQ
-    // Circ. 3/E/2026) — inside ordinary IRPEF they would over-withhold.
+  const priorIncome = input.priorYearEmploymentIncome == null || input.priorYearEmploymentIncome === ""
+    ? null
+    : needNonNegative(input.priorYearEmploymentIncome, "priorYearEmploymentIncome", year);
+  if (rPlus > ZERO) {
+    // L. 199/2025 art. 1 c. 7: 5% on renewal increases, private-sector, 2025
+    // lavoro income ≤ 33.000 (AdE Circ. 2/E/2026). No amount cap.
+    if (priorIncome == null) {
+      refuse(
+        `IT ${year} refuses renewal increases without the 2025 lavoro income: the 33.000 ceiling decides `
+        + "eligibility for the 5% substitute tax — declare reddito_lavoro_2025 before pricing; "
+        + `see ${refused}`,
+      );
+    }
+    if (priorIncome > U("33000")) {
+      refuse(
+        `IT ${year} refuses renewal increases for 2025 lavoro income ${D(priorIncome)}: above the 33.000 `
+        + "ceiling the 5% substitute tax does not apply — remove the amounts from the substitute channel "
+        + "and price them as ordinary wages; "
+        + `see ${refused}`,
+      );
+    }
+  }
+  if (aPlus > ZERO) {
+    // L. 199/2025 art. 1 c. 10–11: 15% on night/holiday/shift allowances,
+    // annual base cap 1.500, 2025 lavoro income ≤ 40.000.
+    if (priorIncome == null) {
+      refuse(
+        `IT ${year} refuses shift allowances without the 2025 lavoro income: the 40.000 ceiling decides `
+        + "eligibility for the 15% substitute tax — declare reddito_lavoro_2025 before pricing; "
+        + `see ${refused}`,
+      );
+    }
+    if (priorIncome > U("40000")) {
+      refuse(
+        `IT ${year} refuses shift allowances for 2025 lavoro income ${D(priorIncome)}: above the 40.000 `
+        + "ceiling the 15% substitute tax does not apply — remove the amounts from the substitute channel "
+        + "and price them as ordinary wages; "
+        + `see ${refused}`,
+      );
+    }
+  }
+  if (pPlus > ZERO && input.premiRisultatoEligible !== true) {
+    // L. 208/2015 art. 1 c. 182–189 at the 2026–2027 1% rate, annual base cap
+    // 5.000: the incrementality and registered-contract criteria decide.
     refuse(
-      `IT ${year} refuses pay including 2026 night/holiday/shift allowances: the 15% substitute tax is not `
-      + "priced — remove them from the ordinary IRPEF base and settle externally until supported; "
-      + `see ${refused}`,
+      `IT ${year} refuses performance bonuses with undeclared regime eligibility: assert `
+      + "premi_risultato_ammissibili once the L. 208/2015 criteria are met before pricing the 1% "
+      + `substitute tax; see ${refused}`,
     );
   }
+  const ALLOW_CAP = U("1500");
+  const PREMI_CAP = U("5000");
+  const aCapped = bmin(aYtd + aPlus, ALLOW_CAP);
+  const pCapped = bmin(pYtd + pPlus, PREMI_CAP);
+  const aShare = aCapped - bmin(aYtd, ALLOW_CAP);
+  const pShare = pCapped - bmin(pYtd, PREMI_CAP);
+  const rBase = rYtd + rPlus;
+  // INPS note: renewal increases and shift allowances stay in the pensionable
+  // base (retribuzione imponibile). Premi di risultato may carry an INPS
+  // exemption within limits — unverified for the 2026 1%/5.000 shape, so the
+  // base is untouched and any exemption settles externally for now.
+  const substCarve = rBase + aCapped + pCapped;
+  const sostRinnovi = r2(mulPct(rPlus, "5"));
+  const sostTurni = r2(mulPct(aShare, "15"));
+  const sostPremi = r2(mulPct(pShare, "1"));
   if (input.hasFamilyCharges) {
     // TUIR art. 12 deductions vary by relationship, income, age, disability,
     // and allocation between eligible taxpayers. The declaration currently
@@ -575,7 +676,9 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     : needNonNegative(input.presumedTotalIncome, "presumedTotalIncome", year);
   const R = presunto > lavoroNet ? presunto : lavoroNet;
 
-  const imponibile = R;
+  // Substitute-taxed bases leave ordinary IRPEF (and its addizionali, priced
+  // off imponibile below); thresholds above keep reading the inclusive R.
+  const imponibile = max0(R - substCarve);
   const irpefLorda = r2(marginalTax(imponibile, tables.bands));
 
   // Art. 13 detrazione lavoro dipendente (declaration-gated) with the
@@ -761,6 +864,15 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     inpsEmployer: D(inpsEmployer),
     addizionaleRegionale: D(addRegionale),
     addizionaleComunale: D(addComunale),
+    sostitutivaRinnoviBase: D(rBase),
+    sostitutivaRinnovi: D(r2(mulPct(rBase, "5"))),
+    sostitutivaTurniBase: D(aCapped),
+    sostitutivaTurni: D(r2(mulPct(aCapped, "15"))),
+    sostitutivaPremiBase: D(pCapped),
+    sostitutivaPremi: D(r2(mulPct(pCapped, "1"))),
+    sostitutivaRinnoviShare: D(rPlus),
+    sostitutivaTurniShare: D(aShare),
+    sostitutivaPremiShare: D(pShare),
     period: {
       irpef: per(irpefNetta),
       inpsWorker: per(inpsWorker),
@@ -769,6 +881,9 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       addizionaleComunale: per(addComunale),
       trattamentoIntegrativo: per(trattamentoIntegrativo),
       somma: per(somma),
+      sostitutivaRinnovi: D(sostRinnovi),
+      sostitutivaTurni: D(sostTurni),
+      sostitutivaPremi: D(sostPremi),
     },
   };
 }
@@ -823,7 +938,50 @@ export const IT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CONG_TI_PAID: "Conguaglio — trattamento integrativo erogato nell'anno",
   CONG_SOMMA_ANNUAL: "Conguaglio — somma annua verificata (L. 207/2024)",
   CONG_SOMMA_PAID: "Conguaglio — somma erogata nell'anno",
+  IT_SUBST_RINNOVI: "Sostitutiva 5% aumenti rinnovo CCNL — base realizzata (L. 199/2025)",
+  IT_SUBST_TURNI: "Sostitutiva 15% indennità notturne/festive/turni — base realizzata (L. 199/2025)",
+  IT_SUBST_PREMI: "Sostitutiva 1% premi di risultato — base realizzata (L. 208/2015)",
+  CONG_SUBST_RINNOVI_ANNUAL: "Conguaglio — sostitutiva 5% rinnovi annuale ricalcolata",
+  CONG_SUBST_RINNOVI_YTD: "Conguaglio — sostitutiva 5% rinnovi trattenuta nell'anno",
+  CONG_SUBST_RINNOVI_DELTA: "Conguaglio — differenza sostitutiva 5% rinnovi",
+  CONG_SUBST_TURNI_ANNUAL: "Conguaglio — sostitutiva 15% turni annuale ricalcolata",
+  CONG_SUBST_TURNI_YTD: "Conguaglio — sostitutiva 15% turni trattenuta nell'anno",
+  CONG_SUBST_TURNI_DELTA: "Conguaglio — differenza sostitutiva 15% turni",
+  CONG_SUBST_PREMI_ANNUAL: "Conguaglio — sostitutiva 1% premi annuale ricalcolata",
+  CONG_SUBST_PREMI_YTD: "Conguaglio — sostitutiva 1% premi trattenuta nell'anno",
+  CONG_SUBST_PREMI_DELTA: "Conguaglio — differenza sostitutiva 1% premi",
 };
+
+/**
+ * Substitute-regime bases already priced this year (committed stubs'
+ * IT_SUBST_* factors). Caps bind the annual base, so every priced share
+ * needs the realized total; the opening carry-in leg is refused in the
+ * adapter (prior-provider substitute bases are unknown).
+ */
+export async function itSubstituteYtd(input: {
+  tx: Pick<typeof db, "execute">;
+  orgId: string;
+  employeePartyId: string;
+  taxYear: number;
+  payDate: string;
+  excludeDocumentId: string;
+}): Promise<{ rinovi: string; turni: string; premi: string }> {
+  const rows = await input.tx.execute<{ rinovi: string; turni: string; premi: string }>(sql`
+    select round(coalesce(sum((s.factors->>'IT_SUBST_RINNOVI')::numeric), 0), 4)::text as rinovi,
+           round(coalesce(sum((s.factors->>'IT_SUBST_TURNI')::numeric), 0), 4)::text as turni,
+           round(coalesce(sum((s.factors->>'IT_SUBST_PREMI')::numeric), 0), 4)::text as premi
+      from pay_stubs s
+      join pay_runs r on r.org_id = s.org_id
+                    and r.document_id = s.pay_run_document_id
+                    and r.run_status = 'committed'
+     where s.org_id = ${input.orgId}
+       and s.employee_party_id = ${input.employeePartyId}
+       and s.country = 'IT'
+       and s.tax_year = ${input.taxYear}
+       and s.pay_date <= ${input.payDate}::date
+       and s.pay_run_document_id <> ${input.excludeDocumentId}`);
+  return rows.rows[0] ?? { rinovi: "0", turni: "0", premi: "0" };
+}
 
 export async function computeItStatutoryWithRates(
   ctx: PayrollStatutoryComputeContext,
@@ -858,6 +1016,50 @@ export async function computeItStatutoryWithRates(
     const n = Number(raw);
     return Number.isInteger(n) && n > 0 ? n : 0;
   };
+  // 2026 substitute-regime period amounts (certificate-declared; "0" when
+  // none). Any positive amount pulls the eligibility inputs, the committed
+  // YTD bases for the annual caps, and the pre-adoption carry-in guard.
+  const substAmount = (key: string): string => {
+    const raw = answers[key];
+    return raw == null || raw === "" ? "0" : raw;
+  };
+  const renewalIncrease = substAmount("importo_aumenti_rinnovo");
+  const shiftAllowance = substAmount("importo_indennita_turni");
+  const premiRisultato = substAmount("importo_premi_risultato");
+  const hasSubst = U(renewalIncrease) > ZERO
+    || U(shiftAllowance) > ZERO
+    || U(premiRisultato) > ZERO;
+  let substYtd = { rinovi: "0", turni: "0", premi: "0" };
+  if (hasSubst) {
+    const carry = await ctx.tx.execute(sql`
+      select 1 from payroll_opening_balances
+       where org_id = ${ctx.orgId}
+         and employee_party_id = ${ctx.employeePartyId}
+         and tax_year = ${taxYear} limit 1`);
+    if (carry.rows.length > 0) {
+      throw new ItPayrollRefusal(
+        `IT ${taxYear} refuses substitute-regime pay with a pre-adoption carry-in: prior-provider `
+        + "substitute bases are unknown, so the 1.500/5.000 annual caps cannot bind — settle the "
+        + "substitute amounts externally until carry-in support lands.",
+      );
+    }
+    const payDate = ctx.run.pay_date;
+    if (payDate == null || payDate === "") {
+      throw new ItPayrollRefusal(
+        `IT ${taxYear} substitute-regime pay needs the run versement date (run pay_date) to bound the `
+        + "annual caps' year-to-date bases.",
+      );
+    }
+    substYtd = await itSubstituteYtd({
+      tx: ctx.tx,
+      orgId: ctx.orgId,
+      employeePartyId: ctx.employeePartyId,
+      taxYear,
+      payDate,
+      excludeDocumentId: ctx.documentId,
+    });
+  }
+  const substIncome = answers["reddito_lavoro_2025"] ?? null;
   const calculate = taxYear === 2026 ? calculateIt2026 : calculateIt2025;
   // L. 207/2024 art. 1 c. 4 selects the somma percentage from full annual
   // employment income, including non-periodic pay; the formula applies that
@@ -891,8 +1093,18 @@ export async function computeItStatutoryWithRates(
       : answers["tempo_determinato"] === "false"
         ? false
         : null,
-    hasRenewalIncreases: answers["aumenti_rinnovo_ccnl"] === "true" ? true : undefined,
-    hasShiftAllowances: answers["indennita_notturno_festivi"] === "true" ? true : undefined,
+    renewalIncrease: substAmount("importo_aumenti_rinnovo"),
+    shiftAllowance: substAmount("importo_indennita_turni"),
+    premiRisultato: substAmount("importo_premi_risultato"),
+    renewalIncreaseYtd: substYtd.rinovi,
+    shiftAllowanceYtd: substYtd.turni,
+    premiRisultatoYtd: substYtd.premi,
+    priorYearEmploymentIncome: substIncome,
+    premiRisultatoEligible: answers["premi_risultato_ammissibili"] === "true"
+      ? true
+      : answers["premi_risultato_ammissibili"] === "false"
+        ? false
+        : null,
     isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
       ? undefined
       : bool(answers["anzianita_post_1995"]),
@@ -912,12 +1124,18 @@ export async function computeItStatutoryWithRates(
   pushStatutory("regional_surtax", "deduction", "Addizionale regionale all'IRPEF", result.period.addizionaleRegionale, 115);
   pushStatutory("municipal_surtax", "deduction", "Addizionale comunale all'IRPEF", result.period.addizionaleComunale, 120);
   pushStatutory("inps", "deduction", "INPS — contributi IVS a carico del lavoratore", result.period.inpsWorker, 130);
+  pushStatutory("sostitutiva_rinnovi", "deduction", "Sostitutiva 5% aumenti rinnovo CCNL", result.period.sostitutivaRinnovi, 111);
+  pushStatutory("sostitutiva_turni", "deduction", "Sostitutiva 15% indennità notturne/festive/turni", result.period.sostitutivaTurni, 112);
+  pushStatutory("sostitutiva_premi", "deduction", "Sostitutiva 1% premi di risultato", result.period.sostitutivaPremi, 113);
   pushStatutory("ti_payout", "credit", "Trattamento integrativo", result.period.trattamentoIntegrativo, 140);
   pushStatutory("somma_payout", "credit", "Somma di cui al comma 4 (L. 207/2024)", result.period.somma, 145);
   pushStatutory("inps", "employer_contribution", "INPS — contributi IVS a carico del datore", result.period.inpsEmployer, 230);
   return {
     I: income,
     PI: pensionable,
+    IT_SUBST_RINNOVI: result.sostitutivaRinnoviShare,
+    IT_SUBST_TURNI: result.sostitutivaTurniShare,
+    IT_SUBST_PREMI: result.sostitutivaPremiShare,
     IRPEF: result.period.irpef,
     ADDREG: result.period.addizionaleRegionale,
     ADDCOM: result.period.addizionaleComunale,

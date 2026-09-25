@@ -92,6 +92,8 @@ import {
   IT_2025_TABLES,
   IT_2026_TABLES,
   ItPayrollRefusal,
+  mulPct,
+  r2,
   type ItYearTables,
 } from "./compute-statutory.ts";
 import { IT_PACK_RATES } from "./rates.ts";
@@ -139,6 +141,15 @@ export const IT_CONGUAGLIO_FACTOR_KEYS = [
   "CONG_TI_PAID",
   "CONG_SOMMA_ANNUAL",
   "CONG_SOMMA_PAID",
+  "CONG_SUBST_RINNOVI_ANNUAL",
+  "CONG_SUBST_RINNOVI_YTD",
+  "CONG_SUBST_RINNOVI_DELTA",
+  "CONG_SUBST_TURNI_ANNUAL",
+  "CONG_SUBST_TURNI_YTD",
+  "CONG_SUBST_TURNI_DELTA",
+  "CONG_SUBST_PREMI_ANNUAL",
+  "CONG_SUBST_PREMI_YTD",
+  "CONG_SUBST_PREMI_DELTA",
 ] as const;
 
 export interface ItConguaglioDeclaration {
@@ -154,6 +165,16 @@ export interface ItConguaglioDeclaration {
   isPensioner?: boolean;
   /** Reddito complessivo presunto from the declaration, when declared. */
   presumedTotalIncome: string | null;
+  /**
+   * Substitute-regime period amounts from the declaration (final run's
+   * amounts; annual totals add the committed YTD bases below). Ceilings and
+   * the premi eligibility ride the same inputs as monthly.
+   */
+  renewalIncrease?: string;
+  shiftAllowance?: string;
+  premiRisultato?: string;
+  priorYearEmploymentIncome?: string | null;
+  premiRisultatoEligible?: boolean | null;
   /** Domicile comune (codice catastale); null refuses the comunale, as monthly. */
   comuneCode: string | null;
 }
@@ -247,6 +268,14 @@ export function calculateItConguaglio(
       isFixedTerm: declaration.isFixedTerm,
       isPost1995: declaration.isPost1995,
       isPensioner: declaration.isPensioner,
+      renewalIncrease: declaration.renewalIncrease ?? "0",
+      shiftAllowance: declaration.shiftAllowance ?? "0",
+      premiRisultato: declaration.premiRisultato ?? "0",
+      renewalIncreaseYtd: paidOf(input.ytdBySystemKey, "IT_SUBST_RINNOVI"),
+      shiftAllowanceYtd: paidOf(input.ytdBySystemKey, "IT_SUBST_TURNI"),
+      premiRisultatoYtd: paidOf(input.ytdBySystemKey, "IT_SUBST_PREMI"),
+      priorYearEmploymentIncome: declaration.priorYearEmploymentIncome ?? null,
+      premiRisultatoEligible: declaration.premiRisultatoEligible ?? null,
     },
     tables,
   );
@@ -286,6 +315,20 @@ export function calculateItConguaglio(
     municipalSurtax: diffOf(annual.municipalSurtax, paid.municipalSurtax),
   };
 
+  // Substitute-regime true-up: the exact annual tax off the realized capped
+  // bases, less what the monthly priced shares already withheld (rate times
+  // the committed base YTD). Consistent years delta to dust and push nothing.
+  const substPaid = {
+    rinnovi: fromUnits(r2(mulPct(toUnits(paidOf(input.ytdBySystemKey, "IT_SUBST_RINNOVI")), "5"))),
+    turni: fromUnits(r2(mulPct(toUnits(paidOf(input.ytdBySystemKey, "IT_SUBST_TURNI")), "15"))),
+    premi: fromUnits(r2(mulPct(toUnits(paidOf(input.ytdBySystemKey, "IT_SUBST_PREMI")), "1"))),
+  };
+  const substDelta = {
+    rinnovi: diffOf(result.sostitutivaRinnovi, substPaid.rinnovi),
+    turni: diffOf(result.sostitutivaTurni, substPaid.turni),
+    premi: diffOf(result.sostitutivaPremi, substPaid.premi),
+  };
+
   // Direction rides the kind: more tax owed collects (deduction),
   // over-withheld refunds (credit). Zero pushes nothing — the legitimate
   // zero. Amounts stay positive; the contract's push refuses negatives.
@@ -293,6 +336,9 @@ export function calculateItConguaglio(
     { systemKey: "income_tax", label: "Conguaglio IRPEF", sequence: 110, signed: delta.incomeTax },
     { systemKey: "regional_surtax", label: "Conguaglio addizionale regionale", sequence: 115, signed: delta.regionalSurtax },
     { systemKey: "municipal_surtax", label: "Conguaglio addizionale comunale", sequence: 120, signed: delta.municipalSurtax },
+    { systemKey: "sostitutiva_rinnovi", label: "Conguaglio sostitutiva 5% rinnovi", sequence: 111, signed: substDelta.rinnovi },
+    { systemKey: "sostitutiva_turni", label: "Conguaglio sostitutiva 15% turni", sequence: 112, signed: substDelta.turni },
+    { systemKey: "sostitutiva_premi", label: "Conguaglio sostitutiva 1% premi", sequence: 113, signed: substDelta.premi },
   ] as const;
   for (const line of lines) {
     const order = cmp(line.signed, "0");
@@ -318,6 +364,15 @@ export function calculateItConguaglio(
     CONG_TI_PAID: tiPaid,
     CONG_SOMMA_ANNUAL: sommaAnnual,
     CONG_SOMMA_PAID: sommaPaid,
+    CONG_SUBST_RINNOVI_ANNUAL: result.sostitutivaRinnovi,
+    CONG_SUBST_RINNOVI_YTD: substPaid.rinnovi,
+    CONG_SUBST_RINNOVI_DELTA: substDelta.rinnovi,
+    CONG_SUBST_TURNI_ANNUAL: result.sostitutivaTurni,
+    CONG_SUBST_TURNI_YTD: substPaid.turni,
+    CONG_SUBST_TURNI_DELTA: substDelta.turni,
+    CONG_SUBST_PREMI_ANNUAL: result.sostitutivaPremi,
+    CONG_SUBST_PREMI_YTD: substPaid.premi,
+    CONG_SUBST_PREMI_DELTA: substDelta.premi,
   };
 }
 
@@ -339,6 +394,10 @@ function readSettlementDeclaration(
     return Number.isInteger(n) && n > 0 ? n : 0;
   };
   const presumed = answers["reddito_complessivo_presunto"] ?? null;
+  const substAmount = (key: string): string => {
+    const raw = answers[key];
+    return raw == null || raw === "" ? "0" : raw;
+  };
   return {
     hasDetrazioniDeclaration: cert !== null,
     hasFamilyCharges: bool(answers["coniuge_a_carico"] ?? null)
@@ -349,8 +408,15 @@ function readSettlementDeclaration(
       : answers["tempo_determinato"] === "false"
         ? false
         : null,
-    hasRenewalIncreases: answers["aumenti_rinnovo_ccnl"] === "true" ? true : undefined,
-    hasShiftAllowances: answers["indennita_notturno_festivi"] === "true" ? true : undefined,
+    renewalIncrease: substAmount("importo_aumenti_rinnovo"),
+    shiftAllowance: substAmount("importo_indennita_turni"),
+    premiRisultato: substAmount("importo_premi_risultato"),
+    priorYearEmploymentIncome: answers["reddito_lavoro_2025"] ?? null,
+    premiRisultatoEligible: answers["premi_risultato_ammissibili"] === "true"
+      ? true
+      : answers["premi_risultato_ammissibili"] === "false"
+        ? false
+        : null,
     isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
       ? undefined
       : bool(answers["anzianita_post_1995"]),
