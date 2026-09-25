@@ -385,6 +385,7 @@
       "funded": "Funded FTE",
       "filled": "Filled FTE",
       "vacant": "Vacant FTE",
+      "refusal": "Refusal",
       "holder": "Holder",
       "unassignedHolder": "Vacant",
       "holdersCount": "{count, plural, one {# holder} other {# holders}}"

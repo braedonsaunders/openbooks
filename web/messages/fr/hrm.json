@@ -385,6 +385,7 @@
       "funded": "ETP financés",
       "filled": "ETP pourvus",
       "vacant": "ETP vacants",
+      "refusal": "Refus",
       "holder": "Titulaire",
       "unassignedHolder": "Vacant",
       "holdersCount": "{count, plural, one {# titulaire} other {# titulaires}}"

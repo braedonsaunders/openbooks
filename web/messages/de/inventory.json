@@ -234,5 +234,9 @@
       "showMore": "Mehr anzeigen ({loaded} von {total})",
       "loadingMore": "Wird geladen…"
     }
+  },
+  "create": {
+    "subsidiary": "Tochtergesellschaft",
+    "selectSubsidiary": "Gesellschaft wählen…"
   }
 }

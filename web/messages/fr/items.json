@@ -155,6 +155,7 @@
     "billRate": "Tarif de facturation",
     "addUnit": "Ajouter une unité tarifaire",
     "saveFailed": "Impossible d’enregistrer les tarifs",
+    "loadFailed": "Impossible de charger les tarifs",
     "saved": "Version tarifaire enregistrée",
     "empty": "Aucune version tarifaire.",
     "rates": "Tarifs",

@@ -234,5 +234,9 @@
       "showMore": "Mostrar más ({loaded} de {total})",
       "loadingMore": "Cargando…"
     }
+  },
+  "create": {
+    "subsidiary": "Filial",
+    "selectSubsidiary": "Elige filial…"
   }
 }

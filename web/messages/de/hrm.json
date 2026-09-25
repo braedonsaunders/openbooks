@@ -385,6 +385,7 @@
       "funded": "Finanzierte FTE",
       "filled": "Besetzte FTE",
       "vacant": "Offene FTE",
+      "refusal": "Ablehnung",
       "holder": "Inhaber",
       "unassignedHolder": "Offen",
       "holdersCount": "{count, plural, one {# Inhaber} other {# Inhaber}}"

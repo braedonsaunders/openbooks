@@ -365,6 +365,9 @@
     "overview": "Overview",
     "package": "Package",
     "versions": "Versions",
+    "labels": {
+      "name": "Name"
+    },
     "runs": "Runs",
     "audit": "Audit history",
     "storage": "App storage",

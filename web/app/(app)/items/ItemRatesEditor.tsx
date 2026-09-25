@@ -261,10 +261,10 @@ export function ItemRatesEditor({
         </div>
       </div>
 
-      {loadState === 'loading' ? <p role="status" className="text-sm text-slate-500">{common('loading')}</p> : null}
+      {loadState === 'loading' ? <p role="status" className="text-sm text-slate-500">{common('feedback.loading')}</p> : null}
       {loadState === 'failed' ? (
         <div role="alert" className="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
-          <span>{loadError}</span><Button variant="outline" size="sm" onClick={() => { void load() }}>{common('retry')}</Button>
+          <span>{loadError}</span><Button variant="outline" size="sm" onClick={() => { void load() }}>{common('actions.retry')}</Button>
         </div>
       ) : null}
 

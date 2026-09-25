@@ -371,6 +371,9 @@
     "overview": "Übersicht",
     "package": "Paket",
     "versions": "Versionen",
+    "labels": {
+      "name": "Name"
+    },
     "runs": "Ausführungen",
     "audit": "Prüfverlauf",
     "storage": "App-Speicher",

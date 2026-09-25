@@ -199,6 +199,7 @@
     "billRate": "Bill rate",
     "addUnit": "Add rate unit",
     "saveFailed": "Could not save rates",
+    "loadFailed": "Could not load rates",
     "saved": "Rate version saved",
     "empty": "No rate versions yet.",
     "rates": "Rates",

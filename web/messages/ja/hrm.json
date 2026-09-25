@@ -385,6 +385,7 @@
       "funded": "財源付きFTE",
       "filled": "充足済みFTE",
       "vacant": "欠員FTE",
+      "refusal": "拒否",
       "holder": "保持者",
       "unassignedHolder": "欠員",
       "holdersCount": "{count, plural, other {# 名の保持者}}"
