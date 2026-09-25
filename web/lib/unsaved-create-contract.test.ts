@@ -26,6 +26,15 @@ const PROJECT_BUTTON = "web/app/(app)/projects/NewProjectButton.tsx";
 const PROJECT_REDIRECT = "web/app/(app)/projects/NewProjectRedirect.tsx";
 const HRM_BUTTON = "web/app/(app)/hrm/NewHrmButton.tsx";
 const PARTY_DRAWER = "web/app/(app)/parties/PartyDrawer.tsx";
+// ARCH-FILE-SPLIT: the files PartyDrawer.tsx was split into (was just PARTY_DRAWER).
+const PARTY_DRAWER_PIECES = [
+  "web/app/(app)/parties/party-drawer-model.ts",
+  "web/app/(app)/parties/PartySummary.tsx",
+  "web/app/(app)/parties/PartyContactForms.tsx",
+  "web/app/(app)/parties/PartyBankAccountsPanel.tsx",
+  "web/app/(app)/parties/PartyActivitySublist.tsx",
+  "web/app/(app)/parties/PartyTransactionSublist.tsx",
+];
 const PROJECT_DRAWER = "web/app/(app)/projects/ProjectDrawer.tsx";
 const PARTIES_VIEW = "web/app/(app)/parties/view.ts";
 const ENTITIES_VIEW = "web/app/(app)/entities/[role]/view.ts";
@@ -43,6 +52,7 @@ const SLICE_CALLERS = [
   PROJECT_REDIRECT,
   HRM_BUTTON,
   PARTY_DRAWER,
+  ...PARTY_DRAWER_PIECES,
   PROJECT_DRAWER,
   PARTIES_VIEW,
   ENTITIES_VIEW,
