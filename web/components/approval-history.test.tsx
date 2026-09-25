@@ -2,35 +2,6 @@ import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { approvalTabBody } from './approval-history'
 
-// the receipt Approvals tab rendered a completely blank panel —
-// no spinner, no content, no empty state. The tab body is a four-state
-// machine; the component must render something visible for every state.
-test('approval tab body states: loading, history, pending, empty', () => {
-  assert.equal(approvalTabBody(null), 'loading')
-  assert.equal(
-    approvalTabBody({ history: [{ id: 'run:1' }], approvalState: { pendingWith: [] } }),
-    'history',
-  )
-  assert.equal(
-    approvalTabBody({
-      history: [],
-      approvalState: { pendingWith: [{ name: 'Controller', gateId: 'g1', since: '2026-09-01' }] },
-    }),
-    'pending',
-  )
-  assert.equal(approvalTabBody({ history: [], approvalState: { pendingWith: [] } }), 'empty')
-})
-
-test('history wins over a concurrent pending gate', () => {
-  assert.equal(
-    approvalTabBody({
-      history: [{ id: 'run:1' }],
-      approvalState: { pendingWith: [{ name: 'Controller', gateId: 'g1', since: '2026-09-01' }] },
-    }),
-    'history',
-  )
-})
-
 const { JSDOM } = await import('jsdom')
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
 const globals = globalThis as Record<string, unknown>
@@ -59,6 +30,35 @@ registerHooks({
   },
 })
 const { ApprovalHistory } = await import('./approval-history')
+
+// the receipt Approvals tab rendered a completely blank panel —
+// no spinner, no content, no empty state. The tab body is a four-state
+// machine; the component must render something visible for every state.
+test('approval tab body states: loading, history, pending, empty', () => {
+  assert.equal(approvalTabBody(null), 'loading')
+  assert.equal(
+    approvalTabBody({ history: [{ id: 'run:1' }], approvalState: { pendingWith: [] } }),
+    'history',
+  )
+  assert.equal(
+    approvalTabBody({
+      history: [],
+      approvalState: { pendingWith: [{ name: 'Controller', gateId: 'g1', since: '2026-09-01' }] },
+    }),
+    'pending',
+  )
+  assert.equal(approvalTabBody({ history: [], approvalState: { pendingWith: [] } }), 'empty')
+})
+
+test('history wins over a concurrent pending gate', () => {
+  assert.equal(
+    approvalTabBody({
+      history: [{ id: 'run:1' }],
+      approvalState: { pendingWith: [{ name: 'Controller', gateId: 'g1', since: '2026-09-01' }] },
+    }),
+    'history',
+  )
+})
 
 test('shared history component renders its empty body for a bank account subject', async (t: TestContext) => {
   const previousFetch = globalThis.fetch

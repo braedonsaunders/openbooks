@@ -807,7 +807,7 @@ test.describe.serial("close to reporting", () => {
           action: "send-package",
           packageId: run.reporting_package_id,
           periodId: SEED.periodId,
-          bookId: SEED.primaryBookId,
+          bookId: SEED.primaryBookId, idempotencyKey: crypto.randomUUID(),
         }),
         "send-package",
       );

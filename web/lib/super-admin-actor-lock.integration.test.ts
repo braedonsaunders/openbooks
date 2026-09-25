@@ -15,13 +15,13 @@ const { lockSuperAdminActor } = await import("./super-admin.ts");
 const { sql } = await import("drizzle-orm");
 
 test("a privileged write rechecks super-admin status after waiting for concurrent revocation", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   let unlockHolder!: () => void;
   let signalHolderLocked!: () => void;
   const releaseHolder = new Promise<void>((resolve) => { unlockHolder = resolve; });
   const holderLocked = new Promise<void>((resolve) => { signalHolderLocked = resolve; });
   try {
-    const actorId = await createScratchUser(org.orgId, "Platform admin race", "admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Platform admin race", "admin"));
     await withBypass(() => db.execute(sql`update users set is_super_admin = true, is_active = true where id = ${actorId}`));
 
     const revoker = withBypass(async () => {
@@ -32,7 +32,7 @@ test("a privileged write rechecks super-admin status after waiting for concurren
     });
     await holderLocked;
 
-    const privilegedWrite = withBypass(() => lockSuperAdminActor(db, actorId));
+    const revoked = assert.rejects(withBypass(() => lockSuperAdminActor(db, actorId)), /Platform super-admin access was revoked/u);
     const deadline = Date.now() + 5_000;
     let waiting = false;
     while (Date.now() < deadline) {
@@ -51,7 +51,7 @@ test("a privileged write rechecks super-admin status after waiting for concurren
 
     unlockHolder();
     await revoker;
-    await assert.rejects(privilegedWrite, /Platform super-admin access was revoked/u);
+    await revoked;
     const state = (await withBypass(() => db.execute<{ isSuperAdmin: boolean }>(sql`
       select is_super_admin as "isSuperAdmin" from users where id = ${actorId}
     `))).rows[0];

@@ -24,27 +24,6 @@ const SetupIndexPage = (await import('./page.tsx')).default as (props: unknown) 
 const RootPage = (await import('../../page.tsx')).default as () => never
 hooks.deregister()
 
-const sp = (params: Record<string, string | string[] | undefined>) => ({ searchParams: Promise.resolve(params) })
-
-test('/admin/settings lands on Company Setup named as a move', async () => {
-  await assert.rejects(SettingsPage(sp({})), /REDIRECT:\/admin\/setup\/company\?movedFrom=settings/)
-})
-
-test('/admin/settings keeps the reader context across the move', async () => {
-  await assert.rejects(
-    SettingsPage(sp({ tab: 'tax' })),
-    /REDIRECT:\/admin\/setup\/company\?tab=tax&movedFrom=settings/,
-  )
-})
-
-test('/admin/setup lands on the readiness guide named as a move', async () => {
-  await assert.rejects(SetupIndexPage(sp({})), /REDIRECT:\/admin\/setup\/readiness\?movedFrom=setup-index/)
-})
-
-test('/ is a bookmark alias for the one canonical home', () => {
-  assert.throws(() => RootPage(), /REDIRECT:\/dashboard/)
-})
-
 // The Online-payments-off gate must send readers to Features with the
 // movedFrom source the notice reads — a bare '/admin/setup/features'
 // redirect lands silently. Loaded for real with only authz, features and
@@ -89,6 +68,27 @@ const { loadPaymentProviders } = (await import('./payment-providers/view.ts')) a
   './payment-providers/view.ts'
 )
 gateHooks.deregister()
+
+const sp = (params: Record<string, string | string[] | undefined>) => ({ searchParams: Promise.resolve(params) })
+
+test('/admin/settings lands on Company Setup named as a move', async () => {
+  await assert.rejects(SettingsPage(sp({})), /REDIRECT:\/admin\/setup\/company\?movedFrom=settings/)
+})
+
+test('/admin/settings keeps the reader context across the move', async () => {
+  await assert.rejects(
+    SettingsPage(sp({ tab: 'tax' })),
+    /REDIRECT:\/admin\/setup\/company\?tab=tax&movedFrom=settings/,
+  )
+})
+
+test('/admin/setup lands on the readiness guide named as a move', async () => {
+  await assert.rejects(SetupIndexPage(sp({})), /REDIRECT:\/admin\/setup\/readiness\?movedFrom=setup-index/)
+})
+
+test('/ is a bookmark alias for the one canonical home', () => {
+  assert.throws(() => RootPage(), /REDIRECT:\/dashboard/)
+})
 
 test('the payment-providers gate names its destination and reason', async () => {
   ;(globalThis as Record<string, unknown>).__aliasOnlinePayments = false

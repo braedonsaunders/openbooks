@@ -107,42 +107,6 @@ const routeUrl = './route.ts?field-ticket-sign-gate-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-function reset(enabled: boolean): void {
-  state.featureEnabled = enabled
-  state.featureCalls = []
-  state.executeCalls = 0
-}
-
-function post(): Promise<Response> {
-  return POST(new Request('http://openbooks.test/api/sign/field-tickets', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      token: 'valid-token',
-      signature: 'data:image/png;base64,iVBORw0KGgo=',
-      name: 'Customer signer',
-    }),
-  }))
-}
-
-test('customer signing refuses a valid link when Field Tickets is disabled', async () => {
-  reset(false)
-  const response = await post()
-
-  assert.equal(response.status, 404)
-  assert.deepEqual(state.featureCalls, ['fieldTickets'])
-  assert.equal(state.executeCalls, 0, 'the signing transaction must not start while the feature is off')
-})
-
-test('customer signing remains available when Field Tickets is enabled', async () => {
-  reset(true)
-  const response = await post()
-
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true })
-  assert.deepEqual(state.featureCalls, ['fieldTickets'])
-})
-
 const pageKey = Symbol.for('openbooks.field-ticket-sign-page-test')
 interface PageState {
   featureEnabled: boolean
@@ -196,6 +160,42 @@ const pageHooks = registerHooks({
 const { default: SignFieldTicketPage } = await import('../../../sign/field-tickets/[token]/page.tsx')
 pageHooks.deregister()
 const { renderToStaticMarkup } = await import('react-dom/server')
+
+function reset(enabled: boolean): void {
+  state.featureEnabled = enabled
+  state.featureCalls = []
+  state.executeCalls = 0
+}
+
+function post(): Promise<Response> {
+  return POST(new Request('http://openbooks.test/api/sign/field-tickets', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      token: 'valid-token',
+      signature: 'data:image/png;base64,iVBORw0KGgo=',
+      name: 'Customer signer',
+    }),
+  }))
+}
+
+test('customer signing refuses a valid link when Field Tickets is disabled', async () => {
+  reset(false)
+  const response = await post()
+
+  assert.equal(response.status, 404)
+  assert.deepEqual(state.featureCalls, ['fieldTickets'])
+  assert.equal(state.executeCalls, 0, 'the signing transaction must not start while the feature is off')
+})
+
+test('customer signing remains available when Field Tickets is enabled', async () => {
+  reset(true)
+  const response = await post()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true })
+  assert.deepEqual(state.featureCalls, ['fieldTickets'])
+})
 
 test('the public signing page refuses the token when Field Tickets is disabled', async () => {
   pageState.featureEnabled = false

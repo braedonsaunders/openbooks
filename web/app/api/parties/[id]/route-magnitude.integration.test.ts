@@ -26,22 +26,22 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   state.orgId = org.orgId
   state.actorId = randomUUID()
-  const partyId = (await db.execute<{ id: string }>(sql`
+  const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Magnitude Customer', true)
-    returning id`)).rows[0]!.id
-  const revision = (await db.execute<{ updated_at: string }>(sql`
+    returning id`))).rows[0]!.id
+  const revision = (await withBypassContext(() => db.execute<{ updated_at: string }>(sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
-      from parties where id = ${partyId}`)).rows[0]!.updated_at
+      from parties where id = ${partyId}`))).rows[0]!.updated_at
   return { org, partyId, revision }
 }
 
@@ -99,14 +99,14 @@ test('PATCH still saves a column-maximum credit limit with identical read-back',
 
 test('PATCH refuses a foreign reference custom value instead of storing it', async () => {
   const { org, partyId, revision } = await fixture()
-  const foreign = await createScratchOrg()
+  const foreign = await withBypassContext(() => createScratchOrg())
   try {
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into custom_field_defs
         (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
       values
         (${randomUUID()}, ${org.orgId}, 'parties', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
-    `)
+    `))
     const refused = await patch(partyId, { expectedUpdatedAt: revision, custom: { ref_party: foreign.vendorId } })
     assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refused.json)}`)
     const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from parties where id = ${partyId}`)).rows[0]?.custom

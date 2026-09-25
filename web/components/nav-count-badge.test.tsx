@@ -23,6 +23,7 @@ const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/fr")).default;
+const messagesEn = (await import("../messages/en")).default;
 const { NavCountBadge } = await import("./nav-count-badge");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -74,8 +75,6 @@ test("F5-9: the inbox badge aria-label pluralizes in the session locale", async 
     await one.done();
   }
 });
-
-const messagesEn = (await import("../messages/en")).default;
 
 async function renderBadgeWith(fetchImpl: typeof fetch, source: string) {
   const prior = globalThis.fetch;

@@ -9,44 +9,6 @@ import { NextRequest } from "next/server";
 const React = await import("react");
 Object.assign(globalThis, { React });
 
-test("Next.js applies the static security-header baseline to every route", async () => {
-  const { default: config, securityHeaders } =
-    await import("../next.config.mjs");
-
-  const headers = config.headers;
-  assert.equal(typeof headers, "function");
-  assert.ok(headers);
-  const routes = await headers();
-  assert.deepEqual(routes, [{ source: "/(.*)", headers: securityHeaders }]);
-
-  const values = new Map(securityHeaders.map(({ key, value }) => [key, value]));
-  assert.equal(values.get("X-Content-Type-Options"), "nosniff");
-  assert.equal(values.get("X-Frame-Options"), "DENY");
-  assert.match(
-    values.get("Strict-Transport-Security") ?? "",
-    /max-age=63072000/,
-  );
-  assert.equal(values.has("Content-Security-Policy"), false);
-});
-
-test("production CSP uses a request nonce without insecure script fallbacks", async () => {
-  const { buildContentSecurityPolicy } = await import("./content-security-policy.ts");
-  const policy = buildContentSecurityPolicy("test-nonce-123456", false);
-
-  assert.match(policy, /script-src 'self' 'nonce-test-nonce-123456' 'strict-dynamic'/);
-  assert.match(policy, /frame-ancestors 'none'/);
-  assert.match(policy, /object-src 'none'/);
-  assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/);
-  assert.doesNotMatch(policy, /unsafe-eval/);
-  assert.doesNotMatch(policy, /upgrade-insecure-requests/);
-});
-
-test("development CSP permits the evaluator required by Next.js", async () => {
-  const { buildContentSecurityPolicy } = await import("./content-security-policy.ts");
-  const policy = buildContentSecurityPolicy("test-nonce-123456", true);
-  assert.match(policy, /script-src[^;]*'unsafe-eval'/);
-});
-
 // The proxy's request-header plumbing (x-nonce + CSP into the downstream
 // request) is internal to NextResponse.next, so the test captures that seam:
 // only the proxy module sees the recording pass-through, every other
@@ -95,29 +57,6 @@ const proxyHooks = registerHooks({
 
 const { proxy } = await import("../proxy.ts");
 proxyHooks.deregister();
-
-test("the request proxy sends the CSP and nonce to Next.js", async () => {
-  proxyState.nextCalls = [];
-  // /login is public: the proxy short-circuits before any session or
-  // database touch, so this drives the real header plumbing only.
-  const response = await proxy(new NextRequest("http://openbooks.test/login"));
-
-  assert.equal(proxyState.nextCalls.length, 1);
-  const forwarded = proxyState.nextCalls[0]!.request?.headers;
-  assert.ok(forwarded, "the proxy forwards headers downstream");
-  const nonce = forwarded.get("x-nonce");
-  assert.ok(nonce && nonce.length >= 8, "the proxy mints a per-request nonce");
-  const requestPolicy = forwarded.get("Content-Security-Policy");
-  assert.ok(
-    requestPolicy?.includes(`nonce-${nonce}`),
-    "the downstream CSP carries the request nonce",
-  );
-  assert.equal(
-    response.headers.get("Content-Security-Policy"),
-    requestPolicy,
-    "the response carries the same policy",
-  );
-});
 
 // The root layout reads x-nonce from the request headers and hands it to
 // its head-init <Script>. The render below drives the real layout and
@@ -222,6 +161,67 @@ const layoutHooks = registerHooks({
 const { default: RootLayout } = await import("../app/layout.tsx");
 layoutHooks.deregister();
 const { renderToStaticMarkup } = await import("react-dom/server");
+
+test("Next.js applies the static security-header baseline to every route", async () => {
+  const { default: config, securityHeaders } =
+    await import("../next.config.mjs");
+
+  const headers = config.headers;
+  assert.equal(typeof headers, "function");
+  assert.ok(headers);
+  const routes = await headers();
+  assert.deepEqual(routes, [{ source: "/(.*)", headers: securityHeaders }]);
+
+  const values = new Map(securityHeaders.map(({ key, value }) => [key, value]));
+  assert.equal(values.get("X-Content-Type-Options"), "nosniff");
+  assert.equal(values.get("X-Frame-Options"), "DENY");
+  assert.match(
+    values.get("Strict-Transport-Security") ?? "",
+    /max-age=63072000/,
+  );
+  assert.equal(values.has("Content-Security-Policy"), false);
+});
+
+test("production CSP uses a request nonce without insecure script fallbacks", async () => {
+  const { buildContentSecurityPolicy } = await import("./content-security-policy.ts");
+  const policy = buildContentSecurityPolicy("test-nonce-123456", false);
+
+  assert.match(policy, /script-src 'self' 'nonce-test-nonce-123456' 'strict-dynamic'/);
+  assert.match(policy, /frame-ancestors 'none'/);
+  assert.match(policy, /object-src 'none'/);
+  assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/);
+  assert.doesNotMatch(policy, /unsafe-eval/);
+  assert.doesNotMatch(policy, /upgrade-insecure-requests/);
+});
+
+test("development CSP permits the evaluator required by Next.js", async () => {
+  const { buildContentSecurityPolicy } = await import("./content-security-policy.ts");
+  const policy = buildContentSecurityPolicy("test-nonce-123456", true);
+  assert.match(policy, /script-src[^;]*'unsafe-eval'/);
+});
+
+test("the request proxy sends the CSP and nonce to Next.js", async () => {
+  proxyState.nextCalls = [];
+  // /login is public: the proxy short-circuits before any session or
+  // database touch, so this drives the real header plumbing only.
+  const response = await proxy(new NextRequest("http://openbooks.test/login"));
+
+  assert.equal(proxyState.nextCalls.length, 1);
+  const forwarded = proxyState.nextCalls[0]!.request?.headers;
+  assert.ok(forwarded, "the proxy forwards headers downstream");
+  const nonce = forwarded.get("x-nonce");
+  assert.ok(nonce && nonce.length >= 8, "the proxy mints a per-request nonce");
+  const requestPolicy = forwarded.get("Content-Security-Policy");
+  assert.ok(
+    requestPolicy?.includes(`nonce-${nonce}`),
+    "the downstream CSP carries the request nonce",
+  );
+  assert.equal(
+    response.headers.get("Content-Security-Policy"),
+    requestPolicy,
+    "the response carries the same policy",
+  );
+});
 
 test("the root layout passes the request nonce to its custom script", async () => {
   layoutState.headers = new Headers({ "x-nonce": "layout-nonce-1" });
