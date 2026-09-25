@@ -768,6 +768,7 @@
           "co_famli_employee": "Verbindlichkeiten aus FAMLI Colorado (Arbeitnehmer)",
           "co_famli_employer": "Verbindlichkeiten aus FAMLI Colorado (Arbeitgeber)",
           "ca_ett": "Verbindlichkeiten aus Beschäftigungsbildungssteuer Kalifornien (Arbeitgeber)",
+          "ca_sdi_employee": "Verbindlichkeiten aus kalifornischer SDI (Arbeitnehmer)",
           "ct_pl_employee": "Verbindlichkeiten aus bezahltem Urlaub Connecticut (Arbeitnehmer)",
           "vt_child_care_contribution": "Verbindlichkeiten aus Kinderbetreuungsbeitrag Vermont",
           "mn_paid_leave": "Verbindlichkeiten aus bezahltem Urlaub Minnesota"
@@ -789,7 +790,8 @@
           "paye": "Verbindlichkeiten aus PAYE (Einkommensteuer)",
           "nic": "Verbindlichkeiten aus National Insurance (Klasse-1-Beiträge von Arbeitnehmer und Arbeitgeber)",
           "student-loans": "Verbindlichkeiten aus Studienkredit- und Postgraduiertenkredit-Abzügen",
-          "apprenticeship-levy": "Verbindlichkeiten aus Apprenticeship Levy (Arbeitgeber)"
+          "apprenticeship-levy": "Verbindlichkeiten aus Apprenticeship Levy (Arbeitgeber)",
+          "workplace-pension": "Verbindlichkeiten aus betrieblicher Altersvorsorge (Arbeitnehmer + Arbeitgeber)"
         }
       },
       "IE": {

@@ -768,6 +768,7 @@
           "co_famli_employee": "FAMLI du Colorado (employé) à payer",
           "co_famli_employer": "FAMLI du Colorado (employeur) à payer",
           "ca_ett": "Taxe de formation professionnelle de Californie (employeur) à payer",
+          "ca_sdi_employee": "SDI de Californie (salarié) à payer",
           "ct_pl_employee": "Congé payé du Connecticut (employé) à payer",
           "vt_child_care_contribution": "Contribution du Vermont pour la garde d'enfants à payer",
           "mn_paid_leave": "Congé payé du Minnesota à payer"
@@ -789,7 +790,8 @@
           "paye": "PAYE à payer (impôt sur le revenu)",
           "nic": "National Insurance à payer (classe 1 employé et employeur)",
           "student-loans": "Retenues de prêts étudiants et de troisième cycle à payer",
-          "apprenticeship-levy": "Apprenticeship Levy à payer (employeur)"
+          "apprenticeship-levy": "Apprenticeship Levy à payer (employeur)",
+          "workplace-pension": "Cotisations de retraite professionnelle à payer (salarié + employeur)"
         }
       },
       "IE": {

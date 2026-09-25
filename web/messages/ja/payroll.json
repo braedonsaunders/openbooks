@@ -768,6 +768,7 @@
           "co_famli_employee": "コロラド州FAMLI（従業員分）未払金",
           "co_famli_employer": "コロラド州FAMLI（事業主分）未払金",
           "ca_ett": "カリフォルニア州雇用訓練税（事業主分）未払金",
+          "ca_sdi_employee": "カリフォルニア州SDI（従業員分）未払金",
           "ct_pl_employee": "コネチカット州有給休暇（従業員分）未払金",
           "vt_child_care_contribution": "バーモント州保育拠出金未払金",
           "mn_paid_leave": "ミネソタ州有給休暇未払金"
@@ -789,7 +790,8 @@
           "paye": "PAYE未払金（所得税）",
           "nic": "National Insurance未払金（従業員・事業主負担クラス1）",
           "student-loans": "学生ローン・大学院ローン控除未払金",
-          "apprenticeship-levy": "Apprenticeship Levy未払金（事業主負担）"
+          "apprenticeship-levy": "Apprenticeship Levy未払金（事業主負担）",
+          "workplace-pension": "職域年金拠出金未払金（従業員＋事業主）"
         }
       },
       "IE": {

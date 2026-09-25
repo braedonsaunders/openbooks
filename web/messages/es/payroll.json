@@ -768,6 +768,7 @@
           "co_famli_employee": "FAMLI de Colorado (empleado) por pagar",
           "co_famli_employer": "FAMLI de Colorado (empleador) por pagar",
           "ca_ett": "Impuesto de formación para el empleo de California (empleador) por pagar",
+          "ca_sdi_employee": "SDI de California (empleado) por pagar",
           "ct_pl_employee": "Licencia pagada de Connecticut (empleado) por pagar",
           "vt_child_care_contribution": "Contribución de Vermont para el cuidado infantil por pagar",
           "mn_paid_leave": "Licencia pagada de Minnesota por pagar"
@@ -789,7 +790,8 @@
           "paye": "PAYE por pagar (impuesto sobre la renta)",
           "nic": "National Insurance por pagar (clase 1 de empleado y empleador)",
           "student-loans": "Deducciones de préstamos estudiantiles y de posgrado por pagar",
-          "apprenticeship-levy": "Apprenticeship Levy por pagar (empleador)"
+          "apprenticeship-levy": "Apprenticeship Levy por pagar (empleador)",
+          "workplace-pension": "Aportaciones al plan de pensiones de empresa por pagar (empleado + empleador)"
         }
       },
       "IE": {

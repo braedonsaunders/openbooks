@@ -768,6 +768,7 @@
           "co_famli_employee": "科罗拉多州FAMLI（雇员部分）应付",
           "co_famli_employer": "科罗拉多州FAMLI（雇主部分）应付",
           "ca_ett": "加利福尼亚州就业培训税（雇主部分）应付",
+          "ca_sdi_employee": "加利福尼亚州 SDI（员工部分）应付",
           "ct_pl_employee": "康涅狄格州带薪假（雇员部分）应付",
           "vt_child_care_contribution": "佛蒙特州儿童保育缴款应付",
           "mn_paid_leave": "明尼苏达州带薪假应付"
@@ -789,7 +790,8 @@
           "paye": "PAYE应付（所得税）",
           "nic": "National Insurance应付（雇员和雇主第一类）",
           "student-loans": "学生贷款和研究生贷款扣款应付",
-          "apprenticeship-levy": "学徒税应付（雇主部分）"
+          "apprenticeship-levy": "学徒税应付（雇主部分）",
+          "workplace-pension": "职场养老金缴款应付（员工 + 雇主）"
         }
       },
       "IE": {
