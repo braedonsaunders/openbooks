@@ -113,7 +113,7 @@ export async function loadJournal(
        order by created_at desc
        limit 20
     `)),
-    entryParam ? loadJournalDoc(entryParam, authz.user.orgId).then((journal) => {
+    entryParam ? loadJournalDoc(entryParam, authz.user.orgId, allowedSubsidiaries).then((journal) => {
       if (!journal || !allowedSubsidiaries) return journal
       return allowedSubsidiaries.has(String(journal.doc.subsidiary_id)) ? journal : null
     }) : null,

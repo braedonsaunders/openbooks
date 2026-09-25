@@ -306,7 +306,7 @@ export async function loadRelatedTransactionDrawerData({
 
   if (kind === 'journal') {
     if (!can(authz, 'gl.read')) return null
-    const journal = await loadJournalDoc(id)
+    const journal = await loadJournalDoc(id, authz.user.orgId, authz.allowedSubsidiaryIds)
     if (!journal || !canSeeDocument((journal.doc), partyId, authz)) return null
     const [parties, accounts, dimensions, headerDefs, lineDefs, subsidiaries, segments] = await Promise.all([
       db.execute<ElementOf<JournalProps['parties']>>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`),

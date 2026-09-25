@@ -349,7 +349,7 @@ export async function createManualJournal(input: {
     throw error;
   }
 
-  const journal = await loadJournalDoc(requestId, orgId);
+  const journal = await loadJournalDoc(requestId, orgId, input.allowedSubsidiaryIds);
   if (!journal) fail("save_failed", undefined, 500);
   return { created, journal };
 }

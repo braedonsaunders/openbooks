@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/platform/db.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { nextDocumentNumber } from "./bills.ts";
 import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -117,23 +118,34 @@ export async function createDraftJournal(
 }
 
 /** Full manual-journal payload for the drawer: header + signed lines. */
-export async function loadJournalDoc(id: string, orgId?: string) {
+export async function loadJournalDoc(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   if (!UUID_RE.test(id)) return null
   const resolvedOrgId = await resolveOrgId(orgId)
-  const doc = (await db.execute<Record<string, unknown>>(sql`
-    select d.*, p.display_name as party_name, e.id as entry_id
-      from documents d
-      left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
-     where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'journal'
-  `))
-  if (!doc.rows[0]) return null
-  const lines = (await db.execute<Record<string, unknown>>(sql`
-    select l.id, l.line_number, l.account_id, l.description, l.amount,
-           l.party_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom
-      from document_lines l
-     where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
-     order by l.line_number
-  `))
-  return { doc: doc.rows[0], lines: lines.rows }
+  return withOrgTransaction(resolvedOrgId, async () => {
+    // Scope and lock the journal header before reading detail, keeping both
+    // reads in the same transaction so a concurrent rehome cannot move the
+    // header between authorization and the line read.
+    const doc = await db.execute<Record<string, unknown>>(sql`
+      select d.*, p.display_name as party_name, e.id as entry_id
+        from documents d
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
+        left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
+       where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'journal'
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       for share of d
+    `)
+    if (!doc.rows[0]) return null
+    const lines = await db.execute<Record<string, unknown>>(sql`
+      select l.id, l.line_number, l.account_id, l.description, l.amount,
+             l.party_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom
+        from document_lines l
+       where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
+       order by l.line_number
+    `)
+    return { doc: doc.rows[0], lines: lines.rows }
+  })
 }
