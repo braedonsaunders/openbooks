@@ -17,7 +17,7 @@ import { seedCanadianPayrollComponentsForTest } from "./filing-test-fixtures.ts"
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -75,12 +75,15 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
+      // Stub calculation refuses employees without an HRM employment, so the
+      // hire carries one and the profile points at it.
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // 80 approved hours inside the period 2026-07-05..07-18
@@ -260,12 +263,13 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Union weekly', 'weekly', 52, '2026-07-18', 5, true,
                 ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               union_agreement_id, union_classification_id, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, union_agreement_id,
+                                               union_classification_id, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 ${agreementId}, ${classificationId}, true, ${actorId}, ${actorId})`);
 
       const projectA = randomUUID();
@@ -419,12 +423,13 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Union weekly', 'weekly', 52, '2026-07-18', 5, true,
                 ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               union_agreement_id, union_classification_id, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, union_agreement_id,
+                                               union_classification_id, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 ${agreementId}, ${classificationId}, true, ${actorId}, ${actorId})`);
 
       const projects = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
@@ -506,6 +511,11 @@ test(
             // unconfigured SUI refuses by name at calculate rather than
             // accruing 0.00, so the second employee needs theirs too.
             us: {
+              // Presence-only FUTA the same way: the 2026 Schedule A is not
+              // transcribed, so an unconfigured FUTA refuses by name; the
+              // ordinary 0.6% full-credit figure is the TEST entering a
+              // number as an employer would, and no expectation asserts it.
+              futaRate: "0.006",
               sui: {
                 TX: { rate: "0.027", wageBase: "9000" },
                 CA: { rate: "0.034", wageBase: "7000" },
@@ -554,12 +564,22 @@ test(
                                    created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3,
                 ${usSubId}, true, ${actorId}, ${actorId})`);
+      const texEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, usSubId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                               province, pay_basis, filing_status, is_active,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, filing_status, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'US', 'TX', 'salary', 'married_joint',
-                true, ${actorId}, ${actorId})`);
+        values (${org.orgId}, ${employeeId}, ${texEmploymentId}, ${scheduleId}, 'US', 'TX', 'salary',
+                'married_joint', true, ${actorId}, ${actorId})`);
+      // The federal calculation refuses payroll without a tax-residency
+      // status, so the hire states one — U.S. person, like the MFJ status.
+      await db.execute(sql`
+        insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                               region, sub_region, answers, effective_from,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'US', 'us_w4_tax_residency', null, null,
+                '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+                ${actorId}, ${actorId})`);
 
       // A second employee in a taxing state must error per-employee, not crash the run.
       const caStateEmployee = randomUUID();
@@ -572,12 +592,20 @@ test(
                                       is_active, created_by, updated_by)
         values (${org.orgId}, ${caStateEmployee}, 'USD', '30', 'hour', '2026-01-01', true,
                 ${actorId}, ${actorId})`);
+      const caEmploymentId = await seedWorkerEmployment(org.orgId, caStateEmployee, usSubId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                               province, pay_basis, filing_status, is_active,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, filing_status, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${caStateEmployee}, ${scheduleId}, 'US', 'CA', 'hourly', 'single',
-                true, ${actorId}, ${actorId})`);
+        values (${org.orgId}, ${caStateEmployee}, ${caEmploymentId}, ${scheduleId}, 'US', 'CA', 'hourly',
+                'single', true, ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                               region, sub_region, answers, effective_from,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${caStateEmployee}, 'US', 'us_w4_tax_residency', null, null,
+                '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+                ${actorId}, ${actorId})`);
       await db.execute(sql`
         insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
                                   billing_status, costing_basis, created_by, updated_by)
@@ -612,9 +640,13 @@ test(
       assert.equal(stub.province, "TX");
 
       // The stub must match the Pub 15-T engine called directly with the same facts.
+      // The effective FUTA rate rides the call's own input — the engine passes
+      // the configured rate the same way — because no 2026 Schedule A is
+      // transcribed and the pure boundary refuses untranscribed years by name.
       const expected = calculatePub15T({
         payDate: "2026-07-21", periodsPerYear: 26, wages: "4000.00",
         filingStatus: "married_joint",
+        futaEffectiveRate: "0.006",
         sui: { rate: "0.027", wageBase: "9000" },
       });
       const factors = stub.factors as unknown as Record<string, string>;
@@ -776,13 +808,29 @@ test(
       // Both profiles say Canada explicitly: Sam's 'CA' is the deliberate
       // misconfiguration the refusal below asserts on ("their profile still
       // says Canada while the entity paying them is American").
-      for (const [employee, province] of [[rootEmployee, "ON"], [usEmployee, "ON"]] as const) {
+      for (const [employee, province, subsidiaryId] of [
+        [rootEmployee, "ON", org.subsidiaryId],
+        [usEmployee, "ON", usSubId],
+      ] as const) {
+        const employmentId = await seedWorkerEmployment(org.orgId, employee, subsidiaryId);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                                 pay_basis, federal_claim_code, provincial_claim_code,
-                                                 is_active, created_by, updated_by)
-          values (${org.orgId}, ${employee}, ${scheduleId}, 'CA', ${province}, 'hourly', 1, 1, true,
-                  ${actorId}, ${actorId})`);
+          insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                                 country, province, pay_basis, federal_claim_code,
+                                                 provincial_claim_code, is_active, created_by, updated_by)
+          values (${org.orgId}, ${employee}, ${employmentId}, ${scheduleId}, 'CA', ${province}, 'hourly',
+                  1, 1, true, ${actorId}, ${actorId})`);
+        // Sam runs through US federal (the American entity pays him), which
+        // refuses payroll without a tax-residency status — so he states U.S.
+        // personhood. Rita is a Canadian hire and files no US form.
+        if (employee === usEmployee) {
+          await db.execute(sql`
+            insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                                   region, sub_region, answers, effective_from,
+                                                   created_by, updated_by)
+            values (${org.orgId}, ${employee}, 'US', 'us_w4_tax_residency', null, null,
+                    '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+                    ${actorId}, ${actorId})`);
+        }
         await db.execute(sql`
           insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
                                     billing_status, costing_basis, created_by, updated_by)
@@ -833,7 +881,11 @@ test(
          where org_id = ${org.orgId} and employee_party_id = ${usEmployee}`);
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
-          payroll: { us: { sui: { TX: { rate: "0.027", wageBase: "9000" } } } },
+          // Presence-only FUTA the same way: the 2026 Schedule A is not
+          // transcribed, so an unconfigured FUTA refuses by name; the
+          // ordinary 0.6% full-credit figure is the TEST entering a number
+          // as an employer would, and no expectation asserts it.
+          payroll: { us: { futaRate: "0.006", sui: { TX: { rate: "0.027", wageBase: "9000" } } } },
         })}::jsonb where id = ${org.orgId}`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
@@ -884,12 +936,13 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1, true,
-                ${actorId}, ${actorId})`);
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+                true, ${actorId}, ${actorId})`);
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
@@ -1011,12 +1064,13 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
       for (const workedOn of ["2026-07-06", "2026-07-08"]) {
         await db.execute(sql`
@@ -1157,12 +1211,13 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
       const addHours = async (workedOn: string) => {
         await db.execute(sql`
@@ -1468,12 +1523,13 @@ async function seedFencedRaceOrg(): Promise<{
                                pay_date_offset_days, is_active, created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`);
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_percent, vacation_method, is_active,
-                                           created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, federal_claim_code,
+                                           provincial_claim_code, vacation_percent, vacation_method,
+                                           is_active, created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             '4', 'accrue', true, ${actorId}, ${actorId})`);
   // Two approved entries inside EACH period: every run in these tests must
   // have real time to price AND real rows the source selection must lock.

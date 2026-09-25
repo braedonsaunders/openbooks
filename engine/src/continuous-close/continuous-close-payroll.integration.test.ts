@@ -11,7 +11,7 @@ import {
   seedAdoption,
 } from "../payroll/filing-test-fixtures.ts";
 import { commitPayRun } from "../payroll/run-commit.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Live-PostgreSQL proofs for the payroll-compliance pack (background agent
@@ -192,9 +192,11 @@ test(
           await db.execute(sql`
             insert into parties (id, org_id, kind, display_name, is_active, custom)
             values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+          const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
           await db.execute(sql`
-            insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province)
-            values (${org.orgId}, ${employeeId}, ${scheduleId}, ${country}, ${province})`);
+            insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                                   country, province)
+            values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, ${country}, ${province})`);
         }
       });
       const findings = await scan(org.orgId);

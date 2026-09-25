@@ -16,7 +16,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * The US state withholding engine, ON A REAL PAY RUN.
@@ -197,11 +197,14 @@ async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Pro
                                   effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, 'USD', '52000', 'year', 2080, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
+  // Stub calculation refuses employees without an HRM employment, so the hire
+  // carries one and the profile points at it.
+  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                           province, residence_region, pay_basis, filing_status,
-                                           is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'US', ${opts.state},
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, residence_region, pay_basis,
+                                           filing_status, is_active, created_by, updated_by)
+    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'US', ${opts.state},
             ${opts.residence ?? null}, 'salary', 'single', true, ${fx.actorId}, ${fx.actorId})`);
   for (const certificate of opts.certificates ?? []) {
     await db.execute(sql`

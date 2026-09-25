@@ -21,7 +21,7 @@ import {
   filingSubmissions,
   recordFilingIssue,
 } from "./yearend-amendments.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -766,12 +766,15 @@ async function seedT4Year(): Promise<T4Fixture> {
                                pay_date_offset_days, is_active, created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`);
+  // Stub calculation refuses employees without an HRM employment, so the hire
+  // carries one and the profile points at it.
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           province, pay_basis, country, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            sin_encrypted, sin_last3, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, '4', 'accrue',
+    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, '4', 'accrue',
             ${sealSecret("046454286")}, '286', true, ${actorId}, ${actorId})`);
 
   const documentId = randomUUID();
@@ -788,10 +791,10 @@ async function seedT4Year(): Promise<T4Fixture> {
 
   const stubId = randomUUID();
   await db.execute(sql`
-    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                            periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
                            pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-    values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, 'ON', 26, '2026-07-21',
+    values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 26, '2026-07-21',
             2026, 'CAD', '52000.0000', '42000.0000', '52000.0000', '52000.0000',
             ${JSON.stringify({ C: "3200.50", C2: "188.00", EI: "834.20" })}::jsonb,
             ${actorId}, ${actorId})`);

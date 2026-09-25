@@ -12,7 +12,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -20,6 +20,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedWcbHarness(
   orgId: string,
   actorId: string,
+  subsidiaryId: string,
   hourlyRate: string,
   ehtExemption = "1000000",
 ): Promise<{
@@ -83,11 +84,14 @@ async function seedWcbHarness(
                                pay_date_offset_days, is_active, created_by, updated_by)
     values (${scheduleId}, ${orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`);
+  // Stub calculation refuses employees without an HRM employment, so the hire
+  // carries one and the profile points at it.
+  const employmentId = await seedWorkerEmployment(orgId, employeeId, subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           is_active, created_by, updated_by)
-    values (${orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, federal_claim_code,
+                                           provincial_claim_code, is_active, created_by, updated_by)
+    values (${orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
   const jobs = { jobA: randomUUID(), jobB: randomUUID(), jobC: randomUUID() };
   for (const [id, name] of [[jobs.jobA, "Job A"], [jobs.jobB, "Job B"], [jobs.jobC, "Job C"]] as const) {
@@ -169,11 +173,12 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 true, ${actorId}, ${actorId})`);
 
       // 40h on each of two jobs → $1,200 per job, $2,400 gross.
@@ -312,7 +317,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const harness = await seedWcbHarness(org.orgId, actorId, "30", "1000");
+      const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "30", "1000");
       const ehtPayable = randomUUID();
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -358,7 +363,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "30");
       // $600 on the job, $600 untagged → $1,200 gross, premium 2% = $24.00;
       // the single tagged split takes exactly half, leaving +$12.00.
       await harness.postHours("2026-07-06", "20", harness.jobA);
@@ -400,7 +405,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const harness = await seedWcbHarness(org.orgId, actorId, "100");
+      const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "100");
       await harness.postHours("2026-07-06", "3.3333", harness.jobA);
       await harness.postHours("2026-07-08", "3.3333", harness.jobB);
       await harness.postHours("2026-07-10", "3.3334", harness.jobC);
@@ -441,7 +446,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "30");
       const ehtPayable = randomUUID();
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -485,7 +490,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "30");
       await saveOpeningBalances({
         orgId: org.orgId, actorId, taxYear: 2026,
         rows: [{ employeePartyId: harness.employeeId, amounts: { pensionableYtd: "74000" } }],
@@ -608,11 +613,12 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 true, ${actorId}, ${actorId})`);
       const jobA = randomUUID();
       await db.execute(sql`

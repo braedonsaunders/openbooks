@@ -14,7 +14,7 @@ import { PaymentError } from "../payments/payment-errors.ts";
 import { reversePaymentForReturn } from "../payments/payment-return.ts";
 import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { dropScratchOrgReporting, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 async function postedRun(mixed = false) {
   const fx = await seedAdoption();
@@ -30,9 +30,10 @@ async function postedRun(mixed = false) {
         await db.execute(sql`insert into labor_cost_rates(org_id,employee_party_id,currency,rate,basis,effective_from,is_active,created_by,updated_by)
           select org_id,${employeeId},currency,rate,basis,effective_from,is_active,created_by,updated_by from labor_cost_rates
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
-        await db.execute(sql`insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,province,pay_basis,country,
+        const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
+        await db.execute(sql`insert into employee_payroll_profiles(org_id,employee_party_id,employment_id,pay_schedule_id,province,pay_basis,country,
           federal_claim_code,provincial_claim_code,vacation_percent,vacation_method,is_active,payment_method,created_by,updated_by)
-          select org_id,${employeeId},pay_schedule_id,province,pay_basis,country,federal_claim_code,provincial_claim_code,
+          select org_id,${employeeId},${employmentId},pay_schedule_id,province,pay_basis,country,federal_claim_code,provincial_claim_code,
           vacation_percent,vacation_method,is_active,'cheque',created_by,updated_by from employee_payroll_profiles
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
         await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,status,is_billable,billing_status,costing_basis,created_by,updated_by)

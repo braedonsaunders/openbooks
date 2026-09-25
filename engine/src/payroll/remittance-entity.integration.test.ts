@@ -10,7 +10,7 @@ import {
   createRemittanceBill,
   payrollRemittanceSummary,
 } from "./remittance.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -144,13 +144,16 @@ async function addEntityAccrual(
        run_status, run_type, created_by, updated_by)
     values (${documentId}, ${fx.org.orgId}, ${scheduleId}, '2026-07-01', ${payDate},
             ${payDate}, 2026, 'committed', 'regular', ${fx.actorId}, ${fx.actorId})`);
+  // pay_stubs.employment_id is NOT NULL: the stub carries the employee's own
+  // HRM employment, under the run's own subsidiary.
+  const employmentId = await seedWorkerEmployment(fx.org.orgId, employeeId, input.subsidiaryId);
   await db.execute(sql`
     insert into pay_stubs
-      (id, org_id, pay_run_document_id, employee_party_id, province, periods_per_year,
+      (id, org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
        pay_date, tax_year, currency_code, gross, pensionable_earnings, insurable_earnings,
        net_pay, employer_cost, vacation_accrued, factors, filing_account_id,
        filing_account_source, created_by, updated_by)
-    values (${stubId}, ${fx.org.orgId}, ${documentId}, ${employeeId}, 'ON', 12,
+    values (${stubId}, ${fx.org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 12,
             ${payDate}, 2026, ${input.currency}, ${input.amount}, ${input.amount},
             ${input.amount}, ${input.amount}, ${input.amount}, '0', '{}'::jsonb,
             ${input.filingAccountId ?? null}, ${input.filingAccountId ? "calculation" : "unknown"},

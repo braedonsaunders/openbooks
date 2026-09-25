@@ -625,6 +625,27 @@ export async function seedActiveEmployment(orgId: string, partyId: string, hired
     values (${orgId}, ${partyId}, ${hiredOn}, true)`);
 }
 
+/**
+ * Give a scratch payroll employee an HRM employment. Payroll stub calculation
+ * refuses employees without one and pay_stubs.employment_id is NOT NULL, so
+ * every seeded payroll employee needs this next to the profile — a parties
+ * row plus an employee_roles row alone is not an employment. Returns the
+ * employment id for the profile's employment_id (and any stub rows the test
+ * inserts directly). Tests proving the refusal itself seed no employment.
+ */
+export async function seedWorkerEmployment(
+  orgId: string,
+  workerPartyId: string,
+  employerSubsidiaryId: string,
+): Promise<string> {
+  await assertFixtureDatabase();
+  const id = randomUUID();
+  await db.execute(sql`
+    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
+    values (${id}, ${orgId}, ${workerPartyId}, ${employerSubsidiaryId})`);
+  return id;
+}
+
 /** Seed the users an approval-flow test needs. Passwords are placeholders. */
 export async function seedFlowActors(orgId: string): Promise<FlowActors> {
   const mk = async (name: string, role: string): Promise<string> => {
