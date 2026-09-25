@@ -43,19 +43,31 @@ export async function PUT(req: Request) {
   if (provider !== undefined && provider !== null && !isEmailProvider(provider)) {
     return NextResponse.json({ error: 'invalid provider' }, { status: 422 })
   }
+  const enabled = body.enabled
+  if (enabled !== undefined && typeof enabled !== 'boolean') {
+    return NextResponse.json({ error: 'enabled must be a boolean' }, { status: 422 })
+  }
+  const smtpSecure = body.smtpSecure
+  if (smtpSecure !== undefined && typeof smtpSecure !== 'boolean') {
+    return NextResponse.json({ error: 'smtpSecure must be a boolean' }, { status: 422 })
+  }
+  const mailgunRegion = body.mailgunRegion
+  if (mailgunRegion !== undefined && mailgunRegion !== null && mailgunRegion !== 'eu' && mailgunRegion !== 'us') {
+    return NextResponse.json({ error: 'mailgunRegion must be us, eu, or null' }, { status: 422 })
+  }
 
   try {
     const saved = await saveOrgEmailConfig(gate.user.orgId, {
-      enabled: body.enabled === true,
+      enabled: enabled === true,
       provider: provider === undefined ? undefined : isEmailProvider(provider) ? provider : null,
       fromName: clearableStr(body.fromName),
       fromEmail: clearableStr(body.fromEmail),
       replyTo: clearableStr(body.replyTo),
       mailgunDomain: clearableStr(body.mailgunDomain),
-      mailgunRegion: body.mailgunRegion === undefined ? undefined : body.mailgunRegion === 'eu' ? 'eu' : body.mailgunRegion === 'us' ? 'us' : null,
+      mailgunRegion,
       smtpHost: clearableStr(body.smtpHost),
       smtpPort: body.smtpPort === undefined ? undefined : typeof body.smtpPort === 'number' ? body.smtpPort : body.smtpPort ? Number(body.smtpPort) : null,
-      smtpSecure: body.smtpSecure === true,
+      smtpSecure: smtpSecure === true,
       smtpUsername: clearableStr(body.smtpUsername),
       // secret: non-empty string ⇒ seal; null ⇒ clear; blank/omitted ⇒ keep.
       secret: body.secret === null ? null : typeof body.secret === 'string' && body.secret.trim() ? body.secret.trim() : undefined,

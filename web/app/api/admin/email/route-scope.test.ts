@@ -67,3 +67,21 @@ test('explicit blank email settings and an empty provider reach storage as clear
   assert.equal(saved[1].fromName, null)
   assert.equal(saved[1].replyTo, null)
 })
+
+test('malformed email setting types are refused before storage', async () => {
+  state.allowedSubsidiaryIds = null
+  for (const [field, value] of [
+    ['enabled', 'true'],
+    ['smtpSecure', 'true'],
+    ['mailgunRegion', 'ap-southeast'],
+  ] as const) {
+    state.saves.length = 0
+    const response = await PUT(new Request('http://localhost/api/admin/email', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedUpdatedAt: '1', [field]: value }),
+    }))
+    assert.equal(response.status, 422, `${field} rejects a value of the wrong type or outside its enum`)
+    assert.deepEqual(state.saves, [], `${field} never reaches the settings writer`)
+  }
+})
