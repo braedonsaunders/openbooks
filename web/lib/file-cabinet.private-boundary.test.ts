@@ -74,7 +74,7 @@ test(
         getFolderTree,
         listFiles,
         setGrant,
-      } from "./web/lib/file-cabinet.ts";
+      } from "./web/lib/file-cabinet/index.ts";
 
       installTrustedTestDatabaseBypass();
 
@@ -360,7 +360,7 @@ test(
       import { db } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
-      import { purgeFile } from "./web/lib/file-cabinet.ts";
+      import { purgeFile } from "./web/lib/file-cabinet/index.ts";
 
       installTrustedTestDatabaseBypass();
 
@@ -425,7 +425,7 @@ test(
       import { db } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
-      import { purgeFile } from "./web/lib/file-cabinet.ts";
+      import { purgeFile } from "./web/lib/file-cabinet/index.ts";
 
       installTrustedTestDatabaseBypass();
 
@@ -500,7 +500,7 @@ test(
       import { db } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
-      import { purgeFile } from "./web/lib/file-cabinet.ts";
+      import { purgeFile } from "./web/lib/file-cabinet/index.ts";
 
       installTrustedTestDatabaseBypass();
 
@@ -564,7 +564,7 @@ test(
       import { db } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
-      import { purgeFile } from "./web/lib/file-cabinet.ts";
+      import { purgeFile } from "./web/lib/file-cabinet/index.ts";
 
       installTrustedTestDatabaseBypass();
 
