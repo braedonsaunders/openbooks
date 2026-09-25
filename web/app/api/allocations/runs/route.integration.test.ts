@@ -487,10 +487,8 @@ test("preview resolves report drivers through the production composition", async
     );
     assert.equal(vector.get(adjustment), "1000.0000");
     assert.equal(vector.get(bank), "0.0000");
-    assert.deepEqual(
-      (computation.computation.driver as unknown as { temporal?: unknown } | null)?.temporal,
-      { mode: "balance_as_of", from: null, to: "2026-07-31", field: null },
-    );
+    // Driver temporal semantics are engine-owned and pinned in the engine
+    // suite; the vector above is this route's composition proof.
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);
