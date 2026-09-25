@@ -367,11 +367,6 @@ async function writeTransactions(
       let subsidiaryId: string | null = null
       const subsidiaryHuman = String(src.subsidiary ?? '').trim()
       const subsidiaryMapped = fieldWasMapped(src, 'subsidiary') || subsidiaryHuman.length > 0
-      if (subsidiaryMapped && !multiSubsidiaryOn) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: 'subsidiary field is not available while multi-subsidiary is disabled' })
-        continue
-      }
       if (subsidiaryHuman) {
         subsidiaryId = await resolver.resolveId({ resource: 'subsidiaries', by: 'name' }, subsidiaryHuman)
         if (!subsidiaryId) {
@@ -379,7 +374,17 @@ async function writeTransactions(
           outcome.errors.push({ row: rowNo, message: `subsidiary "${subsidiaryHuman}" not found` })
           continue
         }
-      } else {
+      }
+      // A file the system wrote itself always carries the row's subsidiary
+      // name, and the root is the only legal value on a single-subsidiary
+      // org: accept it so exports round-trip. Any other explicit subsidiary
+      // still needs the multi-subsidiary feature.
+      if (subsidiaryMapped && !multiSubsidiaryOn && subsidiaryId !== rootSubsidiaryId) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: 'subsidiary field is not available while multi-subsidiary is disabled' })
+        continue
+      }
+      if (!subsidiaryId) {
         subsidiaryId = rootSubsidiaryId
       }
 
@@ -500,7 +505,7 @@ async function writeTransactions(
       const number = wantNumber || (await nextDocumentNumber(ctx.orgId, cfg.kind, cfg.numberPrefix))
       const currency = String(src.currency ?? '').trim() || baseCurrency
       const documentId = await db.transaction(async (tx) => {
-        if (subsidiaryMapped) {
+        if (subsidiaryMapped && subsidiaryId !== rootSubsidiaryId) {
           await acquireOrgFeatureGateLock(tx, ctx.orgId)
           if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, 'multiSubsidiary'))) {
             throw new Error('subsidiary field is not available while multi-subsidiary is disabled')
