@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Popover } from '@openbooks/ui'
 import { downloadExportFile } from '../../../lib/export-download'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 /**
  * One compact "Export" button that opens a menu with Print / PDF / Excel / CSV,
@@ -43,7 +44,7 @@ export function ExportMenu({ kind, params, baseHref }: {
     setOpen(false)
     try {
       const res = await fetch(pdf)
-      if (!res.ok) throw new Error('print')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('printFailed')))
       const objUrl = URL.createObjectURL(await res.blob())
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
@@ -57,8 +58,8 @@ export function ExportMenu({ kind, params, baseHref }: {
         }, 60_000)
       }
       document.body.appendChild(iframe)
-    } catch {
-      toast.error(t('printFailed'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('printFailed'))
     }
   }
 
