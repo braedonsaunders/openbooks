@@ -133,6 +133,12 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  // The locked in-transaction scope recheck is IO, not pure logic, so it is
+  // doubled here like the database: the mocked gate is unrestricted, for
+  // which the real helper returns null. The recheck itself is covered by
+  // subsidiary-scope-lock.integration.test.ts and the parties PATCH
+  // integration tests, which load the real module.
+  ['mock:party-scope', `export async function denyLockedOutsidePartyScope() { return null }`],
 ])
 
 // Neither the decimal classifier nor the money kernel is mocked: a hand
@@ -146,6 +152,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/list-params', 'mock:list-params'],
   ['../../../../lib/countries', 'mock:countries'],
   ['../_lib', 'mock:party-loader'],
+  ['./bank-accounts/party-scope', 'mock:party-scope'],
 ])
 
 const hooks = registerHooks({

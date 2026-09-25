@@ -89,6 +89,8 @@ test(
       assert.equal(first.parties?.failed ?? -1, 0);
       const landed = await roleRows(org.orgId);
       assert.equal(landed.length, 3);
+      const stampedBefore = (await withOrg(org.orgId, () => db.execute<{ updated_at: string }>(sql`
+        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`))).rows[0]!.updated_at;
       assert.equal(
         landed.find((r) => r.table === "customer")?.credit,
         "1738300.0000",
@@ -106,6 +108,12 @@ test(
       assert.equal(second.parties?.failed ?? -1, 0);
       const relanded = await roleRows(org.orgId);
       assert.equal(relanded.length, 3);
+      // The re-pull rewrites every party row: updated_at must move so an
+      // optimistic-concurrency edit can see the sync touch (in particular a
+      // rehome) instead of committing over it.
+      const stampedAfter = (await withOrg(org.orgId, () => db.execute<{ updated_at: string }>(sql`
+        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`))).rows[0]!.updated_at;
+      assert.notEqual(stampedAfter, stampedBefore);
       assert.equal(
         relanded.find((r) => r.table === "customer")?.credit,
         "1800000.0000",

@@ -1058,13 +1058,17 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
   const taxIds = JSON.stringify((f.taxIds as Record<string, string>) ?? {});
   let pid = await findPartyByRef(orgId, refKey, rec.sourceRef);
   if (pid) {
+    // A rehome (subsidiary_id change) must move updated_at with it: party
+    // writes use that stamp for optimistic concurrency, and a silent rehome
+    // would otherwise slip under an in-flight edit's equality check.
     await db.execute(sql`update parties set display_name=${displayName}, kind=${kind}::text, is_active=${isActive},
       subsidiary_id=coalesce(${subsidiaryId}, subsidiary_id),
       email=coalesce(${str(f.email)}, email), phone=coalesce(${str(f.phone)}, phone),
       website=coalesce(${str(f.website)}, website), legal_name=coalesce(${str(f.legalName)}, legal_name),
       tax_ids=${taxIds}::jsonb,
       custom=(${custom}::jsonb || parties.custom)
-        || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
+        || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text),
+      updated_at=greatest(clock_timestamp(), updated_at + interval '1 microsecond')
       where id=${pid} and org_id=${orgId}`);
     s.updated++;
   } else {
