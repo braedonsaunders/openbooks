@@ -24,6 +24,10 @@ const mockAuthz = `
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
+  export function guardUnrestrictedScope(authz) {
+    if (authz?.allowedSubsidiaryIds == null) return null
+    return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+  }
 `;
 
 type QueryClient = {

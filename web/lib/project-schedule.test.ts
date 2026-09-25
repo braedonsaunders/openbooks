@@ -18,7 +18,7 @@ interface TestState {
   calendarTargetExists: boolean
   resourceTargetExists: boolean
   /** Row the in-transaction project lock sees (null = missing project). */
-  projectRow: { id: string; subsidiary_id: string | null } | null
+  projectRow: { id: string; subsidiaryId: string | null } | null
   allowedSubsidiaryIds: Set<string> | null
 }
 
@@ -33,7 +33,7 @@ const state: TestState = {
   txQueries: [],
   calendarTargetExists: false,
   resourceTargetExists: false,
-  projectRow: { id: 'project-a', subsidiary_id: 'sub-a' },
+  projectRow: { id: 'project-a', subsidiaryId: 'sub-a' },
   allowedSubsidiaryIds: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
@@ -65,8 +65,8 @@ const mockSources = new Map<string, string>([
         if (/from projects p/i.test(statement)) {
           const row = state.projectRow
           const inScope = state.allowedSubsidiaryIds === null
-            || (row?.subsidiary_id !== null && row?.subsidiary_id !== undefined
-              && state.allowedSubsidiaryIds.has(row.subsidiary_id))
+            || (row?.subsidiaryId !== null && row?.subsidiaryId !== undefined
+              && state.allowedSubsidiaryIds.has(row.subsidiaryId))
           return { rows: row && inScope ? [row] : [] }
         }
         if (/select coalesce\\(max\\(schedule_order\\)/i.test(statement)) return { rows: [{ n: 7 }] }
@@ -165,7 +165,7 @@ function reset() {
   state.txQueries = []
   state.calendarTargetExists = false
   state.resourceTargetExists = false
-  state.projectRow = { id: 'project-a', subsidiary_id: 'sub-a' }
+  state.projectRow = { id: 'project-a', subsidiaryId: 'sub-a' }
   state.allowedSubsidiaryIds = null
 }
 
@@ -348,7 +348,7 @@ test('an out-of-scope project refuses before reading schedule children', async (
     ),
   ]) {
     reset()
-    state.projectRow = { id: PROJECT_A, subsidiary_id: 'sub-b' }
+    state.projectRow = { id: PROJECT_A, subsidiaryId: 'sub-b' }
     state.allowedSubsidiaryIds = new Set(['sub-a'])
 
     await assert.rejects(

@@ -108,7 +108,8 @@ async function opaqueFixture() {
 function scopedGate(fx: { orgId: string; actorId: string; subsidiaryId: string }, permission: string): Authz {
   return {
     user: { orgId: fx.orgId, id: fx.actorId },
-    permissions: new Set([permission]),
+    // Read-before-action runs the real kind gate (pay_run reads via the GL namespace), so gates carry gl.read.
+    permissions: new Set([permission, 'gl.read']),
     allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
   } as Authz;
 }
