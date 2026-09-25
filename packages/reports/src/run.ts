@@ -398,9 +398,7 @@ function shapeSummarizeResult(
         sumExactDecimals(plusInputs, namesForRows(plusRows)),
         sumExactDecimals(minusInputs, namesForRows(minusRows)),
       )
-      row[measureOffset + mi] = m.fn === 'sum' || m.fn === 'latest'
-        ? (formatExactNumber(total) ?? total)
-        : Number(total)
+      row[measureOffset + mi] = shapeTotalValue(m.fn, total)
     })
     return row
   }
@@ -469,9 +467,7 @@ function shapeSummarizeResult(
             const inputs = levelRaw.map((raw) => raw[`m${mi}`])
             if (inputs.every((v) => v === null || v === undefined)) return
             const total = sumExactDecimals(inputs, namesForRows(levelRaw))
-            totalsRow[breakouts.length - 1 + mi] = m.fn === 'sum' || m.fn === 'latest'
-              ? (formatExactNumber(total) ?? total)
-              : Number(total)
+            totalsRow[breakouts.length - 1 + mi] = shapeTotalValue(m.fn, total)
           })
           out.totalRows.push(out.rows.length)
           out.rows.push(totalsRow)
@@ -549,9 +545,7 @@ function shapeSummarizeResult(
             return
           }
           const total = sumExactDecimals(inputs, namesForRows(entry.raw))
-          row[breakouts.length - 1 + mi] = m.fn === 'sum' || m.fn === 'latest'
-            ? (formatExactNumber(total) ?? total)
-            : Number(total)
+          row[breakouts.length - 1 + mi] = shapeTotalValue(m.fn, total)
         })
         grandRows.push(row)
         grandKeys.push(entry.scope)
@@ -790,6 +784,17 @@ function sumExactDecimals(values: unknown[], rowNames: string[] = values.map((_,
   if (scale === 0) return `${negative ? '-' : ''}${absolute}`
   const digits = absolute.toString().padStart(scale + 1, '0')
   return `${negative ? '-' : ''}${digits.slice(0, -scale)}.${digits.slice(-scale)}`
+}
+
+/**
+ * Display value for a combined total over exact-decimal inputs. Counts are
+ * true integers; every other aggregate keeps its exact decimal string —
+ * routing a monetary total through Number would silently round past
+ * IEEE-754 precision, so only counts take the Number path.
+ */
+function shapeTotalValue(fn: string, total: string): string | number {
+  if (fn === 'count') return Number(total)
+  return formatExactNumber(total) ?? total
 }
 
 function formatExactNumber(value: unknown): string | null {

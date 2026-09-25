@@ -847,7 +847,11 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         options: ['earning', 'deduction', 'employer_contribution'],
       },
       { key: 'hours', label: 'Hours', kind: 'number', expr: 'l.hours' },
-      { key: 'rate', label: 'Rate', kind: 'number', expr: 'l.rate' },
+      // Compensation per unit at ledger precision (numeric(19,4)), rendered
+      // as money on the stub — a generic number kind would route its
+      // aggregates through the lossy numeric shaping instead of the
+      // money-exact presentation and denomination classification.
+      { key: 'rate', label: 'Rate', kind: 'money', expr: 'l.rate' },
       { key: 'amount', label: 'Amount', kind: 'money', expr: 'l.amount' },
       {
         key: 'ytd_amount', label: 'YTD amount', kind: 'money',
