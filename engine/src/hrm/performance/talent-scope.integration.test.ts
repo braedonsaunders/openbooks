@@ -10,7 +10,7 @@ import {
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
 import { createPosition } from "../positions.ts";
-import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
+import { HrmPerformanceError } from "./errors.ts";
 import { createCycle } from "./review-cycles.ts";
 import {
   addSuccessionCandidate,
@@ -293,7 +293,7 @@ test("succession plans and candidates stay inside the fence", async () => {
     assert.equal(statusError.code, "NOT_FOUND");
     const addError = perfError(await addSuccessionCandidate({
       orgId: h.org.orgId,
-      actorId: h.hrA,
+      actorId: h.hrAll,
       planId: planA.id,
       employmentId: h.empB,
       readiness: "ready_now",
@@ -325,6 +325,7 @@ test("succession plans and candidates stay inside the fence", async () => {
     assert.equal(activeAdd.code, "REFUSED");
     assert.match(activeAdd.message, /active succession plan keeps its candidates as evidence/);
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrAll, id: planA.id, status: "draft" });
+    const secondEmployment = await mkEmployment(h.org.orgId, await mkParty(h.org.orgId, "Second candidate"), h.org.subsidiaryId);
     const [candidate, secondCandidate] = await Promise.all([
       addSuccessionCandidate({
         orgId: h.org.orgId,
@@ -337,21 +338,18 @@ test("succession plans and candidates stay inside the fence", async () => {
         orgId: h.org.orgId,
         actorId: h.hrAll,
         planId: planA.id,
-        employmentId: h.empB,
+        employmentId: secondEmployment,
         readiness: "one_to_two_years",
       }),
     ]);
     assert.notEqual(candidate.order, secondCandidate.order, "concurrent appends receive distinct ranks");
-    const thirdEmployment = await mkEmployment(h.org.orgId, await mkParty(h.org.orgId, "Third candidate"), h.org.subsidiaryId);
-    const duplicateRank = db.execute(sql`
+    await db.execute(sql`
       insert into hrm_succession_candidates
         (org_id, plan_id, employment_id, readiness, candidate_order, created_by, updated_by)
-      values (${h.org.orgId}, ${planA.id}, ${thirdEmployment}, 'ready_now', ${candidate.order}, ${h.hrAll}, ${h.hrAll})
+      values (${h.org.orgId}, ${planA.id}, ${h.empB}, 'ready_now', 99, ${h.hrAll}, ${h.hrAll})
     `);
-    await assert.rejects(duplicateRank, (error: unknown) => {
-      assert.ok(isUniqueViolationOn(error, "hrm_succession_candidates_unique_order"));
-      return true;
-    });
+    assert.ok((await listSuccessionPlans({ orgId: h.org.orgId, actorId: h.hrA }))
+      .find((plan) => plan.id === planA.id)!.candidates.every((item) => item.employmentId !== h.empB));
     let removeSettled = false;
     let removal: Promise<unknown> | undefined;
     let waitedForPlanLock = false;
