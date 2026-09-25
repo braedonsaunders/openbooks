@@ -1,4 +1,5 @@
 import { cmp } from "../money/money.ts";
+import { parseMoney } from "../money/brands.ts";
 import { statutoryAssessment } from "./packs.ts";
 import type { PushStatutoryFn, StubLine } from "./statutory-context.ts";
 
@@ -22,9 +23,11 @@ export function createPushStatutory(input: {
     let pushed = false;
     for (const allocation of options.allocations ?? [{ amount }]) {
       if (cmp(allocation.amount, "0") === 0) continue;
+      // The choke point every pack statutory pass flows through: parse once
+      // here (fail closed) so no pack can push unvalidated text at the stub.
       lines.push({
         componentId: c.id as string, kind, description,
-        amount: allocation.amount, sequence,
+        amount: parseMoney(allocation.amount), sequence,
         projectId: allocation.projectId ?? null,
         departmentId: allocation.departmentId ?? null,
         assessedOn,
