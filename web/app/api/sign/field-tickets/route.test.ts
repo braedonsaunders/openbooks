@@ -36,10 +36,12 @@ const mockSources = new Map<string, string>([
       export const db = {
         async execute() {
           state.executeCalls += 1
-          if (state.executeCalls === 2) return { rows: [{ id: '${TICKET_ID}', status: 'approved', document_number: 'FT-1' }] }
-          // Slot serialization (bdd8d171f): request claim is call 4, signature insert is call 5.
-          if (state.executeCalls === 4) return { rows: [{ id: '00000000-0000-4000-8000-00000000c004' }] }
-          if (state.executeCalls === 5) return { rows: [{ id: '00000000-0000-4000-8000-00000000c006' }] }
+          // Row-locked flag read honors the feature switch (the gate lock itself is mocked above).
+          if (state.executeCalls === 1) return { rows: [{ features: { fieldTickets: state.featureEnabled } }] }
+          if (state.executeCalls === 3) return { rows: [{ id: '${TICKET_ID}', status: 'approved', document_number: 'FT-1' }] }
+          // Slot serialization (bdd8d171f): request claim is call 5, signature insert is call 6.
+          if (state.executeCalls === 5) return { rows: [{ id: '00000000-0000-4000-8000-00000000c004' }] }
+          if (state.executeCalls === 6) return { rows: [{ id: '00000000-0000-4000-8000-00000000c006' }] }
           return { rows: [] }
         },
       }
@@ -51,9 +53,8 @@ const mockSources = new Map<string, string>([
     'mock:features',
     `
       const state = globalThis[Symbol.for('openbooks.field-ticket-sign-gate-test')]
-      export async function isFeatureEnabled(_orgId, key) {
-        state.featureCalls.push(key)
-        return state.featureEnabled
+      export async function acquireFeatureGateLock() {
+        state.featureCalls.push('gate-lock')
       }
     `,
   ],
@@ -184,8 +185,8 @@ test('customer signing refuses a valid link when Field Tickets is disabled', asy
   const response = await post()
 
   assert.equal(response.status, 404)
-  assert.deepEqual(state.featureCalls, ['fieldTickets'])
-  assert.equal(state.executeCalls, 0, 'the signing transaction must not start while the feature is off')
+  assert.deepEqual(state.featureCalls, ['gate-lock'])
+  assert.equal(state.executeCalls, 1, 'only the feature fence runs while the feature is off')
 })
 
 test('customer signing remains available when Field Tickets is enabled', async () => {
@@ -194,12 +195,11 @@ test('customer signing remains available when Field Tickets is enabled', async (
 
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { ok: true })
-  assert.deepEqual(state.featureCalls, ['fieldTickets'])
+  assert.deepEqual(state.featureCalls, ['gate-lock'])
 })
 
 test('the public signing page refuses the token when Field Tickets is disabled', async () => {
   pageState.featureEnabled = false
-  pageState.featureCalls = []
   await assert.rejects(
     SignFieldTicketPage({ params: Promise.resolve({ token: 'valid-token' }) }),
     /PAGE_NOT_FOUND/,
