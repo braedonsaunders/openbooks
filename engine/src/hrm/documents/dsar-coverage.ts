@@ -5,13 +5,23 @@ import type { DsarModule } from "./dsar.ts";
  * subject-access exports, derived from the live schema rather than a
  * hand-kept module list.
  *
- * Every table in the HR remit (hrm_* plus the named employment, time and
- * pay tables below) that holds personal data about a party must appear
+ * Every table with a person link — a foreign key to parties,
+ * worker_employments or hrm_candidates on any column but the tenancy
+ * link (orgs are party rows, so org_id references parties without the
+ * row being about a person), or a *_party_id / *_employment_id /
+ * candidate_id column where the catalog constrains nothing — must appear
  * here exactly once: either gathered by a DSAR domain, or explicitly
  * excluded with a reviewed reason. `dsar-coverage.integration.test.ts`
- * discovers person-linked tables from information_schema and fails when
- * one has neither, so a new personal-data table cannot land without a
- * coverage decision.
+ * derives that surface from pg_constraint plus the name safety net and
+ * fails when one has neither, so a new personal-data table cannot land
+ * without a coverage decision.
+ *
+ * Exclusions come in two honest kinds: remit exclusions (another module
+ * owns the data — finance, CRM, vendor, ops, compliance, legal, platform —
+ * or the link is actor-side / counterparty / credential material), and
+ * gather-pending notes for subject data with no gatherer yet. A pending
+ * note names the link and the required gatherer; it is a tracked gap,
+ * not a silent omission.
  *
  * Linkage kinds:
  * - direct: the table carries its own subject/employment link and the
@@ -62,6 +72,9 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "employee_payroll_profiles", domain: "payroll", linkage: "direct" },
   { table: "hrm_per_diem_entries", domain: "payroll", linkage: "direct" },
   { table: "hrm_travel_pay_entries", domain: "payroll", linkage: "direct" },
+  { table: "payroll_work_location_allocations", domain: "payroll", linkage: "direct" },
+  { table: "payroll_roe_separation_events", domain: "payroll", linkage: "direct" },
+  { table: "it_addizionali_opening_balances", domain: "payroll", linkage: "direct" },
   { table: "hrm_candidates", domain: "recruiting", linkage: "direct" },
   { table: "hrm_candidate_consents", domain: "recruiting", linkage: "transitive" },
   { table: "hrm_applications", domain: "recruiting", linkage: "transitive" },
@@ -97,51 +110,304 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "without the preimage, and exporting them would leak credential material " +
       "rather than personal data.",
   },
-];
-
-/**
- * Person-link columns the coverage discovery uses: any remit table carrying
- * one is personal data about somebody until the registry says otherwise.
- */
-export const DSAR_PERSON_LINK_COLUMNS: readonly string[] = [
-  "party_id",
-  "worker_party_id",
-  "employee_party_id",
-  "subject_party_id",
-  "reviewer_party_id",
-  "interviewer_party_id",
-  "candidate_id",
-  "employment_id",
-];
-
-/**
- * HR remit for the derived coverage test: the tables a subject-access
- * export can reasonably cover. Finance, CRM, vendor and platform tables
- * with party links live outside the HR export and are enforced by their
- * own inventories.
- */
-export const DSAR_REMIT_TABLE_PATTERN = "hrm_%";
-
-export const DSAR_REMIT_EXTRA_TABLES: readonly string[] = [
-  "parties",
-  "worker_employments",
-  "worker_employment_versions",
-  "employment_assignments",
-  "employment_assignment_versions",
-  "employment_changes",
-  "time_entries",
-  "time_clock_events",
-  "pay_stubs",
-  "pay_stub_lines",
-  // Non-hrm_-prefixed employee tables with direct employee_party_id links:
-  // without these entries the discovery query cannot see them and their
-  // omission fails silently instead of in the coverage test.
-  "employee_tax_certificates",
-  "employee_payroll_profiles",
-  // Named so the worker_clock_pins exclusion below is enforced rather than
-  // silently droppable: the table carries a person link but is credential
-  // material, never exportable personal data.
-  "worker_clock_pins",
+  // SUBJECT DATA — gatherer pending. Each note names the subject link and
+  // the required gatherer; these are tracked gaps, not silent omissions.
+  {
+    table: "hrm_feedback",
+    reason:
+      "SUBJECT DATA — gatherer pending: rows where the subject is the " +
+      "subject (subject_employment_id, unconstrained), the author, or the " +
+      "requested party. Needs a reviews-domain gatherer following all three links.",
+  },
+  {
+    table: "hrm_one_on_ones",
+    reason:
+      "SUBJECT DATA — gatherer pending: the subject's 1:1s as report " +
+      "(report_employment_id) or manager (manager_employment_id, both " +
+      "unconstrained). Needs a reviews-domain gatherer.",
+  },
+  {
+    table: "hrm_one_on_one_items",
+    reason:
+      "SUBJECT DATA — gatherer pending: items of the subject's 1:1s " +
+      "(transitive under hrm_one_on_ones via one_on_one_id, following " +
+      "assignee/author). Gather with hrm_one_on_ones.",
+  },
+  {
+    table: "hrm_document_signers",
+    reason:
+      "SUBJECT DATA — gatherer pending: signature events where the subject " +
+      "signed (signer_party_id), transitive under gathered hrm_documents. " +
+      "token_hash is credential material and must stay denied when gathered.",
+  },
+  {
+    table: "hrm_process_steps",
+    reason:
+      "SUBJECT DATA — gatherer pending: steps of the subject's processes " +
+      "(owner_party_id/done_by), transitive under gathered hrm_processes. " +
+      "Attachment content needs a secrecy review before inclusion.",
+  },
+  {
+    table: "hrm_succession_plans",
+    reason:
+      "SUBJECT DATA — gatherer pending: succession plans where the subject " +
+      "is the incumbent (incumbent_employment_id, unconstrained). Extend " +
+      "the reviews-domain succession gatherer.",
+  },
+  {
+    table: "employee_pay_components",
+    reason:
+      "SUBJECT DATA — gatherer pending: the subject's pay component values " +
+      "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "employee_roles",
+    reason:
+      "SUBJECT DATA — gatherer pending: role assignments (party_id) " +
+      "including birth_date, which is held PII and exports with the record " +
+      "when gathered. Needs an employments-domain gatherer.",
+  },
+  {
+    table: "entitlement_ledger",
+    reason:
+      "SUBJECT DATA — gatherer pending: leave movements " +
+      "(employee_party_id/employment_id). Needs a leave-domain gatherer.",
+  },
+  {
+    table: "entitlement_plan_limits",
+    reason:
+      "SUBJECT DATA — gatherer pending: leave balance caps (same links). " +
+      "Gather with entitlement_ledger under the leave domain.",
+  },
+  {
+    table: "payroll_opening_balances",
+    reason:
+      "SUBJECT DATA — gatherer pending: YTD carry-ins " +
+      "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "payroll_prior_stubs",
+    reason:
+      "SUBJECT DATA — gatherer pending: pre-migration stub register " +
+      "(employee_party_id). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "payroll_retro_settlements",
+    reason:
+      "SUBJECT DATA — gatherer pending: recomputation settlements " +
+      "(employee_party_id/employment_id); quantified_source_snapshot needs " +
+      "a secrecy review before inclusion. Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "payroll_parallel_findings",
+    reason:
+      "SUBJECT DATA — gatherer pending: parallel-run comparisons including " +
+      "employee_name (employee_party_id). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "payroll_anomaly_flags",
+    reason:
+      "SUBJECT DATA — gatherer pending: run anomaly flags about the " +
+      "subject's pay (employment_id, unconstrained). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "payroll_opening_program_bases",
+    reason:
+      "SUBJECT DATA — gatherer pending: program opening bases " +
+      "(employee_party_id, unconstrained). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "pay_run_adjustments",
+    reason:
+      "SUBJECT DATA — gatherer pending: per-employee run adjustments " +
+      "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "pay_run_holiday_assertions",
+    reason:
+      "SUBJECT DATA — gatherer pending: holiday assertions including " +
+      "absent_without_consent (same links). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "labor_cost_rates",
+    reason:
+      "SUBJECT DATA — gatherer pending: the subject's costing rate " +
+      "(employee_party_id). Needs a payroll-domain gatherer.",
+  },
+  {
+    table: "work_schedules",
+    reason:
+      "SUBJECT DATA — gatherer pending: the subject's schedule pattern " +
+      "(employee_party_id). Needs a payroll/time-domain gatherer.",
+  },
+  {
+    table: "reporting_relationships",
+    reason:
+      "SUBJECT DATA — gatherer pending: the manager chain " +
+      "(employment_id/manager_employment_id). Needs an employments-domain gatherer.",
+  },
+  {
+    table: "addresses",
+    reason:
+      "SUBJECT DATA — gatherer pending: the subject's addresses (party_id). " +
+      "Needs a party-domain gatherer.",
+  },
+  {
+    table: "contacts",
+    reason:
+      "SUBJECT DATA — gatherer pending: the subject's contact records " +
+      "(party_id). Needs a party-domain gatherer.",
+  },
+  {
+    table: "crew_time_batch_lines",
+    reason:
+      "SUBJECT DATA — gatherer pending: crew time records " +
+      "(employee_party_id). Needs a time-domain gatherer; envelopes stay " +
+      "foreman-side (see crew_time_batches).",
+  },
+  {
+    table: "field_ticket_labor_lines",
+    reason:
+      "SUBJECT DATA — gatherer pending behind a field-ticket remit " +
+      "decision: lines name the employee, but the parent ticket is a " +
+      "customer billing document outside the HR remit.",
+  },
+  {
+    table: "timesheet_weeks",
+    reason:
+      "SUBJECT DATA — gatherer pending: approval envelopes " +
+      "(employee_party_id, unconstrained) over gathered time_entries. " +
+      "Needs a time-domain gatherer.",
+  },
+  // Remit exclusions: another module owns the data, the link is
+  // actor-side or counterparty, or the payload is credential material.
+  {
+    table: "party_bank_accounts",
+    reason:
+      "financial credential material (account_number_encrypted) under the " +
+      "finance remit; bank detail is not HR file data.",
+  },
+  {
+    table: "documents",
+    reason:
+      "finance-owned document store (invoices, bills, expenses); HR file " +
+      "documents gather via hrm_documents. A subject-linked non-HR document " +
+      "needs its own remit decision before inclusion.",
+  },
+  {
+    table: "document_lines",
+    reason:
+      "same store as documents; employee_id lines are billing detail, not " +
+      "HR file data.",
+  },
+  {
+    table: "journal_lines",
+    reason:
+      "general ledger; finance remit. Payroll postings derive from gathered pay stubs.",
+  },
+  { table: "payment_cards", reason: "financial instruments; finance remit." },
+  { table: "payment_instructions", reason: "financial instruments; finance remit." },
+  { table: "payment_links", reason: "financial instruments; finance remit." },
+  { table: "payment_mandates", reason: "financial instruments; finance remit." },
+  {
+    table: "information_return_recipients",
+    reason: "tax filing counterparties; tax remit.",
+  },
+  { table: "lien_waivers", reason: "construction legal instruments; legal remit." },
+  {
+    table: "fixed_assets",
+    reason:
+      "asset register; the custodian link is an assignment, not a subject " +
+      "record. Asset remit.",
+  },
+  {
+    table: "property_leases",
+    reason: "lease register; tenant link. Property remit.",
+  },
+  {
+    table: "pay_components",
+    reason:
+      "component definitions; remittance_party_id names a counterparty payee, " +
+      "not the subject.",
+  },
+  {
+    table: "union_agreements",
+    reason: "agreement config; remittance counterparty.",
+  },
+  {
+    table: "customer_price_level_assignments",
+    reason: "commercial config; customer counterparty.",
+  },
+  { table: "customer_roles", reason: "commercial config; customer counterparty." },
+  {
+    table: "item_price_schedules",
+    reason: "pricing config; customer counterparty.",
+  },
+  {
+    table: "item_rate_book_assignments",
+    reason: "pricing config; customer counterparty.",
+  },
+  {
+    table: "crm_account_profiles",
+    reason: "CRM remit; account links are counterparties.",
+  },
+  { table: "crm_opportunities", reason: "CRM remit; account counterparty." },
+  { table: "revenue_contracts", reason: "commercial contracts; customer counterparty." },
+  { table: "subcontracts", reason: "vendor remit." },
+  { table: "subcontract_payment_controls", reason: "vendor remit." },
+  { table: "vendor_roles", reason: "vendor remit." },
+  {
+    table: "ap_capture_items",
+    reason: "AP capture; vendor_candidate_id is a vendor counterparty.",
+  },
+  { table: "compliance_records", reason: "compliance module remit." },
+  { table: "compliance_release_checks", reason: "compliance module remit." },
+  { table: "compliance_waivers", reason: "compliance module remit." },
+  {
+    table: "projects",
+    reason:
+      "construction ops remit; customer counterparty, foreman/manager actor-side.",
+  },
+  {
+    table: "field_tickets",
+    reason:
+      "construction billing documents; customer doc with foreman actor-side. Ops remit.",
+  },
+  { table: "field_ticket_policies", reason: "customer billing config. Ops remit." },
+  {
+    table: "crew_time_batches",
+    reason: "foreman-side capture envelopes; ops time capture.",
+  },
+  { table: "wip_prebill_lines", reason: "construction billing detail. Ops remit." },
+  {
+    table: "hrm_benefit_plans",
+    reason:
+      "plan definitions; provider counterparty. The subject instances " +
+      "(enrollments) gather.",
+  },
+  {
+    table: "hrm_calibration_sessions",
+    reason:
+      "facilitator actor-side; the session is about ratees, not the " +
+      "facilitator's record.",
+  },
+  {
+    table: "hrm_comp_cycle_budgets",
+    reason:
+      "manager-side budget envelopes; outcomes gather via statements and lines.",
+  },
+  {
+    table: "hrm_requisitions",
+    reason: "hiring config; hiring-manager actor-side.",
+  },
+  {
+    table: "hrm_process_template_steps",
+    reason: "template defaults; instances on subject processes are deferred above.",
+  },
+  {
+    table: "party_subsidiaries",
+    reason: "org membership administration; platform remit.",
+  },
 ];
 
 export interface DsarCoverageManifest {
