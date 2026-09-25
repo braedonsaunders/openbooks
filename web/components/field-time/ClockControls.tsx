@@ -93,17 +93,26 @@ export function ClockControls({
   const [photoBusy, setPhotoBusy] = useState(false)
   const [queue, setQueue] = useState<QueuedEvent[]>(loadQueue)
   const [replaying, setReplaying] = useState(false)
+  const [stale, setStale] = useState(false)
   const [search, setSearch] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const refresh = useCallback(async () => {
-    const res = await fetch('/api/time/clock', { credentials: 'same-origin' })
-    if (!res.ok) return
-    const day = (await res.json()) as { status: ClockState }
-    if (day.status) {
-      setState(day.status)
-      setProjectId(day.status.projectId ?? '')
-      setCostCode(day.status.costCodeRef ?? '')
+  // Refresh reports whether today's state could be re-read. A POST that is
+  // known-recorded must never be re-enqueued merely because this GET failed,
+  // so callers branch on the boolean instead of throwing.
+  const refresh = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/time/clock', { credentials: 'same-origin' })
+      if (!res.ok) return false
+      const day = (await res.json()) as { status: ClockState }
+      if (day.status) {
+        setState(day.status)
+        setProjectId(day.status.projectId ?? '')
+        setCostCode(day.status.costCodeRef ?? '')
+      }
+      return true
+    } catch {
+      return false
     }
   }, [])
 
@@ -119,13 +128,22 @@ export function ClockControls({
     async (body: Record<string, unknown>): Promise<boolean> => {
       setBusy(true)
       setError(null)
+      setStale(false)
       try {
-        const res = await fetch('/api/time/clock', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        })
+        let res: Response
+        try {
+          res = await fetch('/api/time/clock', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+        } catch {
+          // POST transport is uncertain — the event may never have reached
+          // the server, so the offline queue owns it.
+          enqueue(body)
+          return true
+        }
         if (!res.ok) {
           if (!navigator.onLine) {
             enqueue(body)
@@ -135,10 +153,9 @@ export function ClockControls({
           setError(payload?.error ?? t('field.sendFailed'))
           return false
         }
-        await refresh()
-        return true
-      } catch {
-        enqueue(body)
+        // The POST is known-recorded from here: a refresh failure below
+        // raises the stale notice and never re-enqueues this event.
+        setStale(!(await refresh()))
         return true
       } finally {
         setBusy(false)
@@ -146,6 +163,15 @@ export function ClockControls({
     },
     [enqueue, refresh, t],
   )
+
+  const retryRefresh = useCallback(async () => {
+    setBusy(true)
+    try {
+      setStale(!(await refresh()))
+    } finally {
+      setBusy(false)
+    }
+  }, [refresh])
 
   const locate = useCallback(
     (): Promise<{ lat: number; lng: number; accuracyM: number | null } | null> =>
@@ -187,6 +213,7 @@ export function ClockControls({
     if (pending.length === 0 || replaying) return
     setReplaying(true)
     setError(null)
+    setStale(false)
     try {
       const res = await fetch('/api/time/clock', {
         method: 'POST',
@@ -205,7 +232,7 @@ export function ClockControls({
       setQueue(failed)
       const firstError = payload.results.find((result) => result.error)?.error
       if (firstError) setError(firstError)
-      await refresh()
+      setStale(!(await refresh()))
     } catch {
       setError(t('field.sendFailed'))
     } finally {
@@ -327,6 +354,17 @@ export function ClockControls({
           </p>
           <Button variant="outline" disabled={replaying} onClick={replay} className="mt-2">
             {replaying ? t('field.replaying') : t('field.replayNow')}
+          </Button>
+        </div>
+      ) : null}
+
+      {stale ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950" role="status">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            {t('field.staleState')}
+          </p>
+          <Button variant="outline" disabled={busy} onClick={retryRefresh} className="mt-2">
+            {t('field.refreshNow')}
           </Button>
         </div>
       ) : null}
