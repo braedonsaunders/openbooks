@@ -414,6 +414,17 @@ async function writeSetup(
           outcome.errors.push({ row: rowNo, message: updatePackProblem })
           continue
         }
+        // I5-platform-155: a class under a misspelled or inactive regime (or
+        // an incomplete MACRS class) must fail import exactly as the
+        // interactive writer refuses it — same merged-row validator.
+        if (entity.key === 'tax-pool-classes') {
+          const classProblem = await validateEntityIntegrity(entity, src, ctx.orgId, existingId ?? undefined)
+          if (classProblem) {
+            outcome.failed++
+            outcome.errors.push({ row: rowNo, message: classProblem })
+            continue
+          }
+        }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
         const storageCols = entity.key === 'pay-components'
           ? built.cols.filter((column) => column.column !== 'supplemental_wage_category')
@@ -486,6 +497,16 @@ async function writeSetup(
           outcome.failed++
           outcome.errors.push({ row: rowNo, message: insertPackProblem })
           continue
+        }
+        // I5-platform-155: same merged-row validator as the update branch —
+        // preview and commit share the refusal through the row path.
+        if (entity.key === 'tax-pool-classes') {
+          const classProblem = await validateEntityIntegrity(entity, src, ctx.orgId, undefined)
+          if (classProblem) {
+            outcome.failed++
+            outcome.errors.push({ row: rowNo, message: classProblem })
+            continue
+          }
         }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
         const storageCols = entity.key === 'pay-components'
