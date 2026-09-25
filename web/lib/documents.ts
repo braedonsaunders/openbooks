@@ -410,6 +410,7 @@ export async function precomputeDocumentTotalsForCreate(
 export interface DocumentEditContext {
   orgId: string
   userId: string
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
   /** Provenance recorded on the transaction audit + flow events. */
   source: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction'
   /** Fire on_update record flows after the edit commits (default true). */
@@ -1041,6 +1042,7 @@ export async function applyDocumentEdit(
     )
   }
   const { orgId, userId } = ctx
+  const referenceSubsidiaryId = body.subsidiaryId ?? current.subsidiaryId
   // Validation reads ride the caller's tx when one owns this edit, so they
   // observe the caller's uncommitted claim (the fresh row's own currency);
   // every other read is committed reference data either way.
@@ -1189,11 +1191,14 @@ export async function applyDocumentEdit(
           throw new DocumentEditError(422, `${cfg?.fundingSource === 'card' ? 'card account' : 'funding bank'} must be a valid record reference`)
         }
         const owned = (await runner.execute<{ id: string }>(sql`
-          select id from accounts
-           where org_id = ${orgId} and is_active and not is_summary
-             and reconcilable and type = ${fundingAccountType} and id = ${override}::uuid
+          select a.id from accounts a
+           where a.org_id = ${orgId} and a.is_active and not a.is_summary
+             and a.reconcilable and a.type = ${fundingAccountType} and a.id = ${override}::uuid
+             and (a.subsidiary_id is null or a.subsidiary_id = ${referenceSubsidiaryId}::uuid)
+             ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
+           for key share
         `))
-        if (!owned.rows[0]) throw new DocumentEditError(404, `${fundingNoun} not found in this organization`)
+        if (!owned.rows[0]) throw new DocumentEditError(404, `${fundingNoun} not found for this subsidiary`)
         headerCustom = { ...(headerCustom ?? current.custom ?? {}), controlAccountId: override }
       }
     }
@@ -1308,11 +1313,14 @@ export async function applyDocumentEdit(
     const malformedLineAccounts = lineAccountIds.filter((v) => !isUuid(v))
     const usableLineAccounts = malformedLineAccounts.length === 0 && lineAccountIds.length > 0
       ? (await runner.execute<{ id: string }>(sql`
-          select id from accounts
-           where org_id = ${orgId} and id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])`)).rows
+          select a.id from accounts a
+           where a.org_id = ${orgId} and a.id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])
+             and (a.subsidiary_id is null or a.subsidiary_id = ${referenceSubsidiaryId}::uuid)
+             ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
+           for key share`)).rows
       : []
     if (malformedLineAccounts.length > 0 || usableLineAccounts.length !== lineAccountIds.length) {
-      throw new DocumentEditError(404, 'account not found in this organization')
+      throw new DocumentEditError(404, 'account not found for this subsidiary')
     }
     // Line dimension references ride the same uncast path into the re-insert:
     // a malformed id dies as 22P02 and a foreign id as 23503, both unhandled

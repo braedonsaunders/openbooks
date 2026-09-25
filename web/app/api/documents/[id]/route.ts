@@ -180,7 +180,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await withOrgTransaction(user.orgId, async () => {
       const relocked = await lockedDocumentScopeDenied(authz, id)
       if (relocked) throw new DocumentEditError(404, 'not found')
-      await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source: 'ui' })
+      await applyDocumentEdit(id, row, body, {
+        orgId: user.orgId,
+        userId: user.id,
+        source: 'ui',
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      })
     })
   } catch (e) {
     if (e instanceof DocumentEditError) {
