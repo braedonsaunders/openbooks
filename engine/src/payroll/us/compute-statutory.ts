@@ -4,9 +4,8 @@ import { PayrollPackError } from "../payroll-error.ts";
 import { U } from "../canada/decimal.ts";
 import { add, sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
+import { resolveEmployerFact } from "../employer-facts.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
-// Side effect: registers the US employer-fact declaration before direct reads.
-import "./employer-facts.ts";
 
 // Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
@@ -60,14 +59,30 @@ export type UsYtdRow = {
   lstWithheldYtd: Record<string, string>;
 };
 
-/** A non-contributory SUI financing method has no priced liability yet: refuse by name. */
-export function requireUsContributorySuiMethod(method: string | null, region: string): void {
-  if (method !== "contributory") {
-    throw new PayrollPackError(
-      `US SUI cannot be calculated for the ${region} employer account using the "${method}" financing method. `
-      + "This payroll engine does not yet record the account's benefit-charge liability; "
-      + "do not configure a fictitious contributory rate. Use the external state benefit-charge process until this financing method is supported.",
-    );
+/**
+ * The account's RECORDED SUI financing method, resolved against the pack's
+ * declaration — the single choke point every read passes through.
+ *
+ * A missing fact never reaches the financing branch below: it refuses here
+ * through the required-employer-fact path (Payroll Setup → Employer facts
+ * as the remedy), exactly like every other required employer fact — never
+ * as a `"null"` method with the non-contributory remedy. An unknown value
+ * refuses by name against the declared choices. Only a recorded declared
+ * value returns, so the caller below decides solely on recorded values.
+ */
+export function resolveUsSuiFinancingMethod(method: string | null, region: string): string {
+  const canonical = resolveEmployerFact("US", "sui_financing_method", method);
+  switch (canonical) {
+    case "contributory":
+    case "reimbursable":
+    case "school_employees_fund":
+      return canonical;
+    default:
+      throw new PayrollPackError(
+        `US SUI cannot be calculated for the ${region} employer account using the "${canonical}" financing method. `
+        + "Record one of the declared financing methods for this state unemployment account "
+        + "in Payroll Setup → Employer facts.",
+      );
   }
 }
 
@@ -379,11 +394,20 @@ export async function computeUsStatutory(
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region, filingAccountId);
   const sui = config.sui(region, ytd.suiAccountId);
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
-  const suiFinancingMethod = suiExempt ? null : await resolveStoredEmployerFact({
-    tx, orgId, filingAccountId,
-    country: "US", factKey: "sui_financing_method", asOf: run.pay_date!,
-  });
-  if (!suiExempt) requireUsContributorySuiMethod(suiFinancingMethod, region);
+  const suiFinancingMethod = suiExempt ? null : resolveUsSuiFinancingMethod(
+    await resolveStoredEmployerFact({
+      tx, orgId, filingAccountId,
+      country: "US", factKey: "sui_financing_method", asOf: run.pay_date!,
+    }),
+    region,
+  );
+  if (suiFinancingMethod !== null && suiFinancingMethod !== "contributory") {
+    throw new PayrollPackError(
+      `US SUI cannot be calculated for the ${region} employer account using the "${suiFinancingMethod}" financing method. `
+      + "This payroll engine does not yet record the account's benefit-charge liability; "
+      + "do not configure a fictitious contributory rate. Use the external state benefit-charge process until this financing method is supported.",
+    );
+  }
   const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, taxYear, ytd, suiExempt) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const federalAlienStatus = certificateFor("us_w4_tax_residency")?.answers.alien_status;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import { employerFactsFor } from "./employer-facts.ts";
-import { requireUsContributorySuiMethod } from "./us/compute-statutory.ts";
+import { resolveUsSuiFinancingMethod } from "./us/compute-statutory.ts";
 
 test("every country pack publishes exactly its declared employer-fact vocabulary", () => {
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
@@ -21,6 +21,6 @@ test("every country pack publishes exactly its declared employer-fact vocabulary
   }
 });
 
-test("US reimbursable SUI account refuses pricing as contributory", () => {
-  assert.throws(() => requireUsContributorySuiMethod("reimbursable", "CA"), /benefit-charge liability/);
+test("US SUI financing method routes a missing fact to the required-fact refusal", () => {
+  assert.throws(() => resolveUsSuiFinancingMethod(null, "CA"), /Payroll Setup → Employer facts/);
 });
