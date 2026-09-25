@@ -20,8 +20,8 @@ import {
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
 import { flowPdfTemplateMeta, renderFlowPdf } from "./pdf-hook.ts";
+import { flowDocumentEffects } from "./document-effects-hook.ts";
 import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
-import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { flowSubjectProfileForOrg } from "./registry.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
@@ -289,33 +289,15 @@ export async function executeFlowPlan(
       }
 
       case "post_document": {
-        let entryId: string;
-        if (
-          adapter.subjectKind === "vendor_payment" ||
-          adapter.subjectKind === "customer_payment"
-        ) {
-          // Payment posting is a larger accounting unit than its GL entry:
-          // applications, realized FX and provenance links must commit with it.
-          // Payment posting is a larger accounting unit than its GL entry:
-// applications, realized FX and provenance links must commit with it.
-const { postPaymentWithApplications } = await import("../payments/payment-posting.ts");
-          entryId = (
-            await postPaymentWithApplications(
-              subjectId,
-              undefined,
-              ctx.userId ?? undefined,
-              "flows",
-            )
-          ).entryId;
-        } else {
-          // Break the static import cycle (posting.ts dispatches flows).
-          // Break the static import cycle (posting.ts dispatches flows).
-const { postDocument } = await import("../ledger/posting-document.ts");
-          const deps = { control: await loadRequiredControlAccounts(ctx.orgId) };
-          entryId = await postDocument(subjectId, deps, {
-            audit: { actorId: ctx.userId ?? null, source: "flows" },
-          });
-        }
+        // Posting lives behind the installed document-effects port (C14):
+        // the executor never imports ledger/payments. The port runs inline
+        // in this call chain, so the ambient pinned org transaction is
+        // unchanged; a missing port throws instead of reporting posted.
+        const entryId = await flowDocumentEffects().postSubject({
+          subjectKind: adapter.subjectKind,
+          subjectId,
+          ctx,
+        });
         Object.defineProperty(values, "status", {
           value: "posted",
           configurable: true,

@@ -89,6 +89,12 @@ export {
   type FlowApprovalReleaseHandler,
 } from "./approval-release-hook.ts";
 export {
+  FlowDocumentEffectsNotInstalledError,
+  flowDocumentEffects,
+  registerFlowDocumentEffects,
+  type FlowDocumentEffects,
+} from "./document-effects-hook.ts";
+export {
   BANK_ACCOUNT_SUBJECT_KIND,
   bankAccountsFlowAdapter,
   bankAccountSubjectProfile,

@@ -14,6 +14,12 @@ import {
 } from "../testing/fixtures.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 /**
  * Effect-claim atomicity. A flow_run_effects checkpoint must be claimed with

@@ -36,6 +36,12 @@ import { createChangeRequestDraft, submitChangeRequest } from "../hrm/change-req
 import { actOnInboxItem, countInbox, InboxError, listInbox, type InboxSourceNotice } from "./registry.ts";
 import { writeNotification } from "./adapters/notification.ts";
 import "./index.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

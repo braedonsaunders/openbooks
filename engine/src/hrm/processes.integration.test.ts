@@ -30,6 +30,12 @@ import {
   upsertProcessTemplateStep,
 } from "./processes.ts";
 import { getOnboardingOverview, getOwnStep, getProcess, listProcesses } from "./processes-read.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 /**
  * Onboarding / offboarding / transfer processes over the real 0193 tables — DB-owned.

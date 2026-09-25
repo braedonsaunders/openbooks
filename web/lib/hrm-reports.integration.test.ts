@@ -27,6 +27,11 @@ const { createChangeRequestDraft, submitChangeRequest } = await import(
 )
 const { HRM_CHANGE_REQUEST_SUBJECT_KIND } = await import('../../schema/src/hrm-change-requests.ts')
 const { decideGate } = await import('../../engine/src/flows/gates.ts')
+const { installEngineSeams } = await import('../../engine/src/composition/install.ts')
+
+// Gate releases run through the installed engine seams (C13/C14); without
+// this the gates strand on a not-registered refusal instead of releasing.
+installEngineSeams()
 
 /**
  * Slice G DB coverage (integration partition): the three workforce report

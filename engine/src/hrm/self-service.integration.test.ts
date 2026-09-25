@@ -21,6 +21,12 @@ import { SelfServiceError } from "./self-service/actor.ts";
 import { getMyProfile, getMyRequests, getMySteps } from "./self-service/self-read.ts";
 import { actorHasTeam, getTeamView } from "./self-service/team-read.ts";
 import { fileProfileChangeRequest } from "./self-service/profile-changes.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Gate releases and post_document run through the installed engine
+// seams (C13/C14); without this the gates strand on a not-registered
+// refusal instead of releasing.
+installEngineSeams();
 
 /**
  * HR-9 self-service DB coverage (integration partition): the person link
