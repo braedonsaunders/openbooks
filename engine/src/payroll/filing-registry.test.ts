@@ -283,11 +283,11 @@ test(
 );
 
 /* ------------------------------------------------------------------ */
-/* ROE: no pay schedule means a refusal, never an invented Block 6     */
+/* ROE: a non-Canadian attribution means no ROE, never a foreign filing */
 /* ------------------------------------------------------------------ */
 
 test(
-  "an ROE for a schedule-less employee is refused by employee name",
+  "an ROE for a non-Canadian employee is refused, never filed",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -296,23 +296,27 @@ test(
       const employeeId = randomUUID();
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
-        values (${employeeId}, ${org.orgId}, 'person', 'Sam Scheduleless', true, ${org.subsidiaryId}, '{}'::jsonb)`);
+        values (${employeeId}, ${org.orgId}, 'person', 'Sam American', true, ${org.subsidiaryId}, '{}'::jsonb)`);
       await db.execute(sql`
         insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
-      // No payroll profile at all — the profiles table requires a pay
-      // schedule, so the schedule-less employee is the one the LEFT JOIN
-      // produces a null frequency for (imported history, terminated staff).
-      // Block 6 (pay-period type) and the Block 15 window cannot be derived,
-      // so the builder must refuse — previously it invented
-      // `biweekly`/`27`/`"B"` and filed anyway.
-      await assert.rejects(
-        roeRecord(org.orgId, employeeId),
-        (error: Error) => {
-          assert.match(error.message, /Sam Scheduleless/, "the refusal names the employee");
-          assert.match(error.message, /no pay schedule/);
-          return true;
-        },
+      // Country-attributed profile with a real pay schedule: pay_schedule_id
+      // is NOT NULL, so a schedule-less profile row cannot exist, and the
+      // country gate runs before any schedule logic. A US-attributed
+      // employee matches no ROE row, so roeRecord returns null (fail closed)
+      // and every caller refuses — the slip builder throws "ROEs exist for
+      // Canadian-pack employees only".
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, is_active)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-06-28', true)`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'US', 'TX')`);
+      assert.equal(
+        await roeRecord(org.orgId, employeeId),
+        null,
+        "a US-attributed employee gets no ROE — the country refusal, not a filing",
       );
     } finally {
       await dropScratchOrgReporting(org.orgId);
