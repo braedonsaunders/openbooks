@@ -192,6 +192,7 @@
     "description": "Étendez n’importe quel module — en-têtes de documents, lignes de transactions, tiers, projets, comptes. Les champs s’affichent partout où l’enregistrement apparaît : tiroirs, grilles de lignes et rapports.",
     "searchPlaceholder": "Rechercher des champs…",
     "targetFilter": "Cible",
+    "targetUnknown": "Cible inconnue",
     "table": {
       "field": "Champ",
       "key": "Clé",
@@ -2263,6 +2264,7 @@
           "backfillPrompt": "{entries} saisies approuvées (~{hours} h) sont antérieures à ce mode et ne portent pas encore de frais généraux.",
           "backfill": "Appliquer aux heures passées",
           "backfilled": "{entries} saisies passées portées : ${total} de frais généraux appliqués",
+          "unknownStatus": "Statut inconnu",
           "systemRule": {
             "title": "Règle noyau de répartition",
             "body": "Chaque comptabilisation ci-dessus est construite par la règle de répartition appartenant au moteur {key} (version {version}, en vigueur le {date}, définition {hash}). Elle reflète cette politique et la fiche tarifaire publiée : elle ne peut donc être ni modifiée ni supprimée ici — modifiez plutôt la politique ou publiez de nouveaux taux.",

@@ -107,6 +107,7 @@
     "configure": "配置费率定价",
     "newVersion": "新建费率版本",
     "notSet": "未设置",
+    "statusUnknown": "未知状态",
     "guide": {
       "title": "此物料的定价方式",
       "simpleMode": "简单价格与成本",

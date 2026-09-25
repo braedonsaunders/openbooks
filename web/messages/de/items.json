@@ -120,6 +120,7 @@
     "configure": "Preisstaffeln konfigurieren",
     "newVersion": "Neue Satzversion",
     "notSet": "Nicht festgelegt",
+    "statusUnknown": "Unbekannter Status",
     "guide": {
       "title": "So wird dieser Artikel bepreist",
       "simpleMode": "Einfacher Preis und Kosten",

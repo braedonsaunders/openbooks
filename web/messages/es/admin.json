@@ -239,6 +239,7 @@
     "description": "Extienda cualquier módulo: encabezados de documentos, líneas de transacción, terceros, proyectos, cuentas. Los campos se muestran dondequiera que aparezca el registro: paneles, cuadrículas de líneas e informes.",
     "searchPlaceholder": "Buscar campos…",
     "targetFilter": "Destino",
+    "targetUnknown": "Destino desconocido",
     "table": {
       "field": "Campo",
       "key": "Clave",
@@ -2263,6 +2264,7 @@
           "backfillPrompt": "{entries} registros aprobados (~{hours}h) son anteriores a este modo y aún no llevan gastos generales.",
           "backfill": "Aplicar a horas pasadas",
           "backfilled": "Aplicados ${total} de gastos generales en {entries} registros pasados",
+          "unknownStatus": "Estado desconocido",
           "systemRule": {
             "title": "Regla de distribución del núcleo",
             "body": "Cada contabilización anterior la construye la regla de distribución propia del motor {key} (versión {version}, vigente el {date}, definición {hash}). Refleja esta política y la tarjeta de tasas publicada, por lo que no puede editarse ni eliminarse aquí: cambie la política o publique nuevas tasas.",

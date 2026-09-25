@@ -192,6 +192,7 @@
     "description": "Estenda qualquer módulo — cabeçalhos de documento, linhas de transação, partes, projetos, contas. Os campos aparecem em todo lugar onde o registro aparece: painéis laterais, grades de linhas e relatórios.",
     "searchPlaceholder": "Pesquisar campos…",
     "targetFilter": "Alvo",
+    "targetUnknown": "Destino desconhecido",
     "table": {
       "field": "Campo",
       "key": "Chave",
@@ -2359,6 +2360,7 @@
           "backfillPrompt": "{entries} apontamentos aprovados (~{hours}h) antecedem este modo e ainda não carregam indireto.",
           "backfill": "Aplicar a horas passadas",
           "backfilled": "Aplicados ${total} de indiretos em {entries} apontamentos passados",
+          "unknownStatus": "Status desconhecido",
           "systemRule": {
             "title": "Regra central de rateio",
             "body": "Cada lançamento acima é construído pela regra de rateio {key} do motor (versão {version}, vigente em {date}, definição {hash}). Ela espelha esta política e o cartão publicado, então não pode ser editada nem excluída aqui — mude a política ou publique novas taxas.",

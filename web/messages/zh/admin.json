@@ -192,6 +192,7 @@
     "description": "扩展任何模块——文档抬头、交易明细行、往来方、项目、科目。字段会在记录出现的所有位置渲染：抽屉、明细行网格和报表。",
     "searchPlaceholder": "搜索字段……",
     "targetFilter": "目标",
+    "targetUnknown": "未知目标",
     "table": {
       "field": "字段",
       "key": "键",
@@ -2359,6 +2360,7 @@
           "backfillPrompt": "{entries} 条已批准分录（约 {hours} 小时）早于此模式，尚未分摊间接费用。",
           "backfill": "对过往工时补应用",
           "backfilled": "已对 {entries} 条过往分录补应用间接费用 ${total}",
+          "unknownStatus": "未知状态",
           "systemRule": {
             "title": "分摊核心规则",
             "body": "上述每条过账均由引擎所有的分摊规则 {key}（版本 {version}，{date} 生效，定义 {hash}）生成。它镜像本政策与已发布费率卡，此处不可编辑或删除——请改政策或发布新费率。",

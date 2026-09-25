@@ -192,6 +192,7 @@
     "description": "Extend any module — document headers, transaction lines, parties, projects, accounts. Fields render everywhere the record does: drawers, line grids, and reporting.",
     "searchPlaceholder": "Search fields…",
     "targetFilter": "Target",
+    "targetUnknown": "Unknown target",
     "table": {
       "field": "Field",
       "key": "Key",
@@ -2359,6 +2360,7 @@
           "backfillPrompt": "{entries} approved entries (~{hours}h) predate this mode and aren't carrying overhead yet.",
           "backfill": "Apply to past hours",
           "backfilled": "Applied ${total} of overhead across {entries} past entries",
+          "unknownStatus": "Unknown status",
           "systemRule": {
             "title": "Allocation kernel rule",
             "body": "Each posting above is built by the engine-owned allocation rule {key} (version {version}, effective {date}, definition {hash}). It mirrors this policy and the published rate card, so it cannot be edited or deleted here — change the policy or publish new rates instead.",

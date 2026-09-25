@@ -9,6 +9,9 @@ import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { PagedTable } from '../../../components/paged-table'
+import { enumLabel } from '../../../lib/enum-label'
+
+type RateVersionStatus = 'draft' | 'active' | 'retired'
 
 export interface Tier extends Record<string, unknown> {
   unitCode: string
@@ -317,7 +320,9 @@ export function ItemRatesEditor({
           { key: 'book', header: t('rateBook'), cell: (version) => version.rate_book_name, search: (version) => version.rate_book_name },
           { key: 'from', header: t('effectiveFrom'), cell: (version) => version.effective_from },
           { key: 'to', header: t('effectiveTo'), cell: (version) => version.effective_to ?? '—' },
-          { key: 'status', header: common('labels.status'), cell: (version) => <Badge variant={version.status === 'active' ? 'success' : 'secondary'}>{version.status}</Badge> },
+          { key: 'status', header: common('labels.status'), cell: (version) => <Badge variant={version.status === 'active' ? 'success' : 'secondary'}>{enumLabel(version.status, {
+            draft: common('status.draft'), active: common('status.active'), retired: common('status.retired'),
+          } satisfies Record<RateVersionStatus, string>, t('statusUnknown'))}</Badge> },
           { key: 'rates', header: t('rates'), cell: (version) => version.tiers.map((tier) => `${tier.unitName}: ${money(tier.billRate)}`).join(' · ') },
         ]}
       />

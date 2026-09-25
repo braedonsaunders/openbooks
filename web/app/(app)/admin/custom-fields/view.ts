@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { CUSTOM_FIELD_TARGETS } from '@openbooks/customization'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import {
   badge,
@@ -99,8 +100,20 @@ export async function loadCustomFields(
 ): Promise<CustomFieldsData> {
   const authz = await requirePermission('admin.custom_fields.manage')
   const t = await getTranslations('admin.customFields')
+  const tCustomization = await getTranslations('customization')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
+  const targetFor = (table: string) => CUSTOM_FIELD_TARGETS.find((candidate) => candidate.table === table)
+  const targetLabel = (table: string) => {
+    const target = targetFor(table)
+    return target ? t(target.labelKey.replace('admin.customFields.', '')) : t('targetUnknown')
+  }
+  const kindLabel = (table: string, kind: string) => {
+    const labelKey = targetFor(table)?.kinds.find((candidate) => candidate.value === kind)?.labelKey
+    return labelKey?.startsWith('customization.')
+      ? tCustomization(labelKey.slice('customization.'.length))
+      : t('targetUnknown')
+  }
   const params = parseListParams(sp, { sort: 'target', allowedSorts: ['target'] as const, perPage: 100 })
   const target = pickString(sp.target)
   const fieldId = pickString(sp.field)
@@ -160,7 +173,7 @@ export async function loadCustomFields(
     targetFilterLabel: t('targetFilter'),
     targetOptions: counts.rows.map((r) => ({
       value: String(r.target_table),
-      label: String(r.target_table),
+      label: targetLabel(String(r.target_table)),
       count: Number(r.n),
     })),
     currentParams: sp,
@@ -176,8 +189,8 @@ export async function loadCustomFields(
       label: String(d.label),
       href: buildListDrawerHref('/admin/custom-fields', sp, 'field', String(d.id)),
       key: String(d.key),
-      targetTable: String(d.target_table),
-      targetKindSuffix: d.target_kind ? `:${d.target_kind}` : '',
+      targetTable: targetLabel(String(d.target_table)),
+      targetKindSuffix: d.target_kind ? `:${kindLabel(String(d.target_table), String(d.target_kind))}` : '',
       typeLabel: TYPE_KEYS[String(d.field_type)]
         ? t(`types.${TYPE_KEYS[String(d.field_type)]}.label`)
         : String(d.field_type),
