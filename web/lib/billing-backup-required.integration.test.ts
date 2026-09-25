@@ -48,9 +48,8 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { randomUUID } = await import('node:crypto')
 const { createBillingRequest } = await import('./billing-requests')
 const { generateInvoiceFromBillingRequest } = await import('./billing')
-const { requireInvoiceBackup } = await import('./invoice-backup')
 const { POST: POST_BACKUP } = await import('../app/api/billing-requests/[id]/backup/route')
-const { InvoiceBackupRequiredError } = await import('./invoice-backup')
+const { requireInvoiceBackup, InvoiceBackupRequiredError, InvoiceBackupSourceAccessError, assembleInvoiceBackup } = await import('./invoice-backup')
 const { toActionFailure } = await import('../app/api/documents/actions/action-failure')
 const { advanceDocumentLifecycle } = await import('./application/documents')
 const { ApplicationError } = await import('./application/errors')
@@ -134,6 +133,17 @@ test('requireInvoiceBackup fails closed only when a required packet is missing',
       projectId: project, basis: 'draw_amount', drawAmount: '100', backupRequired: true, backupType: 'costed_timesheets',
     }))
     const generated = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, required.id, null))
+    const invoiceLine = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from document_lines where org_id=${org.orgId} and document_id=${generated.id} order by line_number limit 1`))).rows[0]?.id
+    assert.ok(invoiceLine)
+    const source = randomUUID(), sourceLine = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,subsidiary_id,party_id,currency) values (${source},${org.orgId},'vendor_bill',${source},${org.date},${org.subsidiaryId},${org.vendorId},'CAD')`)
+      await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,quantity,unit_price,amount,billed_by_line_id) values (${sourceLine},${org.orgId},${source},1,${org.accounts.cogs},1,1,1,${invoiceLine})`)
+      await db.execute(sql`update app_roles set permissions='["ar.read","ar.create","documents.manage"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    })
+    const { uploadAndAttach } = await import('./file-cabinet')
+    await withOrgContext(org.orgId, () => uploadAndAttach({ orgId: org.orgId, targetTable: 'documents', targetId: source, filename: 'Source.pdf', contentType: 'application/pdf', bytes: (globalThis as typeof globalThis & { __billingBackupStubPdf: Buffer }).__billingBackupStubPdf, createdBy: actor }))
+    await assert.rejects(withOrgContext(org.orgId, () => assembleInvoiceBackup(org.orgId, actor, generated.id, 'purchases', null)), (error) => error instanceof InvoiceBackupSourceAccessError && error.permission === 'ap.read')
     await assert.rejects(
       withOrgContext(org.orgId, () => requireInvoiceBackup(org.orgId, generated.id)),
       /requires a backup packet/,

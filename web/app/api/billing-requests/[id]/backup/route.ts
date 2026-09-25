@@ -6,7 +6,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { rendererUnavailableResponse } from '../../../../../lib/api/pdf-renderer'
 import { isUuid } from '../../../../../lib/list-params'
 import { pdfResponse, safeName } from '../../../../../lib/export'
-import { assembleInvoiceBackup, loadInvoiceBackup, InvoiceBackupImmutableError, InvoiceBackupNotFoundError, type BackupType } from '../../../../../lib/invoice-backup'
+import { assembleInvoiceBackup, loadInvoiceBackup, InvoiceBackupImmutableError, InvoiceBackupNotFoundError, InvoiceBackupSourceAccessError, type BackupType } from '../../../../../lib/invoice-backup'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
@@ -43,6 +43,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount })
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof InvoiceBackupSourceAccessError) return NextResponse.json({ error: e.message }, { status: 403 })
     if (e instanceof InvoiceBackupImmutableError) return apiErrorResponse(e, { safeStatus: 422 })
     const rendererRefusal = rendererUnavailableResponse(e)
     if (rendererRefusal) return rendererRefusal
@@ -76,6 +77,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return pdfResponse(backup.bytes, safeName(backup.filename))
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof InvoiceBackupSourceAccessError) return NextResponse.json({ error: e.message }, { status: 403 })
     throw e
   }
 }
