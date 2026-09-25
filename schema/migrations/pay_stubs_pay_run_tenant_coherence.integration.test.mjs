@@ -60,6 +60,7 @@ async function seedTenant(client, label) {
   const orgId = randomUUID();
   const subsidiaryId = randomUUID();
   const employeeId = randomUUID();
+  const employmentId = randomUUID();
   const scheduleId = randomUUID();
   const documentId = randomUUID();
 
@@ -83,6 +84,15 @@ async function seedTenant(client, label) {
      values ($1, $2, 'person', $3, true, $4, '{}'::jsonb)`,
     [employeeId, orgId, `Employee ${label}`, subsidiaryId],
   );
+  // pay_stubs.employment_id is NOT NULL: the employee needs the same
+  // worker_employments row seedWorkerEmployment writes (id, org_id,
+  // worker_party_id, employer_subsidiary_id), through this proof's own
+  // bypass client so it lives and rolls back inside the test transaction.
+  await client.query(
+    `insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
+     values ($1, $2, $3, $4)`,
+    [employmentId, orgId, employeeId, subsidiaryId],
+  );
   await client.query(
     `insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                pay_date_offset_days, is_active)
@@ -101,16 +111,16 @@ async function seedTenant(client, label) {
      values ($1, $2, $3, '2026-07-05', '2026-07-18', '2026-07-21', 2026, 'draft')`,
     [documentId, orgId, scheduleId],
   );
-  return { orgId, employeeId, documentId };
+  return { orgId, employeeId, employmentId, documentId };
 }
 
-async function insertStub(client, stubId, orgId, payRunDocumentId, employeeId) {
+async function insertStub(client, stubId, orgId, payRunDocumentId, employeeId, employmentId) {
   await client.query(
-    `insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+    `insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                             periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
                             pensionable_earnings, insurable_earnings, factors)
-     values ($1, $2, $3, $4, 'ON', 26, '2026-07-21', 2026, 'CAD', '0', '0', '0', '0', '{}'::jsonb)`,
-    [stubId, orgId, payRunDocumentId, employeeId],
+     values ($1, $2, $3, $4, $5, 'ON', 26, '2026-07-21', 2026, 'CAD', '0', '0', '0', '0', '{}'::jsonb)`,
+    [stubId, orgId, payRunDocumentId, employeeId, employmentId],
   );
 }
 
@@ -131,7 +141,7 @@ test("same-org pay stub can name its pay run; cross-tenant insert and update are
       const orgA = await seedTenant(client, "A");
       const orgB = await seedTenant(client, "B");
       const sameOrgStub = randomUUID();
-      await insertStub(client, sameOrgStub, orgA.orgId, orgA.documentId, orgA.employeeId);
+      await insertStub(client, sameOrgStub, orgA.orgId, orgA.documentId, orgA.employeeId, orgA.employmentId);
       const stored = await client.query(
         `select org_id, pay_run_document_id from pay_stubs where id = $1`,
         [sameOrgStub],
@@ -142,7 +152,7 @@ test("same-org pay stub can name its pay run; cross-tenant insert and update are
 
       await client.query("savepoint before_cross_insert");
       await assert.rejects(
-        insertStub(client, randomUUID(), orgA.orgId, orgB.documentId, orgA.employeeId),
+        insertStub(client, randomUUID(), orgA.orgId, orgB.documentId, orgA.employeeId, orgA.employmentId),
         (error) => {
           assert.equal(postgresCode(error), "23503");
           return true;
@@ -206,7 +216,7 @@ test("0209 fails closed on a dirty cross-tenant or orphaned pointer and does not
       );
 
       const crossTenantStub = randomUUID();
-      await insertStub(client, crossTenantStub, orgA.orgId, orgB.documentId, orgA.employeeId);
+      await insertStub(client, crossTenantStub, orgA.orgId, orgB.documentId, orgA.employeeId, orgA.employmentId);
       const beforeCross = await client.query(
         `select id, org_id::text, pay_run_document_id::text from pay_stubs where id = $1`,
         [crossTenantStub],
@@ -241,7 +251,7 @@ test("0209 fails closed on a dirty cross-tenant or orphaned pointer and does not
         `alter table public.pay_stubs drop constraint pay_stubs_pay_run_document_id_fkey`,
       );
       const orphanedStub = randomUUID();
-      await insertStub(client, orphanedStub, orgA.orgId, randomUUID(), orgA.employeeId);
+      await insertStub(client, orphanedStub, orgA.orgId, randomUUID(), orgA.employeeId, orgA.employmentId);
       const beforeOrphan = await client.query(
         `select id, org_id::text, pay_run_document_id::text from pay_stubs where id = $1`,
         [orphanedStub],
