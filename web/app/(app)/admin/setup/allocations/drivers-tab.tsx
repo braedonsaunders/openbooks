@@ -253,13 +253,18 @@ function ManualValuesSection({
   }, [load])
 
   async function addValue() {
-    const res = await fetch('/api/allocations/driver-values', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ driverId: driver.id, ...valuePayloadFromForm(valueDraft) }),
-    })
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('saveFailed'))
+    try {
+      const res = await fetch('/api/allocations/driver-values', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ driverId: driver.id, ...valuePayloadFromForm(valueDraft) }),
+      })
+      if (!res.ok) {
+        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('saveFailed'))
+        return
+      }
+    } catch {
+      setError(t('saveFailed'))
       return
     }
     setValueDraft({ dimensionValueId: '', effectiveFrom: '', effectiveTo: '', value: '', note: '' })
@@ -267,13 +272,18 @@ function ManualValuesSection({
   }
 
   async function patchValue(row: DriverValue, patch: Record<string, unknown>) {
-    const res = await fetch(`/api/allocations/driver-values/${row.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(patch),
-    })
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('saveFailed'))
+    try {
+      const res = await fetch(`/api/allocations/driver-values/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) {
+        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('saveFailed'))
+        return
+      }
+    } catch {
+      setError(t('saveFailed'))
       return
     }
     load()
@@ -281,9 +291,14 @@ function ManualValuesSection({
 
   async function removeValue(row: DriverValue) {
     if (!(await confirmDialog(t('deleteValueConfirm')))) return
-    const res = await fetch(`/api/allocations/driver-values/${row.id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('deleteFailed'))
+    try {
+      const res = await fetch(`/api/allocations/driver-values/${row.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('deleteFailed'))
+        return
+      }
+    } catch {
+      setError(t('deleteFailed'))
       return
     }
     load()
@@ -454,7 +469,7 @@ export function DriversTab() {
   const [options, setOptions] = useState<Options | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
-  const [editing, setEditing] = useState<{ form: DriverFormState; id?: string; updatedAt?: string | null; justSavedManual?: boolean } | null>(null)
+  const [editing, setEditing] = useState<{ form: DriverFormState; initial: DriverFormState; id?: string; updatedAt?: string | null; justSavedManual?: boolean } | null>(null)
   const [saving, setSaving] = useState(false)
   const [previewing, setPreviewing] = useState<Driver | null>(null)
   const [previewPeriod, setPreviewPeriod] = useState('')
@@ -490,50 +505,83 @@ export function DriversTab() {
     }
   }, [showInactive, t, reloadKey])
 
+  // A dirty driver drawer never closes silently: Escape, the backdrop, and
+  // the X all ask first (the ExpenseDrawer confirmDiscard shape), so typed
+  // work survives a stray close. A drawer with no edits closes at once.
+  async function closeEditor() {
+    if (editing && JSON.stringify(editing.form) !== JSON.stringify(editing.initial)) {
+      const discard = await confirmDialog({
+        message: tc('feedback.unsavedChanges'),
+        confirmLabel: tc('confirm.discardChanges'),
+        tone: 'danger',
+      })
+      if (!discard) return
+    }
+    setEditing(null)
+  }
+
   async function save() {
-    if (!editing) return
+    if (!editing || saving) return
     setSaving(true)
     setError(null)
     const creating = editing.id === undefined
+    // Snapshot the form before the request: the controls below stay disabled
+    // while saving, so nothing typed mid-flight can be silently discarded
+    // when success closes the drawer or replaces the form.
     const payload =
       creating
         ? driverPayloadFromForm(editing.form)
         : { ...driverPayloadFromForm(editing.form), expectedUpdatedAt: editing.updatedAt ?? undefined }
-    const res = await fetch(
-      creating ? '/api/allocations/drivers' : `/api/allocations/drivers/${editing.id}`,
-      {
-        method: creating ? 'POST' : 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      },
-    )
-    const body = (await res.json().catch(() => ({}))) as { driver?: Driver; error?: string }
-    setSaving(false)
-    if (!res.ok) {
-      setError(body.error ?? t('saveFailed'))
-      return
-    }
-    // A manual driver saved for the first time stays open with its values
-    // section ready: values need a driver id, which only exists after save.
-    if (creating && editing.form.sourceKind === 'manual' && body.driver?.id) {
-      setEditing({
-        form: formFromDriver(body.driver),
-        id: body.driver.id,
-        updatedAt: body.driver.updatedAt,
-        justSavedManual: true,
-      })
+    try {
+      const res = await fetch(
+        creating ? '/api/allocations/drivers' : `/api/allocations/drivers/${editing.id}`,
+        {
+          method: creating ? 'POST' : 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      )
+      const body = (await res.json().catch(() => ({}))) as { driver?: Driver; error?: string }
+      if (!res.ok) {
+        setError(body.error ?? t('saveFailed'))
+        return
+      }
+      // A manual driver saved for the first time stays open with its values
+      // section ready: values need a driver id, which only exists after save.
+      // The saved form becomes the new clean baseline for the dirty guard.
+      if (creating && editing.form.sourceKind === 'manual' && body.driver?.id) {
+        const form = formFromDriver(body.driver)
+        setEditing({
+          form,
+          initial: form,
+          id: body.driver.id,
+          updatedAt: body.driver.updatedAt,
+          justSavedManual: true,
+        })
+        reload()
+        return
+      }
+      setEditing(null)
       reload()
-      return
+    } catch {
+      // Transport rejection: name it like any other save failure instead of
+      // stranding the drawer in its saving state with an uncaught rejection.
+      setError(t('saveFailed'))
+    } finally {
+      setSaving(false)
     }
-    setEditing(null)
-    reload()
   }
 
   async function remove(driver: Driver) {
     if (!(await confirmDialog(t('deleteConfirm', { name: driver.name })))) return
-    const res = await fetch(`/api/allocations/drivers/${driver.id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('deleteFailed'))
+    try {
+      const res = await fetch(`/api/allocations/drivers/${driver.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('deleteFailed'))
+        return
+      }
+    } catch {
+      setError(t('deleteFailed'))
       return
     }
     reload()
@@ -544,17 +592,21 @@ export function DriversTab() {
     setPreviewRows(null)
     setPreviewNote(null)
     const body = previewPeriod ? { driverId: previewing.id, periodId: previewPeriod } : { driverId: previewing.id, date: previewDate }
-    const res = await fetch('/api/allocations/drivers/preview', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const json = (await res.json().catch(() => ({}))) as { rows?: PreviewRow[]; errorCode?: string; error?: string }
-    if (!res.ok) {
-      setPreviewNote(res.status === 503 ? t('enginePending') : (json.error ?? t('previewFailed')))
-      return
+    try {
+      const res = await fetch('/api/allocations/drivers/preview', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = (await res.json().catch(() => ({}))) as { rows?: PreviewRow[]; errorCode?: string; error?: string }
+      if (!res.ok) {
+        setPreviewNote(res.status === 503 ? t('enginePending') : (json.error ?? t('previewFailed')))
+        return
+      }
+      setPreviewRows(json.rows ?? [])
+    } catch {
+      setPreviewNote(t('previewFailed'))
     }
-    setPreviewRows(json.rows ?? [])
   }
 
   // House loading: header row stays up while the list skeleton shimmers
@@ -564,7 +616,7 @@ export function DriversTab() {
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
-          <Button type="button" onClick={() => setEditing({ form: newDriverForm() })}>
+          <Button type="button" onClick={() => { const fresh = newDriverForm(); setEditing({ form: fresh, initial: fresh }) }}>
             <Plus size={15} />
             {t('newDriver')}
           </Button>
@@ -593,7 +645,7 @@ export function DriversTab() {
         <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
           {t('description')}
         </p>
-        <Button type="button" onClick={() => setEditing({ form: newDriverForm() })}>
+        <Button type="button" onClick={() => { const fresh = newDriverForm(); setEditing({ form: fresh, initial: fresh }) }}>
           <Plus size={15} />
           {t('newDriver')}
         </Button>
@@ -607,7 +659,7 @@ export function DriversTab() {
           emptyAsRow
           toolbarAfter={<ShowInactivePill checked={showInactive} onChange={setShowInactive} />}
           empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
-          onRowClick={(row) => setEditing({ form: formFromDriver(row), id: row.id, updatedAt: row.updatedAt })}
+          onRowClick={(row) => { const form = formFromDriver(row); setEditing({ form, initial: form, id: row.id, updatedAt: row.updatedAt }) }}
             columns={[
               { key: 'name', header: t('name'), cell: (row) => <span className="font-medium">{row.name}</span>, search: (row) => `${row.name} ${row.key}` },
               { key: 'key', header: t('key'), cell: (row) => <code className="text-xs">{row.key}</code>, search: (row) => row.key },
@@ -654,7 +706,7 @@ export function DriversTab() {
 
       <Drawer
         open={editing !== null}
-        onClose={() => setEditing(null)}
+        onClose={() => void closeEditor()}
         title={creating ? t('newDriver') : t('editDriver')}
         description={creating ? undefined : editing?.form.key}
         size="xl"
@@ -665,7 +717,10 @@ export function DriversTab() {
         }
       >
         {form ? (
-          <div className="space-y-5 p-1">
+          // Disabled while the save request is in flight: save() snapshots
+          // this form before awaiting, so mid-flight edits would be silently
+          // discarded when success closes the drawer or replaces the form.
+          <fieldset disabled={saving} className="m-0 min-w-0 space-y-5 border-0 p-1">
             {/* No body heading: the drawer title already names the record —
                 the SetupDrawer composition. */}
             <div className="space-y-3">
@@ -869,7 +924,7 @@ export function DriversTab() {
                 />
               </DrawerSection>
             ) : null}
-          </div>
+          </fieldset>
         ) : null}
       </Drawer>
 

@@ -290,31 +290,39 @@ export function RunsTab() {
   async function runPreview() {
     setPreview(null)
     setNotice(null)
-    const res = await fetch('/api/allocations/runs/preview', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ruleId: previewForm.ruleId,
-        periodId: previewForm.periodId,
-        bookId: previewForm.bookId,
-        subsidiaryId: previewForm.subsidiaryId || null,
-      }),
-    })
-    const json = (await res.json().catch(() => ({}))) as { computation?: Computation; errorCode?: string; error?: string }
-    if (!res.ok) {
-      setNotice(res.status === 503 ? t('enginePending') : (json.error ?? t('loadFailed')))
-      return
+    try {
+      const res = await fetch('/api/allocations/runs/preview', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ruleId: previewForm.ruleId,
+          periodId: previewForm.periodId,
+          bookId: previewForm.bookId,
+          subsidiaryId: previewForm.subsidiaryId || null,
+        }),
+      })
+      const json = (await res.json().catch(() => ({}))) as { computation?: Computation; errorCode?: string; error?: string }
+      if (!res.ok) {
+        setNotice(res.status === 503 ? t('enginePending') : (json.error ?? t('loadFailed')))
+        return
+      }
+      if (json.computation) setPreview(json.computation)
+    } catch {
+      setNotice(t('loadFailed'))
     }
-    if (json.computation) setPreview(json.computation)
   }
 
   async function openDetail(id: string) {
-    const res = await fetch(`/api/allocations/runs/${id}`)
-    if (!res.ok) {
+    try {
+      const res = await fetch(`/api/allocations/runs/${id}`)
+      if (!res.ok) {
+        setError(t('detailFailed'))
+        return
+      }
+      setDetail(((await res.json()) as { run: RunRow & { computation?: Computation } }).run)
+    } catch {
       setError(t('detailFailed'))
-      return
     }
-    setDetail(((await res.json()) as { run: RunRow & { computation?: Computation } }).run)
   }
 
   async function act(kind: 'post' | 'reverse' | 'rerun') {
@@ -331,18 +339,23 @@ export function RunsTab() {
     } else {
       if (!(await confirmDialog(t('rerun')))) return
     }
-    const res = await fetch(`/api/allocations/runs/${detail.id}/${kind}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const json = (await res.json().catch(() => ({}))) as { errorCode?: string; error?: string }
-    if (!res.ok) {
-      setNotice(
-        res.status === 503
-          ? t('enginePending')
-          : (json.error ?? t(kind === 'post' ? 'postFailed' : kind === 'reverse' ? 'reverseFailed' : 'rerunFailed')),
-      )
+    try {
+      const res = await fetch(`/api/allocations/runs/${detail.id}/${kind}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = (await res.json().catch(() => ({}))) as { errorCode?: string; error?: string }
+      if (!res.ok) {
+        setNotice(
+          res.status === 503
+            ? t('enginePending')
+            : (json.error ?? t(kind === 'post' ? 'postFailed' : kind === 'reverse' ? 'reverseFailed' : 'rerunFailed')),
+        )
+        return
+      }
+    } catch {
+      setNotice(t('loadFailed'))
       return
     }
     reload()
