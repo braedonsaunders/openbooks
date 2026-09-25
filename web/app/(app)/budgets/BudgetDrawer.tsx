@@ -8,6 +8,7 @@ import { Copy, Download, Eraser, FileUp, LockKeyhole, MoreHorizontal, Rows3 } fr
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, ContextMenu, Input, Label, Popover, Select, Textarea, UrlDrawer, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { SearchInput } from '../../../components/search-input'
@@ -173,6 +174,22 @@ export function BudgetDrawer({
   // typed, the input is controlled and the totals below read the draft, so
   // the total updates live instead of waiting for blur. Cleared on commit.
   const [annualDrafts, setAnnualDrafts] = useState<Record<string, string>>({})
+  const initialValues = Object.fromEntries(initial.lines.map((line) => [
+    cellKey(line.accountId, line.periodId, line.subsidiaryId ?? ''),
+    toDisplay(line.accountId, line.amount),
+  ]))
+  const createCloseGuard = useDirtyClose({
+    dirty: unsaved && (
+      name !== initial.scenario.name || description !== (initial.scenario.description ?? '') ||
+      kind !== initial.scenario.kind || bookId !== initial.scenario.bookId ||
+      fiscalYear !== String(initial.scenario.fiscalYear) || sourceScenarioId !== '' ||
+      Object.keys(annualDrafts).length > 0 || JSON.stringify(values) !== JSON.stringify(initialValues)
+    ),
+    busy,
+    onClose: () => router.push(closeHref),
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
 
   function queueCell(cell: Omit<Cell, 'subsidiaryId'>) {
     if (!editable) return
@@ -572,7 +589,7 @@ export function BudgetDrawer({
   // the first Save commits the row they would act on.
   const headerActions = unsaved ? <>
     <Button size="sm" disabled={busy} onClick={() => void saveNew()}>{t('create.save')}</Button>
-    <Button variant="outline" size="sm" disabled={busy} onClick={() => router.push(closeHref)}>{tc('actions.cancel')}</Button>
+    <Button variant="outline" size="sm" disabled={busy} onClick={createCloseGuard.close}>{tc('actions.cancel')}</Button>
   </> : <>
     {editable ? <Button variant="outline" size="sm" asChild><Link href={(importHref)}><FileUp size={15} />{t('import.button')}</Link></Button> : null}
     <Button variant="outline" size="sm" asChild><Link href={`/reports/budget?scenario=${scenario.id}`}>{t('actions.openReport')}</Link></Button>
@@ -588,7 +605,7 @@ export function BudgetDrawer({
   <UrlDrawer
     open
     closeHref={closeHref}
-    beforeClose={unsaved && busy ? () => false : undefined}
+    beforeClose={createCloseGuard.beforeClose}
     size="2xl"
     initialFullscreen
     title={<span className="flex items-center gap-2.5"><span>{newlyCreated ? t('create.title') : name || scenario.name}</span><Badge variant={badgeVariant}>{t(`status.${scenario.status}`)}</Badge></span>}
