@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { scriptOccurrenceKey } from "../scheduling/scheduler.ts";
+import { bulkRunIdempotencyScope } from "../scripting/bulk-run-claim.ts";
 import { processScriptJobData, scheduledScopeFromJob } from "./scripts-worker.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -180,4 +181,9 @@ test("scheduledScopeFromJob prefers the payload key and adopts scheduler-minted 
     undefined,
     "bulk runs keep their per-run namespace even when a job id looks stable",
   );
+});
+
+test("a bulk claim key derives one stable journal scope (E02)", () => {
+  assert.equal(bulkRunIdempotencyScope("run-key-1"), bulkRunIdempotencyScope("run-key-1"));
+  assert.notEqual(bulkRunIdempotencyScope("run-key-1"), bulkRunIdempotencyScope("run-key-2"));
 });
