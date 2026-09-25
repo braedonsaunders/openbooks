@@ -68,10 +68,14 @@ test('bucket amounts sum the stub deduction lines by component code', () => {
 })
 
 test('the run wizard renders register columns from the declared buckets', () => {
-  const source = readFileSync(
-    new URL('../app/(app)/payroll/runs/[id]/RunWizard.tsx', import.meta.url),
-    'utf8',
-  )
+  // ARCH-FILE-SPLIT: the review grid lives in steps/ReviewStep.tsx and the
+  // stub drawer in StubDrawer.tsx; read both (was RunWizard.tsx).
+  const source = [
+    '../app/(app)/payroll/runs/[id]/steps/ReviewStep.tsx',
+    '../app/(app)/payroll/runs/[id]/StubDrawer.tsx',
+  ]
+    .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+    .join('\n')
   assert.match(source, /registerBuckets\.map\(\(bucket, index\)/)
   assert.match(source, /withholding\(stub, registerBuckets\)/)
   assert.match(source, /\{t\('run\.stub\.trace', \{ engine: traceEngine \}\)\}/)
