@@ -105,9 +105,25 @@ export function assertLohnsteuerbescheinigungYear(taxYear: number): void {
  * of this shape. One row per employee: the certificate is IdNr-keyed, not
  * account-keyed.
  */
+/**
+ * The row grammar, as the inverse of `lohnsteuerbescheinigungPopulation`'s
+ * `employee:account` construction (the account empty for the unassigned
+ * aggregate) — the IE/FR precedent. A bare employee UUID still parses for
+ * backward compatibility and addresses that employee's single certificate;
+ * the slip build refuses it as ambiguous when the employee holds more than
+ * one. Owned HERE, beside the builder — the subsidiary-scope guard parses
+ * through the declaration, never its own copy of this shape.
+ */
 export function parseLohnsteuerbescheinigungRowId(rowId: string): PayrollFilingRowScope | null {
-  if (!ROW_UUID_RE.test(rowId)) return null;
-  return { employees: [rowId], accounts: [] };
+  const parts = rowId.split(":");
+  if (parts.length === 1 && ROW_UUID_RE.test(parts[0]!)) {
+    return { employees: [parts[0]!], accounts: [] };
+  }
+  const employee = parts[0] ?? "";
+  const account = parts[1] ?? "";
+  if (parts.length !== 2 || !ROW_UUID_RE.test(employee)) return null;
+  if (account && !ROW_UUID_RE.test(account)) return null;
+  return { employees: [employee], accounts: account ? [account] : [] };
 }
 
 const AUSDRUCK_2026 =
@@ -155,10 +171,17 @@ export const LOHNSTEUERBESCHEINIGUNG_AMENDMENT_REFUSAL =
   + "not transmit. Correct the payroll data, re-run and commit, retransmit via ELSTER, and re-print the "
   + "Ausdruck from the corrected runs";
 
-/** One employee's certified year, as the DB builder assembles it. */
+/** One employee's certified year per employer, as the DB builder assembles it. */
 export interface DeLohnsteuerbescheinigungSlip {
   employeePartyId: string;
   employeeName: string;
+  /**
+   * The filing account (Betriebsstättenfinanzamt establishment) this
+   * employment's stubs were calculated under — the employer identity of the
+   * certificate. Null for stubs that predate account stamping: the
+   * unassigned aggregate, never attributed to an employer by guessing.
+   */
+  filingAccountId: string | null;
   /** BZSt IdNr from the employee's sealed payroll-profile identifier field. */
   idNr: string;
   /** Beschäftigungsland (profile province), for the header. */
@@ -269,6 +292,11 @@ export async function lohnsteuerbescheinigungSlips(
   // on s.id while grouping by employee is not merely wrong arithmetic --
   // PostgreSQL refuses it outright ("subquery uses ungrouped column s.id"),
   // so this statement could never have run.
+  // One certificate per employment relationship (EStG §41b: "für jeden
+  // Arbeitnehmer" of each employer): the sums correlate on the employee AND
+  // the stub's filing account, NULL-safe — stubs that predate account
+  // stamping aggregate into the unassigned row instead of joining a named
+  // employer's certificate.
   const earningSum = (alias: SQL) => sql`
     (select coalesce(sum(l.amount), 0) from pay_stub_lines l
        join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -276,6 +304,7 @@ export async function lohnsteuerbescheinigungSlips(
        join pay_runs er on er.document_id = es.pay_run_document_id and er.org_id = es.org_id
          and er.run_status = 'committed'
       where l.org_id = ${orgId} and es.employee_party_id = ${alias}.employee_party_id
+        and es.filing_account_id is not distinct from ${alias}.filing_account_id
         and es.tax_year = ${taxYear} and es.country = 'DE'
         and l.kind = 'earning' and coalesce(pc.taxable, true))`;
   const withheldSum = (alias: SQL, systemKey: string, kind: string) => sql`
@@ -285,11 +314,12 @@ export async function lohnsteuerbescheinigungSlips(
        join pay_runs er on er.document_id = es.pay_run_document_id and er.org_id = es.org_id
          and er.run_status = 'committed'
       where l.org_id = ${orgId} and es.employee_party_id = ${alias}.employee_party_id
+        and es.filing_account_id is not distinct from ${alias}.filing_account_id
         and es.tax_year = ${taxYear} and es.country = 'DE'
         and l.kind = ${kind} and pc.system_key = ${systemKey})`;
   const s = sql.raw("s");
   const rows = (await db.execute<Record<string, unknown>>(sql`
-    select s.employee_party_id, p.display_name,
+    select s.employee_party_id, p.display_name, s.filing_account_id,
            min(s.pay_date)::text as first_pay, max(s.pay_date)::text as last_pay,
            ${earningSum(s)} as gross,
            ${withheldSum(s, "lohnsteuer", "deduction")} as lst,
@@ -307,7 +337,7 @@ export async function lohnsteuerbescheinigungSlips(
         and r.run_status = 'committed'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'DE'
-     group by s.employee_party_id, p.display_name
+     group by s.employee_party_id, p.display_name, s.filing_account_id
      order by p.display_name
   `));
   if (rows.rows.length === 0) {
@@ -336,19 +366,30 @@ export async function lohnsteuerbescheinigungSlips(
   );
   const elstam = payrollCertificate("DE", "de_elstam");
   const accounts = await filingAccountsById(orgId);
-  const finanzamtDefault = [...accounts.values()]
-    .filter((account) => account.country === "DE" && account.programType === "de_finanzamt" && account.isActive)
-    .sort((a, b) => Number(b.isDefault) - Number(a.isDefault))[0];
-  const finanzamt = filingAccountRef(finanzamtDefault?.id ?? null, accounts);
-  const finanzamtLabel = finanzamt.accountNumber
-    ? `${finanzamt.accountNumber}${finanzamt.name ? ` · ${finanzamt.name}` : ""}`
-    : null;
+  // Deduction, not a guess: when exactly one active Betriebsstättenfinanzamt
+  // account exists org-wide, every stub necessarily belongs to it — so
+  // pre-stamping (NULL-account) stubs keep the display they always had.
+  // With several, a NULL stub is genuinely unattributable and stays
+  // unassigned rather than joining one employer's certificate.
+  const soleFinanzamt = [...accounts.values()].filter((account) =>
+    account.country === "DE" && account.programType === "de_finanzamt" && account.isActive,
+  );
+  const soleFinanzamtId = soleFinanzamt.length === 1 ? soleFinanzamt[0]!.id : null;
 
   const slips: DeLohnsteuerbescheinigungSlip[] = [];
   for (const row of rows.rows) {
     const employeePartyId = String(row.employee_party_id);
     const employeeName = String(row.display_name);
     const lastPay = String(row.last_pay);
+    // The certificate's employer: this employment's own filing account, not
+    // the org default — merging two establishments' stubs under one
+    // Finanzamt header is the defect. Null stays unassigned (the header
+    // falls back to "Unassigned" as before), never guessed onto an employer.
+    const slipAccountId = (row.filing_account_id as string | null) ?? soleFinanzamtId;
+    const slipFinanzamt = filingAccountRef(slipAccountId, accounts);
+    const finanzamtLabel = slipFinanzamt.accountNumber
+      ? `${slipFinanzamt.accountNumber}${slipFinanzamt.name ? ` · ${slipFinanzamt.name}` : ""}`
+      : null;
     const idNr = identifierByEmployee.get(employeePartyId) ?? null;
     if (!idNr || !/^\d{11}$/.test(idNr)) {
       throw new PayrollPackError(
@@ -380,6 +421,7 @@ export async function lohnsteuerbescheinigungSlips(
     slips.push({
       employeePartyId,
       employeeName,
+      filingAccountId: slipAccountId,
       idNr,
       land: landByEmployee.get(employeePartyId) ?? "",
       steuerklasse,
@@ -430,8 +472,9 @@ async function lohnsteuerbescheinigungPopulation(orgId: string, taxYear: number)
     svAn = add(svAn, anTotal);
     agAn = add(agAn, agTotal);
     return {
-      rowId: slip.employeePartyId,
+      rowId: `${slip.employeePartyId}:${slip.filingAccountId ?? ""}`,
       employee: slip.employeeName,
+      arbeitgeber: slip.finanzamt ?? "Unassigned",
       steuerklasse: slip.faktor ? `${slip.steuerklasse} / ${slip.faktor}` : slip.steuerklasse,
       z3: slip.gross,
       z4: slip.lst,
@@ -445,6 +488,7 @@ async function lohnsteuerbescheinigungPopulation(orgId: string, taxYear: number)
     rowKey: "rowId",
     columns: [
       { key: "employee", label: "Arbeitnehmer" },
+      { key: "arbeitgeber", label: "Arbeitgeber (Finanzamt)" },
       { key: "steuerklasse", label: "StKl/Faktor" },
       { key: "z3", label: "Zeile 3 Brutto", align: "right", money: true },
       { key: "z4", label: "Zeile 4 LSt", align: "right", money: true },
@@ -472,13 +516,24 @@ async function lohnsteuerbescheinigungSlip(
   rowId: string,
 ): Promise<PayrollFilingSlipData> {
   const slips = await lohnsteuerbescheinigungSlips(orgId, taxYear);
-  const slip = slips.find((candidate) => candidate.employeePartyId === rowId);
-  if (!slip) {
+  const scope = parseLohnsteuerbescheinigungRowId(rowId);
+  const candidates = scope == null
+    ? []
+    : slips.filter((candidate) =>
+      candidate.employeePartyId === scope.employees[0]
+      && (scope.accounts.length === 0 || candidate.filingAccountId === scope.accounts[0]));
+  if (candidates.length === 0) {
     throw new PayrollError(
       `no ${taxYear} Lohnsteuerbescheinigung matches the requested employee`,
     );
   }
-  return lohnsteuerbescheinigungSlipData(slip);
+  if (candidates.length > 1) {
+    throw new PayrollError(
+      `the requested employee holds ${candidates.length} ${taxYear} Lohnsteuerbescheinigungen with `
+      + `different employers — open the row for the employing Finanzamt instead of the bare employee id`,
+    );
+  }
+  return lohnsteuerbescheinigungSlipData(candidates[0]!);
 }
 
 /**
@@ -494,7 +549,8 @@ export function lohnsteuerbescheinigungFiling(): PayrollYearEndFiling {
     description:
       "The employee's printout of the annual electronic wage-tax certificate (EStG §41b): "
       + "certified withheld Lohnsteuer, Solidaritätszuschlag, Kirchensteuer and SV shares per "
-      + "employee, from committed runs. The ELSTER transmission itself is not produced.",
+      + "employee and employing establishment (one certificate per employment relationship), "
+      + "from committed runs. The ELSTER transmission itself is not produced.",
     population: (orgId, taxYear) => lohnsteuerbescheinigungPopulation(orgId, taxYear),
     parseRowId: parseLohnsteuerbescheinigungRowId,
     slip: { build: (orgId, taxYear, rowId) => lohnsteuerbescheinigungSlip(orgId, taxYear, rowId) },
