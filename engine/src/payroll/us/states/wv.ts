@@ -39,10 +39,13 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
+  evaluateUsNonresidentThreshold,
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
   requireUsSourceWages,
+  requireUsWageAllocation,
+  type UsNonresidentThresholdRule,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -50,6 +53,34 @@ import {
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/wv.ts";
+const WV_MOBILE_KEY = "us_wv_mobile";
+
+/**
+ * WV Code §11-21-31 mobile-employee exclusion: a nonresident performing
+ * duties in more than one state is excluded from West Virginia source income
+ * at 30 or fewer West Virginia days. Past 30, the employer withholds for
+ * every West Virginia day that year, including the first 30 — the prior
+ * exempt wages are caught up once.
+ */
+const WV_MOBILE_WORKFORCE_RULE: UsNonresidentThresholdRule = {
+  measure: "service_days",
+  threshold: 30,
+  crossing: ">",
+  catchUpPriorWages: true,
+  label: "West Virginia 30-day mobile-employee exclusion",
+};
+
+/** Eligibility facts for the mobile-employee exclusion, §11-21-31(b)(3)–(4). */
+const WV_MOBILE_FACTS: readonly { key: string; description: string }[] = [
+  {
+    key: "not_excluded_role",
+    description: "the employee is not a professional athlete, professional entertainer, or public figure",
+  },
+  {
+    key: "residence_state_qualifies",
+    description: "the employee's residence state provides a substantially similar exclusion, imposes no individual income tax, or the income is exempt under the United States Constitution or federal statute",
+  },
+];
 
 type WvPeriod = "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual" | "daily";
 
@@ -364,6 +395,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     : "two_earner";
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
   const grossWages = U(input.wages) + U(input.supplemental ?? "0");
+  // Nonresidents withhold on verified West Virginia-source wages (I6-payroll-131);
+  // the mobile exclusion below prices off the same allocation when it applies.
   let wages = input.basis === "nonresident"
     ? U(requireUsSourceWages(input.wageAllocations, "WV", null))
     : grossWages;
@@ -398,15 +431,77 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     lowIncomeFactors.WV_LOW_INCOME_PERIOD_EXCLUSION = D(periodExclusion);
   }
 
-  const { tax, factors } = wvPercentageMethod({
+  // §11-21-31 mobile-employee exclusion: no withholding while a qualifying
+  // multi-state nonresident is at 30 or fewer West Virginia days. Past 30,
+  // every West Virginia day that year withholds — the prior exempt wages
+  // are caught up through the same percentage method. Without the filed
+  // eligibility attestation the exclusion does not apply (fail closed).
+  // (The general nonresident source-wage base is the separately delivered
+  // I6-payroll-131 change; this path prices the mobile exclusion on the
+  // verified allocation it requires.)
+  let catchUpSourceWages = "0.0000";
+  let catchUpPeriods = 0;
+  const mobileFactors: Record<string, string> = {};
+  if (input.basis === "nonresident") {
+    const mobile = input.supportingCertificates?.[WV_MOBILE_KEY];
+    if (mobile?.onFile) {
+      const unmet = WV_MOBILE_FACTS.filter((fact) => !certificateFlag(mobile, fact.key));
+      if (unmet.length > 0) {
+        throw new PayrollError(
+          "West Virginia mobile-employee exclusion requires proof that "
+          + unmet.map((fact) => fact.description).join("; "),
+        );
+      }
+      const workedOutsideWv = (input.wageAllocations ?? []).some((item) => item.region !== "WV");
+      if (workedOutsideWv) {
+        const allocation = requireUsWageAllocation(input.wageAllocations, "WV", null);
+        const threshold = evaluateUsNonresidentThreshold(
+          allocation, WV_MOBILE_WORKFORCE_RULE, input.periodsPerYear,
+        );
+        wages = U(requireUsSourceWages(input.wageAllocations, "WV", null));
+        mobileFactors.WV_SOURCE_WAGES = D(wages);
+        mobileFactors.WV_MOBILE_DAYS_YTD = String(allocation.serviceDaysYearToDate);
+        if (!threshold.crossed) {
+          mobileFactors.WV_MOBILE_EXCLUDED = "1";
+          return {
+            state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+            factors: mobileFactors,
+          };
+        }
+        catchUpSourceWages = threshold.catchUpSourceWages;
+        catchUpPeriods = threshold.periodsBeforeCurrent ?? 0;
+      }
+    }
+  }
+
+  const { tax, factors: methodFactors } = wvPercentageMethod({
     payDate: input.payDate,
     periodsPerYear: input.periodsPerYear,
     wages: D(wages),
     schedule,
     exemptions,
   });
-  if (input.basis === "nonresident") factors.WV_SOURCE_WAGES = D(wages);
+  const factors = { ...mobileFactors, ...methodFactors };
+  if (input.basis === "nonresident" && factors.WV_SOURCE_WAGES == null) {
+    factors.WV_SOURCE_WAGES = D(wages);
+  }
   Object.assign(factors, lowIncomeFactors);
+
+  let catchUpTax = 0n;
+  if (U(catchUpSourceWages) > 0n) {
+    const averagePriorWages = divIntCents(U(catchUpSourceWages), catchUpPeriods);
+    const priorTax = wvPercentageMethod({
+      payDate: input.payDate,
+      periodsPerYear: input.periodsPerYear,
+      wages: D(averagePriorWages),
+      schedule,
+      exemptions,
+    }).tax;
+    catchUpTax = priorTax * BigInt(catchUpPeriods);
+    factors.WV_CATCHUP_SOURCE_WAGES = D(U(catchUpSourceWages));
+    factors.WV_CATCHUP_PERIODS = String(catchUpPeriods);
+    factors.WV_CATCHUP_TAX = D(catchUpTax);
+  }
 
   // IT-104 line 6 — additional withholding, added AFTER the rounded tax.
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
@@ -420,8 +515,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   return {
     state: "WV",
     year: rates.year,
-    tax: D(tax + extra),
-    statutoryTax: D(tax),
+    tax: D(tax + catchUpTax + extra),
+    statutoryTax: D(tax + catchUpTax),
     additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
@@ -445,6 +540,11 @@ export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WV_TAX: "West Virginia tax",
   WV_LOW_INCOME_ANNUAL_EXCLUSION: "West Virginia low-income earned-income exclusion (annual)",
   WV_LOW_INCOME_PERIOD_EXCLUSION: "West Virginia low-income earned-income exclusion (this period)",
+  WV_MOBILE_DAYS_YTD: "West Virginia service days this year for a nonresident",
+  WV_MOBILE_EXCLUDED: "West Virginia 30-day mobile-employee exclusion",
+  WV_CATCHUP_SOURCE_WAGES: "West Virginia-source wages previously excluded",
+  WV_CATCHUP_PERIODS: "West Virginia prior periods included in catch-up",
+  WV_CATCHUP_TAX: "West Virginia catch-up withholding for prior periods",
   WV_RECIPROCAL_EXEMPTION_NOT_APPLIED: "West Virginia reciprocal exemption not applied",
 };
 
@@ -455,7 +555,7 @@ export const WV_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: WV_TAX_YEAR_EDITIONS,
   printedPeriods: WV_PERIODS,
-  supportingCertificateKeys: ["us_wv_it104nr"],
+  supportingCertificateKeys: ["us_wv_it104nr", WV_MOBILE_KEY],
   compute,
 };
 
@@ -611,6 +711,44 @@ export const WV_IT104NR_CERTIFICATE: PayrollCertificate = {
       label: "Copy of spousal military identification card is attached",
       kind: "flag", required: true,
       help: "The IT-104NR instructions require the employee to attach this supporting document.",
+    },
+  ],
+};
+
+/**
+ * West Virginia mobile-employee exclusion attestation. The state publishes no
+ * form for §11-21-31 — the employer relies on its time-and-attendance system
+ * or the employee's written day-count statement — so the qualifying facts the
+ * system cannot derive (role, residence-state prong) are attested here while
+ * service days and multi-state work come from verified work allocations.
+ */
+export const WV_MOBILE_CERTIFICATE: PayrollCertificate = {
+  key: WV_MOBILE_KEY,
+  form: "(employer-determined)",
+  label: "West Virginia mobile-employee exclusion attestation",
+  scope: { level: "region", region: "WV" },
+  purpose: "exemption",
+  citation:
+    "West Virginia Code §11-21-31 (mobile-employee exclusion from state source income); "
+    + "WV Tax Division TSD 381 (Rev. September 2025)",
+  summary:
+    "Attests a nonresident's §11-21-31 eligibility (ordinary role, qualifying "
+    + "residence state). With it on file, verified West Virginia service days "
+    + "at or under 30 exclude the wages; past 30, every West Virginia day that "
+    + "year withholds. Without it, ordinary withholding applies.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "not_excluded_role",
+      label: "Employee is not a professional athlete, professional entertainer, or public figure",
+      kind: "flag", required: true,
+      help: "§11-21-31(b)(3): the exclusion does not cover duties performed in those capacities.",
+    },
+    {
+      key: "residence_state_qualifies",
+      label: "Residence state provides a substantially similar exclusion, imposes no individual income tax, or the income is constitutionally or federally exempt",
+      kind: "flag", required: true,
+      help: "§11-21-31(b)(4): one of the three residence-state prongs must hold.",
     },
   ],
 };

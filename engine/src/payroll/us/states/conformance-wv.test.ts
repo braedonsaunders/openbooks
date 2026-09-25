@@ -17,7 +17,7 @@ import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  WV_CERTIFICATE, WV_IT104NR_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING,
+  WV_CERTIFICATE, WV_IT104NR_CERTIFICATE, WV_MOBILE_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING,
   wvPercentageMethod, wvRoundToDollar,
 } from "./wv.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
@@ -231,6 +231,20 @@ test("WV IT-104NR military-spouse claim requires every attestation and military 
   });
   assert.equal(result.tax, money("0"));
   assert.equal(result.factors.WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT, "1");
+});
+
+test("WV mobile-employee exclusion zeroes qualifying wages at 30 or fewer days", () => {
+  // §11-21-31: a qualifying multi-state nonresident at 20 West Virginia days
+  // owes no West Virginia withholding on the $800 paycheck.
+  const wv = { region: "WV", subRegion: null, workShare: "0.6", source: "approved_time_entries", serviceDaysCurrentPeriod: 3, serviceDaysYearToDate: 20, sourceWagesCurrentPeriod: "480.00", sourceWagesYearToDate: "2400.00", periodsYearToDate: 6 };
+  const oh = { region: "OH", subRegion: null, workShare: "0.4", source: "approved_time_entries", serviceDaysCurrentPeriod: 2, serviceDaysYearToDate: 14, sourceWagesCurrentPeriod: "320.00", sourceWagesYearToDate: "1600.00", periodsYearToDate: 6 };
+  const mobile = resolvedCertificate(WV_MOBILE_CERTIFICATE, { not_excluded_role: "true", residence_state_qualifies: "true" });
+  const result = WV_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
+    certificate: cert({ exemptions: "0" }), wageAllocations: [wv, oh],
+    supportingCertificates: { [WV_MOBILE_CERTIFICATE.key]: mobile },
+  });
+  assert.equal(result.tax, money("0"));
 });
 
 test("WV refuses a year it has not transcribed", () => {
