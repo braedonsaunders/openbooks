@@ -99,8 +99,11 @@ export async function segmentRegistry(
   }))
 }
 
-export async function customSegmentOptions(orgId?: string) {
-  return (await segmentRegistry(orgId)).filter((segment) => segment.sourceKind === 'custom')
+export async function customSegmentOptions(
+  orgId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | readonly string[] | null,
+) {
+  return (await segmentRegistry(orgId, allowedSubsidiaryIds)).filter((segment) => segment.sourceKind === 'custom')
 }
 
 /** Keep only active custom values belonging to the supplied tenant registry. */
