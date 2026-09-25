@@ -226,26 +226,10 @@ test("starter Duplicate pre-fills a non-colliding name", async () => {
 
 // F4T2-5: the offered duplicate default carries no language — the persisted
 // English "(copy)" is gone, so the default is the digits-only unique name.
-test("F4T2-5: row Duplicate pre-fills a language-neutral unique name", async () => {
-  (globalThis as Record<string, unknown>).__templateToasts = [];
-  (globalThis as Record<string, unknown>).__templatePushes = [];
-  globalThis.fetch = (async (url: unknown) => {
-    assert.match(String(url), /\/api\/pdf-templates\/tid-1$/);
-    return Response.json({
-      row: {
-        id: "tid-1",
-        name: "My template",
-        recordType: "customer_invoice",
-        description: null,
-        sourceHtml: "<p>x</p>",
-        headerHtml: "",
-        footerHtml: "",
-        paperSize: "letter",
-        orientation: "portrait",
-        marginMm: 10,
-      },
-    });
-  }) as typeof fetch;
+// The three row-Duplicate cases mount the same button and walk the same
+// stale-dialog dismissal into the name prompt; only the fetch script and
+// the prompt tail differ.
+async function mountDuplicateButton() {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -270,31 +254,63 @@ test("F4T2-5: row Duplicate pre-fills a language-neutral unique name", async () 
     /* eslint-enable react/no-children-prop */
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  try {
-    await act(async () => {
-      const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
-        (b) => b.textContent?.trim() === "Cancel",
-      );
-      staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
-    const button = [...host.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Duplicate"),
+  return { host, root };
+}
+
+async function openDuplicateDialog(host: HTMLDivElement) {
+  await act(async () => {
+    const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
+      (b) => b.textContent?.trim() === "Cancel",
     );
-    assert.ok(button, "row Duplicate button must render");
-    await act(async () => {
-      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 25));
+    staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  });
+  const button = [...host.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Duplicate"),
+  );
+  assert.ok(button, "row Duplicate button must render");
+  await act(async () => {
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  });
+}
+
+async function unmountDuplicate(root: ReturnType<typeof createRoot>, host: HTMLDivElement) {
+  await act(async () => {
+    root.unmount();
+  });
+  host.remove();
+}
+
+test("F4T2-5: row Duplicate pre-fills a language-neutral unique name", async () => {
+  (globalThis as Record<string, unknown>).__templateToasts = [];
+  (globalThis as Record<string, unknown>).__templatePushes = [];
+  globalThis.fetch = (async (url: unknown) => {
+    assert.match(String(url), /\/api\/pdf-templates\/tid-1$/);
+    return Response.json({
+      row: {
+        id: "tid-1",
+        name: "My template",
+        recordType: "customer_invoice",
+        description: null,
+        sourceHtml: "<p>x</p>",
+        headerHtml: "",
+        footerHtml: "",
+        paperSize: "letter",
+        orientation: "portrait",
+        marginMm: 10,
+      },
     });
+  }) as typeof fetch;
+  const { host, root } = await mountDuplicateButton();
+  try {
+    await openDuplicateDialog(host);
     const input = document.body.querySelector('[role="dialog"] input') as HTMLInputElement | null;
     assert.ok(input, "name prompt dialog must open");
     assert.equal(input.value, "My template 2");
     assert.ok(!input.value.includes("(copy)"), "the default carries no persisted English");
   } finally {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
+    await unmountDuplicate(root, host);
   }
 });
 
@@ -332,46 +348,9 @@ test("F4T2-4: duplicate posts the copy and navigates to its id", async () => {
     posted.push(JSON.parse(String(init?.body ?? "{}")));
     return Response.json({ id: "new-9" });
   }) as typeof fetch;
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  await act(async () => {
-    /* eslint-disable react/no-children-prop */
-    root.render(
-      React.createElement(NextIntlClientProvider, {
-        locale: "en",
-        messages,
-        timeZone: "UTC",
-        children: React.createElement(
-          React.Fragment,
-          null,
-          React.createElement(PromptRoot, {}),
-          React.createElement(DuplicateTemplateButton, {
-            templateId: "tid-1",
-            takenNames: new Set(["My template"]),
-          }),
-        ),
-      }),
-    );
-    /* eslint-enable react/no-children-prop */
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  const { host, root } = await mountDuplicateButton();
   try {
-    await act(async () => {
-      const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
-        (b) => b.textContent?.trim() === "Cancel",
-      );
-      staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
-    const button = [...host.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Duplicate"),
-    );
-    assert.ok(button, "row Duplicate button must render");
-    await act(async () => {
-      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
+    await openDuplicateDialog(host);
     const confirm = [...document.body.querySelectorAll('[role="dialog"] button')].find(
       (b) => b.textContent?.trim() === "Save",
     );
@@ -390,10 +369,7 @@ test("F4T2-4: duplicate posts the copy and navigates to its id", async () => {
     assert.equal((posted[0] as { name?: unknown })?.name, "My template 2");
     assert.deepEqual(globalThis.__templatePushes, ["/admin/pdf-templates/new-9"]);
   } finally {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
+    await unmountDuplicate(root, host);
   }
 });
 
@@ -401,56 +377,16 @@ test("F4T2-4: a non-JSON failure toasts instead of navigating nowhere", async ()
   (globalThis as Record<string, unknown>).__templateToasts = [];
   (globalThis as Record<string, unknown>).__templatePushes = [];
   globalThis.fetch = (async () => new Response("", { status: 500 })) as typeof fetch;
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  await act(async () => {
-    /* eslint-disable react/no-children-prop */
-    root.render(
-      React.createElement(NextIntlClientProvider, {
-        locale: "en",
-        messages,
-        timeZone: "UTC",
-        children: React.createElement(
-          React.Fragment,
-          null,
-          React.createElement(PromptRoot, {}),
-          React.createElement(DuplicateTemplateButton, {
-            templateId: "tid-1",
-            takenNames: new Set(["My template"]),
-          }),
-        ),
-      }),
-    );
-    /* eslint-enable react/no-children-prop */
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  const { host, root } = await mountDuplicateButton();
   try {
-    await act(async () => {
-      const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
-        (b) => b.textContent?.trim() === "Cancel",
-      );
-      staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
-    const button = [...host.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Duplicate"),
-    );
-    assert.ok(button, "row Duplicate button must render");
-    await act(async () => {
-      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
+    await openDuplicateDialog(host);
+    await new Promise((resolve) => setTimeout(resolve, 25));
     const errors = (globalThis.__templateToasts ?? []).filter((t) => t.kind === "error");
     assert.equal(errors.length, 1, "the failure toasts exactly once");
     assert.match(errors[0]!.message, /Save failed \(status 500\)/);
     assert.deepEqual(globalThis.__templatePushes, [], "a failed duplicate navigates nowhere");
   } finally {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
+    await unmountDuplicate(root, host);
   }
 });
 
