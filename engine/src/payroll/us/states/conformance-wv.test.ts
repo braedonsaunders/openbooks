@@ -17,17 +17,17 @@ import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  WV_CERTIFICATE, WV_IT104NR_CERTIFICATE, WV_MOBILE_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING,
+  WV_CERTIFICATE, WV_IT104NR_CERTIFICATE, WV_MILITARY_PAY_CERTIFICATE, WV_MOBILE_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING,
   wvPercentageMethod, wvRoundToDollar,
 } from "./wv.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
-  resolvedCertificate(WV_CERTIFICATE, answers);
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate => resolvedCertificate(WV_CERTIFICATE, answers);
 
 test("WV certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(WV_CERTIFICATE), null);
   assert.equal(certificateDeclarationProblem(WV_IT104NR_CERTIFICATE), null);
+  assert.equal(certificateDeclarationProblem(WV_MILITARY_PAY_CERTIFICATE), null);
   assert.equal(WV_REGION.residentWithholding, "required"); assert.equal(WV_REGION.residentWithholdingMethod?.kind, "full");
   assert.equal(WV_REGION.certificateKey, "us_wv_it104");
 });
@@ -38,8 +38,7 @@ test("WV IT-100.2A two-earner weekly substitute — $800, 0 exemptions: $25", ()
   //   $15.95 plus 4.22% of ($800 − $577) = $15.95 + 4.22% × $223
   //   4.22% × $223 = $9.41; $15.95 + $9.41 = $25.36; nearest dollar = $25.
   const result = WV_WITHHOLDING.compute({
-    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
-    certificate: cert({ exemptions: "0" }),
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident", certificate: cert({ exemptions: "0" }),
   });
   assert.equal(result.factors.WV_SCHEDULE, "two_earner");
   assert.equal(result.factors.WV_TAXABLE, money("800"));
@@ -81,8 +80,7 @@ test("WV IT-104 line 5 elects the optional one-earner schedule", () => {
     certificate: cert({ exemptions: "0" }),
   });
   const one = WV_WITHHOLDING.compute({
-    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
-    certificate: cert({ exemptions: "0", one_earner: "true" }),
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident", certificate: cert({ exemptions: "0", one_earner: "true" }),
   });
   assert.equal(one.factors.WV_SCHEDULE, "one_earner");
   // $800 is over $769 but not over $1,154 on the one-earner weekly table:
@@ -94,8 +92,7 @@ test("WV IT-104 line 5 elects the optional one-earner schedule", () => {
 
 test("WV with no IT-104 is two-earner, zero exemptions", () => {
   const result = WV_WITHHOLDING.compute({
-    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
-    certificate: resolveCertificate({ certificate: WV_CERTIFICATE }),
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident", certificate: resolveCertificate({ certificate: WV_CERTIFICATE }),
   });
   assert.equal(result.factors.WV_SCHEDULE, "two_earner");
   assert.equal(result.factors.WV_EXEMPTION, money("0"));
@@ -104,17 +101,13 @@ test("WV with no IT-104 is two-earner, zero exemptions", () => {
   // $10,000 unmarried limit excludes the full $173.08 weekly wage to zero.
   assert.equal(WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "173.08", basis: "resident",
-    certificate: cert({
-      low_income_exclusion_claim: "true", low_income_return_status: "unmarried_or_joint",
-      expected_annual_federal_agi: "9000.00", expected_annual_earned_income: "9000.00",
-    }),
+    certificate: cert({ low_income_exclusion_claim: "true", low_income_return_status: "unmarried_or_joint", expected_annual_federal_agi: "9000.00", expected_annual_earned_income: "9000.00" }),
   }).tax, money("0"));
 });
 
 test("WV extra withholding is added AFTER dollar rounding", () => {
   const result = WV_WITHHOLDING.compute({
-    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
-    certificate: cert({ exemptions: "0", additional_per_period: "10.00" }),
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident", certificate: cert({ exemptions: "0", additional_per_period: "10.00" }),
   });
   assert.equal(result.tax, money("35"));
 });
@@ -144,20 +137,14 @@ test("WV weekly two-earner bases are not a clean annual÷52 — the printed tabl
 });
 
 test("WV refuses a pay frequency it does not print a table for", () => {
-  assert.throws(
-    () => WV_WITHHOLDING.compute({
-      payDate: "2026-03-06", periodsPerYear: 4, wages: "20000",
-      basis: "resident", certificate: cert(),
-    }),
-    /West Virginia income tax publishes withholding tables for/,
-  );
   // The daily table is 260-calibrated: a 365-day daily payroll has no
   // printed table and is refused, not scaled.
   assert.throws(
-    () => WV_WITHHOLDING.compute({
-      payDate: "2026-03-06", periodsPerYear: 365, wages: "100.00",
-      basis: "resident", certificate: cert(),
-    }),
+    () => WV_WITHHOLDING.compute({ payDate: "2026-03-06", periodsPerYear: 4, wages: "20000", basis: "resident", certificate: cert() }),
+    /West Virginia income tax publishes withholding tables for/,
+  );
+  assert.throws(
+    () => WV_WITHHOLDING.compute({ payDate: "2026-03-06", periodsPerYear: 365, wages: "100.00", basis: "resident", certificate: cert() }),
     /West Virginia income tax publishes withholding tables for/,
   );
 });
@@ -168,50 +155,36 @@ test("WV IT-104NR reciprocal exemption requires an eligible residence and wage-o
   // https://tax.wv.gov/Documents/Withholding/it104.pdf
   const reciprocal = WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
-    certificate: cert({
-      exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "true",
-    }),
+    certificate: cert({ exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "true" }),
   });
   assert.equal(reciprocal.tax, money("0"));
 
   // Ordinary nonresident withholding prices verified West Virginia-source
   // wages (I6-payroll-131): the full $800 paycheck is WV-source here.
   const wvSourceWages = [{ region: "WV", subRegion: null, workShare: "1", source: "adequate_records", sourceWagesCurrentPeriod: "800.00" }];
-  const invalidClaims: Record<string, string>[] = [
-    { exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "false" },
-  ];
-  for (const answers of invalidClaims) {
-    const ordinaryWithholding = WV_WITHHOLDING.compute({
-      payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
-      certificate: cert(answers), wageAllocations: wvSourceWages,
-    });
-    assert.equal(ordinaryWithholding.tax, money("25"));
-    assert.ok(ordinaryWithholding.factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED);
-  }
+  const ordinaryWithholding = WV_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
+    certificate: cert({ exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "false" }), wageAllocations: wvSourceWages,
+  });
+  assert.equal(ordinaryWithholding.tax, money("25"));
+  assert.ok(ordinaryWithholding.factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED);
 
   const outOfSetResidence = WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
-    certificate: cert({
-      exempt: "true", resident_state: "NY", only_wv_source_income_is_wages: "true",
-    }),
-    wageAllocations: wvSourceWages,
+    certificate: cert({ exempt: "true", resident_state: "NY", only_wv_source_income_is_wages: "true" }), wageAllocations: wvSourceWages,
   });
   assert.equal(outOfSetResidence.tax, money("25"));
   assert.equal(outOfSetResidence.factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED, "ineligible_resident_state");
 
   const residentClaim = WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
-    certificate: cert({
-      exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "true",
-    }),
+    certificate: cert({ exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "true" }),
   });
   assert.equal(residentClaim.tax, money("25"));
 });
 
 test("WV IT-104NR military-spouse claim requires every attestation and military ID", () => {
-  const incomplete = resolvedCertificate(WV_IT104NR_CERTIFICATE, {
-    servicemember_is_armed_forces_member: "true",
-  });
+  const incomplete = resolvedCertificate(WV_IT104NR_CERTIFICATE, { servicemember_is_armed_forces_member: "true" });
   assert.throws(
     () => WV_WITHHOLDING.compute({
       payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
@@ -220,11 +193,8 @@ test("WV IT-104NR military-spouse claim requires every attestation and military 
     /West Virginia military-spouse withholding exemption requires proof that the servicemember is present in West Virginia in compliance with military orders; the employee is present in West Virginia solely to be with the servicemember; the employee maintains domicile in another state; a copy of the spousal military identification card is attached/,
   );
 
-  const complete = resolvedCertificate(WV_IT104NR_CERTIFICATE, Object.fromEntries([
-    "servicemember_is_armed_forces_member", "servicemember_present_under_orders",
-    "spouse_present_solely_to_accompany", "spouse_domiciled_outside_wv",
-    "spousal_military_id_on_file",
-  ].map((key) => [key, "true"])));
+  const complete = resolvedCertificate(WV_IT104NR_CERTIFICATE, Object.fromEntries(
+    ["servicemember_is_armed_forces_member", "servicemember_present_under_orders", "spouse_present_solely_to_accompany", "spouse_domiciled_outside_wv", "spousal_military_id_on_file"].map((key) => [key, "true"])));
   const result = WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
     certificate: cert(), supportingCertificates: { us_wv_it104nr: complete },
@@ -240,19 +210,49 @@ test("WV mobile-employee exclusion zeroes qualifying wages at 30 or fewer days",
   const oh = { region: "OH", subRegion: null, workShare: "0.4", source: "approved_time_entries", serviceDaysCurrentPeriod: 2, serviceDaysYearToDate: 14, sourceWagesCurrentPeriod: "320.00", sourceWagesYearToDate: "1600.00", periodsYearToDate: 6 };
   const mobile = resolvedCertificate(WV_MOBILE_CERTIFICATE, { not_excluded_role: "true", residence_state_qualifies: "true" });
   const result = WV_WITHHOLDING.compute({
-    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
-    certificate: cert({ exemptions: "0" }), wageAllocations: [wv, oh],
-    supportingCertificates: { [WV_MOBILE_CERTIFICATE.key]: mobile },
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident", certificate: cert({ exemptions: "0" }),
+    wageAllocations: [wv, oh], supportingCertificates: { [WV_MOBILE_CERTIFICATE.key]: mobile },
   });
   assert.equal(result.tax, money("0"));
 });
 
 test("WV refuses a year it has not transcribed", () => {
   assert.throws(
-    () => WV_WITHHOLDING.compute({
-      payDate: "2027-01-15", periodsPerYear: 52, wages: "800",
-      basis: "resident", certificate: cert(),
-    }),
+    () => WV_WITHHOLDING.compute({ payDate: "2027-01-15", periodsPerYear: 52, wages: "800", basis: "resident", certificate: cert() }),
     /2027 West Virginia income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
+});
+
+test("WV excludes attested nonresident military pay; Guard/Reserve exceptions stay taxable", () => {
+  // WV Code §11-21-71; TSD 381 withholds nothing for a nonresident Armed
+  // Forces member, except Guard on 32 USC §502 duty and ready reserve on
+  // scheduled or 10 USC §270(a) duty. https://tax.wv.gov/Documents/TSD/tsd381.pdf
+  const member = resolvedCertificate(WV_MILITARY_PAY_CERTIFICATE, { armed_forces_member: "true", guard_reserve_excepted_duty: "false" });
+  const source = [{ region: "WV", subRegion: null, workShare: "1", source: "adequate_records", sourceWagesCurrentPeriod: "800.00" }];
+  const base = { payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", certificate: cert({ exemptions: "0" }) } as const;
+  const military = [{ category: "military_pay", amount: "800.00" }] as const;
+  const excluded = WV_WITHHOLDING.compute({ ...base, basis: "nonresident", wageAllocations: source, statutoryExemptionAmounts: [...military], supportingCertificates: { us_wv_military_pay: member } });
+  assert.equal(excluded.tax, money("0"));
+  assert.equal(excluded.factors.WV_EXEMPT_MILITARY_PAY, money("800"));
+  assert.equal(excluded.factors.WV_TAXABLE, money("0"));
+  assert.throws(() => WV_WITHHOLDING.compute({ ...base, basis: "nonresident", wageAllocations: source, statutoryExemptionAmounts: [...military] }), /military pay is classified but no military-pay attestation is on file/);
+  assert.throws(() => WV_WITHHOLDING.compute({ ...base, basis: "nonresident", wageAllocations: source, statutoryExemptionAmounts: [...military], supportingCertificates: { us_wv_military_pay: resolvedCertificate(WV_MILITARY_PAY_CERTIFICATE, { armed_forces_member: "false", guard_reserve_excepted_duty: "false" }) } }), /does not certify Armed Forces membership/);
+  const taxable = WV_WITHHOLDING.compute({ ...base, basis: "nonresident", wageAllocations: source, statutoryExemptionAmounts: [...military], supportingCertificates: { us_wv_military_pay: resolvedCertificate(WV_MILITARY_PAY_CERTIFICATE, { armed_forces_member: "true", guard_reserve_excepted_duty: "true" }) } });
+  assert.equal(taxable.factors.WV_TAXABLE, money("800"));
+  assert.equal(taxable.factors.WV_MILITARY_PAY_TAXABLE, "guard_reserve_excepted_duty");
+  const resident = WV_WITHHOLDING.compute({ ...base, basis: "resident", statutoryExemptionAmounts: [...military], supportingCertificates: { us_wv_military_pay: member } });
+  assert.equal(resident.factors.WV_TAXABLE, money("800"));
+});
+
+test("WV excludes qualifying nonresident seafarer wages", () => {
+  // 46 USC 11108(a); WV CSR §110-21-71.1.2: crew wages on vessels in
+  // foreign, coastwise, intercoastal, interstate, or noncontiguous trade
+  // may not be withheld.
+  const result = WV_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident", certificate: cert({ exemptions: "0" }),
+    wageAllocations: [{ region: "WV", subRegion: null, workShare: "1", source: "adequate_records", sourceWagesCurrentPeriod: "800.00" }],
+    statutoryExemptionAmounts: [{ category: "seafarer", amount: "800.00" }] as const,
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.WV_EXEMPT_SEAFARER_WAGES, money("800"));
 });

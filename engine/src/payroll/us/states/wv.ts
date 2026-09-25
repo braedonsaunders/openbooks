@@ -387,6 +387,53 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     };
   }
 
+  // Nonresident Armed Forces pay (WV Code §11-21-71; TSD 381) and qualifying
+  // seafarer wages (46 USC 11108(a); WV CSR §110-21-71.1.2) are excluded by
+  // classified component dollars only. Military pay additionally needs the
+  // payer-held membership attestation, because TSD 381 excepts National
+  // Guard members on 32 USC §502 duty and ready-reserve members on scheduled
+  // or 10 USC §270(a) active duty: excepted members' military pay stays
+  // taxable, and classified military pay with no attestation refuses by
+  // name rather than assuming either status.
+  const exemptionAmount = (...classes: readonly string[]): bigint =>
+    (input.statutoryExemptionAmounts ?? [])
+      .filter((item) => item.category !== null && classes.includes(item.category))
+      .reduce((total, item) => total + U(item.amount), 0n);
+  // Factor entries for the exclusions below; merged after the percentage
+  // method builds `factors` further down.
+  const exemptionFactors: Record<string, string> = {};
+  let federallyExempt = 0n;
+  if (input.basis === "nonresident") {
+    const seafarerAmount = exemptionAmount("seafarer");
+    if (seafarerAmount > 0n) {
+      exemptionFactors.WV_EXEMPT_SEAFARER_WAGES = D(seafarerAmount);
+      federallyExempt += seafarerAmount;
+    }
+    if (exemptionAmount("military_pay") > 0n) {
+      const status = input.supportingCertificates?.us_wv_military_pay;
+      if (!status?.onFile) {
+        throw new PayrollError(
+          "West Virginia military pay is classified but no military-pay attestation is on file — "
+          + "record the member's Armed Forces status and Guard/Reserve exception answers before "
+          + "calculating; refused by name",
+        );
+      }
+      if (!certificateFlag(status, "armed_forces_member")) {
+        throw new PayrollError(
+          "West Virginia military-pay attestation does not certify Armed Forces membership — "
+          + "the §11-21-71 exclusion covers members only; correct the attestation before calculating",
+        );
+      }
+      if (certificateFlag(status, "guard_reserve_excepted_duty")) {
+        exemptionFactors.WV_MILITARY_PAY_TAXABLE = "guard_reserve_excepted_duty";
+      } else {
+        const militaryAmount = exemptionAmount("military_pay");
+        exemptionFactors.WV_EXEMPT_MILITARY_PAY = D(militaryAmount);
+        federallyExempt += militaryAmount;
+      }
+    }
+  }
+
   // IT-104 line 5 must be checked to elect the optional one-earner schedule.
   // Unchecked — and no certificate on file — is the two-earner default the
   // wage-bracket tables themselves are computed from.
@@ -400,6 +447,13 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   let wages = input.basis === "nonresident"
     ? U(requireUsSourceWages(input.wageAllocations, "WV", null))
     : grossWages;
+  // Federally exempt component dollars leave the priced base here, so the
+  // low-income spread, the mobile exclusion, and the source-wage trace all
+  // price the reduced base. (The mobile branch below re-establishes `wages`
+  // from the allocation and re-applies the same exclusion there.)
+  if (input.basis === "nonresident" && federallyExempt > 0n) {
+    wages = max0(wages - federallyExempt);
+  }
   // §11-21-10 low-income earned-income exclusion, claimed in good faith on
   // the certificate: the capped annual exclusion spreads over the declared
   // payroll periods before the percentage method. §11-21-71(a) directs
@@ -458,14 +512,14 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
         const threshold = evaluateUsNonresidentThreshold(
           allocation, WV_MOBILE_WORKFORCE_RULE, input.periodsPerYear,
         );
-        wages = U(requireUsSourceWages(input.wageAllocations, "WV", null));
+        wages = max0(U(requireUsSourceWages(input.wageAllocations, "WV", null)) - federallyExempt);
         mobileFactors.WV_SOURCE_WAGES = D(wages);
         mobileFactors.WV_MOBILE_DAYS_YTD = String(allocation.serviceDaysYearToDate);
         if (!threshold.crossed) {
           mobileFactors.WV_MOBILE_EXCLUDED = "1";
           return {
             state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-            factors: mobileFactors,
+            factors: { ...exemptionFactors, ...mobileFactors },
           };
         }
         catchUpSourceWages = threshold.catchUpSourceWages;
@@ -481,7 +535,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     schedule,
     exemptions,
   });
-  const factors = { ...mobileFactors, ...methodFactors };
+  const factors = { ...exemptionFactors, ...mobileFactors, ...methodFactors };
   if (input.basis === "nonresident" && factors.WV_SOURCE_WAGES == null) {
     factors.WV_SOURCE_WAGES = D(wages);
   }
@@ -530,6 +584,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "West Virginia qualifying military-spouse wages exempt from withholding",
+  WV_EXEMPT_MILITARY_PAY: "West Virginia nonresident Armed Forces pay excluded from withholding",
+  WV_EXEMPT_SEAFARER_WAGES: "West Virginia qualifying seafarer wages excluded from withholding",
+  WV_MILITARY_PAY_TAXABLE: "West Virginia military pay taxable under a Guard/Reserve exception",
   WV_EXEMPT: "Exempt from West Virginia withholding",
   WV_SCHEDULE: "West Virginia schedule",
   WV_PERIOD: "West Virginia payroll period",
@@ -555,7 +612,7 @@ export const WV_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: WV_TAX_YEAR_EDITIONS,
   printedPeriods: WV_PERIODS,
-  supportingCertificateKeys: ["us_wv_it104nr", WV_MOBILE_KEY],
+  supportingCertificateKeys: ["us_wv_it104nr", WV_MOBILE_KEY, "us_wv_military_pay"],
   compute,
 };
 
@@ -711,6 +768,44 @@ export const WV_IT104NR_CERTIFICATE: PayrollCertificate = {
       label: "Copy of spousal military identification card is attached",
       kind: "flag", required: true,
       help: "The IT-104NR instructions require the employee to attach this supporting document.",
+    },
+  ],
+};
+
+/**
+ * Payer-held Armed Forces pay attestation (no state form exists — TSD 381
+ * is an employer instruction). Filed only for a nonresident employee whose
+ * component pay is classified military_pay: it certifies Armed Forces
+ * membership and whether the TSD 381 Guard/Reserve exceptions apply.
+ */
+export const WV_MILITARY_PAY_CERTIFICATE: PayrollCertificate = {
+  key: "us_wv_military_pay",
+  form: "Military pay attestation",
+  label: "West Virginia nonresident military-pay attestation",
+  scope: { level: "region", region: "WV" },
+  purpose: "withholding",
+  citation:
+    "WV Code §11-21-71; WV Tax Division TSD 381 (withholding not required for "
+    + "a nonresident Armed Forces member)",
+  summary:
+    "The employer attests the nonresident employee's Armed Forces membership "
+    + "and Guard/Reserve exception status so classified military pay is "
+    + "excluded only for qualifying members.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "armed_forces_member",
+      label: "Employee is a member of the Armed Forces of the United States",
+      kind: "flag", required: true,
+      help: "The §11-21-71 exclusion covers members only.",
+    },
+    {
+      key: "guard_reserve_excepted_duty",
+      label: "Member serves in a TSD 381 excepted duty status",
+      kind: "flag", required: true,
+      help: "Set when the member is National Guard on 32 USC §502 duty or "
+        + "ready reserve on scheduled duties or 10 USC §270(a) active duty — "
+        + "TSD 381 does not extend the withholding exclusion to those duties.",
     },
   ],
 };
