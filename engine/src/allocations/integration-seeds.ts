@@ -30,3 +30,9 @@ export async function enableAllocations(orgId: string, on = true): Promise<void>
 export function negate(amount: string): string {
   return amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
 }
+
+export async function journalLineCount(orgId: string): Promise<number> {
+  const rows = (await db.execute<{ count: string }>(sql`
+    select count(*)::text as count from journal_lines where org_id = ${orgId}`)).rows;
+  return Number(rows[0]?.count ?? 0);
+}

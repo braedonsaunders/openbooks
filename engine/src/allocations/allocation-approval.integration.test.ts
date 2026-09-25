@@ -15,7 +15,7 @@ import { decideGate, DecisionFailedError } from "../flows/gates.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
 import { postAllocationRun, previewAllocationRun } from "./period-run.ts";
 import { processAllocationRunOutboxRow } from "./scheduling.ts";
-import { enableAllocations, seedDepartment } from "./integration-seeds.ts";
+import { enableAllocations, journalLineCount, seedDepartment } from "./integration-seeds.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -120,12 +120,6 @@ async function runRow(runId: string): Promise<{
     error: row.error,
     requestedBy: row.requested_by,
   };
-}
-
-async function journalLineCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from journal_lines where org_id = ${orgId}`)).rows;
-  return Number(rows[0]?.count ?? 0);
 }
 
 async function lineageCount(orgId: string, runId: string): Promise<number> {
