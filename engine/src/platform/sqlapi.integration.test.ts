@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { PoolClient } from 'pg'
-import { db, pool, withBypass } from './db.ts'
+import { db, pool, withBypass, withOrgContext } from './db.ts'
 import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts'
 import { listSchema, runUserSql } from './sqlapi.ts'
 
@@ -199,9 +199,15 @@ test('governed SQL stays available while the ordinary request pool is saturated'
   const heldClients: PoolClient[] = []
   try {
     assert.equal(pool.options.max, 10)
-    for (let index = 0; index < pool.options.max; index += 1) {
-      heldClients.push(await pool.connect())
-    }
+    // Pin an explicit tenant scope while saturating: pool.connect routes
+    // through the ambient context, and the integration harness runs under
+    // bypass — without the scope these holders would occupy the small
+    // bypass pool instead of the ordinary request pool under test.
+    await withOrgContext(org.orgId, async () => {
+      for (let index = 0; index < pool.options.max; index += 1) {
+        heldClients.push(await pool.connect())
+      }
+    })
 
     const operations = Promise.all([
       runUserSql('select 42 as answer', { orgId: org.orgId }),
