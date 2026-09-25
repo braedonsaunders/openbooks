@@ -21,6 +21,10 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function insertDraftChangeSet(orgId: string, createdBy: string): Promise<string> {
+  // Review/approval need a live ready sandbox: a shell row on the scratch org (no clone — authority, not capture).
+  await db.execute(sql`
+    insert into sandboxes (id, org_id, production_org_id, name, tier, masked, status)
+    values (${randomUUID()}, ${orgId}, ${orgId}, 'Authority probe source', 'full', false, 'ready')`);
   const changeSetId = randomUUID();
   await db.execute(sql`
     insert into change_sets
@@ -106,11 +110,7 @@ test("change-set review and approval evidence their transitions in audit_log", {
     await reviewChangeSet(changeSetId, actors.approver1Id);
     await approveChangeSet(changeSetId, actors.approver2Id);
 
-    const status = (
-      await db.execute<{ status: string }>(sql`
-        select status from change_sets where id = ${changeSetId} and org_id = ${org.orgId}`)
-    ).rows[0]!.status;
-    assert.equal(status, "approved");
+    assert.equal(await changeSetStatus(org.orgId, changeSetId), "approved");
 
     const rows = (
       await db.execute<{
