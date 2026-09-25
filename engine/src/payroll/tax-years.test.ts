@@ -520,12 +520,12 @@ test(
           }
         }
       }
-      // A year loaded for CA and US populates for them with no refusal (empty
-      // tenant). Other packs may legitimately carry a named refusal for 2026 —
-      // DE declares the Lohnsteuerbescheinigung but has not implemented ELSTER
-      // population — so this asks the two packs the fixture installed.
-      for (const section of await orgYearEndFilings(org.orgId, 2026)) {
-        if (section.country !== "CA" && section.country !== "US") continue;
+      // A loaded year populates with no refusal — except filings that declare
+      // one instead of populating (US 940; DE's unbuilt ELSTER elsewhere).
+      const loaded = await orgYearEndFilings(org.orgId, 2026);
+      assert.match(loaded.find((s) => s.country === "US" && s.key === "940")?.populationRefusal ?? "", /does not prepare Form 940/);
+      for (const section of loaded) {
+        if ((section.country !== "CA" && section.country !== "US") || (section.country === "US" && section.key === "940")) continue;
         assert.equal(section.populationRefusal, null, `${section.country} ${section.key}`);
       }
     } finally {
