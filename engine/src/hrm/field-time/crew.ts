@@ -22,7 +22,13 @@ import { sql } from "drizzle-orm";
 import { db, withOrg, withOrgTransaction, withTransactionSavepoint } from "../../platform/db.ts";
 import { runRecordFlows } from "../../flows/index.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
+import {
+  lockEquipmentProjectScope,
+  lockScopeRows,
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+} from "../../organization/subsidiary-scope.ts";
+import { EffectiveEmploymentError, resolveEffectiveEmployment } from "../effective-employment.ts";
 import { keyedFingerprint } from "../../platform/secrets.ts";
 import { FieldTimeError, isUniqueViolation, refuse } from "./errors.ts";
 import {
@@ -32,6 +38,7 @@ import {
   loadFieldTimeSettings,
 } from "./settings.ts";
 import { checkEquipmentTolerance } from "./pure.ts";
+import { assertNoFieldTimeSourceCollision, lockEmployeeTimeSources } from "./source-collision.ts";
 import {
   chainComplete,
   CREW_BATCH_CHAIN,
@@ -264,6 +271,64 @@ async function validateLines(
   return cleaned;
 }
 
+async function lockEquipmentScope(
+  orgId: string,
+  projectId: string,
+  equipmentIds: readonly (string | null)[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<void> {
+  try {
+    await lockEquipmentProjectScope(
+      db,
+      orgId,
+      projectId,
+      equipmentIds.filter((id): id is string => id !== null),
+      allowedSubsidiaryIds,
+      "update",
+    );
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) {
+      refuse("equipment_unknown", "The equipment unit is unknown or outside your organization scope — choose an in-scope active unit");
+    }
+    throw error;
+  }
+}
+
+async function lockLineEmployeeScope(
+  orgId: string,
+  projectId: string,
+  workedOn: string,
+  employeePartyIds: readonly string[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<void> {
+  if (allowedSubsidiaryIds === null) return;
+  const employees = [...new Set(employeePartyIds)].sort();
+  const effective: Array<{ partyId: string; employmentId: string }> = [];
+  for (const partyId of employees) {
+    let employment;
+    try {
+      employment = await resolveEffectiveEmployment(db, { orgId, partyId, workedOn, projectId });
+    } catch (error) {
+      if (error instanceof EffectiveEmploymentError) {
+        refuse("employee_scope", `Worker ${partyId} has no unambiguous employment for this project and date — correct the worker's employment assignment before saving the crew line`);
+      }
+      throw error;
+    }
+    if (!employment) refuse("employee_scope", `Worker ${partyId} is not employed by this project on ${workedOn} — choose a worker employed in the project's legal entity`);
+    effective.push({ partyId, employmentId: employment.id });
+  }
+  try {
+    await lockScopeRows(db, orgId, effective.map(({ employmentId }) => ({ kind: "employment" as const, id: employmentId })), allowedSubsidiaryIds, "update");
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) refuse("employee_scope", "A crew worker is outside your subsidiary access — choose workers in your assigned entities");
+    throw error;
+  }
+  for (const employee of effective) {
+    const current = await resolveEffectiveEmployment(db, { orgId, partyId: employee.partyId, workedOn, projectId });
+    if (!current || current.id !== employee.employmentId) refuse("employee_scope", "A crew worker's employment changed while saving — reload and choose a currently employed worker");
+  }
+}
+
 export async function createBatch(input: {
   orgId: string;
   actorUserId: string;
@@ -360,6 +425,10 @@ export async function setBatchLines(input: {
        where org_id = ${input.orgId} and id = ${input.batchId} for update`)).rows[0];
     if (!still || (still.status !== "draft" && still.status !== "rejected")) {
       refuse("batch_locked", "The batch moved out of draft while saving — reload and retry");
+    }
+    await lockLineEmployeeScope(input.orgId, batch.project_id, batch.worked_on, input.lines.map((line) => line.employeePartyId), input.allowedSubsidiaryIds);
+    if (equipmentOn) {
+      await lockEquipmentScope(input.orgId, batch.project_id, input.lines.map((line) => line.equipmentId ?? null), input.allowedSubsidiaryIds);
     }
     await db.execute(sql`delete from crew_time_batch_lines where batch_id = ${input.batchId}`);
     for (const line of cleaned) {
@@ -692,10 +761,29 @@ export async function postBatch(input: {
     // transaction: a pre-read would let a concurrent rehome stamp and post
     // another entity's charges for a scoped caller.
     await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+    const postingBatch = (await db.execute<{ status: string }>(sql`
+      select status from crew_time_batches where org_id = ${input.orgId} and id = ${input.batchId} for update`)).rows[0];
+    if (!postingBatch || postingBatch.status !== batch.status) {
+      refuse("batch_moved", "The batch changed while posting — reload the approval status and retry");
+    }
     const project = (await db.execute<{ subsidiary_id: string }>(sql`
       select subsidiary_id::text as subsidiary_id from projects
        where org_id = ${input.orgId} and id = ${batch.project_id}`)).rows[0];
     if (!project) refuse("project_unknown", "The batch project is gone — withdraw the batch and re-enter it");
+    if (equipmentOn) {
+      await lockEquipmentScope(input.orgId, batch.project_id, lines.map((line) => line.equipmentId ?? null), input.allowedSubsidiaryIds);
+    }
+    await lockLineEmployeeScope(input.orgId, batch.project_id, batch.worked_on, lines.map((line) => line.employeePartyId), input.allowedSubsidiaryIds);
+    await lockEmployeeTimeSources(db, input.orgId, lines.map((line) => line.employeePartyId));
+    for (const employeePartyId of [...new Set(lines.map((line) => line.employeePartyId))]) {
+      await assertNoFieldTimeSourceCollision(db, {
+        orgId: input.orgId,
+        employeePartyId,
+        workedOn: batch.worked_on,
+        source: "crew_batch",
+        sourceId: batch.id,
+      });
+    }
     const entryIds: string[] = [];
     for (const line of lines) {
       const inserted = (await db.execute<{ id: string }>(sql`

@@ -21,6 +21,7 @@ import { businessTimeZone } from "../../platform/business-date.ts";
 import { isUuid } from "../../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, isForeignKeyViolation, refuse } from "./errors.ts";
+import { assertNoFieldTimeSourceCollision, lockEmployeeTimeSources } from "./source-collision.ts";
 import { isClockPhotoSql } from "./photos.ts";
 import { lockActiveKioskToken } from "./kiosk-token-lock.ts";
 import {
@@ -354,6 +355,13 @@ async function pairAndPostEntries(input: {
         throw e;
       }
     }
+    await assertNoFieldTimeSourceCollision(db, {
+      orgId: input.orgId,
+      employeePartyId: input.employeePartyId,
+      workedOn: cell.date,
+      source: "clock_pair",
+      sourceId: pairId,
+    });
     await ensureWeek(input.orgId, input.employeePartyId, cell.date, input.actorUserId);
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into time_entries
@@ -442,10 +450,7 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     // Every transition for one worker shares this transaction lock. Acquire it
     // before claiming the event id or reading the open pair so distinct device
     // ids cannot both validate against the same empty state under READ COMMITTED.
-    await db.execute(sql`
-      select pg_advisory_xact_lock(
-        hashtextextended(${`field-clock:${input.orgId}:${input.employeePartyId}`}, 0)
-      )`);
+    await lockEmployeeTimeSources(db, input.orgId, [input.employeePartyId]);
 
     // Transaction-safe get-or-create on the offline idempotency key.
     // Reading the key outside the transaction let two simultaneous

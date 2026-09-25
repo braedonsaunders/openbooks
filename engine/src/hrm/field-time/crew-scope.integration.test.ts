@@ -1,15 +1,4 @@
-/**
- * Crew authorization proofs (DB-owned — gated remotely).
- *
- * - Foreman B cannot edit, submit, or withdraw foreman A's batch: every
- *   denial is batch_unknown, identical to a missing id.
- * - Opening a batch under another foreman's party id without time.manage
- *   is refused as foreman_not_self; a supervisor (canManageAll) may act.
- * - An out-of-scope project refuses as project_unknown, identical to a
- *   missing project — on create and inside every write transaction.
- * - Reads show own batches plus in-scope projects: B's list hides A's
- *   batch, B's detail lookup answers batch_unknown, unrestricted sees all.
- */
+/** DB-owned crew write/read authorization proofs under subsidiary scope. */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -88,6 +77,11 @@ async function seedCrewWorld(orgId: string, subA: string): Promise<CrewWorld> {
     insert into schedule_resources (org_id, project_id, name, kind, party_id)
     values (${orgId}, ${projectA}, 'Foreman', 'crew', ${foremanA}),
            (${orgId}, ${projectB}, 'Foreman', 'crew', ${foremanB})`);
+  const employmentA = randomUUID(), employmentB = randomUUID();
+  await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+    values (${employmentA}, ${orgId}, ${worker}, ${subA}, 1), (${employmentB}, ${orgId}, ${foremanB}, ${subB}, 1)`);
+  await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at)
+    values (${orgId}, ${employmentA}, 1, 'active', '2020-01-01', now()), (${orgId}, ${employmentB}, 1, 'active', '2020-01-01', now())`);
   const userA = await createScratchUser(orgId, "Foreman A", "crew_a");
   const userB = await createScratchUser(orgId, "Foreman B", "crew_b");
   await db.execute(sql`update users set party_id = ${foremanA} where org_id = ${orgId} and id = ${userA}`);
@@ -109,6 +103,10 @@ test("foreman B cannot edit, submit, or withdraw foreman A's batch", { skip: !DB
         projectId: w.projectA, workedOn: "2026-09-14",
         canManageAll: false, allowedSubsidiaryIds: scopeA,
       }));
+    assert.equal(await refusesCode(() => setBatchLines({
+      orgId: w.orgId, actorUserId: w.userA, batchId, lines: linesFor(w.foremanB),
+      canManageAll: false, allowedSubsidiaryIds: scopeA,
+    })), "employee_scope");
     await withOrg(org.orgId, async () => {
       // B holds crew entry on their own project but learns nothing here:
       // every denial matches the missing-id refusal exactly.

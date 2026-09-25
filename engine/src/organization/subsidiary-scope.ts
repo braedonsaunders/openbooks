@@ -143,6 +143,7 @@ export type ScopeRowKind =
   | "equipment_unit"
   | "document"
   | "fixed_asset"
+  | "equipment"
   | "account"
   | "department"
   | "employment";
@@ -186,6 +187,10 @@ export async function lockScopeRow(
           ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
               select a.id, a.subsidiary_id as "subsidiaryId" from fixed_assets a
                where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`)
+        : kind === "equipment"
+          ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+              select e.id, e.subsidiary_id as "subsidiaryId" from equipment_units e
+               where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`)
         : kind === "account"
           ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
               select a.id, a.subsidiary_id as "subsidiaryId" from accounts a
@@ -219,6 +224,28 @@ export async function lockScopeRows(
     rows.push(await lockScopeRow(tx, orgId, target.kind, target.id, scope, mode, options));
   }
   return rows;
+}
+
+/** Lock a project and its referenced equipment in canonical order, then
+ * refuse any unit whose subsidiary differs from the project's anchor. */
+export async function lockEquipmentProjectScope(
+  tx: SqlExecutor,
+  orgId: string,
+  projectId: string,
+  equipmentIds: readonly string[],
+  scope: ReadonlySet<string> | null,
+  mode: "update" | "share" = "update",
+): Promise<LockedProjectScope> {
+  const ids = [...new Set(equipmentIds)].sort();
+  const rows = await lockScopeRows(tx, orgId, [
+    ...ids.map((id) => ({ kind: "equipment" as const, id })),
+    { kind: "project" as const, id: projectId },
+  ], scope, mode);
+  const project = rows[ids.length];
+  if (!project || rows.slice(0, ids.length).some((unit) =>
+    unit.subsidiaryId !== null && unit.subsidiaryId !== project.subsidiaryId
+  )) throw new ScopeNotFoundError();
+  return { id: project.id, subsidiaryId: project.subsidiaryId };
 }
 
 /**
