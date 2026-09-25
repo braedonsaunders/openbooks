@@ -10,9 +10,11 @@ web or workers unless bootstrap succeeds.
 
 This supports PostgreSQL 16+ with a database per OpenBooks installation on a
 shared cluster. The migration login needs ownership/DDL rights inside that
-database, but neither login needs `SUPERUSER`, `BYPASSRLS`, `CREATEROLE`,
-`CREATEDB`, replication, or privileged file/server roles. A host that supplies
-only one login must provision a second login before using this mode.
+database, but the migration and runtime logins need none of `SUPERUSER`,
+`BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication, or privileged file/server
+roles — only the dedicated cross-tenant login holds `BYPASSRLS`. A host that
+supplies only one login must provision two further logins (runtime and
+cross-tenant) before using this mode.
 
 ## Provider provisioning
 
@@ -26,6 +28,14 @@ CREATE ROLE tenant_books_owner LOGIN INHERIT NOSUPERUSER NOBYPASSRLS
   NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD 'replace-with-owner-password';
 CREATE ROLE tenant_books_app LOGIN INHERIT NOSUPERUSER NOBYPASSRLS
   NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD 'replace-with-runtime-password';
+-- Cross-tenant login for installation-wide work (maintenance, sandbox
+-- promotion, platform jobs). Production web/worker processes refuse at
+-- import without its URL, so every production deployment provisions it.
+-- BYPASSRLS defeats FORCE ROW LEVEL SECURITY by design: this login is
+-- dedicated (never the runtime login, never the owner), least-privilege
+-- everywhere else, and must own no application objects.
+CREATE ROLE tenant_books_bypass LOGIN INHERIT NOSUPERUSER BYPASSRLS
+  NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD 'replace-with-bypass-password';
 
 -- Cluster-wide: create once, or verify the existing role has this posture.
 CREATE ROLE openbooks_read NOLOGIN NOSUPERUSER NOBYPASSRLS
@@ -37,6 +47,7 @@ GRANT tenant_books_app TO tenant_books_owner WITH INHERIT TRUE, SET TRUE;
 CREATE DATABASE tenant_books OWNER tenant_books_owner;
 REVOKE ALL ON DATABASE tenant_books FROM PUBLIC;
 GRANT CONNECT, TEMPORARY ON DATABASE tenant_books TO tenant_books_app;
+GRANT CONNECT, TEMPORARY ON DATABASE tenant_books TO tenant_books_bypass;
 ```
 
 Connect the provisioning administrator to `tenant_books`, then run:
@@ -56,6 +67,35 @@ The runtime login also needs `EXECUTE` on
 `tenant_books_app` in this database. Bootstrap verifies this prerequisite and
 does not attempt to administer PostgreSQL catalog-function privileges in this
 mode.
+
+The cross-tenant login needs the same application-object rights as the
+runtime login — `USAGE` on schema `public`, `SELECT, INSERT, UPDATE, DELETE`
+on every application table, `USAGE, SELECT, UPDATE` on every sequence, the
+same default privileges for future objects, and `EXECUTE` on
+`pg_catalog.set_config(text,text,boolean)` — because `BYPASSRLS` changes
+which rows policies hide, not which objects the login may touch. Bootstrap
+converges those object grants (and revokes the login's `EXECUTE` on the
+tightly controlled `SECURITY DEFINER` maintenance functions) in every mode,
+but the host owns the login itself plus database `CONNECT, TEMPORARY` and
+the `set_config` grant:
+
+```sql
+GRANT CONNECT, TEMPORARY ON DATABASE tenant_books TO tenant_books_bypass;
+GRANT USAGE ON SCHEMA public TO tenant_books_bypass;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tenant_books_bypass;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO tenant_books_bypass;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tenant_books_bypass;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO tenant_books_bypass;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO tenant_books_bypass;
+```
+
+The bypass login must own no application objects and must never be granted
+to, or inherit, any other login. Rotate its password with the provider's
+normal secret rotation, then update the deployment secret holding
+`OPENBOOKS_BYPASS_DB_URL`; stock Compose (automatic provisioning) also
+accepts the new password through a re-run of the one-shot bootstrap service.
 
 The owner inherits the runtime role so its `SECURITY DEFINER` query-context
 helper can read the runtime-owned temporary context table. This is one-way:
@@ -82,6 +122,7 @@ OPENBOOKS_BOOTSTRAP=1
 OPENBOOKS_PRECREATED_ROLES=1
 OPENBOOKS_MIGRATION_DB_URL=postgres://tenant_books_owner:OWNER_PASSWORD@db:5432/tenant_books
 OPENBOOKS_RUNTIME_DB_URL=postgres://tenant_books_app:RUNTIME_PASSWORD@db:5432/tenant_books
+OPENBOOKS_BYPASS_DB_URL=postgres://tenant_books_bypass:BYPASS_PASSWORD@db:5432/tenant_books
 OPENBOOKS_DB_URL=postgres://tenant_books_app:RUNTIME_PASSWORD@db:5432/tenant_books
 ORG_NAME=My Company
 ORG_COUNTRY=US
@@ -103,10 +144,12 @@ provisions its own PostgreSQL; for an external host, configure a bootstrap job
 and web/worker services with these external URLs instead. On Kubernetes, add
 `OPENBOOKS_PRECREATED_ROLES=1` to the bootstrap Job environment.
 
-Web and workers receive only `OPENBOOKS_DB_URL` with the runtime login, plus
-their normal application configuration. Do not supply the migration credential
-or `OPENBOOKS_BOOTSTRAP=1` to runtime processes. The provider owns password
-rotation; update the corresponding deployment secret after rotating it.
+Web and workers receive `OPENBOOKS_DB_URL` with the runtime login plus
+`OPENBOOKS_BYPASS_DB_URL` with the cross-tenant login, and their normal
+application configuration — both URLs are required, and production web/worker
+processes refuse at import without the bypass URL. Do not supply the migration
+credential or `OPENBOOKS_BOOTSTRAP=1` to runtime processes. The provider owns
+password rotation; update the corresponding deployment secret after rotating it.
 
 ## Upgrades and troubleshooting
 
@@ -121,7 +164,12 @@ unusable read-role memberships before migration work. In particular,
 `INHERIT TRUE` does not imply `SET TRUE`: the host must permit the runtime and
 migration logins to `SET ROLE openbooks_read`. Post-migration verification checks
 effective object permissions, and the runtime connection must demonstrate both
-unscoped RLS denial and a working governed-query context.
+unscoped RLS denial and a working governed-query context. When
+`OPENBOOKS_BYPASS_DB_URL` is wired, bootstrap also covers the cross-tenant
+login — creating it under automatic provisioning, verifying it exists with
+`LOGIN` and holds `BYPASSRLS` (refusing by name otherwise) in pre-created,
+constrained, and aliased modes — and converges its application-object grants
+in every mode.
 
 `OPENBOOKS_PRECREATED_ROLES` accepts only `0` or `1`; unset/`0` keeps the existing
 automatic role provisioning. Do not combine this mode with

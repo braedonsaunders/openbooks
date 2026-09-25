@@ -53,6 +53,16 @@ spec:
                 secretKeyRef:
                   name: openbooks-bootstrap
                   key: OPENBOOKS_RUNTIME_DB_URL
+            # Cross-tenant login: the Job verifies it holds BYPASSRLS before
+            # any pod rolls (production web/worker refuse at import without
+            # it). Optional so existing secrets keep working until the key
+            # is added; unwired stays installer-exempt.
+            - name: OPENBOOKS_BYPASS_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openbooks-bootstrap
+                  key: OPENBOOKS_BYPASS_DB_URL
+                  optional: true
             - name: ORG_NAME
               valueFrom:
                 secretKeyRef:

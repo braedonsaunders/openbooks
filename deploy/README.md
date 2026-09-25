@@ -6,14 +6,20 @@ Compose ordering primitives (`depends_on`) are ignored in stack mode, so the
 script is the ordering. Read its header comment (`OPERATOR SETUP`) alongside
 this file before your first release with it.
 
-## Database: two logins, never one
+## Database: three logins, never one
 
 Web/worker serve application traffic as a **non-owner runtime login**;
-migrations run as the **schema-owner login**. Serving as the owner lets the
+migrations run as the **schema-owner login**; installation-wide work
+(maintenance, sandbox promotion, platform jobs) runs as a dedicated
+**cross-tenant login**. Serving as the owner lets the
 application `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` / `DROP POLICY` its
 own isolation away, so the release refuses to deploy unless both logins are
 present and different — and bootstrap refuses again in production if they
-ever collapse into one.
+ever collapse into one. Production web/worker additionally refuse at import
+without the cross-tenant credential (`OPENBOOKS_BYPASS_DB_URL`), so the
+release also refuses unless the stack env wires it (see `swarm-release.sh`
+operator setup): a digest swap to servers that cannot boot is aborted before
+the pins move.
 
 One-time setup, as the database administrator (details and the full
 least-privilege posture in `docs/operations/communal-postgres.md`):
@@ -22,6 +28,12 @@ least-privilege posture in `docs/operations/communal-postgres.md`):
 CREATE ROLE openbooks_runtime LOGIN NOSUPERUSER NOBYPASSRLS
   NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '<24+ random characters>';
 GRANT CONNECT, TEMPORARY ON DATABASE <database> TO openbooks_runtime;
+-- Dedicated cross-tenant login. BYPASSRLS defeats FORCE ROW LEVEL SECURITY
+-- by design, so this login is never the runtime login, never the owner,
+-- owns nothing, and stays least-privilege everywhere else.
+CREATE ROLE openbooks_bypass LOGIN NOSUPERUSER BYPASSRLS
+  NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '<24+ random characters>';
+GRANT CONNECT, TEMPORARY ON DATABASE <database> TO openbooks_bypass;
 -- Fresh installs only: the migration owner needs database CREATE to create
 -- schemas (existing installs already have them).
 GRANT CREATE ON DATABASE <database> TO <owner>;
@@ -32,8 +44,10 @@ GRANT CREATE ON DATABASE <database> TO <owner>;
 GRANT openbooks_read TO openbooks_runtime WITH INHERIT FALSE, SET TRUE;
 GRANT openbooks_runtime TO <owner> WITH INHERIT TRUE;
 -- Tenant context plumbing: harmless when the default PUBLIC grant is
--- intact, required when the host has tightened pg_catalog.
+-- intact, required when the host has tightened pg_catalog. Both the runtime
+-- and the cross-tenant login establish tenant identity through set_config.
 GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO openbooks_runtime;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO openbooks_bypass;
 ```
 
 Division of labour: the operator pre-creates the logins and the grants
@@ -41,7 +55,9 @@ above; bootstrap (constrained mode, inside the release) then grants the
 runtime login table/sequence privileges on every object including ones the
 release itself creates, sets default privileges for future objects, revokes
 function execute, proves the login owns nothing, and RLS-proves it — all
-before the digest swap. The operator never grants on tables directly.
+before the digest swap — and converges the same object grants for the
+cross-tenant login (verifying it holds BYPASSRLS) before the digest swap.
+The operator never grants on tables directly.
 
 Preflight before the first release with the new login (connect as
 `openbooks_runtime`; all three must hold on a cluster that already has
@@ -56,6 +72,9 @@ select count(*) from orgs; -- 0: FORCE RLS denies cross-tenant reads without a t
 Then, in the Dokploy stack env:
 
 - `OPENBOOKS_DB_URL` = the **runtime** login URL (web/worker serve with this).
+- `OPENBOOKS_BYPASS_DB_URL` = the **cross-tenant** login URL (web/worker
+  refuse at import without it; `swarm-release.sh` reads it from the stack
+  env and the pre-swap migration verifies the login before the pins move).
 - `OPENBOOKS_MIGRATION_DB_URL` = the **schema-owner** login URL (migrations
   only; never served, never given to web/worker).
 
