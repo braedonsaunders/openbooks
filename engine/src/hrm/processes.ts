@@ -390,6 +390,7 @@ async function assertAppliesToTargets(
         from departments d
         left join subsidiaries s on s.org_id = d.org_id and s.id = d.subsidiary_id
        where d.org_id = ${orgId} and d.id = ${appliesTo.departmentId}
+       for update of d
     `)).rows[0];
     if (!department?.owner_exists || (department.subsidiary_id !== null && allowed !== null && !allowed.has(department.subsidiary_id))) {
       throw new HrmProcessError(
