@@ -3,6 +3,7 @@
 import { sum } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
+import type { Dispatch, SetStateAction } from 'react'
 import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -78,6 +79,16 @@ interface ReconciliationActionResult {
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
 
+function useScopedSelection<T>(scope: string, initialValue: T): readonly [T, Dispatch<SetStateAction<T>>] {
+  const [stored, setStored] = useState<{ scope: string; value: T }>(() => ({ scope, value: initialValue }))
+  const value = stored.scope === scope ? stored.value : initialValue
+  const setValue: Dispatch<SetStateAction<T>> = (next) => setStored((current) => {
+    const previous = current.scope === scope ? current.value : initialValue
+    return { scope, value: typeof next === 'function' ? (next as (value: T) => T)(previous) : next }
+  })
+  return [value, setValue]
+}
+
 // Known matched_by enum values — unknown values render verbatim.
 const MATCHED_BY_KEYS = ['auto', 'manual', 'rule']
 
@@ -132,8 +143,14 @@ function ReconcileWorkspaceForId({
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
-  const [selectedStmt, setSelectedStmt] = useState<string | null>(null)
-  const [selectedGl, setSelectedGl] = useState<Set<string>>(new Set())
+  const subjectKey = reconciliation.id
+  const selectionKey = JSON.stringify([
+    subjectKey,
+    stmtParams.q, stmtParams.sort, stmtParams.dir, stmtParams.page, stmtParams.perPage,
+    glParams.q, glParams.sort, glParams.dir, glParams.page, glParams.perPage,
+  ])
+  const [selectedStmt, setSelectedStmt] = useScopedSelection<string | null>(selectionKey, null)
+  const [selectedGl, setSelectedGl] = useScopedSelection<Set<string>>(selectionKey, new Set())
   const [adjustOpen, setAdjustOpen] = useState(false)
   const adjustThroughDateId = useId()
   const adjustStatementBalanceId = useId()
