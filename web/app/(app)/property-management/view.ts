@@ -13,6 +13,7 @@ import {
   resolveListView,
 } from '../../../lib/customization/resolve'
 import { isFeatureEnabled } from '../../../lib/features'
+import { taxCodeOptions } from '../../../lib/documents.ts'
 import { requirePropertyManagementFeature } from '../../../lib/property-management-gate'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import type { Option } from './workspace-ui'
@@ -59,6 +60,7 @@ export interface PropertyManagementData {
     bankAccounts: Option[]
     assets: Option[]
     openInvoices: Option[]
+    taxCodes: Option[]
   }
   permissions: {
     manage: boolean
@@ -144,6 +146,7 @@ export async function loadPropertyManagement(
         bankAccounts: [],
         assets: [],
         openInvoices: [],
+        taxCodes: [],
       },
       permissions: {
         manage: can(authz, 'ar.create'),
@@ -167,6 +170,7 @@ export async function loadPropertyManagement(
     bankAccounts,
     assets,
     openInvoices,
+    taxCodes,
   ] = await Promise.all([
     db.execute<Option>(
       multiCurrency
@@ -199,6 +203,14 @@ export async function loadPropertyManagement(
     db.execute<Option>(
       sql`select d.id,d.party_id as "partyId",concat_ws(' · ',d.document_number,d.document_date::text) as name,d.open_balance as "openBalance" from documents d where d.org_id=${orgId} and d.kind='customer_invoice' and d.status='posted' and coalesce(d.open_balance,0)>0 ${documentSubsidiaryScope} order by d.document_date desc`,
     ),
+    // Active tax codes for the lease-charge picker: billing honours the
+    // charge's tax code, so the UI must be able to set one.
+    taxCodeOptions(orgId).then((rows) =>
+      rows.map((row) => ({
+        id: String(row.id),
+        name: [row.code, row.name].filter((part) => !!part).join(' · ') || String(row.id),
+      })),
+    ),
   ])
   const t = await getTranslations('entities.propertyManagement.workspace')
   return {
@@ -221,6 +233,7 @@ export async function loadPropertyManagement(
       bankAccounts: bankAccounts.rows,
       assets: assets.rows,
       openInvoices: openInvoices.rows,
+      taxCodes,
     },
     permissions: {
       manage: can(authz, 'ar.create'),

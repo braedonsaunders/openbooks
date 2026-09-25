@@ -110,7 +110,7 @@ async function mount(t: TestContext, responder: () => Response): Promise<void> {
                 liabilityAccounts: [],
                 bankAccounts: [],
                 assets: [],
-                openInvoices: [],
+                openInvoices: [], taxCodes: [],
               }}
               permissions={{ manage: false, bill: false, account: false, bulk: false, customize: false }}
               customization={{

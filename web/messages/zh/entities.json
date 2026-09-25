@@ -98,7 +98,8 @@
           "frequency": "频率",
           "effectiveFrom": "生效自",
           "effectiveTo": "生效至",
-          "incomeAccount": "收入科目"
+          "incomeAccount": "收入科目",
+          "taxCode": "税码"
         },
         "types": {
           "cam": "公共区域费用",

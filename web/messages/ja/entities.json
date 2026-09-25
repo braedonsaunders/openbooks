@@ -98,7 +98,8 @@
           "frequency": "頻度",
           "effectiveFrom": "適用開始日",
           "effectiveTo": "適用終了日",
-          "incomeAccount": "収益勘定"
+          "incomeAccount": "収益勘定",
+          "taxCode": "税コード"
         },
         "types": {
           "cam": "共益費",

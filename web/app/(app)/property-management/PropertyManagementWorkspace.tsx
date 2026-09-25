@@ -83,6 +83,7 @@ export function PropertyManagementWorkspace({
     bankAccounts: Option[];
     assets: Option[];
     openInvoices: Option[];
+    taxCodes: Option[];
   };
   permissions: {
     manage: boolean;
