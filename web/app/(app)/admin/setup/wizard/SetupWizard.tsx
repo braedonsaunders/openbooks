@@ -42,6 +42,7 @@ import { cn } from '@openbooks/ui'
 import type { IndustryDef } from '@/lib/industries'
 import { countryOptions } from '@/lib/countries'
 import { currencyOptions } from '@/lib/iso-currencies'
+import { readApiErrorMessage } from '@/lib/api-error'
 import {
   recommendWorkspaceFeatures,
   type ComplexityLevel,
@@ -245,13 +246,13 @@ export function SetupWizard(props: {
     setBusy(true)
     try {
       const res = await fetch('/api/admin/setup/wizard', { method: 'POST' })
-      if (!res.ok) throw new Error('failed')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('error')))
       // Skipping is a deferral, not an abandonment: land on the canonical
       // home and name where setup resumes, instead of detouring into Setup.
       toast.success(t('skipped'))
       router.push('/dashboard')
-    } catch {
-      toast.error(t('error'))
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('error'))
     } finally {
       setBusy(false)
     }
@@ -303,8 +304,12 @@ export function SetupWizard(props: {
           body: JSON.stringify({ industry: industryKey }),
         })
         if (!sample.ok) {
-          const detail = await sample.json().catch(() => ({}))
-          toast.error(detail.error ?? t('launch.sample.error'))
+          const detail = await sample.clone().json().catch(() => null) as { message?: unknown } | null
+          toast.error(
+            typeof detail?.message === 'string' && detail.message.trim()
+              ? detail.message
+              : await readApiErrorMessage(sample, t('launch.sample.error')),
+          )
         }
       }
       // Show the done step briefly, then close
