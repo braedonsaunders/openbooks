@@ -831,7 +831,8 @@
         "unknownError": "erreur inconnue",
         "syncFailed": "Échec de la synchronisation : {error}",
         "imported": "{imported} nouveaux importés, {duplicates} doublons.",
-        "requestFailed": "La requête a échoué (HTTP {status})"
+        "requestFailed": "La requête a échoué (HTTP {status})",
+        "networkFailure": "Le serveur n’a pas pu être joint. Vérifiez votre connexion puis réessayez."
       },
       "sftpCard": {
         "badge": "Dépôt de fichiers SFTP",

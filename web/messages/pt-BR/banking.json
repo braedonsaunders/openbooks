@@ -831,7 +831,8 @@
         "unknownError": "erro desconhecido",
         "syncFailed": "Falha na sincronização: {error}",
         "imported": "{imported} novos importados, {duplicates} duplicados.",
-        "requestFailed": "A solicitação falhou (HTTP {status})"
+        "requestFailed": "A solicitação falhou (HTTP {status})",
+        "networkFailure": "Não foi possível acessar o servidor. Verifique sua conexão e tente novamente."
       },
       "sftpCard": {
         "badge": "Entrega de arquivos SFTP",
