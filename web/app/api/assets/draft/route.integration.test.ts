@@ -162,6 +162,19 @@ test(
         1,
         "first-use category creation must be idempotent",
       );
+      const category = await withOrgContext(fixture.orgId, async () =>
+        db.execute<{ unconfigured: boolean }>(sql`
+          select (asset_account_id is null
+                  and accumulated_depreciation_account_id is null
+                  and depreciation_expense_account_id is null) as unconfigured
+            from asset_categories
+           where org_id = ${fixture.orgId} and name = 'Uncategorised'`),
+      );
+      assert.equal(
+        category.rows[0]?.unconfigured,
+        true,
+        "a chart without fixed-asset posting roles must seed an explicitly unconfigured category, never arbitrary fallback accounts",
+      );
     } finally {
       routeState.authz = null;
       await removeInsertPause(fixture.triggerFunction, fixture.triggerName);
