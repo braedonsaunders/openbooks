@@ -41,6 +41,7 @@ import {
 } from "../engine/src/delivery/email-config.ts";
 import { writeNotification } from "../engine/src/inbox/adapters/notification.ts";
 import { recoverStaleApCaptureClaims } from "../engine/src/payables/ap-capture-service.ts";
+import { recoverUnenqueuedApCaptures } from "../engine/src/payables/ap-capture-dispatch.ts";
 import {
   deriveEmailDeliveryKey,
   hrmSignatureRequestEmail,
@@ -323,6 +324,16 @@ export function registerWorkerDuties(): void {
     key: "hrm-document-reminders",
     run: async () => {
       await runReminderDuty();
+    },
+  });
+  // I5-platform-35: re-drive capture rows committed as queued whose dispatch
+  // never reached BullMQ (commit-then-crash). Deterministic job ids make the
+  // scan idempotent; rows with a live or retained job are left alone.
+  console.log("[worker] duty registered: ap-capture-dispatch");
+  registerWorkerDuty({
+    key: "ap-capture-dispatch",
+    run: async () => {
+      await recoverUnenqueuedApCaptures();
     },
   });
 }

@@ -27,6 +27,17 @@ export type ApCaptureJobData = {
  * Wall-clock values must never feed this: a Date.now() id (the pre-fix
  * shape) dedupes nothing.
  */
+/**
+ * Deterministic queue identity for one upload of a capture item. The upload
+ * route and the dispatch-recovery scan must derive the same id independently
+ * so a re-enqueue after a commit-then-crash dedupes instead of extracting
+ * twice — one builder, never a second copy of the format.
+ */
+export function apCaptureUploadJobId(captureItemId: string): string {
+  if (!captureItemId.trim()) throw new Error("ap-capture upload job identity requires the capture item id");
+  return `ap-capture|${captureItemId}`;
+}
+
 export function apCaptureReprocessJobId(captureItemId: string, attempts: number): string {
   if (!captureItemId.trim()) throw new Error("ap-capture reprocess job identity requires the capture item id");
   if (!Number.isSafeInteger(attempts) || attempts < 0) {
@@ -52,7 +63,7 @@ export function getApCaptureQueue(): Queue<ApCaptureJobData> {
 
 export async function enqueueApCapture(data: ApCaptureJobData, options?: JobsOptions) {
   return getApCaptureQueue().add("extract", data, {
-    jobId: `ap-capture|${data.captureItemId}`,
+    jobId: apCaptureUploadJobId(data.captureItemId),
     ...options,
   });
 }
