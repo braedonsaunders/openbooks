@@ -2,14 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { receiveInventory } from "./movements.ts";
-import {
-  createStockCount,
-  recordCountedQuantity,
-  startStockCount,
-} from "./stock-counts.ts";
+import { recordCountedQuantity } from "./stock-counts.ts";
 import { InventoryError } from "./contracts.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { openCountingLine } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -19,28 +15,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * countVariance) and at storage (0299 CHECK). -1 and the sub-precision
  * -0.0001 both refuse; zero stays legal.
  */
-
-async function openCountingLine(org: ScratchOrg): Promise<{ countId: string; lineId: string }> {
-  await receiveInventory(org.orgId, null, {
-    itemId: org.items.fifo,
-    stockLocationId: org.stockLocationId,
-    quantity: "10",
-    unitCost: "4",
-    subsidiaryId: org.subsidiaryId,
-    offsetAccountId: org.accounts.clearing,
-    date: org.date,
-  });
-  const count = await createStockCount(org.orgId, null, {
-    locationId: org.locationId,
-    subsidiaryId: org.subsidiaryId,
-    countedOn: org.date,
-    lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
-  });
-  await startStockCount(org.orgId, null, count.id);
-  const lineId = (await db.execute<{ id: string }>(sql`
-    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
-  return { countId: count.id, lineId };
-}
 
 for (const counted of ["-1", "-0.0001"]) {
   test(`recording ${counted} refuses before any line, audit, or stock write`, { skip: !DB }, async () => {

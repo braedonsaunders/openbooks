@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { receiveInventory } from "./movements.ts";
 import {
   createStockCount,
   postStockCount,
@@ -13,6 +12,7 @@ import {
 } from "./stock-counts.ts";
 import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { receiveTen } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -22,18 +22,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * post, so a later restriction edit refuses with a named remedy instead of
  * stranding the count (or dying inside adjustInventory mid-post).
  */
-
-async function receiveTen(org: ScratchOrg): Promise<void> {
-  await receiveInventory(org.orgId, null, {
-    itemId: org.items.fifo,
-    stockLocationId: org.stockLocationId,
-    quantity: "10",
-    unitCost: "4",
-    subsidiaryId: org.subsidiaryId,
-    offsetAccountId: org.accounts.clearing,
-    date: org.date,
-  });
-}
 
 async function countRows(orgId: string): Promise<string> {
   return (await db.execute<{ n: string }>(sql`
