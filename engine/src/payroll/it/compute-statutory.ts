@@ -267,7 +267,7 @@ export interface It2025Input {
    * The pack lacks the facts and amounts needed to compute those deductions.
    */
   hasFamilyCharges?: boolean;
-  isFixedTerm?: boolean;
+  isFixedTerm?: boolean | null;
   /** Art. 49 c. 2 lett. a) pension income: refused (TABELLA 7). */
   isPensioner?: boolean;
   /** Post-1995 seniority: the annual massimale applies; absent is unknown. */
@@ -320,6 +320,13 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     refuse(
       `IT ${year} engine refuses pension income (art. 49 c. 2 lett. a)): pensionati use the `
       + `TABELLA 7 detrazioni, not transcribed — see ${refused}`,
+    );
+  }
+  if (input.isFixedTerm == null) {
+    refuse(
+      `IT ${year} refuses: employment term is unknown. A fixed-term contract owes the NASpI add-on `
+      + "of 1.40% plus 0.50 percentage points per qualifying renewal, and the required renewal and exemption "
+      + "facts are not priced; declare the contract term before calculating payroll.",
     );
   }
   if (input.isFixedTerm) {
@@ -653,7 +660,11 @@ export async function computeItStatutoryWithRates(
       ? null
       : { rate: rates.municipalRate, exemption: rates.municipalExemption },
     hasDetrazioniDeclaration: cert !== null,
-    isFixedTerm: bool(answers["tempo_determinato"] ?? null),
+    isFixedTerm: answers["tempo_determinato"] === "true"
+      ? true
+      : answers["tempo_determinato"] === "false"
+        ? false
+        : null,
     isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
       ? undefined
       : bool(answers["anzianita_post_1995"]),

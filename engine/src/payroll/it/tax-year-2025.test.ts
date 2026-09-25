@@ -25,7 +25,7 @@ const BASE = {
   comuneCode: "H501",
   regionalRate: "0",
   municipalSurtax: { rate: "0" },
-  hasDetrazioniDeclaration: false,
+  hasDetrazioniDeclaration: false, isFixedTerm: false,
 };
 
 test("Circ. 4/E Esempio 1: somma 106 euro", () => {

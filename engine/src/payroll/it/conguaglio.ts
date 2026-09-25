@@ -146,7 +146,7 @@ export interface ItConguaglioDeclaration {
   /** Any art. 12 family charge: gates the 15.001–28.000 TI band, as monthly. */
   hasFamilyCharges: boolean;
   /** Fixed-term contract: art. 13 c. 1 floor 1.380 instead of 690. */
-  isFixedTerm: boolean;
+  isFixedTerm: boolean | null;
   /** Post-1995 seniority: the year's massimale applies; absent is unknown. */
   isPost1995?: boolean;
   /** Art. 49 c. 2 lett. a) pension income: refused, as monthly. */
@@ -336,7 +336,11 @@ function readSettlementDeclaration(
     hasFamilyCharges: bool(answers["coniuge_a_carico"] ?? null)
       || countOf("figli_a_carico") > 0
       || countOf("altri_familiari_a_carico") > 0,
-    isFixedTerm: bool(answers["tempo_determinato"] ?? null),
+    isFixedTerm: answers["tempo_determinato"] === "true"
+      ? true
+      : answers["tempo_determinato"] === "false"
+        ? false
+        : null,
     isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
       ? undefined
       : bool(answers["anzianita_post_1995"]),
