@@ -214,7 +214,7 @@ async function uiSubmitAndPost(page: Page, drawerUrl: string, expectedBadge: "Op
 /** Audit trail text for a document, through the drawer's Audit Trail tab. */
 async function auditActions(page: Page, drawerUrl: string): Promise<string> {
   const drawer = await openDrawer(page, drawerUrl);
-  await drawer.getByRole("tab", { name: "Audit Trail", exact: true }).click();
+  await drawer.getByRole("button", { name: "Audit Trail", exact: true }).click();
   await expect(drawer.getByText(/events/)).toBeVisible({ timeout: 15000 });
   return drawer.innerText();
 }
