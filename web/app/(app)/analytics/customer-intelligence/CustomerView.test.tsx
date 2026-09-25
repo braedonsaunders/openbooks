@@ -90,7 +90,7 @@ function row(overrides: Partial<CustomerRow> = {}): CustomerRow {
     frictionPoints: 0,
     frictionLevel: 'low',
     creditCount: 0,
-    creditValue: 0,
+    creditValue: '0',
     returnRate: 0,
     avgOrderCycle: 30,
     daysOverdue: 0,
