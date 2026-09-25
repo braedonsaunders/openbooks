@@ -65,6 +65,7 @@ interface MatchData {
   glTotal: number
   glParams: ListParams
   reviewRows: ReviewRow[]
+  reviewTotal: number
   excludedRows: StatementRow[]
   excludedTotal: number
   exParams: ListParams
@@ -124,6 +125,15 @@ export function MatchWorkspace({
   const [suggestionResult, setSuggestionResult] = useState<{
     accountId: string; sessionId: string; rows: Map<string, { ruleId: string; ruleName: string }>
   } | null>(null)
+  // A refused/unavailable rules preview must not read as "no rules
+  // matched": track the outcome per request separately from the (possibly
+  // empty) suggestion map so the workspace can say so. Set only in the
+  // async continuations, and matched to the current request when read.
+  const [previewOutcome, setPreviewOutcome] = useState<{
+    accountId: string; sessionId: string; failed: boolean
+  } | null>(null)
+  const previewFailed = previewOutcome !== null && previewOutcome.failed
+    && previewOutcome.accountId === accountId && previewOutcome.sessionId === sessionId
   const suggestions = suggestionResult && suggestionResult.accountId === accountId && suggestionResult.sessionId === sessionId
     ? suggestionResult.rows : NO_SUGGESTIONS
 
@@ -139,6 +149,7 @@ export function MatchWorkspace({
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (controller.signal.aborted) return
+        setPreviewOutcome({ accountId, sessionId, failed: !d })
         const next = new Map<string, { ruleId: string; ruleName: string }>()
         for (const m of d?.matches ?? []) {
           if (m.action === 'categorize' && m.ruleMode === 'suggest' && m.ruleId) {
@@ -148,7 +159,9 @@ export function MatchWorkspace({
         setSuggestionResult({ accountId, sessionId, rows: next })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setSuggestionResult({ accountId, sessionId, rows: new Map() })
+        if (controller.signal.aborted) return
+        setPreviewOutcome({ accountId, sessionId, failed: true })
+        setSuggestionResult({ accountId, sessionId, rows: new Map() })
       })
     return () => controller.abort()
   }, [accountId, sessionId, data])
@@ -384,9 +397,12 @@ export function MatchWorkspace({
       {/* tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200 pb-2 dark:border-slate-800">
         {tabBtn('match', t('tabs.toMatch'), data.stmtTotal)}
-        {tabBtn('review', t('tabs.review'), data.reviewRows.length)}
+        {tabBtn('review', t('tabs.review'), data.reviewTotal)}
         {tabBtn('excluded', t('tabs.excluded'), data.excludedTotal)}
       </div>
+      {previewFailed ? (
+        <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">{tW('suggestionsUnavailable')}</p>
+      ) : null}
 
       {tab === 'match' ? (
         <div className="grid gap-6 xl:grid-cols-2">
@@ -498,6 +514,9 @@ export function MatchWorkspace({
       {tab === 'review' ? (
         <section className="space-y-2">
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('reviewHint')}</p>
+          {data.reviewTotal > data.reviewRows.length ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('reviewTruncated', { shown: data.reviewRows.length, total: data.reviewTotal })}</p>
+          ) : null}
           <Table>
             <TableHeader><TableRow>
               <TableHead>{t('columns.bankDate')}</TableHead>

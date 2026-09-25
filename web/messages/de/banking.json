@@ -337,6 +337,7 @@
     "restoredToast": "Zeile wiederhergestellt",
     "addedToast": "Journal hinzugefügt und zugeordnet",
     "reviewHint": "Automatische Zuordnungen mit geringer Sicherheit — bestätigen Sie, dass sie korrekt sind, oder heben Sie die Zuordnung auf, um sie zu wiederholen.",
+    "reviewTruncated": "{shown} von {total} werden angezeigt.",
     "columns": {
       "bankDate": "Bankdatum",
       "confidence": "Sicherheit"
@@ -538,6 +539,7 @@
     "discardedToast": "Abstimmung verworfen",
     "updatedToast": "Abstimmung aktualisiert",
     "bankLinesTitle": "Kontoauszugszeilen",
+    "suggestionsUnavailable": "Regelvorschläge sind nicht verfügbar — die Vorschau ist fehlgeschlagen. Sie können weiterhin manuell zuordnen.",
     "bankLinesCount": "({count, number} nicht zugeordnet)",
     "searchBankLines": "Bankzeilen suchen…",
     "noBankLinesSearch": "Keine Bankzeilen passen zu dieser Suche.",

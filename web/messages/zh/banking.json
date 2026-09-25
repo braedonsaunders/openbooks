@@ -337,6 +337,7 @@
     "restoredToast": "明细已还原",
     "addedToast": "分录已添加并匹配",
     "reviewHint": "低置信度自动匹配 — 请确认无误，或取消匹配以重做。",
+    "reviewTruncated": "共 {total} 条，显示 {shown} 条。",
     "columns": {
       "bankDate": "银行日期",
       "confidence": "置信度"
@@ -538,6 +539,7 @@
     "discardedToast": "对账已放弃",
     "updatedToast": "对账已更新",
     "bankLinesTitle": "银行对账单明细",
+    "suggestionsUnavailable": "规则建议不可用——预览失败。您仍可手动匹配。",
     "bankLinesCount": "（{count, number} 条未匹配）",
     "searchBankLines": "搜索银行明细…",
     "noBankLinesSearch": "无银行明细匹配此搜索。",
