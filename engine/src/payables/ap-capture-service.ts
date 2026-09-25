@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, type SqlExecutor, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -32,7 +32,62 @@ type CaptureRow = {
   original_filename: string;
   content_hash: string;
   created_by: string | null;
+  attempts: number;
 };
+
+/** A live extraction refreshes its item lease once a minute; an unrefreshed ten-minute claim is recoverable. */
+export const AP_CAPTURE_STALE_CLAIM_MS = 10 * 60_000;
+const AP_CAPTURE_HEARTBEAT_MS = 60_000;
+const AP_CAPTURE_STALE_ERROR = "Extraction worker stopped before finalizing this attempt; reprocess the capture to try again.";
+
+/**
+ * Release claims left by a dead extraction worker. The item row is the lease:
+ * the active worker heartbeats updated_at and fences every final write by its
+ * attempt number, so recovery cannot let an old worker overwrite a newer run.
+ */
+export async function recoverStaleApCaptureClaims(now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - AP_CAPTURE_STALE_CLAIM_MS);
+  const candidates = await withBypassContext(() => db.execute<{ id: string; org_id: string; attempts: number }>(sql`
+    select id, org_id, attempts from ap_capture_items
+     where status = 'extracting' and updated_at < ${cutoff.toISOString()}
+     order by updated_at limit 50
+  `));
+  let recovered = 0;
+  for (const candidate of candidates.rows) {
+    const didRecover = await withOrgTransaction(candidate.org_id, async () => {
+      const current = (await db.execute<{ id: string; attempts: number }>(sql`
+        select id, attempts from ap_capture_items
+         where id = ${candidate.id} and org_id = ${candidate.org_id}
+           and status = 'extracting' and attempts = ${candidate.attempts}
+           and updated_at < ${cutoff.toISOString()}
+         for update
+      `)).rows[0];
+      if (!current) return false;
+      await db.execute(sql`
+        update ap_capture_runs set status = 'failed', error_message = ${AP_CAPTURE_STALE_ERROR}, finished_at = now()
+         where org_id = ${candidate.org_id} and capture_item_id = ${candidate.id}
+           and attempt = ${current.attempts} and status = 'running'
+      `);
+      const failed = await db.execute<{ id: string }>(sql`
+        update ap_capture_items
+           set status = 'failed', last_error = ${AP_CAPTURE_STALE_ERROR}, updated_at = now()
+         where id = ${candidate.id} and org_id = ${candidate.org_id}
+           and status = 'extracting' and attempts = ${current.attempts}
+         returning id
+      `);
+      if (!failed.rows[0]) return false;
+      await db.execute(sql`
+        insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+        values (${candidate.org_id}, ${candidate.id}, 'extraction_failed',
+                ${JSON.stringify({ message: AP_CAPTURE_STALE_ERROR, recovered: true, attempt: current.attempts })}::jsonb,
+                (select created_by from ap_capture_items where id = ${candidate.id} and org_id = ${candidate.org_id}))
+      `);
+      return true;
+    });
+    if (didRecover) recovered += 1;
+  }
+  return recovered;
+}
 
 function normalizedKey(value: string): string {
   return value.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -467,16 +522,34 @@ export async function processCaptureItem(input: {
   `));
   const item = claimed.rows[0];
   if (!item) return;
-  const settings = await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
   const attempt = Number((item as unknown as { attempts: number }).attempts);
-  const run = (await db.execute<{ id: string }>(sql`
-    insert into ap_capture_runs (org_id, capture_item_id, attempt, provider, model, api_version, created_by)
-    values (${input.orgId}, ${item.id}, ${attempt}, 'azure_document_intelligence',
-            ${settings?.model ?? "prebuilt-invoice"}, '2024-11-30', ${input.actorId ?? item.created_by})
-    returning id
-  `));
-  const runId = run.rows[0]!.id;
+  let runId: string | null = null;
+  let heartbeatBusy = false;
+  const heartbeat = setInterval(() => {
+    if (heartbeatBusy) return;
+    heartbeatBusy = true;
+    void withOrgContext(input.orgId, () => db.execute(sql`
+      update ap_capture_items set updated_at = now()
+       where id = ${item.id} and org_id = ${input.orgId}
+         and status = 'extracting' and attempts = ${attempt}
+    `)).catch((error) => {
+      console.error(`[ap-capture] item ${item.id}: extraction heartbeat failed:`, (error as Error).message);
+    }).finally(() => {
+      heartbeatBusy = false;
+    });
+  }, AP_CAPTURE_HEARTBEAT_MS);
+  heartbeat.unref?.();
   try {
+    // All fallible setup belongs to this attempt's failure finalizer. A
+    // configuration or run-ledger insert error must not strand extracting.
+    const settings = await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
+    const run = await db.execute<{ id: string }>(sql`
+      insert into ap_capture_runs (org_id, capture_item_id, attempt, provider, model, api_version, created_by)
+      values (${input.orgId}, ${item.id}, ${attempt}, 'azure_document_intelligence',
+              ${settings?.model ?? "prebuilt-invoice"}, '2024-11-30', ${input.actorId ?? item.created_by})
+      returning id
+    `);
+    runId = run.rows[0]!.id;
     if (!settings) throw new Error("Document capture is disabled or not configured under Platform → AI");
     const blob = await loadCaptureBlob(input.orgId, item.file_id);
     const extracted = await extractAzureInvoice({
@@ -499,6 +572,13 @@ export async function processCaptureItem(input: {
       resolved.issues.push(issue("document_low_confidence", "warning", { field: "document" }));
     }
     await db.transaction(async (tx) => {
+      const owner = (await tx.execute<{ attempts: number }>(sql`
+        select attempts from ap_capture_items
+         where id = ${item.id} and org_id = ${input.orgId}
+           and status = 'extracting' and attempts = ${attempt}
+         for update
+      `)).rows[0];
+      if (!owner) throw new Error("capture extraction claim expired before its result could be saved");
       for (const field of extracted.evidence) {
         await tx.execute(sql`
           insert into ap_capture_fields (org_id, run_id, field_key, line_index, raw_value,
@@ -514,13 +594,16 @@ export async function processCaptureItem(input: {
          where id = ${runId} and org_id = ${input.orgId} and status = 'running'
       `);
       const status = resolved.duplicate ? "duplicate" : resolved.issues.length ? "needs_review" : "ready";
-      await tx.execute(sql`
+      const completed = await tx.execute<{ id: string }>(sql`
         update ap_capture_items set status = ${status}, normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
                validation_issues = ${JSON.stringify(resolved.issues)}::jsonb,
                overall_confidence = ${extracted.overallConfidence}, vendor_candidate_id = ${resolved.vendorId},
                purchase_order_id = ${resolved.purchaseOrderId}, processed_at = now(), updated_at = now()
          where id = ${item.id} and org_id = ${input.orgId}
+           and status = 'extracting' and attempts = ${attempt}
+         returning id
       `);
+      if (!completed.rows[0]) throw new Error("capture extraction claim changed before completion");
       await tx.execute(sql`
         insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
         values (${input.orgId}, ${item.id}, 'extraction_completed',
@@ -565,14 +648,19 @@ export async function processCaptureItem(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Capture failed";
     await db.transaction(async (tx) => {
-      await tx.execute(sql`
-        update ap_capture_runs set status = 'failed', error_message = ${message}, finished_at = now()
-         where id = ${runId} and org_id = ${input.orgId} and status = 'running'
-      `);
-      await tx.execute(sql`
+      const failed = await tx.execute<{ id: string }>(sql`
         update ap_capture_items set status = 'failed', last_error = ${message}, updated_at = now()
          where id = ${item.id} and org_id = ${input.orgId}
+           and status = 'extracting' and attempts = ${attempt}
+         returning id
       `);
+      if (!failed.rows[0]) return; // a recovery or newer attempt owns the item now
+      if (runId) {
+        await tx.execute(sql`
+          update ap_capture_runs set status = 'failed', error_message = ${message}, finished_at = now()
+           where id = ${runId} and org_id = ${input.orgId} and status = 'running'
+        `);
+      }
       await tx.execute(sql`
         insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
         values (${input.orgId}, ${item.id}, 'extraction_failed', ${JSON.stringify({ message })}::jsonb,
@@ -580,6 +668,8 @@ export async function processCaptureItem(input: {
       `);
     });
     throw error;
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 

@@ -40,6 +40,7 @@ import {
   resolveOrgEmailTransport,
 } from "../engine/src/delivery/email-config.ts";
 import { writeNotification } from "../engine/src/inbox/adapters/notification.ts";
+import { recoverStaleApCaptureClaims } from "../engine/src/payables/ap-capture-service.ts";
 import {
   deriveEmailDeliveryKey,
   hrmSignatureRequestEmail,
@@ -267,6 +268,13 @@ async function runReminderDuty(): Promise<void> {
 }
 
 export function registerWorkerDuties(): void {
+  console.log("[worker] duty registered: ap-capture-stale-claims");
+  registerWorkerDuty({
+    key: "ap-capture-stale-claims",
+    run: async () => {
+      await recoverStaleApCaptureClaims();
+    },
+  });
   // One scanner per key (the registry refuses duplicates): the automation
   // tick covers schedule, date-relative, and queued field-change / event /
   // document triggers, claimed across replicas on its own advisory key.
