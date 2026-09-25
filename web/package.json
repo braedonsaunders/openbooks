@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev -p 4780",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node --max-old-space-size=6144 ../node_modules/typescript/bin/tsc --noEmit",
     "build": "next build",
     "start": "next start -p 4780"
   },
