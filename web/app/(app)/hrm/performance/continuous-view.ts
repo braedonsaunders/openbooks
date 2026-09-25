@@ -353,7 +353,10 @@ export async function loadContinuousTab(
   let talentError: ContinuousLoadError | null = null
   if (tab === 'talent' && showTalent) {
     const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id })
-    const cycleId = typeof sp.cycle === 'string' && sp.cycle.length > 0 ? sp.cycle : cycles.find((c) => c.status !== 'closed')?.id ?? cycles[0]?.id ?? null
+    // The talent filter rides talentCycle, never cycle: cycle opens the
+    // cycle drawer (performance/view reads it as the drawer id), so sharing
+    // the name popped the drawer over the talent tab.
+    const cycleId = typeof sp.talentCycle === 'string' && sp.talentCycle.length > 0 ? sp.talentCycle : cycles.find((c) => c.status !== 'closed')?.id ?? cycles[0]?.id ?? null
     const perfFilter = typeof sp.perf === 'string' ? sp.perf : null
     const potFilter = typeof sp.pot === 'string' ? sp.pot : null
     const directory = await listTalentDirectory({ orgId: authz.user.orgId, actorId: authz.user.id })
@@ -364,7 +367,7 @@ export async function loadContinuousTab(
           listTalentReviews({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId }),
           listSuccessionPlans({ orgId: authz.user.orgId, actorId: authz.user.id }),
         ])
-        const base = `/hrm/performance?tab=talent&cycle=${cycleId}`
+        const base = `/hrm/performance?tab=talent&talentCycle=${cycleId}`
         const talentLabel = (key: string) => t(key as never)
         const visible = reviews.filter(
           (r) => (!perfFilter || r.performanceKey === perfFilter) && (!potFilter || r.potentialKey === potFilter),
@@ -444,7 +447,7 @@ export async function loadContinuousTab(
             notesLabel: t('performance.continuous.talent.notesLabel'),
             submitLabel: t('performance.continuous.talent.submitLabel'),
             cancelLabel: t('performance.cancel'),
-            closeHref: `/hrm/performance?tab=talent&cycle=${cycleId}`,
+            closeHref: `/hrm/performance?tab=talent&talentCycle=${cycleId}`,
             failed: t('performance.actionFailed'),
             openLabel: t('performance.continuous.talent.newRecord'),
             modeLabel: t('performance.continuous.talent.modeLabel'),
@@ -458,7 +461,7 @@ export async function loadContinuousTab(
         if (!isExpectedAbsence(error)) {
           talentError = {
             message: t('performance.continuous.talent.loadFailed'),
-            retryHref: cycleId ? `/hrm/performance?tab=talent&cycle=${cycleId}` : '/hrm/performance?tab=talent',
+            retryHref: cycleId ? `/hrm/performance?tab=talent&talentCycle=${cycleId}` : '/hrm/performance?tab=talent',
             retryLabel,
           }
         }
