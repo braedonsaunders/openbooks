@@ -28,6 +28,7 @@ import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
 import { loadComplianceClasses, loadVendorComplianceClass } from '../../../lib/compliance'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { listScopedAccountOptions } from '../../../lib/scoped-options'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import type { PartyDrawer, PartyTab } from './PartyDrawer'
 
@@ -266,9 +267,9 @@ export async function loadParties(
               ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
               : options,
           ),
-          db.execute<ElementOf<PartyDrawerProps['accounts']>>(
-            sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`,
-          ),
+          listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({
+            rows: rows.map(({ id, name, type, number }) => ({ id, name, type, label: [number, name].filter(Boolean).join(' · ') })),
+          })),
           db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(
             sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`,
           ),
