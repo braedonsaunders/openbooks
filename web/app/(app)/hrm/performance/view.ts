@@ -30,6 +30,8 @@ import { isUuid } from '@/lib/list-params'
 import { listReviewTemplates } from '@openbooks/engine/src/hrm/performance/review-cycles.ts'
 import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
 import { HrmPerformanceError } from '@openbooks/engine/src/hrm/performance/errors.ts'
+import { HrmAuthorizationError, loadApprovalPerson } from '@openbooks/engine/src/hrm/authorization.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, getAuthz } from '../../../../lib/authz'
@@ -598,11 +600,30 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         actorId: authz.user.id,
         reviewId,
       })
-      const goals = await listGoals({
-        orgId: authz.user.orgId,
-        actorId: authz.user.id,
-        employmentId: full.review.employmentId,
-      })
+      // The goals read carries its own authority (subject, current
+      // manager, or manage grant): an analyst with the read grant, or a
+      // period-end reviewer who no longer manages the subject, may read
+      // the review but not its goals. Their refusal narrows the drawer
+      // to the review — it never fails the drawer with a Retry that
+      // always fails. Anything else propagates to the load error below.
+      let goals: Awaited<ReturnType<typeof listGoals>> = []
+      try {
+        goals = await listGoals({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          employmentId: full.review.employmentId,
+        })
+      } catch (error) {
+        if (!(error instanceof HrmAuthorizationError)) throw error
+      }
+      // Lifecycle affordances mirror the service's actor rules (the
+      // endpoints stay authoritative): only the reviewer answers and
+      // shares (a manager with the grant may also share), only the
+      // subject acknowledges. Status-only checks offered every button
+      // to readers who can only be refused.
+      const actorPartyId = (await loadApprovalPerson(db, authz.user.orgId, authz.user.id)).partyId
+      const isReviewer = actorPartyId !== null && full.review.reviewerPartyId === actorPartyId
+      const isSubject = actorPartyId !== null && full.review.subjectPartyId === actorPartyId
       review = {
         id: full.review.id,
         kindLabel:
@@ -634,9 +655,12 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         })),
         goalsTitle: t('performance.goalsTitle'),
         goalsEmpty: t('performance.goalsEmpty'),
-        canAnswer: full.review.status === 'pending',
-        canShare: full.review.kind !== 'self' && (full.review.status === 'submitted' || full.review.status === 'calibrated'),
-        canAcknowledge: full.review.status === 'shared',
+        canAnswer: isReviewer && full.review.status === 'pending',
+        canShare:
+          full.review.kind !== 'self' &&
+          (full.review.status === 'submitted' || full.review.status === 'calibrated') &&
+          (isReviewer || canManage),
+        canAcknowledge: isSubject && full.review.status === 'shared',
         canCalibrate: canManage && (full.review.status === 'submitted' || full.review.status === 'calibrated'),
         canReopen: canManage && (full.review.status === 'submitted' || full.review.status === 'calibrated'),
         submitLabel: t('performance.submitReview'),
