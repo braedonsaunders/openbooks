@@ -375,11 +375,12 @@ test("merge route forwards a scope that narrows after the precheck to the locked
   }
 });
 
-test("merge moves posted journal lines in open periods through the amend path", async () => {
+test("merge moves posted journal lines in open periods by reversal plus repost", async () => {
   // A plain in-place rewrite of posted lines dies in the journal guard
-  // ("lines of a posted journal entry are immutable"). The merge runs the
-  // move through the governed amend path instead, so open-period posted
-  // history follows the survivor.
+  // ("lines of a posted journal entry are immutable") with no amend escape.
+  // The merge cancels the duplicate-attributed legs with an exact negated
+  // reversal and re-books them under the survivor; the original is marked
+  // reversed and keeps its history on the duplicate.
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
@@ -394,16 +395,36 @@ test("merge moves posted journal lines in open periods through the amend path", 
     assert.equal(preview.moved.find((m) => m.table === "journal_lines")?.rows, 2);
     const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
     assert.equal(result.alreadyMerged, false);
-    const left = await db.execute<{ n: string }>(sql`
+    // History stays on the duplicate: the reversed original plus its negation.
+    const history = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from journal_lines
        where org_id = ${org.orgId} and project_id = ${duplicate}`);
-    assert.equal(left.rows[0]?.n, "0");
-    const moved = await db.execute<{ n: string; status: string }>(sql`
-      select count(*)::text as n, max(e.status) as status
+    assert.equal(history.rows[0]?.n, "4");
+    // The survivor holds the corrected, posted, balanced copy.
+    const moved = await db.execute<{ n: string; status: string; balance: string }>(sql`
+      select count(*)::text as n, max(e.status) as status,
+             coalesce(sum(jl.amount), 0)::text as balance
         from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
        where jl.org_id = ${org.orgId} and jl.project_id = ${survivor}`);
     assert.equal(moved.rows[0]?.n, "2");
-    assert.equal(moved.rows[0]?.status, "posted", "the entry stays posted through the move");
+    assert.equal(moved.rows[0]?.status, "posted");
+    assert.equal(moved.rows[0]?.balance, "0.0000");
+    // Explicit lineage: original reversed, reversal and copy posted.
+    const lineage = await db.execute<{ entry_number: string; status: string }>(sql`
+      select entry_number, status from journal_entries
+       where org_id = ${org.orgId} and entry_number like 'JE-JOPEN%'
+       order by entry_number`);
+    assert.deepEqual(lineage.rows, [
+      { entry_number: "JE-JOPEN", status: "reversed" },
+      { entry_number: "JE-JOPEN-C", status: "posted" },
+      { entry_number: "JE-JOPEN-R", status: "posted" },
+    ]);
+    // The merge adds no money: posted entries still balance overall.
+    const books = await db.execute<{ balance: string }>(sql`
+      select coalesce(sum(jl.amount), 0)::text as balance
+        from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
+       where jl.org_id = ${org.orgId} and e.status = 'posted'`);
+    assert.equal(books.rows[0]?.balance, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
