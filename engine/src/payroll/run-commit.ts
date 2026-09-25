@@ -15,6 +15,7 @@ import { add, cmp, neg, sum } from "../money/money.ts";
 import { legacyStatutoryLiabilityAccount, PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import { laborCostingSettings } from "../projects/labor-costing.ts";
 import { canonicalJson, payRunCalculationSourceDigest, parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, type PayRunCalculationError, type PayRunRefusalAcknowledgement, payRunCalculationRefusals, payRunRefusalDigest, parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement } from "./run-calculation-evidence.ts";
+import { lockStatutoryRatesForPayRun } from "./statutory-rates.ts";
 /**
  * The commit refusal: names every refused in-scope employee WITH the pack's
  * own words for why, so the operator sees at POST exactly what the exception
@@ -561,6 +562,23 @@ export async function commitPayRun(input: {
     if (canonicalJson(actualClaimIds) !== canonicalJson(expectedClaimIds)) {
       throw new PayrollError(staleCalculationMessage(["time"]));
     }
+    // Rate writes use the same per-slot and per-point transaction advisory
+    // locks. Take every slot used by this schedule (including slots with no
+    // current row, so a new more-specific point cannot appear in the gap),
+    // then lock its current points before the final READ COMMITTED freshness
+    // snapshot. The fences stay held through the terminal commit below.
+    const rateCountries = (await tx.execute<{ country: string }>(sql`
+      select distinct country from employee_payroll_profiles
+       where org_id = ${orgId} and pay_schedule_id = ${run.pay_schedule_id}
+         and is_active and country is not null
+       order by country
+    `)).rows.map((row) => row.country);
+    const ratePacks = rateCountries.flatMap((country) => {
+      const pack = PAYROLL_COUNTRY_PACKS[country];
+      return pack ? [pack.statutoryRates] : [];
+    });
+    await lockStatutoryRatesForPayRun(tx, orgId, Number(run.tax_year), ratePacks);
+
     // Belt AND braces, deliberately — the same doctrine as the gate that
     // opened this transaction, now asked again at the LAST moment. The two
     // gates are separate statements and READ COMMITTED gives each its own
