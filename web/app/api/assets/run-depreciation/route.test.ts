@@ -202,9 +202,11 @@ const mockDb = `
       return { rows: [] }
     }
     if (text.includes('from accounts') && !text.includes('depreciation_')) {
+      // postEntry guards on the live account flags (active, non-summary,
+      // currency restriction): the chart rows carry them like real rows.
       return { rows: [
-        { id: '${EXPENSE_ID}', number: '6100', name: 'Depreciation expense' },
-        { id: '${ACCUM_ID}', number: '1510', name: 'Accumulated depreciation' },
+        { id: '${EXPENSE_ID}', number: '6100', name: 'Depreciation expense', is_active: true, is_summary: false, currency_restriction: null },
+        { id: '${ACCUM_ID}', number: '1510', name: 'Accumulated depreciation', is_active: true, is_summary: false, currency_restriction: null },
       ] }
     }
     if (text.includes('select distinct s.asset_id')) {
@@ -269,6 +271,17 @@ const mockDb = `
     // Recognition and line-marking updates affect exactly their line.
     if (text.includes('update depreciation_schedule_lines')) {
       return { rows: [{ id: 'marked' }] }
+    }
+    // postEntry writes every entry as one two-leg INSERT and verifies the
+    // row count; the draft-to-posted flip must match exactly its entry.
+    if (text.includes('insert into journal_lines')) {
+      return { rows: [
+        { id: '00000000-0000-4000-8000-00000000e201', line_number: 1 },
+        { id: '00000000-0000-4000-8000-00000000e202', line_number: 2 },
+      ] }
+    }
+    if (text.includes('update journal_entries')) {
+      return { rows: [{ id: '00000000-0000-4000-8000-00000000e100' }] }
     }
     if (text.includes('from depreciation_schedule_lines') && text.includes('for update') && !text.includes('for update of l')) {
       // Batch-gate reload: claim-shaped rows — planned amounts plus posted
