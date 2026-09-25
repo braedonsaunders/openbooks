@@ -54,10 +54,29 @@ export interface CustomersHome {
     collected7d: string
     customers: number
   }
-  /** False when Orders is off — hide quote/SO vitals rather than show zeros. */
+  /**
+   * False when Orders is off OR the caller lacks the orders read grant
+   * (quotes and sales orders read behind ar.read at their source) — hide
+   * quote/SO vitals rather than show zeros.
+   */
   ordersEnabled: boolean
-  /** False when CRM is off — hide pipeline/opportunity vitals rather than show zeros. */
+  /**
+   * False when CRM is off OR the caller lacks the CRM read grant (the
+   * pipeline and opportunity counts read behind crm.opportunities.read at
+   * their source) — hide pipeline/opportunity vitals rather than show zeros.
+   */
   crmEnabled: boolean
+  /**
+   * I4-webui-225b: false when the caller lacks ar.read. The AR families
+   * (balances, collections, DSO, roster) are then skipped, never
+   * zero-shaped — the view hides their vitals.
+   */
+  arAllowed: boolean
+  /**
+   * I4-webui-225b: false when the caller lacks parties.read. The directory
+   * and customer count are then skipped — the view hides them.
+   */
+  partiesAllowed: boolean
 }
 
 const TREND_WEEKS = 13
@@ -115,6 +134,24 @@ async function pipelineInOrgCurrency(
   return { total, weighted, closed }
 }
 
+/**
+ * I4-webui-225b: per-section read grants for the customers home. Each
+ * payload family keeps the permission its native source page requires —
+ * open receivables, collections, and quotes/sales orders read behind
+ * `ar.read` (receivables cockpit, estimates, file-cabinet kind map); the
+ * pipeline and opportunity counts read behind `crm.opportunities.read`
+ * (opportunities board and the application opportunity readers); the
+ * directory reads behind `parties.read`. The loader SKIPS ungranted
+ * families and flags them on the returned home, so an unauthorized metric
+ * is omitted, never a data-shaped zero. Omit the whole parameter only
+ * where every family is granted (tests, trusted callers).
+ */
+export interface CustomersHomeGrants {
+  ar: boolean
+  crm: boolean
+  parties: boolean
+}
+
 export async function customersHome(
   orgId: string,
   subIds?: string[],
@@ -124,7 +161,13 @@ export async function customersHome(
    * subsidiary) rows. Restricted callers never receive it.
    */
   includeNullSubsidiary?: boolean,
+  grants?: CustomersHomeGrants,
 ): Promise<CustomersHome> {
+  // I4-webui-225b: section grants default open so existing callers keep
+  // their payload; the /customers loader always passes explicit grants.
+  const arGranted = grants?.ar ?? true
+  const crmGranted = grants?.crm ?? true
+  const partiesGranted = grants?.parties ?? true
   const [ordersOn, crmOn] = await Promise.all([
     isFeatureEnabled(orgId, 'orders'),
     isFeatureEnabled(orgId, 'crm'),
@@ -151,7 +194,8 @@ export async function customersHome(
     // book — across dashboard, workspace, hub and aging). Legs are stamped
     // in their line entity's functional: aggregate per functional and
     // translate to presentation below.
-    db.execute(sql`
+    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    arGranted ? db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date, sub.base_currency as func,
                (case when d.kind = 'customer_credit' then -1 else 1 end) * (abs(jl.amount) - coalesce((
@@ -177,16 +221,18 @@ export async function customersHome(
              count(*) filter (where remaining <> 0) as open_count,
              count(*) filter (where remaining <> 0 and due_date < ${today}) as overdue_count
         from oi where remaining <> 0 group by oi.func
-    `),
+    `) : Promise.resolve({ rows: [] }),
     // Days-sales-outstanding is the ONE org DSO from the cash engine's
     // maintained settlement rollup — the same reader the cash cockpit,
     // cashflow analytics, MCP cashflow tool, get_vitals, and customer
     // intelligence quote — never a second local grain. The rollup scan keeps
     // this landing cheap; subsidiary scoping rides the engine's own rules.
-    paymentStats("ar", today, subIds, orgId),
+    // I4-webui-225b: the AR settlement rollup is unreadable without ar.read.
+    arGranted ? paymentStats("ar", today, subIds, orgId) : Promise.resolve({ map: new Map<string, { avg: number; sd: number; n: number }>(), globalAvg: 0 }),
     // Hero roster — top relationships by open balance, with open-opp counts.
     // Per (party, functional): the translated ranking happens in JS below.
-    db.execute(sql`
+    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    arGranted ? db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date, sub.base_currency as func,
                (case when d.kind = 'customer_credit' then -1 else 1 end) * (abs(jl.amount) - coalesce((
@@ -211,24 +257,25 @@ export async function customersHome(
              sum(oi.remaining) filter (where oi.due_date < ${today}) as overdue,
              count(*) as open_invoices,
              min(oi.due_date) as oldest_due,
-             ${crmOn ? sql`coalesce(opp.n, 0)` : sql`0`} as open_opps
+             ${crmOn && crmGranted ? sql`coalesce(opp.n, 0)` : sql`0`} as open_opps
         from oi
         left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
-        ${crmOn ? sql`left join lateral (
+        ${crmOn && crmGranted ? sql`left join lateral (
           select count(*) as n
             from crm_opportunities o
             join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
            where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed
              and o.party_id = oi.party_id) opp on true` : sql``}
        where oi.remaining <> 0
-       group by oi.party_id, oi.func, p.display_name${crmOn ? sql`, opp.n` : sql``}
-    `),
+       group by oi.party_id, oi.func, p.display_name${crmOn && crmGranted ? sql`, opp.n` : sql``}
+    `) : Promise.resolve({ rows: [] }),
     // 13-week collections trend (posted customer payments by week). `total`
     // is denominated in the document's transaction currency, so convert each
     // receipt with its posting FX rate (first leg) before adding unlike
     // currencies; the second leg to presentation runs per (week, functional)
     // below.
-    db.execute(sql`
+    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    arGranted ? db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
              sub.base_currency as func,
              max(coalesce(d.document_date, d.posting_date))::text as late,
@@ -239,26 +286,30 @@ export async function customersHome(
          and d.voided_at is null${docScope}
          and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
        group by 1, 2
-    `),
+    `) : Promise.resolve({ rows: [] }),
     // Directory badges — cheap counts for the workspace's other pages (the
     // collected-value scalar moved to the row query below for translation).
+    // I4-webui-225b: each badge keeps its source permission — opportunity
+    // counts behind crm.opportunities.read, quotes/sales orders and
+    // receipts behind ar.read, the customer count behind parties.read.
     db.execute(sql`
       select
-        ${crmOn ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+        ${crmOn && crmGranted ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
           where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed)` : sql`0`} as open_opps,
-        ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
+        ${ordersOn && arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_quotes,
-        ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
+        ${ordersOn && arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_sos,
-        (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
+        ${arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= ${ago7}) as receipts_7d,
-        (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
+          and coalesce(d.document_date, d.posting_date) >= ${ago7})` : sql`0`} as receipts_7d,
+        ${partiesGranted ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-          ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
+          ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as customers
     `),
     // 7-day collection value per (date, functional) for presentation translation.
-    db.execute(sql`
+    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    arGranted ? db.execute(sql`
       select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
              coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
         from documents d
@@ -267,8 +318,8 @@ export async function customersHome(
          and d.status = 'posted' and d.voided_at is null${docScope}
          and coalesce(d.document_date, d.posting_date) >= ${ago7}
        group by 1, 2
-    `),
-    crmOn ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
+    `) : Promise.resolve({ rows: [] }),
+    crmOn && crmGranted ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
     db.execute<{ baseCurrency: string }>(sql`
       select base_currency as "baseCurrency" from orgs where id = ${orgId}
     `),
@@ -366,7 +417,11 @@ export async function customersHome(
       collected7d,
       customers: Number(badge.customers ?? 0),
     },
-    ordersEnabled: ordersOn,
-    crmEnabled: crmOn,
+    // I4-webui-225b: feature AND grant — an ungranted family hides its
+    // vitals in the view instead of rendering data-shaped zeros.
+    ordersEnabled: ordersOn && arGranted,
+    crmEnabled: crmOn && crmGranted,
+    arAllowed: arGranted,
+    partiesAllowed: partiesGranted,
   }
 }
