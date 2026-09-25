@@ -13,6 +13,7 @@ import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { guardProjectsFeature } from '../../../lib/projects-gate'
+import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../lib/features'
 
 export const runtime = 'nodejs'
@@ -141,6 +142,23 @@ export async function POST(request: Request) {
     if (v === 'invalid') return bad('Invalid manager', 'managerId')
     if (v !== null && !(await partyExists(v, user.orgId))) return bad('Manager not found', 'managerId')
     managerId = v
+  }
+  // The picker only offers subsidiary-visible parties: the write must agree,
+  // so an out-of-scope customer/foreman/manager is refused by name instead
+  // of persisting a cross-subsidiary link the caller can never see again.
+  if (customerId !== null || foremanId !== null || managerId !== null) {
+    const visiblePartyIds = new Set(
+      (await listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true })).map((row) => row.id),
+    )
+    if (customerId !== null && !visiblePartyIds.has(customerId)) {
+      return bad(`project customer "${customerId}" is not visible in your subsidiary scope`, 'customerId')
+    }
+    if (foremanId !== null && !visiblePartyIds.has(foremanId)) {
+      return bad(`project foreman "${foremanId}" is not visible in your subsidiary scope`, 'foremanId')
+    }
+    if (managerId !== null && !visiblePartyIds.has(managerId)) {
+      return bad(`project manager "${managerId}" is not visible in your subsidiary scope`, 'managerId')
+    }
   }
 
   let subsidiaryId: string | null = null
