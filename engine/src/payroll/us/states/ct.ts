@@ -25,8 +25,6 @@
  * Rules in Circular CT that this engine refuses, rather than inventing:
  *   • Resident out-of-state proration (Examples 1–4) — needs the other
  *     jurisdiction's withheld tax, which the input does not carry.
- *   • Form CT-W4NA allocation (Examples 8–9) — a separate certificate; with
- *     no CT-W4NA, Example 10 withholds on all wages.
  *   • IP 2026(7) supplemental tables for two-earner Code A couples — employee
  *     advisory; the employer applies Line 2 / Line 3, not a second table.
  *   • Daily / miscellaneous amounts — Circular CT sends those to the
@@ -521,7 +519,24 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       + "(Example 11, aggregated) instead of on a standalone check.",
     );
   }
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = U(input.wages) + U(input.supplemental ?? "0");
+
+  // Circular CT Examples 8–9: a filed CT-W4NA allocates a nonresident's wages
+  // by its percentage, and only that share is priced. Without one, Example 10
+  // withholds on all wages — never a guessed default.
+  const w4na = input.basis === "nonresident"
+    ? input.supportingCertificates?.us_ct_ctw4na ?? null
+    : null;
+  if (w4na != null) {
+    const allocationRaw = certificateAmount(w4na, "allocation_percentage");
+    if (allocationRaw == null) {
+      throw new PayrollError(
+        "Form CT-W4NA is on file but carries no allocation percentage; complete the filed allocation before calculating",
+      );
+    }
+    wages = mulRateCents(wages, pctToRate(allocationRaw));
+    trace("CT_SOURCE_WAGES", wages);
+  }
 
   if (codeRaw == null) {
     const flat = mulRateCents(wages, rates.noCertificateRate);
@@ -610,6 +625,7 @@ export const CT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CT_NO_CERTIFICATE: "No CT-W4 on file (flat-rate method)",
   CT_TAX: "Connecticut tax this period (flat method)",
   CT_ANNUAL_WAGES: "Connecticut annualized wages",
+  CT_SOURCE_WAGES: "Connecticut-source wages after CT-W4NA allocation",
   CT_EXEMPTION: "Connecticut personal exemption",
   CT_TAXABLE: "Connecticut taxable income",
   CT_INITIAL_TAX: "Connecticut initial tax from tables",
@@ -626,6 +642,7 @@ export const CT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CT",
   label: "Connecticut income tax",
   certificateKey: "us_ct_ctw4",
+  supportingCertificateKeys: ["us_ct_ctw4na"],
   ratesModule: RATES_MODULE,
   editions: CT_TAX_YEAR_EDITIONS,
   printedPeriods: null,
@@ -719,6 +736,43 @@ export const CT_CERTIFICATE: PayrollCertificate = {
         "Subtracted AFTER the calculation rules (TPG-211 Step 15). Circular CT: the Line 3 "
         + "amount cannot exceed the withholding computed at Step 13, and the result cannot "
         + "be less than zero.",
+    },
+  ],
+};
+
+/**
+ * Form CT-W4NA, Employee's Withholding Certificate — Nonresident Apportionment
+ * (Rev. 12/25). A SEPARATE certificate from CT-W4: it carries the percentage
+ * of services performed in Connecticut (Circular CT Examples 8–9). Read as a
+ * supporting certificate; the engine never guesses the percentage.
+ */
+export const CT_W4NA_CERTIFICATE: PayrollCertificate = {
+  key: "us_ct_ctw4na",
+  form: "CT-W4NA",
+  label: "Employee's Withholding Certificate — Nonresident Apportionment (Connecticut)",
+  scope: { level: "region", region: "CT" },
+  purpose: "withholding",
+  citation:
+    "Connecticut Form CT-W4NA (Rev. 12/25); Informational Publication 2026(1), "
+    + "Connecticut Employer's Tax Guide, Circular CT, Issued 12/12/2025, Examples 8–9",
+  summary:
+    "States the percentage of a nonresident's services performed in Connecticut. "
+    + "Only the allocated share is priced; without a filed CT-W4NA, Example 10 "
+    + "withholds on all wages.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "allocation_percentage",
+      label: "Percentage of services performed in Connecticut",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      max: "100",
+      required: true,
+      help:
+        "The CT-W4NA percentage from the employee's allocation records (Examples 8–9). "
+        + "A filed CT-W4NA with no percentage refuses calculation instead of pricing "
+        + "an invented default.",
     },
   ],
 };
