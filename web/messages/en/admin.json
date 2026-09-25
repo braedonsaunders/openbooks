@@ -4042,7 +4042,13 @@
       "copy": "Copy",
       "copied": "Copied",
       "testConnection": "Test connection",
-      "testing": "Testing…"
+      "testing": "Testing…",
+      "errors": {
+        "loadFailed": "Payment provider settings could not be loaded.",
+        "saveFailed": "Payment provider settings could not be saved.",
+        "testFailed": "The provider connection could not be tested.",
+        "unrestrictedScope": "Unrestricted subsidiary access is required. Ask an administrator to grant access or make this change."
+      }
     },
     "wizard": {
       "skip": "Skip for now",

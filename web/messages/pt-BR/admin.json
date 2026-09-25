@@ -4042,7 +4042,13 @@
       "copy": "Copiar",
       "copied": "Copiado",
       "testConnection": "Testar conexão",
-      "testing": "Testando…"
+      "testing": "Testando…",
+      "errors": {
+        "loadFailed": "Não foi possível carregar as configurações dos provedores de pagamento.",
+        "saveFailed": "Não foi possível salvar as configurações dos provedores de pagamento.",
+        "testFailed": "Não foi possível testar a conexão do provedor.",
+        "unrestrictedScope": "É necessário ter acesso irrestrito às subsidiárias. Peça acesso a um administrador ou solicite que ele faça esta alteração."
+      }
     },
     "wizard": {
       "skip": "Pular por ora",

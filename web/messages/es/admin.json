@@ -3988,6 +3988,12 @@
       "copied": "Copiado",
       "testConnection": "Probar conexión",
       "testing": "Probando…",
+      "errors": {
+        "loadFailed": "No se pudo cargar la configuración de los proveedores de pago.",
+        "saveFailed": "No se pudo guardar la configuración de los proveedores de pago.",
+        "testFailed": "No se pudo probar la conexión del proveedor.",
+        "unrestrictedScope": "Se requiere acceso sin restricciones a las filiales. Solicite acceso a un administrador o pídale que realice este cambio."
+      },
       "navTitle": "Proveedores de pago"
     },
     "readiness": {
