@@ -4,6 +4,8 @@ import { cloneElement, isValidElement, useId } from "react";
 import { Badge, Label, cn } from "@openbooks/ui";
 import { HomeStatTile } from "../../../components/module-home/client";
 import type { Accent } from "../../../components/cockpit/ui";
+import { decimalSum } from "../../../lib/statement-format";
+import type { Money } from "./types";
 
 export type Option = {
   id: string;
@@ -51,6 +53,36 @@ export function Metric({
       tone={tone === "danger" ? "negative" : "neutral"}
     />
   );
+}
+
+/**
+ * Multi-currency totals, grouped the way CamTable already formats: one exact
+ * sum per currency, never a cross-currency addition. Sorted by code so the
+ * metric reads the same on every render.
+ */
+export function sumByCurrency(
+  entries: ReadonlyArray<{ currency: string; amount: string }>,
+): Array<{ currency: string; total: string }> {
+  const amounts = new Map<string, string[]>();
+  for (const entry of entries) {
+    const list = amounts.get(entry.currency);
+    if (list) list.push(entry.amount);
+    else amounts.set(entry.currency, [entry.amount]);
+  }
+  return [...amounts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, values]) => ({ currency, total: decimalSum(values) }));
+}
+
+/** One formatted total per currency, joined — the portfolio-wide equivalent
+ * of CamTable's per-pool currency formatting. */
+export function formatGroupedMoney(
+  parts: ReadonlyArray<{ currency: string; total: string }>,
+  money: Money,
+): string {
+  return parts
+    .map((part) => money(part.total, { currency: part.currency }))
+    .join(" · ");
 }
 
 export function Status({ value, label }: { value: string; label?: string }) {
