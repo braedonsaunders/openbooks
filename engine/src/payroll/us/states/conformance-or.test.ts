@@ -30,8 +30,12 @@ test("OR certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(OR_CERTIFICATE), null);
   assert.equal(OR_REGION.implemented, true);
   assert.equal(OR_REGION.certificateKey, "us_or_orw4");
-  assert.equal(OR_REGION.residentWithholdingImplemented, false);
-  assert.equal(OR_REGION.residentWithholding, "unknown");
+  // OAR 150-316-0255 / ORS 316.167: resident withholding is required from
+  // wages regardless of the state in which they were earned (relief only for
+  // $300-or-less yearly wages, and voluntary treatment for out-of-state
+  // employers with no Oregon activity).
+  assert.equal(OR_REGION.residentWithholdingImplemented, true);
+  assert.equal(OR_REGION.residentWithholding, "required");
   assert.equal(OR_CERTIFICATE.storage, "certificate_rows");
   for (const field of OR_CERTIFICATE.fields) {
     assert.ok(field.help.length > 20, `${field.key} help is too thin`);

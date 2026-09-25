@@ -380,11 +380,13 @@ export const MT_REGION: PayrollRegionWithholding = {
   label: "Montana income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  // The Employer and Information Agent Guide / MW-4 instructions require
-  // withholding on wages of Montana residents. The other-state credit
-  // (Form 2) is return-level only — no employer withholding-credit
-  // mechanism — so the full resident tax is withheld.
-  residentWithholding: "required",
+  // The Employer and Information Agent Guide states the duty as
+  // services-performed-in-Montana ("required when wages are earned in
+  // Montana," MW-4 instructions); wages earned outside Montana's boundaries
+  // are not subject to Montana wage withholding. Residents still owe the tax
+  // — the other-state credit (Form 2) is return-level — but the employer is
+  // not required to withhold it.
+  residentWithholding: "not_required",
   residentWithholdingImplemented: true,
   certificateKey: "us_mt_mw4",
   subRegions: [],

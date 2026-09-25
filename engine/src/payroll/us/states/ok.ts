@@ -372,14 +372,13 @@ export const OK_REGION: PayrollRegionWithholding = {
   label: "Oklahoma income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  // The OTC quarterly return (WTH) instructions waive Oklahoma withholding
-  // for a resident's out-of-state wages subject to the work jurisdiction's
-  // withholding (and require it where the work state has no income tax) —
-  // a conditional waiver. The 511TX credit (OAC 710:50-15-72) reconciles
-  // any remainder at return level.
+  // 68 O.S. § 2385.2: every employer making payment of wages withholds —
+  // no employer-level waiver for out-of-state work exists in the statute or
+  // the OW-2 booklet (which scopes itself to services rendered in
+  // Oklahoma). Double taxation is relieved return-level only via Form
+  // 511TX (OAC 710:50-15-72).
   residentWithholding: "required",
   residentWithholdingImplemented: true,
-  residentWithholdingMethod: { kind: "waive_when_work_region_withheld" },
   certificateKey: "us_ok_okw4",
   subRegions: [],
   subRegionConflictRule: "both",
