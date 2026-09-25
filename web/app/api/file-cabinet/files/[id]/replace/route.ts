@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { replaceFile } from '../../../../../../lib/file-cabinet'
+import { isRetainedFileEvidence, replaceFile } from '../../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../../lib/list-params'
 import { fileViewer, isAllowedContentType, MAX_BYTES, requireFileAccess, requireSession } from '../../../lib'
 
@@ -37,6 +37,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     updatedBy: gate.user.id,
     audit: { actorId: gate.user.id, viewer: fileViewer(gate) },
   })
-  if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!ok) {
+    if (await isRetainedFileEvidence(gate.user.orgId, id)) {
+      return NextResponse.json(
+        {
+          error: 'retained_evidence_cannot_be_replaced',
+          detail:
+            'this file is retained evidence for a posted or active record, a live payment artifact, or a lifecycle-governed HR document; its bytes are pinned and cannot be replaced',
+        },
+        { status: 409 },
+      )
+    }
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   return NextResponse.json({ ok: true })
 }

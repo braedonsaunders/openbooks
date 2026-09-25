@@ -6,6 +6,7 @@ import {
   deleteFolder,
   fileAccessLevel,
   folderAccessLevel,
+  isRetainedFileEvidence,
   moveFile,
   moveFolder,
 } from '../../../../lib/file-cabinet'
@@ -88,6 +89,7 @@ export async function POST(req: Request) {
       for (const id of fileIds) {
         if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'manager')) { record(id, 'file', false, 'forbidden'); continue }
         if (await deleteFile(orgId, id, audit)) record(id, 'file', true)
+        else if (await isRetainedFileEvidence(orgId, id)) record(id, 'file', false, 'retained')
         else record(id, 'file', false, 'failed')
       }
       for (const id of folderIds) {

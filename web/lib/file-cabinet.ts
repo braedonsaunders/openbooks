@@ -1380,11 +1380,23 @@ export async function deleteFolder(
        order by fi.id
        for update
     `)
+    // Retained evidence must never be hidden by a subtree trash: fail the whole
+    // folder closed when any live contained file is retained (checked after the
+    // file-row locks above, inside the same transaction). The per-file update
+    // below repeats the exclusion so a concurrent link can only newly protect.
+    const retained = (await tx.execute(sql`
+      select 1 from files fi
+       where fi.folder_id in (${descendants}) and fi.org_id = ${orgId} and not fi.is_inactive
+         and ${retainedFileEvidence(orgId, sql`fi.id`)}
+       limit 1
+    `))
+    if (retained.rows.length > 0) return { ok: false, reason: 'retained' as const }
     await tx.execute(sql`update folders set is_inactive = true, updated_at = now() where id in (${descendants}) and org_id = ${orgId}`)
     await tx.execute(sql`
       update files set is_inactive = true, updated_at = now()
        where folder_id in (${descendants}) and org_id = ${orgId} and not is_inactive
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+         and not ${retainedFileEvidence(orgId, sql`files.id`)}
     `)
     if (audit) {
       await recordFileEvent({
@@ -1568,6 +1580,17 @@ export async function purgeFolder(
        limit 1
     `)
     if (attached.rows.length > 0) return { ok: false as const, reason: 'has attached files' as const }
+    // Pinned references with no attachment row (payment artifacts, HRM
+    // documents, mandate proofs) dangle the same way when bytes are purged.
+    const pinned = (await tx.execute(sql`
+      select 1
+        from files fi
+       where fi.org_id = ${orgId}
+         and fi.folder_id in (${descendants})
+         and ${retainedFileEvidence(orgId, sql`fi.id`)}
+       limit 1
+    `))
+    if (pinned.rows.length > 0) return { ok: false as const, reason: 'retained' as const }
 
     const s3Versions = (await tx.execute<{ id: string }>(sql`
       select fv.id from file_versions fv
@@ -2047,6 +2070,15 @@ export async function replaceFile(input: {
     `))
     if (current.rows.length === 0) return false
     if (!(await viewerFileGate(tx, input.orgId, input.audit, input.fileId, 'editor'))) return false
+    // Retained evidence keeps its pinned bytes: a new version would fork the
+    // cabinet-visible file away from the immutable artifact readers serve.
+    const retained = (await tx.execute(sql`
+      select 1 from files fi
+       where fi.id = ${input.fileId} and fi.org_id = ${input.orgId}
+         and ${retainedFileEvidence(input.orgId, sql`fi.id`)}
+       limit 1
+    `))
+    if (retained.rows.length > 0) return false
     const nextVer = (current.rows[0]!.max_ver ?? 0) + 1
     const kind = activeStorageKind()
 
@@ -2296,6 +2328,7 @@ export async function deleteFile(
       update files set is_inactive = true, updated_at = now()
        where id = ${id} and org_id = ${orgId} and not is_inactive
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+         and not ${retainedFileEvidence(orgId, sql`files.id`)}
       returning id
     `))
     return r.rows.length > 0
@@ -2388,6 +2421,18 @@ interface PurgedFileEvidence {
  * Purge refuses to destroy such a file and detach refuses to unlink it — the
  * two halves of one guarantee, since a detached file becomes purgeable.
  */
+/**
+ * HRM documents whose file evidence is lifecycle-governed (aliased `d`): any
+ * non-terminal document, plus anything under legal hold or carrying a
+ * retention clock even if terminal — the retention lifecycle owns deletion
+ * (retention.ts deletes only non-deleted/non-voided rows and honors holds).
+ */
+const HRM_DOCUMENT_RETAINED: SQL = sql`(
+  d.status not in ('deleted', 'voided')
+  or d.legal_hold
+  or d.retain_until is not null
+)`
+
 const RETAINED_ATTACHMENT: SQL = sql`(
   (fa.target_table = 'documents' and exists (
     select 1 from documents d
@@ -2398,7 +2443,54 @@ const RETAINED_ATTACHMENT: SQL = sql`(
   or (fa.target_table = 'fixed_assets' and exists (
     select 1 from fixed_assets a
      where a.id = fa.target_id and a.org_id = fa.org_id))
+  or (fa.target_table = 'hrm_documents' and exists (
+    select 1 from hrm_documents d
+     where d.id = fa.target_id and d.org_id = fa.org_id and ${HRM_DOCUMENT_RETAINED}))
 )`
+
+/**
+ * Files that are retained evidence no cabinet verb may hide or destroy:
+ * retained attachment links (above), files pinned by a live HRM document,
+ * live payment-run artifacts (payment_files rows are immutable; readers fetch
+ * the pinned version regardless of files.is_inactive), and proof files of
+ * live payment mandates. Callers pass the files-id expression; the fragment
+ * reserves the `fa`, `d`, `pf`, and `pm` aliases. Enforced in trash, folder
+ * trash, replace, purge, folder purge, and detach — the DSAR and payment
+ * readers intentionally keep serving pinned bytes, so hiding the cabinet row
+ * must be refused rather than silently diverged.
+ */
+function retainedFileEvidence(orgId: string, fileId: SQL): SQL {
+  return sql`(
+    exists (
+      select 1 from file_attachments fa
+       where fa.file_id = ${fileId} and fa.org_id = ${orgId} and ${RETAINED_ATTACHMENT})
+    or exists (
+      select 1 from hrm_documents d
+       where d.file_id = ${fileId} and d.org_id = ${orgId} and ${HRM_DOCUMENT_RETAINED})
+    or exists (
+      select 1 from payment_files pf
+       where pf.file_id = ${fileId} and pf.org_id = ${orgId}
+         and pf.status not in ('superseded', 'voided', 'rejected'))
+    or exists (
+      select 1 from payment_mandates pm
+       where pm.proof_file_id = ${fileId} and pm.org_id = ${orgId}
+         and pm.status not in ('revoked', 'expired'))
+  )`
+}
+
+/**
+ * Message-only retained check for routes: after a boolean verb refuses, this
+ * names the 409. Enforcement lives inside the verbs' own transactions; this
+ * read only selects the message and may race the mutation's snapshot.
+ */
+export async function isRetainedFileEvidence(orgId: string, id: string): Promise<boolean> {
+  const r = (await db.execute(sql`
+    select 1 from files fi
+     where fi.id = ${id} and fi.org_id = ${orgId} and ${retainedFileEvidence(orgId, sql`fi.id`)}
+     limit 1
+  `))
+  return r.rows.length > 0
+}
 
 /** Lock the mutable record row whose lifecycle controls evidence retention. */
 async function lockRetainedAttachmentTarget(
@@ -2496,7 +2588,14 @@ export async function purgeFile(
          and ${RETAINED_ATTACHMENT}
        limit 1
     `))
-    if (material.rows.length > 0) return { outcome: 'retained' as const }
+    // Pinned references with no attachment row (payment artifacts, HRM
+    // documents, mandate proofs) dangle the same way when bytes are purged.
+    const pinned = (await tx.execute(sql`
+      select 1 from files fi
+       where fi.id = ${id} and fi.org_id = ${orgId} and ${retainedFileEvidence(orgId, sql`fi.id`)}
+       limit 1
+    `))
+    if (material.rows.length > 0 || pinned.rows.length > 0) return { outcome: 'retained' as const }
     const s3Versions = (await tx.execute<{ id: string }>(sql`
       select fv.id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}

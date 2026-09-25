@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { deleteFile, getFile, moveFile, purgeFile, renameFile } from '../../../../../lib/file-cabinet'
+import { deleteFile, getFile, isRetainedFileEvidence, moveFile, purgeFile, renameFile } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { fileViewer, requireFileAccess, requireFolderAccess, requireSession } from '../../lib'
@@ -102,6 +102,21 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ ok: true })
   }
   const ok = await deleteFile(gate.user.orgId, id, audit)
-  if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!ok) {
+    // Enforcement happened inside the trash transaction; this read only
+    // names the refusal. Retained evidence is released through the owning
+    // record's lifecycle (void/supersede/delete), never by hiding the file.
+    if (await isRetainedFileEvidence(gate.user.orgId, id)) {
+      return NextResponse.json(
+        {
+          error: 'retained_evidence_cannot_be_trashed',
+          detail:
+            'this file is retained evidence for a posted or active record, a live payment artifact, or a lifecycle-governed HR document; release it through the owning record first',
+        },
+        { status: 409 },
+      )
+    }
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   return NextResponse.json({ ok: true })
 }
