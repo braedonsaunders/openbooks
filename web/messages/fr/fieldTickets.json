@@ -93,6 +93,7 @@
       "title": "Heures de l'équipe",
       "hint": "Une ligne par personne (optionnellement par classe). R / O / D = initiales des types d'heures.",
       "employee": "Employé",
+      "unclassified": "Non classé",
       "laborItem": "Classe de travail",
       "task": "Tâche du projet",
       "addRow": "Ajouter une personne",
@@ -122,7 +123,8 @@
       "empty": "Aucune ligne pour l'instant.",
       "itemRequired": "Choisissez un article", "rateFailed": "Résolution du tarif impossible", "projectLoadFailed": "Chargement du projet impossible", "reloadFailed": "Rechargement du ticket impossible",
       "operator": "Opérateur",
-      "noOperator": "Non renseigné"
+      "noOperator": "Non renseigné",
+      "inferredPolicy": "Règle déduite avant la mise à niveau — à vérifier avant la facturation"
     },
     "tasks": {
       "title": "Tâches du projet",

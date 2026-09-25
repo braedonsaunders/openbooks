@@ -93,6 +93,7 @@
       "title": "Horas de la cuadrilla",
       "hint": "Una fila por persona (opcionalmente por clase). R / O / D = iniciales de los tipos de hora.",
       "employee": "Empleado",
+      "unclassified": "Sin clasificar",
       "laborItem": "Clase de trabajo",
       "task": "Tarea del proyecto",
       "addRow": "Agregar persona",
@@ -122,7 +123,8 @@
       "empty": "Aún no hay líneas.",
       "itemRequired": "Elija un artículo", "rateFailed": "No se pudo resolver la tarifa del artículo", "projectLoadFailed": "No se pudo cargar el proyecto", "reloadFailed": "No se pudo recargar el ticket",
       "operator": "Operario",
-      "noOperator": "No registrado"
+      "noOperator": "No registrado",
+      "inferredPolicy": "Política inferida antes de la actualización — verifíquela antes de facturar"
     },
     "tasks": {
       "title": "Tareas del proyecto",
