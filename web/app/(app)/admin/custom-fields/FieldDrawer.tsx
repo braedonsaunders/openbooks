@@ -10,18 +10,12 @@ import { CUSTOM_FIELD_TARGETS as TARGETS, CUSTOM_FIELD_REFERENCE_TABLES } from '
 import { CustomFieldInput } from '@/components/custom-field-input'
 import type { CustomFieldDefClient } from '@/components/custom-field-inputs'
 import { customFieldEditorConfig } from '@/lib/custom-field-editor-config'
-import { BUILT_IN_ROLE_KEYS, BUILT_IN_ROLES } from '@/lib/permissions'
 
 const DISPLAY_MODES = [
   { value: 'always', labelKey: 'drawer.displayNormal' },
   { value: 'readonly', labelKey: 'drawer.displayDisabled' },
   { value: 'hidden', labelKey: 'drawer.displayHidden' },
 ]
-
-const ROLE_OPTIONS = BUILT_IN_ROLE_KEYS.map((k) => ({
-  value: k,
-  label: BUILT_IN_ROLES[k]?.name ?? k,
-}))
 
 const TYPES: { value: string; labelKey: string; helpKey: string }[] = [
   { value: 'text', labelKey: 'types.text.label', helpKey: 'types.text.help' },
@@ -65,10 +59,12 @@ export function FieldDrawer({
   def,
   hiddenKinds = [],
   hiddenTables = [],
+  roleOptions = [],
 }: {
   def: FieldDefRow | null
   hiddenKinds?: string[]
   hiddenTables?: string[]
+  roleOptions?: { value: string; label: string }[]
 }) {
   const targets = TARGETS
     .filter((item) => !hiddenTables.includes(item.table))
@@ -450,7 +446,7 @@ export function FieldDrawer({
               <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
             </Label>
             <div className="flex flex-wrap gap-2">
-              {ROLE_OPTIONS.map((r) => (
+              {roleOptions.map((r) => (
                 <label
                   key={r.value}
                   className="flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-800"

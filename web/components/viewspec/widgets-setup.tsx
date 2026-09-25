@@ -47,6 +47,7 @@ export const SETUP_WIDGETS = {
       def={(props.def as ComponentProps<typeof FieldDrawer>['def']) ?? null}
       hiddenKinds={(props.hiddenKinds as string[]) ?? []}
       hiddenTables={(props.hiddenTables as string[]) ?? []}
+      roleOptions={(props.roleOptions as ComponentProps<typeof FieldDrawer>['roleOptions']) ?? []}
     />
   ),
   /**
