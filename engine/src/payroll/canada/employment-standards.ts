@@ -584,10 +584,7 @@ const PE_HOLIDAY_PAY_EDITIONS: readonly PayrollHolidayPayEdition[] = [
  * s. 29: thirty calendar days of employment, and the last scheduled shift
  * before and the first after. Yukon's guidance is explicit that this gates the
  * UNWORKED holiday only — an employee with less than thirty days who actually
- * works the day still gets both the holiday pay and the overtime. That is not
- * expressible here: `minEmploymentDays` denies the whole day. A Yukon employee
- * inside their first month who works a general holiday is therefore under-paid
- * by this declaration, and it is named here rather than left to be discovered.
+ * works the day still gets both the holiday pay and the overtime.
  *
  * s. 31: the overtime rate for the hours worked in addition to the s. 30 pay.
  */
@@ -599,7 +596,10 @@ const YT_HOLIDAY_PAY: PayrollHolidayPayRule = {
     whenIrregular: { kind: "percent_of_earnings", percent: "10", lookbackWeeks: 2 },
   },
   include: { overtime: true, vacationPay: false, holidayPay: false },
-  qualifying: { minEmploymentDays: 30, lastAndFirstScheduledShift: true },
+  qualifying: {
+    minEmploymentDays: 30, minEmploymentDaysWhenUnworked: true,
+    lastAndFirstScheduledShift: true,
+  },
   premium: { multiplier: "1.5", plusHolidayPay: true },
   // s. 30(2): "the two week period immediately preceding the WEEK in which the
   // general holiday occurs".

@@ -1306,6 +1306,8 @@ export interface PayrollHolidayPayInclusions {
 export interface PayrollHolidayQualifying {
   /** Calendar days of employment before the holiday (BC: 30). */
   minEmploymentDays?: number;
+  /** Some statutes apply the service test only when the employee does not work the holiday. */
+  minEmploymentDaysWhenUnworked?: boolean;
   /**
    * Days inside a window (BC: 15 of the 30 days before). `counting` is
    * REQUIRED and is the whole test: "worked 15 of 30" and "worked or earned
