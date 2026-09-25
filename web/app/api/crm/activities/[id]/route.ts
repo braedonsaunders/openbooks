@@ -144,6 +144,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         : { rows: [] }
       if (!valid.rows.length) return NextResponse.json({error:'invalid related record'},{status:422})
     }
+    if (participants) for (const participant of participants) {
+      if (!participant.contactId) continue
+      const exists = await lockCrmLinkSubject(tx, user.orgId, 'contact', participant.contactId)
+      const valid = exists
+        ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`)
+        : { rows: [] }
+      if (!valid.rows.length) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
+    }
     // Child evidence is captured on both sides of the delete/insert pairs so
     // the audit row records what actually changed, not just what was asked.
     const linksBefore = links ? (await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} order by subject_kind, subject_id`)).rows : null
