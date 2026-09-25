@@ -1,0 +1,206 @@
+/** Setup-registry assets entities (split from registry.ts; pure moves only). */
+import type { SetupEntity } from '../types'
+import { POOL_METHODS, TAX_DEPRECIATION_MODELS, MACRS_SYSTEMS, MACRS_METHODS, TAX_DEPRECIATION_CONVENTIONS, DEPRECIATION_METHODS, DEPRECIATION_CONVENTIONS, END_OF_LIFE } from '../options'
+import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciation-limits.ts'
+
+export const ASSET_ENTITIES: SetupEntity[] = [
+  // --- Assets --------------------------------------------------------------
+  {
+    key: 'asset-categories',
+    table: 'asset_categories',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'name',
+    hasActive: true,
+    docSlug: 'fixed-assets-depreciation',
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'defaultMethod', kind: 'text' },
+      { key: 'defaultLifeMonths', kind: 'number' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'assetAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'accumulatedDepreciationAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'depreciationExpenseAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'gainLossAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'defaultMethod', kind: 'select', options: DEPRECIATION_METHODS },
+      { key: 'defaultDepreciationMethodId', kind: 'ref', ref: 'depreciation-methods' },
+      { key: 'defaultConvention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
+      { key: 'defaultLifeMonths', kind: 'integer', min: 1, max: MAX_DEPRECIATION_PERIODS },
+      { key: 'taxAttributes', kind: 'json', keepDefault: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Configurable tax depreciation regimes (built-ins: ca_cca, uk_wda, au_pool,
+    // nz_pool). Add a jurisdiction the engine doesn't ship, or shadow a built-in.
+    key: 'tax-regimes',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/tax-depreciation?tab=regimes',
+    table: 'tax_regimes',
+    singularTitleKey: 'entities.tax-regimes.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    docSlug: 'setup-assets-group',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'countryCode', kind: 'text' },
+      { key: 'calculationModel', kind: 'text' },
+      { key: 'classAttribute', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'countryCode', kind: 'country' },
+      { key: 'calculationModel', kind: 'select', options: TAX_DEPRECIATION_MODELS, keepDefault: true },
+      { key: 'classAttribute', kind: 'text', keepDefault: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Configurable pool CLASSES per regime (rate, method, first-year fraction,
+    // recapture/terminal behavior). Org rows override the built-in class table.
+    key: 'tax-pool-classes',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/tax-depreciation?tab=classes',
+    table: 'tax_pool_classes',
+    singularTitleKey: 'entities.tax-pool-classes.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'regime, class_code',
+    hasActive: true,
+    docSlug: 'setup-assets-group',
+    columns: [
+      { key: 'regime', kind: 'text' },
+      { key: 'classCode', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'rate', kind: 'number' },
+      { key: 'method', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'regime', kind: 'text', required: true },
+      { key: 'classCode', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'rate', kind: 'decimal', required: true },
+      { key: 'method', kind: 'select', options: POOL_METHODS, keepDefault: true },
+      { key: 'firstYearFraction', kind: 'decimal', keepDefault: true },
+      { key: 'allowRecapture', kind: 'boolean', keepDefault: true },
+      { key: 'allowTerminalLoss', kind: 'boolean', keepDefault: true },
+      { key: 'costCap', kind: 'decimal' },
+      { key: 'depreciationSystem', kind: 'select', options: MACRS_SYSTEMS },
+      { key: 'macrsMethod', kind: 'select', options: MACRS_METHODS },
+      { key: 'recoveryPeriodYears', kind: 'decimal' },
+      { key: 'convention', kind: 'select', options: TAX_DEPRECIATION_CONVENTIONS },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Dated first-year rules per regime/class (half-year rule, AII, immediate
+    // expensing) — legislatively volatile, so config not code.
+    key: 'tax-first-year-rules',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/tax-depreciation?tab=first-year',
+    table: 'tax_first_year_rules',
+    singularTitleKey: 'entities.tax-first-year-rules.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'regime, class_code',
+    hasActive: false,
+    docSlug: 'setup-assets-group',
+    columns: [
+      { key: 'regime', kind: 'text' },
+      { key: 'classCode', kind: 'code' },
+      { key: 'firstYearFraction', kind: 'number' },
+      { key: 'acquiredFrom', kind: 'date' },
+    ],
+    fields: [
+      { key: 'regime', kind: 'text', required: true },
+      { key: 'classCode', kind: 'text' },
+      { key: 'acquiredFrom', kind: 'date' },
+      { key: 'acquiredTo', kind: 'date' },
+      { key: 'firstYearFraction', kind: 'decimal', keepDefault: true },
+      { key: 'enhancedMultiplier', kind: 'decimal' },
+    ],
+  },
+  {
+    // The depreciation formula builder — user-authored methods (formula over the
+    // depreciation variable set: NB, OC, RV, AL, CP, …). Referenced by code from
+    // an asset category's Default method.
+    key: 'depreciation-methods',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/depreciation?tab=methods',
+    table: 'depreciation_methods',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    docSlug: 'fixed-assets-depreciation',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'formula', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'formula', kind: 'textarea', required: true },
+      { key: 'endOfLife', kind: 'select', options: END_OF_LIFE, keepDefault: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Multi-book: per-book, per-category depreciation policy (a tax/alternate book
+    // runs a different method than the primary posting book).
+    key: 'depreciation-book-policies',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/depreciation?tab=books',
+    table: 'depreciation_book_policies',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'book_id, category_id',
+    hasActive: false,
+    docSlug: 'fixed-assets-depreciation',
+    columns: [
+      { key: 'bookId', kind: 'ref', ref: 'accounting-books' },
+      { key: 'categoryId', kind: 'ref', ref: 'asset-categories' },
+      { key: 'method', kind: 'text' },
+      { key: 'lifeMonths', kind: 'number' },
+    ],
+    fields: [
+      { key: 'bookId', kind: 'ref', ref: 'accounting-books', required: true },
+      { key: 'categoryId', kind: 'ref', ref: 'asset-categories', required: true },
+      { key: 'method', kind: 'select', options: DEPRECIATION_METHODS, keepDefault: true },
+      { key: 'depreciationMethodId', kind: 'ref', ref: 'depreciation-methods' },
+      { key: 'lifeMonths', kind: 'integer', min: 1, max: MAX_DEPRECIATION_PERIODS },
+      { key: 'ratePercent', kind: 'percent' },
+      { key: 'unitsTotal', kind: 'decimal' },
+      { key: 'convention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
+    ],
+  },
+]

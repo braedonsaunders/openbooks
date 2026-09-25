@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /**
  * Setup-registry descriptors for the HR leave taxonomy (0194).

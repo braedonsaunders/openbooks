@@ -1,4 +1,4 @@
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 import { foldWholeNumber } from './whole-number'
 
 /**

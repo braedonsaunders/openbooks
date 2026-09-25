@@ -1,6 +1,6 @@
 import { declaredPayrollFilings } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
-import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './registry'
+import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './types'
 
 /**
  * Materialize registry-declared dynamic options (`optionsSource`) from the

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from '@openbooks/engine/src/extensions/projections.ts'
-import type { SetupEntity } from './registry'
+import type { SetupEntity } from './types'
 
 /** Extension declarations use the existing setup list and drawer through this data adapter. */
 export async function loadExtensionSettingRows(orgId: string) {
