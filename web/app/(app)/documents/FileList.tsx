@@ -294,7 +294,7 @@ export function FileList({
         toast.success(tt('fileRenamed'))
         router.refresh()
       } else {
-        toast.error(tt('fileRenameFailed'))
+        toast.error(await readApiErrorMessage(res, tt('fileRenameFailed')))
       }
     } catch {
       toast.error(tt('fileRenameFailed'))
@@ -319,7 +319,7 @@ export function FileList({
         toast.success(tt('folderRenamed'))
         router.refresh()
       } else {
-        toast.error(tt('folderRenameFailed'))
+        toast.error(await readApiErrorMessage(res, tt('folderRenameFailed')))
       }
     } catch {
       toast.error(tt('folderRenameFailed'))
@@ -345,7 +345,7 @@ export function FileList({
         }
         router.refresh()
       } else {
-        toast.error(tt('fileDeleteFailed'))
+        toast.error(await readApiErrorMessage(res, tt('fileDeleteFailed')))
       }
     } catch {
       toast.error(tt('fileDeleteFailed'))
@@ -365,10 +365,11 @@ export function FileList({
         toast.success(tt('folderDeleted'))
         router.refresh()
       } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(
-          err.error === 'has attached files' ? t('folder.deleteBlocked') : tt('folderDeleteFailed'),
-        )
+        // The trash refusal names its remedy (e.g. the 409
+        // retained_evidence_cannot_be_trashed detail); pass it through
+        // instead of a generic failure. ('has attached files' is a purge
+        // refusal this non-purge call never receives.)
+        toast.error(await readApiErrorMessage(res, tt('folderDeleteFailed')))
       }
     } catch {
       toast.error(tt('folderDeleteFailed'))
