@@ -13,6 +13,7 @@ import {
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createPaymentRun } from "./run-creation.ts";
+import { createPaymentBankProfile } from "./operations.ts";
 import { loadPaymentDocument, openItemsForParty } from "./payment-queries.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { postPaymentRun } from "./run-posting.ts";
@@ -609,6 +610,29 @@ test(
       assert.deepEqual(
         await openItemsForParty(org.vendorId, "ap", org.orgId),
         [],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "payment bank profiles refuse a bank account outside the caller scope",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Scope audit", "admin");
+      const subB = randomUUID();
+      const bankB = randomUUID();
+      const format = randomUUID();
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${subB},${org.orgId},${org.subsidiaryId},'Second entity','CAD','CA')`);
+      await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children,subsidiary_id,currency_restriction) values(${bankB},${org.orgId},'1011','Second entity bank','asset_bank',false,true,false,true,'[]'::jsonb,'{}'::jsonb,true,${subB},'CAD')`);
+      await db.execute(sql`insert into payment_formats(id,org_id,code,name,rail,direction,country,currency,created_by,updated_by) values(${format},${org.orgId},'SCOPE','Scope','sepa','credit','CA','CAD',${actor},${actor})`);
+      await assert.rejects(
+        createPaymentBankProfile(org.orgId, actor, { name: "Scope", bankAccountId: bankB, paymentFormatId: format, currency: "CAD" }, new Set([org.subsidiaryId])),
+        ScopeNotFoundError,
       );
     } finally {
       await dropScratchOrg(org.orgId);

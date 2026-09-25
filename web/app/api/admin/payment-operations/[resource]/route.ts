@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import {
   createPaymentBankProfile,
   type PaymentBankProfileInput,
@@ -32,6 +33,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
     return NextResponse.json({ rows: rows.rows })
   }
   if (resource === 'profiles') {
+    // Profiles expose bank account number/name, subsidiary, and SFTP
+    // server/folder: filter them like mandates, on both the profile's own
+    // subsidiary and the bank account's, so an A-only admin never reads B's
+    // payment credentials surface (I1-refix-225).
     const rows = await db.execute(sql`
       select p.id, p.name, p.bank_account_id, p.subsidiary_id, p.payment_format_id,
              p.currency, p.country, p.settings, p.sftp_server_id, p.sftp_folder,
@@ -41,15 +46,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
         from payment_bank_profiles p
         join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
         join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
-       where p.org_id = ${gate.user.orgId} order by p.is_active desc, p.name
+       where p.org_id = ${gate.user.orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+       order by p.is_active desc, p.name
     `)
     return NextResponse.json({ rows: rows.rows })
   }
   if (resource === 'schedules') {
+    // Schedules inherit their profile's visibility: the same two predicates
+    // as the profiles arm, or a hidden profile's cadence leaks through its
+    // schedule rows (I1-refix-225).
     const rows = await db.execute(sql`
       select s.*, p.name as profile_name
         from payment_schedules s join payment_bank_profiles p on p.id = s.payment_bank_profile_id and p.org_id = s.org_id
-       where s.org_id = ${gate.user.orgId} order by s.is_active desc, s.name
+        join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
+       where s.org_id = ${gate.user.orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+       order by s.is_active desc, s.name
     `)
     return NextResponse.json({ rows: rows.rows })
   }
@@ -152,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         return NextResponse.json({ error: 'name, bankAccountId, paymentFormatId, and currency are required' }, { status: 400 })
       }
       const input = { ...body, currency } as unknown as PaymentBankProfileInput
-      const row = await createPaymentBankProfile(gate.user.orgId, gate.user.id, input)
+      const row = await createPaymentBankProfile(gate.user.orgId, gate.user.id, input, gate.allowedSubsidiaryIds)
       return NextResponse.json(row, { status: 201 })
     }
     if (resource === 'schedules') {
@@ -229,6 +244,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     if (creation.kind === 'invalid-bank') return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
     return NextResponse.json({ id: creation.row.id }, { status: 201 })
   } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const message = error instanceof Error ? error.message : 'request failed'
     return NextResponse.json({ error: message }, { status: 422 })
   }

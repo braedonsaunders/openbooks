@@ -70,7 +70,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       ) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
-      await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body)
+      await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body, gate.allowedSubsidiaryIds)
     } else if (resource === 'formats') {
       // Format currency is Multi-currency configuration. Turning that
       // switch off must refuse a write; omitting currency keeps the
@@ -230,6 +230,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
     }
     return NextResponse.json({ ok: true })
   } catch (error) {
+    // ScopeNotFoundError carries status 404, so the shared boundary preserves
+    // this route's uniform 404 for hidden parties (I1-refix-121).
     return apiErrorResponse(error)
   }
 }
