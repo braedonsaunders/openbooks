@@ -30,6 +30,7 @@ import {
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -206,7 +207,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as OkFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    wages = U(requireUsSourceWages(input.wageAllocations, "OK", null));
+    factors.OK_NONRESIDENT_SOURCE_WAGES = D(wages);
+  }
   trace("OK_WAGES", wages);
 
   const allowance = U(rates.periods[period].allowance) * BigInt(allowances);
@@ -238,6 +243,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 export const OK_FACTOR_LABELS: Readonly<Record<string, string>> = {
   OK_EXEMPT: "Exempt from Oklahoma withholding",
   OK_WAGES: "Oklahoma wages this period",
+  OK_NONRESIDENT_SOURCE_WAGES: "Oklahoma-source wages this period for a nonresident",
   OK_ALLOWANCE: "Oklahoma allowance",
   OK_TAXABLE: "Oklahoma taxable wages",
   OK_UNROUNDED: "Oklahoma tax before rounding",
