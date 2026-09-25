@@ -152,9 +152,10 @@ async function loadDuplicatePairs(orgId: string, windowDays: number, floor: stri
         and d.kind = o.kind and d.party_id = o.party_id and abs(d.total) = o.amt
         and d.id <> o.id
         and abs(coalesce(d.document_date, d.posting_date) - o.ddate) <= ${windowDays}
-        -- Each unordered pair surfaces once: the open leg drives, except an
-        -- open/open pair which the greater id owns.
-        and (d.id > o.id or d.status <> 'posted' or d.open_balance = 0)
+        -- Each unordered pair surfaces once: the smaller-id open leg drives
+        -- an open/open pair, and a closed other leg (draft, paid, or a
+        -- nulled balance cache) never suppresses the open leg's row.
+        and (d.id > o.id or d.status <> 'posted' or coalesce(d.open_balance, 0) = 0)
       left join parties p on p.id = o.party_id and p.org_id = ${orgId}
      order by o.amt desc, days_between asc, o.id, d.id
      limit 200
