@@ -46,8 +46,10 @@ import {
  * uitkomst van de rekenregel kan gering verschillen van die van de
  * tabelsystematiek. Dat is toegestaan.").
  *
- * Money is integer eurocents (bigint) throughout; every rounding below is
- * the publication's own rule, quoted at the step. No floating point.
+ * Money is bigint throughout — integer eurocents on the period legs, whole
+ * euros on the annual legs (L, X1, the kortingen, X); every rounding below
+ * is the publication's own rule, quoted at the step. No floating point: no
+ * wage, tax, base or intermediate crosses a Number boundary.
  */
 
 // ---------------------------------------------------------------------------
@@ -158,12 +160,16 @@ export interface NlStatutoryInput {
 }
 
 export interface NlStatutoryResult {
-  /** Jaarloon L in whole euros (multiple of € 54 at or below Lmax). */
+  /**
+   * Jaarloon L in whole euros (multiple of € 54 at or below Lmax), null
+   * above Lmax where there is no tabelloon. A bigint, never a float: annual
+   * wages, band amounts, taxes and credits cross no Number boundary.
+   */
   annualWage: bigint | null;
   /** X1: schijventarief amount before kortingen, whole euros. */
   grossAnnual: bigint;
   applied: { ahk: bigint; ouk: bigint; ark: bigint; aok: bigint };
-  /** X: annual withholding, whole euros. */
+  /** X: annual withholding, whole euros; null above Lmax. */
   netAnnual: bigint | null;
   /** x: per-period loonheffing before JGK, cents. */
   periodicCents: bigint;
@@ -225,16 +231,14 @@ function arkAnnual(L: bigint, aow: boolean): bigint {
   //        - arka1 * (L - arkg3)", each product "rekenkundig afrondt op
   // 5 decimalen" (exact at 5dp from whole-euro L), running sums "maximeert
   // op arkm1/arkm2/arkm3", "u ARK (jaarbedrag) naar boven afrondt op hele euro's".
-  const over1 = L > BigInt(p.band1) ? L - BigInt(p.band1) : 0n;
-  const over2 = L > BigInt(p.band2) ? L - BigInt(p.band2) : 0n;
-  const over3 = L > BigInt(p.band3) ? L - BigInt(p.band3) : 0n;
+  const over = (limit: number): bigint => (L > BigInt(limit) ? L - BigInt(limit) : 0n);
   const t1 = L * parseRate5(p.build1, "ARK opbouwfactor 1");
   const capped1 = t1 > BigInt(p.max1) * 100000n ? BigInt(p.max1) * 100000n : t1;
-  const s2 = capped1 + BigInt(over1) * parseRate5(p.build2, "ARK opbouwfactor 2");
+  const s2 = capped1 + over(p.band1) * parseRate5(p.build2, "ARK opbouwfactor 2");
   const capped2 = s2 > BigInt(p.max2) * 100000n ? BigInt(p.max2) * 100000n : s2;
-  const s3 = capped2 + BigInt(over2) * parseRate5(p.build3, "ARK opbouwfactor 3");
+  const s3 = capped2 + over(p.band2) * parseRate5(p.build3, "ARK opbouwfactor 3");
   const capped3 = s3 > BigInt(p.max3) * 100000n ? BigInt(p.max3) * 100000n : s3;
-  const tapered = capped3 - BigInt(over3) * parseRate5(p.taper, "ARK afbouwfactor");
+  const tapered = capped3 - over(p.band3) * parseRate5(p.taper, "ARK afbouwfactor");
   return ceilDiv(tapered < 0n ? 0n : tapered, 100000n);
 }
 
@@ -274,17 +278,18 @@ function priceAnnual(L: bigint, ageClass: NlAgeClass, applyKorting: boolean, aok
   // named order is the reduction order, so AHK is kept first and AOK last —
   // the witte maandtabel pins this (tabelloon € 729: verrekende ARK € 1,00,
   // only the AHK-first keep leaves ARK € 12).
+  const keep = (credit: bigint, room: bigint): bigint => (credit < room ? credit : room);
   let x = x1 - (ahk + ouk + ark + aok);
   if (x < 0n) {
     x = 0n;
     let room = x1;
-    ahk = ahk < room ? ahk : room;
+    ahk = keep(ahk, room);
     room -= ahk;
-    ouk = ouk < room ? ouk : room;
+    ouk = keep(ouk, room);
     room -= ouk;
-    ark = ark < room ? ark : room;
+    ark = keep(ark, room);
     room -= ark;
-    aok = aok < room ? aok : room;
+    aok = keep(aok, room);
   }
   return { x1, ahk, ouk, ark, aok, x };
 }
@@ -331,7 +336,7 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
     // "L = {(tvl * F) / Lv} * Lv, waarbij u (tvl * F) / Lv naar beneden afrondt op 0 decimalen".
     const L = (scaledCents / BigInt(NL_LV_2026 * 100)) * BigInt(NL_LV_2026);
     const priced = priceAnnual(L, ageClass, input.applyKorting, input.aokApply === true);
-    const periodicCents = halfUpDiv(BigInt(priced.x) * 100n, BigInt(F));
+    const periodicCents = halfUpDiv(priced.x * 100n, BigInt(F));
     return finishCalculation({
       input, F, aow, annualWage: L, priced, periodicCents,
       aboveMaxCents: 0n, aboveMax: false,
@@ -340,7 +345,7 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
   // Above Lmax there is no tabelloon: systematiek 1 prices the period wage
   // directly ("x = y + xboven").
   const atMax = priceAnnual(BigInt(NL_LMAX_2026), ageClass, input.applyKorting, input.aokApply === true);
-  const yCents = halfUpDiv(BigInt(atMax.x) * 100n, BigInt(F));
+  const yCents = halfUpDiv(atMax.x * 100n, BigInt(F));
   // "xboven = (L / F - Lmax / F) * (bmax / 100)", "u xboven naar beneden afrondt op 2 decimalen".
   const topRate = parseRate2(NL_BRACKETS_2026[ageClass][2]!.ratePct, "hoogste schijf");
   const aboveMaxCents = ((scaledCents - lmaxCents) * topRate) / (10000n * BigInt(F));
@@ -364,10 +369,10 @@ function finishCalculation(args: {
   const { input, F, priced, periodicCents, aboveMaxCents, aboveMax } = args;
   const bigF = BigInt(F);
 
-  const arkPeriodicCents = halfUpDiv(BigInt(priced.ark) * 100n, bigF);
-  const ahkPeriodicCents = halfUpDiv(BigInt(priced.ahk) * 100n, bigF);
-  const oukPeriodicCents = halfUpDiv(BigInt(priced.ouk) * 100n, bigF);
-  const aokPeriodicCents = halfUpDiv(BigInt(priced.aok) * 100n, bigF);
+  const arkPeriodicCents = halfUpDiv(priced.ark * 100n, bigF);
+  const ahkPeriodicCents = halfUpDiv(priced.ahk * 100n, bigF);
+  const oukPeriodicCents = halfUpDiv(priced.ouk * 100n, bigF);
+  const aokPeriodicCents = halfUpDiv(priced.aok * 100n, bigF);
 
   // Tabelloon ℓ = L/F "naar boven op 2 decimalen" (Tabel 8); above Lmax the
   // period wage itself is the tabelloon.

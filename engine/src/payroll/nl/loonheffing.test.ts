@@ -138,23 +138,23 @@ test("AHK fully afgebouwd at € 78.426, ARK at € 132.920", () => {
 });
 
 test("boundary sweep across every kink, each at a table-exact L", () => {
-  const arkAt = (tvl: string): number =>
+  const arkAt = (tvl: string): bigint =>
     calculateNlStatutory({ income: tvl, periodsPerYear: 12, applyKorting: true, svWage: "0" }).applied.ark;
-  const ahkAt = (tvl: string): number =>
+  const ahkAt = (tvl: string): bigint =>
     calculateNlStatutory({ income: tvl, periodsPerYear: 12, applyKorting: true, svWage: "0" }).applied.ahk;
   // AHK phase-out starts at 29.736: L = 29.700 prices the full € 3.115,
   // L = 29.754 prices 3.115 − 18 × 0,06398 = 3.113,85 → € 3.114.
-  assert.equal(ahkAt("2475.00"), 3115);
-  assert.equal(ahkAt("2479.50"), 3114);
+  assert.equal(ahkAt("2475.00"), 3115n);
+  assert.equal(ahkAt("2479.50"), 3114n);
   // ARK climbs through arkg2 = 25.845 (the max2 cap binds just above it):
   // L = 25.812 prices 996 + 13.847 × 0,31009 = 5.289,82 → € 5.290;
   // L = 25.866 prices min(5.306,56, 5.300) + 21 × 0,01950 = 5.300,41 → € 5.301.
-  assert.equal(arkAt("2151.00"), 5290);
-  assert.equal(arkAt("2155.50"), 5301);
+  assert.equal(arkAt("2151.00"), 5290n);
+  assert.equal(arkAt("2155.50"), 5301n);
   // Taper kink at arkg3 = 45.592: L = 45.576 prices € 5.685 (5.684,75 → up),
   // L = 45.630 prices 5.685 − 38 × 0,06510 = 5.682,53 → € 5.683.
-  assert.equal(arkAt("3798.00"), 5685);
-  assert.equal(arkAt("3802.50"), 5683);
+  assert.equal(arkAt("3798.00"), 5685n);
+  assert.equal(arkAt("3802.50"), 5683n);
 });
 
 test("AOW-1946 goldens: lower schijf 1, OUK, and the AOK incl/excl pair", () => {
