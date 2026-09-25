@@ -138,7 +138,10 @@ export function ImportWizard() {
         if (!r.ok) throw new Error(await readApiErrorMessage(r, t('import.loadFailed')))
         return r.json()
       })
-      .then((d) => setResources((d.resources ?? []).filter((x: ResourceDescriptor & { supportsImport?: boolean }) => x)))
+      // Read-only resources are export-only: the import route refuses them
+      // as 'resource is read-only', so the picker must not offer them. The
+      // truthy check matches the server's own `!supportsImport` refusal.
+      .then((d) => setResources((d.resources ?? []).filter((x: ResourceDescriptor & { supportsImport?: boolean }) => x?.supportsImport)))
       .catch((e) => {
         toast.error((e as Error).message)
       })
