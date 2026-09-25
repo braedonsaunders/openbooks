@@ -75,6 +75,17 @@ test("every statutory opening amount is additive with committed stubs", () => {
   assert.equal(slip!.box56QpipInsurable, "0.0000", "no program base carried: box 56 keeps the stubs alone");
 });
 
+test("employer levy carry-in is additive with the committed employer share", () => {
+  const carried = openingYtdIntoT4Slip(
+    t4("e1", { employerCpp: "3000.0000", employerCpp2: "40.0000", employerEi: "1120.0000" }),
+    opening({ employerCppYtd: "700.00", employerCpp2Ytd: "120.00", employerEiYtd: "294.00" }),
+  );
+  assert.equal(carried.employerCpp, "3700.0000");
+  assert.equal(carried.employerCpp2, "160.0000");
+  assert.equal(carried.employerEi, "1414.0000");
+  assert.equal(carried.box24EiInsurable, "50000.0000", "employer premiums never enter the insurable base");
+});
+
 test("a multi-slip employee's carry-in lands on exactly one slip", () => {
   // One employee, two provinces of employment: the per-employee opening must
   // not be multiplied by the slip count. It rides the FIRST slip in the

@@ -1,0 +1,1 @@
+Additive NOT NULL DEFAULT 0 columns plus appended view columns; existing rows read back as zero and no operator repair is needed.
