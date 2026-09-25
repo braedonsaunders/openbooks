@@ -74,16 +74,20 @@ test("the cockpit sums the live primary book, never a deactivated one", async ()
       insert into recognition_schedule_lines (org_id, schedule_id, period_id, sequence, planned_amount, recognized_amount, journal_entry_id)
       values (${org.orgId}, ${scheduleId}, ${org.periodId}, 1, 250, 250, ${entryId})`);
 
-    const live = await loadProjectCockpit(org.orgId, projectId);
+    const live = (await loadProjectCockpit(org.orgId, projectId))!;
     assert.ok(live.recognition);
     assert.equal(live.recognition.recognized, "250.0000");
     assert.equal(live.financials.pricingMethod, fixedPrice.financialProfile.totalPrice.method);
     assert.equal(live.financials.contractValue, "1250.5000");
 
+    // I1-refix-125: a project outside the caller scope reads as absent.
+    const hidden = await loadProjectCockpit(org.orgId, projectId, { allowedSubsidiaryIds: new Set([randomUUID()]) });
+    assert.equal(hidden, null);
+
     // Deactivate the primary book: the run can no longer post there, so the
     // card must stop summing it too.
     await db.execute(sql`update accounting_books set is_active = false where id = ${org.bookId}`);
-    const dead = await loadProjectCockpit(org.orgId, projectId);
+    const dead = (await loadProjectCockpit(org.orgId, projectId))!;
     assert.ok(dead.recognition);
     assert.equal(dead.recognition.recognized, "0.0000");
   } finally {
