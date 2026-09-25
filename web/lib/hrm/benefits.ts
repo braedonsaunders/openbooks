@@ -17,6 +17,8 @@ import { can, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmRewardsViewTabs } from './workspace-tabs'
 import { loadQueueLabels } from './change-requests'
+import { listScopedDepartmentOptions } from '../scoped-options'
+import { subsidiaryVisibleFilter } from '../subsidiaries'
 
 /**
  * Benefits workspace loader — windows and enrolments behind the Benefits
@@ -247,14 +249,13 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
 
   const subsidiaries = (
     await db.execute<{ id: string; name: string }>(sql`
-      select id::text as id, name from subsidiaries where org_id = ${orgId}::uuid and is_active order by name
+      select id::text as id, name from subsidiaries
+       where org_id = ${orgId}::uuid and is_active
+         ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)}
+       order by name
     `)
   ).rows
-  const departments = (
-    await db.execute<{ id: string; name: string }>(sql`
-      select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name
-    `)
-  ).rows
+  const departments = await listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)
   const dialogOpen = sp.window === 'new' && canManage
   const subsidiaryOptions = subsidiaries.map((row) => ({ value: row.id, label: row.name }))
   const departmentOptions = departments.map((row) => ({ value: row.id, label: row.name }))
