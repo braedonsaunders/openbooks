@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import test, { describe } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors, dropScratchOrgReporting, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { payRunStaleness, payRunChanges, payRunFunding, payRunReadiness, payrollSetupState } from "./readiness.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
@@ -67,12 +67,18 @@ describe("readiness-levy-scope", () => {
                                     effective_from, is_active, created_by, updated_by)
       values (${orgId}, ${id}, 'CAD', '30', 'hour', '2080', '2026-01-01', true,
               ${actorId}, ${actorId})`);
+    // Hires carry an HRM employment or stub calculation refuses them; the
+    // employment rides the org's root subsidiary like the party does.
+    const employmentSubsidiary = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries where org_id = ${orgId} and parent_id is null and is_active
+       order by created_at limit 1`)).rows[0]!.id;
+    const employmentId = await seedWorkerEmployment(orgId, id, employmentSubsidiary);
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                             pay_basis, federal_claim_code, provincial_claim_code,
-                                             vacation_percent, vacation_method, is_active,
-                                             created_by, updated_by)
-      values (${orgId}, ${id}, ${scheduleId}, ${country}, ${province}, 'hourly', 1, 1,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                             country, province, pay_basis, federal_claim_code,
+                                             provincial_claim_code, vacation_percent, vacation_method,
+                                             is_active, created_by, updated_by)
+      values (${orgId}, ${id}, ${employmentId}, ${scheduleId}, ${country}, ${province}, 'hourly', 1, 1,
               '4', 'accrue', true, ${actorId}, ${actorId})`);
     return id;
   }
@@ -240,6 +246,7 @@ describe("readiness-rq-schedule", () => {
     accountId: string;
     rqVendorId: string;
     employeeId: string;
+    employmentId: string;
     scheduleId: string;
     componentId: string;
     liabilityAccountId: string;
@@ -310,8 +317,10 @@ describe("readiness-rq-schedule", () => {
                            is_active, custom, created_by, updated_by)
       values (${employeeId}, ${org.orgId}, 'person', 'Quebec Employee',
               ${org.subsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId})`);
+    // Direct committed stubs carry a NOT NULL employment.
+    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
     return {
-      orgId: org.orgId, actorId, accountId, rqVendorId, employeeId, scheduleId,
+      orgId: org.orgId, actorId, accountId, rqVendorId, employeeId, employmentId, scheduleId,
       componentId, liabilityAccountId,
     };
   }
@@ -343,12 +352,12 @@ describe("readiness-rq-schedule", () => {
     const stubId = randomUUID();
     await db.execute(sql`
       insert into pay_stubs
-        (id, org_id, pay_run_document_id, employee_party_id, province,
+        (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
          periods_per_year, pay_date, tax_year, currency_code, gross,
          pensionable_earnings, insurable_earnings, net_pay, employer_cost,
          vacation_accrued, factors, filing_account_id, filing_account_source,
          created_by, updated_by)
-      values (${stubId}, ${fx.orgId}, ${documentId}, ${fx.employeeId}, 'QC', 52,
+      values (${stubId}, ${fx.orgId}, ${documentId}, ${fx.employeeId}, ${fx.employmentId}, 'QC', 52,
               ${payDate}, ${taxYear}, 'CAD', ${amount}, ${amount}, ${amount}, ${amount},
               ${amount}, '0', '{}'::jsonb, ${fx.accountId},
               'calculation', ${fx.actorId}, ${fx.actorId})`);
