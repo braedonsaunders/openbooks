@@ -35,7 +35,7 @@ registerHooks({
 
 const { generateApiKey } = await import("../../../../lib/api-auth");
 const createRoute = await import("./[typeKey]/route.ts");
-const itemRoute = await import("./[typeKey]/[id]/route.ts");
+const itemRoute = await import("./[typeKey]/[id]/route.ts"); const openApiRoute = await import("../openapi/route.ts");
 
 async function query<T extends Record<string, unknown>>(
   statement: ReturnType<typeof sql>,
@@ -92,7 +92,7 @@ async function seedEvidenceOrg(): Promise<EvidenceOrg> {
     await db.execute(sql`
       insert into app_roles (id, org_id, key, name, permissions)
       values (${adminRoleId}, ${orgId}, 'records_manager', 'Records Manager',
-              '["parties.read","parties.manage"]'::jsonb)`);
+              '["api.keys.manage","parties.read","parties.manage"]'::jsonb)`);
     const emptyRoleId = randomUUID();
     await db.execute(sql`
       insert into app_roles (id, org_id, key, name, permissions)
@@ -127,7 +127,7 @@ async function seedEvidenceOrg(): Promise<EvidenceOrg> {
         values (${orgId}, ${userId},
                 ${userId === adminUserId ? "evidence admin key" : "roleless guest key"},
                 ${generated.keyPrefix}, ${generated.keyHash}, ${generated.keyPreview},
-                '["parties.read", "parties.manage"]'::jsonb, true)
+                '["api.keys.manage", "parties.read", "parties.manage"]'::jsonb, true)
         returning id`)).rows;
       if (userId === adminUserId) {
         adminKey = generated.plaintext;
@@ -142,7 +142,7 @@ async function seedEvidenceOrg(): Promise<EvidenceOrg> {
 }
 
 function recordsRequest(
-  method: "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   pathname: string,
   plaintextKey: string,
   idempotencyKey: string,
@@ -350,7 +350,7 @@ test("successful create commits exactly one canonical evidence row; replays add 
     const replayBody = (await replay.json()) as { id: string };
     assert.equal(replayBody.id, body.id, "replay returns the stored result");
     assert.equal(await partyCount(org.orgId), 1, "still exactly one effect");
-    assert.equal(await eventCount(org.orgId), 2, "the replay carries its own correlation row");
+    assert.equal(await withOrgContext(org.orgId, async () => { await openApiRoute.GET(recordsRequest("GET", "/api/v1/openapi", org.adminKey, "openapi-audit-01")); return eventCount(org.orgId); }), 3, "create, replay, and authenticated OpenAPI read each retain evidence");
   } finally {
     await setAuditFailureMode("allow");
     await dropScratchOrg(org.orgId);

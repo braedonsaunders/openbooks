@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardApiKey } from "../../../../lib/api-auth";
 import { loadApiSchema } from "../../../../lib/api/schema-registry";
+import { emitV1ExecutionEvent } from "../../../../lib/api/v1-request";
 
 export const runtime = "nodejs";
 
@@ -13,5 +14,7 @@ export async function GET(req: Request) {
     gate.user.orgId,
     gate.user.roles.map(({ key }) => key),
   );
+  const auditFailure = await emitV1ExecutionEvent("v1.schema", 200, gate);
+  if (auditFailure) return auditFailure;
   return NextResponse.json({ recordTypes: schema });
 }
