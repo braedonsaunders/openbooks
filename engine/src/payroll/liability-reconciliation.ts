@@ -70,10 +70,11 @@ export async function reconcilePayrollLiabilityAccounts(input: {
       )) {
         // Historical payroll belongs to its original pay-run entity. Hold that
         // document against a concurrent void before resolving its source line.
-        const source = (await db.execute<{ subsidiary_id: string | null }>(sql`
-          select d.subsidiary_id from pay_stub_lines l
+        const source = (await db.execute<{ subsidiary_id: string | null; subsidiary_name: string | null }>(sql`
+          select d.subsidiary_id, ent.name as subsidiary_name from pay_stub_lines l
           join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
           join documents d on d.org_id=s.org_id and d.id=s.pay_run_document_id
+          left join subsidiaries ent on ent.org_id=l.org_id and ent.id=d.subsidiary_id
           where l.org_id=${input.orgId} and l.id=${row.lineId} for share of d`)).rows[0];
         const allowed = await actorAllowedSubsidiaryIds(db,input.orgId,input.actorId);
         if (!source || (allowed !== null && (!source.subsidiary_id || !allowed.has(source.subsidiary_id)))) {
@@ -81,6 +82,52 @@ export async function reconcilePayrollLiabilityAccounts(input: {
         }
         if (!(await actorHasPermission(db,input.orgId,input.actorId,"payroll.manage"))) {
           throw new PayrollError("Payroll management permission is required to reconcile legacy liability attribution.");
+        }
+        // Resolve the account like the filing path: an id the org does not
+        // hold, one restricted to another legal entity, or one that cannot
+        // carry a posting must refuse by name here. Falling through to the
+        // update would surface only a raw database error from the tenant FK
+        // or the liability guard — and the one-time unknown→reconciled guard
+        // would make a bad stamp permanent and misroute remittance grouping.
+        const account = (await db.execute<{
+          subsidiary_id: string | null; number: string | null;
+          name: string | null; type: string; is_summary: boolean;
+          entity_name: string | null;
+        }>(sql`
+          select a.subsidiary_id, a.number, a.name, a.type, a.is_summary, ent.name as entity_name
+            from accounts a
+            left join subsidiaries ent on ent.org_id=a.org_id and ent.id=a.subsidiary_id
+           where a.org_id=${input.orgId} and a.id=${row.accountId}`)).rows[0] ?? null;
+        if (!account) {
+          throw new PayrollError(
+            `Cannot reconcile payroll line ${row.lineId} with liability account ${row.accountId}: ` +
+            `this organization holds no account with that id. Create it in the chart of accounts first, then reconcile.`,
+          );
+        }
+        const accountLabel = account.number ?? account.name ?? row.accountId;
+        if (account.subsidiary_id != null && account.subsidiary_id !== source.subsidiary_id) {
+          const accountEntity = account.entity_name ?? account.subsidiary_id;
+          if (source.subsidiary_id == null) {
+            throw new PayrollError(
+              `Cannot reconcile payroll line ${row.lineId} with liability account ${accountLabel} restricted to ${accountEntity}: ` +
+              `the line's pay run has no recorded legal entity. Reconcile with an org-wide liability account.`,
+            );
+          }
+          const lineEntity = source.subsidiary_name ?? source.subsidiary_id;
+          throw new PayrollError(
+            `Cannot reconcile payroll line ${row.lineId} with liability account ${accountLabel} restricted to ${accountEntity}: ` +
+            `the line's pay run belongs to ${lineEntity}. ` +
+            `Reconcile with a liability account available to ${lineEntity}, or an org-wide account.`,
+          );
+        }
+        if (account.is_summary || !account.type.startsWith("liability")) {
+          const kind = account.is_summary
+            ? "a summary account"
+            : `${/^[aeiou]/i.test(account.type) ? "an" : "a"} ${account.type} account`;
+          throw new PayrollError(
+            `Cannot reconcile payroll line ${row.lineId} with account ${accountLabel}: it is ${kind}, not a posting liability account. ` +
+            `Reconcile with a posting (non-summary) liability account.`,
+          );
         }
         const result = await db.execute(sql`
         update pay_stub_lines set liability_account_id = ${row.accountId},

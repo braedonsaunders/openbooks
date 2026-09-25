@@ -48,6 +48,8 @@ test('liability reconciliation refuses bad evidence, missing accounts, scope esc
  const input={orgId:fx.orgId,actorId:fx.actorId,rows:rows.map(r=>({...r,...evidence}))};
  await assert.rejects(reconcilePayrollLiabilityAccounts({...input,rows:[{...input.rows[0]!,reference:''}]}),/evidence reference/);
  await assert.rejects(reconcilePayrollLiabilityAccounts({...input,rows:[input.rows[0]!,input.rows[0]!]}),/Duplicate/);
+ const unknownAccount=randomUUID();
+ await assert.rejects(reconcilePayrollLiabilityAccounts({...input,rows:[{...input.rows[0]!,accountId:unknownAccount}]}),(error:unknown)=>{const message=(error as Error).message;assert.ok(message.includes(unknownAccount),`refusal names the unknown account: ${message}`);return true;});
  // The second row fails after the first update, inside an ambient transaction
  // whose caller catches the error. Its explicit savepoint must restore both.
  await withOrgTransaction(fx.orgId,async()=>{
