@@ -6,6 +6,7 @@ import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/period
 import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
+import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { type PostingDeps, PostingError } from "./posting-contracts.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
@@ -301,7 +302,7 @@ export async function regenerateGlImpactTx(
   // the replacement endpoint. Bank reconciliation, inventory, revenue, and
   // downstream-document evidence remain hard blockers because their dedicated
   // transfer/cancellation workflows carry additional accounting semantics.
-  const activeApplications = await tx
+  let activeApplications = await tx
     .select()
     .from(schema.applications)
     .where(sql`
@@ -316,6 +317,46 @@ export async function regenerateGlImpactTx(
         )
       )
     `);
+  // Source correction transfers live applications after changing the source
+  // document's posted entry. Acquire the shared document -> entry -> endpoint
+  // line lock order before that document write; the application validation
+  // trigger otherwise locks endpoint lines while the correction already owns
+  // the document row, opposite ordinary payment posting's order.
+  const endpointIds = [...new Set(activeApplications.flatMap((application) => [
+    application.fromLineId,
+    application.toLineId,
+  ]))];
+  const lockedApplicationEvidence = await lockApplicationEvidence(
+    tx,
+    doc.orgId,
+    endpointIds,
+    [doc.id],
+    [entry.id],
+  );
+  activeApplications = await tx
+    .select()
+    .from(schema.applications)
+    .where(sql`
+      ${schema.applications.orgId} = ${doc.orgId}
+      and ${schema.applications.unappliedAt} is null
+      and (
+        ${schema.applications.fromLineId} in (
+          select id from journal_lines where entry_id = ${entry.id} and org_id = ${doc.orgId}
+        )
+        or ${schema.applications.toLineId} in (
+          select id from journal_lines where entry_id = ${entry.id} and org_id = ${doc.orgId}
+        )
+      )
+    `);
+  const lockedEndpointIds = new Set(lockedApplicationEvidence.lineIds);
+  if (activeApplications.some((application) =>
+    !lockedEndpointIds.has(application.fromLineId) ||
+    !lockedEndpointIds.has(application.toLineId)
+  )) {
+    throw new PostingError(
+      "applications changed while source correction locks were acquired; retry the correction",
+    );
+  }
 
   let authenticatedHistoricalReplay = false;
   if (
