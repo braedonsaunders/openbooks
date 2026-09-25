@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { unsealSecret } from "../../platform/secrets.ts";
 import { add } from "../../money/money.ts";
 import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
@@ -52,8 +53,8 @@ import { DE_TAX_YEARS } from "./rates.ts";
  * ELStAM Merkmale in force for the last Lohnzahlungszeitraum (per-employee
  * declared facts, read through resolveCertificate, never derived).
  * Kirchensteuer is whatever was withheld at the Land's own 8%/9% split —
- * never a national default. The IdNr has no payroll column (see the gap
- * below): it travels on the ELSTER transmission, not on this printout.
+ * never a national default. The IdNr is read from its sealed payroll-profile
+ * field and printed in the Ausdruck header required by EStG §41b.
  *
  * Lazy-cycle note (the caPackFilings pattern): this module is reached from
  * the pack declaration and reaches the builders, which reach the pack
@@ -141,7 +142,6 @@ export const LOHNSTEUERBESCHEINIGUNG_GAPS: readonly string[] = [
   "Zeile 16, Zeilen 17–21 sowie Zeile 24b (steuerfreie Leistungen, DBA-Auslandstätigkeit, private Krankenversicherung): not modelled — verify manually if any apply.",
   "Zeile 28 und Zeile 33: left unbesetzt by the form itself — nothing is ever printed there.",
   "Zeile 34 (Freibetrag DBA Türkei): not modelled — verify manually if it applies.",
-  "Steuerliche Identifikationsnummer (IdNr, header block): payroll stores no IdNr column (employee_payroll_profiles carries only the sealed CA/US sin_encrypted) — the IdNr travels on the ELSTER transmission (EStG §41b Datensatz), never as plaintext in payroll; identify the employee by IdNr when transmitting via ELSTER.",
 ];
 
 export const LOHNSTEUERBESCHEINIGUNG_DOWNLOAD_REFUSAL =
@@ -159,6 +159,8 @@ export const LOHNSTEUERBESCHEINIGUNG_AMENDMENT_REFUSAL =
 export interface DeLohnsteuerbescheinigungSlip {
   employeePartyId: string;
   employeeName: string;
+  /** BZSt IdNr from the employee's sealed payroll-profile identifier field. */
+  idNr: string;
   /** Beschäftigungsland (profile province), for the header. */
   land: string;
   /** ELStAM Merkmale in force for the last Lohnzahlungszeitraum. */
@@ -218,7 +220,7 @@ export function lohnsteuerbescheinigungSlipData(slip: DeLohnsteuerbescheinigungS
       { label: "Finanzamt, an das die Lohnsteuer abgeführt wurde", value: slip.finanzamt ?? "Unassigned" },
       {
         label: "Steuerliche Identifikationsnummer (IdNr)",
-        value: "Not stored by payroll — identify the employee by IdNr when transmitting via ELSTER (EStG §41b)",
+        value: slip.idNr,
       },
     ],
     boxes: [
@@ -318,14 +320,19 @@ export async function lohnsteuerbescheinigungSlips(
   // No ANY($array): a bare JavaScript array interpolates as a row
   // constructor, not a PostgreSQL array — filter in JS instead.
   const wanted = new Set(rows.rows.map((row) => String(row.employee_party_id)));
-  const profiles = (await db.execute<{ employee_party_id: string; province: string }>(sql`
-    select employee_party_id, province from employee_payroll_profiles
+  const profiles = (await db.execute<{ employee_party_id: string; province: string; sin_encrypted: string | null }>(sql`
+    select employee_party_id, province, sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId}
   `));
   const landByEmployee = new Map(
     profiles.rows
       .filter((row) => wanted.has(String(row.employee_party_id)))
       .map((row) => [String(row.employee_party_id), String(row.province ?? "")]),
+  );
+  const identifierByEmployee = new Map(
+    profiles.rows
+      .filter((row) => wanted.has(String(row.employee_party_id)))
+      .map((row) => [String(row.employee_party_id), unsealSecret(row.sin_encrypted)]),
   );
   const elstam = payrollCertificate("DE", "de_elstam");
   const accounts = await filingAccountsById(orgId);
@@ -342,6 +349,14 @@ export async function lohnsteuerbescheinigungSlips(
     const employeePartyId = String(row.employee_party_id);
     const employeeName = String(row.display_name);
     const lastPay = String(row.last_pay);
+    const idNr = identifierByEmployee.get(employeePartyId) ?? null;
+    if (!idNr || !/^\d{11}$/.test(idNr)) {
+      throw new PayrollPackError(
+        `DE Lohnsteuerbescheinigung: ${idNr ? "the IdNr is invalid" : "the IdNr is missing"} for `
+        + `${employeeName}; add or correct the 11-digit Steuerliche Identifikationsnummer on the employee `
+        + `payroll profile before issuing (EStG §41b; https://www.gesetze-im-internet.de/estg/__41b.html).`,
+      );
+    }
     // The Merkmale in force for the LAST Lohnzahlungszeitraum — the form's
     // own definition ("Für den letzten Lohnzahlungszeitraum wurden folgende
     // Lohnsteuerabzugsmerkmale zugrunde gelegt").
@@ -365,6 +380,7 @@ export async function lohnsteuerbescheinigungSlips(
     slips.push({
       employeePartyId,
       employeeName,
+      idNr,
       land: landByEmployee.get(employeePartyId) ?? "",
       steuerklasse,
       faktor: steuerklasse === "IV" && faktorRaw != null && faktorRaw !== "" && faktorRaw !== "1.000"

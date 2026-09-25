@@ -288,14 +288,15 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   // every registered person a lifelong Steuerliche Identifikationsnummer
   // (IdNr) of 11 digits. Length and digit shape only — the MOD 11,10 check
   // digit is real but unsourced here, so it is NOT enforced; ELStAM rejects
-  // what is wrong. Needed for ELStAM retrieval and the Lohnsteuerbescheinigung.
+  // what is wrong. Needed for ELStAM and the Lohnsteuerbescheinigung (EStG §41b:
+  // https://www.gesetze-im-internet.de/estg/__41b.html).
   employeeIdentifier: {
     label: "Steuerliche Identifikationsnummer",
     pattern: "\\d{11}",
     formatHelp: "11 digits",
     example: "12345678901",
     requiredForPayroll: true,
-    neededFor: "ELStAM",
+    neededFor: "ELStAM and the Lohnsteuerbescheinigung",
     citation: "§ 139b AO: the BZSt assigns an 11-digit Steuerliche Identifikationsnummer (IdNr) for life",
     numericEntry: true,
   },
