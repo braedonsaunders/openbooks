@@ -1,8 +1,8 @@
+import { isFeatureEnabled } from "../../../../../lib/features";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { createCandidate } from "@openbooks/engine/src/hrm/recruiting/candidates.ts";
 import { guardPermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createCandidateBody } from "./bodies";
 
@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const parsedBody = await parseJsonBody(req, createCandidateBody);

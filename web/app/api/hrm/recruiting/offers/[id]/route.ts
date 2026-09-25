@@ -1,3 +1,4 @@
+import { isFeatureEnabled } from "../../../../../../lib/features";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
@@ -8,7 +9,6 @@ import {
 import { acceptOfferAsHire } from "@openbooks/engine/src/hrm/recruiting/hire.ts";
 import { getOfferDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
 import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
 import { patchOfferBody } from "../bodies";
@@ -26,7 +26,7 @@ export const runtime = "nodejs";
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("hrm.recruiting.read");
   if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const { id } = await params;
@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const { id } = await params;

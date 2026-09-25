@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../../platform/db.ts";
-import { featureEnabled } from "../../organization/feature-registry.ts";
+import { HrmAuthorizationError, requireRecruitingFeature } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 
 /**
@@ -36,16 +36,6 @@ export const DEPTH_FEATURE_KEYS = [
 
 export type DepthFeatureKey = (typeof DEPTH_FEATURE_KEYS)[number];
 
-const FEATURE_LABEL: Record<DepthFeatureKey, string> = {
-  hrmRecruiting: "Recruiting",
-  hrmStructuredInterviews: "Structured interviews",
-  hrmInterviewScheduling: "Interview scheduling",
-  hrmOfferSigning: "Offer signing",
-  hrmJobBoards: "Job boards",
-  hrmCandidateRetention: "Candidate retention",
-  hrmTalentPool: "Talent pool",
-};
-
 export async function loadFeatureState(
   exec: SqlExecutor,
   orgId: string,
@@ -62,12 +52,11 @@ export async function requireDepthFeature(
   orgId: string,
   key: DepthFeatureKey,
 ): Promise<void> {
-  const state = await loadFeatureState(exec, orgId);
-  if (!featureEnabled(state, key)) {
-    throw new RecruitingError(
-      "REFUSED",
-      `${FEATURE_LABEL[key]} is off — turn it on in Company Settings → Features to use this surface; nothing was written`,
-    );
+  try {
+    await requireRecruitingFeature(exec, orgId, key);
+  } catch (error) {
+    if (!(error instanceof HrmAuthorizationError)) throw error;
+    throw new RecruitingError("REFUSED", error.message);
   }
 }
 

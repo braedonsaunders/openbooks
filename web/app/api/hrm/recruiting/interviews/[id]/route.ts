@@ -1,3 +1,4 @@
+import { isFeatureEnabled } from "../../../../../../lib/features";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
@@ -5,7 +6,6 @@ import {
   completeInterview,
 } from "@openbooks/engine/src/hrm/recruiting/interviews.ts";
 import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
 import { patchInterviewBody } from "../bodies";
@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const { id } = await params;

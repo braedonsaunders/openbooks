@@ -15,7 +15,6 @@ export const runtime = "nodejs";
  * hrmInterviewScheduling is off.
  */
 async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return false;
   if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
   return isFeatureEnabled(orgId, "hrmInterviewScheduling");
 }
