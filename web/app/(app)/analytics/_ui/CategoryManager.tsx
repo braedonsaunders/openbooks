@@ -7,6 +7,7 @@ import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
 import { Button, Select, cn } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { ForecastCategory, ForecastCategoryMethod } from '../../../../lib/cash/core'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { Panel } from './Panel'
 
 export interface CatOption { id: string; name: string }
@@ -139,29 +140,34 @@ export function CategoryManager({
   const save = async (next: ForecastCategory[]) => {
     setBusy(true)
     setMsg(null)
-    const r = await fetch('/api/analytics/cashflow/categories', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categories: next, expectedRevision: revision }),
-    })
-    if (r.ok) {
-      const j = await r.json()
-      setCats(j.categories)
-      if (typeof j.revision === 'number') setRevision(j.revision)
-      setMsg(t('toasts.savedRecomputing'))
-      setEditIdx(null)
-      setDraft(null)
-      router.refresh()
-    } else if (r.status === 409) {
-      // Another editor saved first: show their win and reload instead of
-      // overwriting it.
-      const j = await r.json().catch(() => null)
-      setMsg(j && typeof j.message === 'string' ? j.message : t('toasts.saveFailed', { status: r.status }))
-      await reload()
-    } else {
-      setMsg(r.status === 403 ? t('toasts.forbidden') : t('toasts.saveFailed', { status: r.status }))
+    try {
+      const r = await fetch('/api/analytics/cashflow/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: next, expectedRevision: revision }),
+      })
+      if (r.ok) {
+        const j = await r.json()
+        setCats(j.categories)
+        if (typeof j.revision === 'number') setRevision(j.revision)
+        setMsg(t('toasts.savedRecomputing'))
+        setEditIdx(null)
+        setDraft(null)
+        router.refresh()
+      } else if (r.status === 409) {
+        // Another editor saved first: show their win and reload instead of
+        // overwriting it.
+        const j = await r.json().catch(() => null)
+        setMsg(j && typeof j.message === 'string' ? j.message : t('toasts.saveFailed', { status: r.status }))
+        await reload()
+      } else {
+        setMsg(r.status === 403 ? t('toasts.forbidden') : await readApiErrorMessage(r, t('toasts.saveFailed', { status: r.status })))
+      }
+    } catch {
+      setMsg(t('toasts.saveFailed', { status: 'network' }))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const openEditor = (idx: number) => {
