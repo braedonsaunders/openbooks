@@ -1705,11 +1705,20 @@ async function lockRun(tx: Tx, runId: string): Promise<RunRow> {
 
 /**
  * Open the version's approval flow for a previewed run: validate the
- * configured flow, dispatch the run's `on_submit` flows, and park the run in
- * `pending_approval` with `flow_run_id` stamped. NO journal is written here —
- * the flow engine's release posts it (actor = approver) or records the
- * rejection. Fails closed when the configured flow is missing, disabled,
- * for another subject kind, or produces no gate: the run stays previewed.
+ * configured flow, dispatch the run's `on_submit` flows, recheck the
+ * allocations fence, and park the run in `pending_approval` with
+ * `flow_run_id` stamped. NO journal is written here — the flow engine's
+ * release posts it (actor = approver) or records the rejection. Fails closed
+ * when the configured flow is missing, disabled, for another subject kind,
+ * or produces no gate: the run stays previewed.
+ *
+ * The dispatch runs BEFORE the fenced recheck on purpose. The flow engine
+ * rechecks its own feature under the same per-org feature-gate advisory lock
+ * in a separate transaction: dispatching while this transaction holds that
+ * lock deadlocks the two writers until statement timeout. A disable that
+ * lands between dispatch and the stamp still refuses — the dispatch is
+ * cancelled and this transaction rolls back, so the run stays previewed
+ * with zero writes, exactly as if the fence had run first.
  */
 async function openRunApproval(
   tx: Tx,
@@ -1721,6 +1730,7 @@ async function openRunApproval(
     reason: string;
     approvalFlowId: string;
     eventSource: "api" | "schedule" | "close_automation";
+    fenceVerb: string;
   },
 ): Promise<AllocationRunRecord> {
   const { orgId, run } = opts;
@@ -1777,6 +1787,18 @@ async function openRunApproval(
       `allocation approval flow ${opts.approvalFlowId} produced no approval gate`,
     );
   }
+  // Fenced recheck after the dispatch (see the header comment for why the
+  // fence cannot precede it): a disable that landed after preview refuses
+  // here, never parks the run. The dispatch is cancelled first so no
+  // half-routed approval lingers, and the throw rolls this transaction back.
+  try {
+    await assertAllocationsEnabled(tx, orgId, opts.fenceVerb);
+  } catch (error) {
+    await cancelDispatchRuns(orgId, dispatched.runs.map((item) => item.runId), {
+      actorId: opts.actorId,
+    });
+    throw error;
+  }
   await tx.execute(sql`
     update allocation_runs
        set status = 'pending_approval', flow_run_id = ${gated.runId},
@@ -1826,9 +1848,11 @@ export async function postAllocationRun(
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be posted`);
     }
     const orgId = run.org_id;
-    // Fenced recheck before any write (including opening an approval gate):
-    // a disable that landed after preview/submit must refuse, never post.
-    await assertAllocationsEnabled(tx, orgId, "post");
+    // No fence yet: the approval branch below dispatches flows first and the
+    // flow engine takes this same advisory lock in its own transaction, so
+    // fencing here would deadlock the dispatch. Each branch fences before
+    // its own writes instead (the approval stamp inside openRunApproval, the
+    // journal below for the direct post).
     const period = await loadPeriod(tx, orgId, run.period_id);
     // The preview's world may have moved on (rule deactivated, version
     // retired): re-check the head and the pinned version before money moves,
@@ -1863,8 +1887,12 @@ export async function postAllocationRun(
         reason: cleanReason,
         approvalFlowId,
         eventSource: opts.eventSource ?? "api",
+        fenceVerb: "post",
       });
     }
+    // Fenced recheck before the journal write: a disable that landed after
+    // preview/submit must refuse, never post.
+    await assertAllocationsEnabled(tx, orgId, "post");
     // An approved rerun replacement swaps atomically: unwind the superseded
     // posted run FIRST (frees the one-posted-run slot), then post the
     // replacement below in the same transaction.
@@ -2087,14 +2115,24 @@ export async function rerunAllocationRun(
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be re-run`);
     }
     const orgId = run.org_id;
-    // Rerun reverses and posts inside this one transaction: fence once here
-    // before any of those writes.
-    await assertAllocationsEnabled(tx, orgId, "re-run");
+    // Fence placement matters here (see the version-load comment below): the
+    // direct branch fences before any write, while the approval branch
+    // dispatches flows first and fences inside openRunApproval. Every
+    // refusal rolls this whole transaction back, so all paths land zero
+    // writes.
     const period = await loadPeriod(tx, orgId, run.period_id);
     const book = await loadBook(tx, orgId, run.book_id);
     if (run.subsidiary_id) await requireSubsidiary(tx, orgId, run.subsidiary_id);
     const rule = await loadRule(tx, orgId, run.rule_id);
     const version = await loadVersionInForce(tx, rule, period);
+    // The direct branch fences here, before any write (and before the
+    // idempotent early-return, so a disabled feature refuses by name even
+    // when there is nothing to recompute). The approval branch must NOT
+    // fence yet: it dispatches flows first and the flow engine takes this
+    // same advisory lock in its own transaction — openRunApproval fences
+    // after the dispatch instead.
+    const needsApproval = !!version.approval_flow_id;
+    if (!needsApproval) await assertAllocationsEnabled(tx, orgId, "re-run");
     const targets = await loadTargets(tx, orgId, version.id);
     const built = await buildComputation(
       tx,
@@ -2111,6 +2149,10 @@ export async function rerunAllocationRun(
       deps,
     );
     if (built.fingerprint === run.fingerprint) {
+      // No writes follow on this path, so fencing here cannot deadlock —
+      // but the verb stays gated: a disabled feature refuses by name rather
+      // than reporting a quiet idempotent success.
+      if (needsApproval) await assertAllocationsEnabled(tx, orgId, "re-run");
       return { run: toRecord(run), idempotent: true };
     }
     const fresh = await insertRunRow(tx, {
@@ -2153,6 +2195,7 @@ export async function rerunAllocationRun(
         reason: cleanReason,
         approvalFlowId: version.approval_flow_id,
         eventSource: "api",
+        fenceVerb: "re-run",
       });
       await tx.execute(sql`
         update allocation_runs
