@@ -260,8 +260,7 @@ export function PayrollOnboardingWizard(props: {
           ])),
         }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not save payroll accounts'))
       await reload()
       return
     }
@@ -291,8 +290,8 @@ export function PayrollOnboardingWizard(props: {
           isActive: true,
         }),
       })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not create the pay schedule'))
       const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
       setCreatedSchedule({ id: String(j.id ?? ''), name: scheduleName.trim() })
       await reload()
       return
@@ -305,8 +304,7 @@ export function PayrollOnboardingWizard(props: {
           vendorKeys.map((key) => [key, vendorChoices[key] || null]),
         )),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not save remittance vendors'))
       await reload()
       return
     }
@@ -316,8 +314,7 @@ export function PayrollOnboardingWizard(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eftFallbackToCheque }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Could not save payment settings'))
       await reload()
       return
     }
