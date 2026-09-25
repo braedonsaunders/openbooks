@@ -132,14 +132,22 @@ export async function assemblePayRunEvidence(
 
   const definitions = (await db.execute<{ slug: string; id: string; name: string }>(sql`
     select slug, id, name from report_definitions
-     where org_id = ${orgId} and slug = any(${`{${EVIDENCE_SLUGS.join(',')}}`}::text[])
+     where org_id = ${orgId} and kind = 'built_in'
+       and slug = any(${`{${EVIDENCE_SLUGS.join(',')}}`}::text[])
   `))
+
+  const missingDefinitions = EVIDENCE_SLUGS.filter(
+    (slug) => !definitions.rows.some((row) => row.slug === slug),
+  )
+  if (missingDefinitions.length > 0) {
+    throw new PayrollError(`required built-in payroll evidence reports are unavailable: ${missingDefinitions.join(', ')}`)
+  }
 
   const parts: string[] = []
   const pdfs: Buffer[] = []
   for (const slug of EVIDENCE_SLUGS) {
     const definition = definitions.rows.find((row) => row.slug === slug)
-    if (!definition) continue
+    if (!definition) throw new PayrollError(`required built-in payroll evidence report is unavailable: ${slug}`)
     const data = await resolveDefinitionToExportData(orgId, definition.id, params, ctx, {
       // The exact run, not merely its period: an off-cycle run inside a period
       // already paid must not drag the regular run's numbers into evidence.

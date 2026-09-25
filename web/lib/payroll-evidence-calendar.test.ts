@@ -70,10 +70,10 @@ const mockSources = new Map<string, string>([
             }] }
           }
           if (text.includes('from report_definitions')) {
-            return { rows: [
-              { slug: 'payroll-journal', id: 'def-journal', name: 'Payroll journal' },
-              { slug: 'payroll-register', id: 'def-register', name: 'Payroll register' },
-            ] }
+            return { rows: text.includes("kind = 'built_in'") ? ['journal', 'register'].map((part) => ({ slug: 'payroll-' + part, id: 'def-' + part, name: 'Payroll ' + part })) : ['journal', 'register'].flatMap((part) => [
+                { slug: 'payroll-' + part, id: 'custom-' + part, name: 'Custom payroll ' + part },
+                { slug: 'payroll-' + part, id: 'def-' + part, name: 'Payroll ' + part },
+              ]) }
           }
           throw new Error('unexpected evidence query: ' + text.slice(0, 120))
         },
