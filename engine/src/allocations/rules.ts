@@ -32,7 +32,7 @@ import {
 import {
   allocationRuleVisible,
   type SubsidiaryScope,
-} from "./subsidiary-scope.ts";
+} from "../organization/allocation-scope.ts";
 
 /**
  * Rule/version service (shard A1): versioned, effective-dated allocation

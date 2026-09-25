@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextResponse } from "next/server";
-import { allocationRuleVisible } from "@openbooks/engine/src/allocations/subsidiary-scope.ts";
+import { allocationRuleVisible } from "@openbooks/engine/src/organization/allocation-scope.ts";
 
 // The route's scope wrapper (web/lib/allocations-scope.ts) cannot load here
 // rule onto the REAL engine predicate: the refusal decision under test is

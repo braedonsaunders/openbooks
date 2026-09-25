@@ -9,7 +9,7 @@ import {
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { canReadFlowSubject } from '../../../lib/flow-subject-authz'
-import { allocationScopeVisible } from '@openbooks/engine/src/allocations/subsidiary-scope.ts'
+import { allocationScopeVisible } from '@openbooks/engine/src/organization/allocation-scope.ts'
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
 export async function requireFlowsSession(): Promise<Authz | NextResponse> {

@@ -7,6 +7,7 @@
   "engine/src/advanced-subscriptions-renewal.integration.test.ts": "engine/src/billing/advanced-subscriptions-renewal.integration.test.ts",
   "engine/src/advanced-subscriptions.test.ts": "engine/src/billing/advanced-subscriptions.test.ts",
   "engine/src/advanced-subscriptions.ts": "engine/src/billing/advanced-subscriptions.ts",
+  "engine/src/allocations/subsidiary-scope.ts": "engine/src/organization/allocation-scope.ts",
   "engine/src/ap-capture-config.ts": "engine/src/payables/ap-capture-config.ts",
   "engine/src/ap-capture-service.ts": "engine/src/payables/ap-capture-service.ts",
   "engine/src/ap-capture.test.ts": "engine/src/payables/ap-capture.test.ts",

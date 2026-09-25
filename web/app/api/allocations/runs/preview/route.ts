@@ -4,7 +4,7 @@ import { parseJsonBody } from "../../../../../lib/api/json";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
 import { previewAllocationRun } from "../../../../../../engine/src/allocations/period-run.ts";
 import { allocationServiceDeps } from "../../../../../../engine/src/allocations/service.ts";
-import { previewPinError } from "../../../../../../engine/src/allocations/subsidiary-scope.ts";
+import { previewPinError } from "../../../../../../engine/src/organization/allocation-scope.ts";
 import { isUuid } from "../../../../../lib/list-params";
 import { allocationRunErrorResponse } from "../../_lib.ts";
 
