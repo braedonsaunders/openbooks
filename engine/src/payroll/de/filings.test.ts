@@ -12,6 +12,7 @@ import {
   LOHNSTEUERBESCHEINIGUNG_CITATIONS,
   LOHNSTEUERBESCHEINIGUNG_GAPS,
   assertLohnsteuerbescheinigungYear,
+  bescheinigungszeitraum,
   lohnsteuerbescheinigungSlipData,
   parseLohnsteuerbescheinigungRowId,
   type DeLohnsteuerbescheinigungSlip,
@@ -34,6 +35,26 @@ test("row grammar refuses everything that is not one of its rows", () => {
   assert.equal(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:BY:${OTHER}`), null);
   assert.equal(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:extra`), null);
   assert.equal(parseLohnsteuerbescheinigungRowId(` ${EMPLOYEE}`), null);
+});
+
+test("Bescheinigungszeitraum comes from the relationship, never pay dates (I6-payroll-268)", () => {
+  // Employed all year: full year even when pay starts later.
+  assert.deepEqual(bescheinigungszeitraum("2025-06-01", null, 2026, "Maria Muster"), {
+    von: "2026-01-01",
+    bis: "2026-12-31",
+  });
+  // Mid-year joiner and leaver clip to the spell.
+  assert.deepEqual(bescheinigungszeitraum("2026-07-01", null, 2026, "Jan Beispiel"), {
+    von: "2026-07-01",
+    bis: "2026-12-31",
+  });
+  assert.deepEqual(bescheinigungszeitraum("2025-01-01", "2026-03-31", 2026, "Jan Beispiel"), {
+    von: "2026-01-01",
+    bis: "2026-03-31",
+  });
+  // No recorded start refuses; ended-before-the-year refuses.
+  assert.throws(() => bescheinigungszeitraum(null, null, 2026, "Maria Muster"), /hired_on/);
+  assert.throws(() => bescheinigungszeitraum("2024-01-01", "2025-12-31", 2026, "Maria Muster"), /before 2026/);
 });
 
 test("2026 is the only published Ausdruck year; any other year refuses by name", () => {
