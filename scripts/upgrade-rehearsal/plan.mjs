@@ -32,6 +32,19 @@ const SEVERITIES = new Set(["refuse", "notice"]);
  * remedies directory is refused here.
  */
 export const REMEDY_DIR_PREFIX = "schema/migrations/preflight/remedies/";
+const SHA = /^[0-9a-f]{40}$/;
+/**
+ * The only source-tree paths a source-oracle overlay may replace. The oracle
+ * lives in engine/src/harness/; engine/src/platform/uuid.ts is the pure UUID
+ * predicate that oracle imports (no data writes, no schema). Anything else —
+ * the posting kernel, migrations, seeders — shapes the seeded rows, and
+ * overlaying it would rehearse an upgrade of data the source release never
+ * wrote. Refused here, at plan time, not mid-cell.
+ */
+export const ORACLE_OVERLAY_ALLOWLIST = Object.freeze([
+  "engine/src/harness/",
+  "engine/src/platform/uuid.ts",
+]);
 
 function refuse(problems, message) {
   problems.push(message);
@@ -107,6 +120,42 @@ function validateExpectFindings(dataset, where, problems) {
     }
   }
   return expected;
+}
+
+/**
+ * A frozen source release cannot seed a dataset its own oracle refuses to
+ * finish (edge: the tagged tie-out counts governed void pairs, so the source
+ * sim halts mid-seed). The dataset may declare a source-oracle overlay: the
+ * fixed oracle file(s), copied from the candidate tree into the source tree
+ * for the seed phase only and removed before the source-harness phase. The
+ * sha names the covering commit for audit; the files are allow-listed to the
+ * oracle so no data-shaping code can ride along.
+ */
+function validateSourceOracleOverlay(dataset, where, problems) {
+  const overlay = dataset?.sourceOracleOverlay;
+  if (overlay === undefined) return;
+  if (!overlay || typeof overlay !== "object") {
+    refuse(problems, `${where}: sourceOracleOverlay must be an object`);
+    return;
+  }
+  if (!SHA.test(overlay.sha ?? "")) {
+    refuse(problems, `${where}: sourceOracleOverlay needs the full covering commit sha`);
+  }
+  if (!Array.isArray(overlay.files) || overlay.files.length === 0) {
+    refuse(problems, `${where}: sourceOracleOverlay needs a non-empty files array`);
+  } else {
+    for (const file of overlay.files) {
+      const allowed = typeof file === "string" && !file.includes("..") &&
+        ORACLE_OVERLAY_ALLOWLIST.some((prefix) =>
+          prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix);
+      if (!allowed || !file.endsWith(".ts")) {
+        refuse(problems, `${where}: sourceOracleOverlay file ${JSON.stringify(file)} is outside the oracle allowlist`);
+      }
+    }
+  }
+  if (typeof overlay.reason !== "string" || overlay.reason.replace(/\s/g, "").length < 40) {
+    refuse(problems, `${where}: sourceOracleOverlay needs a reason (at least 40 characters) saying why the tagged oracle cannot seed this dataset`);
+  }
 }
 
 function validateRemedies(dataset, expected, where, problems) {
@@ -190,6 +239,7 @@ export function validateConfig(config) {
     }
     const expected = validateExpectFindings(dataset, where, problems);
     validateRemedies(dataset, expected, where, problems);
+    validateSourceOracleOverlay(dataset, where, problems);
     if (dataset?.assertions !== undefined && typeof dataset.assertions !== "boolean") {
       refuse(problems, `${where}: assertions must be true or absent`);
     } else if (dataset?.assertions === true) {

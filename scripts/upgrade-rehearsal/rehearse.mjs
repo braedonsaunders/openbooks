@@ -43,7 +43,7 @@
  *     --source-dir ../source --report-dir upgrade-report
  */
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -220,15 +220,81 @@ async function seedWithSeeder(step, sourceDir) {
   return orgIds;
 }
 
+/**
+ * Copy the declared fixed-oracle files from the candidate tree over the
+ * source tree so a frozen source release can seed a dataset its own oracle
+ * refuses to finish. Only the oracle is overlaid — the posting kernel,
+ * migrations, and seeders stay the source release's own, so every seeded
+ * row is still data that version wrote. The originals are restored before
+ * the source-harness phase, which then exercises (and tolerates, when
+ * declared) the tagged oracle. A restore failure refuses: a dirty source
+ * tree must never proceed silently.
+ */
+async function applySourceOracleOverlay(datasetId, overlay, sourceDir) {
+  const applied = [];
+  try {
+    for (const file of overlay.files) {
+      const from = join(CANDIDATE, file);
+      const to = join(sourceDir, file);
+      let bytes;
+      try {
+        bytes = readFileSync(from);
+      } catch {
+        throw new PhaseRefusal("seed", `dataset ${datasetId} oracle overlay: ${file} is missing from the candidate tree`);
+      }
+      const hadOriginal = existsSync(to);
+      const backup = hadOriginal ? readFileSync(to) : null;
+      mkdirSync(dirname(to), { recursive: true });
+      writeFileSync(to, bytes);
+      applied.push({ file, hadOriginal, backup });
+      console.log(`upgrade rehearsal: dataset ${datasetId} oracle overlay ${file} from ${overlay.sha.slice(0, 12)} (${hadOriginal ? "replaced" : "added"})`);
+    }
+  } catch (error) {
+    // A half-applied overlay is worse than none: roll back what landed before
+    // the seed phase refuses, so the source tree is never left dirty.
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      await restoreSourceOracleOverlay(datasetId, { applied }, sourceDir);
+    } catch (rollbackError) {
+      const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+      throw new PhaseRefusal("seed", `dataset ${datasetId} oracle overlay failed (${message}) and rollback failed (${rollbackMessage}): the source tree may be dirty`);
+    }
+    throw error;
+  }
+  return { sha: overlay.sha, files: [...overlay.files], reason: overlay.reason, applied };
+}
+
+async function restoreSourceOracleOverlay(datasetId, state, sourceDir) {
+  for (const entry of state.applied) {
+    const to = join(sourceDir, entry.file);
+    try {
+      if (entry.hadOriginal) writeFileSync(to, entry.backup);
+      else unlinkSync(to);
+    } catch (error) {
+      throw new PhaseRefusal("seed", `dataset ${datasetId} oracle overlay: could not restore ${entry.file}: ${(error instanceof Error ? error.message : String(error))}`);
+    }
+  }
+  console.log(`upgrade rehearsal: dataset ${datasetId} oracle overlay removed (source tree restored)`);
+}
+
 async function seed(dataset, sourceDir) {
   const orgIds = [];
-  for (const step of dataset.steps) {
-    if (step.kind === "sim") orgIds.push(...(await seedSim(step, sourceDir)));
-    else if (step.kind === "samples") orgIds.push(...(await seedSamples(sourceDir)));
-    else if (step.kind === "seeder") orgIds.push(...(await seedWithSeeder(step, sourceDir)));
-    else throw new PhaseRefusal("seed", `unknown step kind ${step.kind}`);
+  const overlay = dataset.sourceOracleOverlay ?? null;
+  const overlaid = overlay ? await applySourceOracleOverlay(dataset.id, overlay, sourceDir) : null;
+  try {
+    for (const step of dataset.steps) {
+      if (step.kind === "sim") orgIds.push(...(await seedSim(step, sourceDir)));
+      else if (step.kind === "samples") orgIds.push(...(await seedSamples(sourceDir)));
+      else if (step.kind === "seeder") orgIds.push(...(await seedWithSeeder(step, sourceDir)));
+      else throw new PhaseRefusal("seed", `unknown step kind ${step.kind}`);
+    }
+  } finally {
+    if (overlaid) await restoreSourceOracleOverlay(dataset.id, overlaid, sourceDir);
   }
-  return orgIds;
+  return {
+    orgIds,
+    oracleOverlay: overlaid ? { sha: overlaid.sha, files: overlaid.files, reason: overlaid.reason } : null,
+  };
 }
 
 /** The golden harness's FAIL lines, split by whether the source declared them. */
@@ -510,6 +576,7 @@ async function main() {
     candidate: process.env.UPGRADE_CANDIDATE_SHA ?? null,
     phases: [],
     seededOrgs: [],
+    oracleOverlay: null,
     upgrade: null,
     preflight: null,
     assertions: null,
@@ -539,7 +606,9 @@ async function main() {
     writeFileSync(join(reportDir, "catalog-reference.json"), reference);
 
     await phase("source-install", () => run("source-install", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: sourceDir }));
-    report.seededOrgs = await phase("seed", () => seed(dataset, sourceDir));
+    const seeded = await phase("seed", () => seed(dataset, sourceDir));
+    report.seededOrgs = seeded.orgIds;
+    report.oracleOverlay = seeded.oracleOverlay;
     const sourceEntry = config.sources.find((candidate) => candidate.tag === process.env.UPGRADE_SOURCE_TAG);
     const toleratedAtSource = new Set((sourceEntry?.knownHarnessDefects ?? []).map((defect) => defect.check));
     report.toleratedSourceHarness = await phase("source-harness", () =>
@@ -676,6 +745,12 @@ export function summarize(report) {
       "| migration | seconds |",
       "|---|---|",
       ...report.upgrade.migrations.slice(0, 10).map((m) => `| ${m.filename} | ${m.seconds} |`),
+    );
+  }
+  if (report.oracleOverlay) {
+    lines.push(
+      "",
+      `Source-oracle overlay at seed (removed before source-harness): ${report.oracleOverlay.sha} [${report.oracleOverlay.files.join(", ")}]`,
     );
   }
   if ((report.toleratedSourceHarness ?? []).length > 0) {
