@@ -831,7 +831,8 @@
         "unknownError": "unbekannter Fehler",
         "syncFailed": "Synchronisierung fehlgeschlagen: {error}",
         "imported": "{imported} neue importiert, {duplicates} Duplikate.",
-        "requestFailed": "Anfrage fehlgeschlagen (HTTP {status})"
+        "requestFailed": "Anfrage fehlgeschlagen (HTTP {status})",
+        "networkFailure": "Der Server konnte nicht erreicht werden. Prüfen Sie die Verbindung und versuchen Sie es erneut."
       },
       "sftpCard": {
         "badge": "SFTP-Dateiablage",
