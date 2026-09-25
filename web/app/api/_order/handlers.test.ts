@@ -141,12 +141,15 @@ class OrderRouteHarness {
     const { text, params } = this.compile(query)
     const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase()
 
-    if (normalized.startsWith('select status, document_date, subsidiary_id as "subsidiaryid"')) {
+    if (normalized.startsWith('select status, document_date, currency, party_id, subsidiary_id as "subsidiaryid"')) {
       return {
         rows: this.matchesDocument(params)
           ? [{
               status: this.document.status,
               document_date: this.document.documentDate,
+              currency: 'CAD',
+              party_id: this.document.partyId,
+              subsidiaryId: this.document.subsidiaryId ?? null,
               updated_at: this.document.updatedAt,
             }]
           : [],
@@ -174,17 +177,6 @@ class OrderRouteHarness {
               total: this.document.total,
               updated_at: this.document.updatedAt,
             }]
-          : [],
-      }
-    }
-
-    // Pre-fix handlers loaded issue eligibility in a separate unlocked query.
-    // Supporting it here lets the mutation check reach the race itself instead
-    // of failing merely because that obsolete query shape is unknown.
-    if (normalized.startsWith('select party_id, total from documents')) {
-      return {
-        rows: params[0] === this.document.id && params[1] === this.document.orgId
-          ? [{ party_id: this.document.partyId, total: this.document.total }]
           : [],
       }
     }
@@ -846,10 +838,10 @@ class IssuePoolHarness {
         ? [{ status: document.status, document_date: document.documentDate }]
         : [])
     }
-    if (normalized.startsWith('select status, document_date, subsidiary_id as "subsidiaryid"')) {
+    if (normalized.startsWith('select status, document_date, currency, party_id, subsidiary_id as "subsidiaryid"')) {
       const document = this.documentFromParams(params)
       return this.result(document
-        ? [{ status: document.status, document_date: document.documentDate, updated_at: document.updatedAt }]
+        ? [{ status: document.status, document_date: document.documentDate, currency: 'CAD', party_id: document.partyId, subsidiaryId: null, updated_at: document.updatedAt }]
         : [])
     }
     if (normalized.startsWith('select status, party_id, total')) {
