@@ -5,7 +5,7 @@ import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "
 // Never ../authz here: that module pulls next/navigation, which breaks
 // plain-node consumers of the ledger readers (spawned test children
 // without the react-server condition) — same rule as payroll-confidentiality.
-import { subsidiaryScopeAllows } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
@@ -86,6 +86,9 @@ export async function accountRegister(
         or replace(coalesce(d.kind, 'journal'), '_', ' ') ilike ${like}
       )`
     : sql``;
+  const sourceDocumentScope = allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)
   const subsidiaryFilter = allowedSubsidiaryIds
     ? allowedSubsidiaryIds.size > 0
       // Intercompany entries carry the origin subsidiary on the header while
@@ -116,7 +119,7 @@ export async function accountRegister(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
-      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
      where l.account_id in (select id from account_scope)
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
@@ -198,7 +201,7 @@ export async function accountRegister(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
-      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
      where l.account_id in (select id from account_scope)
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
   `));

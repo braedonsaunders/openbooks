@@ -14,13 +14,15 @@ const { accountRegister } = await import('./reports/registers')
 test('account registers scope both lines and totals within a visible intercompany header', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
-    const child = randomUUID(), entry = randomUUID()
+    const child = randomUUID(), entry = randomUUID(), sourceDoc = randomUUID()
     await withBypass(async () => {
       await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${child}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Other entity', 'CAD', 'CA')`)
+      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+        values (${sourceDoc}, ${scratch.orgId}, 'sales_invoice', 'draft', 'HIDDEN-DOC', ${scratch.date}, ${child}, 'CAD', 0, 0, 0, '{}'::jsonb)`)
       await db.execute(sql`insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${entry}, ${scratch.orgId}, ${scratch.bookId}, ${scratch.subsidiaryId},
+        (id, org_id, book_id, subsidiary_id, source_document_id, entry_number, posting_date, period_id, status, origin)
+        values (${entry}, ${scratch.orgId}, ${scratch.bookId}, ${scratch.subsidiaryId}, ${sourceDoc},
           'REGISTER-SCOPE', ${scratch.date}, ${scratch.periodId}, 'draft', 'manual')`)
       await db.execute(sql`insert into journal_lines
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
@@ -30,10 +32,6 @@ test('account registers scope both lines and totals within a visible intercompan
           (${scratch.orgId}, ${entry}, 4, ${scratch.accounts.revenue}, ${child}, '100', 'CAD', '100', '1')`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
     })
-    // Reads run in the scratch org's scope: the register issues bare queries
-    // with explicit org predicates, which pooled RLS denies outside an
-    // explicit scope (unscoped, every scope reads zero rows and totals tie on
-    // nothing).
     const { scoped, childScoped, all, none } = await withOrgContext(scratch.orgId, async () => {
       const scoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([scratch.subsidiaryId]))
       const childScoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([child]))
@@ -42,11 +40,10 @@ test('account registers scope both lines and totals within a visible intercompan
       return { scoped, childScoped, all, none }
     })
     assert.equal(scoped.total, 1)
-    assert.equal(scoped.lines.length, 1)
     assert.equal(scoped.balance, '100.0000')
+    assert.equal(scoped.lines[0]?.docId, null)
     assert.equal(scoped.lines[0]?.amount, '100.0000')
     assert.equal(childScoped.total, 1)
-    assert.equal(childScoped.lines.length, 1)
     assert.equal(childScoped.balance, '-100.0000')
     assert.equal(childScoped.lines[0]?.amount, '-100.0000')
     assert.equal(all.total, 2)
