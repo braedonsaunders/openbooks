@@ -388,7 +388,7 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const fixture = await seedScheduleFixture(org, { action: "create_draft" });
-      await assert.rejects(withOrgContext(org.orgId, () => createPaymentRun({ orgId: org.orgId, createdBy: null, paymentBankProfileId: fixture.profileId, billDocumentIds: [fixture.billId], maximumRunAmount: "100" })), /live bill balances exceed the scheduled maximum run amount/);
+      await assert.rejects(withOrgContext(org.orgId, () => createPaymentRun({ orgId: org.orgId, allowedSubsidiaryIds: null, createdBy: null, paymentBankProfileId: fixture.profileId, billDocumentIds: [fixture.billId], maximumRunAmount: "100" })), /live bill balances exceed the scheduled maximum run amount/);
       const run = await withOrgContext(org.orgId, () =>
         createPaymentRun({ allowedSubsidiaryIds: null,
           orgId: org.orgId,

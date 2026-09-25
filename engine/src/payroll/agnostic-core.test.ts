@@ -524,7 +524,7 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   await assert.rejects(
     statutoryHolidayLinesForStub(untouchedTx, {
       orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp("CA-ZZ"), country: "CA", province: null,
+      emp: emp("CA-ZZ"), country: "CA", subsidiaryId: null, province: null,
       periodStart: "2026-07-06", periodEnd: "2026-07-18",
       payRate: null, need,
     }),
@@ -536,7 +536,7 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   await assert.rejects(
     statutoryHolidayLinesForStub(untouchedTx, {
       orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp(null), country: "CA", province: "ZZ",
+      emp: emp(null), country: "CA", subsidiaryId: null, province: "ZZ",
       periodStart: "2026-06-21", periodEnd: "2026-07-04",
       payRate: null, need,
     }),
@@ -548,7 +548,7 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   assert.deepEqual(
     await statutoryHolidayLinesForStub(untouchedTx, {
       orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp(null), country: "CA", province: "ZZ",
+      emp: emp(null), country: "CA", subsidiaryId: null, province: "ZZ",
       periodStart: "2026-07-06", periodEnd: "2026-07-18",
       payRate: null, need,
     }),
@@ -561,7 +561,7 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   await assert.rejects(
     statutoryHolidayLinesForStub(untouchedTx, {
       orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp(null), country: "CA", province: "ON",
+      emp: emp(null), country: "CA", subsidiaryId: null, province: "ON",
       periodStart: "2026-06-21", periodEnd: "2026-07-04",
       payRate: null, need,
     }),
@@ -587,7 +587,7 @@ test("the holiday calculation honours the caller's subsidiary scope", async () =
   const base = {
     orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
     emp: { party_id: "emp-1", display_name: "Ann", labour_jurisdiction: null },
-    country: "CA", province: "ZZ", periodStart: "2026-07-06", periodEnd: "2026-07-18",
+    country: "CA", subsidiaryId: null, province: "ZZ", periodStart: "2026-07-06", periodEnd: "2026-07-18",
     payRate: null, need,
   } as Parameters<typeof statutoryHolidayLinesForStub>[1];
   // In scope (ZZ, no holiday in the period): calculates to no lines.

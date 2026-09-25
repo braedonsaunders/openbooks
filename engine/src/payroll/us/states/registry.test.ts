@@ -236,10 +236,11 @@ test("pack-declared certificate renewal dates stop stale statutory exemptions", 
 });
 
 test("Oregon and California withholding exemptions lapse after February 15", () => {
-  for (const [key, region, answers] of [
+  const cases: Array<[string, string, Record<string, string>]> = [
     ["us_ca_de4", "CA", { filing_status: "head_household", regular_allowances: "2", exempt: "true" }],
     ["us_or_orw4", "OR", { marital_status: "married", allowances: "4", exempt: "true" }],
-  ] as const) {
+  ];
+  for (const [key, region, answers] of cases) {
     const certificate = payrollCertificate("US", key);
     const row = { certificateKey: key, region, effectiveFrom: "2025-02-16", answers };
     assert.equal(resolveCertificate({ certificate, stored: [row], asOf: "2026-02-15" }).answers.exempt, "true");

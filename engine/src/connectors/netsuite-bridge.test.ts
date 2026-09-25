@@ -29,7 +29,7 @@ test("NetSuite RESTlet scopes export status and cleanup to an exact job boundary
   type Restlet = { post: (input: Record<string, unknown>) => unknown };
   let restlet: Restlet | undefined;
   let searchOptions: { filters: unknown } | undefined;
-  let exportTask: { params?: Record<string, unknown> } | undefined;
+  let exportTask: { params?: Record<string, unknown>; submit?: () => string } | undefined;
   const deletedIds: string[] = [];
   const searchRows: SearchResult[] = [
     { id: "1", name: "ob-chunk-abc-a-000000.json", getValue: ({ name }) => name === "name" ? "ob-chunk-abc-a-000000.json" : "1" },

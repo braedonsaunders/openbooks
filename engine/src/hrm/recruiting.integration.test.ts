@@ -1444,6 +1444,7 @@ test("consent extension emails go once per grant, then lapse into the action", {
     await db.execute(sql`
       insert into hrm_candidate_consents (org_id, candidate_id, purpose, source, expires_at)
       values (${orgId}, ${candidateId}, 'future_roles', 'form', now() + interval '5 days')`);
+    const sent: string[] = [];
     const first = await evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
       { removeFile: async () => {}, enqueueEmail: async (message) => { sent.push(message.to); } },
