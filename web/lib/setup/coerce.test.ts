@@ -60,7 +60,7 @@ test('setup decimal and percent fields canonicalize without crossing IEEE-754', 
   const rate: SetupField = { key: 'ratePercent', kind: 'percent', required: true }
   const money: SetupField = { key: 'acquisitionCost', kind: 'decimal', required: true }
   assert.deepEqual(coerceField(rate, '13.2500'), { column: 'rate_percent', value: '13.2500000000' })
-  assert.deepEqual(coerceField(rate, 13.25), { column: 'rate_percent', value: '13.2500000000' })
+  assert.deepEqual(coerceField(rate, 13.25), { error: 'ratePercent must be a number' })
   assert.deepEqual(coerceField(money, '00100.1000'), { column: 'acquisition_cost', value: '100.1000000000' })
   assert.deepEqual(coerceField({ key: 'acquisitionRate', kind: 'decimal', required: true }, '1.25'), {
     column: 'acquisition_rate',
@@ -202,8 +202,8 @@ test('worker-comp group rates refuse negatives through the declared field (B-PRJ
   assert.ok(entity)
   const field = entity.fields.find((f) => f.key === 'ratePercent')
   assert.ok(field)
-  assert.deepEqual(coerceField(field, -2.5), { error: 'ratePercent must be at least 0' })
-  const ok = coerceField(field, 5)
+  assert.deepEqual(coerceField(field, '-2.5'), { error: 'ratePercent must be at least 0' })
+  const ok = coerceField(field, '5')
   assert.ok('column' in ok && ok.column === 'rate_percent')
 })
 
