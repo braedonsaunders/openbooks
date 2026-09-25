@@ -202,7 +202,7 @@ function fakeCtx(overrides: {
   const answers = overrides.answers ?? {
     domicilio_comune: "H501",
     reddito_complessivo_presunto: null,
-    tempo_determinato: null,
+    tempo_determinato: "false",
     anzianita_post_1995: null,
     titolare_pensione: null,
     coniuge_a_carico: null,

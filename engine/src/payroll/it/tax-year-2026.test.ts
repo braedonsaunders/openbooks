@@ -28,7 +28,7 @@ const BASE = {
   comuneCode: "H501",
   regionalRate: "0",
   municipalSurtax: { rate: "0" },
-  hasDetrazioniDeclaration: false,
+  hasDetrazioniDeclaration: false, isFixedTerm: false,
 };
 
 test("AdE note golden: 6.440 at 28.000, 13.700 at 50.000", () => {
@@ -182,12 +182,8 @@ test("fixed-term employment refuses when NASpI surcharge renewals and exceptions
   // does not carry. INPS Circ. 13/2023 and Circ. 91/2020.
   // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2023/02/Circolare_14062/Allegati/14019_Circolare-numero-13-del-02-02-2023.pdf
   // https://servizi2.inps.it/servizi/Bussola/VisualizzaDoc.aspx?sVirtualURL=%2FCircolari%2FCircolare+numero+91+del+04-08-2020.htm
-  assert.throws(
-    () => calculateIt2026({
-      ...BASE, annualGrossEmployment: "35000", annualPensionable: "35000", isFixedTerm: true,
-    }),
-    /tempo determinato.*NASpI.*1\.40%.*0\.50/,
-  );
+  assert.throws(() => calculateIt2026({ ...BASE, annualGrossEmployment: "35000", annualPensionable: "35000", isFixedTerm: true }), /tempo determinato.*NASpI.*1\.40%.*0\.50/);
+  assert.throws(() => calculateIt2026({ ...BASE, annualGrossEmployment: "35000", annualPensionable: "35000", isFixedTerm: null }), /employment term.*unknown.*NASpI.*1\.40%.*0\.50/);
 });
 
 test("missing rates refuse naming the 2026 scope point", () => {

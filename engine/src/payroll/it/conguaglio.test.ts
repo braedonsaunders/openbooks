@@ -100,7 +100,7 @@ function monthlyCollector() {
     ) => {
       pushed.push({ systemKey, kind, amount, sequence });
     },
-    certificateFor: () => ({ answers: { domicilio_comune: "H501" } }),
+    certificateFor: () => ({ answers: { domicilio_comune: "H501", tempo_determinato: "false" } }),
     bool: (value: string | null) => value === "true",
   } as unknown as PayrollStatutoryComputeContext;
   return { ctx, pushed };

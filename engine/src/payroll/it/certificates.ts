@@ -48,8 +48,10 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
           key: "tempo_determinato",
           label: "Rapporto di lavoro a tempo determinato",
           kind: "flag",
-          default: "false",
-          help: "A fixed-term contract raises the art. 13 c. 1 floor from 690 to 1.380 euro.",
+          help: "State whether this is a fixed-term contract. Fixed-term employment also owes the NASpI "
+            + "add-on of 1.40% plus 0.50 percentage points per qualifying renewal (L. 92/2012 art. 2 c. 28); "
+            + "the pack refuses fixed-term contracts because renewal and exemption facts are not yet priced. "
+            + "Leave unanswered only when unknown: payroll will refuse rather than treat it as permanent.",
         },
         {
           key: "anzianita_post_1995",
