@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { cmp, neg, add } from "../money/money.ts";
+import type { Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
 /**
@@ -234,6 +235,7 @@ export function resultingExposureAfterPosting(
   exposure: CustomerExposure,
   invoiceTotal: string,
   relief: string,
-): string {
-  return add(add(add(exposure.openOrderExposure, exposure.unpaidInvoiceExposure), invoiceTotal), neg(relief));
+): Money {
+  // add() emits fromUnits-fixed 4dp: the exposure is canonical Money.
+  return add(add(add(exposure.openOrderExposure, exposure.unpaidInvoiceExposure), invoiceTotal), neg(relief)) as Money;
 }
