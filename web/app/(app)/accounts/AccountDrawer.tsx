@@ -97,6 +97,28 @@ function asAccountRow(raw: Record<string, unknown>): AccountRow {
   }
 }
 
+// The drawer shows the persisted record, never a stale draft: the same
+// mapping builds the opening form and reconciles it from a save response.
+function toForm(row: AccountRow, create: boolean) {
+  return {
+    number: row.number ?? '',
+    name: row.name ?? '',
+    type: row.type ?? 'expense',
+    description: row.description ?? '',
+    parentId: row.parent_id ?? '',
+    isSummary: row.is_summary === true,
+    isActive: create ? true : row.is_active === true,
+    currencyRestriction: row.currency_restriction ?? '',
+    eliminate: row.eliminate === true,
+    subsidiaryId: row.subsidiary_id ?? '',
+    subsidiaryIncludeChildren: row.subsidiary_include_children !== false,
+    reconcilable: row.reconcilable === true,
+    monetary: typeof row.monetary === 'boolean' ? String(row.monetary) : '',
+    requiredDimensions: row.required_dimensions,
+    custom: row.custom,
+  }
+}
+
 export function AccountDrawer({
   payload,
   parents,
@@ -135,23 +157,7 @@ export function AccountDrawer({
   const account = asAccountRow(payload.account)
   const requestIdRef = useRef<string | null>(null)
 
-  const initial = useMemo(() => ({
-    number: account.number ?? '',
-    name: account.name ?? '',
-    type: account.type ?? 'expense',
-    description: account.description ?? '',
-    parentId: account.parent_id ?? '',
-    isSummary: account.is_summary === true,
-    isActive: createMode ? true : account.is_active === true,
-    currencyRestriction: account.currency_restriction ?? '',
-    eliminate: account.eliminate === true,
-    subsidiaryId: account.subsidiary_id ?? '',
-    subsidiaryIncludeChildren: account.subsidiary_include_children !== false,
-    reconcilable: account.reconcilable === true,
-    monetary: typeof account.monetary === 'boolean' ? String(account.monetary) : '',
-    requiredDimensions: account.required_dimensions,
-    custom: account.custom,
-  }), [account, createMode])
+  const initial = useMemo(() => toForm(account, createMode), [account, createMode])
   const [form, setForm] = useState(initial)
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   // A blocked save that only fires a transient toast reads as "nothing
@@ -252,6 +258,10 @@ export function AccountDrawer({
         router.refresh()
         return
       }
+      // Show the persisted record, not the draft: the server normalizes
+      // (nulls, casing, flags) before it stores.
+      if (isStringMap(data.account)) setForm(toForm(asAccountRow(data.account), false))
+      setFieldError(null)
       setMode('view')
       router.refresh()
     } catch {
