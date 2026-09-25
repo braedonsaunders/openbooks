@@ -118,14 +118,14 @@ const PAYLOAD = {
   coverage: [],
 }
 
-async function mountRates(putResponder: () => Response | Promise<Response>) {
+async function mountRates(putResponder: () => Response | Promise<Response>, getResponder: (url: string) => Response | Promise<Response> = () => Response.json(PAYLOAD)) {
   globalThis.__ratesRouter = { push() {}, refresh() {} }
   globalThis.__ratesToasts = []
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
     const method = (init?.method ?? 'GET').toUpperCase()
-    if (url.startsWith('/api/payroll/settings/rates') && method === 'GET') return Response.json(PAYLOAD)
+    if (url.startsWith('/api/payroll/settings/rates') && method === 'GET') return getResponder(url)
     if (url === '/api/payroll/settings/rates' && method === 'PUT') return putResponder()
     return Response.json({})
   }) as typeof fetch
@@ -175,13 +175,13 @@ async function openDialog() {
   await tick()
 }
 
-test('the rates table renders decimal rates as percents', async () => {
-  const { unmount } = await mountRates(() => Response.json({ ok: true }))
-  try {
-    assert.ok(
-      (document.body.textContent ?? '').includes('0.60%'),
-      'the stored decimal 0.0060 must read as a human percent',
-    )
+test('a late tax year response cannot replace the selected year', async () => {
+  const pending: ((response: Response) => void)[] = []; let defer = false; const { unmount } = await mountRates(() => Response.json({ ok: true }), () => defer ? new Promise((resolve) => pending.push(resolve)) : Response.json(PAYLOAD))
+  try { const select = document.getElementById('rates-year') as HTMLSelectElement; assert.ok((document.body.textContent ?? '').includes('0.60%'), 'the stored decimal 0.0060 must read as a human percent')
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!; defer = true
+    for (const year of ['2027', '2028']) await act(async () => { setValue.call(select, year); select.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
+    await act(async () => { pending[1]!(Response.json({ ...PAYLOAD, year: 2028 })); await tick() }); await act(async () => { pending[0]!(Response.json({ ...PAYLOAD, year: 2027 })); await tick() })
+    assert.ok(select.value === '2028' && (document.body.textContent ?? '').includes('0.60%'), 'the newer tax year and its rows remain selected')
   } finally {
     await unmount()
   }
