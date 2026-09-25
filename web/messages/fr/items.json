@@ -107,6 +107,7 @@
     "configure": "Configurer la tarification",
     "newVersion": "Nouvelle version tarifaire",
     "notSet": "Non défini",
+    "statusUnknown": "Statut inconnu",
     "guide": {
       "title": "Fonctionnement du prix de cet article",
       "simpleMode": "Prix et coût simples",

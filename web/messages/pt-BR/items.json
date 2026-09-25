@@ -107,6 +107,7 @@
     "configure": "Configurar preços por tarifa",
     "newVersion": "Nova versão de tarifas",
     "notSet": "Não definido",
+    "statusUnknown": "Status desconhecido",
     "guide": {
       "title": "Como funciona o preço deste item",
       "simpleMode": "Preço e custo simples",

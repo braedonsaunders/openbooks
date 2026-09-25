@@ -9,6 +9,9 @@ import { Button, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
 import { useMoney } from '@/components/money-provider'
 import { formatDecimal } from '@/lib/money-format'
+import { enumLabel } from '@/lib/enum-label'
+
+type OverheadJournalStatus = 'posted' | 'voided' | 'reversed'
 
 export interface ApplicationRow {
   id: string
@@ -51,6 +54,7 @@ export function OverheadApplication(props: {
   const locale = useLocale()
   const t = useTranslations('admin.setup.entities.overhead-model.application')
   const tFailure = useTranslations('admin.setup.entities.overhead-model')
+  const common = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState(props.mode)
@@ -179,7 +183,9 @@ export function OverheadApplication(props: {
                   { key: 'date', header: t('date'), cell: (a) => <span className="tabular-nums">{a.posting_date}</span> },
                   { key: 'projects', header: t('projects'), cell: (a) => <span className="tabular-nums">{a.projects}</span> },
                   { key: 'total', header: t('total'), cell: (a) => <span className="tabular-nums">{money(a.applied_total)}</span> },
-                  { key: 'status', header: t('status'), cell: (a) => a.status },
+                  { key: 'status', header: t('status'), cell: (a) => enumLabel(a.status, {
+                    posted: common('status.posted'), voided: common('status.voided'), reversed: common('status.reversed'),
+                  } satisfies Record<OverheadJournalStatus, string>, t('unknownStatus')) },
                 ]}
               />
             </div>

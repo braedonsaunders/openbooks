@@ -192,6 +192,7 @@
     "description": "Erweitern Sie jedes Modul – Dokumentenköpfe, Transaktionszeilen, Parteien, Projekte, Konten. Felder werden überall dort dargestellt, wo der Datensatz erscheint: in Schubladen, Zeilenrastern und in der Berichterstattung.",
     "searchPlaceholder": "Felder durchsuchen…",
     "targetFilter": "Ziel",
+    "targetUnknown": "Unbekanntes Ziel",
     "table": {
       "field": "Feld",
       "key": "Schlüssel",
@@ -2375,6 +2376,7 @@
           "backfill": "Auf vergangene Stunden anwenden",
           "backfillPrompt": "{entries} genehmigte Einträge (~{hours} Std.) liegen vor diesem Modus und tragen noch keine Gemeinkosten.",
           "backfilled": "${total} Gemeinkosten auf {entries} vergangene Einträge angewandt",
+          "unknownStatus": "Unbekannter Status",
           "date": "Datum",
           "entry": "Buchung",
           "hint": "Wie Gemeinkosten in die Bücher gelangen. Nur Bericht bleibt statistisch. Das Nullsummen-Paar bucht den Anteil jedes Projekts MIT dem Projektkennzeichen auf das Gemeinkostenkonto und storniert denselben Betrag ohne Kennzeichen – Auftragskostensichten tragen Gemeinkosten, Konto und Unternehmens-GuV saldieren auf null.",
