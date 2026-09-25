@@ -25,6 +25,7 @@ import {
 import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
 
 function esResolvedCertificate(key: string) {
+  if (key === "es_residencia_fiscal") return { answers: { residencia: "residente" } };
   if (key !== "es_retribucion_anual") return key === "es_zona_irpf"
     ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
     : null;
@@ -164,12 +165,13 @@ test("ES foral territories are refused by name, never covered by AEAT", () => {
 
 test("ES certificates keep Modelo 145 distinct from payer-held facts", () => {
   assert.equal(ES_CERTIFICATES.country, "ES");
-  // Profile columns supply SITUPER/grupo/año; a separate certificate row
-  // carries the zone facts. Modelo 145 remains the government form, and its
+  // Profile columns supply SITUPER/grupo/año; separate certificate rows carry
+  // the zone facts and fiscal residence (IRPF vs IRNR, which no agency form
+  // states on its own). Modelo 145 remains the government form, and its
   // situación familiar is distinct from SITUPER.
   assert.deepEqual(
     ES_CERTIFICATES.certificates.map((entry) => [entry.key, entry.storage]),
-    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"], ["es_contrato", "certificate_rows"]],
+    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"], ["es_contrato", "certificate_rows"], ["es_residencia_fiscal", "certificate_rows"]],
   );
   const certificate = ES_CERTIFICATES.certificates[0]!;
   assert.equal(certificate.form, "145");
@@ -286,6 +288,23 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
   await assert.rejects(
     () => computeEsStatutory({ ...base, periodsPerYear: 52 }),
     /intrinsically monthly/,
+  );
+  await assert.rejects(
+    () => computeEsStatutory({ ...base, certificateFor: () => null }),
+    /cannot calculate without the employee's fiscal residence/,
+  );
+  await assert.rejects(
+    () => computeEsStatutory({
+      ...base,
+      certificateFor: () => ({
+        certificate: ES_CERTIFICATES.certificates.find((item) => item.key === "es_residencia_fiscal")!,
+        onFile: true,
+        effectiveFrom: null,
+        answers: { residencia: "no_residente_sin_convenio" },
+        missing: [],
+      }),
+    }),
+    /IRNR.*art\. 25/,
   );
 });
 

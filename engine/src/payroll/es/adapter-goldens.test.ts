@@ -78,7 +78,8 @@ function esAdapterContext(
       certificate: ES_CERTIFICATES.certificates.find((item) => item.key === key)!,
       onFile: true, effectiveFrom: null, missing: [],
       answers: { categoria_contrato: categoria },
-    } : { answers: { zona_residencia: zone, rendimientos_en_zona: String(incomeInZone) } },
+    } : key === "es_residencia_fiscal" ? { answers: { residencia: "residente" } }
+    : { answers: { zona_residencia: zone, rendimientos_en_zona: String(incomeInZone) } },
     assertRegionSupported: () => {},
   } as unknown as PayrollStatutoryComputeContext;
   return { ctx, lines };

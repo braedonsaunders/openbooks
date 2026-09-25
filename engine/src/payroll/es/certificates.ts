@@ -272,7 +272,61 @@ const ES_RETRIBUCION_ANUAL: PayrollCertificate = {
   ],
 };
 
+/**
+ * Fiscal residence for IRPF vs IRNR. No agency form carries this single
+ * fact — the Modelo 145 is filed only by IRPF perceptores and never states
+ * nonresidence — so the form names the declaration itself instead of
+ * inventing a code, like es_datos_perceptor above. No default: "no
+ * certificate on file" is not a statutory resident, so absence refuses at
+ * the calculation boundary rather than pricing IRNR wages as IRPF.
+ */
+const ES_RESIDENCIA_FISCAL: PayrollCertificate = {
+  key: "es_residencia_fiscal",
+  form: "Residencia fiscal del perceptor",
+  label: "Fiscal residence for wage withholding (IRPF vs IRNR)",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "LIRNR (RD Legislativo 5/2004) arts. 1–13 (contribuyentes, rentas de fuente española); "
+    + "AEAT IRNR rates 19%/24% (LIRNR art. 25) and rendimientos del trabajo guidance "
+    + "(sede.agenciatributaria.gob.es, IRNR sin establecimiento permanente)",
+  summary:
+    "Whether the perceptor is a Spanish fiscal resident (IRPF) or a nonresident whose "
+    + "Spanish-source wages fall under the IRNR. The pack computes no IRNR levy, so a "
+    + "recorded nonresident refuses by name instead of withholding IRPF on IRNR wages.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "residencia", label: "Residencia fiscal", kind: "choice",
+      choices: [
+        {
+          value: "residente",
+          label: "Residente fiscal en España — tributa por el IRPF",
+          help: "LIRPF (Ley 35/2006): worldwide employment income taxed under IRPF; "
+            + "the AEAT retention algorithm prices the withholding.",
+        },
+        {
+          value: "no_residente_sin_convenio",
+          label: "No residente sin convenio aplicable — tributa por el IRNR",
+          help: "LIRNR: Spanish-source employment income is taxed under the IRNR at the "
+            + "general rates (19% qualifying EU/EEA residents, 24% otherwise — art. 25), "
+            + "which this pack does not compute.",
+        },
+        {
+          value: "no_residente_con_convenio",
+          label: "No residente con convenio de doble imposición aplicable",
+          help: "The applicable treaty may exempt or limit Spanish taxation; this pack "
+            + "computes no treaty relief, so the run refuses until IRNR pricing exists.",
+        },
+      ],
+      required: true,
+      help: "IRPF taxes residents; the IRNR taxes nonresidents' Spanish-source wages. "
+        + "The two are different levies — recording the wrong one withholds the wrong tax.",
+    },
+  ],
+};
+
 export const ES_CERTIFICATES: PayrollPackCertificates = {
   country: "ES",
-  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL, ES_CONTRATO],
+  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL, ES_CONTRATO, ES_RESIDENCIA_FISCAL],
 };
