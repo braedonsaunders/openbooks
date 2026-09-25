@@ -519,6 +519,45 @@ export function agingExportData(
   }
 }
 
+export function agingDetailExportData(
+  side: 'ar' | 'ap',
+  result: {
+    rows: { partyName: string | null; reference: string | null; dueDate: string | null; ageDays: number; bucket: 'current' | 'b1' | 'b2' | 'b3' | 'b4'; open: ExactDecimal; docCurrency: string; txnOpen: ExactDecimal }[]
+    totals: { current: ExactDecimal; b1: ExactDecimal; b2: ExactDecimal; b3: ExactDecimal; b4: ExactDecimal; total: ExactDecimal }
+    asOf: string
+  },
+  t: Translator,
+): ExportData {
+  const title = side === 'ar' ? t('aging.receivablesTitle') : t('aging.payablesTitle')
+  const bucketLabel = (bucket: 'current' | 'b1' | 'b2' | 'b3' | 'b4') => t(`aging.buckets.${bucket}`)
+  const rows = result.rows.map((row) => [
+    row.partyName ?? t('aging.noParty'),
+    row.reference ?? '',
+    row.dueDate ?? '',
+    row.ageDays,
+    bucketLabel(row.bucket),
+    row.open,
+    row.docCurrency,
+    row.txnOpen,
+  ] as (string | number)[])
+  rows.push([
+    t('trialBalance.totals'), '', '', '', '', result.totals.total, '', '',
+  ])
+  return {
+    title,
+    dateRangeLabel: t('aging.asOf', { date: result.asOf }),
+    summary: [{ label: t('aging.columns.total'), value: result.totals.total, money: true }],
+    groups: [{
+      kind: 'results',
+      title,
+      columns: [t('export.columns.party'), t('export.columns.type'), t('aging.columns.due'), t('aging.columns.age'), t('aging.columns.bucket'), t('aging.columns.total'), t('aging.columns.currency'), t('aging.columns.txnOpen')],
+      rows,
+      align: ['left', 'left', 'left', 'right', 'left', 'right', 'left', 'right'],
+      money: [false, false, false, false, false, true, false, true],
+    }],
+  }
+}
+
 export function cashFlowExportData(
   cf: {
     sections: { section: string; lines: { type: string; label: string; amount: ExactDecimal }[]; subtotal: ExactDecimal }[]
