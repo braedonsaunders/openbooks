@@ -547,6 +547,10 @@ export const OR_CERTIFICATE: PayrollCertificate = {
   label: "Oregon Employee’s Withholding Allowance Certificate",
   scope: { level: "region", region: "OR" },
   purpose: "withholding",
+  validity: {
+    kind: "following_year_date", monthDay: "02-15",
+    appliesWhen: { field: "exempt", values: ["true"] },
+  },
   citation:
     "Oregon Form OR-W-4; 2026 Form OR-W-4 instructions 150-101-402-1; "
     + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25)",
@@ -620,9 +624,8 @@ export const OR_CERTIFICATE: PayrollCertificate = {
       help:
         "Line 4a exemption code plus the word Exempt on line 4b. For wages the "
         + "election expires February 15 of the following year; a new OR-W-4 is due "
-        + "each year. Without a current exemption the employer withholds. This engine "
-        + "honors the flag on file — dating the February 15 cutoff is certificate "
-        + "administration, not a silent fallback.",
+        + "each year. Without a current exemption the employer withholds under the "
+        + "applicable Oregon method.",
     },
   ],
 };
