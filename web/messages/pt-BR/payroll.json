@@ -759,7 +759,9 @@
           "suta": "Seguro-desemprego estadual a recolher",
           "state_income_tax": "Imposto de renda estadual a recolher",
           "local_income_tax": "Imposto de renda local a recolher",
-          "transit_payroll_tax": "Imposto sobre a folha para transporte público a recolher"
+          "transit_payroll_tax": "Imposto sobre a folha para transporte público a recolher",
+          "or_statewide_transit_tax": "Imposto estadual de transporte do Oregon",
+          "pa_uc_employee": "Seguro-desemprego da Pensilvânia (empregado) a recolher"
         }
       },
       "NL": {

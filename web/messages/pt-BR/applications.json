@@ -11,7 +11,7 @@
     "action": "A ação falhou",
     "notFound": "O projeto ou registro não foi encontrado. Pode estar fora do seu acesso — recarregue e tente novamente.",
     "notApplicationsBilling": "Este projeto não utiliza solicitações de pagamento. Ative um tipo de projeto com solicitações de pagamento e atribua-o ao projeto.",
-    "featureOff": "O recurso de projetos está desativado. Ative-o em Company Settings → Features antes de faturar.",
+    "featureOff": "O recurso de projetos está desativado. Ative-o em Configuração → Funcionalidades antes de faturar.",
     "incomeAccountNotFound": "A conta de receita não foi encontrada. Escolha outra conta e tente novamente.",
     "sovDescriptionValueRequired": "Informe uma descrição e um valor programado positivo.",
     "retainageRange": "O percentual de retenção deve estar entre 0 e 100.",

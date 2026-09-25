@@ -811,5 +811,9 @@
     "commitFailed": "Could not assign posting periods.",
     "committed": "Assigned {count, plural, one {# posting period} other {# posting periods}}.",
     "needsBook": "Open this page from a close run to pick a ledger and assign posting periods."
+  },
+  "problems": {
+    "subsidiaryMissing": "Subsidiary {subsidiaryId} does not exist.",
+    "entityFailed": "{name}: {detail}"
   }
 }

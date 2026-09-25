@@ -759,7 +759,9 @@
           "suta": "州失业税应付",
           "state_income_tax": "州所得税应付",
           "local_income_tax": "地方所得税应付",
-          "transit_payroll_tax": "公共交通工资税应付"
+          "transit_payroll_tax": "公共交通工资税应付",
+          "or_statewide_transit_tax": "俄勒冈州全州交通税",
+          "pa_uc_employee": "宾夕法尼亚州失业税（雇员部分）应付"
         }
       },
       "NL": {

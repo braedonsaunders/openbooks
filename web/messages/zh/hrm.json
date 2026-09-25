@@ -1966,6 +1966,7 @@
       "pending": "待处理",
       "viewed": "已查看",
       "missing": "此文档已不可用。",
+      "loadFailed": "此文档无法加载，请重试。",
       "retention": "保留",
       "eventCreated": "已创建",
       "eventSent": "已发送",

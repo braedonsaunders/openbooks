@@ -811,5 +811,9 @@
     "commitFailed": "Buchungsperioden konnten nicht zugeordnet werden.",
     "committed": "{count, plural, one {# Buchungsperiode zugeordnet} other {# Buchungsperioden zugeordnet}}.",
     "needsBook": "Öffnen Sie diese Seite aus einem Abschlusslauf, um ein Buch auszuwählen und Buchungsperioden zuzuordnen."
+  },
+  "problems": {
+    "subsidiaryMissing": "Tochtergesellschaft {subsidiaryId} existiert nicht.",
+    "entityFailed": "{name}: {detail}"
   }
 }

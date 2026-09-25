@@ -811,5 +811,9 @@
     "commitFailed": "記帳期間を割り当てられませんでした。",
     "committed": "{count, plural, one {# 件の記帳期間を割り当てました。} other {# 件の記帳期間を割り当てました。}}",
     "needsBook": "元帳を選択して記帳期間を割り当てるには、決算実行からこのページを開いてください。"
+  },
+  "problems": {
+    "subsidiaryMissing": "子会社 {subsidiaryId} が存在しません。",
+    "entityFailed": "{name}：{detail}"
   }
 }

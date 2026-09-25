@@ -811,5 +811,9 @@
     "commitFailed": "No se pudieron asignar los períodos contables.",
     "committed": "{count, plural, one {# período contable asignado} other {# períodos contables asignados}}.",
     "needsBook": "Abra esta página desde un cierre para elegir un libro contable y asignar períodos contables."
+  },
+  "problems": {
+    "subsidiaryMissing": "La subsidiaria {subsidiaryId} no existe.",
+    "entityFailed": "{name}: {detail}"
   }
 }

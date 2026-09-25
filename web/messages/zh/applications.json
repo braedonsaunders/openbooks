@@ -11,7 +11,7 @@
     "action": "操作失败",
     "notFound": "未找到项目或记录，可能超出您的访问范围。请重新加载后重试。",
     "notApplicationsBilling": "此项目不使用付款申请。请启用使用付款申请的项目类型，并将其分配给此项目。",
-    "featureOff": "项目功能已关闭。请先在 Company Settings → Features 中开启，然后再开票。",
+    "featureOff": "项目功能已关闭。请先在设置 → 功能中开启，然后再开票。",
     "incomeAccountNotFound": "未找到收入科目。请选择其他科目后重试。",
     "sovDescriptionValueRequired": "请输入说明和正数的计划价值。",
     "retainageRange": "保留百分比必须在 0 到 100 之间。",
