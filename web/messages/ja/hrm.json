@@ -1505,6 +1505,8 @@
     "unknownFormat": "不明な形式",
     "empty": "まだ何もありません。",
     "emptyAction": "下の設定で構成してください。",
+    "sectionOffTitle": "このセクションは無効です",
+    "sectionOffMessage": "会社設定 → 機能で該当する機能を有効にしてください。",
     "active": "有効",
     "retired": "廃止",
     "sections": {

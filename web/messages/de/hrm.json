@@ -1505,6 +1505,8 @@
     "unknownFormat": "Unbekanntes Format",
     "empty": "Noch nichts vorhanden.",
     "emptyAction": "Unten unter Setup konfigurieren.",
+    "sectionOffTitle": "Dieser Bereich ist ausgeschaltet",
+    "sectionOffMessage": "Aktivieren Sie die zugehörige Funktion unter Unternehmenseinstellungen → Funktionen.",
     "active": "Aktiv",
     "retired": "Archiviert",
     "sections": {

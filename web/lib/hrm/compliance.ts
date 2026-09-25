@@ -11,6 +11,7 @@ import { listCompClasses, listCompRules } from '@openbooks/engine/src/hrm/constr
 import { listEntries, listPolicies } from '@openbooks/engine/src/hrm/construction/per-diem.ts'
 import { HrmConstructionError } from '@openbooks/engine/src/hrm/construction/errors.ts'
 import { can, type Authz } from '../authz'
+import { isFeatureEnabled } from '../features'
 import { setupSectionParams } from '../list-params'
 import { complianceHref } from './workspace-href'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
@@ -82,6 +83,7 @@ export interface ComplianceData {
   refusal: { title: string; message: string } | null
   hasContent: boolean
   section: ComplianceSection
+  sectionOff: boolean
   sections: Array<{ value: string; label: string }>
   kindFilter: string | null
   kinds: Array<{ value: string; label: string; count: number }>
@@ -125,6 +127,8 @@ export interface ComplianceData {
     perdiemTitle: string
     empty: string
     emptyAction: string
+    sectionOffTitle: string
+    sectionOffMessage: string
     columns: Record<string, string>
   }
 }
@@ -170,6 +174,7 @@ export async function loadCompliancePage(
     refusal: null,
     hasContent: false,
     section,
+    sectionOff: false,
     sections: SECTIONS.map((value) => ({ value, label: t(`compliance.sections.${value}`) })),
     kindFilter,
     kinds: [],
@@ -215,6 +220,8 @@ export async function loadCompliancePage(
       perdiemTitle: t('compliance.perdiemTitle'),
       empty: t('compliance.empty'),
       emptyAction: t('compliance.emptyAction'),
+      sectionOffTitle: t('compliance.sectionOffTitle'),
+      sectionOffMessage: t('compliance.sectionOffMessage'),
       columns: {
         kind: t('compliance.columns.kind'),
         project: t('compliance.columns.project'),
@@ -241,6 +248,13 @@ export async function loadCompliancePage(
   const orgId = authz.user.orgId
   const actorId = authz.user.id
   try {
+    const [ratesOn, certifiedOn, classesOn, perdiemOn] = await Promise.all([
+      isFeatureEnabled(orgId, 'hrmPrevailingWage'),
+      isFeatureEnabled(orgId, 'hrmCertifiedPayroll'),
+      isFeatureEnabled(orgId, 'hrmWorkersCompClasses'),
+      isFeatureEnabled(orgId, 'hrmPerDiem'),
+    ])
+    empty.sectionOff = !({ findings: true, rates: ratesOn, certified: certifiedOn, classes: classesOn, perdiem: perdiemOn }[section])
     const projects = (
       await db.execute<{ id: string; name: string }>(sql`
         select id::text as id, name from projects where org_id = ${orgId} order by name
@@ -267,7 +281,7 @@ export async function loadCompliancePage(
       statusVariant: statusVariant(finding.status),
       recordedLabel: finding.recordedAt.slice(0, 10),
     }))
-    const schedules = await listSchedules(db, orgId, actorId)
+    const schedules = ratesOn ? await listSchedules(db, orgId, actorId) : []
     const scheduleRows: ComplianceScheduleRow[] = schedules.map((schedule) => {
       const scope = schedule.appliesTo
       const parts: string[] = []
@@ -284,12 +298,12 @@ export async function loadCompliancePage(
         statusLabel: schedule.isActive ? t('compliance.active') : t('compliance.retired'),
       }
     })
-    const runs = await listRuns(db, orgId, actorId, null)
+    const runs = certifiedOn ? await listRuns(db, orgId, actorId, null) : []
     let packName: string | null = null
     let formatsEmpty = false
     let formatOptions: Array<{ value: string; label: string }> = []
     try {
-      const declared = await listFormats(db, orgId, actorId)
+      const declared = certifiedOn ? await listFormats(db, orgId, actorId) : { packName: null, formats: [] }
       packName = declared.packName
       formatsEmpty = declared.formats.length === 0
       formatOptions = declared.formats.map((format) => ({ value: format.key, label: format.label }))
@@ -306,8 +320,8 @@ export async function loadCompliancePage(
       statusLabel: t(`compliance.runStatus.${run.status}`),
       statusVariant: statusVariant(run.status),
     }))
-    const classes = await listCompClasses(db, orgId, actorId)
-    const rules = await listCompRules(db, orgId, actorId)
+    const classes = classesOn ? await listCompClasses(db, orgId, actorId) : []
+    const rules = classesOn ? await listCompRules(db, orgId, actorId) : []
     const classRows: ComplianceClassRow[] = classes.map((compClass) => ({
       id: compClass.id,
       code: compClass.code,
@@ -315,7 +329,7 @@ export async function loadCompliancePage(
       rateLabel: compClass.ratePer100 ?? '—',
       rulesLabel: String(rules.filter((rule) => rule.compClassId === compClass.id).length),
     }))
-    const entries = await listEntries(db, orgId, actorId, null)
+    const entries = perdiemOn ? await listEntries(db, orgId, actorId, null) : []
     const entryRows: ComplianceEntryRow[] = entries.slice(0, 200).map((entry) => ({
       id: entry.id,
       dayLabel: entry.workedOn,
@@ -325,7 +339,7 @@ export async function loadCompliancePage(
       statusVariant: statusVariant(entry.status),
       entryKind: 'per_diem',
     }))
-    const policies = await listPolicies(db, orgId, actorId)
+    const policies = perdiemOn ? await listPolicies(db, orgId, actorId) : []
     // Certified due: scoped projects whose current week has no generated run.
     // "Current" is the org's business day, never the UTC day.
     const today = await businessToday(orgId)

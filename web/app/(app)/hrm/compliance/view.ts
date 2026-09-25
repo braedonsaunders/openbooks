@@ -58,6 +58,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
     ],
     body: [
       widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),
+      widgetBlock('empty-state', { title: f('labels.sectionOffTitle'), description: f('labels.sectionOffMessage') }, f('sectionOff')),
       grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4', [0, 1, 2, 3].map((index) => statTile({
         iconKey: 'siren',
         accent: 'amber',
@@ -120,7 +121,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
             }),
           ]
         : []),
-      ...(data.section === 'rates'
+      ...(data.section === 'rates' && !data.sectionOff
         ? [
             panel({
               title: f('labels.ratesTitle'),
@@ -148,7 +149,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
             widgetBlock('setup-section', { entityKey: 'construction-rate-schedules', sp: data.currentParams, basePath, rowParam: 'schedule' }),
           ]
         : []),
-      ...(data.section === 'certified'
+      ...(data.section === 'certified' && !data.sectionOff
         ? [
             panel({
               title: f('labels.certifiedTitle'),
@@ -186,7 +187,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
             }),
           ]
         : []),
-      ...(data.section === 'classes'
+      ...(data.section === 'classes' && !data.sectionOff
         ? [
             panel({
               title: f('labels.classesTitle'),
@@ -218,7 +219,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
             widgetBlock('setup-section', { entityKey: 'construction-ratio-rules', sp: data.currentParams, basePath, rowParam: 'ratioRule' }),
           ]
         : []),
-      ...(data.section === 'perdiem'
+      ...(data.section === 'perdiem' && !data.sectionOff
         ? [
             panel({
               title: f('labels.perdiemTitle'),
