@@ -368,14 +368,25 @@ function recordScopeFilePredicate(
   return sql`(${targetVisible ?? sql`true`} and ${attachmentsVisible ?? sql`true`})`
 }
 
-/** A live file belongs to the org, is not in trash, and is not a DSAR export
- * reserved for its HR permission-gated delivery route. */
-export function liveFilePredicate(orgId: string): SQL {
-  return sql`fi.org_id = ${orgId} and not fi.is_inactive
+/** A file belongs to the org and is not a DSAR export reserved for its HR
+ * permission-gated delivery route. Trash membership is conditional: live
+ * reads exclude trashed files, while the trash lifecycle (restore/purge
+ * rechecks) resolves them — but a subject export stays excluded on BOTH
+ * branches, so it can never resolve through the trash lifecycle. The live
+ * fence and fileAccessLevel's includeInactive branch both derive from this
+ * one predicate so they cannot drift. */
+export function ownedFilePredicate(orgId: string, options: { includeInactive?: boolean } = {}): SQL {
+  return sql`fi.org_id = ${orgId}${options.includeInactive ? sql`` : sql` and not fi.is_inactive`}
     and not exists (
       select 1 from hrm_data_subject_exports ds
        where ds.org_id = fi.org_id and ds.file_id = fi.id
     )`
+}
+
+/** A live file belongs to the org, is not in trash, and is not a DSAR export
+ * reserved for its HR permission-gated delivery route. */
+export function liveFilePredicate(orgId: string): SQL {
+  return ownedFilePredicate(orgId)
 }
 
 /** The shared file-row fence used by lists and every folder file-count projection. */
@@ -512,9 +523,7 @@ export async function fileAccessLevel(
       ${folderFence ?? sql`true`} as "folderRecordVisible",
       ${attachFence ?? sql`true`} as "attachVisible"
       from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
-     where fi.id = ${fileId} and ${options.includeInactive
-       ? sql`fi.org_id = ${orgId}`
-       : liveFilePredicate(orgId)}
+     where fi.id = ${fileId} and ${ownedFilePredicate(orgId, options)}
   `))
   const row = r.rows[0]
   if (!row) return 'none'
