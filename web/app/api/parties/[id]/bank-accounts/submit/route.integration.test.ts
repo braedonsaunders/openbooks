@@ -275,7 +275,7 @@ async function seedActionOnlyFlow(orgId: string, userId: string): Promise<string
   }
   await withBypassContext(async () => {
     await db.execute(sql`
-      insert into flows (id, org_id, name, subject_kind, graph)
+      insert into flows (id, org_id, name, subject_kind, enabled, graph)
       values (${flowId}, ${orgId}, 'Notify-only bank flow', 'party_bank_account', true,
               ${JSON.stringify(graph)}::jsonb)`)
   })
