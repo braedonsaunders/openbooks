@@ -86,6 +86,9 @@ export interface AgingOptions {
   reportingCurrency?: string;
   /** Drill scope: rebuild only this party's open documents. */
   partyId?: string;
+  /** Drill scope: rebuild only party-less open documents (the "(no party)"
+   * row). Kept separate from an absent filter, which rebuilds everything. */
+  partyIsNull?: boolean;
   /** Drill scope: rebuild only this age bucket. Matches `bucketOf`. */
   bucket?: AgingBucket;
   /**
@@ -174,7 +177,7 @@ async function openDocuments(
   orgBase: string,
   kinds: readonly string[],
   creditKind: string,
-  scope?: { partyId?: string; bucket?: AgingBucket; bookId?: string | null },
+  scope?: { partyId?: string; partyIsNull?: boolean; bucket?: AgingBucket; bookId?: string | null },
 ): Promise<OpenDocument[]> {
   // Account gate: the AP side admits liability_payable lines plus the
   // designated employee-payable control (preset-typed liability_current_other,
@@ -225,7 +228,7 @@ async function openDocuments(
          and e.book_id = ${statementBookExpr(orgId, scope?.bookId)}
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
-         ${scope?.partyId ? sql`and d.party_id = ${scope.partyId}` : sql``}
+         ${scope?.partyId ? sql`and d.party_id = ${scope.partyId}` : scope?.partyIsNull ? sql`and d.party_id is null` : sql``}
          and ${agingBucketSql(asOf, scope?.bucket)}
     ),
     open_docs as (
@@ -603,6 +606,7 @@ export async function agingDetail(
   // direct control journals) surface on the summary residual row, never here.
   const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
     partyId: opts?.partyId,
+    partyIsNull: opts?.partyIsNull,
     bucket: opts?.bucket,
     bookId: opts?.bookId,
   });

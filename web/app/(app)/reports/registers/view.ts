@@ -213,7 +213,10 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           kind: 'ledger', bookId: selectedBook.id,
           label: `${name} · ${openingLabel}`,
           accountTypes,
+          // The partyless section drills to exactly its lines: an absent
+          // filter would drop the predicate and show every party's lines.
           partyIds,
+          unassignedParty: pt.partyId ? undefined : true,
           to: openingDate,
           mode: 'balance',
           dims,
@@ -224,6 +227,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           label: name,
           accountTypes,
           partyIds,
+          unassignedParty: pt.partyId ? undefined : true,
           to: period.to,
           mode: 'balance',
           dims,

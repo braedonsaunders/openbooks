@@ -57,6 +57,9 @@ export async function transactionDetail(opts: {
   dims?: DimFilter
   basis?: "accrual" | "cash"
   partyIds?: string[]
+  /** Party-less ledger lines for the "(no party)" row drill: kept separate
+   * from an unfiltered total, mirroring unassignedProjectCustomer. */
+  unassignedParty?: boolean
   /** Project-customer scope used by customer subtotal drill-downs. */
   projectCustomerId?: string
   /** Project rows without a customer, kept separate from an unfiltered total. */
@@ -104,7 +107,11 @@ export async function transactionDetail(opts: {
     opts.cashOnly
       ? sql` and e.id in (select l2.entry_id from journal_lines l2 join accounts a2 on a2.id = l2.account_id and a2.org_id = l2.org_id where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
       : sql``
-  const partyFilter = opts.partyIds?.length ? sql` and l.party_id in ${opts.partyIds}` : sql``
+  const partyFilter = opts.partyIds?.length
+    ? sql` and l.party_id in ${opts.partyIds}`
+    : opts.unassignedParty
+      ? sql` and l.party_id is null`
+      : sql``
   const projectCustomerFilter = opts.projectCustomerId
     ? sql` and l.project_id in (
         select p.id from projects p

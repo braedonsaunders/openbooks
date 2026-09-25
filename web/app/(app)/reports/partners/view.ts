@@ -172,7 +172,10 @@ export async function loadPartners(
           kind: 'ledger', bookId: selectedBook.id,
           label: row.display_name ?? noPartyDrillLabel,
           accountTypes,
+          // The partyless row drills to exactly its lines: an absent filter
+          // would drop the predicate and show every party's lines.
           partyIds: row.id ? [row.id] : undefined,
+          unassignedParty: row.id ? undefined : true,
           to: asOf,
           mode: 'balance',
         },
