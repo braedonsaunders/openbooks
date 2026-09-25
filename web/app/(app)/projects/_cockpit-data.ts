@@ -14,6 +14,7 @@ import type { ProjectCockpitData } from './ProjectDrawer'
 import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money/money.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
  * Loads everything the project flyout's cockpit tabs need. The Financials tab is
@@ -62,8 +63,18 @@ type RecognitionStatusRow = {
 export async function loadProjectCockpit(
   orgId: string,
   projectId: string,
-  options: { includeApplicationBilling?: boolean } = {},
-): Promise<ProjectCockpitData> {
+  options: { includeApplicationBilling?: boolean; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
+): Promise<ProjectCockpitData | null> {
+  // I1-refix-125: the cockpit snapshot opens by re-locking the scope-checked
+  // project row. A concurrent rehome then serializes on this lock instead of
+  // moving the project between the header read and these reads. Unknown or
+  // out-of-scope projects read as absent, exactly like the header loader.
+  const scope = options.allowedSubsidiaryIds ?? null;
+  const locked = await db.execute(sql`
+    select id from projects where id = ${projectId} and org_id = ${orgId}
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
+      for share`);
+  if (!locked.rows[0]) return null;
   const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today, fieldTimeEnabled, primaryBookId] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),

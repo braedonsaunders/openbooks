@@ -75,30 +75,40 @@ export async function loadProjects(
   // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
   const creating = pickString(sp.projectNew) === '1' && canManage
 
-  const openProject =
+  // I1-refix-125: header and cockpit load in ONE tenant transaction. The
+  // header FOR SHARE lock is therefore held across every cockpit read, so a
+  // concurrent project rehome serializes instead of moving rows between the
+  // header read and the financials/time/billing reads of one response.
+  const openSnapshot =
     projectId && projectId !== 'new' && isUuid(projectId)
-      ? await loadProject(projectId, orgId, authz.allowedSubsidiaryIds)
+      ? await withOrgTransaction(orgId, async () => {
+          const header = await loadProject(projectId, orgId, authz.allowedSubsidiaryIds)
+          const cockpit = header
+            ? await loadProjectCockpit(orgId, header.project.id as string, {
+                allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+                includeApplicationBilling: applicationPermissions.canRead,
+              })
+            : null
+          return header ? { header, cockpit } : null
+        })
       : null
+  const openProject = openSnapshot?.header ?? null
+  const openCockpit = openSnapshot?.cockpit ?? null
 
   // party pickers + resolved form layout + cockpit data for the flyout
   // (only when a project is open; creation loads the form inputs but no
   // cockpit — those tabs need a persisted project and stay hidden).
-  const [parties, subsidiaries, cockpit, projectTypesRes] = openProject || creating
+  const [parties, subsidiaries, projectTypesRes] = openProject || creating
     ? await Promise.all([
         // Customer/foreman/manager pickers: only parties the caller may see.
         listScopedPartyOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true }),
         subsidiaryUiOptions(orgId),
-        openProject
-          ? loadProjectCockpit(orgId, openProject.project.id as string, {
-              includeApplicationBilling: applicationPermissions.canRead,
-            })
-          : Promise.resolve(null),
         db.execute<ProjectTypeOption>(sql`
           select id, name, billing_method as "billingMethod",
                  invoicing_profile->>'billingProcedure' as "billingProcedure"
             from project_types where org_id = ${orgId} and is_active order by sort_order, name`),
       ])
-    : [null, [], null, null]
+    : [null, [], null]
   const projectTypes = projectTypesRes?.rows ?? []
 
   // The Schedule tab is a Projects sub-capability: resolved on the server so a
@@ -167,7 +177,7 @@ export async function loadProjects(
             canManage,
             canViewGl,
             layout: resolvedForm?.layout,
-            cockpit: openProject ? cockpit : null,
+            cockpit: openProject ? openCockpit : null,
             projectTypes,
             schedulingEnabled,
             locale,
