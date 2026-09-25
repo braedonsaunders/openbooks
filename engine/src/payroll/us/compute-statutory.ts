@@ -35,6 +35,8 @@ export type UsYtdRow = {
   suiCurrentRegion: string;
   suiOtherRegions: string;
   suiOpeningUnscoped: boolean;
+  /** Covered Minnesota Paid Leave base priced on committed stubs this year. */
+  mnPaidLeaveWages: string;
   supplemental: string;
   regularWageTaxWithheldThisYear: boolean;
   regularWageTaxWithheldKeys: string[];
@@ -110,6 +112,7 @@ export async function usEmployeeYtd(
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
+      coalesce(sum((s.factors->>'mn_paid_leave_BASE')::numeric), 0) as "mnPaidLeaveWages",
       coalesce(bool_or(
         coalesce((s.factors->>'B')::numeric, 0) = 0
         and coalesce((s.factors->>${`SIT_${region}`})::numeric, 0) > 0
@@ -332,6 +335,19 @@ export async function computeUsStatutory(
       `${employeeName}: ${blocking.map((gap) => gap.message).join(" ")}${unclaimed}`,
     );
   }
+  // Minnesota Paid Leave prices only base room the stubs establish: an
+  // opening balance with unscoped insurable wages (the same provenance gap
+  // that refuses SUI) may hide Minnesota base, so a Minnesota premium levy
+  // with such history refuses rather than overstating the room.
+  const mnPremium = resolution.levies.some((levy) => levy.region === "MN"
+    && (levy.subRegion === "PL" || levy.subRegion === "PLE"));
+  if (mnPremium && ytd.suiOpeningUnscoped) {
+    throw new PayrollError(
+      `${employeeName}: Minnesota Paid Leave cannot be calculated: prior insurable wages sit in `
+      + "an opening balance without state allocation, and the premium's wage-base room cannot be "
+      + "established. Complete the state-scoped wage history before calculating this run; refused by name",
+    );
+  }
   // Advisory gaps reach the operator as named, non-blocking run warnings and
   // on the employee's stub trace — never as silence, and never as a refusal.
   for (const gap of advisory) ctx.noteAdvisory?.(gap.message);
@@ -373,6 +389,7 @@ export async function computeUsStatutory(
         payDate: run.pay_date!,
         wages: sum([income, nonPeriodic]),
         wageAllocations: ctx.workAllocations,
+        ytdWages: levy.region === "MN" && levy.subRegion === "PL" ? ytd.mnPaidLeaveWages : undefined,
         tenantRates: (rateKey, subRegion) =>
           config.subRegionRates(rateKey, levy.region, subRegion),
       });
@@ -435,8 +452,13 @@ export async function computeUsStatutory(
       regionTax,
       // State engines annualize against the year's earlier supplemental pay
       // (Massachusetts' surtax threshold is the live case); without this
-      // every bonus withholds as the year's first.
-      ytd: { supplemental: ytd.supplemental },
+      // every bonus withholds as the year's first. A base-capped flat levy
+      // (Minnesota Paid Leave) additionally reads its priced base history
+      // off ytd.wages — its own documented field, not a repurposed one.
+      ytd: {
+        supplemental: ytd.supplemental,
+        ...(levy.region === "MN" && levy.subRegion === "PLE" ? { wages: ytd.mnPaidLeaveWages } : {}),
+      },
       socialInsuranceDeducted: {
         period: sum([statutory.ss, statutory.medicare, statutory.additionalMedicare]),
         yearToDate: ytd.fica_tax,

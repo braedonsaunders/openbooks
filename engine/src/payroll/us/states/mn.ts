@@ -392,6 +392,24 @@ export const MN_MWR: PayrollCertificate = {
   ],
 };
 
+/**
+ * Minnesota Paid Leave (Minn. Stat. ch. 268B): employer and employee premium
+ * on covered Minnesota wages from January 1, 2026, reported quarterly with
+ * wage detail and paid separately from unemployment premiums (first payments
+ * due April 30, 2026). The 2026 designated premium is 0.88% of wages to the
+ * Social Security wage base (0.66% for DEED-notified small employers); the
+ * employer pays at least half and deducts at most 0.44% from employee wages.
+ * Both shares are employer-entered from the DEED designation — no Department
+ * publication a release can carry supplies an individual employer's assessed
+ * rate — and a run without them refuses rather than accruing zero.
+ *
+ * Sources: Minnesota DEED, 2026 Small Employer Premium Rate Designation
+ * (https://mn.gov/deed/assets/paid-leave-small-employer-premium-rate-designation-acc_tcm1045-716947.pdf);
+ * Minnesota DEED/UIMN, Taxes and Premiums
+ * (https://mn.gov/uimn/employers/paid-leave/taxes-premiums/); Minnesota DOR,
+ * 2026 Withholding Tax Instructions and Tables p. 3
+ * (https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf).
+ */
 export const MN_REGION: PayrollRegionWithholding = {
   region: "MN",
   label: "Minnesota income tax",
@@ -406,7 +424,56 @@ export const MN_REGION: PayrollRegionWithholding = {
   residentWithholdingImplemented: true,
   residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_mn_w4mn",
-  subRegions: [],
+  subRegions: [
+    {
+      code: "PL",
+      label: "Minnesota Paid Leave premium (employer)",
+      kind: "paid_leave",
+      // Employer liability follows Minnesota work: only the work side
+      // resolves, and it never leaves the employee's cheque.
+      reaches: ["nonresident"],
+      rateSource: { kind: "tenant", rateKey: "us_mn_pl" },
+      automatic: true,
+      pocket: "employer",
+      statutoryComponent: { systemKey: "mn_paid_leave", kind: "employer_contribution" },
+      withholdingMethod: {
+        kind: "flat_rate",
+        rates: [],
+        effectiveFrom: "2026-01-01",
+        wageBase: "social_security",
+      },
+      implemented: true,
+      citation:
+        "Minnesota Paid Leave (Minn. Stat. ch. 268B): employer premium on covered Minnesota wages "
+        + "from January 1, 2026, to the Social Security wage base; 2026 Small Employer Premium Rate "
+        + "Designation (DEED); quarterly wage detail and premium (UIMN Taxes and Premiums)",
+    },
+    {
+      code: "PLE",
+      label: "Minnesota Paid Leave premium (employee share)",
+      kind: "paid_leave",
+      // The employer's elected deduction, at most half the premium. Unlike
+      // Vermont's share it has no employer-pays-all default: the statute
+      // splits the premium evenly unless the employer pays more, so an
+      // unentered share is unconfigured facts and refuses.
+      reaches: ["nonresident"],
+      rateSource: { kind: "tenant", rateKey: "us_mn_ple" },
+      automatic: true,
+      statutoryComponent: { systemKey: "mn_paid_leave_employee", kind: "deduction" },
+      withholdingMethod: {
+        kind: "flat_rate",
+        rates: [],
+        effectiveFrom: "2026-01-01",
+        maxRate: "0.0044",
+        wageBase: "social_security",
+      },
+      implemented: true,
+      citation:
+        "Minnesota Paid Leave (Minn. Stat. ch. 268B): the employer pays at least half the premium "
+        + "and deducts at most 0.44% from employee wages; 2026 Small Employer Premium Rate Designation "
+        + "(DEED)",
+    },
+  ],
   subRegionConflictRule: "both",
   citation:
     "Minnesota Department of Revenue, 2026 Minnesota Withholding Tax Instructions and Tables, "
