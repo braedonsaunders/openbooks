@@ -107,10 +107,10 @@ test(
   async () => {
     const fx = await seedAdoption();
     try {
-      // Terry files with claim codes but no SIN: the slip gap fires, the
-      // elections detector stays silent. The fixture org also leaves a
-      // statutory rate unconfigured — a true year-end gap from the rates
-      // surface's own computation.
+      // Terry files with claim codes but no SIN in Quebec, where the
+      // unconfigured health services fund is the year-end gap.
+      await db.execute(sql`update employee_payroll_profiles set province = 'QC'
+         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`);
       let findings = await scan(fx.orgId);
       assert.ok(
         fingerprints(findings).includes("payroll-yearend-no-sin:CA"),
