@@ -147,10 +147,16 @@ async function loadLines(orgId: string, accountId: string, status: 'unmatched' |
 type RuleApplyOutcome = 'excluded' | 'categorized' | 'suggested' | null
 
 /**
- * Re-read and lock the rule at the moment a bulk scan is about to use it.
- * Rule edits/deactivation take the same row lock, so an apply either finishes
- * against the current active rule before the edit commits, or observes the
- * edited/inactive row and does not use the earlier scan snapshot.
+ * Re-read the rule at the moment a bulk scan is about to use it. The read
+ * deliberately takes no row lock: under read-committed every line observes
+ * the latest committed rule state, so an edit that commits between two
+ * lines stops the later line (I2-money-27). A row lock here would be held
+ * for the whole bulk run by the outer transaction, forcing every concurrent
+ * edit to wait behind the run and turning the re-read into the very
+ * whole-run snapshot it exists to prevent. Product-path edits still
+ * serialize against the run through the rule-set advisory lock
+ * (I1-refix-160); a direct edit racing one line's read-and-apply affects
+ * the following lines, not the in-flight one.
  */
 async function applyRuleIfStillCurrent(
   orgId: string,
@@ -162,15 +168,14 @@ async function applyRuleIfStillCurrent(
   ensureReconciliation: () => Promise<string>,
 ): Promise<RuleApplyOutcome> {
   return withOrgTransaction(orgId, async () => {
-    // The rule-set advisory lock serializes edits and bulk scans; the row
-    // lock below also protects this exact rule against direct concurrent
-    // state changes (I1-refix-160).
+    // The rule-set advisory lock serializes product-path edits against bulk
+    // scans (I1-refix-160). The re-read below is lock-free on purpose (see
+    // above): locking the row would pin it for the whole outer transaction.
     await lockBankMatchRuleSet(orgId)
     const current = (await db.execute<RuleRow>(sql`
       select id, name, criteria, outcome, priority, is_active
         from bank_match_rules
        where id = ${scannedRule.id} and org_id = ${orgId}
-       for update
     `)).rows[0]
     if (!current?.is_active) return null
     if (!ruleAppliesToAccount(current.criteria, accountId) || !lineMatchesRule(line, current.criteria)) return null
