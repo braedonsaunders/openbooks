@@ -247,6 +247,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * header.
  */
 export const WI_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "Wisconsin qualifying military-spouse wages exempt from withholding",
   WI_EXEMPT: "Exempt from Wisconsin withholding",
   WI_WT4A_AGREED_WITHHOLDING: "Wisconsin WT-4A agreed withholding per period",
   WI_SCHEDULE: "Wisconsin schedule (marital status)",

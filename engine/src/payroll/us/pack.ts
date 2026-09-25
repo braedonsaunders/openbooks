@@ -52,7 +52,7 @@ import { VA_FACTOR_LABELS } from "./states/va.ts";
 import { VT_FACTOR_LABELS } from "./states/vt.ts";
 import { WI_FACTOR_LABELS } from "./states/wi.ts";
 import { WV_FACTOR_LABELS } from "./states/wv.ts";
-import { US_LOCAL_FACTOR_LABELS } from "./withholding.ts";
+import { US_LOCAL_FACTOR_LABELS, US_SUPPLEMENTAL_FACTOR_LABELS } from "./withholding.ts";
 // HR-13: the US pack's declared labor-compliance artefacts (types only
 // from the pack interface; the builders are pure over a typed context).
 import { US_LABOR_COMPLIANCE_FORMATS } from "./labor-compliance.ts";
@@ -67,6 +67,10 @@ import { US_EMPLOYEE_FACTS } from "./employee-facts.ts";
  * jurisdiction the amount was withheld for.
  */
 function usDescribeFactor(key: string): string | null {
+  const supplementalRate = /^US_SUPPLEMENTAL_RATE_([A-Z_]+)$/.exec(key);
+  if (supplementalRate) {
+    return `US supplemental withholding rate (${supplementalRate[1]!.toLowerCase().replaceAll("_", " ")})`;
+  }
   const match = /^(SIT|LIT|EPT)_(.+)$/.exec(key);
   if (!match) return null;
   const level = match[1];
@@ -430,6 +434,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     ...WI_FACTOR_LABELS,
     ...WV_FACTOR_LABELS,
     ...US_LOCAL_FACTOR_LABELS,
+    ...US_SUPPLEMENTAL_FACTOR_LABELS,
     ...US_COMPUTE_FACTOR_LABELS,
   },
   describeFactor: usDescribeFactor,

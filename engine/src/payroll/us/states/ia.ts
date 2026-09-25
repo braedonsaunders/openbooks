@@ -246,6 +246,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * the module header.
  */
 export const IA_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  IA_MILITARY_SPOUSE_EXEMPT: "Iowa qualifying military-spouse wages exempt from withholding",
   IA_EXEMPT: "Exempt from Iowa withholding",
   IA_FORM: "Iowa certificate form version",
   IA_COLUMN: "Iowa table column",
