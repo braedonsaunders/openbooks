@@ -567,13 +567,21 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     && waiverWages > 0n
     ? "eligible_to_waive_covered_wages"
     : "withheld";
+  // Certificate resolvers are keyed by declaration. A mismatched result
+  // resolves as absent so a caller cannot accidentally apply another form's
+  // answers to this levy (supporting certificates declare different fields,
+  // and the state guards refuse undeclared-field reads by name).
+  const certificateForKey = (key: string) => {
+    const resolved = input.certificateFor(key);
+    return resolved?.certificate.key === key ? resolved : null;
+  };
   const certificate = levy.certificateKey
-    ? input.certificateFor(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
+    ? certificateForKey(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
     : emptyResolvedCertificate(`${levy.label} publishes no withholding certificate`);
   const supportingCertificates = (keys: readonly string[] | undefined) =>
     Object.fromEntries((keys ?? []).map((key) => [
       key,
-      input.certificateFor(key) ?? emptyResolvedCertificate(key),
+      certificateForKey(key) ?? emptyResolvedCertificate(key),
     ]));
   let separateFlatRate: string | undefined;
   let separateFlatWholeDollar = false;
