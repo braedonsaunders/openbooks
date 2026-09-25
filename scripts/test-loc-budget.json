@@ -1,4 +1,4 @@
 {
   "$comment": "Ceiling on non-blank lines across all tracked test files. It may only be lowered. See scripts/check-test-loc-budget.mjs.",
-  "ceiling": 669283
+  "ceiling": 667337
 }
