@@ -773,6 +773,7 @@
     "depth": {
       "applies": "{count} Bewerbungen",
       "blinded": "Andere öffnen nach Ihrer Abgabe.",
+      "boardLabel": "Börse",
       "bookedSlots": "{count} gebucht",
       "close": "Schließen",
       "columns": {
@@ -796,6 +797,7 @@
       "empty": "Noch nichts hier.",
       "failed": "Speichern fehlgeschlagen.",
       "kit": "Leitfaden",
+      "matchAction": "Abgleichen",
       "matchToOpening": "Mit Stelle abgleichen",
       "members": "{count} Mitglieder",
       "missing": "ausstehend",
@@ -809,6 +811,8 @@
       "publish": "Veröffentlichen",
       "questions": "Fragen",
       "remove": "Entfernen",
+      "requisitionIdLabel": "Stellen-ID",
+      "requisitionLabel": "Stelle",
       "retentionDate": "Aufbewahrung bis",
       "scorecards": "{submitted}/{total} Urteile",
       "sendLink": "Signaturlink senden",
@@ -830,6 +834,8 @@
       "starts": "Beginn",
       "ends": "Ende",
       "timezone": "Zeitzone",
+      "feedBoard": "Feed",
+      "internalBoard": "Intern",
       "invalidTime": "Geben Sie eine gültige Ortszeit in der Zeitzone der Organisation ein. Bei einer Zeitumstellung übersprungene oder wiederholte Zeiten können nicht gebucht werden.",
       "bookingLink": "Buchungslink",
       "email": "E-Mail",

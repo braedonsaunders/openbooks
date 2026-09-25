@@ -1025,7 +1025,7 @@ export function PostingActionsIsland({
   postingId?: string
   status?: string
   requisitionId?: string
-  labels: { publish: string; pause: string; close: string; failed: string }
+  labels: { publish: string; pause: string; close: string; failed: string; board: string; internal: string; feed: string }
 }) {
   const refresh = useRefresh()
   const [boardKey, setBoardKey] = useState('internal')
@@ -1053,9 +1053,9 @@ export function PostingActionsIsland({
     <div className="space-y-2">
       {requisitionId ? (
         <div className="flex flex-wrap gap-2">
-          <Select aria-label="board" value={boardKey} onChange={(event) => setBoardKey(event.target.value)}>
-            <option value="internal">internal</option>
-            <option value="feed">feed</option>
+          <Select aria-label={labels.board} value={boardKey} onChange={(event) => setBoardKey(event.target.value)}>
+            <option value="internal">{labels.internal}</option>
+            <option value="feed">{labels.feed}</option>
           </Select>
           <Button size="sm" disabled={busy} onClick={() => void act('/api/hrm/recruiting/postings', { requisitionId, boardKey })}>
             {labels.publish}
@@ -1087,7 +1087,7 @@ export function PoolRediscoverIsland({
   labels,
 }: {
   poolId: string
-  labels: { tags: string; failed: string }
+  labels: { tags: string; failed: string; requisition: string; requisitionId: string; match: string }
 }) {
   const [requisitionId, setRequisitionId] = useState('')
   const [tags, setTags] = useState('')
@@ -1121,10 +1121,10 @@ export function PoolRediscoverIsland({
   return (
     <form onSubmit={(event) => void submit(event)} className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Input aria-label="requisition" placeholder="requisition id" value={requisitionId} onChange={(event) => setRequisitionId(event.target.value)} />
+        <Input aria-label={labels.requisition} placeholder={labels.requisitionId} value={requisitionId} onChange={(event) => setRequisitionId(event.target.value)} />
         <Input aria-label={labels.tags} placeholder={labels.tags} value={tags} onChange={(event) => setTags(event.target.value)} />
         <Button size="sm" type="submit" disabled={busy || !requisitionId || !tags.trim()}>
-          Match
+          {labels.match}
         </Button>
       </div>
       {error ? (

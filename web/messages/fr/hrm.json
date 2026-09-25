@@ -773,6 +773,7 @@
     "depth": {
       "applies": "{count} candidatures",
       "blinded": "Les autres s'ouvrent après votre envoi.",
+      "boardLabel": "Site",
       "bookedSlots": "{count} réservés",
       "close": "Fermer",
       "columns": {
@@ -796,6 +797,7 @@
       "empty": "Rien ici pour l'instant.",
       "failed": "Enregistrement impossible.",
       "kit": "Guide",
+      "matchAction": "Rapprocher",
       "matchToOpening": "Rapprocher du poste",
       "members": "{count} membres",
       "missing": "manquant",
@@ -809,6 +811,8 @@
       "publish": "Publier",
       "questions": "Questions",
       "remove": "Retirer",
+      "requisitionIdLabel": "Référence du besoin",
+      "requisitionLabel": "Besoin",
       "retentionDate": "Conservation jusqu'au",
       "scorecards": "{submitted}/{total} avis",
       "sendLink": "Envoyer le lien de signature",
@@ -830,6 +834,8 @@
       "starts": "Début",
       "ends": "Fin",
       "timezone": "Fuseau horaire",
+      "feedBoard": "Flux",
+      "internalBoard": "Interne",
       "invalidTime": "Saisissez une heure locale valide dans le fuseau horaire de l’organisation. Les heures sautées ou répétées lors du changement d’heure ne peuvent pas être réservées.",
       "bookingLink": "Lien de réservation",
       "email": "E-mail",

@@ -232,7 +232,7 @@ export async function loadPostingsTab(authz: Authz, t: T, tab: DepthTab): Promis
   return postings.map((posting) => ({
     id: posting.id,
     requisitionId: posting.requisitionId,
-    board: posting.boardKey,
+    board: t(`recruiting.depth.${posting.boardKey === 'feed' ? 'feedBoard' : 'internalBoard'}`),
     status: t(`recruiting.posting.${posting.status}`),
     statusVariant: postingVariant(posting.status),
     applies: t('recruiting.depth.applies', { count: posting.applyCount }),
@@ -519,6 +519,9 @@ export async function loadPostingDrawerExtra(
         pause: t('recruiting.depth.pause'),
         close: t('recruiting.depth.close'),
         failed: t('recruiting.depth.failed'),
+        board: t('recruiting.depth.boardLabel'),
+        internal: t('recruiting.depth.internalBoard'),
+        feed: t('recruiting.depth.feedBoard'),
       },
     }
   } catch (error) {
@@ -557,6 +560,9 @@ export async function loadPoolDrawer(authz: Authz, t: T, poolId: string): Promis
       labels: {
         members: t('recruiting.depth.poolMembers'),
         match: t('recruiting.depth.matchToOpening'),
+        requisition: t('recruiting.depth.requisitionLabel'),
+        requisitionId: t('recruiting.depth.requisitionIdLabel'),
+        matchAction: t('recruiting.depth.matchAction'),
         tags: t('recruiting.depth.tagsLabel'),
         failed: t('recruiting.depth.failed'),
         remove: t('recruiting.depth.remove'),
