@@ -89,7 +89,7 @@ test("loaders serve the unsaved drawer only to permitted roles, draft by default
   const journal = src(JOURNAL_VIEW);
   assert.match(
     journal,
-    /pickString\(sp\.entryNew\) === '1' && can\(authz, 'gl\.post'\)/,
+    /pickString\(sp\.entryNew\) === '1' && canCreate/,
     "journal loader must gate ?entryNew=1 on the posting grant",
   );
   assert.match(journal, /status: 'draft'/, "journal loader must default the unsaved record to draft");
