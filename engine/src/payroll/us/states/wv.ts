@@ -42,6 +42,7 @@ import {
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -362,7 +363,10 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     ? "one_earner"
     : "two_earner";
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const grossWages = U(input.wages) + U(input.supplemental ?? "0");
+  const wages = input.basis === "nonresident"
+    ? U(requireUsSourceWages(input.wageAllocations, "WV", null))
+    : grossWages;
 
   const { tax, factors } = wvPercentageMethod({
     payDate: input.payDate,
@@ -371,6 +375,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     schedule,
     exemptions,
   });
+  if (input.basis === "nonresident") factors.WV_SOURCE_WAGES = D(wages);
 
   // IT-104 line 6 — additional withholding, added AFTER the rounded tax.
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
@@ -404,6 +409,7 @@ export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WV_PERIOD: "West Virginia payroll period",
   WV_EXEMPTION: "West Virginia exemption",
   WV_TAXABLE: "West Virginia taxable income",
+  WV_SOURCE_WAGES: "West Virginia source wages",
   WV_BAND_OVER: "West Virginia band excess",
   WV_TAX: "West Virginia tax",
   WV_RECIPROCAL_EXEMPTION_NOT_APPLIED: "West Virginia reciprocal exemption not applied",
