@@ -44,6 +44,8 @@ function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): 
   return {
     tx: { execute: async () => ++query === 1
       ? ({ rows: [{ fact_value: employerEffectif }] })
+      : query === 3
+      ? ({ rows: [{ fact_value: "droit_commun" }] })
       : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
