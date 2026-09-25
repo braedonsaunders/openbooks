@@ -27,6 +27,7 @@ const { resolveCertificate, payrollCertificate } = await import('@openbooks/engi
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET: profilesGet } = await import('../profiles/route')
 const { POST } = await import('./route')
+const { POST: postRetro } = await import('../retro/route')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
@@ -187,7 +188,6 @@ test('concurrent first filings serialize on the employee payroll profile', { ski
 })
 
 test('count and amount answers hold their declared bands and scale', { skip: !DB }, async () => {
-  // California's DE 4 exercises the count and amount kinds end to end.
   const { org, scheduleId } = await setup()
   try {
     const hire = await employee(org.orgId, scheduleId, 'CA Hire', 'US', 'CA')
@@ -208,7 +208,6 @@ test('count and amount answers hold their declared bands and scale', { skip: !DB
       effectiveFrom: '2026-01-01',
     })
     assert.equal(ok.status, 200, await ok.clone().text())
-    // The amount stores at the pack's declared scale (4dp), like the engine reads.
     const rows = await withOrgContext(org.orgId, () => db.execute<{ answers: Record<string, string> }>(sql`
       select answers from employee_tax_certificates
        where org_id = ${org.orgId} and employee_party_id = ${hire}`))
@@ -322,8 +321,6 @@ test('a re-filing supersedes rather than overwrites, and prior dates resolve old
 })
 
 test('profiles GET serves every declared certificate plus stored rows for prefill', { skip: !DB }, async () => {
-  // The read side of the hole: the GET used to filter to profile_columns, so
-  // the page could not even populate the fields it has now learned to render.
   const { org, scheduleId } = await setup()
   try {
     const hire = await employee(org.orgId, scheduleId, 'GB Prefill', 'GB', 'ENG')
@@ -381,6 +378,15 @@ test('filing for a missing employee names the employee id', { skip: !DB }, async
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
+})
+
+test('retro pay refuses impossible calendar pay dates at the route boundary', { skip: !DB }, async () => {
+  const { org, scheduleId } = await setup()
+  try {
+    const response = await withOrgContext(org.orgId, () => postRetro(new Request('http://payroll.test', { method: 'POST', body: JSON.stringify({ payScheduleId: scheduleId, payDate: '2026-02-31' }) })))
+    assert.equal(response.status, 422, await response.clone().text())
+    assert.match(((await response.json()) as { error: string }).error, /payDate.*calendar date/)
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 
 test.after(async () => { await pool.end() })

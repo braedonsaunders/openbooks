@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { now } from "./clock.ts";
 import { canonicalTimeZone } from "./time-zone.ts";
+import { isIsoCalendarDate } from "./iso-date.ts";
+export { isIsoCalendarDate } from "./iso-date.ts";
 
 /**
  * Business "today" — the calendar day in the org's configured time zone.
@@ -103,21 +105,10 @@ export async function businessToday(orgId: string): Promise<string> {
 
 /** Parse YYYY-MM-DD as a UTC calendar date — no local-timezone shift. */
 export function parseIsoDate(iso: string): Date {
-  const date = typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso)
-    ? new Date(`${iso}T00:00:00.000Z`)
-    : new Date(NaN);
-  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1
-      || date.toISOString().slice(0, 10) !== iso) {
+  if (!isIsoCalendarDate(iso)) {
     throw new RangeError("business date must be a valid YYYY-MM-DD calendar date in years 0001 through 9999");
   }
-  return date;
-}
-
-/** Boolean boundary for forms that report invalid dates instead of throwing. */
-export function isIsoCalendarDate(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  try { parseIsoDate(value); return true; }
-  catch { return false; }
+  return new Date(`${iso}T00:00:00.000Z`);
 }
 
 // ---------------------------------------------------------------------------
