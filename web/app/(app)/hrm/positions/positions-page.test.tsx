@@ -43,7 +43,7 @@ registerHooks({
     if (specifier === "next/navigation") {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return { push(url){ globalThis.__positionPushes = [...(globalThis.__positionPushes || []), url] }, refresh(){} }} export function redirect(url){ throw new Error('unexpected redirect: '+url) }",
+        url: "data:text/javascript,export function useRouter(){return { push(url){ globalThis.__positionPushes = [...(globalThis.__positionPushes || []), url] }, refresh(){} }} export function redirect(url){ throw new Error('unexpected redirect: '+url) } export function notFound(){ throw new Error('unexpected notFound') }",
       };
     }
     return next(specifier, context);
