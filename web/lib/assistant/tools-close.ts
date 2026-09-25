@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { Authz } from "../authz";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { capList, uuidInput } from "./tools-shared";
+import { assistantListPage, capList, uuidInput } from "./tools-shared";
 
 /**
  * Period-close read tools for the agentic assistant. They mirror the close
@@ -53,12 +53,13 @@ const getCloseRunStatus: AssistantToolDef = {
          group by status
       `),
       db.execute<Record<string, unknown>>(sql`
-        select code, category, severity, status, title, message, created_at
+        select code, category, severity, status, title, message, created_at,
+               count(*) over() as total
           from close_exceptions
          where run_id = ${a.runId} and org_id = ${authz.user.orgId} and status = 'open'
          order by case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end,
                   created_at
-         limit 10
+         limit 11
       `),
       db.execute<Record<string, unknown>>(sql`
         select s.signoff_type, s.decision, s.signed_at, u.name as signed_by_name
@@ -69,6 +70,11 @@ const getCloseRunStatus: AssistantToolDef = {
     ]);
     const run = runRes.rows[0];
     if (!run) return { ok: false, error: "close_run_not_found" };
+    const exceptionPage = assistantListPage(
+      exceptionRes.rows,
+      10,
+      Number(exceptionRes.rows[0]?.total ?? 0),
+    );
     const locks = (await db.execute<Record<string, unknown>>(sql`
       select l.module, l.state, l.reopen_expires_at, l.locked_at, l.reason,
              s.name as subsidiary_name
@@ -95,7 +101,11 @@ const getCloseRunStatus: AssistantToolDef = {
         startedBy: run.started_by_name,
         lastValidatedAt: run.last_validated_at,
         tasksByStatus,
-        openExceptions: exceptionRes.rows.map((e) => ({
+        openExceptionsTotal: exceptionPage.total,
+        openExceptionsReturned: exceptionPage.returned,
+        openExceptionsTruncated: exceptionPage.truncated,
+        openExceptionsDropped: exceptionPage.dropped,
+        openExceptions: exceptionPage.items.map((e) => ({
           code: e.code,
           category: e.category,
           severity: e.severity,
