@@ -248,7 +248,7 @@ export async function loadPageLayouts(
     columnUpdated: t('columns.updated'),
     columnNote: t('columns.note'),
     emptyLabel: t('empty'),
-    summary: t('summary', { customized: stored.length, total: PAGE_ROUTES.length }),
+    summary: t('summary', { customized: byRoute.size, total: PAGE_ROUTES.length }),
     rows,
     drawerOpen: drawerRoute !== null,
     drawer: drawerRoute
