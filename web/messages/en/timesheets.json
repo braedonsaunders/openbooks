@@ -196,7 +196,7 @@
     "kiosksTitle": "Kiosk devices",
     "noKiosks": "No kiosks registered yet.",
     "retired": "Retired",
-    "tokenIssued": "Device link for {name} — copy it now, it cannot be shown again:",
+    "tokenIssued": "Device link for {name} — copy it now, it cannot be shown again:", "acknowledgeToken": "I copied this device link",
     "kioskNamePlaceholder": "Kiosk name (site or gate)…",
     "registerKiosk": "Register kiosk",
     "pinWorkerPlaceholder": "Worker party id…",

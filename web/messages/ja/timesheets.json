@@ -196,7 +196,7 @@
     "kiosksTitle": "キオスク端末",
     "noKiosks": "登録済みキオスクはありません。",
     "retired": "廃止済み",
-    "tokenIssued": "{name}の端末リンク — 今コピーしてください。再表示はできません:",
+    "tokenIssued": "{name}の端末リンク — 今コピーしてください。再表示はできません:", "acknowledgeToken": "この端末リンクをコピーしました",
     "kioskNamePlaceholder": "キオスク名（現場やゲート）…",
     "registerKiosk": "キオスクを登録",
     "pinWorkerPlaceholder": "作業員のパーティID…",

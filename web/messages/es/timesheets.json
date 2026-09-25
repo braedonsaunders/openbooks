@@ -196,7 +196,7 @@
     "kiosksTitle": "Quioscos",
     "noKiosks": "Aún no hay quioscos registrados.",
     "retired": "Retirado",
-    "tokenIssued": "Enlace del dispositivo para {name} — cópialo ahora, no volverá a mostrarse:",
+    "tokenIssued": "Enlace del dispositivo para {name} — cópialo ahora, no volverá a mostrarse:", "acknowledgeToken": "He copiado este enlace del dispositivo",
     "kioskNamePlaceholder": "Nombre del quiosco (obra o acceso)…",
     "registerKiosk": "Registrar quiosco",
     "pinWorkerPlaceholder": "ID de parte del trabajador…",

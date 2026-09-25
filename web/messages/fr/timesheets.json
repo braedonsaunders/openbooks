@@ -196,7 +196,7 @@
     "kiosksTitle": "Bornes",
     "noKiosks": "Aucune borne enregistrée.",
     "retired": "Retirée",
-    "tokenIssued": "Lien de l'appareil pour {name} — copiez-le, il ne sera plus affiché :",
+    "tokenIssued": "Lien de l'appareil pour {name} — copiez-le, il ne sera plus affiché :", "acknowledgeToken": "J'ai copié ce lien d'appareil",
     "kioskNamePlaceholder": "Nom de la borne (chantier ou accès)…",
     "registerKiosk": "Enregistrer la borne",
     "pinWorkerPlaceholder": "ID partie de l'ouvrier…",

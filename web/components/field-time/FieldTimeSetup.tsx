@@ -85,6 +85,7 @@ export function FieldTimeSetup({
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [issued, setIssued] = useState<{ name: string; token: string } | null>(null)
+  const [kioskRows, setKioskRows] = useState(kiosks)
   const [kioskName, setKioskName] = useState('')
   const [pinWorker, setPinWorker] = useState('')
   const [pin, setPin] = useState('')
@@ -131,14 +132,14 @@ export function FieldTimeSetup({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: kioskName.trim() }),
       })
-      const payload = (await res.json().catch(() => null)) as { error?: string; kiosk?: { name: string }; token?: string } | null
+      const payload = (await res.json().catch(() => null)) as { error?: string; kiosk?: KioskRow; token?: string } | null
       if (!res.ok || !payload?.token) {
         setError(payload?.error ?? t('field.sendFailed'))
         return
       }
       setIssued({ name: payload.kiosk?.name ?? kioskName.trim(), token: payload.token })
+      if (payload.kiosk) setKioskRows((current) => [...current.filter((kiosk) => kiosk.id !== payload.kiosk!.id), payload.kiosk!])
       setKioskName('')
-      window.location.reload()
     } catch {
       setError(t('field.sendFailed'))
     } finally {
@@ -230,9 +231,9 @@ export function FieldTimeSetup({
       {canManageKiosks ? (
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">{t('field.kiosksTitle')}</h2>
-        {kiosks.length === 0 ? <p className="text-sm text-slate-500">{t('field.noKiosks')}</p> : null}
+        {kioskRows.length === 0 ? <p className="text-sm text-slate-500">{t('field.noKiosks')}</p> : null}
         <ul className="space-y-2">
-          {kiosks.map((kiosk) => (
+          {kioskRows.map((kiosk) => (
             <li key={kiosk.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
               <span className="font-medium">{kiosk.name}</span>
               {!kiosk.isActive ? <span className="text-xs text-red-600">{t('field.retired')}</span> : null}
@@ -245,13 +246,16 @@ export function FieldTimeSetup({
             <p className="mt-1 break-all font-mono text-xs">
               {kioskLinkBase}/{issued.token}
             </p>
+            <Button variant="outline" className="mt-2" onClick={() => setIssued(null)}>
+              {t('field.acknowledgeToken')}
+            </Button>
           </div>
         ) : null}
         <div className="flex gap-2">
           <Field label={t('field.kioskNamePlaceholder')}>
             <Input value={kioskName} onChange={(event) => setKioskName(event.target.value)} placeholder={t('field.kioskNamePlaceholder')} className="max-w-xs" />
           </Field>
-          <Button variant="outline" disabled={busy || !kioskName.trim()} onClick={registerKiosk}>
+          <Button variant="outline" disabled={busy || Boolean(issued) || !kioskName.trim()} onClick={registerKiosk}>
             {t('field.registerKiosk')}
           </Button>
         </div>

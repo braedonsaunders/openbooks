@@ -196,7 +196,7 @@
     "kiosksTitle": "Quiosques",
     "noKiosks": "Nenhum quiosque registrado.",
     "retired": "Aposentado",
-    "tokenIssued": "Link do aparelho para {name} — copie agora, não será exibido de novo:",
+    "tokenIssued": "Link do aparelho para {name} — copie agora, não será exibido de novo:", "acknowledgeToken": "Copiei este link do aparelho",
     "kioskNamePlaceholder": "Nome do quiosque (obra ou portaria)…",
     "registerKiosk": "Registrar quiosque",
     "pinWorkerPlaceholder": "ID de parte do trabalhador…",

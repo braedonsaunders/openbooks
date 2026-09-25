@@ -196,7 +196,7 @@
     "kiosksTitle": "Kioskgeräte",
     "noKiosks": "Noch keine Kiosks registriert.",
     "retired": "Stillgelegt",
-    "tokenIssued": "Gerätelink für {name} — jetzt kopieren, er wird nicht erneut angezeigt:",
+    "tokenIssued": "Gerätelink für {name} — jetzt kopieren, er wird nicht erneut angezeigt:", "acknowledgeToken": "Ich habe diesen Gerätelink kopiert",
     "kioskNamePlaceholder": "Kioskname (Baustelle oder Tor)…",
     "registerKiosk": "Kiosk registrieren",
     "pinWorkerPlaceholder": "Mitarbeiter-Partei-ID…",
