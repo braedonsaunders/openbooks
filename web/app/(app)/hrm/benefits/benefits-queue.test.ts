@@ -190,6 +190,20 @@ test("the windows view binds rows with exact per-status counts", async () => {
   assert.ok(open.windowHref.includes("window=w-open"), "each window opens its own drawer");
 });
 
+test("status segment counts describe all visible windows while rows stay filtered", async () => {
+  stubReads(
+    [windowRow("w-open", "open"), windowRow("w-draft", "draft"), windowRow("w-closed", "closed")],
+    [],
+  );
+  const data = await loadBenefits(HR_BENEFITS, { segment: "open" });
+  assert.deepEqual(
+    data.segments.map((segment) => [segment.value, segment.count]),
+    [["all", 3], ["open", 1], ["draft", 1], ["closed", 1]],
+    "status badges remain organization-wide within the caller's visible scope",
+  );
+  assert.deepEqual(data.windowRows.map((window) => window.id), ["w-open"]);
+});
+
 test("the enrolments view swaps the table for the other entity", async () => {
   stubReads([windowRow("w-open", "open")], [enrolmentRow("e-1", "w-open")]);
   const data = await loadBenefits(HR_BENEFITS, { view: "enrolments" });

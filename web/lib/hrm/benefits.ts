@@ -194,9 +194,9 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     }
   }
 
-  const windows = await listEnrollmentWindows(db, orgId, actorId, {
-    ...(segment === 'all' ? {} : { status: segment }),
-  })
+  // Segment badges count every window: the selected segment filters only the
+  // visible rows below, so Draft and Closed never read 0 beside a filtered list.
+  const windows = await listEnrollmentWindows(db, orgId, actorId)
   const enrolments = await listEnrollments(db, orgId, actorId)
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
@@ -216,11 +216,12 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     count: counts[value] ?? 0,
   }))
 
+  const visibleWindows = segment === 'all' ? windows : windows.filter((w) => w.status === segment)
   // No silent prefix cap: the window drawer resolves any window by id and
-  // joins its enrolments from the complete arrays, so the table must present
-  // the same complete population — a sliced table beside complete counts
-  // showed a nonzero status with "No enrolments".
-  const windowRows: BenefitsWindowRow[] = windows.map((w) => ({
+  // joins its enrolments from the complete arrays, so the table presents the
+  // same complete population — a sliced table beside complete counts showed
+  // a nonzero status with "No enrolments".
+  const windowRows: BenefitsWindowRow[] = visibleWindows.map((w) => ({
     ...w,
     kindLabel: windowKindLabel(t, w.kind),
     statusLabel: statusLabel(t, w.status),
