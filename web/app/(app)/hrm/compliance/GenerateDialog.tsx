@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useId, useState } from 'react'
 import { toast } from 'sonner'
-import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
@@ -68,10 +68,8 @@ export function GenerateDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <div className="mt-4 flex flex-col gap-4">
+    <UrlDrawer open closeHref={closeHref} title={title} size="md">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label id={`${fieldId}-project-label`}>{projectLabel}</Label>
             <Select id={`${fieldId}-project`} aria-labelledby={`${fieldId}-project-label`} aria-label={projectLabel} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
@@ -105,7 +103,6 @@ export function GenerateDialog({
             {generateLabel}
           </Button>
         </div>
-      </div>
-    </div>
+    </UrlDrawer>
   )
 }
