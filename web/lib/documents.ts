@@ -1043,6 +1043,13 @@ export async function applyDocumentEdit(
   }
   const { orgId, userId } = ctx
   const referenceSubsidiaryId = body.subsidiaryId ?? current.subsidiaryId
+  // Reference-account ownership is scoped to the document's subsidiary. With
+  // no subsidiary on either side only org-wide accounts apply: interpolating
+  // a null id as `${x}::uuid` emits `= ::uuid` and the query dies as a
+  // syntax error instead of refusing by name.
+  const referenceSubsidiaryScope = referenceSubsidiaryId
+    ? sql`(a.subsidiary_id is null or a.subsidiary_id = ${referenceSubsidiaryId}::uuid)`
+    : sql`a.subsidiary_id is null`
   // Validation reads ride the caller's tx when one owns this edit, so they
   // observe the caller's uncommitted claim (the fresh row's own currency);
   // every other read is committed reference data either way.
@@ -1209,7 +1216,7 @@ export async function applyDocumentEdit(
           select a.id from accounts a
            where a.org_id = ${orgId} and a.is_active and not a.is_summary
              and a.reconcilable and a.type = ${fundingAccountType} and a.id = ${override}::uuid
-             and (a.subsidiary_id is null or a.subsidiary_id = ${referenceSubsidiaryId}::uuid)
+             and ${referenceSubsidiaryScope}
              ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
            for key share
         `))
@@ -1330,7 +1337,7 @@ export async function applyDocumentEdit(
       ? (await runner.execute<{ id: string }>(sql`
           select a.id from accounts a
            where a.org_id = ${orgId} and a.id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])
-             and (a.subsidiary_id is null or a.subsidiary_id = ${referenceSubsidiaryId}::uuid)
+             and ${referenceSubsidiaryScope}
              ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
            for key share`)).rows
       : []
