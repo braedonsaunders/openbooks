@@ -154,6 +154,11 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         { code: "SS-FOR", name: "Formación profesional (employee)", systemKey: "ss_for", kind: "deduction", sequence: 122, assessedOn: "earnings", remittance: "external" },
         // Art. 16: 0,15 % trabajadora.
         { code: "SS-MEI", name: "MEI (employee)", systemKey: "ss_mei", kind: "deduction", sequence: 123, assessedOn: "earnings", remittance: "external" },
+        // Orden PJC/297/2026 art. 5: the additional contribution on
+        // overtime pay prices on classified overtime euros, never on
+        // hours — fuerza mayor vs resto decide 2 % vs 4,70 % trabajadora.
+        { code: "SS-HEX", name: "Horas extraordinarias (employee)", systemKey: "ss_hex_resto", kind: "deduction", sequence: 124, assessedOn: "earnings", remittance: "external" },
+        { code: "SS-HEX-FM", name: "Horas extraordinarias fuerza mayor (employee)", systemKey: "ss_hex_fm", kind: "deduction", sequence: 125, assessedOn: "earnings", remittance: "external" },
         // Art. 4.a: 23,60 % empresa. Distinct systemKey from the employee
         // share — the engine pushes ss_cc_er, never employer-side ss_cc.
         { code: "SS-CC-ER", name: "Seguridad Social (employer)", systemKey: "ss_cc_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "external" },
@@ -173,10 +178,18 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         // contract under thirty days (art. 28.2 exclusions screened first).
         // Emitted only when the screened charge applies.
         { code: "SS-CORTA-ER", name: "Cotización adicional contratos corta duración (employer)", systemKey: "ss_corta_er", kind: "employer_contribution", sequence: 216, assessedOn: "earnings", remittance: "external" },
+        // Orden PJC/297/2026 art. 5: 23,60 % empresa on non-fuerza-mayor
+        // overtime pay, 12 % on fuerza-mayor overtime pay. Sequences follow
+        // the landed AT/EP and corta-duración lines above.
+        { code: "SS-HEX-ER", name: "Horas extraordinarias (employer)", systemKey: "ss_hex_resto_er", kind: "employer_contribution", sequence: 217, assessedOn: "earnings", remittance: "external" },
+        { code: "SS-HEX-FM-ER", name: "Horas extraordinarias fuerza mayor (employer)", systemKey: "ss_hex_fm_er", kind: "employer_contribution", sequence: 218, assessedOn: "earnings", remittance: "external" },
       ],
     },
   ],
   computeStatutory: computeEsStatutory,
+  // Art. 5 presence rule: overtime lines with hours but no classified
+  // overtime pay refuse by name, so the pack reads the extra-hours facts.
+  statutoryHours: { basis: "contractual-plus-worked-extra" },
   statutoryEngineLabel: "AEAT",
   factorLabels: { ...ES_FACTOR_LABELS },
   employeeFacts: ES_EMPLOYEE_FACTS,

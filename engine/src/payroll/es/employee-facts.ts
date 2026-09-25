@@ -10,12 +10,13 @@
 import { registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
-// Required employee facts. The compute path reads four `emp[...]` keys;
+// Required employee facts. The compute path reads six `emp[...]` keys;
   // the three blocking ones (situación, grupo, año) are served since 0191
   // by the profile columns the `es_datos_perceptor` certificate fields map
   // — kept apart from the Modelo 145, whose situación familiar (art. 81
   // RIRPF) is a FAMILY status, not the labour status SITUPER prices. The
-  // fourth (contrato temporal) accepts absence and stays unbuilt.
+  // fourth (contrato temporal) accepts absence and stays unbuilt, as do the
+  // fifth and sixth (the classified overtime pay split, per-period).
   //
   // OPEN, still: which AEAT/TGSS artefact the operator copies each value
   // off (contrato, alta en Seguridad Social, otro) — and, shared with PL,
@@ -115,6 +116,42 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
         notes:
           "Read only for temporal contracts. Only a present-but-foreign value refuses; absent means the "
           + "contract continues and no charge accrues.",
+      },
+    },
+    {
+      key: "es_horas_extra_resto",
+      kind: "amount",
+      label: "Horas extraordinarias no estructurales: retribución del periodo",
+      refusalReason:
+        "Non-force-majeure overtime carries the Orden PJC/297/2026 art. 5 additional 4,70 % / 23,60 % "
+        + "contribution on its own pay; unclassified overtime pay must not price as ordinary pay alone.",
+      required: false,
+      producer: {
+        kind: "derivation",
+        derivation: "ES overtime pay split",
+        notes:
+          "No channel exists yet: the period's classified overtime pay needs a per-period input "
+          + "alongside the overtime earning lines, which this change does not ship. Until then absent "
+          + "is accepted as no overtime of this class — and a run whose overtime lines carry hours "
+          + "but no classified pay is refused rather than priced without the additional contribution.",
+      },
+    },
+    {
+      key: "es_horas_extra_fuerza_mayor",
+      kind: "amount",
+      label: "Horas extraordinarias por fuerza mayor: retribución del periodo",
+      refusalReason:
+        "Force-majeure overtime carries the Orden PJC/297/2026 art. 5 additional 2 % / 12 % "
+        + "contribution on its own pay; unclassified overtime pay must not price as ordinary pay alone.",
+      required: false,
+      producer: {
+        kind: "derivation",
+        derivation: "ES overtime pay split",
+        notes:
+          "No channel exists yet: the period's classified overtime pay needs a per-period input "
+          + "alongside the overtime earning lines, which this change does not ship. Until then absent "
+          + "is accepted as no overtime of this class — and a run whose overtime lines carry hours "
+          + "but no classified pay is refused rather than priced without the additional contribution.",
       },
     },
 ];

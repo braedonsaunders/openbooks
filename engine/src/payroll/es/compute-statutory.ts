@@ -17,7 +17,7 @@
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { sql } from "drizzle-orm";
-import { empFact } from "../employee-facts.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import { certificateAmount, certificateCount } from "../certificates.ts";
 // Side effect: registers ES_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
@@ -255,6 +255,32 @@ export async function computeEsStatutory(
     cortaDuracionAplicable = duracion < 30 && tipo === "ordinario" && fin === "true";
   }
 
+  // Orden PJC/297/2026 art. 5 prices the additional overtime contribution
+  // on classified overtime PAY (fuerza mayor vs resto), never on hours.
+  // Both classes resolve through the pack's employeeFacts declaration:
+  // absent reads as none of that class, and a supplied-but-unusable value
+  // refuses through the shared gate. Validated here so a refusal names the
+  // fact key, never a calculator argument.
+  const hexRestoRaw = resolveEmployeeFact("ES", "es_horas_extra_resto", empFact("ES", emp, "es_horas_extra_resto"));
+  const hexFmRaw = resolveEmployeeFact("ES", "es_horas_extra_fuerza_mayor", empFact("ES", emp, "es_horas_extra_fuerza_mayor"));
+  const hexResto = hexRestoRaw === null ? null : dec(hexRestoRaw, "es_horas_extra_resto");
+  const hexFm = hexFmRaw === null ? null : dec(hexFmRaw, "es_horas_extra_fuerza_mayor");
+  if (hexResto !== null && hexResto < 0n) fail(`employee es_horas_extra_resto "${hexRestoRaw}" must be non-negative`);
+  if (hexFm !== null && hexFm < 0n) fail(`employee es_horas_extra_fuerza_mayor "${hexFmRaw}" must be non-negative`);
+  // Overtime lines carrying hours with no classified pay behind them: the
+  // additional contribution is always owed on overtime worked, so the run
+  // is refused by name instead of pricing ordinary contributions alone —
+  // split the overtime pay across the two facts above, or correct the
+  // earning lines if no overtime was worked.
+  const extraHours = ctx.statutoryHours?.extra;
+  if ((hexResto ?? 0n) === 0n && (hexFm ?? 0n) === 0n && extraHours !== undefined && dec(extraHours, "extra hours") > 0n) {
+    fail(
+      `the run records ${extraHours} extra hours on overtime-classified earning lines but no classified `
+      + "overtime pay (es_horas_extra_resto / es_horas_extra_fuerza_mayor) was supplied: the Orden "
+      + "PJC/297/2026 art. 5 additional contribution cannot price unclassified overtime",
+    );
+  }
+
   const periodPay = dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (periodPay < 0n) fail("period pay must be non-negative");
 
@@ -321,6 +347,8 @@ export async function computeEsStatutory(
     contratoTemporal: temporal === "true",
     atEpRate,
     cortaDuracionAplicable,
+    horasExtraResto: hexResto === null ? undefined : D(hexResto),
+    horasExtraFuerzaMayor: hexFm === null ? undefined : D(hexFm),
   });
   const ssRecurrente = pensionableNonPeriodicUnits === 0n
     ? ss
@@ -332,6 +360,8 @@ export async function computeEsStatutory(
       contratoTemporal: temporal === "true",
       atEpRate,
       cortaDuracionAplicable,
+      horasExtraResto: hexResto === null ? undefined : D(hexResto),
+      horasExtraFuerzaMayor: hexFm === null ? undefined : D(hexFm),
     });
   const cotizacionesAnual = D(
     U(ssRecurrente.trabajadorTotal) * BigInt(periodosAnuales)
@@ -375,6 +405,13 @@ export async function computeEsStatutory(
   if (ss.cortaDuracionEmpresa != null) {
     pushStatutory("ss_corta_er", "employer_contribution", "Cotización adicional contratos corta duración (employer)", ss.cortaDuracionEmpresa, 216);
   }
+  // Art. 5 additional contributions exist only when classified overtime pay
+  // exists: pushed when nonzero, never as zero lines on ordinary runs (so
+  // the no-overtime line set the adapter goldens enumerate stays stable).
+  if (U(ss.horasExtraRestoTrabajador) !== 0n) pushStatutory("ss_hex_resto", "deduction", "Horas extraordinarias (employee)", ss.horasExtraRestoTrabajador, 124);
+  if (U(ss.horasExtraFMTrabajador) !== 0n) pushStatutory("ss_hex_fm", "deduction", "Horas extraordinarias fuerza mayor (employee)", ss.horasExtraFMTrabajador, 125);
+  if (U(ss.horasExtraRestoEmpresa) !== 0n) pushStatutory("ss_hex_resto_er", "employer_contribution", "Horas extraordinarias (employer)", ss.horasExtraRestoEmpresa, 217);
+  if (U(ss.horasExtraFMEmpresa) !== 0n) pushStatutory("ss_hex_fm_er", "employer_contribution", "Horas extraordinarias fuerza mayor (employer)", ss.horasExtraFMEmpresa, 218);
   return {
     ES_TIPO_IRPF: irpf.tipo,
     ES_IMPORTE_ANUAL: irpf.importeAnual,
