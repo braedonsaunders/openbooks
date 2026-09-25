@@ -15,17 +15,14 @@ import type { OrderPayload } from './OrderDrawer'
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see
 // the jsdom shims.
-const { OrderDrawer } = await import('./OrderDrawer')
+const { OrderDrawer, findInvalidOrderLine } = await import('./OrderDrawer')
 const messages = (await import('../../../messages/en')).default as Record<string, unknown>
 
 const DRAFT_ID = '44444444-4444-4444-8444-444444444444'
 const APPROVED_ID = '55555555-5555-4555-8555-555555555555'
 const QUOTE_ID = '66666666-6666-4666-8666-666666666666'
 
-// OrderDrawer runs saves, statuses, issues, deletes and converts on the
-// shared action path (useAppAction + ActionAlert): a refusal pins as a
-// record-level alert until the next action AND toasts, and busy always
-// releases through the package's finally. (Was order-drawer-refusal pins.)
+test('populated order lines with malformed quantities are refused before payload filtering', () => assert.deepEqual(findInvalidOrderLine([{ itemId: 'item-expense', accountId: '', description: '', quantity: 'twelve', unitPrice: '10' }]), { row: 1, field: 'quantity' }))
 function baseDoc(overrides: Record<string, unknown>): Record<string, unknown> {
   return {
     currency: 'USD',

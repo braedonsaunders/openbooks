@@ -28,6 +28,7 @@
     "convertCreated": "{target} {number} erstellt",
     "convertFailed": "Umwandlung fehlgeschlagen",
     "actionFailed": "Aktion fehlgeschlagen",
+    "invalidLineSave": "Zeile {row}, {field}: Geben Sie einen gültigen Wert ein oder entfernen Sie diese Zeile vor dem Speichern.",
     "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
     "toastIssued": "Ausgestellt",
     "toastVoided": "Storniert",

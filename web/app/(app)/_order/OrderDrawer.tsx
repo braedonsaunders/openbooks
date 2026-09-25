@@ -65,6 +65,33 @@ interface LineRow extends Record<string, unknown> {
    *  stocked (F-t07-003 pickers). */
   stockLocationId: string
 }
+type OrderLineValidationInput = Pick<LineRow, 'itemId' | 'accountId' | 'description' | 'quantity' | 'unitPrice'>
+
+function orderLineIsPopulated(row: OrderLineValidationInput): boolean {
+  return Boolean(row.itemId || row.accountId || row.description.trim() || row.quantity.trim() || row.unitPrice.trim())
+}
+
+export function findInvalidOrderLine(rows: readonly OrderLineValidationInput[]): { row: number; field: 'quantity' | 'unitPrice' | 'amount' } | null {
+  for (const [index, row] of rows.entries()) {
+    if (!orderLineIsPopulated(row)) continue
+    try {
+      if (cmp(row.quantity, '0') <= 0) return { row: index + 1, field: 'quantity' }
+    } catch {
+      return { row: index + 1, field: 'quantity' }
+    }
+    try {
+      if (cmp(row.unitPrice, '0') < 0) return { row: index + 1, field: 'unitPrice' }
+    } catch {
+      return { row: index + 1, field: 'unitPrice' }
+    }
+    try {
+      if (cmp(mul(row.quantity, row.unitPrice), '0') <= 0) return { row: index + 1, field: 'amount' }
+    } catch {
+      return { row: index + 1, field: 'amount' }
+    }
+  }
+  return null
+}
 interface SegmentOption {
   key: string
   name: string
@@ -608,9 +635,7 @@ export function OrderDrawer({
       ...(subsidiaries.length > 0 ? { subsidiaryId: subsidiaryId || null } : {}),
       extraDims,
       lines: rows
-        .filter((r) => {
-          try { return Boolean(r.itemId || r.accountId) && cmp(r.quantity, '0') > 0 && cmp(r.unitPrice, '0') >= 0 && cmp(lineAmount(r), '0') > 0 } catch { return false }
-        })
+        .filter(orderLineIsPopulated)
         .map((r) => ({
           itemId: r.itemId || null,
           accountId: r.accountId || null,
@@ -733,6 +758,16 @@ export function OrderDrawer({
     // persistDraft/persistCreate pin and toast their own refusal through the
     // shared state, so the save reports success-shaped around them: a second
     // pin here would overwrite the specific reason with the generic fallback.
+    const invalidLine = findInvalidOrderLine(rows)
+    if (invalidLine) {
+      const field = invalidLine.field === 'quantity'
+        ? t('columns.qty')
+        : invalidLine.field === 'unitPrice'
+          ? t('columns.unitPrice')
+          : tCommon('labels.amount')
+      refuse(undefined, t('invalidLineSave', { row: invalidLine.row, field }))
+      return
+    }
     await execute(async () => {
       if (createMode) {
         const id = await persistCreate()
