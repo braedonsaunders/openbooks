@@ -287,13 +287,13 @@ test(
       // and commit agree it is an update, storage is gone, and the delete is
       // audited with what it removed.
       const clearPreview = await resource.write(
-        [{ employee: "Dora Verdi", taxYear: 2026 }], "insert", ctx,
+        [{ employee: "Dora Verdi", taxYear: 2026 }], "upsert", ctx,
       );
       assert.deepEqual(clearPreview.errors, []);
       assert.equal(clearPreview.updated, 1);
 
       const cleared = await resource.write(
-        [{ employee: "Dora Verdi", taxYear: 2026 }], "insert", { ...ctx, dryRun: false },
+        [{ employee: "Dora Verdi", taxYear: 2026 }], "upsert", { ...ctx, dryRun: false },
       );
       assert.deepEqual(cleared.errors, []);
       assert.equal(cleared.updated, 1);
