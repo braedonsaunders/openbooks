@@ -81,6 +81,7 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
   {
     file: "engine/src/platform/sqlapi.ts",
     sites: [
+      { stance: "key-members", note: "unique-index membership behind the schema listing's is_key flag; the flag is displayed, never written through" },
       { stance: "descriptive", note: "openbooks_query view columns for the SQL API's schema listing" },
     ],
   },
@@ -106,6 +107,12 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     sites: [
       { stance: "presence-probe", note: "which promotable tables carry org_id" },
       { stance: "feeds-a-write", note: "the promotion's SET / INSERT list; generated payload keys are known but never written" },
+    ],
+  },
+  {
+    file: "engine/src/testing/migration-catalog.ts",
+    sites: [
+      { stance: "descriptive", note: "pre/post-test table snapshot (name, type, nullability, default) diffed for humans; generated columns are legitimately part of what is described" },
     ],
   },
   {
@@ -137,6 +144,19 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     file: "scripts/schema-catalog-snapshot.ts",
     sites: [
       { stance: "descriptive", note: "the canonical catalog snapshot records attgenerated per column" },
+    ],
+  },
+  {
+    file: "scripts/upgrade-rehearsal/ledger.mjs",
+    sites: [
+      { stance: "descriptive", note: "ledger fingerprint column list for the rehearsal row-hash comparison; generated and volatile columns are excluded so the hash is stable" },
+    ],
+  },
+  {
+    file: "scripts/upgrade-rehearsal/seeders/perf-1m.ts",
+    sites: [
+      { stance: "presence-probe", note: "bulk-path wanted columns exist before seeding; the probe only throws on drift" },
+      { stance: "presence-probe", note: "version-dependent wanted columns exist before seeding; the probe only throws on drift" },
     ],
   },
   {
