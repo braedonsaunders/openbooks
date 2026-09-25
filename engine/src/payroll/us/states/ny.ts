@@ -63,10 +63,12 @@ import {
   certificateAmount, certificateChoice, certificateCount,
 } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { pctToRate } from "./transcription.ts";
 import {
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -74,6 +76,7 @@ import {
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/ny.ts";
+const NY_IT2104_1_KEY = "us_ny_it2104_1";
 
 /** The two schedules every New York publication prints. */
 type NyMarital = "single" | "married";
@@ -731,19 +734,64 @@ export function nysWithholding(input: {
   return { tax, factors };
 }
 
+/**
+ * NYS-50 Part K — a nonresident levy's service share. The filed IT-2104.1
+ * percentage governs when present; otherwise the verified work allocation
+ * is the adequate record. Null (price total wages) when neither exists —
+ * the publication's no-certificate rule, which the conformance goldens pin.
+ */
+function nyNonresidentShare(
+  input: UsStateWithholdingInput,
+  percentKey: string,
+  region: string,
+  subRegion: string | null,
+  levy: string,
+): string | null {
+  const it21041 = input.supportingCertificates?.[NY_IT2104_1_KEY];
+  if (it21041?.onFile) {
+    const percentage = certificateAmount(it21041, percentKey);
+    if (percentage == null || U(percentage) > U("100")) {
+      throw new PayrollError(
+        `New York Form IT-2104.1 needs a ${levy} service percentage from 0 through 100; `
+        + "correct the filed allocation before calculating — refused by name",
+      );
+    }
+    return pctToRate(percentage);
+  }
+  const allocation = (input.wageAllocations ?? []).find((item) =>
+    item.region === region && item.subRegion === subRegion);
+  if (!allocation) return null;
+  return requireUsWageAllocation(input.wageAllocations, region, subRegion).workShare;
+}
+
 function computeNys(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = nyRatesForPayDate(input.payDate);
   const marital = maritalFor(certificateChoice(input.certificate, "filing_status"));
   const exemptions = certificateCount(input.certificate, "nys_allowances") ?? 0;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const reportedWages = U(input.wages) + U(input.supplemental ?? "0");
 
-  const { tax, factors } = nysWithholding({
+  // Only wages for New York services are subject (NYS-50 Part I). Resident
+  // wages are unallocated; a nonresident's follow the IT-2104.1 percentage
+  // or the verified New York work share.
+  const allocationFactors: Record<string, string> = {};
+  let wages = reportedWages;
+  if (input.basis === "nonresident") {
+    const share = nyNonresidentShare(input, "nys_service_percent", "NY", null, "New York State");
+    if (share != null) {
+      wages = mulRateCents(reportedWages, share);
+      allocationFactors.NYS_NONRESIDENT_ALLOCATION = share;
+      allocationFactors.NYS_NONRESIDENT_WAGES = D(wages);
+    }
+  }
+
+  const { tax, factors: tableFactors } = nysWithholding({
     payDate: input.payDate,
     periodsPerYear: input.periodsPerYear,
     wages: D(wages),
     marital,
     exemptions,
   });
+  const factors = { ...allocationFactors, ...tableFactors };
 
   const extra = U(certificateAmount(input.certificate, "nys_additional") ?? "0");
   return {
@@ -773,12 +821,16 @@ export const NY_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NYS_METHOD: "New York State method applied (II or III)",
   NYS_METHOD3_RATE: "New York State Method III rate",
   NYS_TAX: "New York State tax",
+  NYS_NONRESIDENT_ALLOCATION: "New York State nonresident service share",
+  NYS_NONRESIDENT_WAGES: "New York State-source wages for a nonresident",
   NYC_ALLOWANCE: "New York City allowance",
   NYC_NET: "New York City net wages",
   NYC_TAX: "New York City tax",
   YONKERS_BASE: "Yonkers surcharge base (state tax)",
   YONKERS_TAX: "Yonkers tax",
   YONKERS_EXCLUSION: "Yonkers nonresident exclusion",
+  YONKERS_NONRESIDENT_ALLOCATION: "Yonkers nonresident service share",
+  YONKERS_NONRESIDENT_WAGES: "Yonkers-source wages for a nonresident",
 };
 
 export const NY_WITHHOLDING: UsStateWithholdingEngine = {
@@ -788,6 +840,7 @@ export const NY_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: NY_TAX_YEAR_EDITIONS,
   printedPeriods: NY_PERIODS,
+  supportingCertificateKeys: [NY_IT2104_1_KEY],
   compute: computeNys,
 };
 
@@ -905,11 +958,20 @@ function computeYonkers(input: UsStateWithholdingInput): UsStateWithholdingResul
   }
 
   // Method VII — the exact calculation method for the nonresident earnings tax.
-  // The base is GROSS wages; Table A allowances play no part.
+  // The base is GROSS wages; Table A allowances play no part. Only
+  // Yonkers-source gross wages are subject, so the IT-2104.1 Part 3
+  // percentage (or the verified Yonkers work share) allocates the base first.
   const bands = rates.yonkers.nonresidentBands[period];
+  let base = wages;
+  const yonkersShare = nyNonresidentShare(input, "yonkers_service_percent", "NY", "YONKERS", "Yonkers");
+  if (yonkersShare != null) {
+    base = mulRateCents(wages, yonkersShare);
+    factors.YONKERS_NONRESIDENT_ALLOCATION = yonkersShare;
+    factors.YONKERS_NONRESIDENT_WAGES = D(base);
+  }
   const band = bands.find((candidate) =>
-    wages >= U(candidate.atLeast)
-    && (candidate.butLessThan == null || wages < U(candidate.butLessThan)));
+    base >= U(candidate.atLeast)
+    && (candidate.butLessThan == null || base < U(candidate.butLessThan)));
   if (!band || band.exclusion == null) {
     // Line 1 of every Method VII table is "No tax withheld".
     factors.YONKERS_TAX = D(0n);
@@ -919,7 +981,7 @@ function computeYonkers(input: UsStateWithholdingInput): UsStateWithholdingResul
     };
   }
   factors.YONKERS_EXCLUSION = band.exclusion;
-  const taxable = max0(wages - U(band.exclusion));
+  const taxable = max0(base - U(band.exclusion));
   const tax = mulRateCents(taxable, rates.yonkers.nonresidentRate);
   factors.YONKERS_TAX = D(tax);
   return {
@@ -935,6 +997,7 @@ export const YONKERS_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: NY_TAX_YEAR_EDITIONS,
   printedPeriods: NY_PERIODS,
+  supportingCertificateKeys: [NY_IT2104_1_KEY],
   compute: computeYonkers,
 };
 

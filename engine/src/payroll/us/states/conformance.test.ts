@@ -435,6 +435,20 @@ test("NYS Method II tables cover every net wage below the Method III handoff", (
   }
 });
 
+test("NYS nonresident prices the IT-2104.1 service share of compensation", () => {
+  // NYS-50 Part K: a nonresident at 40% New York services with IT-2104.1 on
+  // file withholds on $400 of a $1,000 weekly single/0 paycheck — $10.76,
+  // not the $43.17 full-wage amount.
+  const result = NY_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: it2104({ filing_status: "single_or_hoh", nys_allowances: "0" }),
+    supportingCertificates: {
+      us_ny_it2104_1: cert("us_ny_it2104_1", { nys_service_percent: "40" }),
+    },
+  });
+  assert.equal(result.tax, money("10.76"));
+});
+
 /* ===================================================================== */
 /* NEW YORK CITY — NYS-50-T-NYC (1/26)                                   */
 /* ===================================================================== */
