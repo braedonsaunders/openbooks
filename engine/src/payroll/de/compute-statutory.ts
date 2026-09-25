@@ -253,8 +253,10 @@ export function computeDeStatutoryWithRates(
   // (§168 SGB VI); AV 2,6 hälftig (§§341/346 SGB III); PV 3,6 + 0,6
   // Kinderlosenzuschlag − 0,25/Kind, Sachsen ±0,5 from an equal half (§§55/58 SGB XI) —
   // all transcribed in DE_2026_RATES / DE_2026_CEILINGS with quotes.
-  const kvBase = Math.min(re4, Math.round(DE_2026_CEILINGS.kvPbbgMonthly * 100));
-  const rvBase = Math.min(re4, Math.round(DE_2026_CEILINGS.rvBbgMonthly * 100));
+  const pensionable = centsOf(ctx.pensionable);
+  const insurable = centsOf(ctx.insurable);
+  const kvBase = Math.min(pensionable, Math.round(DE_2026_CEILINGS.kvPbbgMonthly * 100));
+  const rvBase = Math.min(insurable, Math.round(DE_2026_CEILINGS.rvBbgMonthly * 100));
   const kvzHundredths = Math.round(rates.kvz * 100);
   const kvHalfMilli = (Math.round(DE_2026_RATES.kv * 100) + kvzHundredths) * 5;
   const kvW = shareHalfUp(kvBase, kvHalfMilli);
