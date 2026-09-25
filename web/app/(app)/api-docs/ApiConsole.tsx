@@ -255,6 +255,16 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
         <div className="flex min-h-0 min-w-0 flex-col">
           {/* Pane tabs */}
           <div className="flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+            <Select
+              aria-label={t('console.recordTypes')}
+              value={selectedKey}
+              onChange={(e) => setSelectedKey(e.target.value)}
+              className="h-8 min-w-0 flex-1 text-xs lg:hidden"
+            >
+              {schema.map((rt) => (
+                <option key={rt.key} value={rt.key}>{rt.label}</option>
+              ))}
+            </Select>
             {(['reference', 'console'] as const).map((p) => (
               <button
                 key={p}
