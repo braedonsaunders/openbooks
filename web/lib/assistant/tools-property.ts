@@ -10,7 +10,7 @@ import { isFeatureEnabled } from "../features";
 import { withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
+import { assistantListPage, dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
 
 /**
  * Property-management read/search tools for the agentic assistant. Every tool
@@ -154,7 +154,7 @@ const listLeases: AssistantToolDef = {
       const key = String(l.status);
       byStatus.set(key, (byStatus.get(key) ?? 0) + 1);
     }
-    const capped = capList(
+    const capped = assistantListPage(
       rows.map((l) => ({
         leaseId: l.id,
         leaseNumber: l.leaseNumber,
@@ -169,7 +169,8 @@ const listLeases: AssistantToolDef = {
         depositBalance: decimalText(l.depositBalance ?? 0),
         autoInvoice: l.autoInvoice,
       })),
-      limit
+      limit,
+      rows.length,
     );
     return {
       ok: true,

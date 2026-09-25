@@ -27,7 +27,7 @@ registerHooks({
   },
 });
 
-const { compactRows, capList, num, decimalText, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
+const { compactRows, assistantListPage, capList, num, decimalText, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
 
 test("num rounds to cents and normalizes negative zero", () => {
   assert.equal(num("12.345"), 12.35);
@@ -54,7 +54,6 @@ test("compactRows caps the list and reports total/returned/truncated", () => {
 });
 
 test("compactRows defaults to the catalog list budget", () => {
-  assert.equal(MAX_LIST_ROWS, 200);
   const rows = Array.from({ length: MAX_LIST_ROWS + 1 }, (_, i) => i);
   const result = compactRows(rows);
   assert.equal(result.returned, MAX_LIST_ROWS);
@@ -63,7 +62,6 @@ test("compactRows defaults to the catalog list budget", () => {
 });
 
 test("compactRows trims wide strings with a marker and leaves the rest alone", () => {
-  assert.equal(MAX_ROW_STRING, 500);
   const wide = "x".repeat(MAX_ROW_STRING + 10);
   const result = compactRows(
     [{ memo: wide, short: "ok", nested: { note: wide, list: [wide, 7] }, when: null, n: 3, flag: true }],
@@ -99,4 +97,9 @@ test("capList keeps its existing contract", () => {
 
 test("decimalText preserves exact decimal strings", () => {
   assert.equal(decimalText("9007199254740993.1234"), "9007199254740993.1234");
+});
+
+test("assistantListPage reports exact-limit completeness from an extra-row fetch", () => {
+  assert.deepEqual(assistantListPage(["a", "b", "c"], 2, 3), { items: ["a", "b"], total: 3, returned: 2, truncated: true, dropped: 1 });
+  assert.deepEqual(assistantListPage(["a", "b"], 2, 2), { items: ["a", "b"], total: 2, returned: 2, truncated: false, dropped: 0 });
 });

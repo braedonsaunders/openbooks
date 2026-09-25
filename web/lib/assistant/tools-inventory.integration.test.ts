@@ -65,10 +65,12 @@ test('inventory reads: happy path plus subsidiary isolation', { skip: !process.e
 
     const restricted = reader(org.orgId, new Set([org.subsidiaryId]));
     const levels = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'inventory_levels', {}));
+      executeAssistantTool(restricted, 'inventory_levels', { limit: 1 }));
     assert.equal(levels.ok, true, JSON.stringify(levels));
     const levelData = (levels as { ok: true; data: Record<string, unknown> }).data;
     assert.equal(levelData.total, 1);
+    assert.equal(levelData.returned, 1);
+    assert.equal(levelData.truncated, false, 'one returned row is complete when the filtered total is one');
     assert.equal(levelData.sumQuantity, '10.0000');
 
     const movements = await withOrgContext(org.orgId, () =>

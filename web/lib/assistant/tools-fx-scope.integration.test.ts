@@ -58,7 +58,6 @@ async function seedFx(orgId: string, subsidiaryId: string, actorId: string, acco
       '{controlAccounts}', coalesce(settings->'controlAccounts', '{}'::jsonb) || ${JSON.stringify({ fxUnrealizedGainLoss: unrealizedId })}::jsonb)
      where id = ${orgId}
   `);
-  // A USD monetary balance: bank leg carried at 1.37, offset in CAD.
   // A USD monetary balance. No currency_restriction: the period-end
   // adjustment leg posts in functional currency, which a USD-only account
   // would refuse (jl_check_account) — the engine then reports problems.
@@ -160,16 +159,16 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       const currencies = await executeAssistantTool(
         { ...reader, permissions: new Set(['assistant.use']) }, 'list_currencies', {},
       );
-      assert.equal(currencies.ok, true, JSON.stringify(currencies));
-      assert.ok(currencies.ok);
+      assert.ok(currencies.ok, JSON.stringify(currencies));
       assert.equal((currencies.data as { baseCurrency: string }).baseCurrency, 'CAD');
       assert.ok((currencies.data as { total: number }).total >= 40);
 
-      const rates = await executeAssistantTool(reader, 'list_fx_rates', { fromCurrency: 'USD', toCurrency: 'CAD' });
-      assert.equal(rates.ok, true, JSON.stringify(rates));
-      assert.ok(rates.ok);
+      const rates = await executeAssistantTool(reader, 'list_fx_rates', { fromCurrency: 'USD', toCurrency: 'CAD', limit: 1 });
+      assert.ok(rates.ok, JSON.stringify(rates));
       const rateRows = (rates.data as { rates: { rate: string; source: string }[] }).rates;
       assert.equal(rateRows.length, 1);
+      assert.equal((rates.data as { total: number; returned: number; truncated: boolean }).total, 1);
+      assert.equal((rates.data as { truncated: boolean }).truncated, false);
       assert.equal(rateRows[0]!.rate, '1.4000000000');
       assert.equal(rateRows[0]!.source, 'manual');
 
@@ -206,8 +205,7 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       assert.deepEqual(second.result.posted, []);
 
       const revals = await executeAssistantTool(reader, 'list_fx_revaluations', { periodId });
-      assert.equal(revals.ok, true, JSON.stringify(revals));
-      assert.ok(revals.ok);
+      assert.ok(revals.ok, JSON.stringify(revals));
       const revalData = revals.data as {
         total: number; items: { entryNumber: string; mirrorEntryNumber: string | null }[];
       };
@@ -218,13 +216,11 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       assert.ok(adjustment, 'adjustment entry present');
       assert.ok(adjustment.mirrorEntryNumber?.endsWith('-R'), 'adjustment links its mirror');
       const unfiltered = await executeAssistantTool(reader, 'list_fx_revaluations', {});
-      assert.equal(unfiltered.ok, true, JSON.stringify(unfiltered));
-      assert.ok(unfiltered.ok);
+      assert.ok(unfiltered.ok, JSON.stringify(unfiltered));
       assert.equal((unfiltered.data as { total: number }).total, 2);
 
       const view = await executeAssistantTool(reader, 'get_consolidation_view', { periodId });
-      assert.equal(view.ok, true, JSON.stringify(view));
-      assert.ok(view.ok);
+      assert.ok(view.ok, JSON.stringify(view));
       const viewData = view.data as {
         rates: { fromCurrency: string; currentRate: string }[];
         runs: { status: string }[];
@@ -244,8 +240,7 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
     };
     await withOrgContext(org.orgId, async () => {
       const revals = await executeAssistantTool(childReader, 'list_fx_revaluations', {});
-      assert.equal(revals.ok, true, JSON.stringify(revals));
-      assert.ok(revals.ok);
+      assert.ok(revals.ok, JSON.stringify(revals));
       assert.equal((revals.data as { total: number }).total, 0);
       assert.deepEqual(await executeAssistantTool(childReader, 'get_consolidation_view', { periodId }), {
         ok: false, error: 'forbidden',
