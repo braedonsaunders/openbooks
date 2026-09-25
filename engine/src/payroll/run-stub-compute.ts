@@ -371,6 +371,7 @@ export async function calculateStub(
     tx, orgId, documentId, employeePartyId,
     employeeName: emp.display_name ?? employeePartyId,
     taxYear, region: province, lines, pushStatutory, payDate: run.pay_date!,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null,
   }) ?? EMPTY_EMPLOYER_LEVY_FACTORS;
 
   // Statutory inputs from the line set. The pack's contributoryBases declaration

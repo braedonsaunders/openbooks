@@ -25,6 +25,7 @@ import { AU_FACTOR_LABELS, computeAuStatutory } from "./compute-statutory.ts";
 import { applyAuEmployerLevies } from "./employer-levies.ts";
 import { auPackFilings } from "./filings.ts";
 import { AU_PACK_RATES, AU_TAX_YEARS } from "./rates.ts";
+import { AU_EMPLOYER_FACTS } from "./employer-facts.ts";
 
 const AU_REGIONS: PayrollRegionCoverage = {
   label: "state",
@@ -148,5 +149,8 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // No `emp` facts: the engine reads TFN declarations off the certificate
   // answers, never off bare profile keys.
   employeeFacts: [],
-  employerFacts: [],
+  // State payroll tax position (I6-payroll-221): required, so a run with
+  // covered wages and no established position refuses instead of silently
+  // omitting a possibly-owed levy.
+  employerFacts: AU_EMPLOYER_FACTS,
 };

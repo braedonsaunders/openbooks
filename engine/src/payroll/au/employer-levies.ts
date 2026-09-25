@@ -1,4 +1,5 @@
 import { fromUnits, roundDiv, sum, toUnits } from "../../money/money.ts";
+import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type {
   PayrollEmployerLevyContext,
@@ -84,6 +85,32 @@ export async function applyAuEmployerLevies(
   ctx: PayrollEmployerLevyContext,
 ): Promise<PayrollEmployerLevyFactors> {
   const { orgId, taxYear, region, lines, pushStatutory } = ctx;
+  // State payroll tax (I6-payroll-221): the pack transcribes no state payroll
+  // tax computation, so a run with covered wages and no established employer
+  // position would silently omit a possibly-owed levy. Fail closed on the
+  // legal employer's declared position before pricing anything.
+  const subsidiaryId = ctx.subsidiaryId ?? null;
+  if (!subsidiaryId) {
+    throw new PayrollPackError(
+      "AU payroll cannot calculate without the paying legal employer — assign the run "
+      + "to its legal employer, then declare the state payroll tax position in Payroll Setup → Employer facts",
+    );
+  }
+  const position = await resolveStoredEmployerFact({
+    tx: ctx.tx,
+    orgId,
+    subsidiaryId,
+    country: "AU",
+    factKey: "payroll_tax_position",
+    asOf: ctx.payDate ?? `${taxYear}-06-30`,
+  });
+  if (position === "registered_liable") {
+    throw new PayrollPackError(
+      "AU payroll cannot price a state-payroll-tax-registered employer's liability — no state "
+      + "payroll tax computation is transcribed (thresholds, grouping and apportionment differ "
+      + "per jurisdiction). Accruing nothing would silently omit the levy.",
+    );
+  }
   const resolution = await resolveStatutoryRates(orgId, AU_PACK_RATES, taxYear);
   const rate = resolution.values("au_workers_comp", { region })?.rate ?? null;
   // Legacy slot: no rate for this region accrues nothing, and readiness

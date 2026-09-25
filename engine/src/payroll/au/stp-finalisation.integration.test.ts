@@ -1,15 +1,11 @@
 /**
  * AU STP finalisation: the populated declaration, reconciled to committed runs.
  *
- * DB-OWNED. Fixture: Sydney Worker paid across TWO committed fortnightly
- * runs (run 1: 80h regular + 10h overtime at 1.5x; run 2: 80h regular) and
- * Melbourne Worker paid across the same two runs (80h each, no overtime),
- * plus a THIRD run that is calculated but never committed and must be
- * excluded. Expected figures are hand-derived from the transcribed Schedule
- * 1 scale 2 (fortnightly, resident claiming the threshold, no STSL — pure
- * `calculateAu2027`: $2400/fn withholds $404.00, $2850/fn withholds
- * $550.00) and 12% SG on the pensionable leg ($2400 → $288.00,
- * $2850 → $342.00).
+ * DB-OWNED. Sydney Worker across TWO committed fortnights (run 1: 80h + 10h
+ * overtime at 1.5x; run 2: 80h), Melbourne Worker the same two (80h each),
+ * plus a THIRD calculated-but-uncommitted run that must be excluded.
+ * Hand-derived from Schedule 1 scale 2 ($2400/fn → $404.00, $2850/fn →
+ * $550.00) and 12% SG ($2400 → $288.00, $2850 → $342.00).
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -25,6 +21,7 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
+import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -84,6 +81,9 @@ test(
                                    created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Fortnightly AU', 'biweekly', 26, '2026-07-18', 3,
                 ${auSubId}, true, ${actorId}, ${actorId})`);
+      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, subsidiaryId: auSubId,
+        country: "AU", factKey: "payroll_tax_position", effectiveFrom: "2026-07-01",
+        value: "below_threshold_ungrouped", changeReason: "test employer below every state threshold" });
 
       const overtimeTypeId = randomUUID();
       await db.execute(sql`
