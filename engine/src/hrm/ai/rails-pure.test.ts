@@ -167,7 +167,14 @@ test("drafting writes nowhere except ai_decisions", async () => {
           compensationMin: "90000", compensationMax: "110000",
           compensationCurrency: "CAD", compensationBasis: "annual",
           description: "Own the queue", positionId: null,
+          // The subject gate (I3-people-60) reads the requisition's owning
+          // subsidiary: the stubbed subject lives in the actor's scope.
+          employerSubsidiaryId: "sub-1",
         }] };
+      }
+      if (text.includes("subsidiary_restriction")) {
+        // Stored null is legacy-all: the stubbed actor is unrestricted.
+        return { rows: [{ restriction: null }] };
       }
       if (text.includes("from orgs")) {
         return { rows: [{ features: { hrm: true, hrmAiAssist: true, hrmDrafting: true } }] };
