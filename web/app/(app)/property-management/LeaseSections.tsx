@@ -149,6 +149,21 @@ export function ChargesSection({
                   ))}
                 </Select>
               </Field>
+              <Field label={t("leaseSections.charges.labels.taxCode")}>
+                <Select
+                  value={form.taxCodeId}
+                  onChange={(e) =>
+                    setForm({ ...form, taxCodeId: e.target.value })
+                  }
+                >
+                  <option value="">{t("leaseSections.charges.propertyDefault")}</option>
+                  {options.taxCodes.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </div>
             <Button
               size="sm"

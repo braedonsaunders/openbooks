@@ -126,7 +126,8 @@
           "frequency": "Frequency",
           "effectiveFrom": "Effective from",
           "effectiveTo": "Effective to",
-          "incomeAccount": "Income account"
+          "incomeAccount": "Income account",
+          "taxCode": "Tax code"
         },
         "types": {
           "cam": "CAM",

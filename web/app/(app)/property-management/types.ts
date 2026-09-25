@@ -60,6 +60,8 @@ export type WorkspaceOptions = {
   bankAccounts: WorkspaceOption[];
   assets: WorkspaceOption[];
   openInvoices: WorkspaceOption[];
+  /** Active tax codes a lease charge can carry (billing honours them). */
+  taxCodes: WorkspaceOption[];
 };
 export type PropertyPermissions = {
   manage: boolean;

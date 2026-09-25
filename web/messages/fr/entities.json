@@ -98,7 +98,8 @@
           "frequency": "Fréquence",
           "effectiveFrom": "En vigueur à partir du",
           "effectiveTo": "En vigueur jusqu'au",
-          "incomeAccount": "Compte de produits"
+          "incomeAccount": "Compte de produits",
+          "taxCode": "Code de taxe"
         },
         "types": {
           "cam": "Charges communes",

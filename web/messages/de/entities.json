@@ -98,7 +98,8 @@
           "frequency": "Frequenz",
           "effectiveFrom": "Gültig ab",
           "effectiveTo": "Gültig bis",
-          "incomeAccount": "Ertragskonto"
+          "incomeAccount": "Ertragskonto",
+          "taxCode": "Steuerschlüssel"
         },
         "types": {
           "cam": "Nebenkosten",

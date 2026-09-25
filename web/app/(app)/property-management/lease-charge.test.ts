@@ -113,7 +113,7 @@ test('adding a charge with no tax selection submits a nullable tax code', async 
   })
   const options: WorkspaceOptions = {
     subsidiaries: [], locations: [], tenants: [], incomeAccounts: [], expenseAccounts: [],
-    liabilityAccounts: [], bankAccounts: [], assets: [], openInvoices: [],
+    liabilityAccounts: [], bankAccounts: [], assets: [], openInvoices: [], taxCodes: [],
   }
   const lease = {
     id: 'lease-1', startsOn: '2026-01-01', endsOn: null, status: 'active', currency: 'USD',

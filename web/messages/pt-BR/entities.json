@@ -98,7 +98,8 @@
           "frequency": "Frequência",
           "effectiveFrom": "Vigente desde",
           "effectiveTo": "Vigente até",
-          "incomeAccount": "Conta de receita"
+          "incomeAccount": "Conta de receita",
+          "taxCode": "Código de imposto"
         },
         "types": {
           "cam": "Despesas comuns",
