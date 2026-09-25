@@ -169,7 +169,7 @@ export function WorkItemDrawer({
           action: 'assign',
           assigneeUserId: clear || !assigneeUser ? null : assigneeUser,
           assigneeRole: clear || !assigneeRole ? null : assigneeRole,
-          dueAt: clear || !dueDate ? null : new Date(`${dueDate}T00:00:00`).toISOString(),
+          dueAt: clear || !dueDate ? null : new Date(`${dueDate}T00:00:00Z`).toISOString(),
         }),
       })
       if (!response.ok) {
