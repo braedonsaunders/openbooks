@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { ActionError, fetchAction, readActionResult } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
-import { basisForResolvedRow, type PriceBasis } from '@/lib/price-basis'
+import { basisForResolvedRow, parsePriceBasis, type PriceBasis } from '@/lib/price-basis'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
@@ -64,6 +64,10 @@ interface LineRow extends Record<string, unknown> {
   /** Warehouse for fulfil/receipt effects; blank unless the line's item is
    *  stocked (F-t07-003 pickers). */
   stockLocationId: string
+  /** Pricing lineage the line loaded with (client-only, never serialized —
+   *  the save payload picks explicit fields). Lets a reopened draft re-send
+   *  its stored basis when the row is untouched, instead of nulling it. */
+  loadedPrice: { itemId: string; unitPrice: string; quantity: string; basis: PriceBasis } | null
 }
 type OrderLineValidationInput = Pick<LineRow, 'itemId' | 'accountId' | 'description' | 'quantity' | 'unitPrice'>
 
@@ -313,6 +317,7 @@ const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   departmentId: '',
   projectId: '',
   stockLocationId: '',
+  loadedPrice: null,
   ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, ''])),
 })
 
@@ -323,6 +328,48 @@ function lineText(v: unknown): string {
 
 function isLineMap(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
+}
+
+/** Stored pricing lineage for a freshly loaded line: the validated basis plus
+ * the item/price/quantity it was stored against. A row that still shows
+ * exactly this re-sends the basis; anything touched prices by hand or by a
+ * new session resolution. Unparseable lineage loads as none (hand-priced). */
+function loadedPriceOf(l: Record<string, unknown>): LineRow['loadedPrice'] {
+  const raw = l.price_basis
+  const parsed = typeof raw === 'string'
+    ? (() => { try { return parsePriceBasis(JSON.parse(raw)) } catch { return null } })()
+    : parsePriceBasis(raw ?? null)
+  if (!parsed || typeof parsed !== 'object' || 'error' in parsed) return null
+  return {
+    itemId: lineText(l.item_id),
+    unitPrice: l.unit_price != null ? String(l.unit_price) : '',
+    quantity: l.quantity != null ? String(l.quantity) : '',
+    basis: parsed,
+  }
+}
+
+/** Project one grid row to its wire shape (no provenance — attached at save
+ *  time by withPriceBasis, which sees the live session resolutions). */
+function projectLine(r: LineRow, segments: SegmentOption[]): Record<string, unknown> {
+  return {
+    itemId: r.itemId || null,
+    accountId: r.accountId || null,
+    description: r.description,
+    quantity: r.quantity,
+    unit: r.unit || null,
+    unitPrice: r.unitPrice,
+    taxCodeId: r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
+    taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
+    departmentId: r.departmentId || null,
+    projectId: r.projectId || null,
+    stockLocationId: r.stockLocationId || null,
+    extraDims: Object.fromEntries(
+      segments
+        .filter((segment) => segment.showOnLines)
+        .map((segment) => [segment.key, r[`seg_${segment.key}`]])
+        .filter(([, value]) => value !== '' && value != null),
+    ),
+  }
 }
 
 function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
@@ -341,6 +388,7 @@ function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
     stockLocationId: lineText(l.stock_location_id),
+    loadedPrice: loadedPriceOf(l),
     ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, extraDims?.[segment.key] ?? ''])),
   }
 }
@@ -415,7 +463,17 @@ export function OrderDrawer({
   const [mode, setMode] = useState<DrawerMode>(
     initialDrawerMode(initialMode, canEditStatus),
   )
-  const editable = mode === 'edit' && canEditStatus
+  // The action hook sits above its first use: editable freezes while busy
+  // below, and a later declaration would be a TDZ use-before-assign.
+  // Saves, statuses, issues, deletes and converts run on the shared action
+  // path: a refusal pins here (role=alert) until the next action — a toast
+  // alone never survives attention (F-t03-001) — AND toasts, and busy always
+  // releases through the package's finally.
+  const { busy, refusal, execute, refuse, clearRefusal } = useAppAction()
+  // Frozen while an action is in flight (the same busy convention the buttons
+  // already use): the grid otherwise accepts typing during the save PATCH,
+  // and those un-sent edits would be shown as saved and lost on close.
+  const editable = mode === 'edit' && canEditStatus && !busy
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -433,11 +491,6 @@ export function OrderDrawer({
   const priceRequestSequence = useRef(0)
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  // Saves, statuses, issues, deletes and converts run on the shared action
-  // path: a refusal pins here (role=alert) until the next action — a toast
-  // alone never survives attention (F-t03-001) — AND toasts, and busy always
-  // releases through the package's finally.
-  const { busy, refusal, execute, refuse, clearRefusal } = useAppAction()
 
   // Optimistic-concurrency token (documents.updated_at). Every mutating
   // request echoes it; the server refuses any mutation whose view of the
@@ -634,27 +687,7 @@ export function OrderDrawer({
       projectId: projectId || null,
       ...(subsidiaries.length > 0 ? { subsidiaryId: subsidiaryId || null } : {}),
       extraDims,
-      lines: rows
-        .filter(orderLineIsPopulated)
-        .map((r) => ({
-          itemId: r.itemId || null,
-          accountId: r.accountId || null,
-          description: r.description,
-          quantity: r.quantity,
-          unit: r.unit || null,
-          unitPrice: r.unitPrice,
-          taxCodeId: r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
-          taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
-          departmentId: r.departmentId || null,
-          projectId: r.projectId || null,
-          stockLocationId: r.stockLocationId || null,
-          extraDims: Object.fromEntries(
-            segments
-              .filter((segment) => segment.showOnLines)
-              .map((segment) => [segment.key, r[`seg_${segment.key}`]])
-              .filter(([, value]) => value !== '' && value != null),
-          ),
-        })),
+      lines: rows.filter(orderLineIsPopulated).map((r) => projectLine(r, segments)),
     }),
     [partyId, documentDate, dueDate, memo, departmentId, projectId, subsidiaryId, subsidiaries.length, extraDims, rows, segments],
   )
@@ -666,6 +699,17 @@ export function OrderDrawer({
     setPrevPayload(payload)
     if (editable) setDirty(true)
   }
+  // Latest committed payload identity for the in-flight-save guard below:
+  // async price resolutions can still land while busy (user input is frozen,
+  // but fetches are not), and those edits are not in the PATCH body. Written
+  // in a layout effect — never during render — and read at save time.
+  const latestPayloadRef = useRef(payload)
+  useLayoutEffect(() => {
+    latestPayloadRef.current = payload
+  })
+  // Whether the last persist covered the current form. persistDraft sets it;
+  // save() reads it to decide between view mode and staying dirty.
+  const saveCoveredRef = useRef(true)
 
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
@@ -701,21 +745,39 @@ export function OrderDrawer({
    * Provenance for the recorded price basis (0336): attach the preview
    * basis only to rows that still show exactly what the last preview
    * resolved — anything the operator touched afterwards prices by hand
-   * (null). Runs at save time (event context), never during render.
+   * (null). A row untouched since load re-sends its stored basis, so a
+   * reopened draft does not null its lineage on Save/Issue. Rows the
+   * operator re-resolved this session use the session basis.
+   *
+   * Takes the UNFILTERED grid rows: the session resolutions are keyed by
+   * grid position, and filtering first would misalign the lookup onto a
+   * neighbour row. Runs at save time (event context), never during render.
    */
-  function withPriceBasis<T extends { itemId: string | null; unitPrice: string }>(lines: T[]) {
-    return lines.map((line, lineIndex) => ({
-      ...line,
-      priceBasis: basisForResolvedRow({ row: line, resolved: resolvedPriceRef.current.get(lineIndex) }),
-    }))
+  function withPriceBasis(allRows: LineRow[]) {
+    return allRows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => orderLineIsPopulated(row))
+      .map(({ row, index }) => {
+        const session = basisForResolvedRow({ row, resolved: resolvedPriceRef.current.get(index) })
+        const loaded = row.loadedPrice
+        const stored = loaded
+          && row.itemId === loaded.itemId
+          && row.unitPrice === loaded.unitPrice
+          && row.quantity === loaded.quantity
+          ? loaded.basis
+          : null
+        return { ...projectLine(row, segments), priceBasis: session ?? stored }
+      })
   }
 
   async function persistDraft() {
+    const sent = payload
+    const sentRows = rows
     const saved = await persistOrderDraft({
       request: () => fetch(`${apiBase}/${doc.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, lines: withPriceBasis(payload.lines), expectedUpdatedAt: revisionRef.current }),
+        body: JSON.stringify({ ...sent, lines: withPriceBasis(sentRows), expectedUpdatedAt: revisionRef.current }),
       }),
       setState: setSaveState,
       // The callback-style helper cannot return its refusal into execute:
@@ -727,7 +789,11 @@ export function OrderDrawer({
       // Adopt the server's post-save revision so the next mutation (e.g. an
       // issue right after this save) fences on what is actually stored.
       if (saved.doc?.updated_at != null) revisionRef.current = revisionOf(saved.doc.updated_at)
-      setDirty(false)
+      // The form may have moved after the body was built (an async price
+      // resolution landing mid-flight): those edits were never sent, so
+      // clearing dirty would show them as saved and lose them on close.
+      saveCoveredRef.current = latestPayloadRef.current === sent
+      setDirty(!saveCoveredRef.current)
     }
     return saved
   }
@@ -736,11 +802,12 @@ export function OrderDrawer({
    *  The document number allocates inside that transaction — nothing before
    *  this call wrote a row or burned a sequence value. */
   async function persistCreate(): Promise<string | null> {
+    const sentRows = rows
     const saved = await persistOrderDraft({
       request: () => fetch(apiBase, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createKey() },
-        body: JSON.stringify({ ...payload, lines: withPriceBasis(payload.lines) }),
+        body: JSON.stringify({ ...payload, lines: withPriceBasis(sentRows) }),
       }),
       setState: setSaveState,
       onError: (message) => refuse(message, t('actionFailed')),
@@ -780,6 +847,12 @@ export function OrderDrawer({
       if (!saved) return { ok: true as const, status: 200, data: null }
       const savedDoc = asOrderDoc(saved.doc)
       setTotals({ subtotal: savedDoc.subtotal, taxTotal: savedDoc.tax_total, total: savedDoc.total })
+      if (!saveCoveredRef.current) {
+        // Edits landed after the PATCH body was built and were never sent:
+        // stay in edit mode, still dirty, so the next Save persists them —
+        // switching to view mode would show them as saved and lose them.
+        return { ok: true as const, status: 200, data: null }
+      }
       setMode('view')
       router.refresh()
       return { ok: true as const, status: 200, data: null }
