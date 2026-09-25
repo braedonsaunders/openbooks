@@ -53,7 +53,11 @@ async function fixture(run: (org: ScratchOrg, actor: string, nextBook: string) =
 async function restorePrimary(org: ScratchOrg) {
   await withBypassContext(() => db.transaction(async tx => {
     await tx.execute(sql`set local openbooks.migration=on`);
-    await tx.execute(sql`update accounting_books set is_primary=(id=${org.bookId}) where org_id=${org.orgId}`);
+    // Demote-then-promote in two statements: a single flip can transiently
+    // hold two primaries and trip the one-primary-per-org index depending on
+    // row update order. The migration exemption admits both steps.
+    await tx.execute(sql`update accounting_books set is_primary=false where org_id=${org.orgId} and is_primary`);
+    await tx.execute(sql`update accounting_books set is_primary=true where id=${org.bookId} and org_id=${org.orgId}`);
   }));
 }
 async function promote(org: ScratchOrg, actor: string, id: string) {
