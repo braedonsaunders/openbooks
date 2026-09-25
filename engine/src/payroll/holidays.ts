@@ -3,7 +3,7 @@ import { db } from "../platform/db.ts";
 import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
 import { MB_CONSTRUCTION_HOLIDAY } from "./canada/employment-standards.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
-import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
+import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, prorateDays, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
   employmentJurisdictionsOf,
   holidayPayLookbackBasis,
@@ -1057,6 +1057,24 @@ export interface StatutoryHolidayPayInput {
   paidOnCommission?: boolean;
   absentWithoutConsent?: boolean;
   /**
+   * The presented statutory occupation class (the profile column's raw
+   * value). Undefined means the caller never presented the question — probes
+   * and tests get the uncapped rule. Null means presented but unrecorded,
+   * which a rule with a weekly cap refuses by name. The run always presents
+   * it, straight off the employment's profile row.
+   */
+  occupationClass?: string | null;
+  /**
+   * The stub's earning lines so far (before this holiday's lines), for the
+   * weekly cap's same-week slice. Undefined callers get the committed-stubs
+   * slice only; the run always passes its lines.
+   */
+  currentEarningLines?: readonly {
+    amount: string;
+    kind: string;
+    nonPeriodic?: boolean | null;
+  }[];
+  /**
    * Whether the employee worked under an averaging agreement in the qualifying
    * window (BC ESA s. 37). Read only where the rule declares the
    * `averagingAgreementAlternative`; no stored producer supplies it yet, so a
@@ -1158,6 +1176,106 @@ async function resolveMbConstructionHolidayPay(
  * The lookback reads committed stubs and only attributes boundary earnings
  * when their dated lines establish which side of the window earned them.
  */
+/**
+ * An occupation weekly cap (New Brunswick ESA s. 21(2)): a route
+ * salesperson's pay for an UNWORKED holiday shall not push the week's
+ * earnings above their average weekly wages for the preceding four weeks.
+ *
+ * Both terms are day-count pro-rata allocations — the engine's established
+ * method for straddling periods, applied here to the Sunday week (the Act
+ * states no employer election) and to the trailing 28 days. "Wages" is read
+ * unqualified: every earning bucket counts, unlike the s. 21(1) base that
+ * excludes overtime, vacation, and holiday pay. The current stub's lines are
+ * sliced to the week∩period overlap; non-periodic (retro) lines are excluded
+ * because they belong to other periods, not this week. The result floors at
+ * zero: a week already above the average earns no holiday pay, it never earns
+ * negative pay.
+ *
+ * Skips (returns the computed pay) where the rule declares no cap, where the
+ * caller never presented the occupation question, where the occupation is not
+ * the capped one, or where the holiday was worked. Refuses by name where the
+ * question was presented but the class is unrecorded.
+ */
+async function applyOccupationWeeklyCap(
+  tx: Pick<typeof db, "execute">,
+  args: {
+    orgId: string;
+    employeePartyId: string;
+    excludeDocumentId: string;
+    employeeName: string;
+    rule: PayrollHolidayPayRule;
+    holidayDate: string;
+    occupationClass: string | null | undefined;
+    hoursWorked: string;
+    computedPay: string;
+    periodStart: string;
+    periodEnd: string;
+    currentLines: readonly {
+      amount: string;
+      kind: string;
+      nonPeriodic?: boolean | null;
+    }[] | undefined;
+  },
+): Promise<{ pay: string; note: string | null }> {
+  const unchanged = { pay: args.computedPay, note: null };
+  const cap = args.rule.weeklyCap;
+  if (!cap || args.occupationClass === undefined) return unchanged;
+  if (cmp(args.hoursWorked, "0") > 0) return unchanged;
+  if (args.occupationClass === null) {
+    throw new PayrollHolidayError(
+      `${args.employeeName} may be priced under an occupation weekly cap, but their statutory `
+      + "occupation class is not recorded — the run will not guess whether the cap applies. "
+      + "Record it on the employee's payroll profile, then recalculate",
+    );
+  }
+  if (!cap.values.includes(args.occupationClass)) {
+    throw new PayrollHolidayError(
+      `${args.employeeName} carries unrecognized occupation class "${args.occupationClass}" — `
+      + `record one of ${cap.values.join(", ")} on the employee's payroll profile, then recalculate`,
+    );
+  }
+  if (args.occupationClass !== cap.cappedValue) return unchanged;
+
+  const stubInput = {
+    orgId: args.orgId,
+    employeePartyId: args.employeePartyId,
+    excludeDocumentId: args.excludeDocumentId,
+  };
+  const intoWeek = weekdayOf(args.holidayDate) % 7;
+  const weekStart = shiftDays(args.holidayDate, -intoWeek);
+  const weekEnd = shiftDays(weekStart, 6);
+  const total = (earnings: HolidayLookbackEarnings): string =>
+    sum([earnings.regular, earnings.overtime, earnings.vacationPay, earnings.holidayPay]);
+  const average = fromUnits(
+    roundDiv(
+      toUnits(total(await lookbackEarnings(tx, stubInput, {
+        from: shiftDays(weekStart, -(cap.lookbackWeeks * 7)),
+        to: shiftDays(weekStart, -1),
+      }))),
+      BigInt(cap.lookbackWeeks),
+    ),
+  );
+  const committed = total(await lookbackEarnings(tx, stubInput, { from: weekStart, to: weekEnd }));
+  const periodDays = daysBetween(args.periodStart, args.periodEnd) + 1;
+  const overlapFrom = args.periodStart > weekStart ? args.periodStart : weekStart;
+  const overlapTo = args.periodEnd < weekEnd ? args.periodEnd : weekEnd;
+  const overlapDays = daysBetween(overlapFrom, overlapTo) + 1;
+  const currentTotal = sum(
+    (args.currentLines ?? [])
+      .filter((line) => line.kind === "earning" && !line.nonPeriodic)
+      .map((line) => line.amount),
+  );
+  const weekBase = add(committed, prorateDays(currentTotal, Math.max(0, overlapDays), periodDays));
+  const allowed = cmp(fromUnits(toUnits(average) - toUnits(weekBase)), "0") < 0
+    ? "0"
+    : fromUnits(toUnits(average) - toUnits(weekBase));
+  if (cmp(args.computedPay, allowed) <= 0) return unchanged;
+  return {
+    pay: allowed,
+    note: `occupation weekly cap: week earnings ${weekBase} against a ${average} average — paid ${allowed} of ${args.computedPay}`,
+  };
+}
+
 export async function resolveStatutoryHolidayPay(
   tx: Pick<typeof db, "execute">,
   input: StatutoryHolidayPayInput,
@@ -1316,6 +1434,7 @@ export async function resolveStatutoryHolidayPay(
       }
     }
 
+    const hoursWorked = await hoursOn(tx, input, holiday.date);
     const result = computeStatutoryHolidayPay(rule, {
       employee: input.employeeName,
       holiday,
@@ -1333,18 +1452,36 @@ export async function resolveStatutoryHolidayPay(
       paidOnCommission: input.paidOnCommission,
       absentWithoutConsent: input.absentWithoutConsent,
       averagingAgreement: input.averagingAgreement,
-      hoursWorked: await hoursOn(tx, input, holiday.date),
+      hoursWorked,
       hourlyRate: input.hourlyRate,
       schedule,
     });
     if (!result.qualified) continue;
 
-    if (cmp(result.holidayPay, "0") !== 0) {
+    // An occupation weekly cap (New Brunswick s. 21(2)) clamps the PRICED day
+    // after the basis answers — never inside the pure arithmetic, which knows
+    // no database. The trace names the clamp so the stub line explains itself.
+    const capped = await applyOccupationWeeklyCap(tx, {
+      orgId: input.orgId,
+      employeePartyId: input.employeePartyId,
+      excludeDocumentId: input.excludeDocumentId,
+      employeeName: input.employeeName,
+      rule,
+      holidayDate: holiday.date,
+      occupationClass: input.occupationClass,
+      hoursWorked,
+      computedPay: result.holidayPay,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      currentLines: input.currentEarningLines,
+    });
+    if (cmp(capped.pay, "0") !== 0) {
       lines.push({
         componentId: input.holidayComponentId, kind: "earning",
         description: `${holiday.name} — statutory holiday pay`,
-        amount: result.holidayPay, sequence: sequence++,
-        holidayKey: holiday.key, holidayDate: holiday.date, basis: result.basis,
+        amount: capped.pay, sequence: sequence++,
+        holidayKey: holiday.key, holidayDate: holiday.date,
+        basis: capped.note ? `${result.basis}; ${capped.note}` : result.basis,
       });
     }
     if (cmp(result.premiumPay, "0") !== 0) {
@@ -1498,7 +1635,7 @@ const commissionWindowOf = (
  *  which makes Ontario's wage exclusions a transcription rather than a guess. */
 async function lookbackEarnings(
   tx: Pick<typeof db, "execute">,
-  input: StatutoryHolidayPayInput,
+  input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId" | "excludeDocumentId">,
   window: { from: string; to: string },
 ): Promise<HolidayLookbackEarnings> {
   const rows = (await tx.execute<{
@@ -1535,7 +1672,7 @@ async function lookbackEarnings(
     if (earnedFrom === null || earnedTo === null) {
       if (!periodIsInside) {
         throw new PayrollHolidayError(
-          `${input.employeeName}: statutory holiday lookback earnings overlap ${window.from} through ${window.to}, but a committed pay stub has no dated earning evidence; record the earning dates or correct the pay stub before calculating holiday pay`,
+          `${input.employeePartyId}: statutory holiday lookback earnings overlap ${window.from} through ${window.to}, but a committed pay stub has no dated earning evidence; record the earning dates or correct the pay stub before calculating holiday pay`,
         );
       }
     } else {
@@ -1543,7 +1680,7 @@ async function lookbackEarnings(
       if (!earningOverlaps) continue;
       if (earnedFrom < window.from || earnedTo > window.to) {
         throw new PayrollHolidayError(
-          `${input.employeeName}: a pay-stub earning dated ${earnedFrom} through ${earnedTo} crosses the statutory holiday lookback boundary; split the earning into day-resolved pay-stub lines before calculating holiday pay`,
+          `${input.employeePartyId}: a pay-stub earning dated ${earnedFrom} through ${earnedTo} crosses the statutory holiday lookback boundary; split the earning into day-resolved pay-stub lines before calculating holiday pay`,
         );
       }
     }

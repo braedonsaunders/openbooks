@@ -1,0 +1,1 @@
+Adding a nullable text column with no constraint and no backfill; every existing row stays valid, so no operator data repair is needed.

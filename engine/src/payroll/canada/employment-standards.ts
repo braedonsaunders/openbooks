@@ -363,10 +363,12 @@ const MB_HOLIDAY_PAY: PayrollHolidayPayRule = {
  * s. 19(1): time and a half for the hours worked, in addition to the day's
  * regular wages where the employee qualifies.
  *
- * NOT transcribed: s. 21(2) caps a ROUTE SALESPERSON's holiday pay so that
- * week's earnings cannot exceed their average weekly wages over the preceding
- * four weeks. It applies to one named occupation and there is no way to say so
- * in this shape; a route salesperson is therefore over-paid at the margin.
+ * s. 21(2): a ROUTE SALESPERSON's pay for an UNWORKED holiday shall not push
+ * the week's earnings above their average weekly wages for the preceding four
+ * weeks. The occupation rides the generic statutory-occupation-class profile
+ * column (unrecorded refuses by name — the run will not guess the class);
+ * the cap itself is the rule's `weeklyCap`, applied after the basis prices
+ * the day. The week is the Sunday week: the Act states no employer election.
  */
 const NB_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "Employment Standards Act (New Brunswick), SNB 1982 c E-7.2, ss. 18–21",
@@ -384,6 +386,11 @@ const NB_HOLIDAY_PAY: PayrollHolidayPayRule = {
   // continuous days since their latest hire date.
   qualifying: { minEmploymentDays: 90, lastAndFirstScheduledShift: true },
   premium: { multiplier: "1.5", plusHolidayPay: true },
+  weeklyCap: {
+    values: ["route_salesperson", "general"],
+    cappedValue: "route_salesperson",
+    lookbackWeeks: 4,
+  },
   // s. 21(1): "the thirty calendar days immediately preceding the holiday".
   lookbackEnds: ENDS_DAY_BEFORE,
 };

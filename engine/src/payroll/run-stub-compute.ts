@@ -286,6 +286,8 @@ export async function calculateStub(
     statHolidayPay: ctx.statHolidayPay, oneOffRun, need: ctx.need, lines,
     allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
     holidayEligibility: ctx.holidayEligibility,
+    occupationClass: emp.statutory_occupation_class,
+    currentEarningLines: lines,
   });
 
   await applyAssignedComponentLines(tx, {

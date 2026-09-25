@@ -301,11 +301,20 @@ export async function appendStatutoryHolidayEarningLines(
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
     /** Authoritative statutory holiday eligibility facts by employee. */
     holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
+    /** Presented statutory occupation class; see `statutoryHolidayLinesForStub`. */
+    occupationClass?: string | null;
+    /** Stub earning lines so far, for the weekly cap's same-week slice. */
+    currentEarningLines?: readonly {
+      amount: string;
+      kind: string;
+      nonPeriodic?: boolean | null;
+    }[];
   },
 ): Promise<void> {
   const {
     orgId, documentId, employeePartyId, emp, country, subsidiaryId, province, run, payRate,
     statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds, holidayEligibility,
+    occupationClass, currentEarningLines,
   } = args;
   if (!oneOffRun && statHolidayPay) {
     // Class-based percent-of-pay rules (Manitoba construction s. 30) price
@@ -330,6 +339,8 @@ export async function appendStatutoryHolidayEarningLines(
       allowedSubsidiaryIds,
       holidayEligibility,
       periodRegularEarnings,
+      occupationClass,
+      currentEarningLines,
     });
     for (const line of holidayLines) {
       lines.push({
