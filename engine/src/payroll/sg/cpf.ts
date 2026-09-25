@@ -141,8 +141,14 @@ export interface SgStatutoryResult {
   employeeCents: bigint;
   /** Employer share = total − employee, whole dollars as cents. */
   employerCents: bigint;
-  /** SDL for the month, cents. */
+  /** SDL for the month, cents (floored — never rounded up). */
   sdlCents: bigint;
+  /**
+   * Exact SDL levy in 1/40000-dollar units (I6-payroll-28): the summand for
+   * floorEmployerSdlTotal. Retained because cent-rounding each line before
+   * the employer aggregation overstates the floored total.
+   */
+  sdlExact40000: bigint;
 }
 
 const STATUSES: readonly string[] = ["citizen", "spr_3rd_year", "spr_1st_year", "spr_2nd_year",
@@ -276,15 +282,25 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
   // SDL on monthly total wages: "0.25% of the monthly
   // total wages", "$2 for an employee earning less than $800 a month",
   // "$11.25 for an employee earning more than $4,500 a month". The Board
-  // publishes no per-employee cent rule (only the employer total "round[s]
-  // down to the nearest dollar"), so the line prices 0.25% half up to the
-  // cent — stated here, not hidden in arithmetic.
+  // directs employers to add each employee's calculated SDL and round the
+  // employer TOTAL down to the nearest dollar — so the per-employee line
+  // floors to the cent (never rounds up: two $1,002 earners post $2.50 +
+  // $2.50, not $2.51 + $2.51), and the monthly employer total comes from
+  // floorEmployerSdlTotal over the exact levies, never from summing lines.
+  // Exactness: 0.25% of integer cents is exact in 1/40000-dollar units
+  // (SDL$ = wageCents / 40000), so the exact levy IS the wage-cents count,
+  // clamped by the $2 / $11.25 per-employee levies at the wage gates.
   const w = parseCents(input.ordinaryWages, "monthly ordinary wages") + aw;
-  let sdlCents = (w * 25n + 5000n) / 10000n;
-  const sdlMin = parseCents(tables.sdl.minLevy, "SDL minimum levy");
-  const sdlMax = parseCents(tables.sdl.maxLevy, "SDL maximum levy");
-  if (w < parseCents(tables.sdl.minWage, "SDL floor wage") && sdlCents < sdlMin) sdlCents = sdlMin;
-  if (w > parseCents(tables.sdl.maxWage, "SDL cap wage") && sdlCents > sdlMax) sdlCents = sdlMax;
+  let sdlExact40000 = w;
+  const sdlMin40000 = parseCents(tables.sdl.minLevy, "SDL minimum levy") * 400n;
+  const sdlMax40000 = parseCents(tables.sdl.maxLevy, "SDL maximum levy") * 400n;
+  if (w < parseCents(tables.sdl.minWage, "SDL floor wage") && sdlExact40000 < sdlMin40000) {
+    sdlExact40000 = sdlMin40000;
+  }
+  if (w > parseCents(tables.sdl.maxWage, "SDL cap wage") && sdlExact40000 > sdlMax40000) {
+    sdlExact40000 = sdlMax40000;
+  }
+  const sdlCents = sdlExact40000 / 400n;
 
   return {
     cpfApplicable,
@@ -293,7 +309,25 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
     employeeCents: employeeDollars * 100n,
     employerCents: employerDollars * 100n,
     sdlCents,
+    /** Exact levy in 1/40000-dollar units for floorEmployerSdlTotal. */
+    sdlExact40000,
   };
+}
+
+/**
+ * Monthly employer SDL total (I6-payroll-28): add each employee's exact
+ * calculated levy and round the TOTAL down to the nearest dollar (CPF
+ * Board, Skills Development Levy). Takes the `sdlExact40000` figures from
+ * calculateSgStatutory — one per employee for the month — and returns whole
+ * cents. Summing the posted per-employee lines instead overstates the
+ * remittance whenever fractional cents add up; the dust between the line
+ * sum and this total is absorbed at remittance, never re-billed.
+ */
+export function floorEmployerSdlTotal(exact40000: readonly bigint[]): bigint {
+  let sum = 0n;
+  for (const levy of exact40000) sum += levy;
+  if (sum < 0n) throw new PayrollError(`employer SDL exact levies must be non-negative, got total ${sum}`);
+  return (sum / 40000n) * 100n;
 }
 
 // ---------------------------------------------------------------------------
