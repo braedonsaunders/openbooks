@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { computeEsStatutory } from "./compute-statutory.ts";
 import { calculateEsIrpf2026 } from "./irpf-2026.ts";
+import { ES_CERTIFICATES } from "./certificates.ts";
 import type {
   PayrollStatutoryComputeContext,
   StubLine,
@@ -34,6 +35,8 @@ function esAdapterContext(
   priorChanged = false,
   zone: "ninguna" | "ceuta-melilla" | "la-palma" = "ninguna",
   incomeInZone = false,
+  expectedAnnual = "24000.00",
+  expectedPeriods = "12",
 ): RunLines {
   const lines: StubLine[] = [];
   const pushStatutory = createPushStatutory({
@@ -66,9 +69,11 @@ function esAdapterContext(
     insurable: "2000.00",
     periodsPerYear: 12,
     pushStatutory,
-    certificateFor: (key: string) => key === "es_zona_irpf"
-      ? { answers: { zona_residencia: zone, rendimientos_en_zona: String(incomeInZone) } }
-      : null,
+    certificateFor: (key: string) => key === "es_retribucion_anual" ? {
+      certificate: ES_CERTIFICATES.certificates.find((item) => item.key === key)!,
+      onFile: true, effectiveFrom: null, missing: [],
+      answers: { importe_anual_previsto: expectedAnnual, periodos_recurrentes_esperados: expectedPeriods },
+    } : { answers: { zona_residencia: zone, rendimientos_en_zona: String(incomeInZone) } },
     assertRegionSupported: () => {},
   } as unknown as PayrollStatutoryComputeContext;
   return { ctx, lines };
@@ -114,13 +119,16 @@ test("adapter resolves the September late edition", async () => {
 });
 
 test("adapter counts a pensionable one-off contribution once in annual COTIZACIONES", async () => {
-  const { ctx } = esAdapterContext("2026-03-15");
+  const { ctx } = esAdapterContext("2026-03-15", false, "ninguna", false, "31000.00", "12");
   Object.assign(ctx, { income: "2500.00", nonPeriodic: "1000.00", pensionable: "3500.00", pensionableNonPeriodic: "1000.00", insurable: "3500.00" });
   const result = await computeEsStatutory(ctx);
   const expected = calculateEsIrpf2026({ payDate: "2026-03-15", retribuciones: "31000", cotizaciones: "2015", situacionFamiliar: "3", birthYear: 1990 });
   const annualizedWrongly = calculateEsIrpf2026({ payDate: "2026-03-15", retribuciones: "31000", cotizaciones: "2730", situacionFamiliar: "3", birthYear: 1990 });
   assert.notEqual(expected.tipo, annualizedWrongly.tipo);
   assert.equal(result["ES_TIPO_IRPF"], expected.tipo);
+  const december = esAdapterContext("2026-12-15", false, "ninguna", false, "3000.00", "1");
+  Object.assign(december.ctx, { income: "3000.00", pensionable: "3000.00", insurable: "3000.00" });
+  assert.equal((await computeEsStatutory(december.ctx)).ES_IMPORTE_ANUAL, "3000.00");
 });
 
 test("adapter refuses when committed same-year ordinary pay changed without Article 87 inputs", async () => {

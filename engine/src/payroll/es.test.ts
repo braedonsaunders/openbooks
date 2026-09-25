@@ -24,6 +24,16 @@ import {
 } from "./packs.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
 
+function esResolvedCertificate(key: string) {
+  if (key !== "es_retribucion_anual") return key === "es_zona_irpf"
+    ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
+    : null;
+  return {
+    certificate: ES_CERTIFICATES.certificates.find((item) => item.key === key)!,
+    onFile: true, effectiveFrom: null, answers: { importe_anual_previsto: "24000.00", periodos_recurrentes_esperados: "12" }, missing: [],
+  };
+}
+
 test("ES pack exists as an installable 2026 pack in euro on a calendar year", () => {
   assert.equal(ES_PAYROLL_PACK.country, "ES");
   // installable since the adapter golden proves a full monthly payslip
@@ -154,7 +164,7 @@ test("ES certificates keep Modelo 145 distinct from payer-held facts", () => {
   // situación familiar is distinct from SITUPER.
   assert.deepEqual(
     ES_CERTIFICATES.certificates.map((entry) => [entry.key, entry.storage]),
-    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"]],
+    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"]],
   );
   const certificate = ES_CERTIFICATES.certificates[0]!;
   assert.equal(certificate.form, "145");
@@ -231,7 +241,6 @@ test("ES statutory rates carry no tenant slots: every rate is a published consta
 });
 
 test("ES computeStatutory refuses foral regions, off-year runs and off-monthly payroll", async () => {
-  const pushed: Array<{ key: string; amount: string }> = [];
   const base = {
     tx: { execute: async () => ({ rows: [{ changed: false }] }) },
     orgId: "org",
@@ -246,21 +255,14 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
     pensionable: "2000.00",
     insurable: "2000.00",
     periodsPerYear: 12,
-    pushStatutory: (key: string, _kind: string, _label: string, amount: string) => {
-      pushed.push({ key, amount });
-    },
-    certificateFor: (key: string) => key === "es_zona_irpf"
-      ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
-      : null,
+    pushStatutory: () => {},
+    certificateFor: esResolvedCertificate,
     assertRegionSupported: (region: string) => {
       if (!ES_PAYROLL_PACK.regions.supported.includes(region)) {
         throw new PayrollPackError(`unsupported region ${region}`);
       }
     },
   } as unknown as Parameters<typeof computeEsStatutory>[0];
-  const good = await computeEsStatutory(base);
-  assert.match(good["ES_TIPO_IRPF"] ?? "", /^\d+\.\d\d$/);
-  assert.ok(pushed.some((line) => line.key === "irpf"));
 
   await assert.rejects(
     () => computeEsStatutory({ ...base, region: "PV" }),
@@ -283,10 +285,6 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
 });
 
 test("ES employee facts refuse absence as missing and bad values as out-of-band", async () => {
-  // Both causes are reachable now that operators supply these fields: an
-  // empty value is not out of range, it is missing. Statuses unchanged —
-  // every case still refuses — only the absent name sharpens.
-  const pushed: Array<{ key: string; amount: string }> = [];
   const base = {
     taxYear: 2026,
     region: "MD",
@@ -297,12 +295,8 @@ test("ES employee facts refuse absence as missing and bad values as out-of-band"
     pensionable: "2000.00",
     insurable: "2000.00",
     periodsPerYear: 12,
-    pushStatutory: (key: string, _kind: string, _label: string, amount: string) => {
-      pushed.push({ key, amount });
-    },
-    certificateFor: (key: string) => key === "es_zona_irpf"
-      ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
-      : null,
+    pushStatutory: () => {},
+    certificateFor: esResolvedCertificate,
     assertRegionSupported: () => {},
   } as unknown as Parameters<typeof computeEsStatutory>[0];
   const factCases = [
