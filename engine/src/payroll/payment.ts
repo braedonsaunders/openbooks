@@ -331,8 +331,8 @@ export async function recordPayRunPayment(input: {
     });
     const postedPayment = await postEntry(tx, {
       orgId,
-      bookId: run.book_id,
-      subsidiaryId: run.subsidiary_id,
+      bookId: run.book_id!,
+      subsidiaryId: run.subsidiary_id!,
       entryNumber,
       postingDate: paidOn,
       periodId: period.id,
@@ -345,7 +345,7 @@ export async function recordPayRunPayment(input: {
         ...debitLegs,
         {
           accountId: input.bankAccountId,
-          subsidiaryId: run.subsidiary_id,
+          subsidiaryId: run.subsidiary_id!,
           amount: bankAmount,
           currency: runCurrency,
           txnAmount: neg(total),

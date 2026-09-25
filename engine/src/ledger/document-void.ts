@@ -1023,7 +1023,7 @@ export async function completeRequestedDocumentVoid(
               locationId: line.locationId,
               classId: line.classId,
               equipmentUnitId: line.equipmentUnitId,
-              extraDims: line.extraDims ?? {},
+              extraDims: (line.extraDims ?? {}) as Record<string, unknown>,
               paymentCardId: line.paymentCardId,
               taxCodeId: line.taxCodeId,
               quantity: line.quantity,

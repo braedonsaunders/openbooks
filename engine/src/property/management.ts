@@ -2090,7 +2090,7 @@ export async function reverseSecurityDepositTransaction(input: {
           (select id from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id})
       `);
       for (const application of applications.rows) {
-        const reversalLineId = reversalLineByNumber.get(application.line_number);
+        const reversalLineId = reversalLineByNumber.get(Number(application.line_number));
         if (!reversalLineId) throw new PropertyManagementError("Security deposit reversal is missing its mirrored line");
         await tx.execute(sql`
           insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,

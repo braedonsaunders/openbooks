@@ -52,7 +52,7 @@ export interface PostEntryLineInput {
   equipmentUnitId?: string | null;
   paymentCardId?: string | null;
   taxCodeId?: string | null;
-  extraDims?: Record<string, unknown>;
+  extraDims?: Record<string, unknown> | null;
   quantity?: string | null;
   unit?: string | null;
   dueDate?: string | null;
