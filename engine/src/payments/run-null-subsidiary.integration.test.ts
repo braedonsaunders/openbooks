@@ -59,7 +59,7 @@ test("a pay run selects a posted bill whose document has no subsidiary", { skip:
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
 
-    const run = await createPaymentRun({
+    const run = await createPaymentRun({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       createdBy: actor,
       paymentBankProfileId: profileId,

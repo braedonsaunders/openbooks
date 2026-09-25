@@ -389,7 +389,7 @@ test(
     try {
       const fixture = await seedScheduleFixture(org, { action: "create_draft" });
       const run = await withOrgContext(org.orgId, () =>
-        createPaymentRun({
+        createPaymentRun({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: fixture.operatorId,
           paymentBankProfileId: fixture.profileId,
@@ -606,7 +606,7 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const fixture = await seedScheduleFixture(org);
-      const run = await withOrgContext(org.orgId, () => createPaymentRun({
+      const run = await withOrgContext(org.orgId, () => createPaymentRun({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: null,
         paymentBankProfileId: fixture.profileId,

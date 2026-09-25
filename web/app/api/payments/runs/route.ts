@@ -74,6 +74,7 @@ export async function POST(req: Request) {
       createdBy: user.id,
       paymentBankProfileId: body.paymentBankProfileId,
       billDocumentIds: body.billDocumentIds,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       scheduledFor: body.scheduledFor ?? null,
       selectionCriteria: body.selectionCriteria ?? {},
     })

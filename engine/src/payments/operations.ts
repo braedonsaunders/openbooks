@@ -1821,7 +1821,7 @@ async function processDuePaymentSchedule(
     // winner's run through the same occurrence key instead of duplicating it.
     // System provenance throughout: the historical schedule author is never
     // the recorded actor of an automated selection.
-    const run = await createPaymentRun({
+    const run = await createPaymentRun({ allowedSubsidiaryIds: null,
       orgId: schedule.org_id,
       createdBy: null,
       paymentBankProfileId: schedule.payment_bank_profile_id,

@@ -508,20 +508,19 @@ test(
       values(${format},${org.orgId},'SCOPE','Scope','cpa005_credit','credit','CA','CAD',${actor},${actor})`);
       await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,subsidiary_id,payment_format_id,currency,country,created_by,updated_by)
       values(${profile},${org.orgId},'Scope',${org.accounts.bank},${org.subsidiaryId},${format},'CAD','CA',${actor},${actor})`);
-      const run = await createPaymentRun({
+      const movedTo = randomUUID();
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${movedTo},${org.orgId},${org.subsidiaryId},'Rehome','CAD','CA')`);
+      await db.execute(sql`update parties set subsidiary_id=${movedTo} where id=${org.vendorId} and org_id=${org.orgId}`);
+      await assert.rejects(createPaymentRun({ allowedSubsidiaryIds: new Set([org.subsidiaryId]), orgId: org.orgId, createdBy: actor, paymentBankProfileId: profile, billDocumentIds: [bills[0]!], scheduledFor: org.date }), ScopeNotFoundError);
+      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where id=${org.vendorId} and org_id=${org.orgId}`);
+      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: actor,
         paymentBankProfileId: profile,
         billDocumentIds: [bills[0]!],
         scheduledFor: org.date,
       });
-      const evidence = (
-        await db.execute<{
-          amount: string;
-          credits: string;
-        }>(sql`select pi.amount,
-      d.custom->'creditAllocations'->0->>'amount' as credits from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`)
-      ).rows[0];
+      const evidence = (await db.execute<{ amount: string; credits: string }>(sql`select pi.amount, d.custom->'creditAllocations'->0->>'amount' as credits from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`)).rows[0];
       assert.deepEqual(evidence, { amount: "80.0000", credits: "20.0000" });
     } finally {
       await dropScratchOrg(org.orgId);
@@ -588,7 +587,7 @@ test(
       values(${format},${org.orgId},'SCOPE','Scope','wire','credit','CA','USD',${actor},${actor})`);
       await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,subsidiary_id,payment_format_id,currency,country,created_by,updated_by)
       values(${profile},${org.orgId},'Scope',${org.accounts.bank},${org.subsidiaryId},${format},'USD','CA',${actor},${actor})`);
-      const run = await createPaymentRun({
+      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: actor,
         paymentBankProfileId: profile,

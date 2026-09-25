@@ -55,7 +55,7 @@ async function discountFixture(
             ${org.subsidiaryId}, ${formatId}, ${opts.currency}, 'CA',
             ${JSON.stringify({ discountAccountId: org.accounts.cogs })}::jsonb, ${actor}, ${actor})`);
 
-  const run = await createPaymentRun({
+  const run = await createPaymentRun({ allowedSubsidiaryIds: null,
     orgId: org.orgId,
     createdBy: actor,
     paymentBankProfileId: profileId,

@@ -225,7 +225,7 @@ test("a reimbursement run over a three-settlement report selects only the out-of
          require_run_approval, require_file_approval, created_by, updated_by)
       values (${profileId}, ${s.orgId}, 'Settlement profile', ${s.deps.control.bank},
               ${formatId}, 'CAD', false, false, ${actor}, ${actor})`);
-    const run = await createPaymentRun({
+    const run = await createPaymentRun({ allowedSubsidiaryIds: null,
       orgId: s.orgId,
       createdBy: actor,
       paymentBankProfileId: profileId,

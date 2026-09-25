@@ -5,6 +5,11 @@ import { roundCurrencyMoney } from "../fx/currencies.ts";
 import { cmp, divRate, fromUnits, isZero, toUnits } from "../money/money.ts";
 import { evaluateBillsForRelease, recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
 import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
+import {
+  lockScopeRows,
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+} from "../organization/subsidiary-scope.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { type CreditAllocationInput } from "./payment-contracts.ts";
@@ -23,6 +28,7 @@ interface CreatePaymentRunOptions {
   createdBy: string | null;
   paymentBankProfileId: string;
   billDocumentIds: string[];
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   scheduledFor?: string | null;
   sourceScheduleId?: string | null;
   selectionCriteria?: Record<string, unknown>;
@@ -119,6 +125,30 @@ async function createPaymentRunWithinTransaction(
 ): Promise<{ id: string; runNumber: string }> {
   if (opts.billDocumentIds.length === 0) throw new PaymentError("select at least one bill to pay");
 
+  // Lock the requested source documents, then their payees in stable order.
+  // A bill can remain in subsidiary A after its party is rehomed to B; the
+  // service must authorize the live party before reading its payment details.
+  await lockScopeRows(
+    db,
+    opts.orgId,
+    opts.billDocumentIds.map((id) => ({ kind: "document" as const, id })),
+    opts.allowedSubsidiaryIds,
+  );
+  const sourceParties = (await db.execute<{ id: string; party_id: string | null }>(sql`
+    select id, party_id from documents
+     where org_id = ${opts.orgId} and id in ${opts.billDocumentIds}
+     order by id
+  `)).rows;
+  await lockScopeRows(
+    db,
+    opts.orgId,
+    sourceParties.filter((row): row is { id: string; party_id: string } => row.party_id !== null)
+      .map((row) => ({ kind: "party" as const, id: row.party_id })),
+    opts.allowedSubsidiaryIds,
+    "update",
+    { orgWideNull: true },
+  );
+
   // Durable occurrence claim, before any side effect: the ledger row and the
   // run artifacts below commit atomically in this transaction. Concurrent
   // creators of the same occurrence serialize on the unique index — the loser
@@ -164,6 +194,7 @@ async function createPaymentRunWithinTransaction(
   const profiles = (await db.execute<{
     id: string;
     bank_account_id: string;
+    bank_subsidiary_id: string | null;
     subsidiary_id: string | null;
     currency: string;
     require_run_approval: boolean;
@@ -171,16 +202,22 @@ async function createPaymentRunWithinTransaction(
     rail: string;
     direction: string;
   }>(sql`
-    select p.id, p.bank_account_id, p.subsidiary_id, p.currency, p.require_run_approval, p.settings,
+    select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
+           p.currency, p.require_run_approval, p.settings,
            f.rail, f.direction
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
       join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
                         and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
+     for update of p, a
   `));
   const profile = profiles.rows[0];
   if (!profile) throw new PaymentError("payment bank profile was not found or is inactive");
+  if (!subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.subsidiary_id)
+    || !subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.bank_subsidiary_id)) {
+    throw new ScopeNotFoundError();
+  }
   if (profile.direction === "debit") throw new PaymentError("a debit-only bank profile cannot pay vendor bills");
   const method = profile.rail === "cpa005_credit" ? "eft"
     : profile.rail === "nacha_credit" ? "ach"
@@ -489,6 +526,7 @@ async function createPaymentRunWithinTransaction(
       select id from party_bank_accounts
        where party_id = ${partyId} and org_id = ${opts.orgId} and is_active and approved_at is not null
        order by approved_at desc, created_at desc limit 1
+       for share
     `));
 
     const instruction = (await db.insert(schema.paymentInstructions).values({
