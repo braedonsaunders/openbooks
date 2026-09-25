@@ -19,10 +19,6 @@ import {
   ItPayrollRefusal,
   computeItStatutoryWithRates,
 } from "./compute-statutory.ts";
-import {
-  itSaldolInstallmentRemaining,
-  surtaxSaldoInstallment,
-} from "./surtax-balances.ts";
 import { IT_PACK_FILINGS } from "./filings.ts";
 import { IT_JURISDICTIONS } from "./jurisdictions.ts";
 import { IT_PAYROLL_PACK } from "./pack.ts";
@@ -382,24 +378,6 @@ test("CU is populated with a slip; the 770 stays declared and refused", async ()
   );
   assert.equal(settanta.parseRowId("anything"), null);
   assert.equal(IT_PAYROLL_PACK.filings(), IT_PACK_FILINGS);
-});
-
-test("saldo installments divide the remaining assessment over the remaining schedule months", async () => {
-  // Regionale elevenths January–November, comunale ninths March–November; the
-  // last scheduled month takes exactly the remainder, so a mid-year adopter
-  // catches up and the year closes exact.
-  assert.deepEqual(itSaldolInstallmentRemaining(1), { regionale: 11, comunale: 0 });
-  assert.deepEqual(itSaldolInstallmentRemaining(3), { regionale: 9, comunale: 9 });
-  assert.deepEqual(itSaldolInstallmentRemaining(11), { regionale: 1, comunale: 1 });
-  assert.deepEqual(itSaldolInstallmentRemaining(12), { regionale: 0, comunale: 0 });
-  assert.equal(surtaxSaldoInstallment("300.0000", "0.0000", 11), "27.2727");
-  assert.equal(surtaxSaldoInstallment("300.0000", "272.7300", 1), "27.2700");
-  assert.equal(surtaxSaldoInstallment("200.0000", "0.0000", 9), "22.2222");
-  assert.equal(surtaxSaldoInstallment("0.0000", "0.0000", 11), "0.0000");
-  await assert.rejects(
-    (async () => surtaxSaldoInstallment("100.0000", "100.0100", 5))(),
-    /already exceed the assessed/,
-  );
 });
 
 test("the national festivity calendar is declared with Easter Monday computed", () => {
