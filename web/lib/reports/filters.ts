@@ -102,7 +102,7 @@ export async function dimensionOptions(orgId?: string, selectedProjectId?: strin
       order by name`),
     db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active${locationScope} order by name`),
     db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active${classScope} order by name`),
-    segmentRegistry(resolvedOrgId),
+    segmentRegistry(resolvedOrgId, allowedSubsidiaryIds),
   ]);
   return {
     departments: depts.rows as { id: string; name: string }[],
