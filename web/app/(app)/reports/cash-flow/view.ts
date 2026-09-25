@@ -123,7 +123,10 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
   const [opts, org] = await Promise.all([dimensionOptions(undefined, undefined, optionScope), orgInfo()])
   // Resolves empty when blocked; drills only render beside the paper.
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const m = (v: ExactDecimal) => formatMoney(v, { currency: org?.base_currency })
+  // Figures present in the VIEW's currency (the context node's functional
+  // currency), not the org base — a foreign-functional subsidiary view
+  // states its own money. Mirrors the P&L and balance sheet.
+  const m = (v: ExactDecimal) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency })
   const openingTo = new Date(`${from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
   const openingDate = openingTo.toISOString().slice(0, 10)

@@ -152,7 +152,10 @@ export async function loadPartners(
   }
   const org = await orgPromise
 
-  const m = (value: string) => formatMoney(value, { currency: org?.base_currency })
+  // Figures present in the VIEW's currency (the context node's functional
+  // currency), not the org base — a foreign-functional subsidiary view
+  // states its own money. Mirrors the P&L and balance sheet.
+  const m = (value: string) => formatMoney(value, { currency: subView?.currency ?? org?.base_currency })
   const q = params.q?.toLowerCase()
   const filtered = q ? all.filter((r) => (r.display_name ?? '').toLowerCase().includes(q)) : all
   // Payables are stored credit-negative; the report presents them positive.

@@ -208,7 +208,10 @@ export async function loadTrialBalance(
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
     company: branding.orgName,
-    currency: org.base_currency,
+    // The VIEW's currency (the context node's functional currency), not the
+    // org base — a foreign-functional subsidiary view states its own money.
+    // Mirrors the P&L and balance sheet.
+    currency: subView?.currency ?? org.base_currency,
     emptyLabel: t('generalLedger.empty'),
     paper: {
       title: t('trialBalance.title'),

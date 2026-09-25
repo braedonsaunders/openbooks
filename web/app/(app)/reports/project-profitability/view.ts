@@ -321,7 +321,10 @@ export async function loadProjectProfitability(
     periodPhrase: t('pnl.dateRange', { from: period.from, to: period.to }),
     emptyLabel: t('projectProfitability.empty'),
     emptyHint: t('projectProfitability.emptyHint', { period: t('pnl.dateRange', { from: period.from, to: period.to }) }),
-    currency: org.base_currency,
+    // The VIEW's currency (the context node's functional currency), not the
+    // org base — a foreign-functional subsidiary view states its own money.
+    // Mirrors the P&L and balance sheet.
+    currency: subView?.currency ?? org.base_currency,
     baseCurrencyNotice: null,
     currencyBasisBlocked,
     baseCurrencyReady: currencyBasisBlocked === null,
