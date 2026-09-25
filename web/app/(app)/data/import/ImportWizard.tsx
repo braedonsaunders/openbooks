@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -84,6 +84,8 @@ async function readSampleCompanyRefusal(res: Response): Promise<SampleCompanyRef
 
 type Step = 'source' | 'mapping' | 'preview' | 'result'
 type Format = 'csv' | 'xlsx' | 'json'
+type PreviewRequest = { resource: string; format: Format; rows: Record<string, unknown>[]; mapping: Record<string, string>; importMode: 'insert' | 'upsert'; post: boolean }
+type PreviewState = { outcome: Outcome; revision: number; request: PreviewRequest }
 
 export function ImportWizard() {
   const t = useTranslations('data')
@@ -106,7 +108,8 @@ export function ImportWizard() {
   const [importMode, setImportMode] = useState<'insert' | 'upsert'>('upsert')
   const [post, setPost] = useState(false)
 
-  const [preview, setPreview] = useState<Outcome | null>(null)
+  const [preview, setPreview] = useState<PreviewState | null>(null)
+  const [inputRevision, setInputRevision] = useState(0)
   const [result, setResult] = useState<Outcome | null>(null)
   const [busy, setBusy] = useState(false)
   const [sampleProfiles, setSampleProfiles] = useState<SampleCompanyProfile[]>([])
@@ -114,6 +117,13 @@ export function ImportWizard() {
   const [sampleBusy, setSampleBusy] = useState(false)
   const [sampleError, setSampleError] = useState<SampleCompanyRefusal | null>(null)
   const commitIdentity = useRef<ImportCommitIdentity | null>(null)
+  const inputRevisionRef = useRef(0)
+
+  const invalidateInputs = () => {
+    const revision = ++inputRevisionRef.current
+    setInputRevision(revision)
+    setPreview(null)
+  }
 
   const sampleErrorText = (refusal: SampleCompanyRefusal): string => {
     const copyKey = refusal.code ? SAMPLE_COMPANY_FAILURE_COPY[refusal.code] : undefined
@@ -209,31 +219,36 @@ export function ImportWizard() {
     [resources, resource],
   )
 
-  const onFile = useCallback((file: File) => {
+  const onFile = (file: File) => {
+    invalidateInputs()
+    const revision = inputRevisionRef.current
     setFileName(file.name)
+    setText('')
+    setBase64('')
     const lower = file.name.toLowerCase()
     if (lower.endsWith('.xlsx')) {
       setFormat('xlsx')
       const reader = new FileReader()
       reader.onload = () => {
+        if (inputRevisionRef.current !== revision) return
         const dataUrl = String(reader.result)
         setBase64(dataUrl.slice(dataUrl.indexOf(',') + 1))
-        setText('')
       }
       reader.readAsDataURL(file)
     } else {
       setFormat(lower.endsWith('.json') ? 'json' : 'csv')
       const reader = new FileReader()
       reader.onload = () => {
+        if (inputRevisionRef.current !== revision) return
         setText(String(reader.result))
-        setBase64('')
       }
       reader.readAsText(file)
     }
-  }, [])
+  }
 
   const doParse = async () => {
     if (!resource) return
+    const revision = inputRevisionRef.current
     setBusy(true)
     try {
       const res = await fetch('/api/data/import', {
@@ -243,6 +258,7 @@ export function ImportWizard() {
       })
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('import.parseFailed')))
       const d = await res.json()
+      if (inputRevisionRef.current !== revision) return
       if (!d.headers?.length) throw new Error('No columns found in the file')
       setHeaders(d.headers)
       setRows(d.rows ?? [])
@@ -251,32 +267,37 @@ export function ImportWizard() {
       setMapping(d.mapping ?? {})
       setStep('mapping')
     } catch (e) {
-      toast.error((e as Error).message)
+      if (inputRevisionRef.current === revision) toast.error((e as Error).message)
     } finally {
       setBusy(false)
     }
   }
 
   const doPreview = async () => {
+    const revision = inputRevisionRef.current
+    const request: PreviewRequest = { resource, format, rows, mapping, importMode, post }
     setBusy(true)
     try {
       const res = await fetch('/api/data/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'preview', resource, format, rows, mapping, importMode, post }),
+        body: JSON.stringify({ mode: 'preview', ...request }),
       })
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('import.previewFailed')))
       const d = await res.json()
-      setPreview(d.outcome)
+      if (inputRevisionRef.current !== revision) return
+      setPreview({ outcome: d.outcome, revision, request })
       setStep('preview')
     } catch (e) {
-      toast.error((e as Error).message)
+      if (inputRevisionRef.current === revision) toast.error((e as Error).message)
     } finally {
       setBusy(false)
     }
   }
 
   const doCommit = async () => {
+    if (!preview || preview.revision !== inputRevisionRef.current) return
+    const request = preview.request
     setBusy(true)
     try {
       // The key follows the exact request inputs. A lost response reuses it,
@@ -288,7 +309,7 @@ export function ImportWizard() {
         throw new ImportIdentityPersistenceError()
       }
       const identity = await resolveImportCommitIdentity(
-        { resource, format, rows, mapping, importMode, fileName, post },
+        { ...request, fileName },
         commitIdentity.current,
         storage,
         () => crypto.randomUUID(),
@@ -297,7 +318,7 @@ export function ImportWizard() {
       const res = await fetch('/api/data/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'commit', resource, format, rows, mapping, importMode, fileName, post, idempotencyKey: identity.key }),
+        body: JSON.stringify({ mode: 'commit', ...request, fileName, idempotencyKey: identity.key }),
       })
       if (!res.ok) {
         if (res.status === 409) throw new Error(t('import.commitConflict'))
@@ -328,6 +349,8 @@ export function ImportWizard() {
     setFields([])
     setMapping({})
     setPreview(null)
+    inputRevisionRef.current += 1
+    setInputRevision(inputRevisionRef.current)
     setResult(null)
   }
 
@@ -379,9 +402,9 @@ export function ImportWizard() {
           </Button>
         )}
         {step === 'preview' && preview && (
-          <Button onClick={doCommit} disabled={busy || preview.created + preview.updated === 0}>
+          <Button onClick={doCommit} disabled={busy || preview.revision !== inputRevision || preview.outcome.created + preview.outcome.updated === 0}>
             <Upload className="mr-2 h-4 w-4" />
-            {busy ? t('import.committing') : t('import.commit', { n: preview.created + preview.updated })}
+            {busy ? t('import.committing') : t('import.commit', { n: preview.outcome.created + preview.outcome.updated })}
           </Button>
         )}
         {step === 'result' && (
@@ -457,7 +480,7 @@ export function ImportWizard() {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">{t('import.resource')}</label>
-            <Select value={resource} onChange={(e) => setResource(e.target.value)}>
+            <Select value={resource} onChange={(e) => { invalidateInputs(); setResource(e.target.value) }}>
               <option value="">{t('import.resourcePlaceholder')}</option>
               {grouped.map(([group, list]) => (
                 <optgroup key={group} label={group}>
@@ -489,6 +512,7 @@ export function ImportWizard() {
             <textarea
               value={text}
               onChange={(e) => {
+                invalidateInputs()
                 setText(e.target.value)
                 setBase64('')
                 if (format === 'xlsx') setFormat('csv')
@@ -511,7 +535,7 @@ export function ImportWizard() {
           {!selectedCanPost && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">{t('import.mode')}</label>
-              <Select value={importMode} onChange={(e) => setImportMode(e.target.value as 'insert' | 'upsert')}>
+              <Select value={importMode} onChange={(e) => { invalidateInputs(); setImportMode(e.target.value as 'insert' | 'upsert') }}>
                 <option value="upsert">{t('import.modeUpsert')}</option>
                 <option value="insert">{t('import.modeInsert')}</option>
               </Select>
@@ -520,7 +544,7 @@ export function ImportWizard() {
           {selectedCanPost && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">{t('import.postMode')}</label>
-              <Select value={post ? 'post' : 'draft'} onChange={(e) => setPost(e.target.value === 'post')}>
+              <Select value={post ? 'post' : 'draft'} onChange={(e) => { invalidateInputs(); setPost(e.target.value === 'post') }}>
                 <option value="draft">{t('import.postDraft')}</option>
                 <option value="post">{t('import.postPost')}</option>
               </Select>
@@ -541,7 +565,7 @@ export function ImportWizard() {
                     <td className="px-3 py-2">
                       <Select
                         value={mapping[h] ?? ''}
-                        onChange={(e) => setMapping((prev) => ({ ...prev, [h]: e.target.value }))}
+                        onChange={(e) => { invalidateInputs(); setMapping((prev) => ({ ...prev, [h]: e.target.value })) }}
                         triggerClassName="h-8"
                       >
                         <option value="">{t('import.ignore')}</option>
@@ -564,13 +588,13 @@ export function ImportWizard() {
       {step === 'preview' && preview && (
         <div className="space-y-5">
           <div className="grid grid-cols-3 gap-3">
-            <StatTile label={t('import.toInsert')} value={preview.created} tone="green" />
-            <StatTile label={t('import.toUpdate')} value={preview.updated} tone="blue" />
-            <StatTile label={t('import.toFail')} value={preview.failed} tone="red" />
+            <StatTile label={t('import.toInsert')} value={preview.outcome.created} tone="green" />
+            <StatTile label={t('import.toUpdate')} value={preview.outcome.updated} tone="blue" />
+            <StatTile label={t('import.toFail')} value={preview.outcome.failed} tone="red" />
           </div>
-          {preview.errors.length > 0 && <ErrorTable t={t} errors={preview.errors} />}
-          {(preview.warnings?.length ?? 0) > 0 && (
-            <ErrorTable t={t} errors={preview.warnings ?? []} tone="amber" title={t('import.warnings')} />
+          {preview.outcome.errors.length > 0 && <ErrorTable t={t} errors={preview.outcome.errors} />}
+          {(preview.outcome.warnings?.length ?? 0) > 0 && (
+            <ErrorTable t={t} errors={preview.outcome.warnings ?? []} tone="amber" title={t('import.warnings')} />
           )}
         </div>
       )}
