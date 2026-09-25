@@ -12,9 +12,10 @@
  * The scan is static on purpose: a dynamic run only covers the branches its
  * fixture hits (conditionally pushed lines would slip through), while every
  * call SITE is enumerated here whatever the inputs. Non-literal keys fail
- * the scan loudly so a future dynamic push cannot pass silently — the one
- * sanctioned shape is a `cond ? "a" : "b"` ternary, both arms checked (the
- * US state/local split).
+ * the scan loudly so a future dynamic push cannot pass silently — the
+ * sanctioned shapes are a `"literal"` key with a `"literal"` kind, and the
+ * levy dispatch (I6-payroll-207), which checks the fallback arms plus every
+ * routed `statutoryComponent`. A match never spans calls.
  *
  * Run with `node --import tsx` on this file. Run from the repo root: like
  * pack-load-order.test.ts it resolves `engine/src/payroll` relatively.
@@ -43,28 +44,33 @@ const PACK_DIRS: Record<string, string> = {
   BR: "br",
 };
 
-/** `pushStatutory(<key expr>, "<kind>", ...)` — key expr is one literal or a ternary. */
-const PUSH_CALL = /pushStatutory\(\s*([\s\S]*?),\s*"([^"]+)"\s*,/g;
-/** `cond ? "a" : "b"` — both arms are pushed keys when the call runs. */
-const TERNARY_KEYS = /^\s*[\s\S]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*$/;
+/** Key expr never spans calls: a dynamic site cannot swallow its neighbour's kind literal. */
+const PUSH_CALL = /pushStatutory\(\s*((?:(?!pushStatutory\()[\s\S])*?),\s*"([^"]+)"\s*,/g;
+/** The levy dispatch key and its kind default, both pinned exactly. */
+const DISPATCH_CALL = /pushStatutory\(\s*levy\.statutoryComponent\?\.systemKey\s*\?\?\s*\(\s*[\s\S]*?\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*\)\s*,\s*levy\.statutoryComponent\?\.kind\s*\?\?\s*"([^"]+)"\s*,/g;
+/** `statutoryComponent: { systemKey: "x", kind: "y" }` in a jurisdiction declaration. */
+const COMPONENT_DECL = /statutoryComponent:\s*\{\s*systemKey:\s*"([^"]+)"\s*,\s*kind:\s*"([^"]+)"\s*\}/g;
 /** `"key"` and nothing else. */
 const SINGLE_KEY = /^\s*"([^"]+)"\s*$/;
 
-function pushedKeys(source: string, path: string): Array<{ systemKey: string; kind: string }> {
+type PushTarget = { systemKey: string; kind: string };
+function pushedKeys(source: string, path: string, componentTargets: PushTarget[]): PushTarget[] {
   const found: Array<{ systemKey: string; kind: string }> = [];
+  for (const dispatch of source.matchAll(DISPATCH_CALL)) {
+    found.push(
+      { systemKey: dispatch[1] ?? "", kind: dispatch[3] ?? "" },
+      { systemKey: dispatch[2] ?? "", kind: dispatch[3] ?? "" },
+      ...componentTargets,
+    );
+  }
   for (const match of source.matchAll(PUSH_CALL)) {
     const keyExpr = match[1] ?? "";
     const kind = match[2] ?? "";
-    const ternary = TERNARY_KEYS.exec(keyExpr);
-    if (ternary) {
-      found.push({ systemKey: ternary[1] ?? "", kind }, { systemKey: ternary[2] ?? "", kind });
-      continue;
-    }
     const single = SINGLE_KEY.exec(keyExpr);
     assert.ok(
       single,
       `${path}: non-literal pushStatutory key has no declared shape `
-        + `(only "literal" and 'cond ? "a" : "b"' are covered): ${keyExpr.trim().slice(0, 120)}`,
+        + `(only "literal" and the levy dispatch are covered): ${keyExpr.trim().slice(0, 120)}`,
     );
     found.push({ systemKey: single[1] ?? "", kind });
   }
@@ -99,9 +105,19 @@ test("every pushed (systemKey, kind) is declared, for every pack", () => {
           [`${component.systemKey}|${component.kind}`, component.assessedOn] as const),
       ),
     );
-    for (const path of sourcesUnder(join("engine", "src", "payroll", dirName))) {
+    const paths = sourcesUnder(join("engine", "src", "payroll", dirName));
+    // Every levy-routed push target the pack declares: the dispatch above
+    // can push any of these, so each must be a declared component.
+    const componentTargets: Array<{ systemKey: string; kind: string }> = [];
+    for (const path of paths) {
       const source = readFileSync(path, "utf8");
-      for (const pushed of pushedKeys(source, path)) {
+      for (const decl of source.matchAll(COMPONENT_DECL)) {
+        componentTargets.push({ systemKey: decl[1] ?? "", kind: decl[2] ?? "" });
+      }
+    }
+    for (const path of paths) {
+      const source = readFileSync(path, "utf8");
+      for (const pushed of pushedKeys(source, path, componentTargets)) {
         const assessedOn = declared.get(`${pushed.systemKey}|${pushed.kind}`);
         if (assessedOn === "earnings" || assessedOn === "taxable_income") continue;
         undeclared.push(
