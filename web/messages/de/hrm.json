@@ -391,6 +391,8 @@
     },
     "holdersCount": "{count, plural, one {# Inhaber} other {# Inhaber}}",
     "empty": "Keine Positionen entsprechen diesem Filter.",
+    "invalidDateTitle": "Ungültiges Stichtagsdatum",
+    "invalidDate": "{date} ist kein gültiges Kalenderdatum — Positionen werden stattdessen zum {today} angezeigt.",
     "total": "Gesamt",
     "drawer": {
       "title": "Position {code}",

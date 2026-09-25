@@ -18,6 +18,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
 import { HrmPositionError } from '@openbooks/engine/src/hrm/positions.ts'
 import { getPositionAsOf, getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
 import { sql } from 'drizzle-orm'
@@ -91,6 +92,8 @@ export interface PositionsPageData {
   addHref: string
   basePath: string
   effectiveDate: string
+  /** Set when the URL's effectiveDate fails strict civil-date parsing: the list corrects to the business date and names the correction. */
+  dateRefusal?: { title: string; description: string } | null
   segments: PositionSegment[]
   segmentsLabel: string
   allLabel: string
@@ -170,6 +173,16 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
+        // An impossible bookmarked date corrects to the business date in the
+        // loader; the correction is refused by name above the list, never
+        // silent and never a route error.
+        {
+          ...widgetBlock('empty-state', {
+            title: data.dateRefusal?.title ?? '',
+            description: data.dateRefusal?.description ?? '',
+          }),
+          when: f('dateRefusal'),
+        },
         // The house toolbar, not a lone dropdown floating over a bare table.
         // The as-of date was reachable only by hand-editing `effectiveDate`
         // in the URL before this — a filter with no control is a filter
@@ -265,10 +278,19 @@ export async function loadPositionsPage(
   const status = typeof sp.status === 'string' && (STATUSES as readonly string[]).includes(sp.status)
     ? sp.status
     : null
+  // Shape is not enough: 2026-02-30 passes the regex and then throws out
+  // of getVacancyAsOf into the generic route error. The shared strict
+  // parser refuses by calendar at this boundary, like the API's named 400;
+  // the page corrects to the business date and names the correction.
   const rawDate = typeof sp.effectiveDate === 'string' ? sp.effectiveDate : null
-  const effectiveDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
-    ? rawDate
-    : await businessToday(authz.user.orgId)
+  const effectiveDate = rawDate !== null && isCivilDate(rawDate) ? rawDate : await businessToday(authz.user.orgId)
+  const dateRefusal =
+    rawDate !== null && !isCivilDate(rawDate)
+      ? {
+          title: t('positions.invalidDateTitle'),
+          description: t('positions.invalidDate', { date: rawDate, today: effectiveDate }),
+        }
+      : null
   const canManage = can(authz, 'hrm.position.manage')
   const creating = sp.position === 'new' && canManage
   const positionId = typeof sp.position === 'string' && sp.position.length > 0 && sp.position !== 'new'
@@ -502,6 +524,7 @@ export async function loadPositionsPage(
     addHref: hrefFor(effectiveDate, status, 'new'),
     basePath: '/hrm/positions',
     effectiveDate,
+    dateRefusal,
     segments,
     segmentsLabel: t('positions.segmentsLabel'),
     allLabel: t('positions.statusAll'),

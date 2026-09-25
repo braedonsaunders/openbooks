@@ -391,6 +391,8 @@
     },
     "holdersCount": "{count, plural, other {# 名の保持者}}",
     "empty": "このフィルターに一致するポジションはありません。",
+    "invalidDateTitle": "無効な基準日",
+    "invalidDate": "{date}は実在しない日付です — {today}時点のポジションを表示しています。",
     "total": "合計",
     "drawer": {
       "title": "ポジション {code}",
