@@ -74,14 +74,14 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
             else assert.equal(data.monthly.find(row => row.month === '2026-07')?.spend, 100);
           } else if (view === 'customer profitability') {
             const data = await customerProfitability(period, org.orgId, null);
-            assert.equal(data.summary.totalRevenue, 200);
-            assert.equal(data.summary.totalCost, 100);
-            assert.equal(data.summary.totalGrossProfit, 100);
+            assert.equal(data.summary.totalRevenue, '200.0000');
+            assert.equal(data.summary.totalCost, '100.0000');
+            assert.equal(data.summary.totalGrossProfit, '100.0000');
           } else {
             const data = await spendVelocityData(org.orgId, period, null);
             if (view === 'spend accounts') assert.equal(data.summary.totalSpend, 100);
             if (view === 'spend vendors') assert.equal(data.vendorVelocity.find(row => row.id === org.vendorId)?.totalSpend, 100);
-            if (view === 'spend revenue') assert.equal(data.revenue.totalRevenue, 200);
+            if (view === 'spend revenue') assert.equal(data.revenue.totalRevenue, '200.0000');
             if (view === 'spend categories') assert.equal(data.expenseAnalysis.categories.find(row => row.categoryId === org.accounts.cogs)?.currentAmount, 100);
             if (view === 'spend comparison') assert.equal(data.periodComparison.summary.currentTotal, 100);
           }

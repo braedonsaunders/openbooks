@@ -97,8 +97,8 @@ for (const boundary of ["service", "completed month", "page", "assistant", "acco
           assert.equal(data.figures.revenue, mode === 'all' ? 1099 : mode === 'empty' ? 0 : 100);
           assert.equal(data.figures.depreciationAmortization, mode === 'all' ? 109 : mode === 'empty' ? 0 : 10);
           assert.equal(data.figures.headcount, mode === 'all' ? 2 : mode === 'empty' ? 0 : 1);
-          assert.equal(data.budget.totals.budget, mode === 'all' ? 500 : mode === 'empty' ? 0 : 120);
-          assert.equal(data.budget.totals.actual, mode === 'all' ? 1208 : mode === 'empty' ? 0 : 110);
+          assert.equal(data.budget.totals.budget, mode === 'all' ? '500.0000' : mode === 'empty' ? '0.0000' : '120.0000');
+          assert.equal(data.budget.totals.actual, mode === 'all' ? '1208.0000' : mode === 'empty' ? '0.0000' : '110.0000');
           assert.equal(JSON.stringify(data).includes('PRIVATE-HEALTH-EVIDENCE'), mode === 'all');
         });
       } finally { state.user = null; state.period = null; await dropScratchOrg(org.orgId); }
