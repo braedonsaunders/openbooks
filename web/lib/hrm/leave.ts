@@ -382,6 +382,7 @@ export interface MyLeaveData {
   dialogOpen: boolean
   dialogRequestId: string | null
   dialogCloseHref: string
+  canWithdrawCancel: boolean
 }
 
 /** Self-service inbox: the caller's own requests and balances, nothing else. */
@@ -391,6 +392,11 @@ export async function loadMyLeave(
 ): Promise<MyLeaveData> {
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
+  // Withdraw/cancel routes require hrm.leave.request exactly, like the
+  // org queue — the dialog gate mirrors the route guard, never a broader
+  // file/manage grant. Base carries it so the refusal return below stays
+  // a complete MyLeaveData too.
+  const canWithdrawCancel = can(authz, 'hrm.leave.request')
   const base = {
     title: t('myLeave.title'),
     description: t('myLeave.description'),
@@ -419,6 +425,7 @@ export async function loadMyLeave(
     dialogOpen: sp.file !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
     dialogRequestId: typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
     dialogCloseHref: '/hrm/my-leave',
+    canWithdrawCancel,
   }
   let inbox: LeaveRequestSummary[]
   try {
