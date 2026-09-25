@@ -28,11 +28,14 @@ export function ConfigEditor({
   fields,
   values,
   defaults,
+  onDirtyChange,
 }: {
   dashboard: string
   fields: EditorField[]
   values: Record<string, string | number>
   defaults: Record<string, string | number>
+  /** Reports unsaved-edit state so hosts (drawers) can guard dismissal. */
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, String(values[f.key] ?? defaults[f.key])])))
@@ -63,6 +66,10 @@ export function ConfigEditor({
   const dirty = fields.some((f) => f.key === 'weeklyApCap'
     ? draft[f.key] !== String(values[f.key] ?? defaults[f.key])
     : Number(draft[f.key]) !== Number(values[f.key] ?? defaults[f.key]))
+
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
 
   const applyServerValues = (serverValues: unknown) => {
     if (!serverValues || typeof serverValues !== 'object') return

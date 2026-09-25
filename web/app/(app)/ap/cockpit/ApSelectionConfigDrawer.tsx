@@ -1,11 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Drawer } from '@openbooks/ui'
 import { ListOrdered, ArrowUpRight } from 'lucide-react'
 import { ConfigEditor } from '../../analytics/_ui/ConfigEditor'
 import { Panel } from '../../analytics/_ui/Panel'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 
 /**
  * AP pay-selection configuration — the rule that decides WHICH bills the
@@ -37,6 +39,17 @@ export function ApSelectionConfigDrawer({
   currencyCode: string
 }) {
   const t = useTranslations('ap.cockpit.config')
+  const tc = useTranslations('common')
+  // The editor's draft is local state that unmounts with the drawer:
+  // guard dismissal with the shared dirty-close flow so unsaved edits
+  // ask before they are discarded.
+  const [editorDirty, setEditorDirty] = useState(false)
+  const closeGuard = useDirtyClose({
+    dirty: editorDirty,
+    onClose,
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
   const items: { label: string; value: string; note: string }[] = [
     { label: t('orderLabel'), value: t('orderValue'), note: t('orderNote') },
     { label: t('predictionLabel'), value: t('predictionValue'), note: t('predictionNote') },
@@ -46,10 +59,11 @@ export function ApSelectionConfigDrawer({
   ]
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={title} description={description} bodyClassName="overflow-y-auto">
+    <Drawer open onClose={() => void closeGuard.close()} size="lg" title={title} description={description} bodyClassName="overflow-y-auto">
       <div className="space-y-5">
         <ConfigEditor
           dashboard="cashflow"
+          onDirtyChange={setEditorDirty}
           fields={[
             { key: 'weeklyApCap', label: t('weeklyCapLabel', { currency: currencyCode }), help: t('weeklyCapHelp'), min: 0, max: 100_000_000, step: 1000 },
             { key: 'restrictToSafe', label: t('restrictLabel'), help: t('restrictHelp'), min: 0, max: 1, step: 1 },
