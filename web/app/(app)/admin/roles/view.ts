@@ -8,7 +8,7 @@ import { requirePermission } from '../../../../lib/authz'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import type { RoleRow, SubsidiaryPickerOption } from './RoleEditor'
-import type { SubsidiaryRestriction } from '@openbooks/schema'
+import { asSubsidiaryRestriction } from '../../../../lib/subsidiary-restriction-display'
 
 /** The roles-list query output: `app_roles` columns plus the permission and
  *  member counts (`::int` arrives as a number). */
@@ -22,31 +22,6 @@ type RoleDbRow = {
   subsidiary_restriction: unknown
   permission_count: number
   member_count: number
-}
-
-/** Narrow stored JSONB to the restriction union. Anything unrecognised
- *  means "no restriction" — the column default — never a wider grant. */
-function asSubsidiaryRestriction(value: unknown): SubsidiaryRestriction {
-  if (typeof value !== 'object' || value === null || !('mode' in value)) {
-    return { mode: 'all' }
-  }
-  const { mode } = value
-  if (
-    mode === 'subtree' &&
-    'subsidiaryId' in value &&
-    typeof value.subsidiaryId === 'string'
-  ) {
-    return { mode: 'subtree', subsidiaryId: value.subsidiaryId }
-  }
-  if (
-    mode === 'list' &&
-    'subsidiaryIds' in value &&
-    Array.isArray(value.subsidiaryIds) &&
-    value.subsidiaryIds.every((id): id is string => typeof id === 'string')
-  ) {
-    return { mode: 'list', subsidiaryIds: value.subsidiaryIds }
-  }
-  return { mode: 'all' }
 }
 
 /**

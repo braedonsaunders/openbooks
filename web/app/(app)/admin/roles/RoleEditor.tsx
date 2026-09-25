@@ -18,7 +18,7 @@ export type RoleRow = {
   description: string | null
   isBuiltIn: boolean
   permissions: string[]
-  subsidiaryRestriction: SubsidiaryRestriction
+  subsidiaryRestriction: SubsidiaryRestriction | { mode: 'invalid' }
 }
 
 /** Depth-first subsidiary tree flattened for pickers (subsidiaryOptions()). */
@@ -87,7 +87,7 @@ function RoleDrawer({
   const [description, setDescription] = useState(role?.description ?? '')
   const [selected, setSelected] = useState<Set<string>>(new Set(role?.permissions ?? []))
   const restriction = role?.subsidiaryRestriction ?? { mode: 'all' as const }
-  const [subMode, setSubMode] = useState<SubsidiaryRestriction['mode']>(restriction.mode)
+  const [subMode, setSubMode] = useState<SubsidiaryRestriction['mode'] | 'invalid'>(restriction.mode)
   const [subtreeId, setSubtreeId] = useState(
     restriction.mode === 'subtree' ? restriction.subsidiaryId : '',
   )
@@ -146,6 +146,7 @@ function RoleDrawer({
 
   /** The restriction the form currently describes, or a validation error. */
   function buildRestriction(): SubsidiaryRestriction | { error: string } {
+    if (subMode === 'invalid') return { error: t('drawer.subsidiaryRequired') }
     if (subMode === 'subtree') {
       if (!subtreeId) return { error: t('drawer.subsidiaryRequired') }
       return { mode: 'subtree', subsidiaryId: subtreeId }
@@ -389,10 +390,11 @@ function RoleDrawer({
               {t('drawer.subsidiaryHeading')}
             </h3>
             <Select
-              value={subMode}
+              value={subMode === 'invalid' ? '' : subMode}
               disabled={locked}
               onChange={(e) => setSubMode(e.target.value as SubsidiaryRestriction['mode'])}
             >
+              {subMode === 'invalid' ? <option value="" disabled>{t('drawer.subsidiaryRequired')}</option> : null}
               <option value="all">{t('drawer.subsidiaryModeAll')}</option>
               <option value="subtree">{t('drawer.subsidiaryModeSubtree')}</option>
               <option value="list">{t('drawer.subsidiaryModeList')}</option>
