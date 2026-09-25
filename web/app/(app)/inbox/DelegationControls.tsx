@@ -191,8 +191,15 @@ export function DelegationBanner({ users }: { users: DelegateOption[] }) {
     setBusy(true)
     try {
       const res = await fetch(`/api/flows/delegations?id=${active.id}`, { method: 'DELETE' })
-      if (!res.ok) {
+      if (res.status === 404) {
+        // Already gone (ended elsewhere or endpoint undeployed): the banner
+        // describes a delegation that no longer exists, so drop it instead
+        // of leaving an "End now" that 404s forever.
         toast.info(t('unavailable'))
+        setActive(null)
+      } else if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error ?? t('unavailable'))
       } else {
         toast.success(t('ended'))
         setActive(null)
