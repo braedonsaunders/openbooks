@@ -499,11 +499,12 @@ async function moveRoleIfAbsent(
 
 /**
  * Journal-line attribution follows the merge except where a
- * controller-owned close blocks GL writes: the journal guard admits posted
- * attribution moves through the amend path, but a closed period still
- * refuses. Blocked lines stay on the absorbed party (retained with cause),
- * never forced — the same fail-closed rule as source-deletion mirroring.
- * Draft-entry lines always move.
+ * controller-owned close blocks GL writes: the journal guard admits
+ * posted-line moves that change ONLY party_id (amounts, accounts,
+ * subsidiaries, and every other column frozen) when the period is open for
+ * GL posting, with no session-flag escape. Blocked lines stay on the
+ * absorbed party (retained with cause), never forced — the same fail-closed
+ * rule as source-deletion mirroring. Draft-entry lines always move.
  */
 async function moveJournalLines(
   tx: SqlExecutor,
