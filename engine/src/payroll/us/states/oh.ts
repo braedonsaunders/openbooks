@@ -808,8 +808,8 @@ export function ohSchoolDistrictWithholding(input: {
  *
  * R.C. 718.03 requires an employer to withhold for the municipality the work is
  * performed in (subject to the twenty-day occasional-entrant threshold in R.C.
- * 718.011, which is a day count this engine is not given and therefore does not
- * apply on its own). The base is qualifying wages — Medicare wages, with no
+ * 718.011, applied from the employer-kept municipal record when every
+ * element is recorded). The base is qualifying wages — Medicare wages, with no
  * exemptions, no standard deduction and no brackets.
  *
  * The rate is not a constant this pack can carry: every municipality sets its
@@ -822,6 +822,18 @@ export function ohMunicipalWithholding(input: {
   rate: string | null | undefined;
   /** The municipality, for the refusal. */
   municipality: string;
+  /**
+   * R.C. 718.011(B)(1) occasional-entrant posture, from the employer-kept
+   * municipal record. The exemption needs every element — nonresidence,
+   * 20 or fewer days, principal work outside, qualifying non-small
+   * employer — so a partially recorded posture still prices normally.
+   */
+  entrant?: {
+    residentOfMunicipality: boolean;
+    daysInMunicipality: number | null;
+    principalWorkOutsideMunicipality: boolean;
+    nonSmallEmployerQualifyingWages: boolean;
+  };
 }): string {
   if (input.rate == null || input.rate === "") {
     throw new PayrollError(
@@ -831,6 +843,14 @@ export function ohMunicipalWithholding(input: {
       + "(statutory rate \"us_oh_municipal\") from the municipality's own ordinance or The Finder. "
       + "Withholding nothing would under-withhold every employee the levy reaches.",
     );
+  }
+  const entrant = input.entrant;
+  if (
+    entrant && !entrant.residentOfMunicipality
+    && entrant.daysInMunicipality != null && entrant.daysInMunicipality <= 20
+    && entrant.principalWorkOutsideMunicipality && entrant.nonSmallEmployerQualifyingWages
+  ) {
+    return D(0n);
   }
   return D(mulRateCents(max0(U(input.wages)), input.rate));
 }

@@ -447,7 +447,7 @@ test("an Ohio district that is NOT on the list levies nothing — and is not a g
   );
 });
 
-test("an Ohio municipal rate that has not been entered stops the run", () => {
+test("Ohio municipal withholding: missing rate stops the run, occasional entrants at 20 or fewer days are exempt", () => {
   assert.equal(
     ohMunicipalWithholding({ wages: "2000.00", rate: "0.025", municipality: "COLUMBUS" }),
     money("50.00"),
@@ -455,6 +455,25 @@ test("an Ohio municipal rate that has not been entered stops the run", () => {
   assert.throws(
     () => ohMunicipalWithholding({ wages: "2000.00", rate: null, municipality: "COLUMBUS" }),
     /no income tax rate has been entered for COLUMBUS \(Ohio\)/,
+  );
+  // R.C. 718.011(B)(1) excuses the nonresident occasional entrant at 20 or
+  // fewer days: https://codes.ohio.gov/ohio-revised-code/section-718.011
+  const entrant = {
+    residentOfMunicipality: false,
+    daysInMunicipality: 20,
+    principalWorkOutsideMunicipality: true,
+    nonSmallEmployerQualifyingWages: true,
+  };
+  assert.equal(
+    ohMunicipalWithholding({ wages: "10000.00", rate: "0.02", municipality: "WESTERVILLE", entrant }),
+    money("0.00"),
+  );
+  assert.equal(
+    ohMunicipalWithholding({
+      wages: "10000.00", rate: "0.02", municipality: "WESTERVILLE",
+      entrant: { ...entrant, daysInMunicipality: 21 },
+    }),
+    money("200.00"),
   );
 });
 

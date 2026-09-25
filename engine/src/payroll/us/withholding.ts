@@ -1095,10 +1095,26 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       const municipalWages = levy.reach === "nonresident"
         ? requireUsSourceWages(input.wageAllocations, levy.region, subRegion)
         : addAmounts(compensation, input.supplemental);
+      // The R.C. 718.011 occasional-entrant posture rides the employer-kept
+      // municipal record (MI precedent below reads its own state record the
+      // same way); an unrecorded posture prices normally, never as exempt.
+      const municipalRecord = input.certificateFor("us_oh_municipal_record");
       const tax = ohMunicipalWithholding({
         wages: municipalWages,
         rate: rates?.rate,
         municipality: subRegion,
+        entrant: {
+          residentOfMunicipality: levy.reach === "resident",
+          daysInMunicipality: municipalRecord
+            ? certificateCount(municipalRecord, "annual_days_in_municipality")
+            : null,
+          principalWorkOutsideMunicipality: municipalRecord
+            ? certificateFlag(municipalRecord, "principal_work_outside_municipality")
+            : false,
+          nonSmallEmployerQualifyingWages: municipalRecord
+            ? certificateFlag(municipalRecord, "non_small_employer_qualifying_wages")
+            : false,
+        },
       });
       return {
         code: `OH-${subRegion}`, label: declared?.label ?? `${subRegion} municipal income tax`,
