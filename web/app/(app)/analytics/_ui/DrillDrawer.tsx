@@ -7,6 +7,7 @@ import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney } from '@
 import { TxnLink } from '../../reports/TxnLink'
 import { GroupedBar } from './charts'
 import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
+import { refusalMessage } from './fetch-refusal'
 import { useLocale } from 'next-intl'
 import { dateLabel, monthYearLabel } from '@/lib/format'
 
@@ -115,7 +116,13 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
     if (!target) return
     const ctrl = new AbortController()
     fetch(`/api/analytics/drill?${target.kind}=${target.id}&from=${from}&to=${to}`, { signal: ctrl.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(async (r) => {
+        // The drill route refuses with a NAMED 422 (e.g. "no spot rate for
+        // EUR to USD on or before DATE"): surface the refusal body, not just
+        // the status, or the drawer reports a generic load failure.
+        if (!r.ok) throw new Error(await refusalMessage(r))
+        return r.json()
+      })
       .then(setData)
       .catch((e) => { if (e.name !== 'AbortError') setError(String(e.message ?? e)) })
     return () => ctrl.abort()

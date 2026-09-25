@@ -32,7 +32,7 @@ const { EntityDrawer } = await import('./EntityDrawer')
 test('cash entity drawer presents a named API refusal', async () => {
   const priorFetch = globalThis.fetch
   globalThis.fetch = (async () => Response.json(
-    { message: 'Rate coverage is missing for Branch.' },
+    { error: 'Rate coverage is missing for Branch.' },
     { status: 422 },
   )) as typeof fetch
   const host = document.createElement('div')
