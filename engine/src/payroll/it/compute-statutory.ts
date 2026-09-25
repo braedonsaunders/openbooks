@@ -350,6 +350,10 @@ export interface It2025Input {
    */
   hasFamilyCharges?: boolean;
   isFixedTerm?: boolean | null;
+  /** 2026 CCNL-renewal increases under the L. 199/2025 c. 7 substitute tax. */
+  hasRenewalIncreases?: boolean;
+  /** 2026 night/holiday/shift allowances under the L. 199/2025 c. 10–11 substitute tax. */
+  hasShiftAllowances?: boolean;
   /** Art. 49 c. 2 lett. a) pension income: refused (TABELLA 7). */
   isPensioner?: boolean;
   /** Post-1995 seniority: the annual massimale applies; absent is unknown. */
@@ -468,6 +472,26 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       `IT ${year} refuses tempo determinato: NASpI addizionale 1.40% plus 0.50 points per qualifying renewal `
       + "and contract-specific exclusions are not priced — the pack does not carry renewal count or the "
       + `required exemption facts; see ${refused}`,
+    );
+  }
+  if (input.hasRenewalIncreases) {
+    // L. 199/2025 art. 1 c. 7 prices 2026 contractual-renewal increases under
+    // a 5% imposta sostitutiva (private-sector, 2025 lavoro income ≤ 33.000;
+    // AdE Circ. 2/E/2026) — inside ordinary IRPEF they would over-withhold.
+    refuse(
+      `IT ${year} refuses pay including 2026 CCNL-renewal increases: the 5% substitute tax is not priced — `
+      + "remove them from the ordinary IRPEF base and settle externally until supported; "
+      + `see ${refused}`,
+    );
+  }
+  if (input.hasShiftAllowances) {
+    // L. 199/2025 art. 1 c. 10–11 prices 2026 night/holiday/rest-day/shift
+    // allowances under a 15% imposta sostitutiva (cap 1.500/year; AdE FAQ
+    // Circ. 3/E/2026) — inside ordinary IRPEF they would over-withhold.
+    refuse(
+      `IT ${year} refuses pay including 2026 night/holiday/shift allowances: the 15% substitute tax is not `
+      + "priced — remove them from the ordinary IRPEF base and settle externally until supported; "
+      + `see ${refused}`,
     );
   }
   if (input.hasFamilyCharges) {
@@ -867,6 +891,8 @@ export async function computeItStatutoryWithRates(
       : answers["tempo_determinato"] === "false"
         ? false
         : null,
+    hasRenewalIncreases: answers["aumenti_rinnovo_ccnl"] === "true" ? true : undefined,
+    hasShiftAllowances: answers["indennita_notturno_festivi"] === "true" ? true : undefined,
     isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
       ? undefined
       : bool(answers["anzianita_post_1995"]),

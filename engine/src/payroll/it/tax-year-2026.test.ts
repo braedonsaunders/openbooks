@@ -186,6 +186,13 @@ test("fixed-term employment refuses when NASpI surcharge renewals and exceptions
   assert.throws(() => calculateIt2026({ ...BASE, annualGrossEmployment: "35000", annualPensionable: "35000", isFixedTerm: null }), /employment term.*unknown.*NASpI.*1\.40%.*0\.50/);
 });
 
+test("2026 substitute-regime pay refuses by name instead of folding into IRPEF", () => {
+  // L. 199/2025 c. 7 (5% renewal) and c. 10–11 (15% allowances) price outside
+  // ordinary IRPEF; asserted components refuse rather than over-withhold.
+  assert.throws(() => calculateIt2026({ ...BASE, hasRenewalIncreases: true }), /CCNL-renewal increases.*5% substitute tax is not priced/);
+  assert.throws(() => calculateIt2026({ ...BASE, hasShiftAllowances: true }), /night\/holiday\/shift allowances.*15% substitute tax is not priced/);
+});
+
 test("missing rates refuse naming the 2026 scope point", () => {
   const ok = {
     ...BASE,

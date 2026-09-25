@@ -54,6 +54,24 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
             + "Leave unanswered only when unknown: payroll will refuse rather than treat it as permanent.",
         },
         {
+          key: "aumenti_rinnovo_ccnl",
+          label: "Aumenti retributivi da rinnovo CCNL 2026 (sostitutiva 5%)",
+          kind: "flag",
+          help: "State whether this period's pay includes 2026 contractual-renewal increases priced under "
+            + "the L. 199/2025 art. 1 c. 7 imposta sostitutiva (5%, private-sector, 2025 lavoro income ≤ 33.000; "
+            + "AdE Circ. 2/E/2026). The pack does not price the substitute regime: asserted pay refuses by "
+            + "name instead of folding into ordinary IRPEF.",
+        },
+        {
+          key: "indennita_notturno_festivi",
+          label: "Indennità notturne/festive/di riposo/turni 2026 (sostitutiva 15%)",
+          kind: "flag",
+          help: "State whether this period's pay includes 2026 night/holiday/rest-day/shift allowances priced "
+            + "under the L. 199/2025 art. 1 c. 10–11 imposta sostitutiva (15%, cap 1.500/year; AdE FAQ Circ. "
+            + "3/E/2026). The pack does not price the substitute regime: asserted pay refuses by name instead "
+            + "of folding into ordinary IRPEF.",
+        },
+        {
           key: "anzianita_post_1995",
           label: "Iscritto dopo il 31 dicembre 1995 (o opzione contributivo)",
           kind: "flag",
