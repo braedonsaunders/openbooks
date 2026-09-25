@@ -1476,19 +1476,20 @@ export function computeUsEmployerWithholding(input: {
       }
       rate = entered;
     } else {
-      if (input.payDate == null || input.payDate === "") {
+      const payDate = input.payDate;
+      if (payDate == null || payDate === "") {
         throw new UsWithholdingError(
           `${levy.label} needs the pay date to select its effective published rate; `
           + "pass the payroll pay date before calculating — refused by name",
         );
       }
       const published = method.rates
-        .filter((entry) => entry.effectiveFrom <= input.payDate)
+        .filter((entry) => entry.effectiveFrom <= payDate)
         .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
         .at(-1);
       if (!published) {
         throw new UsWithholdingError(
-          `${levy.label} has no published flat rate effective on ${input.payDate}; `
+          `${levy.label} has no published flat rate effective on ${payDate}; `
           + "transcribe the official effective rate before calculating — refused by name",
         );
       }
