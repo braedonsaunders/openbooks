@@ -110,6 +110,7 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
                 {
                   requestId: f('dialogRequestId'),
                   closeHref: f('dialogCloseHref'),
+                  canWithdrawCancel: f('canWithdrawCancel'),
                 },
                 f('dialogOpen'),
               ),
