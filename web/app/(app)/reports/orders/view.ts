@@ -96,9 +96,13 @@ export async function loadOrders(): Promise<OrdersData> {
 
   const [pipeline, converted, org] = await Promise.all([
     db.execute(sql`
-      select d.kind, d.status, count(*)::int as n, coalesce(sum(d.total), 0) as value,
+      -- Open values convert each row at its own document FX before summing:
+      -- a cross-currency sum of raw totals is meaningless, and the column is
+      -- labelled in base currency. Same round-per-row shape the analytics
+      -- funnels use; the JS-side decimalSum below stays on exact decimals.
+      select d.kind, d.status, count(*)::int as n, coalesce(sum(round(d.total * d.fx_rate, 4)), 0) as value,
              count(*) filter (where ${openOrderPredicate})::int as open_n,
-             coalesce(sum(d.total) filter (where ${openOrderPredicate}), 0) as open_value
+             coalesce(sum(round(d.total * d.fx_rate, 4)) filter (where ${openOrderPredicate}), 0) as open_value
         from documents d
        where d.org_id = ${orgId}
          and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
