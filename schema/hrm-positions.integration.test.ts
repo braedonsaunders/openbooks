@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
-import { db, pool } from "../engine/src/platform/db.ts";
+import { db, pool, withOrgContext } from "../engine/src/platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -101,7 +101,7 @@ test("position storage invariants exist by name", { skip }, async () => {
 test("a cross-org position write is refused by RLS", { skip }, async () => {
   const first = await createScratchOrg();
   const second = await createScratchOrg();
-  const writer = await session(false, second.orgId);
+  const writer = await withOrgContext(second.orgId, () => session(false, second.orgId));
   try {
     await writer.query("savepoint refused_probe");
     try {
