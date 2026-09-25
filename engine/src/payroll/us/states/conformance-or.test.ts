@@ -296,6 +296,11 @@ test("OR HB 2119 — no OR-W-4 on file withholds 8% of Oregon-source wages", () 
   });
   assert.equal(none.factors.OR_WAGES, money("1000"));
   assert.equal(none.tax, money("80"));
+  // No allocations is the single-state case: the whole period prices.
+  assert.equal(OR_WITHHOLDING.compute({
+    payDate: "2026-03-13", periodsPerYear: 52, wages: "2000.00", basis: "nonresident",
+    certificate: resolveCertificate({ certificate: OR_CERTIFICATE }),
+  }).tax, money("160"));
 });
 
 test("OR refuses without this period's federal income tax withheld", () => {
