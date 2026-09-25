@@ -91,9 +91,21 @@ export function hasAdminPersona(authz: Authz): boolean {
 
 /** Admin-rail tiles resolve through the persona, not a single grant. */
 const ADMIN_PERSONA_WIDGETS = new Set(['admin-attention', 'workflow-errors', 'admin-calendar'])
+const ADMIN_WIDGET_DOMAIN_PERMISSIONS: Record<string, readonly string[]> = {
+  'admin-attention': ['hrm.employment.read', 'payroll.manage', 'banking.read', 'close.run'],
+  'workflow-errors': ['flows.manage'],
+  'admin-calendar': ['reports.read', 'payroll.manage'],
+}
+
+function canSeeAdminWidget(authz: Authz, id: string): boolean {
+  const domainPermissions = ADMIN_WIDGET_DOMAIN_PERMISSIONS[id]
+  return authz.allowedSubsidiaryIds === null &&
+    hasAdminPersona(authz) &&
+    Boolean(domainPermissions?.some((permission) => hasAnyPermission(authz.permissions, [permission])))
+}
 
 export function canSeeWidget(authz: Authz, id: string): boolean {
-  if (ADMIN_PERSONA_WIDGETS.has(id)) return hasAdminPersona(authz)
+  if (ADMIN_PERSONA_WIDGETS.has(id)) return canSeeAdminWidget(authz, id)
   const required = WIDGET_PERMISSIONS[id]
   // An empty entry is a reviewed public tile (see above), not a missing one.
   if (required) return required.length === 0 || hasAnyPermission(authz.permissions, required)

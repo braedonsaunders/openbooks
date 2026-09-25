@@ -92,6 +92,16 @@ test("denied AR/AP widgets are gated before the query layer, not just hidden", {
     assert.equal(canSeeWidget(denied, "kpi-open-payables"), false);
     assert.equal(canSeeWidget(denied, "kpi-overdue-payables"), false);
 
+    const adminOnly = authzFor(org.orgId, deniedId as unknown as string, ["admin.setup.manage"]);
+    assert.equal(canSeeWidget(adminOnly, "admin-attention"), false, "persona alone grants no cross-domain admin summary");
+    const restrictedAdmin = authzFor(org.orgId, deniedId as unknown as string, ["admin.setup.manage", "banking.read"]);
+    restrictedAdmin.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+    assert.equal(canSeeWidget(restrictedAdmin, "admin-attention"), false, "org-wide summaries require unrestricted subsidiary scope");
+    const bankingAdmin = authzFor(org.orgId, deniedId as unknown as string, ["admin.setup.manage", "banking.read"]);
+    assert.equal(canSeeWidget(bankingAdmin, "admin-attention"), true);
+    assert.equal(canSeeWidget(bankingAdmin, "workflow-errors"), false, "workflow errors require flows.manage");
+    assert.equal(canSeeWidget(bankingAdmin, "admin-calendar"), false, "calendar summaries require reports.read or payroll.manage");
+
     // And the loader — handed only the widgets that survived the filter
     // (here: none of the money tiles) — never invokes their readers. The
     // spies throw on invocation, so a call fails the test, not just an
