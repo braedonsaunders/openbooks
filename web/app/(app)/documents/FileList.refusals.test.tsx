@@ -190,11 +190,11 @@ test("a partial bulk delete toasts moved + skipped, keeps the refused rows selec
   assert.equal(globalThis.__fileRefreshed, true, "the list must refresh so trashed rows disappear");
 });
 
-test("a refused bulk names the server refusal instead of the generic failure", async (t) => {
+test("a refused download names the server size remedy instead of a generic failure", async (t) => {
   globalThis.__fileToasts = [];
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === "/api/file-cabinet/bulk" && init?.method === "POST") {
-      return Response.json({ error: "nothing selected" }, { status: 400 });
+    if (url === "/api/file-cabinet/bulk-download" && init?.method === "POST") {
+      return Response.json({ error: "zip source exceeds 250 MB limit; reduce the selection" }, { status: 413 });
     }
     return null;
   });
@@ -205,18 +205,18 @@ test("a refused bulk names the server refusal instead of the generic failure", a
   const selectAll = document.querySelector('input[aria-label="Select all"]');
   assert.ok(selectAll, "a select-all checkbox must render");
   await click(selectAll);
-  const bulkDelete = [...document.querySelectorAll("button")].find(
-    (b) => b.textContent?.trim() === "Delete",
+  const download = [...document.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === "Download",
   );
-  assert.ok(bulkDelete, "the bulk Delete button must render once rows are selected");
-  await click(bulkDelete);
+  assert.ok(download, "the Download button must render once rows are selected");
+  await click(download);
   await tick();
   await tick();
 
   const toasts = globalThis.__fileToasts ?? [];
   const errors = toasts.filter((toast) => toast.kind === "error");
   assert.equal(errors.length, 1, `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`);
-  assert.match(errors[0]?.message ?? "", /nothing selected/, "the toast must carry the server refusal");
+  assert.match(errors[0]?.message ?? "", /250 MB.*reduce the selection/, "the toast must carry the size limit and remedy");
 });
 
 test("replace picker can be reopened after cancellation for the same file", async (t) => {
