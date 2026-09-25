@@ -161,7 +161,7 @@ test("missing post-1995 seniority stays unknown and refuses when it changes IVS 
   // The contract term is answered (indeterminate) so the run reaches the
   // IVS seniority gate: an unanswered term refuses first, by design.
   const certificate = resolveCertificate({
-    certificate: IT_CERTIFICATES.certificates[0]!,
+    certificate: IT_CERTIFICATES.certificates.find((c) => c.key === "it_detrazioni")!,
     stored: [{
       certificateKey: "it_detrazioni",
       answers: { tempo_determinato: "false" },
@@ -260,7 +260,7 @@ function fakeCtx(overrides: {
     certificateFor: (key) =>
       key === "it_detrazioni"
         ? {
-          certificate: IT_CERTIFICATES.certificates[0]!,
+          certificate: IT_CERTIFICATES.certificates.find((c) => c.key === "it_detrazioni")!,
           onFile: true,
           effectiveFrom: null,
           answers,
