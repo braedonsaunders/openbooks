@@ -9,7 +9,7 @@ import {
 } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
 import { currentUser, type SessionUser } from "./auth";
 import { accessDeniedHref } from "./gate-targets";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions";
@@ -44,20 +44,20 @@ export async function getAuthz(): Promise<Authz | null> {
 }
 
 /** Resolve current grants for a verified active identity, including scheduled execution. */
-export async function resolveUserAuthz(user: SessionUser): Promise<Authz> {
-  const modulePermissions = await extensionPermissionAvailability(user.orgId);
+export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = db): Promise<Authz> {
+  const modulePermissions = await extensionPermissionAvailability(user.orgId, runner);
   const inactivePermissions = modulePermissions.inactive;
   // Super admins hold every permission in whatever org they're currently in.
   if (user.isSuperAdmin) {
     return { user, permissions: denyInactiveExtensionPermissions(new Set<string>(["*"]), inactivePermissions), allowedSubsidiaryIds: null };
   }
   const [assignments, overrides, allowedSubs] = (await Promise.all([
-    db.execute<{ permissions: string[] }>(sql`
+    runner.execute<{ permissions: string[] }>(sql`
       select r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${user.id} and a.org_id = ${user.orgId}`),
-    db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+    runner.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
       select permission, effect
         from user_permission_overrides
        where user_id = ${user.id} and org_id = ${user.orgId}`),

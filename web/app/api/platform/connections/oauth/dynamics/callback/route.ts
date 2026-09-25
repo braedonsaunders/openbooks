@@ -7,6 +7,7 @@ import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../../../lib/authz'
+import { lockActorPermission } from '../../../../../../../lib/super-admin'
 import { storageIdentityError } from '../../../_storage-identity'
 import {
   acceptConnectionOauthState,
@@ -69,6 +70,7 @@ export async function GET(req: Request) {
     const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
     const displayName = `${company.displayName ?? company.name} (Business Central)`
     const connected = await db.transaction(async (tx) => {
+      await lockActorPermission(tx, gate, 'admin.setup.manage', { requireUnrestrictedScope: true })
       const [current] = await tx
         .select()
         .from(schema.connections)

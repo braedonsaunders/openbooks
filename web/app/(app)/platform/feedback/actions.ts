@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { verifyGithubIssueAccess } from '@braedonsaunders/appkit-feedback'
-import { requireSuperAdmin } from '../../../../lib/super-admin'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { lockSuperAdminActor, requireSuperAdmin } from '../../../../lib/super-admin'
 import { recordFeedbackSettingsAudit } from '../../../../lib/feedback/audit'
 import {
   clearFeedbackToken,
@@ -52,7 +53,9 @@ export async function saveFeedbackSettingsAction(
         request: feedbackGithubRequest,
       })
     }
-    const after = await saveFeedbackSettings(input, authz.user.id)
+    const after = await saveFeedbackSettings(input, authz.user.id, () =>
+      lockSuperAdminActor(db, authz.user.homeUserId),
+    )
     await recordFeedbackSettingsAudit({
       orgId: authz.user.orgId,
       actorId: authz.user.id,
@@ -74,7 +77,7 @@ export async function clearFeedbackTokenAction(): Promise<FeedbackSettingsResult
   const authz = await requireSuperAdmin()
   const before = await getFeedbackSettings()
   try {
-    await clearFeedbackToken(authz.user.id)
+    await clearFeedbackToken(authz.user.id, () => lockSuperAdminActor(db, authz.user.homeUserId))
     const after = await getFeedbackSettings()
     await recordFeedbackSettingsAudit({
       orgId: authz.user.orgId,
