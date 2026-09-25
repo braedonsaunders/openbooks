@@ -147,6 +147,7 @@ export interface ContinuousData {
     planCols: { position: string; incumbent: string; candidates: string; status: string }
     plans: { id: string; position: string; incumbent: string; candidates: string; status: string }[]
     dialog: {
+      cycleId: string
       employments: { value: string; label: string }[]
       positions: { value: string; label: string }[]
       perfOptions: string[]
@@ -418,6 +419,7 @@ export async function loadContinuousTab(
             status: translateTalentCode('planStatus', p.status, talentLabel),
           })),
           dialog: {
+            cycleId,
             employments: directory.employments.map((e) => ({ value: e.id, label: e.name })),
             positions: directory.positions.map((p) => ({ value: p.id, label: `${p.code} · ${p.title}` })),
             perfOptions: [...box.performance],

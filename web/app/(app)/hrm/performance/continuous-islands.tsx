@@ -624,6 +624,7 @@ export function FeedbackDialog({
 
 /** Record a talent review or a succession plan with its first candidate (HR). */
 export function TalentDialog({
+  cycleId,
   employments,
   positions,
   perfOptions,
@@ -646,6 +647,7 @@ export function TalentDialog({
   employeeLabel,
   positionLabel,
 }: {
+  cycleId: string
   employments: { value: string; label: string }[]
   positions: { value: string; label: string }[]
   perfOptions: string[]
@@ -691,6 +693,7 @@ export function TalentDialog({
         mode === 'talent'
           ? {
               employmentId,
+              cycleId,
               performanceKey: perf,
               potentialKey: pot,
               impactOfLoss: impact,

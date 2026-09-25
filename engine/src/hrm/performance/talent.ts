@@ -144,6 +144,12 @@ export async function recordTalentReview(args: {
   const actorId = requireId("actorId", args.actorId);
   const employmentId = requireId("employmentId", args.employmentId);
   const cycleId = args.cycleId ? requireId("cycleId", args.cycleId) : null;
+  if (!cycleId) {
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "a talent review needs a cycle with declared rating labels — choose a review cycle before recording it",
+    );
+  }
   if (typeof args.performanceKey !== "string" || args.performanceKey.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "a talent review needs a performance key from the org-declared scale");
   }
@@ -165,20 +171,20 @@ export async function recordTalentReview(args: {
     if (!employment || (allowed !== null && !allowed.has(employment.employerSubsidiaryId))) {
       throw new HrmPerformanceError("NOT_FOUND", "employment was not found — record the talent review against a directory employment");
     }
-    if (cycleId) {
-      const cycle = (await db.execute<{ id: string; appliesTo: unknown }>(sql`
-        select id, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
-      `)).rows[0];
-      if (!cycle) {
-        throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — attach the talent review to an existing cycle");
-      }
-      assertCycleInScope(cycle.appliesTo, allowed);
+    const scales = await resolveTalentScalesInTransaction(db, orgId, cycleId, allowed);
+    const performanceKey = args.performanceKey.trim();
+    const potentialKey = args.potentialKey.trim();
+    if (!scales.performance.includes(performanceKey) || !scales.potential.includes(potentialKey)) {
+      throw new HrmPerformanceError(
+        "INVALID_INPUT",
+        "the performance and potential keys must match labels declared by this cycle — choose each label from the cycle's scales",
+      );
     }
     try {
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_talent_reviews (org_id, employment_id, cycle_id, performance_key, potential_key,
           impact_of_loss, risk_of_loss, promotion_ready, notes, reviewed_by, reviewed_at, created_by, updated_by)
-        values (${orgId}, ${employmentId}, ${cycleId}, ${args.performanceKey.trim()}, ${args.potentialKey.trim()},
+        values (${orgId}, ${employmentId}, ${cycleId}, ${performanceKey}, ${potentialKey},
                 ${args.impactOfLoss}, ${args.riskOfLoss}, ${args.promotionReady ?? false},
                 ${args.notes ?? null}, ${actorId}, now(), ${actorId}, ${actorId})
         returning id
@@ -270,6 +276,44 @@ export async function listTalentReviews(args: {
  * either way the dimension comes from the declaration, never a
  * hardcoded 3x3.
  */
+async function resolveTalentScalesInTransaction(
+  exec: SqlExecutor,
+  orgId: string,
+  cycleId: string,
+  allowed: Set<string> | null,
+): Promise<{ readonly performance: readonly string[]; readonly potential: readonly string[] }> {
+  const cycle = (await exec.execute<{ template_id: string | null; applies_to: unknown }>(sql`
+    select template_id::text as template_id, applies_to from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
+  `)).rows[0];
+  if (!cycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the grid over an existing cycle");
+  assertCycleInScope(cycle.applies_to, allowed);
+  // A cycle may declare a separate potential axis in its applies_to
+  // envelope (potential_labels); otherwise potential shares the
+  // template performance scale. Either way the dimension is declared.
+  const scope = (cycle.applies_to ?? {}) as { potential_labels?: unknown };
+  const potential =
+    Array.isArray(scope.potential_labels) && scope.potential_labels.length > 0
+      ? scope.potential_labels.filter((label): label is string => typeof label === "string" && label.length > 0)
+      : null;
+  let performance: string[] | null = null;
+  if (cycle.template_id) {
+    const template = (await exec.execute<{ rating_scale: unknown }>(sql`
+      select rating_scale from hrm_review_templates where org_id = ${orgId} and id = ${cycle.template_id}
+    `)).rows[0];
+    const scale = (template?.rating_scale ?? {}) as { labels?: unknown };
+    if (Array.isArray(scale.labels) && scale.labels.length > 0) {
+      performance = scale.labels.filter((label): label is string => typeof label === "string" && label.length > 0);
+    }
+  }
+  if (!performance) {
+    throw new HrmPerformanceError(
+      "REFUSED",
+      "the cycle's review template declares no rating labels — declare the scale labels on the template before opening the talent grid",
+    );
+  }
+  return { performance, potential: potential ?? performance };
+}
+
 export async function resolveTalentScales(args: {
   orgId: string;
   actorId: string;
@@ -289,36 +333,7 @@ export async function resolveTalentScales(args: {
         "talent reviews are HR-only — ask an administrator to grant hrm.performance.manage in /admin/roles",
       );
     }
-    const cycle = (await db.execute<{ template_id: string | null; applies_to: unknown }>(sql`
-      select template_id::text as template_id, applies_to from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
-    `)).rows[0];
-    if (!cycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the grid over an existing cycle");
-    assertCycleInScope(cycle.applies_to, allowed);
-    // A cycle may declare a separate potential axis in its applies_to
-    // envelope (potential_labels); otherwise potential shares the
-    // template performance scale. Either way the dimension is declared.
-    const scope = (cycle.applies_to ?? {}) as { potential_labels?: unknown };
-    const potential =
-      Array.isArray(scope.potential_labels) && scope.potential_labels.length > 0
-        ? scope.potential_labels.filter((label): label is string => typeof label === "string" && label.length > 0)
-        : null;
-    let performance: string[] | null = null;
-    if (cycle.template_id) {
-      const template = (await db.execute<{ rating_scale: unknown }>(sql`
-        select rating_scale from hrm_review_templates where org_id = ${orgId} and id = ${cycle.template_id}
-      `)).rows[0];
-      const scale = (template?.rating_scale ?? {}) as { labels?: unknown };
-      if (Array.isArray(scale.labels) && scale.labels.length > 0) {
-        performance = scale.labels.filter((label): label is string => typeof label === "string" && label.length > 0);
-      }
-    }
-    if (!performance) {
-      throw new HrmPerformanceError(
-        "REFUSED",
-        "the cycle's review template declares no rating labels — declare the scale labels on the template before opening the talent grid",
-      );
-    }
-    return { performance, potential: potential ?? performance };
+    return resolveTalentScalesInTransaction(db, orgId, cycleId, allowed);
   });
 }
 

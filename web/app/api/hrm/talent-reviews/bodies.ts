@@ -10,7 +10,7 @@ const uuid = z.string().refine(isUuid, "must be a valid id");
 
 export const recordTalentReviewBody = z.object({
   employmentId: uuid,
-  cycleId: uuid.nullable().optional(),
+  cycleId: uuid,
   performanceKey: z.string().trim().min(1).max(240),
   potentialKey: z.string().trim().min(1).max(240),
   impactOfLoss: z.enum(["low", "medium", "high"]),

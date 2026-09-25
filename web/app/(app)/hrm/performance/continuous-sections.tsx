@@ -120,6 +120,7 @@ export function CalibrationMissingShell({
 export function TalentDialogShell({ dialog }: { dialog: Talent['dialog'] }) {
   return (
     <TalentDialog
+      cycleId={dialog.cycleId}
       employments={dialog.employments}
       positions={dialog.positions}
       perfOptions={dialog.perfOptions}
