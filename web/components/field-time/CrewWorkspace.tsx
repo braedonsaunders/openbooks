@@ -125,6 +125,23 @@ export function CrewWorkspace({
   )
 
   const save = useCallback(async () => {
+    // An incomplete populated or persisted row must refuse, not silently
+    // drop: the replacement endpoint deletes every stored line before
+    // inserting the payload, so omitting a cleared persisted row would
+    // delete it with a success report. Only truly new blank rows are
+    // omitted; explicit removal stays the only delete path.
+    const incomplete = lines.findIndex((line) => {
+      const hasContent = Boolean(
+        line.id || line.employeePartyId || line.hours.trim() || line.timeTypeId ||
+        line.projectTaskId || line.costCodeRef.trim() || line.equipmentId ||
+        line.equipmentHours.trim() || line.memo.trim(),
+      )
+      return hasContent && (!line.employeePartyId || line.hours.trim() === '')
+    })
+    if (incomplete >= 0) {
+      setError(`${incomplete + 1}: ${t('field.chooseWorker')} · ${t('field.hours')}`)
+      return false
+    }
     const cleaned = lines
       .filter((line) => line.employeePartyId && line.hours.trim() !== '')
       .map((line) => ({
@@ -140,7 +157,7 @@ export function CrewWorkspace({
     const ok = await act('lines', { lines: cleaned })
     if (ok) window.location.reload()
     return ok
-  }, [lines, act])
+  }, [lines, act, t])
 
   const submit = useCallback(async () => {
     if (signatureRequired && !signerName.trim()) {
