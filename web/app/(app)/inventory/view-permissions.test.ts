@@ -12,7 +12,7 @@ registerHooks({
     if (specifier === "next/link") return virtual("export default function Link(p) { return globalThis.React.createElement('a', { href: p.href }, p.children) }");
     if (specifier === "lucide-react") return virtual("export function Plus() { return null }");
     if (specifier === "@openbooks/ui") return virtual("export function Button(p) { return globalThis.React.createElement('button', null, p.children) } export function PageHeader(p) { return globalThis.React.createElement('header', null, p.actions) }");
-    if (specifier === "@openbooks/engine/src/platform/db.ts") return virtual("export const db = { execute: async () => ({ rows: globalThis.__inventoryViewPermissions.subsidiaries }) }");
+    if (specifier === "@openbooks/engine/src/platform/db.ts") return virtual("export const db = { execute: async () => ({ rows: globalThis.__inventoryViewPermissions.subsidiaries }) }; export function ambientTenantOrgId() { return globalThis.__inventoryViewPermissions.orgId }; export async function withBypassContext(fn) { return fn() }");
     if (specifier === "@openbooks/engine/src/inventory/stock-count-queries.ts") return virtual("export async function listStockCounts() { return { counts: [], totalCount: 0, nextCursor: null } }");
     if (specifier === "@openbooks/engine/src/inventory/stock-count-gates.ts") return virtual("export async function isStockCountReviewRequired() { return false }");
     if (specifier === "../../../components/entity-list-view") return virtual("export function EntityListView() { return null }");

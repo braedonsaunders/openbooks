@@ -104,7 +104,7 @@ function props() {
       source: { basis: "", backupRequired: "", backupType: "", template: "" },
     },
     canManage: true,
-    applicationPermissions: { canRead: false, canCreate: false, canApprove: false, canInvoice: false },
+    applicationPermissions: { canRead: false, canCreate: true, canApprove: false, canInvoice: false },
     applicationIncomeAccounts: [],
     formOpen: false,
     onFormOpenChange() {},
