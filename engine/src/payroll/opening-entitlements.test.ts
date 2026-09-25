@@ -15,7 +15,7 @@ import { payRunReadiness } from "./readiness.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Mid-year adoption, third dimension: the bank balances an employee arrives
@@ -42,6 +42,7 @@ interface BankFixture {
   subsidiaryId: string;
   scheduleId: string;
   employeeId: string;
+  employmentId: string;
   employeeName: string;
   vacationPlanId: string;
   bankedPlanId: string;
@@ -134,20 +135,21 @@ async function seedBanks(): Promise<BankFixture> {
             ${actorId}, ${actorId})`);
 
   const employeeName = "Terry Worker";
-  const employeeId = await seedEmployee(
-    { orgId: org.orgId, actorId, scheduleId }, { name: employeeName },
+  const { employeeId, employmentId } = await seedEmployee(
+    { orgId: org.orgId, actorId, scheduleId, subsidiaryId: org.subsidiaryId }, { name: employeeName },
   );
 
   return {
     orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId, scheduleId,
-    employeeId, employeeName, vacationPlanId, bankedPlanId, recoupPlanId, payoutComponentId,
+    employeeId, employmentId, employeeName, vacationPlanId, bankedPlanId, recoupPlanId,
+    payoutComponentId,
   };
 }
 
 async function seedEmployee(
-  fx: { orgId: string; actorId: string; scheduleId: string },
+  fx: { orgId: string; actorId: string; scheduleId: string; subsidiaryId: string },
   options: { name: string; hiredOn?: string; terminatedOn?: string },
-): Promise<string> {
+): Promise<{ employeeId: string; employmentId: string }> {
   const employeeId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -162,14 +164,16 @@ async function seedEmployee(
                                   is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2016-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
+  // Hires carry an HRM employment or stub calculation refuses them.
+  const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           province, pay_basis, country, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
+    values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
             '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
-  return employeeId;
+  return { employeeId, employmentId };
 }
 
 async function seedRun(
@@ -202,11 +206,11 @@ async function seedCommittedStub(fx: BankFixture, payDate: string): Promise<stri
     periodStart: payDate, periodEnd: payDate, payDate, runStatus: "committed",
   });
   await db.execute(sql`
-    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
                            periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
                            factors, created_by, updated_by)
-    values (${fx.orgId}, ${documentId}, ${fx.employeeId}, 'ON', 26, ${payDate}, 2026, 'CAD',
-            '2400', '1900', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
+    values (${fx.orgId}, ${documentId}, ${fx.employeeId}, ${fx.employmentId}, 'ON', 26, ${payDate},
+            2026, 'CAD', '2400', '1900', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
   return documentId;
 }
 
@@ -635,7 +639,7 @@ test(
   async () => {
     const fx = await seedBanks();
     try {
-      const newHire = await seedEmployee(fx, { name: "Newly Hired", hiredOn: "2026-07-06" });
+      const newHire = (await seedEmployee(fx, { name: "Newly Hired", hiredOn: "2026-07-06" })).employeeId;
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } }],
