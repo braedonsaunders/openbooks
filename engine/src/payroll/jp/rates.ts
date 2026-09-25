@@ -43,7 +43,7 @@ export const JP_REFUSED_2026: readonly string[] = [
   "健康保険組合-specific ceilings above the pension grades (the 協会けんぽ 50-grade ceiling is documented, not priced)",
   "所得税徴収高計算書 remittance builder (no builder exists); 法定調書 (源泉徴収票/給与支払報告書/合計表) "
   + "are declared in ./filings.ts and refuse population by name until 年末調整 is performed",
-  "non-resident 20.42% withholding (所得税法第212条: a separate mechanism, not the 月額表)",
+  "nonresident mixed Japan/foreign-source wages and treaty/exemption cases (calculate source allocation or treaty relief in supported Japanese payroll software; do not assume the 20.42% method)",
 ];
 
 export const JP_TAX_YEARS: PayrollTaxYearSupport = {

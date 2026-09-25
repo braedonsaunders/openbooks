@@ -164,6 +164,15 @@ export function childCareEmployerLevy(standardYen: bigint): bigint {
   return (standardYen * 36n + 5000n) / 10000n;
 }
 
+/**
+ * NTA nonresident domestic-source salary withholding: 20.42% of the payment
+ * amount, with fractions below one yen discarded.
+ */
+export function nonresidentJapanSourceWithholding(paymentYen: bigint): bigint {
+  needIntYen(paymentYen, "非居住者 domestic-source salary");
+  return paymentYen * 2042n / 10000n;
+}
+
 export interface Jp2026Input {
   /** Monthly gross pay (income), integer yen. */
   grossMonthly: bigint;
@@ -175,6 +184,7 @@ export interface Jp2026Input {
   healthRate: string;
   /** Whether the run's applicable insurance month is on/after 2026-04-01. */
   childContributionsEffective: boolean;
+  taxResidence: "resident" | "nonresident_japan_source" | "nonresident_foreign_source";
 }
 
 export interface Jp2026Result {
@@ -185,7 +195,7 @@ export interface Jp2026Result {
   childSupport: bigint;
   childSupportEmployer: bigint;
   childCareEmployer: bigint;
-  /** gross less employee social premiums: the 月額表 input. */
+  /** Applicable withholding basis: resident net pay or nonresident source pay. */
   gensenBase: bigint;
   gensen: bigint;
 }
@@ -198,17 +208,24 @@ export function calculateJp2026(input: Jp2026Input): Jp2026Result {
   const childSupport = input.childContributionsEffective ? childSupportHalfShare(input.standard) : 0n;
   const childSupportEmployer = childSupport;
   const childCareEmployer = input.childContributionsEffective ? childCareEmployerLevy(input.standard) : 0n;
-  const gensenBase = input.grossMonthly - pension - health - childSupport;
-  if (gensenBase < 0n) {
+  const residentBase = input.grossMonthly - pension - health - childSupport;
+  if (input.taxResidence === "resident" && residentBase < 0n) {
     fail(
       `gensen base is negative (gross ${input.grossMonthly} − pension ${pension} − health ${health} `
       + `− child support ${childSupport}): `
       + "premiums exceed pay — refusing rather than looking up a negative amount",
     );
   }
-  const gensen = input.dependents === null
-    ? lookupGensenOtsu(gensenBase)
-    : lookupGensenKo(gensenBase, input.dependents);
+  const gensenBase = input.taxResidence === "resident"
+    ? residentBase
+    : input.taxResidence === "nonresident_japan_source" ? input.grossMonthly : 0n;
+  const gensen = input.taxResidence === "resident"
+    ? input.dependents === null
+      ? lookupGensenOtsu(gensenBase)
+      : lookupGensenKo(gensenBase, input.dependents)
+    : input.taxResidence === "nonresident_japan_source"
+    ? nonresidentJapanSourceWithholding(gensenBase)
+    : 0n;
   return {
     pension,
     pensionEmployer: pension,

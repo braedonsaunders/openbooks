@@ -111,8 +111,7 @@ test("every transcribed grade: full is twice the half, half is 9.15% of standard
 test("hand-worked 甲 payslip: 300,000円 gross, grade 300,000, 0人, Tokyo 9.85%", () => {
   // Pension: grade 19 → 27,450 (折半額). Health: 300,000 × 9.85% = 29,550,
   // half 14,775. Gensen base: 300,000 − 27,450 − 14,775 = 257,775 →
-  // row 71 (257,000–260,000) 0人 → 6,430.
-  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false });
+  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
   assert.equal(result.pension, 27450n);
   assert.equal(result.pensionEmployer, 27450n);
   assert.equal(result.health, 14775n);
@@ -123,13 +122,13 @@ test("hand-worked 甲 payslip: 300,000円 gross, grade 300,000, 0人, Tokyo 9.85
 
 test("hand-worked 甲 payslip with dependents: same pay, 2人 → 3,200", () => {
   // Same base 257,775 → row 71, 2人 column → 3,200.
-  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: 2, healthRate: "9.85", childContributionsEffective: false });
+  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: 2, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
   assert.equal(result.gensenBase, 257775n);
   assert.equal(result.gensen, 3200n);
 });
 
 test("hand-worked 乙 payslip: no declaration → 乙欄 38,600 on the same base", () => {
-  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: null, healthRate: "9.85", childContributionsEffective: false });
+  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: null, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
   assert.equal(result.gensenBase, 257775n);
   assert.equal(result.gensen, 38600n);
 });
@@ -138,7 +137,7 @@ test("hand-worked low payslip: 150,000円 gross, grade 150,000, 0人, 9.85%", ()
   // Pension grade 9 → 13,725. Health: 150,000 × 9.85% = 14,775, half
   // exactly 7,387.5 → 50銭以下切り捨て → 7,387. Base:
   // 150,000 − 13,725 − 7,387 = 128,888 → row 12 (127,000–129,000) 0人 → 1,300.
-  const result = calculateJp2026({ grossMonthly: 150000n, standard: 150000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false });
+  const result = calculateJp2026({ grossMonthly: 150000n, standard: 150000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
   assert.equal(result.pension, 13725n);
   assert.equal(result.health, 7387n);
   assert.equal(result.gensenBase, 128888n);
@@ -258,12 +257,12 @@ test("sweep: both sides of every grade step, and invariance within each grade", 
 test("unknown 標準報酬月額 refuses (copy it off the JPS notice)", () => {
   assert.throws(() => pensionGradeForStandard(99000n), PayrollPackError);
   assert.throws(() => lookupGensenKo(9007199254740993n, 0), /9007199254740993/);
-  assert.throws(() => calculateJp2026({ grossMonthly: 300000n, standard: 99000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false }), PayrollPackError);
+  assert.throws(() => calculateJp2026({ grossMonthly: 300000n, standard: 99000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" }), PayrollPackError);
 });
 
 test("negative gensen base refuses rather than looking up a negative amount", () => {
   assert.throws(
-    () => calculateJp2026({ grossMonthly: 10000n, standard: 88000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false }),
+    () => calculateJp2026({ grossMonthly: 10000n, standard: 88000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" }),
     /negative/,
   );
 });

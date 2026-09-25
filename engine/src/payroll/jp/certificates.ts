@@ -116,6 +116,38 @@ const JP_EMPLOYMENT_INSURANCE_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+const JP_TAX_RESIDENCY_CERTIFICATE: PayrollCertificate = {
+  key: "jp_tax_residency",
+  form: "日本の税務上の居住地・給与源泉判定",
+  label: "Japanese tax residence and wage-source determination",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "NTA No.12006 (https://www.nta.go.jp/english/taxes/individual/12006.htm); "
+    + "NTA No.12020 (https://www.nta.go.jp/english/taxes/individual/12020.htm)",
+  summary:
+    "Record the documented Japanese tax-residence and Japan-source status used to choose resident "
+    + "monthly-table withholding or the nonresident 20.42% method.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "status",
+    label: "Tax residence and wage source for this pay",
+    kind: "choice",
+    required: true,
+    choices: [
+      { value: "resident", label: "Japanese tax resident" },
+      { value: "nonresident_japan_source", label: "Nonresident; all wages are Japan-source, no treaty or exemption" },
+      { value: "nonresident_foreign_source", label: "Nonresident; all services were performed outside Japan" },
+      { value: "nonresident_domestic_corporation_officer", label: "Nonresident officer of a Japanese corporation" },
+      { value: "nonresident_mixed_source", label: "Nonresident; wages include Japan-source and foreign-source services" },
+      { value: "nonresident_treaty_or_exemption", label: "Nonresident; treaty relief or another exemption applies" },
+    ],
+    help:
+      "Use the employee's documented tax-residence status and where the paid services were performed. "
+      + "Mixed-source wages and treaty/exemption cases refuse until their allocation or relief calculation is supported.",
+  }],
+};
+
 export const JP_CERTIFICATES: PayrollPackCertificates = {
   country: "JP",
   certificates: [
@@ -188,5 +220,6 @@ export const JP_CERTIFICATES: PayrollPackCertificates = {
     // Payer-held facts, never employee-filed declarations (see above).
     JP_HYOJUN_CERTIFICATE,
     JP_EMPLOYMENT_INSURANCE_CERTIFICATE,
+    JP_TAX_RESIDENCY_CERTIFICATE,
   ],
 };
