@@ -11,7 +11,7 @@ import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { upsertUnionFringe } from "./union.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Pay runs that pay MORE THAN ONE PERSON, and the money rules that only a
@@ -112,12 +112,14 @@ async function employee(fx: Fixture, name: string, opts: EmployeeOptions = {}): 
     values (${fx.orgId}, ${id}, ${opts.currency ?? "CAD"}, ${opts.rate ?? "30"},
             ${opts.basis ?? "hour"}, ${opts.annualHours ?? "2080"}, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
+  // Hires carry an HRM employment or stub calculation refuses them.
+  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_percent, vacation_method, is_active,
-                                           created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${opts.scheduleId ?? fx.scheduleId}, 'CA', 'ON',
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, federal_claim_code,
+                                           provincial_claim_code, vacation_percent, vacation_method,
+                                           is_active, created_by, updated_by)
+    values (${fx.orgId}, ${id}, ${employmentId}, ${opts.scheduleId ?? fx.scheduleId}, 'CA', 'ON',
             ${opts.payBasis ?? "hourly"}, 1, 1,
             ${opts.vacationPercent === undefined ? "4" : opts.vacationPercent}, 'accrue', true,
             ${fx.actorId}, ${fx.actorId})`);
@@ -635,12 +637,14 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
-      const line = ((await db.execute<{ rate: string; amount: string }>(sql`
+      const hourlyLines = ((await db.execute<{ rate: string; amount: string }>(sql`
         select l.rate::text as rate, l.amount::text as amount
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
-         where s.pay_run_document_id = ${run.documentId} and l.hours is not null`))).rows[0]!;
-      assert.equal(line.rate, "69.4444");
-      assert.equal(line.amount, "5555.5500"); // 69.4444 × 80, not 69.4445 × 80
+         where s.pay_run_document_id = ${run.documentId} and l.hours is not null`))).rows;
+      assert.equal(hourlyLines[0]!.rate, "69.4444");
+      // Day-evidence lines allocate the exact cent total across worked days,
+      // so the total is summed: 69.4444 × 80, not 69.4445 × 80.
+      assert.equal(sum(hourlyLines.map((l) => l.amount)), "5555.5500");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
