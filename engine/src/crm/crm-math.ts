@@ -1,6 +1,5 @@
-import { cmp, fromUnits, roundDiv, sum, toUnits } from "../money/money.ts";
-
-const SCALE = 10_000n;
+import { cmp, fromUnits, mul, roundDiv, sum, toUnits } from "../money/money.ts";
+import type { Money } from "../money/brands.ts";
 
 export type CrmLifecycleStage = "lead" | "prospect" | "customer";
 
@@ -10,23 +9,25 @@ export function shouldPromoteLifecycle(current: CrmLifecycleStage, requested: Cr
   return LIFECYCLE_RANK[requested] > LIFECYCLE_RANK[current];
 }
 
-/** Exact numeric(19,4) multiplication, rounded half away from zero. */
-export function multiplyDecimal(a: string, b: string): string {
-  const product = toUnits(a) * toUnits(b);
-  const negative = product < 0n;
-  const absolute = negative ? -product : product;
-  const rounded = (absolute + SCALE / 2n) / SCALE;
-  return fromUnits(negative ? -rounded : rounded);
+/**
+ * Exact numeric(19,4) multiplication, rounded half away from zero.
+ * Folded onto the kernel: this was bit-for-bit the same computation as
+ * mul() (truncated half-up magnitude with the sign reapplied), so the
+ * duplicate body is gone and the brand records the canonical output.
+ */
+export function multiplyDecimal(a: string, b: string): Money {
+  return mul(a, b) as Money;
 }
 
 /** Exact weighted amount at an integer close probability. */
-export function weightAmount(amount: string, probability: number): string {
+export function weightAmount(amount: string, probability: number): Money {
   if (!Number.isInteger(probability) || probability < 0 || probability > 100) {
     throw new Error("probability must be an integer from 0 to 100");
   }
   const product = toUnits(amount) * BigInt(probability);
   const rounded = (product + 50n) / 100n;
-  return fromUnits(rounded);
+  // fromUnits always emits fixed 4dp: the weighted amount is canonical Money.
+  return fromUnits(rounded) as Money;
 }
 
 /**
