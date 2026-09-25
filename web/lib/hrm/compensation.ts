@@ -890,7 +890,7 @@ export interface CompPlanDetailData {
   totalLabel: string
   totalCost: string
   linesTitle: string
-  columns: { title: string; kind: string; fte: string; start: string; cost: string; status: string }
+  columns: { title: string; kind: string; fte: string; start: string; cost: string; status: string; action: string }
   lines: CompPlanLineRow[]
   linesEmpty: string
   canManage: boolean
@@ -940,6 +940,7 @@ export async function loadHeadcountPlanDetail(
       start: t('compensation.columns.start'),
       cost: t('compensation.columns.cost'),
       status: t('compensation.columns.status'),
+      action: t('compensation.columns.action'),
     },
     lines: lines.map((l) => ({
       id: l.id,

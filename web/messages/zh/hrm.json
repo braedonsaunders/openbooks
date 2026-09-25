@@ -1682,7 +1682,8 @@
       "title": "标题",
       "kind": "类型",
       "fte": "全职当量",
-      "start": "开始"
+      "start": "开始",
+      "action": "操作"
     },
     "placement": {
       "below_min": "低于下限",

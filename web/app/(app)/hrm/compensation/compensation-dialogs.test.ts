@@ -150,7 +150,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function listJobLevels() { return []; }",
+        url: "data:text/javascript,export async function listJobLevels() { return []; } export async function compensationSettings() { return { comparisonAttributeKey: null, gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/headcount-plans.ts") {
@@ -468,7 +468,7 @@ for (const [name, load, loadedMessage, header, loadSpec, expected, specMessage] 
     "the team grid heads all seven columns from the loader-resolved fields",
   ],
   [
-    "the plan lines head their six columns from the resolved catalog, never literals",
+    "the plan lines head their seven columns from the resolved catalog, never literals",
     () => loadHeadcountPlanDetail(MANAGER, "plan-1"),
     "the plan detail loader resolves the canned plan",
     ["title", "Title", "the title header resolves from the en catalog"],
@@ -481,9 +481,10 @@ for (const [name, load, loadedMessage, header, loadSpec, expected, specMessage] 
         { $: "columns.start" },
         { $: "columns.cost" },
         { $: "columns.status" },
+        { $: "columns.action" },
       ],
     ],
-    "the plan lines head all six columns from the loader-resolved fields",
+    "the plan lines head all seven columns from the loader-resolved fields",
   ],
 ] as Array<
   [

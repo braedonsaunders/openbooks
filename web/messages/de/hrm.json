@@ -1682,7 +1682,8 @@
       "title": "Titel",
       "kind": "Art",
       "fte": "VZÄ",
-      "start": "Beginn"
+      "start": "Beginn",
+      "action": "Aktion"
     },
     "placement": {
       "below_min": "Unter Minimum",

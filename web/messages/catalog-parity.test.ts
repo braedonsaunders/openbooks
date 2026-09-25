@@ -1401,6 +1401,7 @@ const COGNATES = new Set<string>([
   'fr:hrm.qualifications.sectionLabel|Section',
   'fr:hrm.qualifications.title|Qualifications',
   'fr:hrm.qualifications.typesLabel|Type',
+  'fr:hrm.compensation.columns.action|Action',
   'fr:hrm.queue.columns.action|Action',
   'fr:hrm.queue.draftBadge|Actions',
   'fr:hrm.recruiting.depth.columns.signature|Signature',

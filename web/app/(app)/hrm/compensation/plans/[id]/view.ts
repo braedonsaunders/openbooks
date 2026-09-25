@@ -42,7 +42,7 @@ export function compPlanSpec(data: NonNullable<Awaited<ReturnType<typeof loadHea
   if (data.canManage) {
     columns.push(
       column(
-        '',
+        f('columns.action'),
         widgetCell('hrm-plan-line-approve', {
           planId: rootF('planId'),
           lineId: item('id'),

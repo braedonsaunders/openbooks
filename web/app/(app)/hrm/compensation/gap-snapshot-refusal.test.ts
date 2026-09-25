@@ -125,7 +125,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function listJobLevels() { return []; }",
+        url: "data:text/javascript,export async function listJobLevels() { return []; } export async function compensationSettings() { return { comparisonAttributeKey: null, gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/headcount-plans.ts") {
