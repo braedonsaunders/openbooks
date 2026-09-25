@@ -289,7 +289,7 @@ export async function runScenario(
     with scoped as (
       select d.id, d.document_number, d.currency, d.open_balance as stored, d.posted_entry_id
         from documents d
-       where d.org_id=${orgId} and d.status='posted' and d.posted_entry_id is not null and d.open_balance is not null
+       where d.org_id=${orgId} and d.status='posted' and d.posted_entry_id is not null
          and exists (select 1 from journal_entries e2 where e2.id = d.posted_entry_id and e2.posting_date <= ${cutoff})),
     calc as (
       select s.id,
