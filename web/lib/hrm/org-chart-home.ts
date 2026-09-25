@@ -61,6 +61,7 @@ export async function loadOrgChartHome(
       ? loadDirectory({
           orgId: authz.orgId,
           actorId: authz.userId,
+          asOf,
           ...(search ? { search } : {}),
           limit: 50,
           page: directoryPageNumber,
