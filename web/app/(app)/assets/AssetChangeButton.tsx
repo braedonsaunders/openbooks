@@ -123,13 +123,15 @@ export function AssetChangeButton({
   );
   const choice = (name: string, label: string, options: Option[]) => (
     <div className="space-y-1.5" key={name}>
-      <Label>{label}</Label>
+      <Label id={`asset-change-${name}-label`}>{label}</Label>
       <SearchSelect
         disabled={busy}
         value={values[name] ?? ""}
         onChange={(v) => set(name, v)}
         options={options}
         placeholder={`Select ${label.toLowerCase()}`}
+        ariaLabelledBy={`asset-change-${name}-label`}
+        ariaLabel={label}
       />
     </div>
   );
@@ -249,8 +251,9 @@ export function AssetChangeButton({
         <fieldset disabled={busy} className="min-w-0 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Change type</Label>
+              <Label htmlFor="asset-change-operation">Change type</Label>
               <Select
+                id="asset-change-operation"
                 value={operation}
                 onChange={(e) => {
                   setOperation(e.target.value);
@@ -273,8 +276,9 @@ export function AssetChangeButton({
             "Component identification and carrying-value assessment",
           )}
           <div>
-            <Label>Measurement of the disposed portion</Label>
+            <Label htmlFor="asset-change-mode">Measurement of the disposed portion</Label>
             <Select
+              id="asset-change-mode"
               value={mode}
               onChange={(e) => {
                 setMode(e.target.value);
@@ -307,8 +311,10 @@ export function AssetChangeButton({
                       ] as const
                     ).map(([k, label]) => (
                       <div key={k}>
-                        <Label>{label}</Label>
+                        <Label id={`asset-change-component-${k}-label`}>{label}</Label>
                         <Input
+                          aria-labelledby={`asset-change-component-${k}-label`}
+                          aria-label={label}
                           value={components[b.id]?.[k] ?? ""}
                           onChange={(e) => {
                             setComponents((v) => ({
