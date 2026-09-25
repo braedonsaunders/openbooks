@@ -6,7 +6,7 @@ import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, orgToday } from "./tools-shared";
+import { assistantListPage, dateInput, orgToday } from "./tools-shared";
 
 /**
  * Construction-billing reads. Retainage (holdback) is not a separate document
@@ -110,8 +110,7 @@ const retainageBalances: AssistantToolDef = {
          limit ${limit + 1}
       `)).rows;
     }
-    const truncated = rows.length > limit;
-    rows = rows.slice(0, limit);
+    const page = assistantListPage(rows, limit, rows.length);
     return {
       ok: true,
       data: {
@@ -122,9 +121,9 @@ const retainageBalances: AssistantToolDef = {
         total: money(total?.total),
         lines: total?.lines ?? 0,
         groupBy,
-        returned: rows.length,
-        truncated,
-        rows: rows.map((r) => ({ ...r, balance: money(r.balance) })),
+        returned: page.returned,
+        truncated: page.truncated,
+        rows: page.items.map((r) => ({ ...r, balance: money(r.balance) })),
         href: `/accounts?account=${acct.id}`,
       },
     };

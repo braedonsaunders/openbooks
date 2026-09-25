@@ -7,7 +7,7 @@ import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadItem } from "../../app/api/items/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, uuidInput } from "./tools-shared";
+import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
 
 /**
  * Item master + inventory reads. The item catalog screen
@@ -142,7 +142,7 @@ const inventoryLevels: AssistantToolDef = {
        group by i.id, i.code, i.name, sl.id, sl.code
       having coalesce(sum(m.quantity), 0) <> 0
        order by i.name, sl.code
-       limit ${limit}
+       limit ${limit + 1}
     `)).rows;
     const totals = (await db.execute<{ lines: string; quantity: string; value: string }>(sql`
       select count(*)::int as lines, coalesce(sum(sub.quantity), 0) as quantity,
@@ -155,15 +155,17 @@ const inventoryLevels: AssistantToolDef = {
           having coalesce(sum(m.quantity), 0) <> 0
         ) sub
     `)).rows[0];
+    const page = assistantListPage(rows, limit, Number(totals?.lines ?? 0));
     return {
       ok: true,
       data: {
         total: Number(totals?.lines ?? 0),
         sumQuantity: money(totals?.quantity),
         sumValue: money(totals?.value),
-        returned: rows.length,
-        truncated: rows.length === limit,
-        rows: rows.map((r) => ({ ...r, quantity: money(r.quantity), value: money(r.value) })),
+        returned: page.returned,
+        truncated: page.truncated,
+        dropped: page.dropped,
+        rows: page.items.map((r) => ({ ...r, quantity: money(r.quantity), value: money(r.value) })),
         href: "/inventory",
       },
     };

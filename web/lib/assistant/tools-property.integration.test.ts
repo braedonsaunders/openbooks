@@ -134,31 +134,34 @@ test('property assistant reads: register, lease detail, rent roll, arrears, depo
     };
     await withOrgContext(org.orgId, async () => {
       const properties = await executeAssistantTool(restricted, 'list_properties', {});
-      assert.equal(properties.ok, true, JSON.stringify(properties));
-      assert.ok(properties.ok);
+      assert.ok(properties.ok, JSON.stringify(properties));
       assert.equal((properties.data as { total: number }).total, 1);
 
       const leases = await executeAssistantTool(restricted, 'list_leases', {});
-      assert.equal(leases.ok, true, JSON.stringify(leases));
-      assert.ok(leases.ok);
+      assert.ok(leases.ok, JSON.stringify(leases));
       const leaseData = leases.data as { total: number; leases: { leaseNumber: string; baseRent: number }[] };
       assert.equal(leaseData.total, 1);
       assert.equal(leaseData.leases[0]!.leaseNumber, 'L-1001');
       assert.equal(leaseData.leases[0]!.baseRent, 2000);
 
+      await db.execute(sql`update property_leases set status='draft' where id=${seed.lease} and org_id=${org.orgId}`);
+      const filteredLeases = await executeAssistantTool(restricted, 'list_leases', { status: 'active' });
+      assert.ok(filteredLeases.ok, JSON.stringify(filteredLeases));
+      const filteredData = filteredLeases.data as { byStatus: { status: string; count: number }[] };
+      assert.deepEqual(filteredData.byStatus, [], 'status counts must use the same filtered lease set as the list');
+      await db.execute(sql`update property_leases set status='active' where id=${seed.lease} and org_id=${org.orgId}`);
+
       const hidden = await executeAssistantTool(restricted, 'get_lease', { leaseId: seed.hiddenLease });
       assert.deepEqual(hidden, { ok: false, error: 'lease_not_found' });
 
       const detail = await executeAssistantTool(restricted, 'get_lease', { leaseId: seed.lease });
-      assert.equal(detail.ok, true, JSON.stringify(detail));
-      assert.ok(detail.ok);
+      assert.ok(detail.ok, JSON.stringify(detail));
       const lease = (detail.data as { lease: { monthlyCharges: number; pastDue: number } }).lease;
       assert.equal(lease.monthlyCharges, 2000);
       assert.equal(lease.pastDue, 2000);
 
       const roll = await executeAssistantTool(restricted, 'rent_roll', {});
-      assert.equal(roll.ok, true, JSON.stringify(roll));
-      assert.ok(roll.ok);
+      assert.ok(roll.ok, JSON.stringify(roll));
       const rollData = roll.data as {
         total: number;
         monthlyChargesByCurrency: { currency: string; amount: number }[];
@@ -171,8 +174,7 @@ test('property assistant reads: register, lease detail, rent roll, arrears, depo
       assert.deepEqual(rollData.occupancy, { totalUnits: 1, occupiedUnits: 1 });
 
       const arrears = await executeAssistantTool(restricted, 'lease_arrears', {});
-      assert.equal(arrears.ok, true, JSON.stringify(arrears));
-      assert.ok(arrears.ok);
+      assert.ok(arrears.ok, JSON.stringify(arrears));
       const arrearsData = arrears.data as {
         total: number; totalsByCurrency: { currency: string; amount: number }[];
       };
@@ -180,8 +182,7 @@ test('property assistant reads: register, lease detail, rent roll, arrears, depo
       assert.deepEqual(arrearsData.totalsByCurrency, [{ currency: 'CAD', amount: 2000 }]);
 
       const deposits = await executeAssistantTool(restricted, 'property_deposits', {});
-      assert.equal(deposits.ok, true, JSON.stringify(deposits));
-      assert.ok(deposits.ok);
+      assert.ok(deposits.ok, JSON.stringify(deposits));
       assert.equal((deposits.data as { returned: number }).returned, 1);
     });
   } finally {

@@ -79,25 +79,29 @@ const listFxRates: AssistantToolDef = {
     let where = sql`org_id = ${authz.user.orgId} and from_currency = ${a.fromCurrency} and to_currency = ${a.toCurrency}`;
     if (a.asOf) where = sql`${where} and as_of <= ${a.asOf}`;
     if (a.rateType) where = sql`${where} and rate_type = ${a.rateType}`;
-    // Fetch one row past the limit so `truncated` reports whether more rows
-    // exist instead of mistaking an exactly-full page for truncation.
-    const fetched = (await db.execute<Record<string, unknown>>(sql`
+    // Fetch one row past the limit plus an authoritative count so `total`
+    // and `truncated` never mistake an exactly-full page for truncation.
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select from_currency, to_currency, as_of, rate_type, rate::text as rate, source, imported_at, created_at
         from fx_rates
        where ${where}
        order by as_of desc, created_at desc
        limit ${limit + 1}
-    `)).rows;
-    const truncated = fetched.length > limit;
-    const rows = fetched.slice(0, limit);
+    `));
+    const count = (await db.execute<{ total: number }>(sql`
+      select count(*)::int as total from fx_rates where ${where}
+    `)).rows[0];
+    const page = assistantListPage(rows.rows, limit, Number(count?.total ?? 0));
     return {
       ok: true,
       data: {
         fromCurrency: a.fromCurrency,
         toCurrency: a.toCurrency,
-        returned: rows.length,
-        truncated,
-        rates: rows.map((r) => ({
+        total: page.total,
+        returned: page.returned,
+        truncated: page.truncated,
+        dropped: page.dropped,
+        rates: page.items.map((r) => ({
           asOf: r.as_of,
           rateType: r.rate_type,
           rate: r.rate,
