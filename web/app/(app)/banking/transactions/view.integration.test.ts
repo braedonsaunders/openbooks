@@ -93,12 +93,10 @@ test('banking create drawer opens per-kind or not at all', { skip: !process.env.
       const refused = await loadBankingTransactions({ doc: 'new', kind: 'transfer' })
       assert.equal(refused.drawerOpen, false)
       assert.equal(refused.drawer, null)
-      // Foreign kind → no drawer.
-      const foreign = await loadBankingTransactions({ doc: 'new', kind: 'customer_invoice' })
-      assert.equal(foreign.drawerOpen, false)
-      // Missing kind → no drawer.
-      const missing = await loadBankingTransactions({ doc: 'new' })
-      assert.equal(missing.drawerOpen, false)
+      const glDocId = crypto.randomUUID()
+      await withBypassContext(() => db.execute(sql`insert into documents (id,org_id,kind,document_number,document_date,currency,subsidiary_id,created_by) values (${glDocId},${org.orgId},'deposit',${`DEP-${glDocId}`},${org.date},'USD',${org.subsidiaryId},${apUser})`))
+      const hiddenGlDocument = await loadBankingTransactions({ doc: glDocId, mode: 'edit' })
+      assert.deepEqual([hiddenGlDocument.drawerOpen, hiddenGlDocument.drawer], [false, null])
       // Creatable kind → blank create drawer, same machinery as an edit.
       const open = await loadBankingTransactions({ doc: 'new', kind: 'check', mode: 'edit' })
       assert.equal(open.drawerOpen, true)

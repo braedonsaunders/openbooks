@@ -7,7 +7,8 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
+import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind, postPermission } from "../../../../lib/document-kinds.ts";
+import { canReadDocumentKind } from '../../../../lib/flow-subject-authz'
 import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
@@ -122,11 +123,19 @@ export async function loadBankingTransactions(
 
   // -- open document drawer (?doc=<id>) -------------------------------------
   const docId = typeof sp.doc === 'string' ? sp.doc : undefined
-  // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId) : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
-    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
-    ? loadedDoc : null
+  // Resolve tenant, kind and subsidiary before loading lines or other
+  // disclosure-bearing document fields.
+  const docSummary = docId && docId !== 'new'
+    ? (await db.execute<{ kind: string; subsidiaryId: string }>(sql`
+        select kind, subsidiary_id as "subsidiaryId" from documents
+         where id = ${docId} and org_id = ${authz.user.orgId}`)).rows[0]
+    : undefined
+  const docInScope = !!docSummary
+    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(docSummary.subsidiaryId)))
+  const loadedDoc = docSummary && docInScope && canReadDocumentKind(authz, docSummary.kind)
+    ? await loadDocument(docId!, authz.user.orgId)
+    : null
+  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null
   const openKind = openDoc?.doc.kind as string | undefined
   // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
   // over a blank in-memory payload. The kind must belong to this page, the
@@ -241,8 +250,8 @@ export async function loadBankingTransactions(
           subsidiaries: pickers[9] ?? undefined,
           headerDefs: pickers[7] as DocumentDrawerProps['headerDefs'],
           lineDefs: pickers[8] as DocumentDrawerProps['lineDefs'],
-          canCreate,
-          canPost: can(authz, 'ap.post') || can(authz, 'gl.post'),
+          canCreate: can(authz, createPermission(drawerKind!)),
+          canPost: can(authz, postPermission(drawerKind!)),
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
