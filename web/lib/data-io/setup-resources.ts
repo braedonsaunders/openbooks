@@ -397,17 +397,18 @@ async function writeSetup(
         continue
       }
 
-      // Domain invariants the generic coercer cannot express run on the
-      // merged import row exactly as the interactive writer runs them — in
-      // preview and commit alike, before any persistence. The read sees the
-      // same committed state the row write below will see.
-      if (entity.key === 'tax-codes') {
-        const problem = await validateEntityIntegrity(entity, src, ctx.orgId, existingId ?? undefined)
-        if (problem) {
-          outcome.failed++
-          outcome.errors.push({ row: rowNo, message: problem })
-          continue
-        }
+      // Domain checks that coercion cannot express (URL schemes, formula
+      // shape, subsidiary/feature gates, tax-code invariants) run here —
+      // once, for every entity, before preview counts the row and before
+      // commit persists it. The interactive write path enforces the same
+      // validator, so an import can never store what the form refuses
+      // (e.g. a javascript: filing URL on tax-return-forms, or a
+      // withholding code with no withholding account).
+      const integrityProblem = await validateEntityIntegrity(entity, src as Record<string, unknown>, ctx.orgId, existingId ?? undefined)
+      if (integrityProblem) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: integrityProblem })
+        continue
       }
 
       if (isSetupBookEntity(entity)) {
