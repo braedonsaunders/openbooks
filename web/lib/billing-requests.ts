@@ -12,6 +12,16 @@ import { subsidiaryVisibleFilter } from "./subsidiaries";
 
 /** CRUD for project billing requests + milestone schedules. */
 
+/**
+ * Caller-input refusal for billing-request creation. A bare Error here falls
+ * through apiErrorResponse as an unexpected 500 with a request id; the typed
+ * status raises the computed refusal as the named 422 instead (same shape as
+ * the construction-billing errors).
+ */
+export class BillingRequestValidationError extends Error {
+  readonly status = 422
+}
+
 export interface BillingRequestInput {
   projectId: string;
   invoiceType?: "progress" | "final";
@@ -143,7 +153,7 @@ export async function createBillingRequest(
   // that the route can only surface as driver text.
   for (const [label, value] of [["Start date", input.startDate], ["Cutoff date", input.cutoffDate]] as const) {
     if (value != null && value !== "" && !isIsoCalendarDate(value)) {
-      throw new Error(`${label} must be a real calendar date (YYYY-MM-DD)`);
+      throw new BillingRequestValidationError(`${label} must be a real calendar date (YYYY-MM-DD)`);
     }
   }
   const backupRequired = input.backupRequired ?? eff.backupRequired;
@@ -272,7 +282,7 @@ export async function createBillingRequest(
       // draw_amount is numeric(19,4): a wider figure would die in Postgres
       // with a raw failure the route can only surface as driver text.
       if (wholeDigits(exact) > 15)
-        throw new Error("Draw amount is out of range — at most 15 whole digits fit the ledger");
+        throw new BillingRequestValidationError("Draw amount is out of range — at most 15 whole digits fit the ledger");
       try {
         drawAmount = normalizeMoney(exact);
       } catch {
