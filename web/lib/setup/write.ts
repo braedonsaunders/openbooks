@@ -2607,6 +2607,10 @@ export async function deleteSetupRecord(
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
       if (!before) return false
       if (entity.key === 'item-rate-books' && before.is_default) throw new Error('default-required')
+      if (entity.key === 'account-groups') {
+        const pinned = await tx.execute(sql`select 1 from account_group_members where group_id = ${id} and org_id = ${orgId} limit 1`)
+        if (pinned.rows.length > 0) throw new SetupWriteRefusal('account group still has pinned accounts — unpin or reassign them before deleting the group', 409)
+      }
       // Memberships belong to this group. External references still refuse the
       // parent deletion and roll these removals back with the audit transaction.
       if (entity.key === 'tax-groups') await syncMembers(orgId, id, [], tx)

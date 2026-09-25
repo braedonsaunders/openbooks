@@ -257,6 +257,14 @@ test("setup deletes write their audit event in the same transaction", { skip: !D
     assert.equal((await db.execute(sql`select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`)).rows.length, 0);
     assert.equal(await auditCount(f.orgId, "pay_derived_rules", f.ruleId), 2, "insert and delete each leave audit evidence");
 
+    const pinnedGroupId = randomUUID();
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, created_by) values (${pinnedGroupId}, ${f.orgId}, 'delete-test', 'pinned', 'Pinned group', ${f.actorId})`);
+    await db.execute(sql`insert into account_group_members (org_id, group_id, account_id, dimension, created_by) values (${f.orgId}, ${pinnedGroupId}, (select id from accounts where org_id = ${f.orgId} limit 1), 'delete-test', ${f.actorId})`);
+    const refused = await DELETE(deleteRequest("account-groups", pinnedGroupId), call("account-groups"));
+    assert.deepEqual([refused.status, (await refused.json() as { error: string }).error], [409, 'account group still has pinned accounts — unpin or reassign them before deleting the group']);
+    assert.equal((await db.execute(sql`select 1 from account_group_members where group_id = ${pinnedGroupId}`)).rows.length, 1);
+    await assert.rejects(db.execute(sql`delete from account_groups where id = ${pinnedGroupId} and org_id = ${f.orgId}`));
+
     await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"multiSubsidiary":true}'::jsonb, true) where id = ${f.orgId}`);
     const main = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${f.orgId} order by created_at limit 1`)).rows[0]!.id;
     const [foreign, segment] = [randomUUID(), randomUUID()];
