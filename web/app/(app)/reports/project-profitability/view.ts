@@ -113,7 +113,13 @@ export async function loadProjectProfitability(
   // the subsidiaries they may see, and the picker offers the
   // single-currency choice a multi-currency viewed set refuses with.
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
+  const dims = {
+    ...q.dims,
+    subsidiaryIds: subView.subsidiary?.ids,
+    // Unrestricted root-covering views read root-owned (null subsidiary)
+    // projects alongside attributed ones; restricted views stay fail-closed.
+    includeNullSubsidiary: subView.subsidiary?.includeNullSubsidiary === true,
+  }
   // The base currency gates every money figure below: refuse before the
   // expensive report queries run, never after them, and never by throwing —
   // the app boundary renders a generic failure for exceptions.
