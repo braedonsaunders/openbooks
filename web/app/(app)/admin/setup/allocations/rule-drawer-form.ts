@@ -325,8 +325,9 @@ export function definitionPayload(form: DefinitionForm, expectedRevision: string
   return body
 }
 
-/** Stored target → editor line (empty account = same account; sequence rides along, ignored). */
+/** Stored target → editor line (empty account = same account; the stored id rides along as targetId). */
 export function targetToLine(target: {
+  id?: string
   sequence?: number
   targetAccountId?: string | null
   departmentId?: string | null
@@ -344,6 +345,7 @@ export function targetToLine(target: {
       ? { kind: 'percent', value: Number(target.fixedPercent) }
       : { kind: 'weight', value: target.weight ?? '' }
   return {
+    targetId: target.id,
     accountId: target.targetAccountId ?? '',
     portion,
     departmentId: target.departmentId ?? null,
@@ -355,12 +357,16 @@ export function targetToLine(target: {
 }
 
 /**
- * Editor lines → replace-targets input, merged positionally with the loaded
- * targets so server-only fields (subsidiary, extra dims) survive a save that
- * never shows them. New lines take the next sequence.
+ * Editor lines → replace-targets input, merged by stable target identity
+ * with the loaded targets so server-only fields (subsidiary, extra dims)
+ * survive a save that never shows them. Matching by array index copied one
+ * target's hidden subsidiary/extraDims onto its neighbour whenever a line
+ * was removed; lines without a targetId are new and take the next sequence
+ * with empty hidden fields.
  */
 export function mergeLinesToTargets(
   original: {
+    id?: string
     sequence?: number
     subsidiaryId?: string | null
     extraDims?: Record<string, string>
@@ -368,9 +374,18 @@ export function mergeLinesToTargets(
   }[],
   lines: AllocationLine[],
 ): Record<string, unknown>[] {
+  const keptById = new Map<string, (typeof original)[number]>()
+  for (const target of original) {
+    if (target.id !== undefined) keptById.set(target.id, target)
+  }
   return lines.map((line, index) => {
     const basis = allocationTargetBasisFromLine(line)
-    const kept = original[index] ?? {}
+    const byId = line.targetId !== undefined ? keptById.get(line.targetId) : undefined
+    // Lines without a targetId predate stored ids: keep the previous
+    // positional pairing so a save never drops hidden fields it used to
+    // retain. A line whose id no longer matches any loaded target merges
+    // empty — it must not inherit a stranger's subsidiary/extraDims.
+    const kept = byId ?? (line.targetId === undefined ? (original[index] ?? {}) : {})
     return {
       sequence: index,
       targetAccountId: basis.targetAccountId,

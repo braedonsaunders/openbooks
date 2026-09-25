@@ -24,6 +24,8 @@ export interface CodingConfig {
 }
 
 export interface AllocationLine {
+  /** Persisted allocation target identity used to retain hidden server fields. */
+  targetId?: string
   accountId: string
   // Fixed amounts and manual weights stay as their exact decimal text while
   // they are being edited. Converting every keystroke through Number loses
