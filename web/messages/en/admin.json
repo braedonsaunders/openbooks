@@ -5137,6 +5137,7 @@
     "storedCard": {
       "title": "Stored backups",
       "body": "The newest {count} completed backups are kept in object storage; the rest are rotated out. Deleting a backup removes it from storage immediately.",
+      "runCount": "Showing {shown} of {total} backup runs. Retained archives are prioritized.",
       "backUpNow": "Back up now",
       "noneYet": "No stored backups yet."
     },

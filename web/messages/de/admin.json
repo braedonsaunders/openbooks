@@ -5234,6 +5234,7 @@
     "storedCard": {
       "backUpNow": "Jetzt sichern",
       "body": "Die neuesten {count} abgeschlossenen Sicherungen werden im Objektspeicher gehalten; der Rest wird rotiert. Das Löschen einer Sicherung entfernt sie sofort aus dem Speicher.",
+      "runCount": "{shown} von {total} Sicherungsläufen werden angezeigt. Aufbewahrte Archive werden zuerst angezeigt.",
       "noneYet": "Noch keine gespeicherten Sicherungen.",
       "title": "Gespeicherte Sicherungen"
     },

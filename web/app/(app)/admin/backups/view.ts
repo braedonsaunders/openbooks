@@ -91,13 +91,15 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
     purge_reason: string | null
     created_at: Date | string
     completed_at: Date | string | null
+    total_count: number
   }>(sql`
     select id, kind, status, file_name, byte_size, table_count, row_count, sha256,
-           error, purged_at, purge_reason, created_at, completed_at
+           error, purged_at, purge_reason, created_at, completed_at,
+           count(*) over()::int as total_count
       from backup_runs
      where org_id = ${orgId}
-     order by created_at desc
-     limit 50`)
+     order by (status = 'completed' and purged_at is null) desc, created_at desc
+     limit 100`)
   const runs: BackupManagerProps['runs'] = runsRes.rows.map((r) => ({
     id: r.id,
     kind: r.kind as BackupManagerProps['runs'][number]['kind'],
@@ -129,7 +131,7 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
     description: t('backupsManager.pageDescription'),
     backHref: '/admin',
     backLabel: tHub('title'),
-    manager: { policy, runs, s3Enabled, workerOnline },
+    manager: { policy, runs, totalRuns: runsRes.rows[0]?.total_count ?? 0, s3Enabled, workerOnline },
   }
 }
 
@@ -155,6 +157,7 @@ export function adminBackupsSpec(data: AdminBackupsData): PageSpec {
       widgetBlock('backup-manager', {
         policy: data.manager.policy,
         runs: data.manager.runs,
+        totalRuns: data.manager.totalRuns,
         s3Enabled: data.manager.s3Enabled,
         workerOnline: data.manager.workerOnline,
       }),

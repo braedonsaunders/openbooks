@@ -153,14 +153,18 @@ export const SETUP_WIDGETS = {
   /* --- admin backups ---------------------------------------------------------- */
   /** Whole: a per-field schedule form, polling effects and fetch mutations
    *  are client state and capabilities, not spec vocabulary. */
-  'backup-manager': (props) => (
-    <BackupManager
-      policy={(props.policy as ComponentProps<typeof BackupManager>['policy']) ?? null}
-      runs={(props.runs as ComponentProps<typeof BackupManager>['runs']) ?? []}
-      s3Enabled={props.s3Enabled === true}
-      workerOnline={props.workerOnline === true}
-    />
-  ),
+  'backup-manager': (props) => {
+    const runs = (props.runs as ComponentProps<typeof BackupManager>['runs']) ?? []
+    return (
+      <BackupManager
+        policy={(props.policy as ComponentProps<typeof BackupManager>['policy']) ?? null}
+        runs={runs}
+        totalRuns={num(props, 'totalRuns') ?? runs.length}
+        s3Enabled={props.s3Enabled === true}
+        workerOnline={props.workerOnline === true}
+      />
+    )
+  },
 
   /* --- admin islands ---------------------------------------------------------------- */
   /** The org nav-layout editor: unsaved client state, prompt() dialogs, a

@@ -52,6 +52,7 @@ function formatBytes(n: number | null): string {
 export interface BackupManagerProps {
   policy: BackupPolicyRow | null;
   runs: BackupRunRow[];
+  totalRuns: number;
   s3Enabled: boolean;
   workerOnline: boolean;
 }
@@ -59,6 +60,7 @@ export interface BackupManagerProps {
 export function BackupManager({
   policy,
   runs,
+  totalRuns,
   s3Enabled,
   workerOnline,
 }: BackupManagerProps) {
@@ -277,6 +279,9 @@ export function BackupManager({
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("storedCard.title")}</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {t("storedCard.body", { count: policy?.maxKeep ?? maxKeep })}
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {t("storedCard.runCount", { shown: runs.length, total: totalRuns })}
             </p>
           </div>
           <Button variant="default" disabled={pending || !s3Enabled || hasActiveRun} onClick={runNow}>
