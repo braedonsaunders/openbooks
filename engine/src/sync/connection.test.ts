@@ -114,7 +114,7 @@ function netsuiteRow(
   };
 }
 
-const NETSUITE_CONFIG = { account: "1234567", host: "https://1234567.suitetalk.api.netsuite.com" };
+const NETSUITE_CONFIG = { account: "1234567", host: "https://1234567.suitetalk.api.netsuite.com", baseCurrency: "USD" };
 const NETSUITE_SECRETS = {
   consumerKey: "ck",
   consumerSecret: "cs",
@@ -123,8 +123,7 @@ const NETSUITE_SECRETS = {
 };
 
 test("buildSource refuses a NetSuite connection with a blank token secret, naming it", () => {
-  // The old gate checked only the consumer key: this exact row used to
-  // build a source that signed with an empty secret and died remotely.
+  // Blank secrets used to pass the gate and fail remotely.
   assert.throws(
     () => buildSource(netsuiteRow(NETSUITE_CONFIG, { ...NETSUITE_SECRETS, tokenSecret: "" })),
     /NetSuite connection is missing credentials: token secret — set them on the connection before syncing/,
@@ -139,6 +138,7 @@ test("buildSource names every missing NetSuite credential at once", () => {
 });
 
 test("buildSource builds a NetSuite source once every credential is present", () => {
+  assert.throws(() => buildSource(netsuiteRow({ ...NETSUITE_CONFIG, baseCurrency: "" }, NETSUITE_SECRETS)), /NetSuite connection needs its base currency/);
   const source = buildSource(netsuiteRow(NETSUITE_CONFIG, NETSUITE_SECRETS));
   assert.ok(source instanceof NetSuiteSource);
 });

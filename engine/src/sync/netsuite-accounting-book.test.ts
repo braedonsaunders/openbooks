@@ -15,7 +15,7 @@ function sourceWithQuery(
   rows: Array<Record<string, unknown>>,
   accountingBookId?: string,
 ): NetSuiteSource {
-  const source = new NetSuiteSource(creds, { accountingBookId });
+  const source = new NetSuiteSource(creds, { accountingBookId, baseCurrency: "USD" });
   Object.defineProperty(source, "q", {
     value: async () => rows,
   });
@@ -37,7 +37,7 @@ test("NetSuite multi-book accounts fail closed without an explicit book", async 
 
 test("NetSuite verifies and uses an explicitly configured accounting book", async () => {
   const queries: string[] = [];
-  const source = new NetSuiteSource(creds, { accountingBookId: "2" });
+  const source = new NetSuiteSource(creds, { accountingBookId: "2", baseCurrency: "USD" });
   Object.defineProperty(source, "q", {
     value: async (query: string) => {
       queries.push(query);
@@ -63,7 +63,7 @@ test("NetSuite rejects a configured book absent from posted accounting data", as
 
 test("NetSuite accounting book IDs are injection-safe numeric identifiers", () => {
   assert.throws(
-    () => new NetSuiteSource(creds, { accountingBookId: "1 OR 1=1" }),
+    () => new NetSuiteSource(creds, { accountingBookId: "1 OR 1=1", baseCurrency: "USD" }),
     /must be numeric/,
   );
 });
