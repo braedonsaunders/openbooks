@@ -177,7 +177,10 @@ async function openDialog() {
 
 test('a late tax year response cannot replace the selected year', async () => {
   const pending: ((response: Response) => void)[] = []; let defer = false; const { unmount } = await mountRates(() => Response.json({ ok: true }), () => defer ? new Promise((resolve) => pending.push(resolve)) : Response.json(PAYLOAD))
-  try { const select = document.getElementById('rates-year') as HTMLSelectElement; assert.ok((document.body.textContent ?? '').includes('0.60%'), 'the stored decimal 0.0060 must read as a human percent')
+  try { const trigger = document.getElementById('rates-year'); assert.ok(trigger, 'the tax year control is rendered')
+    // The house Select carries the id on its visible trigger; drive the
+    // hidden native select underneath, which fires the genuine change event.
+    const select = trigger.closest('span')?.querySelector('select[aria-hidden]') as HTMLSelectElement | null; assert.ok(select, 'the tax year control wraps its native select'); assert.ok((document.body.textContent ?? '').includes('0.60%'), 'the stored decimal 0.0060 must read as a human percent')
     const setValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!; defer = true
     for (const year of ['2027', '2028']) await act(async () => { setValue.call(select, year); select.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
     await act(async () => { pending[1]!(Response.json({ ...PAYLOAD, year: 2028 })); await tick() }); await act(async () => { pending[0]!(Response.json({ ...PAYLOAD, year: 2027 })); await tick() })
