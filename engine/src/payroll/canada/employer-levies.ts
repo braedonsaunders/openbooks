@@ -116,7 +116,27 @@ export async function applyCaEmployerLevies(
     wcbAssessable = cmp(gross, room) <= 0 ? gross : room;
     if (cmp(wcbAssessable, "0") > 0) {
       wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2);
-      const splits = lines.filter((l) => l.kind === "earning" && !l.accrualOnly && l.projectId);
+      // Aggregate tagged earning lines by costing target (project + department):
+      // hourly earnings post one line per DAY since dated lookbacks, but WSIB
+      // assesses earnings and the stub allocates the premium by project — one
+      // split per day-line would multiply WCB lines (four for two projects)
+      // while the premium total stays identical. First-appearance order is
+      // kept so the last-project remainder rule below stays stable.
+      const byTarget = new Map<string, { amount: string; projectId: string; departmentId: string | null }>();
+      for (const line of lines) {
+        if (line.kind !== "earning" || line.accrualOnly || !line.projectId) continue;
+        const key = `${line.projectId}|${line.departmentId ?? ""}`;
+        const seen = byTarget.get(key);
+        if (seen) seen.amount = add(seen.amount, line.amount);
+        else {
+          byTarget.set(key, {
+            amount: line.amount,
+            projectId: line.projectId,
+            departmentId: line.departmentId ?? null,
+          });
+        }
+      }
+      const splits = [...byTarget.values()];
       const grossUnits = toUnits(gross);
       const allocations: StatutoryAllocation[] = [];
       let allocated = "0";
