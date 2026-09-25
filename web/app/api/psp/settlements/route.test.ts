@@ -38,9 +38,10 @@ const mockSources = new Map<string, string>([
   [
     "mock:json",
     `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
+      export const jsonObject = { safeParse: (data) => ({ success: typeof data === 'object' && data !== null && !Array.isArray(data), data }) }
+      export async function parseJsonBody(request, schema) {
+        const parsed = schema.safeParse(await request.json().catch(() => undefined))
+        return parsed.success ? { ok: true, data: parsed.data } : { ok: false, response: Response.json({ error: 'invalid request body' }, { status: 400 }) }
       }
     `,
   ],
