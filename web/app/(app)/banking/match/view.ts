@@ -27,6 +27,7 @@ import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
  */
 
 type MatchWorkspaceProps = Parameters<typeof MatchWorkspace>[0]
+const MATCH_TABS = ['match', 'review', 'excluded'] as const
 
 interface UnmatchedRow extends Record<string, unknown> {
   id: string
@@ -51,6 +52,7 @@ export interface MatchData {
   data: MatchWorkspaceProps['data']
   totals: MatchWorkspaceProps['totals']
   currentParams: Record<string, string | string[] | undefined>
+  selectionKey: string
   tab: 'match' | 'review' | 'excluded'
 }
 
@@ -61,7 +63,10 @@ export async function loadMatch(
   const t = await getTranslations('banking')
   const orgId = authz.user.orgId
   const accountId = pickString(sp.account)
-  const tab = (pickString(sp.tab) ?? 'match') as 'match' | 'review' | 'excluded'
+  const requestedTab = pickString(sp.tab)
+  const tab = MATCH_TABS.includes(requestedTab as (typeof MATCH_TABS)[number])
+    ? requestedTab as (typeof MATCH_TABS)[number]
+    : 'match'
 
   // Reconcilable accounts (the picker) come from the ONE banking reader
   // (F-t06-001) — the same membership the overview roster and the
@@ -111,6 +116,7 @@ export async function loadMatch(
       data: null,
       totals: null,
       currentParams: sp,
+      selectionKey: JSON.stringify([null, null, tab]),
       tab,
     }
   }
@@ -125,6 +131,7 @@ export async function loadMatch(
 
   let data = null
   let totals = null
+  let selectionKey = JSON.stringify([account.id, session?.id ?? null, tab])
   if (session) {
     const ctx = {
       orgId,
@@ -137,6 +144,7 @@ export async function loadMatch(
     const stmtParams = parsePrefixedListParams(sp, 'stmt', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
     const glParams = parsePrefixedListParams(sp, 'gl', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
     const exParams = parsePrefixedListParams(sp, 'ex', { sort: 'date', dir: 'asc', perPage: 15, allowedSorts: ['date'] as const })
+    selectionKey = JSON.stringify({ accountId: account.id, sessionId: session.id, tab, stmtParams, glParams })
 
     const stmtWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId}
       and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.posted_on <= ${session.through_date}
@@ -225,6 +233,7 @@ export async function loadMatch(
     data,
     totals,
     currentParams: sp,
+    selectionKey,
     tab,
   }
 }
@@ -245,6 +254,7 @@ export function matchSpec(data: MatchData): PageSpec {
         data: data.data,
         totals: data.totals,
         currentParams: data.currentParams,
+        selectionKey: data.selectionKey,
         tab: data.tab,
       }),
     ],
