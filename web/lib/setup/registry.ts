@@ -1889,7 +1889,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     iconKey: 'landmark',
     orgScoped: true,
     actorCols: true,
-    naturalKey: 'account_number',
+    naturalKey: 'accountNumber',
     hasActive: true,
     columns: [
       { key: 'accountNumber', kind: 'code' },
