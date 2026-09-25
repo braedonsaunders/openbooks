@@ -107,6 +107,10 @@ export async function saveEntitlementOpenings(input: {
   /** Adoption date every carry-in in this load is dated. */
   movementDate: string;
   rows: EntitlementOpeningWrite[];
+  /** Insert refuses an existing opening; upsert replaces it. Enforced again
+   * inside the transaction so a concurrent writer cannot turn an insert
+   * into an overwrite between the resource's preview and this write. */
+  mode?: "insert" | "upsert";
   /** Caller scope is rechecked under employee locks in the write transaction. */
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   note?: string | null;
@@ -195,6 +199,10 @@ export async function saveEntitlementOpenings(input: {
           continue;
         }
         const stored = storedKeys.has(`${plan.id}:${row.employeePartyId}`);
+        if (stored && input.mode === "insert") {
+          fail(`${plan.code} carry-in already exists for this employee — choose upsert to replace it`);
+          continue;
+        }
         const lock = locks.get(`${plan.id}:${row.employeePartyId}`);
         if (lock) {
           if (input.strictLocks !== false) {

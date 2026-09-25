@@ -21,14 +21,16 @@ import {
   assertMovementDate,
   entitlementOpeningLocks,
   entitlementPlans,
+  resolvePlanLimit,
   saveEntitlementOpenings,
   type EntitlementPlan,
 } from '@openbooks/engine/src/payroll/entitlements.ts'
-import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
+import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
 import {
   duplicateImportRowIndexes,
   enforceExportRowLimit,
+  importRowAction,
   MAX_EXPORT_ROWS,
   subsidiaryReadFilterWithUnassigned,
   type ReadCtx,
@@ -582,11 +584,19 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
       enforceExportRowLimit(result.rows, PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR.label)
       return { fields: resourceFields, columns, rows: result.rows }
     },
-    async write(rows, _mode, ctx: WriteCtx) {
+    async write(rows, mode: ImportMode, ctx: WriteCtx) {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       const plans = await loadPlans()
       const planByCode = new Map(plans.map((plan) => [plan.code.trim().toLowerCase(), plan]))
       const locks = await entitlementOpeningLocks(ctx.orgId)
+      // Preview must report what commit will do: classify each row against
+      // the openings already stored, so an existing carry-in previews as an
+      // update (or an insert conflict), never as a creation.
+      const storedRows = (await db.execute(sql`
+        select plan_id, employee_party_id from entitlement_ledger
+         where org_id = ${ctx.orgId} and kind = 'opening'
+      `)) as { rows: { plan_id: string; employee_party_id: string }[] }
+      const storedKeys = new Set(storedRows.rows.map((row) => `${row.plan_id}:${row.employee_party_id}`))
 
       // Resolve the natural keys before saving any row. This resource calls
       // saveEntitlementOpenings once per row, so that function's per-call
@@ -643,6 +653,13 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
             continue
           }
           const asOf = assertMovementDate(src.asOf)
+          const key = `${plan.id}:${employee.id}`
+          const action = importRowAction(mode, storedKeys.has(key))
+          if (action === 'conflict') {
+            outcome.failed++
+            outcome.errors.push({ row: rowNo, message: `${plan.code} carry-in already exists for this employee — choose upsert to replace it`, field: 'plan' })
+            continue
+          }
           const lock = locks.get(`${plan.id}:${employee.id}`)
           if (lock) {
             outcome.failed++
@@ -670,8 +687,17 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           if (plan.direction === 'owe' && cmp(amount, '0') > 0) {
             throw new Error(`${plan.code} is a balance the EMPLOYEE owes, so its carry-in must be negative`)
           }
+          const limit = await resolvePlanLimit(db, ctx.orgId, plan.id, employee.id, asOf)
+          const warning = cmp(amount, '0') > 0 && limit?.maxBalance != null && cmp(amount, limit.maxBalance) > 0
+            ? `${plan.code} carry-in ${amount} is above the ${limit.maxBalance} limit that resolves for this employee (${limit.scope} scope)`
+            : null
           if (ctx.dryRun) {
-            outcome.created++
+            if (action === 'update') outcome.updated++
+            else outcome.created++
+            if (warning) {
+              outcome.warnings ??= []
+              outcome.warnings.push({ row: rowNo, message: warning })
+            }
             continue
           }
 
@@ -679,11 +705,18 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
             orgId: ctx.orgId,
             actorId: ctx.actorId,
             movementDate: asOf,
+            mode,
             rows: [{ employeePartyId: employee.id, amounts: { [plan.code]: amount } }],
             allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
           })
           outcome.created += result.created
           outcome.updated += result.updated + result.deleted
+          for (const item of result.warnings) {
+            outcome.warnings ??= []
+            outcome.warnings.push({ row: rowNo, message: item.message })
+          }
+          if (result.created > 0) storedKeys.add(key)
+          if (result.deleted > 0) storedKeys.delete(key)
         } catch (error) {
           outcome.failed++
           outcome.errors.push({
