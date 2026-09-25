@@ -14,6 +14,7 @@ import { confirmDialog } from '../../../../lib/confirm'
 import { useViewerFormat } from '../../../../lib/viewer-format'
 import { formatExactPercent } from '../../../../lib/format'
 import { equipmentRoiPercent } from '../../../../lib/equipment-roi'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 type Opt = { id: string; name: string; code?: string | null; number?: string | null };
 
 // Every stable refusal code POST /api/equipment can emit. The
@@ -114,6 +115,48 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
     ...(projectsEnabled ? { rateBookId: rateBookId || null } : {}), purchasePrice, acquiredOn: acquiredOn || null, inServiceOn: inServiceOn || null,
     serialNumber: serialNumber || null, capacityQuantity: capacityQuantity || null, capacityUnit: capacityUnit || null }),
     [name, unitNumber, description, status, subsidiaryId, chargeItemId, fixedAssetId, rateBookId, projectsEnabled, purchasePrice, acquiredOn, inServiceOn, serialNumber, capacityQuantity, capacityUnit])
+  const originalForm = {
+    name: e.name === 'New equipment unit' ? '' : e.name,
+    unitNumber: e.unit_number,
+    description: e.description ?? '',
+    status: e.status,
+    subsidiaryId: e.subsidiary_id,
+    chargeItemId: e.charge_item_id ?? null,
+    fixedAssetId: e.fixed_asset_id ?? null,
+    ...(projectsEnabled ? { rateBookId: e.rate_book_id ?? null } : {}),
+    purchasePrice: String(e.purchase_price ?? '0'),
+    acquiredOn: e.acquired_on ?? null,
+    inServiceOn: e.in_service_on ?? null,
+    serialNumber: e.serial_number ?? null,
+    capacityQuantity: e.capacity_quantity ?? null,
+    capacityUnit: e.capacity_unit ?? null,
+  }
+  function closeAfterGuard() {
+    if (createMode) {
+      router.push(closeHref as never)
+      return
+    }
+    setName(originalForm.name)
+    setUnitNumber(originalForm.unitNumber)
+    setDescription(originalForm.description)
+    setStatus(originalForm.status)
+    setSubsidiaryId(originalForm.subsidiaryId)
+    setChargeItemId(originalForm.chargeItemId ?? '')
+    setFixedAssetId(originalForm.fixedAssetId ?? '')
+    setRateBookId(originalForm.rateBookId ?? '')
+    setPurchasePrice(originalForm.purchasePrice)
+    setAcquiredOn(originalForm.acquiredOn ?? '')
+    setInServiceOn(originalForm.inServiceOn ?? '')
+    setSerialNumber(originalForm.serialNumber ?? '')
+    setCapacityQuantity(originalForm.capacityQuantity ?? '')
+    setCapacityUnit(originalForm.capacityUnit ?? '')
+    setMode('view')
+  }
+  const closeGuard = useDirtyClose({
+    dirty: mode === 'edit' && JSON.stringify(form) !== JSON.stringify(originalForm),
+    busy, onClose: closeAfterGuard,
+    message: common('feedback.unsavedChanges'), confirmLabel: common('confirm.discardChanges'),
+  })
   function createErrorMessage(code: unknown): string {
     if (typeof code === 'string' && (CREATE_ERROR_CODES as readonly string[]).includes(code)) {
       return t(`create.errors.${code}`)
@@ -196,13 +239,8 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   }
 
   function cancel() {
-    // Unsaved create holds no record: Cancel only navigates and writes nothing.
     clearRefusal()
-    if (createMode) {
-      router.push(closeHref as never)
-      return
-    }
-    setMode('view')
+    void closeGuard.close()
   }
   async function remove() {
     if (!await confirmDialog({ title: t('deleteTitle'), message: t('deleteMessage'), confirmLabel: common('actions.delete'), tone: 'danger' })) return
@@ -236,11 +274,11 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
     setActionsOpen(false)
     if (ok) router.refresh()
   }
-  const editable = mode === 'edit' && canManage
+  const editable = mode === 'edit' && canManage && !busy
   const input = (label: string, value: string, set: (v:string)=>void, props = {}) => <div className="space-y-1.5"><Label>{label}</Label>{editable ? <Input value={value} onChange={(ev) => set(ev.target.value)} {...props}/> : <p className="text-sm">{value || '—'}</p>}</div>
   const roi = equipmentRoiPercent(m.billed_revenue, m.recovery, m.direct_costs, m.depreciation, e.purchase_price)
   const utilization = Number(e.capacity_quantity) > 0 ? Math.min(100, Number(m.usage) / Number(e.capacity_quantity) * 100) : 0
-  return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{name || t('new')}<Badge variant={status === 'active' ? 'success' : 'secondary'}>{t(`statuses.${status}`)}</Badge></span>}
+  return <UrlDrawer open closeHref={closeHref} beforeClose={closeGuard.beforeClose} size="2xl" title={<span className="flex items-center gap-2">{name || t('new')}<Badge variant={status === 'active' ? 'success' : 'secondary'}>{t(`statuses.${status}`)}</Badge></span>}
     description={createMode ? t('create.description') : undefined}
     headerActions={mode === 'edit' ? <><Button size="sm" variant="outline" disabled={busy} onClick={cancel}>{common('actions.cancel')}</Button><Button size="sm" disabled={busy || (createMode && !name.trim())} onClick={() => save()}>{busy ? common('actions.saving') : createMode ? t('create.create') : common('actions.save')}</Button></> : canManage && !createMode ? <><Button size="sm" variant="outline" onClick={() => setMode('edit')}>{common('actions.edit')}</Button><Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1" trigger={<Button size="sm" variant="outline" onClick={() => setActionsOpen(!actionsOpen)}>{common('labels.actions')}<ChevronDown size={14}/></Button>}><div className="grid gap-1">{status !== 'active' ? <Button variant="ghost" className="justify-start" onClick={() => save({status:'active'})}>{t('activate')}</Button> : <Button variant="ghost" className="justify-start" onClick={() => save({status:'inactive'})}>{t('deactivate')}</Button>} {fixedAssetsEnabled && !e.fixed_asset_id ? <Button variant="ghost" className="justify-start" disabled={busy} onClick={capitalize}>{t('capitalize')}</Button> : null} {status === 'draft' ? <Button variant="ghost" className="justify-start text-red-600" onClick={remove}>{common('actions.delete')}</Button> : null}</div></Popover></> : undefined}>
     <div className="space-y-6">
