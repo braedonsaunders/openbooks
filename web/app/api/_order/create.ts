@@ -14,6 +14,7 @@ import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { orderCreateBody, parseJsonBody, type OrderCreateBody } from '@/lib/api/json'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../lib/api/idempotency'
 import type { Authz } from '../../../lib/authz'
+import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from '../../../lib/scoped-options'
 import {
   computeOrderTotals,
   exactOrderMoney,
@@ -162,13 +163,7 @@ export async function createOrder(
     const ids = (values: (string | null | undefined)[]): string[] => [
       ...new Set(values.filter((v): v is string => typeof v === 'string' && v.length > 0)),
     ]
-    const headerPartyIds = body.partyId ? [body.partyId] : []
-    const headerDepartmentIds = body.departmentId ? [body.departmentId] : []
-    const headerProjectIds = body.projectId ? [body.projectId] : []
     const lineItemIds = ids(lines.map((l) => l.itemId))
-    const lineAccountIds = ids(lines.map((l) => l.accountId))
-    const lineDepartmentIds = ids(lines.map((l) => l.departmentId))
-    const lineProjectIds = ids(lines.map((l) => l.projectId))
     const activeIds = async (table: string, wanted: string[], extra = ''): Promise<Set<string>> => {
       if (wanted.length === 0) return new Set()
       const rows = (await db.execute<{ id: string }>(sql`
@@ -177,13 +172,17 @@ export async function createOrder(
            and id = any(${`{${wanted.join(',')}}`}::uuid[])`)).rows
       return new Set(rows.map((r) => r.id))
     }
-    const [parties, departments, projects, items, accounts] = await Promise.all([
-      activeIds('parties', headerPartyIds),
-      activeIds('departments', [...headerDepartmentIds, ...lineDepartmentIds]),
-      activeIds('projects', [...headerProjectIds, ...lineProjectIds]),
+    const [partyOptions, departmentOptions, projectOptions, items, accountOptions] = await Promise.all([
+      listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true }),
+      listScopedDepartmentOptions(user.orgId, gate.allowedSubsidiaryIds),
+      listScopedProjectOptions(user.orgId, gate.allowedSubsidiaryIds),
       activeIds('items', lineItemIds),
-      activeIds('accounts', lineAccountIds, 'and not is_summary'),
+      listScopedAccountOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }),
     ])
+    const parties = new Set(partyOptions.map((row) => row.id))
+    const departments = new Set(departmentOptions.map((row) => row.id))
+    const projects = new Set(projectOptions.map((row) => row.id))
+    const accounts = new Set(accountOptions.map((row) => row.id))
     if (body.partyId && !parties.has(body.partyId)) {
       return bad(`order party "${body.partyId}" must be an active party of this organization — choose an active party`)
     }
