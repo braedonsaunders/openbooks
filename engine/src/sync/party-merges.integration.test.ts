@@ -338,14 +338,15 @@ test("a merge re-points posted documents, lines, journals, and open balances whi
     assert.deepEqual(outcome.merges, [{ absorbedRef: "B", survivorRef: "A" }]);
 
     const afterDoc = await withOrg(org.orgId, () => db.execute<{
-      party_id: string; status: string; open_balance: string | null; total: string;
+      party_id: string; status: string; open_balance: string | null; total: string; payment_stats_n: string | null;
     }>(sql`
-      select party_id, status, open_balance::text as open_balance, total::text as total
+      select party_id, status, open_balance::text as open_balance, total::text as total,
+             (select sum(n)::text from party_payment_stats where org_id = ${org.orgId} and party_id = ${survivorId}) as payment_stats_n
         from documents where id = ${seeded.documentId} and org_id = ${org.orgId}`)).then((r) => r.rows[0]!);
-    assert.equal(afterDoc.party_id, survivorId);
-    assert.equal(afterDoc.status, "posted");
-    assert.equal(afterDoc.open_balance, beforeDoc.open_balance);
-    assert.equal(afterDoc.total, beforeDoc.total);
+    assert.deepEqual(
+      [afterDoc.party_id, afterDoc.status, afterDoc.open_balance, afterDoc.total, afterDoc.payment_stats_n],
+      [survivorId, "posted", beforeDoc.open_balance, beforeDoc.total, "1"],
+    );
 
     const docLine = await withOrg(org.orgId, () => db.execute<{ pid: string }>(sql`
       select party_id as pid from document_lines where document_id = ${seeded.documentId} and org_id = ${org.orgId}`));
@@ -354,8 +355,7 @@ test("a merge re-points posted documents, lines, journals, and open balances whi
     const journals = await withOrg(org.orgId, () => db.execute<{ id: string; pid: string | null }>(sql`
       select id, party_id as pid from journal_lines
        where org_id = ${org.orgId} and id in (${seeded.invoiceArLineId}, ${seeded.paymentArLineId})`));
-    // Both seeded AR lines round-trip: the per-line survivor check below
-    // cannot pass over an empty set.
+    // Both seeded AR lines must follow the survivor.
     assert.equal(journals.rows.length, 2);
     for (const row of journals.rows) assert.equal(row.pid, survivorId);
 
@@ -368,8 +368,7 @@ test("a merge re-points posted documents, lines, journals, and open balances whi
     assert.equal(application.to_line_id, seeded.invoiceArLineId);
     assert.equal(application.amount, "40.0000");
 
-    // Both sides held a customer role: the survivor's stands, the absorbed row
-    // is retained as deactivated history — never duplicated, never deleted.
+    // Keep the survivor's role and retain the absorbed role as deactivated history.
     const roles = await withOrg(org.orgId, () => db.execute<{ pid: string; active: boolean }>(sql`
       select party_id as pid, is_active as active from customer_roles
        where org_id = ${org.orgId} and party_id in (${survivorId}, ${absorbedId}) order by pid`));

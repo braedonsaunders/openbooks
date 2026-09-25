@@ -641,6 +641,13 @@ async function applyMergeTx(
   input: SourcePartyMergeInput,
 ): Promise<PartyMergeResult> {
   const { orgId, absorbedId, survivorId } = input;
+  const locked = (await tx.execute<{ id: string }>(sql`
+    select id from parties
+     where org_id = ${orgId} and id in (${sql.join([absorbedId, survivorId].sort().map((id) => sql`${id}`), sql`, `)})
+     order by id for update`)).rows;
+  if (new Set(locked.map((row) => row.id)).size !== 2) {
+    throw new PartyMergeError("both parties must exist in this organization");
+  }
   const [absorbed, survivor] = await Promise.all([
     loadParty(tx, orgId, absorbedId),
     loadParty(tx, orgId, survivorId),
@@ -683,6 +690,10 @@ async function applyMergeTx(
       await moveGuarded(tx, orgId, ref, absorbedId, survivorId, moved, retained);
     }
     await moveJournalLines(tx, orgId, absorbedId, survivorId, moved, retained);
+    // Journal-line party attribution is part of the party_payment_stats key,
+    // but its maintenance triggers do not watch party_id. Rebuild within this
+    // merge transaction so the derived settlement history follows the lines.
+    await tx.execute(sql`select openbooks_party_payment_stats_rebuild(${orgId})`);
     const customRefs: { table: string; key: string; rows: number }[] = [];
     for (const ref of await customPartyRefs(tx, orgId)) {
       const updated = (await tx.execute(sql`
