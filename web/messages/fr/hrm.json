@@ -428,6 +428,20 @@
       "failed": "Le poste n'a pas pu être créé.",
       "noEmployer": "Aucune société employeuse disponible — demandez l'accès à une société à un administrateur avant de créer le poste."
     },
+    "manage": {
+      "revise": "Réviser le poste",
+      "fund": "Financer la période",
+      "close": "Clore le poste",
+      "title": "Intitulé",
+      "plannedFte": "ETP prévus",
+      "status": "Statut",
+      "effectiveDate": "Date d’effet",
+      "period": "Période comptable",
+      "fundedFte": "ETP financés",
+      "reason": "Motif",
+      "failed": "La modification du poste n’a pas pu être enregistrée.",
+      "saved": "Modification du poste enregistrée."
+    },
     "segmentsLabel": "Statut"
   },
   "processes": {

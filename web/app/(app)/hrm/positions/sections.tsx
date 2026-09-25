@@ -1,6 +1,8 @@
 import { UrlDrawer } from '@openbooks/ui'
 import { PositionCreateForm } from './PositionCreateForm'
+import { PositionManageForm } from './PositionManageForm'
 import type { PositionsPageData } from './view'
+import type { PositionManageProps } from './PositionManageForm'
 
 /**
  * Positions drawer sections (server components): the URL drawer shell around
@@ -29,6 +31,7 @@ export interface PositionDetail {
   warningsTitle: string
   warnings: string[]
   refusal: string | null
+  manage: PositionManageProps | null
 }
 
 /** The position flyout body: version, funding by period, and current holder. */
@@ -79,6 +82,7 @@ export function PositionDrawerBody({ detail }: { detail: PositionDetail }) {
           </ul>
         </div>
       ) : null}
+      {detail.manage ? <PositionManageForm {...detail.manage} /> : null}
     </div>
   )
 }
