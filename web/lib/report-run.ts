@@ -12,6 +12,7 @@ import {
 } from '@openbooks/reports'
 import {
   agingByParty,
+  agingDetail,
   cashFlow,
   cashFlowIndirect,
   generalLedger,
@@ -30,6 +31,7 @@ import { balanceSheetView, profitAndLossView, type StatementView } from './state
 import { budgetVsActualView } from './budget-report'
 import {
   agingExportData,
+  agingDetailExportData,
   cashFlowExportData,
   cashFlowIndirectExportData,
   generalLedgerExportData,
@@ -355,13 +357,20 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       })
       const currencyScope = await agingCurrenciesInScope(side, agingAsOf, dims, orgId)
       const currency = resolveAgingCurrencyParams(p, currencyScope)
+      const agingOpts = {
+        bookId: detailBookId,
+        basis: currency.basis,
+        reportingCurrency: currency.currency,
+      }
+      if (p.get('view') === 'detail') {
+        return {
+          render: 'data',
+          data: agingDetailExportData(side, await agingDetail(side, agingAsOf, dims, orgId, agingOpts), t),
+        }
+      }
       return {
         render: 'data',
-        data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId, {
-          bookId: detailBookId,
-          basis: currency.basis,
-          reportingCurrency: currency.currency,
-        }), t),
+        data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId, agingOpts), t),
       }
     }
     case 'cash-flow':
