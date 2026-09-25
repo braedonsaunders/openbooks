@@ -293,6 +293,17 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       return { schemaVersion: SCHEMA_VERSION, jobId, taskId: exportTask.submit(), partitions: input.partitions.length };
     };
 
+    const exportTaskStatus = (input) => {
+      const taskId = safeId(input.taskId, 'taskId');
+      const status = task.checkStatus({ taskId });
+      return { schemaVersion: SCHEMA_VERSION, taskId, status: text(status.status).toLowerCase() };
+    };
+
+    const cancelExportTask = (input) => {
+      const taskId = safeId(input.taskId, 'taskId');
+      return { schemaVersion: SCHEMA_VERSION, taskId, accepted: task.cancel({ taskId }) === true };
+    };
+
     const exportFiles = (input) => {
       const jobId = safeId(input.jobId, 'jobId');
       const folder = jobsFolder();
@@ -382,6 +393,8 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         if (action === 'attachmentInventory') return attachmentInventory(input);
         if (action === 'attachmentContent') return attachmentContent(input);
         if (action === 'startExport') return startExport(input);
+        if (action === 'exportTaskStatus') return exportTaskStatus(input);
+        if (action === 'cancelExportTask') return cancelExportTask(input);
         if (action === 'exportStatus') return exportFiles(input);
         if (action === 'listExports') return listExports();
         if (action === 'readChunk') return readChunk(input);

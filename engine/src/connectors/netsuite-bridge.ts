@@ -235,6 +235,29 @@ export class NetSuiteBridgeClient {
     } | BridgeError>({ action: "exportStatus", jobId }));
   }
 
+  async exportTaskStatus(taskId: string): Promise<string> {
+    const response = assertBridgeResponse(await this.request<{
+      schemaVersion: number;
+      taskId: string;
+      status: string;
+    } | BridgeError>({ action: "exportTaskStatus", taskId }));
+    if (response.taskId !== taskId || !response.status) {
+      throw new Error(`NetSuite export task ${taskId} returned an invalid status`);
+    }
+    return response.status;
+  }
+
+  async cancelExportTask(taskId: string): Promise<void> {
+    const response = assertBridgeResponse(await this.request<{
+      schemaVersion: number;
+      taskId: string;
+      accepted: boolean;
+    } | BridgeError>({ action: "cancelExportTask", taskId }));
+    if (response.taskId !== taskId) {
+      throw new Error(`NetSuite export task ${taskId} returned an invalid cancellation response`);
+    }
+  }
+
   async listExports(): Promise<NetSuiteExportFile[]> {
     const response = assertBridgeResponse(await this.request<{
       schemaVersion: number;
@@ -305,12 +328,16 @@ export class NetSuiteBridgeClient {
       const jobId = `ob-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
       let started = false;
       let cleanupSafe = true;
+      let taskId: string | null = null;
+      let taskTerminal = false;
+      let timedOut = false;
       try {
         const startedExport = await this.startExport(jobId, batch.map((partition) => ({ ...partition, pageSize: 1_000 })));
-        if (startedExport.jobId !== jobId || startedExport.partitions !== batch.length) {
+        if (startedExport.jobId !== jobId || startedExport.partitions !== batch.length || !startedExport.taskId) {
           throw new Error(`NetSuite bulk export ${jobId} returned an invalid start response`);
         }
         started = true;
+        taskId = startedExport.taskId;
         const deadline = Date.now() + timeoutMs;
         let state: Awaited<ReturnType<NetSuiteBridgeClient["exportStatus"]>> | undefined;
         let pollError: unknown = null;
@@ -343,9 +370,28 @@ export class NetSuiteBridgeClient {
               cleanupSafe = false;
               throw error;
             }
-            if (state.status !== "running") break;
+            // I5-platform-45/-47: the listing is per-job, but the writer is
+            // the task — break only once the task itself is terminal, so a
+            // completed listing with a still-writing task is not cleaned up.
+            if (state.status !== "running") {
+              const taskStatus = await this.exportTaskStatus(taskId);
+              if (["complete", "failed", "cancelled", "canceled"].includes(taskStatus)) {
+                taskTerminal = true;
+                break;
+              }
+              if (!["pending", "processing"].includes(taskStatus)) {
+                cleanupSafe = false;
+                throw new Error(`NetSuite export task ${taskId} returned unknown status ${taskStatus}`);
+              }
+            }
           }
-          if (Date.now() >= deadline) break;
+          if (Date.now() >= deadline) {
+            // Break to the bounded drain below (which refuses with the
+            // timeout); mark timedOut so the finally cleanup will not delete
+            // a job whose task cannot be proven terminal.
+            timedOut = true;
+            break;
+          }
           await new Promise((resolve) => setTimeout(resolve, pollMs));
         }
         if (state === undefined || state.status === "running") {
@@ -543,7 +589,28 @@ export class NetSuiteBridgeClient {
           }
         }
       } finally {
-        if (started && cleanupSafe) await this.deleteExportBatches(jobId);
+        if (started && taskId && !taskTerminal) {
+          try {
+            await this.cancelExportTask(taskId);
+            const cancelDeadline = Date.now() + 60_000;
+            while (Date.now() < cancelDeadline) {
+              const taskStatus = await this.exportTaskStatus(taskId);
+              if (["complete", "failed", "cancelled", "canceled"].includes(taskStatus)) {
+                taskTerminal = true;
+                break;
+              }
+              if (!["pending", "processing"].includes(taskStatus)) break;
+              await new Promise((resolve) => setTimeout(resolve, pollMs));
+            }
+          } catch {
+            taskTerminal = false;
+          }
+          // The timeout path is the common reason for cancellation. If the
+          // NetSuite task cannot be proven terminal, leave its files alone so
+          // it cannot recreate artifacts after cleanup.
+          if (timedOut && !taskTerminal) cleanupSafe = false;
+        }
+        if (started && taskTerminal && cleanupSafe) await this.deleteExportBatches(jobId);
       }
     }
     return out;
