@@ -36,6 +36,22 @@ export async function guardSuperAdmin(): Promise<Authz | NextResponse> {
 /** Lock the home identity so deactivation and privilege revocation serialize with privileged writes. */
 type LockedActor = { id: string; email: string; name: string; orgId: string; isActive: boolean; isSuperAdmin: boolean };
 
+/**
+ * Authority refusal from the actor lock: the operator passed the gate, then
+ * lost the underlying authority (deactivation, super-admin revocation)
+ * before the protected write committed. Typed — never a plain Error — so an
+ * API boundary raises it as a 403 carrying the remedy instead of dropping a
+ * computed refusal into a 500 the operator cannot act on. The messages stay
+ * the exact contract the lock race test matches.
+ */
+export class SuperAdminAuthorityError extends Error {
+  readonly status = 403;
+  constructor(message: string) {
+    super(message);
+    this.name = "SuperAdminAuthorityError";
+  }
+}
+
 async function lockActorRows(runner: SqlExecutor, actorIds: readonly string[]): Promise<Map<string, LockedActor>> {
   const ids = [...new Set(actorIds)].sort();
   const idList = sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
@@ -45,7 +61,7 @@ async function lockActorRows(runner: SqlExecutor, actorIds: readonly string[]): 
   `)).rows;
   const actors = new Map(rows.map((row) => [row.id, row]));
   if (rows.length !== ids.length || rows.some((row) => !row.isActive)) {
-    throw new Error("Acting user is no longer active — sign in again before retrying this protected change");
+    throw new SuperAdminAuthorityError("Acting user is no longer active — sign in again before retrying this protected change");
   }
   return actors;
 }
@@ -67,7 +83,7 @@ export async function lockSuperAdminActor(
 ): Promise<{ id: string; orgId: string; isSuperAdmin: true }> {
   const actor = await lockActiveActor(runner, actorId);
   if (!actor.isSuperAdmin) {
-    throw new Error("Platform super-admin access was revoked — reload and retry with an active super administrator");
+    throw new SuperAdminAuthorityError("Platform super-admin access was revoked — reload and retry with an active super administrator");
   }
   return { ...actor, isSuperAdmin: true };
 }

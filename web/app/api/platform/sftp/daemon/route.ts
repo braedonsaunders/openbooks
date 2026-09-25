@@ -9,7 +9,7 @@ import {
   updateDaemonConfig,
 } from "@openbooks/engine/src/sftp/manager.ts";
 import { auditSetupChange } from "../../../../../lib/setup/audit";
-import { guardSuperAdmin, lockSuperAdminActor } from "../../../../../lib/super-admin";
+import { guardSuperAdmin, lockSuperAdminActor, SuperAdminAuthorityError } from "../../../../../lib/super-admin";
 
 export const runtime = "nodejs";
 
@@ -46,28 +46,40 @@ export async function PATCH(req: Request) {
   if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)) {
     return NextResponse.json({ error: "port must be between 1 and 65535" }, { status: 400 });
   }
-  const cfg = await withBypassContext(() => db.transaction(async (tx) => {
-    const actor = await lockSuperAdminActor(tx, gate.user.id);
-    const before = sftpDaemonConfigAuditSnapshot(await loadDaemonConfig(tx));
-    const after = await updateDaemonConfig(
-      {
-        enabled: body.enabled,
-        port: body.port,
-        advertisedHost: body.advertisedHost !== undefined ? (body.advertisedHost?.trim() || null) : undefined,
-      },
-      actor.id,
-      tx,
-    );
-    await auditSetupChange({
-      orgId: gate.user.orgId,
-      table: "sftp_daemon",
-      rowId: daemonAuditRowId(),
-      action: "update",
-      changes: { before, after: sftpDaemonConfigAuditSnapshot(after) },
-      actorId: actor.id,
-    }, tx);
-    return after;
-  }));
+  let cfg;
+  try {
+    cfg = await withBypassContext(() => db.transaction(async (tx) => {
+      const actor = await lockSuperAdminActor(tx, gate.user.id);
+      const before = sftpDaemonConfigAuditSnapshot(await loadDaemonConfig(tx));
+      const after = await updateDaemonConfig(
+        {
+          enabled: body.enabled,
+          port: body.port,
+          advertisedHost: body.advertisedHost !== undefined ? (body.advertisedHost?.trim() || null) : undefined,
+        },
+        actor.id,
+        tx,
+      );
+      await auditSetupChange({
+        orgId: gate.user.orgId,
+        table: "sftp_daemon",
+        rowId: daemonAuditRowId(),
+        action: "update",
+        changes: { before, after: sftpDaemonConfigAuditSnapshot(after) },
+        actorId: actor.id,
+      }, tx);
+      return after;
+    }));
+  } catch (e) {
+    // A concurrent deactivation or super-admin revocation between the gate
+    // and the protected write refuses by name: the operator gets the remedy
+    // as a 403, never a 500 with the refusal dropped on the way out.
+    // Anything else is an unexpected fault and still throws.
+    if (e instanceof SuperAdminAuthorityError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    throw e;
+  }
   try {
     await ensureSftpServer();
   } catch (e) {
