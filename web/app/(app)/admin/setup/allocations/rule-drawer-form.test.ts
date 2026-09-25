@@ -149,7 +149,7 @@ test('targets round-trip through editor lines preserving server-only fields', ()
     label: 'Share',
   })
   assert.equal(line.accountId, '')
-  assert.deepEqual(line.portion, { kind: 'percent', value: 25.5 })
+  assert.deepEqual(line.portion, { kind: 'percent', value: '25.5' })
   assert.equal(line.departmentId, 'd1')
   assert.equal(line.label, 'Share')
 

@@ -27,12 +27,13 @@ export interface AllocationLine {
   /** Persisted allocation target identity used to retain hidden server fields. */
   targetId?: string
   accountId: string
-  // Fixed amounts and manual weights stay as their exact decimal text while
-  // they are being edited. Converting every keystroke through Number loses
-  // precision before the server-side money validator can canonicalize the value.
+  // Fixed amounts, percents, and manual weights stay as their exact decimal
+  // text while they are being edited. Converting every keystroke through
+  // Number loses precision before the server-side money validator can
+  // canonicalize the value.
   portion:
     | { kind: 'remainder' }
-    | { kind: 'percent'; value: number }
+    | { kind: 'percent'; value: number | string }
     | { kind: 'fixed'; value: string }
     | { kind: 'weight'; value: string }
   departmentId?: string | null
@@ -91,6 +92,6 @@ export function allocationPortionFromInput(
 ): AllocationLine['portion'] {
   if (portion.kind === 'fixed') return { kind: 'fixed', value: rawValue }
   if (portion.kind === 'weight') return { kind: 'weight', value: rawValue }
-  if (portion.kind === 'percent') return { kind: 'percent', value: Number(rawValue) || 0 }
+  if (portion.kind === 'percent') return { kind: 'percent', value: rawValue }
   return portion
 }

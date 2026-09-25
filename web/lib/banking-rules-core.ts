@@ -42,7 +42,7 @@ export interface RuleCriteria {
 
 export interface RuleSplitLine {
   accountId: string
-  portion: { kind: 'remainder' } | { kind: 'percent'; value: number } | { kind: 'fixed'; value: string | number }
+  portion: { kind: 'remainder' } | { kind: 'percent'; value: number | string } | { kind: 'fixed'; value: string | number }
   partyId?: string | null
   departmentId?: string | null
   projectId?: string | null

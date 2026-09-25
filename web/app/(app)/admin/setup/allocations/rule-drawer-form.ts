@@ -342,7 +342,7 @@ export function targetToLine(target: {
   const portion: AllocationLine['portion'] = target.isRemainder
     ? { kind: 'remainder' }
     : target.fixedPercent != null
-      ? { kind: 'percent', value: Number(target.fixedPercent) }
+      ? { kind: 'percent', value: target.fixedPercent }
       : { kind: 'weight', value: target.weight ?? '' }
   return {
     targetId: target.id,

@@ -248,17 +248,17 @@ export function menuKeysForRow<Row extends DistributionGroupRow>(
 
 /**
  * Convert one hand-edited split (SplitLinesEditor portions) into exact child
- * amounts for a known line total. Fixed portions ride verbatim; percents are
- * exact via mulPercent (the editor's number is re-serialized as its shortest
- * decimal, never IEEE-754 arithmetic); remainder lines share the leftover
- * equally with the odd units on the earliest lines. Returns null when the
- * portions cannot make the total: a malformed/negative fixed or percent, an
- * over-allocated book (fixed + percent past the total), or no remainder line
- * to absorb the difference. Either way Σ(result) == total exactly.
+ * amounts for a known line total. Fixed and percent portions ride verbatim as
+ * decimal text into mulPercent/toUnits, never through IEEE-754 arithmetic;
+ * remainder lines share the leftover equally with the odd units on the
+ * earliest lines. Returns null when the portions cannot make the total: a
+ * malformed/negative fixed or percent, an over-allocated book (fixed +
+ * percent past the total), or no remainder line to absorb the difference.
+ * Either way Σ(result) == total exactly.
  */
 export type SplitPortion =
   | { kind: 'remainder' }
-  | { kind: 'percent'; value: number }
+  | { kind: 'percent'; value: number | string }
   | { kind: 'fixed'; value: string }
   | { kind: 'weight'; value: string }
 
@@ -290,10 +290,15 @@ export function splitPortionsToAmounts(
       amounts[i] = units
       placed += units
     } else if (portion.kind === 'percent') {
-      if (!Number.isFinite(portion.value) || portion.value < 0) return null
+      const pctText = typeof portion.value === 'number' ? String(portion.value) : portion.value
+      try {
+        if (toUnits(pctText) < 0n) return null
+      } catch {
+        return null
+      }
       let units: bigint
       try {
-        units = toUnits(mulPercent(total, String(portion.value)))
+        units = toUnits(mulPercent(total, pctText))
       } catch {
         return null
       }
