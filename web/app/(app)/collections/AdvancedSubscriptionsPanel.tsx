@@ -6,6 +6,8 @@ import { Alert, AlertDescription, Badge, Button, Card, Input, Label, Select, Ske
 import { Field } from "@/components/field";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { useAppAction } from "../../../lib/use-app-action";
 
 type BasePlan = { id: string; name: string; interval: string; intervalCount: number; isActive: boolean };
 type BaseSubscription = { id: string; customerName: string | null; planId: string; planName: string; status: string };
@@ -27,7 +29,9 @@ export function AdvancedSubscriptionsPanel() {
   const [amendments, setAmendments] = useState<Amendment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const tErrors = useTranslations("ar.collections.errors");
+  const action = useAppAction();
+  const busy = action.busy;
   const [loading, setLoading] = useState(true);
   const [versionForm, setVersionForm] = useState({ planId: "", effectiveFrom: today, billingTiming: "advance", changeSummary: "", components: [blankComponent(t("baseSubscription"))] });
   const [lifecycleForm, setLifecycleForm] = useState({ subscriptionId: "", planVersionId: "", termStartsOn: today, termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" });
@@ -55,13 +59,18 @@ export function AdvancedSubscriptionsPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const post = async (payload: Record<string, unknown>) => {
-    setBusy(true); setError(null); setMessage(null);
-    const response = await fetch("/api/subscriptions/advanced", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    const body = await response.json().catch(() => ({}));
-    setBusy(false);
-    if (!response.ok) { setError(body.error ?? t("actionFailed")); return null; }
-    await load();
-    return body;
+    setError(null); setMessage(null);
+    let body: Record<string, unknown> | null = null;
+    const ok = await action.execute(async () => {
+      const result = await fetchAction<Record<string, unknown>>("/api/subscriptions/advanced", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      if (result.ok) body = result.data ?? {};
+      return result;
+    }, {
+      fallbackMessage: tErrors("actionFailed"),
+      onRefused: (refusal) => setError(refusal.displayMessage(tErrors("actionFailed"))),
+      onOk: () => { void load() },
+    });
+    return ok ? body : null;
   };
 
   const lifecycleIds = useMemo(() => new Set(lifecycles.map((row) => row.subscriptionId)), [lifecycles]);

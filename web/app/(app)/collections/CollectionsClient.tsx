@@ -8,6 +8,8 @@ import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
 import { confirmDialog } from "../../../lib/confirm";
 import { readApiErrorMessage } from "../../../lib/api-error";
+import { ActionError, fetchAction } from "@braedonsaunders/appkit-errors";
+import { useAppAction } from "../../../lib/use-app-action";
 
 interface Schedule {
   id: string;
@@ -56,6 +58,12 @@ interface Subscription {
   quantity: string; priceOverride: string | null; status: string; startOn: string; nextBillOn: string;
   autoPost: boolean; runCount: number; lastError: string | null; mrr: string; planCurrency: string | null;
   advancedLifecycle?: boolean;
+}
+interface SubscriptionActionBody {
+  documentNumber?: string;
+  adjustment?: string;
+  invoiceId?: string;
+  proration?: { documentNumber?: string; amount?: string };
 }
 
 export function CollectionsClient({
@@ -106,6 +114,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
     paused: tCommon("status.paused"),
     canceled: tCommon("status.cancelled"),
   } satisfies Record<"active" | "paused" | "canceled", string>;
+  const tc = useTranslations("common");
   // The refusal fallback lives under `ar.collections.errors`, not under this
   // section — read from `t` it rendered the literal text
   // `ar.collections.subscriptions.errors.actionFailed` whenever the API
@@ -123,35 +132,43 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
   const [subForm, setSubForm] = useState({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false });
   const [changing, setChanging] = useState<string | null>(null);
   const [changeQty, setChangeQty] = useState("");
+  const action = useAppAction();
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body.
+  // response), never synchronously in the effect body. Named refusals surface
+  // through the shared read; transport outages pin the fallback and keep the
+  // last good table with its retry instead of emptying it.
   const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/subscriptions");
-      if (!response.ok) {
-        setLoadError(tErrors("actionFailed"));
-        return;
-      }
-      const data = await response.json();
-      setLoadError(null);
-      setPlans(data.plans ?? []);
-      setSubs(data.subscriptions ?? []);
-      setMrr(data.mrr ?? "0.0000");
-      setLoaded(true);
-    } catch {
-      setLoadError(tErrors("actionFailed"));
+    const result = await fetchAction<{ plans?: Plan[]; subscriptions?: Subscription[]; mrr?: string }>("/api/subscriptions");
+    if (!result.ok) {
+      setLoadError(result.error.displayMessage(tErrors("actionFailed")));
+      return;
     }
+    const data = result.data;
+    setLoadError(null);
+    setPlans(data.plans ?? []);
+    setSubs(data.subscriptions ?? []);
+    setMrr(data.mrr ?? "0.0000");
+    setLoaded(true);
   }, [tErrors]);
   useEffect(() => { void Promise.resolve().then(load); }, [load]);
 
-  const post = async (payload: Record<string, unknown>) => {
+  const post = async (payload: Record<string, unknown>): Promise<SubscriptionActionBody | null> => {
     setError(null); setMsg(null);
-    const r = await fetch("/api/subscriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    const b = await r.json().catch(() => ({}));
-    if (!r.ok) { setError(b.error ?? tErrors("actionFailed")); return null; }
-    await load();
-    return b;
+    // Assigned inside the execute task below, which execute awaits before it
+    // resolves: by the return the closure has run, but control-flow analysis
+    // cannot see that, so the declared return type carries the contract.
+    let body: SubscriptionActionBody | null = null;
+    const ok = await action.execute(async () => {
+      const result = await fetchAction<SubscriptionActionBody>("/api/subscriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      if (result.ok) body = result.data ?? {};
+      return result;
+    }, {
+      fallbackMessage: tErrors("actionFailed"),
+      onRefused: (refusal) => setError(refusal.displayMessage(tErrors("actionFailed"))),
+      onOk: () => { void load() },
+    });
+    return ok ? body : null;
   };
 
   return (
@@ -162,7 +179,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
         <div className="text-sm text-muted-foreground">{t("summary", { active: subs.filter((s) => s.status === "active").length, plans: plans.length })}</div>
       </Card>}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error} <Button size="sm" variant="ghost" onClick={() => void load()}>{tc("actions.retry")}</Button></p>}
       {msg && <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>}
 
       {/* Plans */}
@@ -197,7 +214,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
             <option value="">{t("defaultIncomeAccount")}</option>
             {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
           </Select>
-          <Button size="sm" disabled={!planForm.name || !planForm.amount} onClick={async () => { const r = await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); if (!r) return; setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>{t("addPlan")}</Button>
+          <Button size="sm" disabled={action.busy || !planForm.name || !planForm.amount} onClick={async () => { const r = await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); if (!r) return; setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>{t("addPlan")}</Button>
         </div>
       </Card>
 
@@ -225,7 +242,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                       </span>
                     ) : (
                       <>
-                        <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId) setMsg(t("toasts.billed", { documentNumber: r.documentNumber })); }}>{t("billNow")}</Button>
+                        <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId && r.documentNumber) setMsg(t("toasts.billed", { documentNumber: r.documentNumber })); }}>{t("billNow")}</Button>
                         {s.status === "active" && !s.advancedLifecycle && <Button size="sm" variant="ghost" onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>{t("changeQty")}</Button>}
                         {s.status === "active"
                           ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>{t("pause")}</Button>
@@ -267,7 +284,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
           <label className="flex items-center gap-1 text-sm">{t("firstFullBill")} <Input type="date" value={subForm.firstBillOn} onChange={(e) => setSubForm({ ...subForm, firstBillOn: e.target.value })} className="h-8" /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.prorateFirstPeriod} onChange={(e) => setSubForm({ ...subForm, prorateFirstPeriod: e.target.checked })} /> {t("prorateFirstPeriod")}</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.autoPost} onChange={(e) => setSubForm({ ...subForm, autoPost: e.target.checked })} /> {t("autoPostInvoices")}</label>
-          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if (!r) return; if (r.proration?.documentNumber) setMsg(t("toasts.firstInvoiceProrated", { documentNumber: r.proration.documentNumber, amount: money(r.proration.amount) })); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>{t("addSubscription")}</Button>
+          <Button size="sm" disabled={action.busy || !subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if (!r) return; if (r.proration?.documentNumber) setMsg(t("toasts.firstInvoiceProrated", { documentNumber: r.proration.documentNumber, amount: money(r.proration.amount) })); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>{t("addSubscription")}</Button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{t("prorateHint")}</p>
       </Card>
@@ -278,7 +295,8 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
 function RecurringPanel() {
   const [rows, setRows] = useState<Schedule[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "failed">("loading");
-  const [busy, setBusy] = useState(false);
+  const action = useAppAction();
+  const busy = action.busy;
   const [form, setForm] = useState({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
   const [error, setError] = useState<string | null>(null);
   const t = useTranslations("ar.collections.recurring");
@@ -301,8 +319,7 @@ function RecurringPanel() {
 
   const create = async () => {
     setError(null);
-    setBusy(true);
-    const r = await fetch("/api/recurring", {
+    await action.execute(() => fetchAction("/api/recurring", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -312,32 +329,33 @@ function RecurringPanel() {
         nextRunOn: form.nextRunOn || undefined,
         autoPost: form.autoPost,
       }),
+    }), {
+      fallbackMessage: tErrors("couldNotCreate"),
+      onRefused: (refusal) => setError(refusal.displayMessage(tErrors("couldNotCreate"))),
+      onOk: () => {
+        setForm({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
+        void load();
+      },
     });
-    setBusy(false);
-    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? tErrors("couldNotCreate")); return; }
-    setForm({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
-    void load();
   };
 
   const act = async (id: string, method: "PATCH" | "DELETE" | "POST", body?: unknown) => {
     setError(null);
-    const r = await fetch(`/api/recurring/${id}`, {
-      method,
-      headers: body ? { "content-type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
+    await action.execute(async () => {
+        const result = await fetchAction(`/api/recurring/${id}`, {
+        method,
+        headers: body ? { "content-type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!result.ok && result.error.code === "generated_documents_exist") {
+        return { ok: false as const, error: new ActionError({ kind: "refused", code: result.error.code, serverMessage: t("generatedDocumentsDeleteConflict") }) };
+      }
+      return result;
+    }, {
+      fallbackMessage: t("actionFailed"),
+      onRefused: (refusal) => setError(refusal.displayMessage(t("actionFailed"))),
+      onOk: () => { void load() },
     });
-    const result = await r.json().catch(() => ({})) as { code?: unknown; error?: unknown };
-    if (!r.ok) {
-      setError(
-        result.code === "generated_documents_exist"
-          ? t("generatedDocumentsDeleteConflict")
-          : typeof result.error === "string"
-            ? result.error
-            : t("actionFailed"),
-      );
-      return;
-    }
-    void load();
   };
 
   return (
@@ -374,7 +392,7 @@ function RecurringPanel() {
             {t("autoPostCheckbox")}
           </label>
         </div>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-red-600">{error} <Button size="sm" variant="ghost" onClick={() => void load()}>{common("actions.retry")}</Button></p>}
         <div className="mt-3">
           <Button onClick={create} disabled={busy || !form.templateDocumentNumber}>{t("createSchedule")}</Button>
         </div>

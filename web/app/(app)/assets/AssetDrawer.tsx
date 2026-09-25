@@ -9,6 +9,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import {
   Badge,
   Button,
@@ -38,6 +40,7 @@ import { Pagination } from '../../../components/pagination'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { confirmDialog } from '../../../lib/confirm'
+import { useAppAction } from '../../../lib/use-app-action'
 import { GroupValuationButton } from './GroupValuationButton'
 import { AssetChangeButton } from './AssetChangeButton'
 import { DisposeButton } from './DisposeButton'
@@ -207,6 +210,7 @@ export function AssetDrawer({
   })
   const [status, setStatus] = useState(a.status)
   const [busy, setBusy] = useState(false)
+  const deleteAction = useAppAction()
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [dirty, setDirty] = useState(false)
   const [revision, setRevision] = useState<string>(a.updated_at)
@@ -420,15 +424,11 @@ export function AssetDrawer({
     }))) return
     setBusy(true)
     try {
-      const res = await fetch(`/api/assets/${a.id}`, { method: 'DELETE' })
-      if (res.ok) {
-        toast.success(t('drawer.deleted')); router.push('/assets'); router.refresh()
-      } else {
-        toast.error((await res.json().catch(() => null))?.error ?? t('drawer.saveFailed'))
-      }
-    } catch {
-      toast.error(t('drawer.deleteOutcomeUnknown'))
-      router.refresh()
+      await deleteAction.execute(() => fetchAction(`/api/assets/${a.id}`, { method: 'DELETE' }), {
+        fallbackMessage: t('drawer.saveFailed'),
+        successMessage: t('drawer.deleted'),
+        onOk: () => { router.push('/assets'); router.refresh() },
+      })
     } finally {
       setBusy(false)
     }
@@ -536,6 +536,7 @@ export function AssetDrawer({
     </div> : undefined}
     footer={<div className="flex w-full items-center gap-3"><span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>{mode === 'edit' ? saveState === 'saving' ? tCommon('actions.saving') : dirty ? t('drawer.unsavedChanges') : null : null}</span><span className="flex-1" /><span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">{t('labels.cost')} {money(payload.totals.remainingCost)} · {t('labels.accumulated')} {money(payload.totals.accumulated)} · <strong className="text-slate-900 dark:text-slate-100">{t('labels.nbv')} {money(payload.totals.netBookValue)}</strong></span></div>}
   >
+    <ActionAlert error={deleteAction.refusal} fallbackMessage={t('drawer.saveFailed')} />
     {tab === 'details' ? <div className="p-1"><HeaderFields layout={effectiveLayout} editable={editable} renderField={renderAssetField} /></div> : null}
     {tab === 'tax' ? <div className="space-y-5 p-1">{taxConfigurations.map((config) => {
       const values = taxValues[config.code] ?? {}

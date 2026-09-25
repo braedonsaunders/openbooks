@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Badge, Button, Card, CardContent, Input, Label } from '@openbooks/ui'
+import { useAppAction } from '../../../lib/use-app-action'
 
 interface Price {
   id: string
@@ -35,7 +37,8 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
   const [prices, setPrices] = useState<Price[]>([])
   const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading')
   const [loadError, setLoadError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const action = useAppAction()
+  const busy = action.busy
   const [form, setForm] = useState<FormState | null>(null)
   // A read-only viewer must never hold the form open. Adjusted during render
   // (same committed value, no extra render).
@@ -80,43 +83,34 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
 
   async function save() {
     if (!form) return
-    setBusy(true)
     const body: Record<string, unknown> = {
       currency: form.currency, unitPrice: form.unitPrice, lowValue: form.lowValue === '' ? null : form.lowValue, highValue: form.highValue === '' ? null : form.highValue,
       effectiveFrom: form.effectiveFrom || null, effectiveTo: form.effectiveTo || null, isActive: form.isActive,
     }
     if (form.id) body.id = form.id
-    const res = await fetch(`/api/items/${itemId}/fair-values`, {
+    await action.execute(() => fetchAction(`/api/items/${itemId}/fair-values`, {
       method: form.id ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    }), {
+      fallbackMessage: common('feedback.saveFailed'),
+      successMessage: common('feedback.saved'),
+      onOk: () => { setForm(null); void load() },
     })
-    const data = await res.json().catch(() => ({}))
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(typeof data.error === 'string' ? data.error : common('feedback.saveFailed'))
-      return
-    }
-    toast.success(common('feedback.saved'))
-    setForm(null)
-    await load()
   }
 
   async function remove(id: string) {
     if (!confirm(t('confirmDelete'))) return
-    setBusy(true)
-    const res = await fetch(`/api/items/${itemId}/fair-values?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(common('feedback.saveFailed'))
-      return
-    }
-    toast.success(common('feedback.deleted'))
-    await load()
+    await action.execute(() => fetchAction(`/api/items/${itemId}/fair-values?id=${encodeURIComponent(id)}`, { method: 'DELETE' }), {
+      fallbackMessage: common('feedback.saveFailed'),
+      successMessage: common('feedback.deleted'),
+      onOk: () => { void load() },
+    })
   }
 
   return (
     <section className="space-y-3">
+      <ActionAlert error={action.refusal} fallbackMessage={common('feedback.saveFailed')} />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
