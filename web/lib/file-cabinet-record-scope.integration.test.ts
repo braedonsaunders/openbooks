@@ -198,9 +198,6 @@ test('generic cabinet readers require AP read for AP capture even with a file gr
   }
 })
 
-/**
- * Attachment-target fence: every attachment target must be in-fence.
- */
 test('cabinet reads hide files attached to out-of-fence records', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
   try {
@@ -291,14 +288,13 @@ test('cabinet reads hide files attached to out-of-fence records', { skip: !proce
       assert.equal(treeFolder?.fileCount, visibleFiles.total)
     }
 
-    // An explicit share re-opens exactly its file for the grantee.
-    await setGrant({
-      orgId: org.orgId, resourceType: 'file', resourceId: onlyA,
-      principalType: 'user', principalId: bUserId, access: 'viewer', actorId,
-    })
-    const sharedAcrossFence = await getFile(org.orgId, onlyA, viewerB)
-    assert.ok(sharedAcrossFence)
-    assert.deepEqual(sharedAcrossFence.attachments, [], 'a direct file grant does not expose an out-of-scope target identity')
+    await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [subB] })}::jsonb
+      where org_id=${org.orgId} and key='clerk'`)
+    await assert.rejects(
+      () => setGrant({ orgId: org.orgId, resourceType: 'file', resourceId: onlyA, principalType: 'user', principalId: bUserId, access: 'viewer', actorId }),
+      /outside their subsidiary scope/,
+    )
+    assert.equal(await getFile(org.orgId, onlyA, viewerB), null)
     assert.equal(await getFile(org.orgId, onlyB, viewerA), null)
     const afterGrant = await listFiles(org.orgId, viewerB, { folderId: commonId })
     assert.equal((await getFolder(org.orgId, commonId, viewerB))?.fileCount, afterGrant.total)

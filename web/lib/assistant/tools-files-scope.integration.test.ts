@@ -50,6 +50,7 @@ test('assistant file tools hide record-folder files outside the caller fence', {
       values (${folderId}, ${org.orgId}, null, 'documents / hidden', true, 'documents', ${hiddenDoc})`)
     await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
       values (${fileId}, ${org.orgId}, ${folderId}, 'hidden-file-evidence.txt', 'text/plain', 8)`)
+    await db.execute(sql`insert into resource_grants (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by, updated_by) values (${org.orgId}, 'file', ${fileId}, 'user', ${actor}, 'viewer', ${actor}, ${actor})`)
   })
   state.user = {
     id: actor,
@@ -68,8 +69,7 @@ test('assistant file tools hide record-folder files outside the caller fence', {
       const authz = await getAuthz()
       assert.ok(authz)
       const listed = await executeAssistantTool(authz, 'list_files', { query: 'hidden-file-evidence' })
-      assert.equal(listed.ok, true, JSON.stringify(listed))
-      assert.ok(listed.ok)
+      assert.ok(listed.ok, JSON.stringify(listed))
       assert.deepEqual((listed.data as { items: unknown[] }).items, [])
       const one = await executeAssistantTool(authz, 'get_file', { id: fileId })
       assert.equal(one.ok, false)
