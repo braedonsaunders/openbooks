@@ -5,8 +5,8 @@ import test from 'node:test';
 
 // The HRM cockpit loader's data contract, proved against the shard database:
 // cross-org invisibility of every scoped leg, the subsidiary lens, the
-// grant-gated panels resolving null (never gated links), and the mixed-scope
-// queue refusal rendering as data instead of throwing. Page-level gates
+// grant-gated panels resolving null (never gated links), and scoped queues
+// excluding out-of-scope requests. Page-level gates
 // (feature switch, employment read) live in loadHrmPage; the spec tree the
 // loader feeds is proved in hrm-home.spec.test.ts.
 process.env.SESSION_SECRET ??= "t6-lane-test-secret-must-be-32+chars!!!!";
@@ -364,10 +364,11 @@ test('nested surfaces stay findable as viewTabs', async (t) => {
   }
 });
 
-test('a mixed-scope queue pins the refusal instead of throwing', async (t) => {
+test('a restricted queue excludes out-of-scope requests', async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   t.after(() => dropScratchOrg(org.orgId));
   let stranger = '';
+  const hiddenSubsidiary = randomUUID();
   try {
     await withBypassContext(async () => {
       await enableHrm(org.orgId);
@@ -376,19 +377,14 @@ test('a mixed-scope queue pins the refusal instead of throwing', async (t) => {
       await seedVersion(org.orgId, emp, 'active', '2026-01-01', null);
       stranger = await createScratchUser(org.orgId, 'Stranger', 't6_hrm_stranger');
       await grantRole(org.orgId, 't6_hrm_stranger', ['hrm.employment.read']);
-      // Scope the stranger to a subsidiary holding nothing: the queue row in
-      // the root entity is out of scope, while list-shaped reads narrow.
-      await restrictRole(org.orgId, 't6_hrm_stranger', [randomUUID()]);
+      await restrictRole(org.orgId, 't6_hrm_stranger', [hiddenSubsidiary]);
       await seedRequest(org.orgId, emp, stranger);
     });
     const data = await withOrgContext(org.orgId, () =>
-      loadHrmHome(actor(stranger, org.orgId, ['hrm.employment.read'], null)),
+      loadHrmHome(actor(stranger, org.orgId, ['hrm.employment.read'], new Set([hiddenSubsidiary]))),
     );
-    assert.deepEqual(data.pending, [], 'a refused queue shows no partial subset');
-    assert.ok(
-      typeof data.pendingRefusal === 'string' && data.pendingRefusal.length > 0,
-      'the refusal must render as data beside the hero, never a 500',
-    );
+    assert.deepEqual(data.pending, [], 'out-of-scope requests stay hidden');
+    assert.equal(data.pendingRefusal, null);
   } finally {
     await dropScratchOrg(org.orgId).catch(() => {});
   }
