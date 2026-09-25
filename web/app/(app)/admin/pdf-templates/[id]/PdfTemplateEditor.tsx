@@ -10,10 +10,9 @@
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import type { Editor } from 'grapesjs'
 import { html as htmlLang } from '@codemirror/lang-html'
 import { EditorView } from '@codemirror/view'
 import { ArrowLeft } from 'lucide-react'
@@ -21,7 +20,8 @@ import { Badge, Button, Input } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { prettifyTemplateHtml } from '../../../../../lib/pdf-templates/prettify'
-import { serializeTemplateEditor, type PaletteCollection, type PaletteField } from './builder-blocks'
+import { useUnsavedNavigationGuard } from '../../../../../lib/use-unsaved-navigation-guard'
+import { type PaletteCollection, type PaletteField } from './builder-blocks'
 
 const PdfBuilder = dynamic(() => import('./PdfBuilder'), { ssr: false })
 const CodeMirror = dynamic(() => import('@uiw/react-codemirror'), { ssr: false })
@@ -73,6 +73,8 @@ export default function PdfTemplateEditor({
   const [footerHtml, setFooterHtml] = useState(template.footerHtml ?? '')
   const [isDefault, setIsDefault] = useState(template.isDefault)
   const [sourceHtml, setSourceHtml] = useState(template.sourceHtml)
+  const initialSnapshot = JSON.stringify([template.name, template.sourceHtml, template.headerHtml ?? '', template.footerHtml ?? '', template.paperSize, template.orientation, template.marginMm, template.isDefault])
+  const [savedSnapshot, setSavedSnapshot] = useState(initialSnapshot)
   const [busy, setBusy] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewBusy, setPreviewBusy] = useState(false)
@@ -81,7 +83,6 @@ export default function PdfTemplateEditor({
   const [previewError, setPreviewError] = useState<string | null>(null)
   // Remount the builder whenever we re-enter Design so it reloads sourceHtml.
   const [designEpoch, setDesignEpoch] = useState(0)
-  const editorRef = useRef<Editor | null>(null)
 
   const [pw, ph] = PAPER_PX[paperSize] ?? PAPER_PX.letter!
   const pageWidthPx = orientation === 'landscape' ? ph : pw
@@ -90,22 +91,21 @@ export default function PdfTemplateEditor({
 
   /** The current source, preferring the live canvas when Design is open. */
   const snapshot = useCallback((): string => {
-    if (tab === 'design' && editorRef.current) {
-      try {
-        return serializeTemplateEditor(editorRef.current)
-      } catch {
-        return sourceHtml
-      }
-    }
     return sourceHtml
-  }, [tab, sourceHtml])
+  }, [sourceHtml])
+
+  const draftSnapshot = useMemo(
+    () => JSON.stringify([name, snapshot(), headerHtml, footerHtml, paperSize, orientation, marginMm, isDefault]),
+    [footerHtml, headerHtml, isDefault, marginMm, name, orientation, paperSize, snapshot],
+  )
+  const dirty = draftSnapshot !== savedSnapshot
+  useUnsavedNavigationGuard(dirty, tCommon('feedback.unsavedChanges'), tCommon('confirm.discardChanges'))
 
   function switchTab(next: 'design' | 'code' | 'preview') {
     if (next === tab) return
     const current = snapshot()
     setSourceHtml(current)
     if (next === 'design') {
-      editorRef.current = null
       setDesignEpoch((n) => n + 1)
     }
     if (next === 'code') {
@@ -179,6 +179,7 @@ export default function PdfTemplateEditor({
         toast.error(data.error ?? t('editor.saveFailed'))
         return
       }
+      setSavedSnapshot(JSON.stringify([name, source, headerHtml, footerHtml, paperSize, orientation, marginMm, isDefault]))
       toast.success(t('editor.saved'))
       router.refresh()
     } finally {
@@ -308,9 +309,8 @@ export default function PdfTemplateEditor({
             pageHeightPx={pageHeightPx}
             marginPx={marginPx}
             paperLabel={`${PAPER_LABEL[paperSize]} · ${orientation === 'landscape' ? t('editor.landscape') : t('editor.portrait')}`}
-            onReady={(ed) => {
-              editorRef.current = ed
-            }}
+            onReady={() => {}}
+            onChange={setSourceHtml}
             mergeFields={mergeFields}
             collections={collections}
             labels={{

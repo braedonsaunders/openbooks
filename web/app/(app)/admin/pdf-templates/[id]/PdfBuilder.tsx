@@ -16,6 +16,7 @@ import { BlockPalette } from './BlockPalette'
 import {
   collectionTableBlockHtml,
   mergeFieldBlockHtml,
+  serializeTemplateEditor,
   type PaletteCollection,
   type PaletteField,
 } from './builder-blocks'
@@ -121,6 +122,7 @@ export default function PdfBuilder({
   marginPx,
   paperLabel,
   onReady,
+  onChange,
   mergeFields = [],
   collections = [],
   labels,
@@ -131,6 +133,7 @@ export default function PdfBuilder({
   marginPx: number
   paperLabel?: string
   onReady: (editor: Editor) => void
+  onChange?: (html: string) => void
   mergeFields?: PaletteField[]
   collections?: PaletteCollection[]
   labels: { content: string; fields: string; tables: string }
@@ -204,6 +207,7 @@ export default function PdfBuilder({
           }
           editorRef.current = editor
           setEditor(editor)
+          editor.on('update', () => onChange?.(serializeTemplateEditor(editor)))
           onReady(editor)
         }}
       >
