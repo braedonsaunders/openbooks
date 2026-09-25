@@ -16,7 +16,8 @@ import {
 import { getAuthz, can, assertCan } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { resolvePeriod } from '../../../lib/periods'
-import { financialHealth, RATIO_DEFS, type RatioResult } from '../../../lib/analytics/financial-health'
+import { financialHealth, type RatioResult } from '../../../lib/analytics/financial-health'
+import { localizedRatioDefs } from '../../../lib/analytics/health-strings'
 import { accountingHome } from '../../../lib/module-home/accounting'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { groupTabs } from '../../../components/module-home/group-tabs'
@@ -88,6 +89,8 @@ export async function loadAccounting(): Promise<AccountingData> {
   if (!authz) redirect('/login')
   if (!['gl.read', 'close.read', 'reports.read'].some((p) => can(authz, p))) assertCan(authz, 'gl.read')
   const t = await getTranslations('accounting')
+  const tAnalytics = await getTranslations('analytics')
+  const ratioDefs = localizedRatioDefs(tAnalytics)
   const tNav = await getTranslations('nav')
 
   // Same default period as the analytics dashboard, so the score matches it.
@@ -170,7 +173,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     if (r.score < 40) {
       attention.push({
         tone: 'warning',
-        text: t('home.attention.weakRatio', { ratio: RATIO_DEFS[r.id]?.label ?? r.id }),
+        text: t('home.attention.weakRatio', { ratio: ratioDefs[r.id]?.label ?? r.id }),
         href: '/analytics/financial-health',
       })
     }
@@ -214,7 +217,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     })),
     ratios: gradedRatios.map((r) => ({
       id: r.id,
-      label: RATIO_DEFS[r.id]?.label ?? r.id,
+      label: ratioDefs[r.id]?.label ?? r.id,
       calc: r.calc,
       value: fmtRatio(r.value, r.format, moneyCompact, format),
       benchmark: fmtRatio(r.benchmark, r.format, moneyCompact, format),
