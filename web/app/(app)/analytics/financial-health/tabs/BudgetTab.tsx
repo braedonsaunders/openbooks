@@ -6,13 +6,12 @@ import { ClipboardList, Download, Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn, Input } from '@openbooks/ui'
 import type { HealthData, BudgetRow } from '../../../../../lib/analytics/health-data'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
-import { divideDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { exportCsv } from '../../_ui/exportCsv'
-import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct, ratioNumber } from '../../_ui/format'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 
 const STATUS_STYLE: Record<BudgetRow['status'], string> = {
   'on-track': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
@@ -142,7 +141,8 @@ function RealBudget({ data }: { data: HealthData }) {
             </thead>
             <tbody>
               {pageRows.map((r) => {
-                const ratio = cmp(r.budget, '0') !== 0 ? Math.max(0, Number(divideDecimal(r.actual, r.budget, 12))) : null
+                // Progress ratio from exact amounts; the bar clamps at 100%.
+                const ratio = cmp(r.budget, '0') !== 0 ? Math.max(0, ratioNumber(r.actual, r.budget)) : null
                 return (
                   <tr key={r.accountId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                     <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>

@@ -25,26 +25,26 @@ const { MoneyProvider } = await import('@/components/money-provider')
 const { ForecastTab } = await import('./ForecastTab')
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 
-function month(revenue: number, month: string, label: string) {
+function month(revenue: string, month: string, label: string) {
   return {
     month,
     label,
     revenue,
-    cogs: 40,
-    grossProfit: 60,
+    cogs: '40',
+    grossProfit: '60',
     grossMarginPct: 60,
-    opex: 20,
-    operatingIncome: 40,
+    opex: '20',
+    operatingIncome: '40',
     operatingMarginPct: 40,
-    netIncome: 35,
+    netIncome: '35',
   }
 }
 
 const data = {
   monthly: [
-    month(100, '2025-10', "Oct '25"),
-    month(110, '2025-11', "Nov '25"),
-    month(120, '2025-12', "Dec '25"),
+    month('100', '2025-10', "Oct '25"),
+    month('110', '2025-11', "Nov '25"),
+    month('120', '2025-12', "Dec '25"),
   ],
 } as unknown as HealthData
 

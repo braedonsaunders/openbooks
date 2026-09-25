@@ -3,8 +3,8 @@ import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
-import { divideDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
+import { abs, add, cmp, isZero, mulDecimal, neg, roundDiv, sum, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { canonicalDecimal, compareDecimal, divideDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { flowRates } from "../fx-presentation";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -49,14 +49,15 @@ const PNL_COST_TYPES_SQL = sql.join(
 export interface MonthPoint {
   month: string; // YYYY-MM
   label: string; // "Jan '25"
-  revenue: number;
-  cogs: number;
-  grossProfit: number;
+  /** Exact decimal strings; ratios stay display numbers computed from integer units below. */
+  revenue: string;
+  cogs: string;
+  grossProfit: string;
   grossMarginPct: number;
-  opex: number;
-  operatingIncome: number;
+  opex: string;
+  operatingIncome: string;
   operatingMarginPct: number;
-  netIncome: number;
+  netIncome: string;
 }
 
 export interface PnlLine {
@@ -80,11 +81,11 @@ export interface MarginStage {
 export interface SegmentRow {
   id: string;
   name: string;
-  revenue: number;
+  revenue: string;
   sharePct: number;
-  grossProfit: number;
+  grossProfit: string;
   grossMarginPct: number;
-  operatingIncome: number;
+  operatingIncome: string;
   operatingMarginPct: number;
   yoyPct: number | null;
   health: "good" | "warn" | "bad";
@@ -94,9 +95,9 @@ export interface DriverRow {
   id: string;
   name: string;
   type: string;
-  current: number;
-  prior: number;
-  change: number;
+  current: string;
+  prior: string;
+  change: string;
   changePct: number | null;
   contribution: number; // share of total absolute movement
 }
@@ -104,9 +105,9 @@ export interface DriverRow {
 export interface ItemRow {
   id: string;
   name: string;
-  prior: number;
-  current: number;
-  change: number;
+  prior: string;
+  current: string;
+  change: string;
   changePct: number | null;
   contribution: number;
 }
@@ -141,7 +142,7 @@ export interface HealthData extends FinancialHealth {
   marginFlow: MarginStage[];
   segments: { department: SegmentRow[]; class: SegmentRow[]; location: SegmentRow[] };
   drivers: { revenue: DriverRow[]; cost: DriverRow[] };
-  items: { rows: ItemRow[]; gainers: ItemRow[]; decliners: ItemRow[]; totalCurrent: number; totalChange: number };
+  items: { rows: ItemRow[]; gainers: ItemRow[]; decliners: ItemRow[]; totalCurrent: string; totalChange: string };
   insights: Insight[];
   budget: BudgetVariance;
   /** Effective benchmark targets driving the grades (org overrides over defaults). */
@@ -223,7 +224,41 @@ function translateAmount(
   date: string,
   rateAt: (func: string | null, date: string) => string,
 ): string {
-  return Number(amount) === 0 ? "0" : mulDecimal(amount, rateAt(func, date));
+  return isZero(amount) ? "0" : mulDecimal(amount, rateAt(func, date));
+}
+
+const RATIO_SCALE = 1_000_000n;
+/**
+ * Dimensionless ratio of two exact amounts as a display/chart number.
+ * Money never crosses into Number here: the quotient rounds once, to
+ * microunits, from integer minor units. A zero denominator yields 0 —
+ * callers needing null-on-empty keep their own guard, as before.
+ */
+function amountRatio(numerator: string, denominator: string): number {
+  const n = toUnits(numerator);
+  const d = toUnits(denominator);
+  if (d === 0n) return 0;
+  const negative = (n < 0n) !== (d < 0n);
+  const mag = roundDiv((n < 0n ? -n : n) * RATIO_SCALE, d < 0n ? -d : d);
+  return Number(negative ? -mag : mag) / Number(RATIO_SCALE);
+}
+
+/**
+ * One-way projection of a canonical ledger string to a bounded display
+ * number for the insights statistics below (trend slopes, σ anomalies).
+ * Same contract as the client's `toChartNumber`, which this server module
+ * cannot import (`_ui/format` is a client component): exact strings stay
+ * the source of truth for every total, comparison, and decision, and only
+ * dimensionless statistics consume the projection.
+ */
+function insightNumber(value: string): number {
+  const exact = canonicalDecimal(value, 100);
+  if (exact === null) throw new Error("insight values must be exact decimal strings");
+  const limit = String(Number.MAX_SAFE_INTEGER);
+  if (compareDecimal(exact, limit) > 0) return Number.MAX_SAFE_INTEGER;
+  if (compareDecimal(exact, `-${limit}`) < 0) return -Number.MAX_SAFE_INTEGER;
+  const n = Number(exact);
+  return Math.max(-Number.MAX_SAFE_INTEGER, Math.min(Number.MAX_SAFE_INTEGER, n));
 }
 
 function priorYear(iso: string): string {
@@ -319,22 +354,25 @@ async function monthlySeries(
     const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
     const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
     const row = by.get(ym);
-    const revenue = Number(row?.revenue ?? 0);
-    const cogs = Number(row?.cogs ?? 0);
-    const opex = Number(row?.opex ?? 0);
-    const grossProfit = Number(sum([String(row?.revenue ?? 0), neg(String(row?.cogs ?? 0))]));
-    const operatingIncome = Number(sum([String(row?.operating_revenue ?? 0), neg(String(row?.cogs ?? 0)), neg(String(row?.opex ?? 0))]));
-    const netIncome = Number(sum([String(row?.revenue ?? 0), neg(String(row?.cogs ?? 0)), neg(String(row?.opex ?? 0)), neg(String(row?.other_exp ?? 0))]));
+    const revenue = String(row?.revenue ?? 0);
+    const cogs = String(row?.cogs ?? 0);
+    const opex = String(row?.opex ?? 0);
+    const operatingRevenue = String(row?.operating_revenue ?? 0);
+    const otherExp = String(row?.other_exp ?? 0);
+    const grossProfit = sum([revenue, neg(cogs)]);
+    const operatingIncome = sum([operatingRevenue, neg(cogs), neg(opex)]);
+    const netIncome = sum([revenue, neg(cogs), neg(opex), neg(otherExp)]);
+    const revPositive = cmp(revenue, "0") > 0;
     out.push({
       month: ym,
       label: strings.monthLabel(ym),
       revenue,
       cogs,
       grossProfit,
-      grossMarginPct: revenue > 0 ? grossProfit / revenue : 0,
+      grossMarginPct: revPositive ? amountRatio(grossProfit, revenue) : 0,
       opex,
       operatingIncome,
-      operatingMarginPct: revenue > 0 ? operatingIncome / revenue : 0,
+      operatingMarginPct: revPositive ? amountRatio(operatingIncome, revenue) : 0,
       netIncome,
     });
   }
@@ -417,22 +455,26 @@ async function segmentsBy(
   // A dimension nobody tags is unused, not "one big Unassigned segment" — keep
   // the empty state in that case.
   if (rows.every((x) => x.id === "unassigned")) return [];
-  const totalRev = rows.reduce((a, x) => a + Number(x.revenue), 0) || 1;
+  const totalRev = sum(rows.map((x) => String(x.revenue ?? 0)));
   return rows
     .map((x): SegmentRow => {
-      const revenue = Number(x.revenue);
-      const priorRev = Number(x.prior_revenue);
-      const grossProfit = Number(sum([String(x.revenue ?? 0), neg(String(x.cogs ?? 0))]));
-      const operatingIncome = Number(sum([String(x.operating_revenue ?? 0), neg(String(x.cogs ?? 0)), neg(String(x.opex ?? 0))]));
-      const gmPct = revenue > 0 ? grossProfit / revenue : 0;
-      const opPct = revenue > 0 ? operatingIncome / revenue : 0;
-      const yoyPct = priorRev > 0 ? (revenue - priorRev) / priorRev : null;
+      const revenue = String(x.revenue ?? 0);
+      const priorRev = String(x.prior_revenue ?? 0);
+      const cogs = String(x.cogs ?? 0);
+      const opex = String(x.opex ?? 0);
+      const operatingRevenue = String(x.operating_revenue ?? 0);
+      const grossProfit = sum([revenue, neg(cogs)]);
+      const operatingIncome = sum([operatingRevenue, neg(cogs), neg(opex)]);
+      const revPositive = cmp(revenue, "0") > 0;
+      const gmPct = revPositive ? amountRatio(grossProfit, revenue) : 0;
+      const opPct = revPositive ? amountRatio(operatingIncome, revenue) : 0;
+      const yoyPct = cmp(priorRev, "0") > 0 ? amountRatio(sum([revenue, neg(priorRev)]), priorRev) : null;
       const health: SegmentRow["health"] = opPct >= 0.1 ? "good" : opPct >= 0 ? "warn" : "bad";
       return {
         id: x.id,
         name: strings.displaySegmentName(x.id, x.name),
         revenue,
-        sharePct: revenue / totalRev,
+        sharePct: amountRatio(revenue, totalRev),
         grossProfit,
         grossMarginPct: gmPct,
         operatingIncome,
@@ -441,7 +483,7 @@ async function segmentsBy(
         health,
       };
     })
-    .sort((a, b) => b.revenue - a.revenue);
+    .sort((a, b) => cmp(b.revenue, a.revenue));
 }
 
 /** Top account-level movers vs prior year, split into revenue and cost. */
@@ -487,25 +529,26 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
   }
   const isIncome = (t: string) => t === "income" || t === "income_other";
   const rows = [...drvByAccount.entries()].map(([id, v]) => {
-    const sign = isIncome(v.type) ? -1 : 1;
-    const current = sign * Number(v.current);
-    const prior = sign * Number(v.prior);
+    const flip = isIncome(v.type);
+    const current = flip ? neg(v.current) : v.current;
+    const prior = flip ? neg(v.prior) : v.prior;
+    const change = sum([current, neg(prior)]);
     return {
       id,
       name: v.name,
       type: v.type,
       current,
       prior,
-      change: current - prior,
-      changePct: Math.abs(prior) > 0 ? (current - prior) / Math.abs(prior) : null,
+      change,
+      changePct: cmp(prior, "0") !== 0 ? amountRatio(change, abs(prior)) : null,
       isIncome: isIncome(v.type),
     };
   });
   const rank = (subset: typeof rows) => {
-    const totalMove = subset.reduce((a, x) => a + Math.abs(x.change), 0) || 1;
+    const totalMove = sum(subset.map((x) => abs(x.change)));
     return subset
-      .map((x): DriverRow => ({ ...x, contribution: Math.abs(x.change) / totalMove }))
-      .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
+      .map((x): DriverRow => ({ ...x, contribution: amountRatio(abs(x.change), totalMove) }))
+      .sort((a, b) => cmp(abs(b.change), abs(a.change)))
       .slice(0, 12);
   };
   return {
@@ -558,32 +601,34 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
     );
     itemByAccount.set(x.id, prev);
   }
-  const totalChangeAbs =
-    ([...itemByAccount.values()]).reduce((a, x) => a + Math.abs(Number(x.current) - Number(x.prior)), 0) || 1;
+  const totalChangeAbs = sum(
+    [...itemByAccount.values()].map((x) => abs(sum([x.current, neg(x.prior)]))),
+  );
   const rows = ([...itemByAccount.entries()])
     .map(([id, v]): ItemRow => {
-      const current = Number(v.current);
-      const prior = Number(v.prior);
+      const current = v.current;
+      const prior = v.prior;
+      const change = sum([current, neg(prior)]);
       return {
         id,
         name: v.name,
         prior,
         current,
-        change: current - prior,
-        changePct: Math.abs(prior) > 0 ? (current - prior) / Math.abs(prior) : null,
-        contribution: Math.abs(current - prior) / totalChangeAbs,
+        change,
+        changePct: cmp(prior, "0") !== 0 ? amountRatio(change, abs(prior)) : null,
+        contribution: amountRatio(abs(change), totalChangeAbs),
       };
     })
-    .filter((x) => Math.abs(x.current) > 0 || Math.abs(x.prior) > 0)
-    .sort((a, b) => b.current - a.current);
-  const gainers = [...rows].filter((x) => x.change > 0).sort((a, b) => b.change - a.change).slice(0, 5);
-  const decliners = [...rows].filter((x) => x.change < 0).sort((a, b) => a.change - b.change).slice(0, 5);
+    .filter((x) => cmp(x.current, "0") !== 0 || cmp(x.prior, "0") !== 0)
+    .sort((a, b) => cmp(b.current, a.current));
+  const gainers = [...rows].filter((x) => cmp(x.change, "0") > 0).sort((a, b) => cmp(b.change, a.change)).slice(0, 5);
+  const decliners = [...rows].filter((x) => cmp(x.change, "0") < 0).sort((a, b) => cmp(a.change, b.change)).slice(0, 5);
   return {
     rows,
     gainers,
     decliners,
-    totalCurrent: rows.reduce((a, x) => a + x.current, 0),
-    totalChange: rows.reduce((a, x) => a + x.change, 0),
+    totalCurrent: sum(rows.map((x) => x.current)),
+    totalChange: sum(rows.map((x) => x.change)),
   };
 }
 
@@ -660,17 +705,17 @@ function buildInsights(
   if (f.revenueGrowth < -0.15) out.push(strings.revFalling(pct1(Math.abs(f.revenueGrowth))));
   else if (f.revenueGrowth < 0) out.push(strings.revDeclined(pct1(Math.abs(f.revenueGrowth))));
   // Trend rules over the trailing months: revenue slope and margin compression.
-  const recent = monthly.filter((m) => m.revenue > 0).slice(-3);
+  const recent = monthly.filter((m) => cmp(m.revenue, "0") > 0).slice(-3);
   if (recent.length === 3) {
     const [a, b, c] = recent;
-    if (a!.revenue > 0 && c!.revenue < a!.revenue * 0.9)
-      out.push(strings.revTrendingDown((((a!.revenue - c!.revenue) / a!.revenue) * 100).toFixed(0)));
+    if (cmp(a!.revenue, "0") > 0 && cmp(c!.revenue, mulDecimal(a!.revenue, "0.9")) < 0)
+      out.push(strings.revTrendingDown((amountRatio(sum([a!.revenue, neg(c!.revenue)]), abs(a!.revenue)) * 100).toFixed(0)));
     if (a!.grossMarginPct - c!.grossMarginPct > 0.03 && b!.grossMarginPct <= a!.grossMarginPct)
       out.push(strings.marginCompression(((a!.grossMarginPct - c!.grossMarginPct) * 100).toFixed(1)));
   }
   // Safety margin via breakeven.
   if (f.breakevenMonthly !== null && monthly.length > 0) {
-    const avgMonthlyRev = f.revenue / Math.max(1, monthly.filter((m) => m.revenue > 0).length);
+    const avgMonthlyRev = f.revenue / Math.max(1, monthly.filter((m) => cmp(m.revenue, "0") > 0).length);
     const safety = avgMonthlyRev > 0 ? (avgMonthlyRev - f.breakevenMonthly) / avgMonthlyRev : 0;
     if (safety < 0) out.push(strings.belowBreakeven(money(f.breakevenMonthly)));
     else if (safety < 0.1) out.push(strings.thinMargin((safety * 100).toFixed(0)));
@@ -684,7 +729,7 @@ function buildInsights(
   if (f.rule40 >= 40) out.push(strings.rule40(f.rule40.toFixed(0)));
 
   // Anomalies: months whose margin deviates > 2σ from the mean.
-  const withRev = monthly.filter((m) => m.revenue > 0);
+  const withRev = monthly.filter((m) => cmp(m.revenue, "0") > 0);
   if (withRev.length >= 4) {
     const margins = withRev.map((m) => m.grossMarginPct);
     const mean = margins.reduce((a, x) => a + x, 0) / margins.length;
@@ -694,12 +739,12 @@ function buildInsights(
         out.push(strings.marginOutlier(m.label, pct1(m.grossMarginPct), pct1(mean)));
       }
     }
-    const revs = withRev.map((m) => m.revenue);
+    const revs = withRev.map((m) => insightNumber(m.revenue));
     const rMean = revs.reduce((a, x) => a + x, 0) / revs.length;
     const rSd = Math.sqrt(revs.reduce((a, x) => a + (x - rMean) ** 2, 0) / revs.length);
     for (const m of withRev) {
-      if (rSd > 0 && Math.abs(m.revenue - rMean) > 2 * rSd) {
-        out.push(strings.revenueSpike(m.label, money(m.revenue), money(rMean)));
+      if (rSd > 0 && Math.abs(insightNumber(m.revenue) - rMean) > 2 * rSd) {
+        out.push(strings.revenueSpike(m.label, money(insightNumber(m.revenue)), money(rMean)));
       }
     }
   }
@@ -902,7 +947,8 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
     .map(([accountId, v]): BudgetRow => {
       const budget = v.budget;
       const actual = v.actual;
-      const { variance, variancePct } = exactBudgetVariance(budget, actual);
+      const variance = sum([actual, neg(budget)]);
+      const variancePct = cmp(budget, "0") !== 0 ? amountRatio(variance, abs(budget)) : null;
       const favorable = isIncome(v.type) ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
       const status = budgetLineStatus(v.type, variance, variancePct, budget);
       return { accountId, name: v.name, type: v.type, budget, actual, variance, variancePct, favorable, status };
@@ -912,9 +958,9 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
     scenario: { id: s.id, name: s.name, fiscalYear: Number(s.fiscal_year), status: s.status },
     rows,
     totals: {
-      budget: rows.reduce((a, x) => add(a, x.budget), "0.0000"),
-      actual: rows.reduce((a, x) => add(a, x.actual), "0.0000"),
-      variance: rows.reduce((a, x) => add(a, x.variance), "0.0000"),
+      budget: sum(rows.map((x) => x.budget)),
+      actual: sum(rows.map((x) => x.actual)),
+      variance: sum(rows.map((x) => x.variance)),
     },
   };
 }

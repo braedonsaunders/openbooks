@@ -7,7 +7,8 @@ import type { HealthData, SegmentRow } from '../../../../../lib/analytics/health
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { Donut, GroupedBar } from '../../_ui/charts'
-import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct, ratioNumber, toChartNumber } from '../../_ui/format'
+import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
 
 type Dim = 'department' | 'class' | 'location'
 
@@ -28,12 +29,13 @@ export function SegmentsTab({ data }: { data: HealthData }) {
     { value: 'location', label: 'By Location' },
   ]
 
-  const totalRev = rows.reduce((a, r) => a + r.revenue, 0)
-  const totalOp = rows.reduce((a, r) => a + r.operatingIncome, 0)
+  // Exact sums for display; HHI reuses the server-computed exact shares.
+  const totalRev = sum(rows.map((r) => r.revenue))
+  const totalOp = sum(rows.map((r) => r.operatingIncome))
   const best = rows.slice().sort((a, b) => b.operatingMarginPct - a.operatingMarginPct)[0]
   // the segment concentration: HHI = Σ(share×100)², classic 0–10,000
   // scale (Unconcentrated <1500 / Moderate <2500 / Concentrated).
-  const hhi = Math.round(rows.reduce((a, r) => a + (totalRev > 0 ? (r.revenue / totalRev) * 100 : 0) ** 2, 0))
+  const hhi = Math.round(rows.reduce((a, r) => a + (r.sharePct * 100) ** 2, 0))
   const hhiLabel = hhi >= 2500 ? 'Concentrated' : hhi >= 1500 ? 'Moderate' : 'Unconcentrated'
 
   return (
@@ -41,7 +43,7 @@ export function SegmentsTab({ data }: { data: HealthData }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiCard icon={Network} accent="teal" label="Segments" value={String(rows.length)} sub={dim} />
         <KpiCard icon={BarChart3} accent="emerald" label="Total Revenue" value={fmtMoney(totalRev, { compact: true })} sub="across segments" />
-        <KpiCard icon={BarChart3} accent="violet" label="Operating Income" value={fmtMoney(totalOp, { compact: true })} sub={fmtPct(totalRev > 0 ? totalOp / totalRev : 0)} />
+        <KpiCard icon={BarChart3} accent="violet" label="Operating Income" value={fmtMoney(totalOp, { compact: true })} sub={fmtPct(cmp(totalRev, '0') > 0 ? ratioNumber(totalOp, totalRev) : 0)} />
         <KpiCard icon={PieChart} accent="amber" label="Best Margin" value={best ? fmtPct(best.operatingMarginPct) : '—'} sub={best?.name ?? '—'} />
         <KpiCard icon={Network} accent={hhi >= 2500 ? 'red' : hhi >= 1500 ? 'amber' : 'emerald'} label="Concentration (HHI)" value={String(hhi)} sub={hhiLabel} tone={hhi >= 2500 ? 'negative' : 'neutral'} />
       </div>
@@ -88,15 +90,15 @@ export function SegmentsTab({ data }: { data: HealthData }) {
           </div>
           <div className="space-y-5">
             <Panel title="Revenue Mix" icon={PieChart}>
-              <Donut data={rows.filter((r) => r.revenue > 0).map((r) => ({ name: r.name, value: r.revenue }))} height={200} />
+              <Donut data={rows.filter((r) => cmp(r.revenue, '0') > 0).map((r) => ({ name: r.name, value: toChartNumber(r.revenue) }))} height={200} />
             </Panel>
             <Panel title="Margin Comparison" icon={BarChart3}>
               <GroupedBar
                 labels={rows.map((r) => r.name)}
                 height={200}
                 series={[
-                  { name: 'Gross Profit', data: rows.map((r) => r.grossProfit), color: '#0d9488' },
-                  { name: 'Operating Income', data: rows.map((r) => r.operatingIncome), color: '#f59e0b' },
+                  { name: 'Gross Profit', data: rows.map((r) => toChartNumber(r.grossProfit)), color: '#0d9488' },
+                  { name: 'Operating Income', data: rows.map((r) => toChartNumber(r.operatingIncome)), color: '#f59e0b' },
                 ]}
               />
             </Panel>

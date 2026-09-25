@@ -69,14 +69,14 @@ function decliningData(): Record<string, unknown> {
     monthly: revenues.map((revenue, i) => ({
       month: `2026-0${i + 1}`,
       label: `M${i + 1}`,
-      revenue,
-      cogs: 0,
-      grossProfit: revenue,
+      revenue: String(revenue),
+      cogs: '0',
+      grossProfit: String(revenue),
       grossMarginPct: 100,
-      opex: 0,
-      operatingIncome: revenue,
+      opex: '0',
+      operatingIncome: String(revenue),
       operatingMarginPct: 100,
-      netIncome: revenue,
+      netIncome: String(revenue),
     })),
   };
 }
@@ -130,8 +130,8 @@ test("an out-of-domain revenue projection carries the caveat on chart, table, an
 test("an in-domain projection shows no caveat", async () => {
   globalThis.__fcRouter = { push() {}, refresh() {} };
   const data = decliningData();
-  (data.monthly as { revenue: number }[]).forEach((m) => {
-    m.revenue = 1_000_000;
+  (data.monthly as { revenue: string }[]).forEach((m) => {
+    m.revenue = '1000000';
   });
   const { host, unmount } = await mount(data);
   try {

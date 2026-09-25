@@ -4,7 +4,7 @@
 
 import { useCallback } from 'react'
 import { useMoney } from '@/components/money-provider'
-import { formatMoney as formatExactMoney, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { formatMoney as formatExactMoney, mulDecimal, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 
@@ -44,6 +44,22 @@ export function toChartNumber(value: string): number {
  * through all comparisons; this helper rounds only when rendering text. */
 export function formatExactRatio(value: string, decimals = 2): string {
   return formatExactMoney(value, decimals)
+}
+
+/**
+ * Dimensionless ratio of two canonical decimal strings as a display number
+ * (progress bars, chart domains). The quotient rounds once, to microunits,
+ * from integer minor units — money never crosses into Number here. A zero
+ * denominator yields the fallback (never null: callers keep their own guard).
+ */
+export function ratioNumber(numerator: string, denominator: string, fallback = 0): number {
+  const scale = 1_000_000n
+  const n = toUnits(numerator)
+  const d = toUnits(denominator)
+  if (d === 0n) return fallback
+  const negative = (n < 0n) !== (d < 0n)
+  const mag = roundDiv((n < 0n ? -n : n) * scale, d < 0n ? -d : d)
+  return Number(negative ? -mag : mag) / Number(scale)
 }
 
 /** Render an exact 0..1 ratio as percentage points without a Number hop. */
