@@ -71,25 +71,35 @@ function InviteDrawer({
       return
     }
     setBusy(true)
-    const res = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'invite', email: email.trim(), roleId }),
-    })
-    setBusy(false)
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      toast.error(res.status === 429 ? t('inviteTooManyAttempts') : (data.error ?? t('requestFailed')))
-      return
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'invite', email: email.trim(), roleId }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(res.status === 429 ? t('inviteTooManyAttempts') : (data.error ?? t('requestFailed')))
+        return
+      }
+      const payload = await res.json().catch(() => ({}))
+      if (typeof payload.setPasswordUrl === 'string') {
+        setLink(payload.setPasswordUrl)
+        return
+      }
+      toast.success(t('inviteSent', { email: email.trim() }))
+      onClose()
+      router.refresh()
+    } catch {
+      // A rejected transport leaves no link and no confirmation, while the
+      // server may have committed the invite: name the failure and keep the
+      // dialog open with the entered address so the operator can retry or
+      // reconcile against the user list. The one-time link still appears
+      // only on a confirmed success.
+      toast.error(t('requestFailed'))
+    } finally {
+      setBusy(false)
     }
-    const payload = await res.json().catch(() => ({}))
-    if (typeof payload.setPasswordUrl === 'string') {
-      setLink(payload.setPasswordUrl)
-      return
-    }
-    toast.success(t('inviteSent', { email: email.trim() }))
-    onClose()
-    router.refresh()
   }
 
   return (
