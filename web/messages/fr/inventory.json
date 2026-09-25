@@ -234,5 +234,9 @@
       "showMore": "Afficher plus ({loaded} sur {total})",
       "loadingMore": "Chargement…"
     }
+  },
+  "create": {
+    "subsidiary": "Filiale",
+    "selectSubsidiary": "Choisir une filiale…"
   }
 }

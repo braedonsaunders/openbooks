@@ -145,6 +145,7 @@
     "billRate": "计费费率",
     "addUnit": "添加费率单位",
     "saveFailed": "无法保存费率",
+    "loadFailed": "无法加载费率",
     "saved": "费率版本已保存",
     "empty": "尚无费率版本。",
     "rates": "费率",

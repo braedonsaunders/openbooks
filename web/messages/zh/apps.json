@@ -371,6 +371,9 @@
     "overview": "概览",
     "package": "包",
     "versions": "版本",
+    "labels": {
+      "name": "名称"
+    },
     "runs": "运行",
     "audit": "审计历史",
     "storage": "应用存储",

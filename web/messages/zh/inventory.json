@@ -234,5 +234,9 @@
       "showMore": "显示更多（共{total}条，已加载{loaded}条）",
       "loadingMore": "正在加载…"
     }
+  },
+  "create": {
+    "subsidiary": "子公司",
+    "selectSubsidiary": "选择子公司…"
   }
 }

@@ -371,6 +371,9 @@
     "overview": "Vista general",
     "package": "Paquete",
     "versions": "Versiones",
+    "labels": {
+      "name": "Nombre"
+    },
     "runs": "Ejecuciones",
     "audit": "Historial de auditoría",
     "storage": "Almacenamiento",

@@ -145,6 +145,7 @@
     "billRate": "Tarifa de cobrança",
     "addUnit": "Adicionar unidade tarifária",
     "saveFailed": "Não foi possível salvar as tarifas",
+    "loadFailed": "Não foi possível carregar as tarifas",
     "saved": "Versão de tarifas salva",
     "empty": "Ainda não há versões de tarifas.",
     "rates": "Tarifas",

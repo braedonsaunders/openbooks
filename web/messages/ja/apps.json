@@ -371,6 +371,9 @@
     "overview": "概要",
     "package": "パッケージ",
     "versions": "バージョン",
+    "labels": {
+      "name": "名前"
+    },
     "runs": "実行",
     "audit": "監査履歴",
     "storage": "アプリストレージ",

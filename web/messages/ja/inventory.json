@@ -234,5 +234,9 @@
       "showMore": "さらに表示（{total}件中{loaded}件）",
       "loadingMore": "読込中…"
     }
+  },
+  "create": {
+    "subsidiary": "子会社",
+    "selectSubsidiary": "子会社を選択…"
   }
 }

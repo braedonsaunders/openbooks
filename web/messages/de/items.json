@@ -158,6 +158,7 @@
     "billRate": "Abrechnungssatz",
     "addUnit": "Satzeinheit hinzufügen",
     "saveFailed": "Sätze konnten nicht gespeichert werden",
+    "loadFailed": "Sätze konnten nicht geladen werden",
     "saved": "Satzversion gespeichert",
     "empty": "Noch keine Satzversionen.",
     "rates": "Sätze",

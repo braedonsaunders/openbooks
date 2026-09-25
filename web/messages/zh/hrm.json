@@ -385,6 +385,7 @@
       "funded": "已拨款 FTE",
       "filled": "已填补 FTE",
       "vacant": "空缺 FTE",
+      "refusal": "拒绝",
       "holder": "任职者",
       "unassignedHolder": "空缺",
       "holdersCount": "{count, plural, other {# 名任职者}}"

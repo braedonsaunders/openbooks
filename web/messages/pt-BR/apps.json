@@ -371,6 +371,9 @@
     "overview": "Visão geral",
     "package": "Pacote",
     "versions": "Versões",
+    "labels": {
+      "name": "Nome"
+    },
     "runs": "Execuções",
     "audit": "Histórico de auditoria",
     "storage": "Armazenamento do app",

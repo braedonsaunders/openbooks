@@ -385,6 +385,7 @@
       "funded": "FTE financiado",
       "filled": "FTE preenchido",
       "vacant": "FTE vago",
+      "refusal": "Recusa",
       "holder": "Titular",
       "unassignedHolder": "Vago",
       "holdersCount": "{count, plural, one {# titular} other {# titulares}}"
