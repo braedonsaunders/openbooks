@@ -28,6 +28,10 @@ import {
   type ResourceRefTarget,
   type WriteOutcome,
 } from './types'
+
+// Drizzle treats bare JS arrays in SQL templates as row constructors. Keep
+// array-valued setup fields as a single driver parameter for PostgreSQL.
+const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(value) : value
 // --- Setup-registry resources -------------------------------------------------
 
 const SETUP_KIND_MAP: Record<SetupField['kind'], ResourceField['kind']> = {
@@ -43,8 +47,7 @@ const SETUP_KIND_MAP: Record<SetupField['kind'], ResourceField['kind']> = {
   ref: 'reference',
   multiref: 'multiselect',
   json: 'long_text',
-  // jsonb text[] — round-trips as its JSON text (export stringifies, the
-  // shared coercer parses it back); the drawer-side TagInput is UI-only.
+  // String-list fields round-trip through the shared setup coercer.
   stringArray: 'long_text',
 }
 
@@ -360,7 +363,7 @@ async function writeSetup(
               const before = await loadSetupAuditRow(entity, ctx.orgId, existingId, tx, true)
               if (!before) throw new Error('row no longer exists')
 
-              const setParts = storageCols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+              const setParts = storageCols.map((c) => sql`${sql.raw(c.column)} = ${bindSetupValue(c.value)}`)
               if (entity.actorCols) {
                 setParts.push(sql`updated_by = ${ctx.actorId}`)
                 setParts.push(sql`updated_at = now()`)
@@ -429,7 +432,7 @@ async function writeSetup(
               }
               const colSql = sql.raw(cols.map((c) => c.column).join(', '))
               const valSql = sql.join(
-                cols.map((c) => sql`${c.value}`),
+                cols.map((c) => sql`${bindSetupValue(c.value)}`),
                 sql`, `,
               )
               const ins = (await tx.execute(sql`

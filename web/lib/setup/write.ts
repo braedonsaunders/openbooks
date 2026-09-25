@@ -48,10 +48,14 @@ import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
 import { taxRegistrationFormProblem } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
 import { saveSetupBook } from './books'
+
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { featureEnabled, featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
+// Drizzle expands bare JS arrays inside sql templates into SQL expressions.
+// A PostgreSQL array column instead needs one bound driver array parameter.
+const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(value) : value
 
 /**
  * Generic CRUD for every configuration entity in the Setup registry
@@ -1789,7 +1793,7 @@ export async function createSetupRecord(
 
   const colSql = sql.raw(cols.map((c) => c.column).join(', '))
   const valSql = sql.join(
-    cols.map((c) => sql`${c.value}`),
+    cols.map((c) => sql`${bindSetupValue(c.value)}`),
     sql`, `,
   )
 
@@ -2080,7 +2084,7 @@ export async function updateSetupRecord(
         if (!changedPolicy) {
           const updated = ((await tx.execute(sql`
             update pay_derived_rules set
-              ${sql.join(built.cols.map(column => sql`${sql.raw(column.column)} = ${column.value}`), sql`, `)},
+              ${sql.join(built.cols.map(column => sql`${sql.raw(column.column)} = ${bindSetupValue(column.value)}`), sql`, `)},
               updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${orgId}
             returning id`)))
@@ -2241,7 +2245,7 @@ export async function updateSetupRecord(
             const key = entity.fields.find((f) => toSnake(f.key) === c.column)?.key
             return key !== undefined && body[key] !== undefined
           })
-          const setParts = submittedCols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+          const setParts = submittedCols.map((c) => sql`${sql.raw(c.column)} = ${bindSetupValue(c.value)}`)
           if (entity.actorCols) {
             setParts.push(sql`updated_by = ${actorId}`)
             setParts.push(sql`updated_at = now()`)
@@ -2372,7 +2376,7 @@ export async function updateSetupRecord(
       } }
     }
   }
-  const setParts = updateCols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+  const setParts = updateCols.map((c) => sql`${sql.raw(c.column)} = ${bindSetupValue(c.value)}`)
   if (entity.key === 'fx-rates') {
     // Any human edit is an explicit override. Provider synchronization never
     // replaces manual rows, so detach the imported provenance atomically.

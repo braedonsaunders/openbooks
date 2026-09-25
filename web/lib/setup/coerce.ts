@@ -160,10 +160,10 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       return { column, value: s }
     }
     case 'stringArray': {
-      // A jsonb text[] column. Accept a real array (the drawer's TagInput) or
-      // a JSON-encoded array string (imports / API clients). The bound value
-      // is a JSON STRING, never a JS array — node-postgres renders a JS array
-      // as a Postgres array literal ({"a","b"}), which is invalid jsonb.
+      // Accept a real array (the drawer's TagInput) or a JSON-encoded array
+      // string (imports / API clients). jsonb arrays need JSON text as their
+      // bound value, while PostgreSQL text[] columns need the native array
+      // value so the driver serializes it using PostgreSQL's array format.
       let list: unknown = raw
       if (!present) list = []
       else if (typeof raw === 'string') {
@@ -191,7 +191,7 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       if (field.required && clean.length === 0) return { error: `${field.key} is required` }
       // An empty list is written as [] (the column default) — for these
       // filter columns "empty" is a real statement (everyone qualifies).
-      return { column, value: JSON.stringify(clean) }
+      return { column, value: field.arrayStorage === 'text' ? clean : JSON.stringify(clean) }
     }
     case 'json': {
       if (!present) return { column, value: null }

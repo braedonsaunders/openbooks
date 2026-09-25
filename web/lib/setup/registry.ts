@@ -154,6 +154,8 @@ export type SetupDynamicOptionsSource =
 export interface SetupField {
   key: string
   kind: SetupFieldKind
+  /** Storage type for stringArray fields; defaults to jsonb. */
+  arrayStorage?: 'jsonb' | 'text'
   required?: boolean
   /** Inclusive resource/domain bounds for integer and percent fields. */
   min?: number
@@ -2051,7 +2053,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       // applicability on earning lines alone, so offering it on a deduction
       // would be a setting that changes nothing (the protection precedent).
       {
-        key: 'programExclusions', kind: 'stringArray',
+        key: 'programExclusions', kind: 'stringArray', arrayStorage: 'text',
         optionsSource: 'payroll-contribution-programs',
         showWhen: { field: 'kind', in: ['earning'] },
       },
