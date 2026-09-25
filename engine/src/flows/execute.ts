@@ -23,6 +23,7 @@ import { flowPdfTemplateMeta, renderFlowPdf } from "./pdf-hook.ts";
 import { enqueueFlowEmail } from "../scheduling/outbox.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { flowSubjectProfileForOrg } from "./registry.ts";
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
 /**
  * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
@@ -152,7 +153,13 @@ export async function executeFlowPlan(
   // leaves no claim; a previously committed orphan is row-locked by
   // claimEffect and safely replayed.
   const runEffectTransaction = async <T>(fn: () => Promise<T>): Promise<T> =>
-    withOrgTransaction(ctx.orgId, () => withTransactionSavepoint(db, fn));
+    withOrgTransaction(ctx.orgId, async () => {
+      await acquireOrgFeatureGateLock(db, ctx.orgId);
+      if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "flows"))) {
+        throw new Error("flows feature is disabled");
+      }
+      return withTransactionSavepoint(db, fn);
+    });
 
   const brand = await orgName(ctx.orgId);
 

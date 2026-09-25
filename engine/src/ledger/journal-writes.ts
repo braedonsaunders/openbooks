@@ -9,6 +9,7 @@ import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
 /**
  * Governed journal writes for sandboxed code (App backends + user scripts).
@@ -70,6 +71,8 @@ export type JournalScopeErrorCode =
 
 export interface CreateScriptJournalOptions {
   post?: boolean;
+  /** Recheck the scripts feature inside the transaction that writes this journal. */
+  requireScriptsFeature?: boolean;
   /**
    * The acting principal's subsidiary visibility: null = unrestricted, a Set
    * = the allowed entities. Omitted = resolved live from the actor's roles
@@ -280,8 +283,15 @@ async function insertScriptDraft(
   actorId: string | null,
   idempotencyKey?: string,
   deadlineMs?: number,
+  requireScriptsFeature = false,
 ): Promise<{ id: string; documentNumber: string; deduped: boolean }> {
   return db.transaction(async (tx) => {
+    if (requireScriptsFeature) {
+      await acquireOrgFeatureGateLock(tx, orgId);
+      if (!(await lockAndCheckOrgFeature(tx, orgId, "scripts"))) {
+        throw new JournalWriteError("scripts feature is disabled");
+      }
+    }
     // Fence the write to the script run's remaining budget — unless this
     // draft nests inside the caller's own transaction (post:true path, or an
     // ambient tenant unit), which the caller fenced already. SET LOCAL dies
@@ -555,6 +565,7 @@ export async function createScriptJournal(
     // request; it stands alone in its own transaction.
     const { deduped: _deduped, ...draft } = await insertScriptDraft(
       orgId, subsidiaryId, baseCurrency, v, byCode, actorId, opts.idempotencyKey, opts.deadlineMs,
+      opts.requireScriptsFeature,
     );
     return draft;
   }
@@ -577,7 +588,10 @@ export async function createScriptJournal(
     if (owned && opts.deadlineMs !== undefined) {
       await fenceTransactionToDeadline(db, opts.deadlineMs);
     }
-    const docId = await insertScriptDraft(orgId, subsidiaryId, baseCurrency, v, byCode, actorId, opts.idempotencyKey, opts.deadlineMs);
+    const docId = await insertScriptDraft(
+      orgId, subsidiaryId, baseCurrency, v, byCode, actorId, opts.idempotencyKey, opts.deadlineMs,
+      opts.requireScriptsFeature,
+    );
     // A deduped draft is another execution's committed unit: re-submitting
     // or re-posting it here would double-apply the first run's document.
     // Return its live outcome; the pre-unit read usually catches this first
