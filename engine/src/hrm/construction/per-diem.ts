@@ -430,6 +430,10 @@ export async function computeForWeek(
     }
     const written: PerDiemEntry[] = [];
     const dailyAmounts: string[] = [];
+    // Several project rows may describe one employment work date. They
+    // still produce their own configured allowance entries below, but a
+    // weekly threshold counts the civil date once, never once per project.
+    const dailyAmountByDate = new Map<string, string>();
     for (const day of days) {
       let distanceKm: number | null = null;
       if (policy.basis === "distance_brackets") {
@@ -472,6 +476,7 @@ export async function computeForWeek(
         amount = cmp(reduced, "0") > 0 ? reduced : "0.0000";
       }
       dailyAmounts.push(amount);
+      dailyAmountByDate.set(day.workedOn, amount);
       written.push(
         await upsertEntry(exec, orgId, actorId, "hrm_per_diem_entries", {
           employmentId,
@@ -487,13 +492,14 @@ export async function computeForWeek(
     // Weekly top-up: 5 worked days paid as 7 writes the two missing days of
     // the same week at the last daily amount — same table, same policy, the
     // basis_inputs say what produced them.
-    const topped = applyWeeklyRule(dailyAmounts, policy.weeklyRule);
-    if (topped.length > dailyAmounts.length) {
+    const workedDateAmounts = [...dailyAmountByDate.values()];
+    const topped = applyWeeklyRule(workedDateAmounts, policy.weeklyRule);
+    if (topped.length > workedDateAmounts.length) {
       const existingDays = new Set(days.map((day) => day.workedOn));
       const missing = weekDates(weekStart).filter((date) => !existingDays.has(date));
       const lastProject = days[days.length - 1]!.projectId;
-      for (let i = dailyAmounts.length; i < topped.length; i += 1) {
-        const date = missing[i - dailyAmounts.length];
+      for (let i = workedDateAmounts.length; i < topped.length; i += 1) {
+        const date = missing[i - workedDateAmounts.length];
         if (!date) break;
         written.push(
           await upsertEntry(exec, orgId, actorId, "hrm_per_diem_entries", {
