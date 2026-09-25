@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { renderTemplate } from "@openbooks/pdf";
 import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { canonicalJson } from "../../platform/canonical-json.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { assertUnrestrictedScope, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
@@ -280,7 +281,7 @@ function signatureSecret(): string {
   return key;
 }
 
-/** Seal the HMAC evidence record (pure, unit-tested): signer + time + IP hash + document hash. */
+/** Seal every stored signature evidence field in a versioned canonical encoding. */
 export function sealSignatureEvidence(args: {
   signerName: string;
   signedAt: string;
@@ -298,7 +299,11 @@ export function sealSignatureEvidence(args: {
     version: args.version,
   };
   const seal = createHmac("sha256", signatureSecret())
-    .update(`${OFFER_SIGNATURE_DOMAIN}|${args.offerId}|${args.version}|${args.documentHash}|${args.signerName}|${args.signedAt}`)
+    .update(canonicalJson({
+      domain: OFFER_SIGNATURE_DOMAIN,
+      encoding_version: 1,
+      evidence,
+    }), "utf8")
     .digest("hex");
   return { evidence, seal };
 }
