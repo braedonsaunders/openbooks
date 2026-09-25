@@ -124,7 +124,42 @@ const PL_WIEK_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/**
+ * Zatrudnienie (the employer's own per-employee record, not an agency
+ * form): the working-time fraction the fund lines need beyond the birth
+ * year. The FP/FS minimum-wage threshold (Labour Market Act art. 259;
+ * 2026 full-time minimum 4 806 zł) is proportional to working time, so a
+ * part-time base below the full minimum may still clear its pro-rata
+ * threshold. No default exists — absent means the fraction was never
+ * recorded. (Return-from-leave relief is asserted on parentalLeaveEnd,
+ * not here.)
+ */
+const PL_ZATRUDNIENIE_CERTIFICATE: PayrollCertificate = {
+  key: "pl_zatrudnienie",
+  form: "Zatrudnienie (dokumentacja pracodawcy)",
+  label: "Employment facts (working time)",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "Labour Market Act of 20 March 2025, art. 259 (proportional minimum wage)",
+  summary:
+    "The employer's per-employee employment record for the fund lines: the "
+    + "working-time fraction behind the pro-rata FP/FS threshold.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "wymiar_etatu",
+      label: "Wymiar etatu (fraction of full time)",
+      kind: "code",
+      help: "Working time as a decimal fraction of a full etat (\"1\" full time, "
+        + "\"0.5\" half time), at most four decimals. The FP/FS threshold is the "
+        + "full-time minimum wage times this fraction. Unset prices against the "
+        + "full minimum only; pay below it refuses until the fraction is recorded.",
+    },
+  ],
+};
+
 export const PL_CERTIFICATES: PayrollPackCertificates = {
   country: "PL",
-  certificates: [PL_PIT2_CERTIFICATE, PL_WIEK_CERTIFICATE],
+  certificates: [PL_PIT2_CERTIFICATE, PL_WIEK_CERTIFICATE, PL_ZATRUDNIENIE_CERTIFICATE],
 };

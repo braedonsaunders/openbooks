@@ -60,7 +60,8 @@
  *
  * What this pass does NOT do (named refusals, stated): non-monthly
  * periodicity, uneven-pay threshold crossings, the FP age band, PUP-hire
- * FP exemptions, ulga dla młodych, 50 % KUP,
+ * FP exemptions, sub-minimum pay without a recorded working-time fraction,
+ * ulga dla młodych, 50 % KUP,
  * joint filing, PPK, non-employment titles, zero-advance requests and
  * multi-payer pomniejszenia (see PL_REFUSALS_2026). Return-from-leave FP/FS
  * relief IS priced, from the asserted leave-end month (see parentalLeaveEnd).
@@ -72,7 +73,7 @@
  * FR precedent). Never floating point.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
-import { empFact } from "../employee-facts.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 // Side effect: registers PL_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
@@ -336,6 +337,35 @@ function requirePayYear(payDate: string, tables: PlYearTables): void {
  * two steps in one regulation (4 242 zł to June, 4 300 zł from 1 July);
  * every other transcribed year carries one.
  */
+/**
+ * Working-time fraction as an exact numerator/scale pair (null when never
+ * recorded). Accepted: decimals above 0 through 1 with at most four places
+ * ("1", "1.0", "0.5", "0.3333"). Anything else — including zero working
+ * time, which is not an employment title this pack prices — refuses by
+ * name so the threshold comparison below never divides by a guess.
+ */
+function parseWymiarEtatu(raw: string | null | undefined): { num: bigint; scale: bigint } | null {
+  if (raw == null || raw === "") return null;
+  const text = raw.trim();
+  const match = /^(1(?:\.0+)?|0\.\d{1,4})$/.exec(text);
+  if (!match) {
+    throw new PayrollPackError(
+      `PL working-time fraction (emp pl_wymiar_etatu) must be a decimal above 0 through 1 `
+      + `with at most four decimals ("1" full time, "0.5" half time), got "${raw}". Correct the `
+      + `wymiar etatu on the pl_zatrudnienie certificate before running payroll`,
+    );
+  }
+  const [whole = "0", fraction = ""] = text.split(".");
+  const num = BigInt(whole + fraction);
+  if (num <= 0n) {
+    throw new PayrollPackError(
+      `PL working-time fraction (emp pl_wymiar_etatu) is zero — zero working time is not an `
+      + `employment title the pack prices. Correct the wymiar etatu on the pl_zatrudnienie certificate`,
+    );
+  }
+  return { num, scale: 10n ** BigInt(fraction.length) };
+}
+
 function minWageForMonth(tables: PlYearTables, payDate: string): bigint {
   if (
     tables.minWageJul !== undefined
@@ -371,6 +401,12 @@ export interface PlZusCalcInput {
    * the window cannot be derived from it.
    */
   parentalLeaveEnd?: string | null;
+  /**
+   * Working-time fraction of a full etat ("1", "0.5"), or null when never
+   * recorded (emp pl_wymiar_etatu). Absent prices against the full-time
+   * minimum only; pay below it refuses until the fraction is known.
+   */
+  wymiarEtatu?: string | null;
   /** Tenant-declared wypadkowe rate as a percent ("1.67" = 1.67 %); null = undeclared. */
   wypadkowePct?: string | null;
 }
@@ -502,8 +538,30 @@ export function calculatePlZusWithTables(
     fpZwolnioneUrlop = payMonth > leaveMonth && payMonth <= leaveMonth + 36;
   }
 
-  // FP/FS base is uncapped but needs the minimum wage for the month.
-  const fpNalezne = !fpZwolnioneWiek && brut >= minWageForMonth(tables, input.payDate);
+  // FP/FS base is uncapped but needs the minimum wage for the month,
+  // times the working-time fraction (Labour Market Act art. 259: the
+  // minimum is proportional to working time). Absent fraction prices
+  // against the full minimum only — a part-time base below it may still
+  // clear its pro-rata threshold, so pay below the full minimum refuses
+  // until the fraction is recorded instead of pricing a guessed zero.
+  const minWage = minWageForMonth(tables, input.payDate);
+  const fraction = parseWymiarEtatu(input.wymiarEtatu);
+  let meetsThreshold: boolean;
+  if (fraction === null) {
+    if (brut >= minWage) {
+      meetsThreshold = true;
+    } else {
+      throw new PayrollPackError(
+        `PL FP/FS cannot be decided: ${D(brut)} is below the full-time minimum ${D(minWage)}, `
+        + "but the minimum is proportional to working time (art. 259) and no working-time "
+        + "fraction was recorded — a part-time base may still clear its pro-rata threshold. "
+        + "Record the employee's wymiar etatu on the pl_zatrudnienie certificate before running payroll",
+      );
+    }
+  } else {
+    meetsThreshold = brut * fraction.scale >= minWage * fraction.num;
+  }
+  const fpNalezne = !fpZwolnioneWiek && meetsThreshold;
   const fp = fpZwolnioneUrlop || !fpNalezne ? 0n : lineOf(brut, rate6(tables.fp));
   const fs = fpZwolnioneUrlop || !fpNalezne ? 0n : lineOf(brut, rate6(tables.fs));
   // FGŚP: same uncapped base, no wage threshold. Where the year's law
@@ -858,12 +916,22 @@ export async function computePlStatutory(
       + "before posting (see PL_REFUSALS_2026).",
     );
   }
+  // The working-time fraction behind the pro-rata FP/FS threshold, read
+  // through the pack's employeeFacts declaration (optional: absent is an
+  // accepted answer, and the core prices the full-minimum case without it).
+  const zatrudnienie = certificateFor("pl_zatrudnienie")?.answers ?? {};
+  const wymiarRaw = empFact("PL", {
+    pl_wymiar_etatu: zatrudnienie["wymiar_etatu"] ?? null,
+  }, "pl_wymiar_etatu");
+  const wymiarEtatu = resolveEmployeeFact("PL", "pl_wymiar_etatu", wymiarRaw);
+
   const base = D(U(income) + bonusUnits);
   const zus = calculatePlZusWithTables({
     brut: base,
     payDate,
     periodsPerYear,
     rokUrodzenia: yob,
+    wymiarEtatu,
     wypadkowePct,
   }, tables);
   const pit = calculatePlPitWithTables({

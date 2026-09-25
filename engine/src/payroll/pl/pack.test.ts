@@ -106,11 +106,12 @@ test("PL certificate declares the PIT-2 answers, not a W-4 clone", () => {
   const declared = PL_PAYROLL_PACK.certificates();
   assert.equal(declared.country, "PL");
   // Since 0191 a second, column-backed declaration carries the payer-held
-  // birth year (`pl_wiek`) — the PIT-2 itself is unchanged, still first,
-  // still the only row-backed (fileable) form.
+  // birth year (`pl_wiek`) — the PIT-2 itself is unchanged, still first;
+  // the employer-recorded employment facts (`pl_zatrudnienie`) are the
+  // second row-backed (fileable) form.
   assert.deepEqual(
     declared.certificates.map((certificate) => [certificate.key, certificate.storage]),
-    [["pl_pit2", "certificate_rows"], ["pl_wiek", "profile_columns"]],
+    [["pl_pit2", "certificate_rows"], ["pl_wiek", "profile_columns"], ["pl_zatrudnienie", "certificate_rows"]],
   );
   const cert = declared.certificates[0];
   assert.ok(cert);

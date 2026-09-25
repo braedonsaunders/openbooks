@@ -35,6 +35,16 @@ export const PL_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     required: true,
     producer: { kind: "profile_column", column: "pl_rok_urodzenia" },
   },
+  {
+    key: "pl_wymiar_etatu",
+    kind: "code",
+    label: "Working-time fraction (wymiar etatu)",
+    refusalReason:
+      "The FP/FS threshold is the full-time minimum wage times the working-time fraction "
+      + "(art. 259), and a part-time base below the full minimum must not fall through to zero.",
+    required: false,
+    producer: { kind: "certificate", certificate: "pl_zatrudnienie", field: "wymiar_etatu" },
+  },
 ];
 
 registerEmployeeFacts("PL", PL_EMPLOYEE_FACTS);
