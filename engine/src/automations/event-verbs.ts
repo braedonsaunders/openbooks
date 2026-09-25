@@ -247,6 +247,11 @@ export async function rescindEmploymentChange(input: {
 
     const recordedAt = new Date();
     const newRevision = (await currentAggregateRevision(db, input.orgId, target.employmentId)) + 1;
+    // The aggregate lock is held now: re-check dependents under it. A rival
+    // rescind/correct that committed after the unlocked probe above left a
+    // higher-revision event this rescind would otherwise close over and
+    // orphan — the loser must see it and refuse.
+    await refuseWhenDependent(db, input.orgId, target);
 
     // The payroll seam is checked against the change's effective date before
     // anything writes (original effective dates are preserved on reopen).
@@ -368,11 +373,16 @@ async function resolveLiveClosure(
     : table === "employment_assignment_versions"
       ? "assignment_id"
       : "relationship_id";
+  // Locked: the aggregate lock is already held (callers resolve only after
+  // currentAggregateRevision), so this pins the live successor — a rival
+  // closer either committed first (row gone from the predicate, refuse) or
+  // blocks behind us (its close then fails its own affected-row check).
   const live = await exec.execute<{ id: string; version_no: number; before: unknown }>(sql`
     select id, version_no, to_jsonb(t) as before from ${sql.identifier(table)} t
      where org_id = ${orgId} and ${sql.identifier(idColumn)} = ${identity}
        and recorded_until is null
      limit 1
+     for update
   `);
   const row = live.rows[0];
   if (!row) {
@@ -547,6 +557,10 @@ export async function correctEmploymentChange(input: {
       await refuseWhenDependent(db, input.orgId, target);
       const recordedAt = new Date();
       const newRevision = (await currentAggregateRevision(db, input.orgId, target.employmentId)) + 1;
+      // Same locked re-check as rescind: a rival that committed after the
+      // unlocked probe left a higher-revision event this correction would
+      // otherwise silently supersede — refuse under the aggregate lock.
+      await refuseWhenDependent(db, input.orgId, target);
       // Direct correction supersedes the LIVE version at the same effective
       // date (no re-approval by org policy). Only scalar version columns on
       // the two versioned chains; anything else refuses with the reapproval
@@ -633,11 +647,14 @@ async function planDirectCorrection(
   const table = onAssignment ? "employment_assignment_versions" : "worker_employment_versions";
   const idColumn = onAssignment ? "assignment_id" : "employment_id";
   const identity = onAssignment ? ctx.target.assignmentId! : ctx.target.employmentId;
+  // Locked like resolveLiveClosure: the correction closes exactly the row
+  // pinned here, and the event names it — no successor can slip between.
   const live = await exec.execute<Record<string, unknown>>(sql`
     select *, to_jsonb(t) as before from ${sql.identifier(table)} t
      where org_id = ${ctx.orgId} and ${sql.identifier(idColumn)} = ${identity}
        and recorded_until is null
      limit 1
+     for update
   `);
   const row = live.rows[0];
   if (!row) throw new EventVerbError("the live version is gone — a concurrent change won; reload and try again");
