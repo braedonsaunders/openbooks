@@ -161,7 +161,7 @@ test("the deployment's issue destination is installation state, sealed and bypas
     for (const clause of [policy.qual, policy.withCheck]) {
       assert.match(
         String(clause),
-        /current_setting\('app\.bypass_rls'::text, true\) = 'on'::text/,
+        /app_bypass_rls_active\(\)/,
         "only a bypass context matches — a tenant session matches no row",
       );
     }

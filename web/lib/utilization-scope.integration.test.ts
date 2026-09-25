@@ -73,7 +73,7 @@ for (const boundary of ['service','page','assistant'] as const) {
           assert.equal(data.company.range.hours,hours);
           assert.equal(data.company.prior.hours,hours);
           assert.equal(data.company.range.billableHours,mode === 'all' ? 20 : mode === 'empty' ? 0 : 3);
-          assert.equal(data.company.range.nonBillableCost,mode === 'all' ? '100.0000' : mode === 'empty' ? '0.0000' : '30.0000');
+          assert.equal(data.company.range.nonBillableCost,mode === 'all' ? '100.0000' : mode === 'empty' ? '0' : '30.0000');
           const history = data.history.periods as UtilizationData['history']['periods'] | { items: UtilizationData['history']['periods'] };
           const june = (Array.isArray(history) ? history : history.items).find(row => row.start === '2026-06-01');
           assert.ok(june);

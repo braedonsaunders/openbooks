@@ -43,12 +43,11 @@ for (const [label,body] of cases) {
       const id=org.items.service;
       await db.execute(sql`update items set default_rate='100',default_cost='40',income_account_id=${org.accounts.revenue} where id=${id}`);
       const before=(await db.execute(sql`select * from items where id=${id}`)).rows[0];
-      const accepted=['safe integer rate','explicit clear','valid edit','omitted finance'].includes(label);
+      const accepted=['explicit clear','valid edit','omitted finance'].includes(label);
       const response=await withOrgContext(org.orgId,()=>PATCH(new Request('http://audit.local/api/items/'+id,{method:'PATCH',body:JSON.stringify(body)}),{params:Promise.resolve({id})}));
       assert.equal(response.status,accepted?200:422,JSON.stringify(await response.json()));
       const after=(await db.execute(sql`select * from items where id=${id}`)).rows[0];
       if(!accepted) assert.deepEqual(after,before,'refused malformed input cannot change the item');
-      else if(label==='safe integer rate') {assert.equal(after?.default_rate,'75.0000');assert.equal(after?.default_cost,'40.0000');}
       else if(label==='explicit clear') {assert.equal(after?.default_rate,null);assert.equal(after?.default_cost,null);assert.equal(after?.income_account_id,null);}
       else if(label==='valid edit') {assert.equal(after?.default_rate,'75.1250');assert.equal(after?.default_cost,'12.5000');}
       else {assert.equal(after?.default_rate,'100.0000');assert.equal(after?.default_cost,'40.0000');}

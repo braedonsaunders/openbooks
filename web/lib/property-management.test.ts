@@ -55,9 +55,9 @@ test("property-management workspace keeps exactly four KPIs in one desktop row",
     /"border-b-2 px-3 py-3 text-sm font-medium transition-colors"/,
   );
   assert.match(workspace, /charge\.effectiveFrom <= today/);
-  // PM2: past-due is the server aggregate over every posted document, never
-  // derived from the capped schedule preview.
-  assert.match(workspace, /const overdue = data\.overdueTotal \?\? "0"/);
+  // PM2: past-due groups the complete per-lease server aggregate by currency,
+  // never the capped schedule preview.
+  assert.match(workspace, /const overdue = sumByCurrency\(\s*data\.overdueByLease\.map/);
   assert.doesNotMatch(workspace, /overdueInvoices = new Map/);
   assert.doesNotMatch(health, /xl:grid-cols/);
 });
