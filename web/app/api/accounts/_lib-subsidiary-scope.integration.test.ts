@@ -31,24 +31,24 @@ test('URL drawer account reads hide out-of-scope subsidiaries and retain shared 
   try {
     const hiddenSubsidiary = randomUUID()
     const hiddenAccount = randomUUID()
-    const sharedAccount = randomUUID()
+    const sharedAccount = randomUUID(), hiddenParent = randomUUID(), visibleChild = randomUUID()
     await withBypass(async () => {
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden Drawer Entity', 'CAD', 'CA')
       `)
       await db.execute(sql`
-        insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
-        values (${hiddenAccount}, ${scratch.orgId}, '1096', 'Hidden subsidiary account', 'asset_bank', ${hiddenSubsidiary}, false, true),
-               (${sharedAccount}, ${scratch.orgId}, '1097', 'Shared chart account', 'expense', null, false, true)
+        insert into accounts (id, org_id, number, name, type, subsidiary_id, parent_id, is_summary, is_active)
+        values (${hiddenAccount}, ${scratch.orgId}, '1096', 'Hidden subsidiary account', 'asset_bank', ${hiddenSubsidiary}, null, false, true),
+               (${sharedAccount}, ${scratch.orgId}, '1097', 'Shared chart account', 'expense', null, null, false, true),
+               (${hiddenParent}, ${scratch.orgId}, '1098', 'Hidden parent', 'asset_other', ${hiddenSubsidiary}, null, true, true), (${visibleChild}, ${scratch.orgId}, '1099', 'Visible child of hidden parent', 'asset_other', ${scratch.subsidiaryId}, ${hiddenParent}, false, true)
       `)
     })
 
     const restricted = new Set([scratch.subsidiaryId])
-    assert.equal(await loadAccount(hiddenAccount, scratch.orgId, restricted), null)
-    assert.equal(await loadAccount(hiddenAccount, scratch.orgId, new Set()), null)
+    assert.deepEqual(await Promise.all([loadAccount(hiddenAccount, scratch.orgId, restricted), loadAccount(hiddenAccount, scratch.orgId, new Set())]), [null, null])
     assert.equal((await loadAccount(hiddenAccount, scratch.orgId, null))?.account.id, hiddenAccount)
-    assert.equal((await loadAccount(sharedAccount, scratch.orgId, restricted))?.account.id, sharedAccount)
+    assert.equal((await loadAccount(visibleChild, scratch.orgId, restricted))?.parentName, null)
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
