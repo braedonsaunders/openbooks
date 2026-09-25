@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { Button, Input, Label } from "@openbooks/ui";
 import type { GroupComponentInput } from "@openbooks/engine/src/assets/group-component.ts";
 /** Native field composition shared with the surrounding asset workpaper. */
@@ -13,6 +14,8 @@ export function GroupComponentFields({
   onward: boolean;
   onChange: (value: GroupComponentInput) => void;
 }) {
+  const t = useTranslations("assets.groupComponent");
+  const tCommon = useTranslations("common");
   const current: GroupComponentInput = value ?? {
     cost: "",
     accumulated: "",
@@ -37,7 +40,7 @@ export function GroupComponentFields({
           <div className="flex gap-2" key={index}>
             <Input
               type="date"
-              aria-label={`${label} period end`}
+              aria-label={t("periodEnd", { label })}
               value={line.date}
               onChange={(e) =>
                 set({
@@ -48,7 +51,7 @@ export function GroupComponentFields({
               }
             />
             <Input
-              aria-label={`${label} amount`}
+              aria-label={t("planAmount", { label })}
               value={line.amount}
               onChange={(e) =>
                 set({
@@ -62,7 +65,7 @@ export function GroupComponentFields({
               variant="outline"
               onClick={() => set({ [key]: rows.filter((_, i) => i !== index) })}
             >
-              Remove
+              {tCommon("actions.remove")}
             </Button>
           </div>
         ))}
@@ -70,26 +73,21 @@ export function GroupComponentFields({
           variant="outline"
           onClick={() => set({ [key]: [...rows, { date: "", amount: "" }] })}
         >
-          Add charge
+          {t("addCharge")}
         </Button>
       </fieldset>
     );
   };
   return (
     <fieldset className="space-y-3 rounded border p-3">
-      <legend>Group component ({currency})</legend>
-      <p className="text-sm text-slate-500">
-        Use group amounts in the original transfer’s historical currency basis.
-        Measure the disposed component separately from its legal-book amounts.
-        Remaining plans allocate the retained carrying value less its residual
-        value.
-      </p>
+      <legend>{t("legend", { currency })}</legend>
+      <p className="text-sm text-slate-500">{t("instructions")}</p>
       <div className="grid grid-cols-3 gap-3">
         {(
           [
-            ["cost", "Group cost removed"],
-            ["accumulated", "Group accumulated depreciation removed"],
-            ["salvage", "Group residual value removed"],
+            ["cost", t("cost")],
+            ["accumulated", t("accumulated")],
+            ["salvage", t("salvage")],
           ] as const
         ).map(([key, label]) => (
           <div key={key}>
@@ -102,35 +100,21 @@ export function GroupComponentFields({
           </div>
         ))}
       </div>
-      {plan("remainingPlan", "Retained group depreciation")}
-      {onward
-        ? plan("removedPlan", "Transferred component group depreciation")
-        : null}
+      {plan("remainingPlan", t("retainedPlan"))}
+      {onward ? plan("removedPlan", t("transferredPlan")) : null}
       <details>
-        <summary>Prior group impairment: preserve the unimpaired basis</summary>
-        <p className="py-2 text-sm text-slate-500">
-          If an earlier impairment changed group service, supply the removed
-          component’s accumulated depreciation and the retained future charges
-          as they would have been without that impairment.
-        </p>
-        <Label>Removed component unimpaired accumulated depreciation</Label>
+        <summary>{t("impairmentTitle")}</summary>
+        <p className="py-2 text-sm text-slate-500">{t("impairmentHelp")}</p>
+        <Label>{t("unimpairedAccumulated")}</Label>
         <Input
-          aria-label="Removed component unimpaired accumulated depreciation"
+          aria-label={t("unimpairedAccumulated")}
           value={current.unimpairedAccumulated ?? ""}
           onChange={(e) =>
             set({ unimpairedAccumulated: e.target.value || undefined })
           }
         />
-        {plan(
-          "unimpairedRemainingPlan",
-          "Retained unimpaired group depreciation",
-        )}
-        {onward
-          ? plan(
-              "unimpairedRemovedPlan",
-              "Transferred component unimpaired group depreciation",
-            )
-          : null}
+        {plan("unimpairedRemainingPlan", t("unimpairedRetained"))}
+        {onward ? plan("unimpairedRemovedPlan", t("unimpairedTransferred")) : null}
       </details>
     </fieldset>
   );
