@@ -72,6 +72,7 @@ export const HRM_WIDGETS = {
       appliedChangeId={str(props, 'appliedChangeId') ?? null}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestRowActions>['departmentOptions']) ?? []}
       canManage={props.canManage === true}
+      canVerb={props.canVerb === true}
     />
   ),
   /** OM-12: the request-detail drawer (?request=<id>), closing by
@@ -85,6 +86,7 @@ export const HRM_WIDGETS = {
       subject={(props.subject as ComponentProps<typeof ChangeRequestDetailDialog>['subject']) ?? null}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestDetailDialog>['departmentOptions']) ?? []}
       canManage={props.canManage === true}
+      canVerb={props.canVerb === true}
     />
   ),
   /** HR-16 begin: the applied event's verb chip (0227) — renders only when

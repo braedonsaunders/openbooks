@@ -19,6 +19,7 @@ export function ChangeRequestDetailDialog({
   subject,
   departmentOptions,
   canManage,
+  canVerb = false,
 }: {
   requestId: string | null
   closeHref: string
@@ -27,6 +28,9 @@ export function ChangeRequestDetailDialog({
   /** Loader-resolved manage grant (F3-36): the drawer's lifecycle actions
    * render only with it. */
   canManage: boolean
+  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
+   * plus the hrmEventVerbs feature. */
+  canVerb?: boolean
 }) {
   const router = useRouter()
   if (!requestId) return null
@@ -37,6 +41,7 @@ export function ChangeRequestDetailDialog({
       subject={subject}
       departmentOptions={departmentOptions}
       canManage={canManage}
+      canVerb={canVerb}
       onClose={() => {
         router.push(closeHref as never)
         router.refresh()

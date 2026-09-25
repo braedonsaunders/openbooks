@@ -161,6 +161,7 @@ export function EmploymentTab({
   canManageHrm,
   canReadExits = false,
   canRecordExit = false,
+  canVerb = false,
   departmentOptions = [],
 }: {
   employmentId: string
@@ -170,6 +171,9 @@ export function EmploymentTab({
   canReadExits?: boolean
   /** hrm.performance.manage — HR records and corrects the exit. */
   canRecordExit?: boolean
+  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
+   * plus the hrmEventVerbs feature. */
+  canVerb?: boolean
   departmentOptions?: { value: string; label: string }[]
 }) {
   const t = useTranslations('hrm')
@@ -604,6 +608,7 @@ export function EmploymentTab({
                     <ChangeRequestActions
                       request={{ id: request.id, status: request.status }}
                       employmentId={employmentId}
+                      canVerb={canVerb}
                       departmentOptions={departmentOptions}
                       // F3-36: this branch already renders inside the
                       // canManageHrm gate — the grant travels explicitly.

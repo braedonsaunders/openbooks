@@ -27,6 +27,7 @@ export function ChangeRequestRowActions({
   appliedChangeId,
   departmentOptions,
   canManage,
+  canVerb = false,
 }: {
   requestId: string
   requestStatus: string
@@ -36,6 +37,10 @@ export function ChangeRequestRowActions({
   /** Loader-resolved manage grant — the queue table renders this island
    * only inside the gated actions column. */
   canManage: boolean
+  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
+   * plus the hrmEventVerbs feature. Defaults off so older callers never
+   * gain verb buttons by omission. */
+  canVerb?: boolean
 }) {
   const router = useRouter()
   return (
@@ -45,6 +50,7 @@ export function ChangeRequestRowActions({
       appliedChangeId={appliedChangeId ?? null}
       departmentOptions={departmentOptions}
       canManage={canManage}
+      canVerb={canVerb}
       onChanged={() => router.refresh()}
     />
   )

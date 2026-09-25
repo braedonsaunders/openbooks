@@ -33,6 +33,7 @@ export function ChangeRequestActions({
   appliedChangeId,
   departmentOptions,
   canManage,
+  canVerb = false,
   onChanged,
 }: {
   request: ChangeRequestRow
@@ -43,6 +44,11 @@ export function ChangeRequestActions({
   /** Loader-resolved manage grant (F3-36): without it no lifecycle action
    * renders, even on a draft — the queue table gates its column the same way. */
   canManage: boolean
+  /** HR-16 verb actions (Rescind/Correct) display gate: the routes 404
+   * unless hrmEventVerbs is on and require hrm.employment.approve, so the
+   * buttons render only when both hold. Defaults off so older callers
+   * never gain verb buttons by omission. */
+  canVerb?: boolean
   onChanged: () => void
 }) {
   const t = useTranslations('hrm')
@@ -125,8 +131,9 @@ export function ChangeRequestActions({
           {t('employment.changeRequests.withdrawAction')}
         </Button>
       ) : null}
-      {/* HR-16 begin: Rescind (danger) and Correct (secondary) on a completed change. */}
-      {request.status === 'applied' && appliedChangeId ? (
+      {/* HR-16 begin: Rescind (danger) and Correct (secondary) on a completed change,
+       * gated on the approve grant plus hrmEventVerbs — the routes refuse anything else. */}
+      {request.status === 'applied' && appliedChangeId && canVerb ? (
         <>
           <Button size="sm" variant="destructive" disabled={verbBusy} onClick={() => verbAction('rescind')}>
             {t('employment.changeRequests.rescindAction')}

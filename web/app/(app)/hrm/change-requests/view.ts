@@ -76,6 +76,9 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
           // F3-36: this column only renders inside the gated branch, so
           // the grant travels explicitly rather than by implication.
           canManage: rootF('canManage'),
+          // HR-16 verb buttons need their own gate (approve + feature),
+          // which the manage grant alone does not imply.
+          canVerb: rootF('canVerb'),
         }),
       ),
     )
@@ -180,6 +183,7 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
                   // F3-36: the drawer hosts the same lifecycle actions as
                   // the gated table column, so it carries the same grant.
                   canManage: f('canManage'),
+                  canVerb: f('canVerb'),
                 },
                 f('dialogOpen'),
               ),
