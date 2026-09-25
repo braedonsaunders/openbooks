@@ -117,6 +117,12 @@ export async function loadApBills(
       authz.allowedSubsidiaryIds.has(String((loadedDoc.doc as Record<string, unknown>).subsidiary_id)))
       ? loadedDoc
       : null
+  // Narrow the drawer's reference options to the open document's subsidiary
+  // (I4-webui-345 AR twin cfe03e570): a subsidiary-A caller opening a
+  // subsidiary-A bill must not see subsidiary-B accounts or dimensions.
+  const documentOptionScope = openDoc
+    ? new Set([String((openDoc.doc as Record<string, unknown>).subsidiary_id)])
+    : authz.allowedSubsidiaryIds
   const openKind = (openDoc?.doc as Record<string, unknown> | undefined)?.kind as string | undefined
   // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
   // over a blank in-memory payload. The kind must belong to this page, the
@@ -141,14 +147,14 @@ export async function loadApBills(
       ? Promise.all([
           listScopedPartyOptionsWithCurrent(
             authz.user.orgId,
-            authz.allowedSubsidiaryIds,
+            documentOptionScope,
             'vendor',
             (openDoc?.doc as Record<string, unknown> | undefined)?.party_id as string | undefined,
           ),
-          accountOptions(DOC_KINDS[drawerKind as 'vendor_bill']!),
+          accountOptions(DOC_KINDS[drawerKind as 'vendor_bill']!, authz.user.orgId, documentOptionScope),
           taxCodeOptions(),
           taxGroupOptions(),
-          dimensionOptions(),
+          dimensionOptions(authz.user.orgId, undefined, documentOptionScope),
           db
             .execute(
               sql`
