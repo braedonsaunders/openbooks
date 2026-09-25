@@ -113,6 +113,7 @@ export function FeaturesWorkspace({
     () => Object.fromEntries(features.map((f) => [f.key, f.enabled])),
   )
   const [pending, setPending] = useState<string | null>(null)
+  const [awaitingRefresh, setAwaitingRefresh] = useState(false)
 
   // Re-sync from the server after router.refresh(): a toggle commits on the
   // server, and derived rows (children of a freshly enabled parent, or rows
@@ -123,6 +124,7 @@ export function FeaturesWorkspace({
   if (syncedFeatures !== features && pending === null) {
     setSyncedFeatures(features)
     setState(Object.fromEntries(features.map((f) => [f.key, f.enabled])))
+    setAwaitingRefresh(false)
   }
 
   /** Comma-joined "12 reconciliations, 340 bank statements" from a feature's impacts. */
@@ -130,7 +132,7 @@ export function FeaturesWorkspace({
     impacts.map((i) => t(`setup.features.impacts.${i.labelKey}`, { count: i.count })).join(', ')
 
   async function toggle(key: string) {
-    if (pending) return
+    if (pending || awaitingRefresh) return
     const status = disableStatus[key]
     const next = !state[key]
 
@@ -162,9 +164,11 @@ export function FeaturesWorkspace({
         throw new Error(featureToggleRefusalMessage(payload, (key, params) => t(key, params)))
       }
       toast.success(t(next ? 'setup.features.enabled' : 'setup.features.disabled', { name: t(`features.${key}.title`) }))
+      setAwaitingRefresh(true)
       router.refresh()
     } catch (e) {
       setState((s) => ({ ...s, [key]: !next }))
+      setAwaitingRefresh(false)
       toast.error((e as Error).message)
     } finally {
       setPending(null)
@@ -209,7 +213,7 @@ export function FeaturesWorkspace({
         }
         reasonTone={blocked || dependencyLocked ? 'block' : 'info'}
         busy={pending === f.key}
-        disabled={dependencyLocked || (pending !== null && pending !== f.key)}
+        disabled={dependencyLocked || pending !== null || awaitingRefresh}
         onToggle={() => toggle(f.key)}
         depth={node.depth}
       />
