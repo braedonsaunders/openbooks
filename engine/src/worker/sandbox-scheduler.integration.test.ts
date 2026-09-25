@@ -4,9 +4,26 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
-import { releaseStaleSandboxClaims, tick } from "./sandbox-scheduler.ts";
+import { releaseStaleSandboxClaims, sandboxRefreshQueueLiveness, tick } from "./sandbox-scheduler.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("sandbox refresh liveness ignores retained terminal jobs and preserves live or uncertain queue states", async () => {
+  const failed = await sandboxRefreshQueueLiveness("sandbox-1", 60_000, async () => "failed");
+  assert.equal(failed, "dead", "retained failed records do not prove a worker can still start");
+  const completed = await sandboxRefreshQueueLiveness("sandbox-2", 60_000, async (jobId) =>
+    jobId.endsWith(String(Math.floor(Date.now() / 60_000))) ? "completed" : null,
+  );
+  assert.equal(completed, "dead", "completed records also have no live worker owner");
+  for (const state of ["waiting", "active", "delayed", "waiting-children", "prioritized"]) {
+    assert.equal(
+      await sandboxRefreshQueueLiveness(`sandbox-${state}`, 60_000, async () => state),
+      "live",
+      `${state} jobs must protect a live refresh claim`,
+    );
+  }
+  assert.equal(await sandboxRefreshQueueLiveness("sandbox-unknown", 60_000, async () => { throw new Error("Redis unavailable"); }), "unknown");
+});
 
 async function seedDueSandbox(productionOrgId: string): Promise<{ sandboxId: string; sandboxOrgId: string }> {
   const sandboxOrgId = randomUUID();
@@ -61,7 +78,9 @@ test("a stale unproven refreshing claim returns to ready for re-queue", { skip: 
     const fresh = await seedShell(org.orgId, { updatedAgoSec: 60 });
     shells.push(stale.orgId, proven.orgId, fresh.orgId);
 
-    assert.equal(await releaseStaleSandboxClaims(), 1);
+    assert.equal(await releaseStaleSandboxClaims(async (jobId) =>
+      jobId.includes(stale.sandboxId) ? "failed" : null,
+    ), 1);
     assert.deepEqual(await sandboxState(stale.sandboxId), {
       status: "ready",
       last_error: "refresh worker never started: stale scheduler claim released for re-queue",

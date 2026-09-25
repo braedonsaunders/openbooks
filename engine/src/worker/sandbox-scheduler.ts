@@ -39,25 +39,44 @@ export function startSandboxScheduler(): void {
  */
 export const STALE_SANDBOX_CLAIM_MS = 60 * 60 * 1000;
 
-async function sandboxRefreshJobAlive(sandboxId: string, windowMs: number): Promise<boolean> {
-  // Queue-state reconciliation: a job id is deterministic per sandbox and
-  // cadence window, so a surviving job record proves the worker may yet
-  // start and the claim must not be released. Redis errors fall through to
-  // the age proof (false = not proven alive).
-  try {
-    const { getSandboxQueue } = await import("@openbooks/jobs");
-    const queue = getSandboxQueue();
-    const bucket = Math.floor(Date.now() / windowMs);
-    for (const candidate of [`sbxsched|${sandboxId}|${bucket}`, `sbxsched|${sandboxId}|${bucket - 1}`]) {
-      if (await queue.getJob(candidate)) return true;
+export type SandboxRefreshQueueLiveness = "live" | "dead" | "unknown";
+
+const LIVE_SANDBOX_JOB_STATES = new Set([
+  "active", "delayed", "paused", "prioritized", "waiting", "waiting-children",
+]);
+
+export async function sandboxRefreshQueueLiveness(
+  sandboxId: string,
+  windowMs: number,
+  getJobState: (jobId: string) => Promise<string | null>,
+): Promise<SandboxRefreshQueueLiveness> {
+  const bucket = Math.floor(Date.now() / windowMs);
+  let unknown = false;
+  for (const jobId of [`sbxsched|${sandboxId}|${bucket}`, `sbxsched|${sandboxId}|${bucket - 1}`]) {
+    let state: string | null;
+    try {
+      state = await getJobState(jobId);
+    } catch {
+      // An unavailable queue cannot prove that a claimed refresh is dead.
+      unknown = true;
+      continue;
     }
-    return false;
-  } catch {
-    return false;
+    if (state === null) continue;
+    if (LIVE_SANDBOX_JOB_STATES.has(state)) return "live";
+    if (state !== "failed" && state !== "completed") unknown = true;
   }
+  return unknown ? "unknown" : "dead";
 }
 
-export async function releaseStaleSandboxClaims(): Promise<number> {
+async function getSandboxRefreshJobState(jobId: string): Promise<string | null> {
+  const { getSandboxQueue } = await import("@openbooks/jobs");
+  const job = await getSandboxQueue().getJob(jobId);
+  return job ? job.getState() : null;
+}
+
+export async function releaseStaleSandboxClaims(
+  getJobState: (jobId: string) => Promise<string | null> = getSandboxRefreshJobState,
+): Promise<number> {
   const stale = (await withBypassContext(() =>
     db.execute<{ id: string; orgId: string; cadence: string | null }>(sql`
       select id, org_id as "orgId", refresh_schedule as "cadence"
@@ -69,7 +88,8 @@ export async function releaseStaleSandboxClaims(): Promise<number> {
   let released = 0;
   for (const row of stale.rows) {
     const window = (row.cadence && CADENCE_MS[row.cadence]) || TICK_INTERVAL_MS;
-    if (await sandboxRefreshJobAlive(row.id, window)) continue;
+    const liveness = await sandboxRefreshQueueLiveness(row.id, window, getJobState);
+    if (liveness !== "dead") continue;
     const done = (await withBypassContext(() =>
       db.execute(sql`
         update sandboxes set status = 'ready',
