@@ -311,14 +311,21 @@ export async function loadCompliancePage(
     const runs = certifiedOn ? await listRuns(db, orgId, actorId, null) : []
     let packName: string | null = null
     let formatsEmpty = false
+    let formatsError: string | null = null
     let formatOptions: Array<{ value: string; label: string }> = []
     try {
       const declared = certifiedOn ? await listFormats(db, orgId, actorId) : { packName: null, formats: [] }
       packName = declared.packName
       formatsEmpty = declared.formats.length === 0
       formatOptions = declared.formats.map((format) => ({ value: format.key, label: format.label }))
-    } catch {
+    } catch (error) {
+      // A named refusal (no payroll pack installed for the org's country)
+      // is the REASON the format list is empty: the generate dialog
+      // renders it beside the disabled Generate button instead of
+      // swallowing it into a null pack name.
       packName = null
+      formatsEmpty = true
+      formatsError = error instanceof HrmConstructionError ? error.message : t('compliance.loadFailed')
     }
     const formatLabels = new Map(formatOptions.map((format) => [format.value, format.label]))
     const runRows: ComplianceRunRow[] = runs.slice(0, 200).map((run) => ({
@@ -378,7 +385,8 @@ export async function loadCompliancePage(
         ...empty.generateDialog,
         projects: projects.map((project) => ({ value: project.id, label: project.name })),
         formats: formatOptions,
-        emptyMessage: t('compliance.generateDialog.emptyFormats', { pack: packName ?? t('compliance.generateDialog.payrollPack') }),
+        emptyMessage:
+          formatsError ?? t('compliance.generateDialog.emptyFormats', { pack: packName ?? t('compliance.generateDialog.payrollPack') }),
       },
       stats: [
         { label: t('compliance.stats.openFindings'), value: String(openCount), sub: t('compliance.stats.openFindingsSub') },
