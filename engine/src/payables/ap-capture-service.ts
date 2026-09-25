@@ -4,6 +4,7 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
+import type { Quantity } from "../money/brands.ts";
 import {
   extractAzureInvoice,
   validatePurchaseOrderQuantities,
@@ -212,6 +213,8 @@ export function priceWithinTolerance(
 
 export type PurchaseOrderMatchIssue = {
   code: "po_quantity_exceeded" | "receipt_quantity_shortfall" | "po_price_variance";
+  // Deliberately unbranded: `actual` echoes raw extracted/caller text for
+  // diagnostics (branding it would canonicalize user-visible messages).
   expected: string;
   actual: string;
 };
@@ -273,10 +276,11 @@ export function matchPurchaseOrderLine(input: {
 export function purchaseOrderBilledQuantityDelta(
   documentKind: CaptureDocumentKind,
   quantity: string,
-): string {
+): Quantity {
   const units = toUnits(quantity);
   if (units <= 0n) throw new Error("purchase-order capture quantity must be positive");
-  return fromUnits(documentKind === "vendor_credit" ? -units : units);
+  // fromUnits-fixed 4dp sits within quantity scale: a canonical Quantity.
+  return fromUnits(documentKind === "vendor_credit" ? -units : units) as Quantity;
 }
 
 /** Received-and-unbilled headroom a purchase-order line can still be billed for. */
