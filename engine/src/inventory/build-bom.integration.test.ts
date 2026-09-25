@@ -8,18 +8,10 @@ import { db, env } from "../platform/db.ts";
 import { getOnHand } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
 import { buildAssembly } from "./assembly.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-function errorChainMatches(error: unknown, pattern: RegExp): boolean {
-  let current: unknown = error;
-  while (current instanceof Error) {
-    if (pattern.test(current.message)) return true;
-    current = (current as Error & { cause?: unknown }).cause;
-  }
-  return false;
-}
 
 async function quietly(statement: string): Promise<void> {
   try {
