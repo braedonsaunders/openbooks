@@ -649,6 +649,9 @@ const explainAllocation: AssistantToolDef = {
         residual: row.residual,
       }));
       const paged = compactRows(rows, { limit: result.limit });
+      // Rows past the end of this page against the authoritative total, so a
+      // capped lineage reports its remainder, not just a truncation flag.
+      const dropped = Math.max(0, result.total - result.offset - paged.returned);
       return {
         ok: true,
         data: {
@@ -657,6 +660,7 @@ const explainAllocation: AssistantToolDef = {
           total: result.total,
           truncated: result.truncated,
           offset: result.offset,
+          dropped,
           lineage: paged.items,
           href: ALLOCATIONS_HREF,
         },
