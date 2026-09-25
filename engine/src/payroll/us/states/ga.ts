@@ -9,7 +9,7 @@
  *     rate and the pre-HB 463 standard deductions, with its own worked example
  *     (pp. 46–47). Still the governing edition for the first four months of the
  *     year, which is why it is transcribed rather than superseded.
- *   Form G-4 (Rev. 08/15/24) — the certificate's own lines.
+ *   Form G-4 (Rev. 06/03/26) — the certificate's own lines.
  *
  * ---------------------------------------------------------------------------
  * A retroactive rate cut that is NOT retroactive to withholding

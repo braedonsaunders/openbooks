@@ -965,7 +965,7 @@ const MA_M4_MS: PayrollCertificate = {
   ],
 };
 
-/** Georgia Form G-4 (Rev. 08/15/24). */
+/** Georgia Form G-4 (Rev. 06/03/26). */
 const GA_G4: PayrollCertificate = {
   key: "us_ga_g4",
   form: "G-4",
@@ -975,7 +975,7 @@ const GA_G4: PayrollCertificate = {
   // Georgia G-4 answers are effective only through February 15 of the next year.
   validity: { kind: "following_year_date", monthDay: "02-15" },
   citation:
-    "Georgia Form G-4 (Rev. 08/15/24); Employer's Withholding Tax Guide 2026 (revised June 2026)",
+    "Georgia Form G-4 (Rev. 06/03/26); Employer's Withholding Tax Guide 2026 (revised June 2026)",
   summary:
     "Georgia claims no personal allowance for the employee or spouse — the standard deduction "
     + "does that work, and the letter on line 7 chooses which one. \"Failure to submit a properly "
@@ -1007,9 +1007,9 @@ const GA_G4: PayrollCertificate = {
     {
       key: "adjustment_allowances", label: "Line 5 — Georgia adjustments allowances", kind: "count",
       min: "0", max: "99", default: "0",
-      help: "From the G-4's own worksheet, one per $4,000 of itemized deductions and Georgia "
-        + "adjustments above the standard deduction. Line 7 totals lines 4 and 5, and the "
-        + "employer uses the total.",
+      help: "From the G-4's own worksheet (Rev. 06/03/26): divide the Line G amount by "
+        + "$5,000, rounding up only when the remainder is over $2,500. Line 7 totals lines "
+        + "4 and 5, and the employer uses the total.",
     },
     {
       key: "additional_per_period", label: "Line 6 — Additional withholding",
