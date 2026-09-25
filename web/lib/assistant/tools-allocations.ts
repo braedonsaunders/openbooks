@@ -587,11 +587,13 @@ const explainAllocation: AssistantToolDef = {
     runId: uuidInput.optional().describe("Allocation run id from list_allocation_runs"),
     journalEntryId: uuidInput.optional().describe("Journal entry holding allocated lines"),
     documentId: uuidInput.optional().describe("Source document whose lines were split or contributed"),
+    limit: z.number().int().min(1).max(200).optional().describe("Page size (default 200)"),
+    offset: z.number().int().min(0).optional().describe("Zero-based lineage row offset (default 0)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const off = await allocationsOff(authz);
     if (off) return off;
-    const a = raw as { runId?: string; journalEntryId?: string; documentId?: string };
+    const a = raw as { runId?: string; journalEntryId?: string; documentId?: string; limit?: number; offset?: number };
     let anchor;
     try {
       anchor = validateLineageAnchor(a);
@@ -626,7 +628,7 @@ const explainAllocation: AssistantToolDef = {
           journalEntryId: a.journalEntryId,
           documentId: a.documentId,
         },
-        { allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+        { allowedSubsidiaryIds: authz.allowedSubsidiaryIds, limit: a.limit ?? 200, offset: a.offset ?? 0 },
       );
       const rows = result.rows.map((row) => ({
         id: row.id,
@@ -645,13 +647,15 @@ const explainAllocation: AssistantToolDef = {
         amount: row.amount,
         residual: row.residual,
       }));
-      const paged = compactRows(rows);
+      const paged = compactRows(rows, { limit: result.limit });
       return {
         ok: true,
         data: {
           ...paged,
           anchor: result.anchor,
-          total: rows.length,
+          total: result.total,
+          truncated: result.truncated,
+          offset: result.offset,
           lineage: paged.items,
           href: ALLOCATIONS_HREF,
         },
