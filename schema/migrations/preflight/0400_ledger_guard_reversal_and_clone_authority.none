@@ -1,0 +1,1 @@
+Trigger-only guard restoration; no data or schema shape changes, no backfill, and no operator repair is possible or needed.
