@@ -661,6 +661,15 @@ export interface RoeSeparationAmount {
   paymentStatus: "paid" | "will_pay";
 }
 
+export interface RoeMailingAddress {
+  line1: string;
+  line2: string | null;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+}
+
 /** ROE worksheet: recent committed periods, newest first (blocks 15A–15C). */
 export async function roeWorksheet(
   orgId: string,
@@ -799,6 +808,8 @@ export interface RoeRecord {
   finalPayPeriodEnd: string | null;
   /** Block 13. */
   occupation: string | null;
+  /** Block 9 — the employee's unambiguous mailing address. */
+  mailingAddress: RoeMailingAddress | null;
   /** Block 15A / 15B / 15C — newest period first (P1 = final pay period). */
   totalInsurableHours: string;
   totalInsurableEarnings: string;
@@ -886,6 +897,24 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   const finalPeriod = worksheet.periods[0] ?? null;
   if (!finalPeriod) {
     throw new PayrollError(`${row.display_name} has no committed pay periods for the ROE reporting window`);
+  }
+  const addressRows = (await db.execute<{
+    line1: string | null; line2: string | null; city: string | null; region: string | null;
+    postal_code: string | null; country: string | null; is_default_billing: boolean; is_default_shipping: boolean;
+  }>(sql`
+    select line1, line2, city, region, postal_code, country, is_default_billing, is_default_shipping
+      from addresses
+     where org_id = ${orgId} and party_id = ${employeePartyId}
+     order by is_default_shipping desc, is_default_billing desc, id
+  `)).rows;
+  const preferredAddresses = addressRows.filter((address) => address.is_default_shipping || address.is_default_billing);
+  const address = preferredAddresses.length === 1 ? preferredAddresses[0]
+    : addressRows.length === 1 ? addressRows[0] : null;
+  if (!address || !address.line1?.trim() || !address.city?.trim() || !address.region?.trim()
+    || !address.postal_code?.trim() || !address.country?.trim()) {
+    throw new PayrollError(
+      `${row.display_name} needs one complete, unambiguous mailing address for ROE Block 9 — add a default employee address with street, city, region, postal code and country`,
+    );
   }
 
   const event = (await db.execute<{
@@ -1048,6 +1077,14 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
     lastDayPaid: event.salary_continuance_end_on ?? event.last_insurable_earnings_on,
     finalPayPeriodEnd: finalPeriod?.periodEnd ?? null,
     occupation: row.job_title,
+    mailingAddress: {
+      line1: address.line1,
+      line2: address.line2,
+      city: address.city,
+      region: address.region,
+      postalCode: address.postal_code,
+      country: address.country,
+    },
     totalInsurableHours: worksheet.totalInsurableHours,
     totalInsurableEarnings: worksheet.totalInsurableEarnings,
     periods: worksheet.periods,

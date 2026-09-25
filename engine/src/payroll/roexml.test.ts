@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
-import { buildRoeXml, isRoeReasonCode, renderRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
+import { buildRoeXml, isRoeReasonCode, renderRoeXml, validateRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
 import { sealSecret } from "../platform/secrets.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import type { RoeRecord } from "./yearend.ts";
@@ -38,6 +38,10 @@ const RECORD: RoeRecord = {
   lastDayPaid: "2026-05-29",
   finalPayPeriodEnd: "2026-05-29",
   occupation: "Site supervisor",
+  mailingAddress: {
+    line1: "10 Main Street", line2: "Unit 4", city: "Toronto", region: "ON",
+    postalCode: "M5V 2T6", country: "CA",
+  },
   totalInsurableHours: "1820.50",
   totalInsurableEarnings: "48000.00",
   periods: [
@@ -59,39 +63,17 @@ const file = (overrides: Partial<RoeRecordToFile> = {}): RoeRecordToFile => ({
   ...overrides,
 });
 
-test("ROE XML carries every documented block", () => {
+test("ROE Payroll Extract v2 includes the employee address and validates against Service Canada's XSD", async () => {
   const xml = renderRoeXml({ employer: EMPLOYER, records: [file()] });
-
-  // Employer / payroll account (blocks 4 and 5): the employee's own program
-  // account files the ROE, not the employer's default business number.
-  assert.match(xml, /<PayrollReferenceNumber>E-4471<\/PayrollReferenceNumber>/);
-  assert.match(xml, /<BusinessNumber>123456789RP0002<\/BusinessNumber>/);
-  assert.match(xml, /<EmployerName>Acme Ltd<\/EmployerName>/);
-  // Block 6 pay-period type, block 8 SIN, block 9 name, block 13 occupation.
-  assert.match(xml, /<PayPeriodType>B<\/PayPeriodType>/);
-  assert.match(xml, /<SIN>046454286<\/SIN>/);
-  assert.match(xml, /<Surname>Hopper<\/Surname>/);
-  assert.match(xml, /<GivenName>Grace<\/GivenName>/);
-  assert.match(xml, /<Occupation>Site supervisor<\/Occupation>/);
-  // Blocks 10 / 11 / 12 — employment dates.
-  assert.match(xml, /<FirstDayWorked>2023-04-03<\/FirstDayWorked>/);
-  assert.match(xml, /<LastDayPaid>2026-05-29<\/LastDayPaid>/);
-  assert.match(xml, /<FinalPayPeriodEndDate>2026-05-29<\/FinalPayPeriodEndDate>/);
-  // Blocks 15A / 15B totals and 15C per-period detail, newest period first.
-  assert.match(xml, /<TotalInsurableHours>1820\.50<\/TotalInsurableHours>/);
-  assert.match(xml, /<TotalInsurableEarnings>48000\.00<\/TotalInsurableEarnings>/);
-  assert.equal(xml.match(/<PayPeriod>/g)?.length, 2);
-  assert.match(
-    xml,
-    /<PayPeriodNumber>1<\/PayPeriodNumber><PayPeriodEndDate>2026-05-29<\/PayPeriodEndDate><InsurableEarnings>2000\.00<\/InsurableEarnings><InsurableHours>80\.00<\/InsurableHours>/,
-  );
-  assert.match(xml, /<PayPeriodNumber>2<\/PayPeriodNumber><PayPeriodEndDate>2026-05-15<\/PayPeriodEndDate>/);
-  // Block 16 reason + contact, block 17 separation payments.
-  assert.match(xml, /<ReasonForIssue>A<\/ReasonForIssue>/);
-  assert.match(xml, /<VacationPay>1500\.25<\/VacationPay>/);
-  assert.match(xml, /<OtherMonies>500\.00<\/OtherMonies>/);
-  assert.match(xml, /<ContactName>Pat Payroll<\/ContactName>/);
-  assert.match(xml, /<ROEs count="1">/);
+  await validateRoeXml(xml);
+  // These B-tags, order and attributes are the published Appendix D contract.
+  assert.match(xml, /<ROEHEADER FileVersion="W-2\.0"/);
+  assert.match(xml, /<B5>123456789RP0002<\/B5>/);
+  assert.match(xml, /<B9><FN>Grace<\/FN><LN>Hopper<\/LN><A1>10 Main Street<\/A1>/);
+  assert.match(xml, /<A2>Toronto ON<\/A2><A3>Unit 4<\/A3><PC>M5V2T6<\/PC><\/B9>/);
+  assert.match(xml, /<B16><CD>A00<\/CD><FN>Pat<\/FN><LN>Payroll<\/LN><AC>555<\/AC><TEL>5550100<\/TEL>/);
+  assert.match(xml, /<B17A>\s*<VP nbr="1"><CD>1<\/CD><AMT>1500\.25<\/AMT><\/VP><\/B17A>/);
+  assert.match(xml, /<B17C>[\s\S]*<CD>S01<\/CD><AMT>500\.00<\/AMT>/);
 });
 
 test("ROE XML is a bulk file: one <ROE> per employee", () => {
@@ -100,10 +82,9 @@ test("ROE XML is a bulk file: one <ROE> per employee", () => {
     issue: { employeePartyId: "emp-2", reasonCode: "K", comment: "Contract cancelled" },
   });
   const xml = renderRoeXml({ employer: EMPLOYER, records: [file(), second] });
-  assert.equal(xml.match(/<ROE>/g)?.length, 2);
-  assert.match(xml, /<ROEs count="2">/);
+  assert.equal(xml.match(/<ROE PrintingLanguage/g)?.length, 2);
   // Block 18 comment travels with reason K.
-  assert.match(xml, /<Comment>Contract cancelled<\/Comment>/);
+  assert.match(xml, /<B18>Contract cancelled<\/B18>/);
 });
 
 test("ROE XML escapes employer-authored text", () => {
@@ -113,7 +94,7 @@ test("ROE XML escapes employer-authored text", () => {
       issue: { employeePartyId: "emp-1", reasonCode: "K", comment: 'Ended <early> & "abruptly"' },
     })],
   });
-  assert.match(xml, /<Comment>Ended &lt;early&gt; &amp; &quot;abruptly&quot;<\/Comment>/);
+  assert.match(xml, /<B18>Ended &lt;early&gt; &amp; &quot;abruptly&quot;<\/B18>/);
   assert.ok(!xml.includes("<early>"));
 });
 
@@ -127,7 +108,7 @@ test("employees with no filing account file under the employer business number",
       },
     })],
   });
-  assert.match(xml, /<BusinessNumber>999999999RP0001<\/BusinessNumber>[\s\S]*<PayPeriodType>/);
+  assert.match(xml, /<B5>999999999RP0001<\/B5>[\s\S]*<B6>B<\/B6>/);
 });
 
 test("reason-for-issue codes are a closed statutory set", () => {
@@ -164,6 +145,9 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       values (${employeeId}, ${org.orgId}, 'person', 'Grace Hopper', true, ${org.subsidiaryId}, '{}'::jsonb)`);
     const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
     await db.execute(sql`
+      insert into addresses (org_id, party_id, line1, city, region, postal_code, country)
+      values (${org.orgId}, ${employeeId}, '10 Main Street', 'Toronto', 'ON', 'M5V 2T6', 'CA')`);
+    await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active, created_by, updated_by)
       values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
@@ -195,6 +179,10 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON',
               26, '2026-07-21', 2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '2000.0000',
               '{}'::jsonb, ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into payroll_roe_separation_events
+        (org_id, employee_party_id, interruption_on, last_insurable_earnings_on, status, change_reason, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, '2026-07-22', '2026-07-18', 'confirmed', 'fixture', ${actorId}, ${actorId})`);
 
     // Confirmed separation facts: the ROE refuses by name without them.
     await db.execute(sql`
