@@ -463,14 +463,24 @@ export function ChangeRequestDrawer({
     setError(null)
     const payload = buildPayload()
     let ok = false
-    if (editing && initialRequest) {
-      ok = await patchDraftIfChanged(initialRequest.id, payload)
-      if (ok) toast.success(t('employment.changeRequests.updatedToast'))
-    } else {
-      ok = (await postCreate(payload)) !== null
-      if (ok) toast.success(t('employment.changeRequests.savedDraftToast'))
+    try {
+      if (editing && initialRequest) {
+        ok = await patchDraftIfChanged(initialRequest.id, payload)
+        if (ok) toast.success(t('employment.changeRequests.updatedToast'))
+      } else {
+        ok = (await postCreate(payload)) !== null
+        if (ok) toast.success(t('employment.changeRequests.savedDraftToast'))
+      }
+    } catch {
+      // I4-webui-127: transport/parse failure is distinct from an HTTP
+      // refusal (which the helpers already surface) — same localized
+      // failure state, never a stranded drawer or unhandled rejection.
+      const message = t('employment.changeRequests.requestFailed')
+      setError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
     if (ok) {
       onClose()
       onSaved()
@@ -488,13 +498,24 @@ export function ChangeRequestDrawer({
     setError(null)
     const payload = buildPayload()
     let requestId: string | null = null
-    if (editing && initialRequest) {
-      requestId = (await patchDraftIfChanged(initialRequest.id, payload)) ? initialRequest.id : null
-    } else {
-      requestId = await postCreate(payload)
+    let submitted = false
+    try {
+      if (editing && initialRequest) {
+        requestId = (await patchDraftIfChanged(initialRequest.id, payload)) ? initialRequest.id : null
+      } else {
+        requestId = await postCreate(payload)
+      }
+      submitted = requestId !== null && (await submitDraft(requestId, submitReason))
+    } catch {
+      // I4-webui-127: transport/parse failure is distinct from an HTTP
+      // refusal (which the helpers already surface) — same localized
+      // failure state, never a stranded drawer or unhandled rejection.
+      const message = t('employment.changeRequests.requestFailed')
+      setError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
     }
-    const submitted = requestId !== null && (await submitDraft(requestId, submitReason))
-    setBusy(false)
     if (submitted) {
       toast.success(t('employment.changeRequests.submittedToast'))
       onClose()
