@@ -25,20 +25,11 @@ import {
   setSuccessionPlanNotes,
 } from "./talent.ts";
 
-/**
- * Talent/succession subsidiary fence over the real 0228 tables — DB-owned,
- * one file at a time. No skip guards: the integration partition
- * guarantees a database.
- *
- * The allowed employer set from requireAggregatePerformanceManage must
- * reach every read and mutation: a scoped HR actor revises only their own
- * subsidiaries, and out-of-scope ids answer NOT_FOUND uniformly so rows
- * cannot be probed across the fence. Proofs are read back through the
- * service, and every refusal asserts its code AND its message.
- */
+/** Talent/succession subsidiary fences over the real tables; out-of-scope ids answer uniformly. */
 
 type Harness = {
   org: ScratchOrg;
+  cycleId: string;
   subB: string;
   hrAll: string;
   hrA: string;
@@ -122,7 +113,9 @@ async function setupHarness(): Promise<Harness> {
   await restrictRole(org.orgId, "talent_hr_empty", { mode: "list", subsidiaryIds: [] });
   const empA = await mkEmployment(org.orgId, await mkParty(org.orgId, "Employee A"), org.subsidiaryId);
   const empB = await mkEmployment(org.orgId, await mkParty(org.orgId, "Employee B"), subB);
-  return { org, subB, hrAll, hrA, hrEmpty, empA, empB };
+  const templateId = await mkTemplate(org.orgId, hrAll);
+  const cycle = await createCycle({ orgId: org.orgId, actorId: hrAll, templateId, name: "Talent cycle", periodStartOn: "2026-01-01", periodEndOn: "2026-12-31" });
+  return { org, cycleId: cycle.id, subB, hrAll, hrA, hrEmpty, empA, empB };
 }
 
 async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
@@ -144,6 +137,7 @@ function recordArgs(h: Harness, employmentId: string, actorId: string) {
     orgId: h.org.orgId,
     actorId,
     employmentId,
+    cycleId: h.cycleId,
     performanceKey: "low",
     potentialKey: "high",
     impactOfLoss: "low" as const,

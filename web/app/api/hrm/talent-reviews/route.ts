@@ -68,7 +68,7 @@ export async function POST(req: Request) {
       orgId: authz.user.orgId,
       actorId: authz.user.id,
       employmentId: body.employmentId,
-      cycleId: body.cycleId ?? null,
+      cycleId: body.cycleId,
       performanceKey: body.performanceKey,
       potentialKey: body.potentialKey,
       impactOfLoss: body.impactOfLoss,
