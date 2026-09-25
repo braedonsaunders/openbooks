@@ -953,6 +953,7 @@
     "exitInterviewDate": "Datum des Austrittsgesprächs",
     "exitInterviewer": "Gesprächsführer",
     "exitInterviewerPlaceholder": "Gesprächsführer auswählen",
+    "exitInterviewerSearch": "Personen suchen…",
     "exitInterviewerFailed": "Die Liste der Gesprächsführer konnte nicht geladen werden.",
     "saveExit": "Austrittsdatensatz speichern",
     "recordExit": "Austritt erfassen",

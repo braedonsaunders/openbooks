@@ -953,6 +953,7 @@
     "exitInterviewDate": "Date de l’entretien",
     "exitInterviewer": "Responsable de l’entretien",
     "exitInterviewerPlaceholder": "Sélectionner le responsable",
+    "exitInterviewerSearch": "Rechercher des personnes…",
     "exitInterviewerFailed": "La liste des responsables n’a pas pu être chargée.",
     "saveExit": "Enregistrer la fiche de sortie",
     "recordExit": "Enregistrer la sortie",

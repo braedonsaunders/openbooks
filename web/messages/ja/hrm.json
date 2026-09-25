@@ -953,6 +953,7 @@
     "exitInterviewDate": "面談実施日",
     "exitInterviewer": "面談者",
     "exitInterviewerPlaceholder": "面談者を選択",
+    "exitInterviewerSearch": "人を検索…",
     "exitInterviewerFailed": "面談者の一覧を読み込めませんでした。",
     "saveExit": "退職記録を保存",
     "recordExit": "退職を記録",
