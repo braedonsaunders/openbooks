@@ -251,18 +251,25 @@ export function SetupDrawer({
     if (!row) return
     if (!confirm(t('confirmDelete'))) return
     setBusy(true)
-    const res = await fetch(`/api/admin/setup/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {
-      method: 'DELETE',
-    })
-    const data = await res.json().catch(() => ({}))
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(errorMessage(data))
-      return
+    try {
+      const res = await fetch(`/api/admin/setup/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(errorMessage(data))
+        return
+      }
+      toast.success(t('deleted'))
+      router.push(closeHref)
+      router.refresh()
+    } catch {
+      // A rejected transport shares the save path's handling: name the
+      // failure and always release busy so the operator can retry.
+      toast.error(tCommon('feedback.deleteFailed'))
+    } finally {
+      setBusy(false)
     }
-    toast.success(t('deleted'))
-    router.push(closeHref)
-    router.refresh()
   }
 
   function errorMessage(body: unknown): string {
