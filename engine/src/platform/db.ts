@@ -560,7 +560,12 @@ export async function withMaintenanceTransaction<T>(
       }
       await client.query(`SET TRANSACTION ISOLATION LEVEL ${opts.isolationLevel}`);
     }
-    await client.query("select set_config('app.current_org', $1, true)", [bypass ? "" : orgId]);
+    // Pin bypass off transaction-locally even on the tenant branch: long-pool
+    // checkouts carry no GUC reset, so a session-level bypass left behind by
+    // a previous holder would otherwise stay visible to every policy for
+    // this whole transaction. Bypass work never reads this GUC — it rides
+    // the dedicated BYPASSRLS pool, whose sessions skip policies entirely.
+    await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)", [bypass ? "" : orgId]);
     const txDb = drizzle({ client });
     // runInOrgContext, not orgContext.run: the scope must outlive the
     // callback's lazy work, or it lands on a pooled connection with the
