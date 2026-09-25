@@ -85,13 +85,13 @@ test("explanations render with the numbers, naming what/expected/actual", () => 
 });
 
 test("baseline breach math: z threshold with zero-spread fail-closed", () => {
-  assert.equal(baselineBreaches(5000, 1000, 9200, 3), true);
-  assert.equal(baselineBreaches(5000, 1000, 5000, 3), false);
-  assert.equal(baselineBreaches(5000, 1000, 7999, 3), false);
-  assert.equal(baselineBreaches(5000, 0, 5000, 3), false);
-  assert.equal(baselineBreaches(5000, 0, 5001, 3), true);
-  assert.equal(zDistance(5000, 1000, 9200), "4.2");
-  assert.equal(zDistance(5000, 0, 5000), "0.0");
+  assert.equal(baselineBreaches("9007199254740993.0123", "0.0001", "9007199254740993.0127", 3), true);
+  assert.equal(baselineBreaches("5000", "1000", "5000", 3), false);
+  assert.equal(baselineBreaches("5000", "1000", "7999", 3), false);
+  assert.equal(baselineBreaches("5000", "0", "5000", 3), false);
+  assert.equal(baselineBreaches("5000", "0", "5001", 3), true);
+  assert.equal(zDistance("9007199254740993.0123", "0.0001", "9007199254740993.0127"), "4.0");
+  assert.equal(zDistance("5000", "0", "5000"), "0.0");
 });
 
 test("suppression identity is stable per kind and detail key", () => {

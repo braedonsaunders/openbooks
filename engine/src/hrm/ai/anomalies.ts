@@ -13,6 +13,8 @@ import { AiRailsError, finalizeBlockedRefusal } from "./errors.ts";
 import { logDecision } from "./governance.ts";
 import { loadAiRailsSettings } from "./settings.ts";
 import { timeBalanceAsOf } from "../leave-read.ts";
+import { abs, add, cmp, mulDecimal, neg } from "../../money/money.ts";
+import { divideDecimal } from "../../money/exact-decimal.ts";
 
 /**
  * HRM AI rails (HR-21) anomaly flags: DETERMINISTIC pre-run payroll and
@@ -131,15 +133,16 @@ export function renderExplanation(kind: AnomalyKind, vars: Record<string, string
 }
 
 /** Baseline breach: beyond zσ of the cohort window. Zero spread means any move breaches. */
-export function baselineBreaches(mean: number, stddev: number, actual: number, z: number): boolean {
-  if (!(stddev > 0)) return actual !== mean;
-  return Math.abs(actual - mean) > z * stddev;
+export function baselineBreaches(mean: string, stddev: string, actual: string, z: number): boolean {
+  if (cmp(stddev, "0") <= 0) return cmp(actual, mean) !== 0;
+  const deviation = abs(add(actual, neg(mean)));
+  return cmp(deviation, mulDecimal(stddev, String(z))) > 0;
 }
 
 /** z distance for the explanation, one decimal. */
-export function zDistance(mean: number, stddev: number, actual: number): string {
-  if (!(stddev > 0)) return actual === mean ? "0.0" : "∞";
-  return (Math.abs(actual - mean) / stddev).toFixed(1);
+export function zDistance(mean: string, stddev: string, actual: string): string {
+  if (cmp(stddev, "0") <= 0) return cmp(actual, mean) === 0 ? "0.0" : "∞";
+  return divideDecimal(abs(add(actual, neg(mean))), stddev, 1);
 }
 
 /** Suppression identity: kind plus the detail key. */
@@ -518,7 +521,7 @@ async function ruleNegativeBalances(
       // refusal, not an anomaly flag.
       continue;
     }
-    if (balance !== null && Number(balance) < 0) {
+    if (balance !== null && cmp(balance, "0") < 0) {
       out.push({
         kind: "negative_balance",
         employmentId: r.employmentId,
@@ -573,17 +576,17 @@ async function ruleBaselines(
        and t.status = 'approved'
      where e.org_id = ${orgId}::uuid
      group by e.id`)).rows;
-  const hoursByEmp = new Map(hoursRows.map((r) => [r.employmentId, Number(r.hours)]));
+  const hoursByEmp = new Map(hoursRows.map((r) => [r.employmentId, r.hours]));
   const byCohortMetric = new Map(baselines.map((b) => [`${b.cohortKey}::${b.metric}`, b]));
   for (const c of currents) {
     const cohort = c.cohort ?? "unassigned";
     // The flag vocabulary names net_pay_spike and hours_spike; a gross
     // move rides net_pay_spike with the metric named in the detail and
     // the explanation, so the reader sees which figure moved.
-    const checks: { metric: "net_pay" | "gross" | "hours"; actual: number; kind: AnomalyKind }[] = [
-      { metric: "net_pay", actual: Number(c.net), kind: "net_pay_spike" },
-      { metric: "gross", actual: Number(c.gross), kind: "net_pay_spike" },
-      { metric: "hours", actual: hoursByEmp.get(c.employmentId) ?? 0, kind: "hours_spike" },
+    const checks: { metric: "net_pay" | "gross" | "hours"; actual: string; kind: AnomalyKind }[] = [
+      { metric: "net_pay", actual: c.net, kind: "net_pay_spike" },
+      { metric: "gross", actual: c.gross, kind: "net_pay_spike" },
+      { metric: "hours", actual: hoursByEmp.get(c.employmentId) ?? "0", kind: "hours_spike" },
     ];
     for (const check of checks) {
       const base = byCohortMetric.get(`${cohort}::${check.metric}`);
@@ -592,13 +595,13 @@ async function ruleBaselines(
         if (!skipped.includes(key)) skipped.push(`${key} (no baseline row — run the baseline job)`);
         continue;
       }
-      const mean = Number(base.mean);
-      const stddev = Number(base.stddev);
+      const mean = base.mean;
+      const stddev = base.stddev;
       if (baselineBreaches(mean, stddev, check.actual, z)) {
         const zz = zDistance(mean, stddev, check.actual);
         const vars = {
           actual: String(check.actual), z: zz, cohort,
-          mean: String(mean), stddev: String(stddev),
+          mean, stddev,
         };
         const explanation = check.metric === "gross"
           ? `Gross ${vars.actual} is ${zz}σ from the ${cohort} baseline (mean ${vars.mean}, σ ${vars.stddev}) — confirm the inputs behind the move.`
