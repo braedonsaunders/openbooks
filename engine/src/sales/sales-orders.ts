@@ -1,7 +1,8 @@
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
-import { add, cmp, normalizeMoney } from "../money/money.ts";
+import { add, cmp } from "../money/money.ts";
+import { parseMoney } from "../money/brands.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import {
   findMixedCurrencyExposure,
@@ -157,10 +158,10 @@ async function creditDecision(
     role.currency,
   );
 
-  const limit = normalizeMoney(role.credit_limit);
-  const openOrderExposure = normalizeMoney(exposure.openOrderExposure);
-  const unpaidInvoiceExposure = normalizeMoney(exposure.unpaidInvoiceExposure);
-  const orderAmount = normalizeMoney(input.order.total);
+  const limit = parseMoney(role.credit_limit);
+  const openOrderExposure = parseMoney(exposure.openOrderExposure);
+  const unpaidInvoiceExposure = parseMoney(exposure.unpaidInvoiceExposure);
+  const orderAmount = parseMoney(input.order.total);
   const existingExposure = add(openOrderExposure, unpaidInvoiceExposure);
   const resultingExposure = add(existingExposure, orderAmount);
   const exceeded = cmp(resultingExposure, limit) > 0;

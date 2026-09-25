@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { cmp, neg, add } from "../money/money.ts";
-import type { Money } from "../money/brands.ts";
+import { parseMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
 /**
@@ -117,8 +117,9 @@ export async function findMixedCurrencyExposure(
 }
 
 export interface CustomerExposure {
-  openOrderExposure: string;
-  unpaidInvoiceExposure: string;
+  /** Canonical Money: SQL sums have unpredictable scale, parsed at measure. */
+  openOrderExposure: Money;
+  unpaidInvoiceExposure: Money;
 }
 
 /** Committed order remainder plus open invoice balances, in role currency. */
@@ -173,8 +174,8 @@ export async function measureCustomerExposure(
     `)
   ).rows[0]!;
   return {
-    openOrderExposure: exposure.open_order_exposure,
-    unpaidInvoiceExposure: exposure.unpaid_invoice_exposure,
+    openOrderExposure: parseMoney(exposure.open_order_exposure),
+    unpaidInvoiceExposure: parseMoney(exposure.unpaid_invoice_exposure),
   };
 }
 
@@ -193,7 +194,7 @@ export async function measureLinkedOrderRelief(
   roleCurrency: string,
   invoiceId: string,
   invoiceTotal: string,
-): Promise<string> {
+): Promise<Money> {
   const linked = (
     await tx.execute<{ relief: string }>(sql`
       select coalesce(sum(
@@ -228,7 +229,8 @@ export async function measureLinkedOrderRelief(
          )
     `)
   ).rows[0]!.relief;
-  return cmp(invoiceTotal, linked) <= 0 ? invoiceTotal : linked;
+  // The smaller of two texts is not provably canonical: parse the winner.
+  return parseMoney(cmp(invoiceTotal, linked) <= 0 ? invoiceTotal : linked);
 }
 
 export function resultingExposureAfterPosting(
