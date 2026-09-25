@@ -194,6 +194,7 @@
     "deleteTitle": "¿Eliminar este activo?",
     "deleteMessage": "Esto elimina permanentemente el activo borrador y su cronograma. Esta acción no se puede deshacer.",
     "deleted": "Activo eliminado",
+    "deleteOutcomeUnknown": "No se pudo confirmar la eliminación. Actualice la página para comprobar si se completó antes de volver a intentarlo.",
     "unsavedChanges": "Cambios sin guardar"
   },
   "create": {

@@ -194,6 +194,7 @@
     "deleteTitle": "Excluir este ativo?",
     "deleteMessage": "Isto exclui permanentemente o ativo em rascunho e seu cronograma. Não é possível desfazer.",
     "deleted": "Ativo excluído",
+    "deleteOutcomeUnknown": "Não foi possível confirmar a exclusão. Atualize a página para verificar se ela foi concluída antes de tentar novamente.",
     "unsavedChanges": "Alterações não salvas"
   },
   "create": {

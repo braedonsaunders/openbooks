@@ -194,6 +194,7 @@
     "deleteTitle": "Delete this asset?",
     "deleteMessage": "This permanently deletes the draft asset and its schedule. This cannot be undone.",
     "deleted": "Asset deleted",
+    "deleteOutcomeUnknown": "The delete request could not be confirmed. Refresh to check whether it completed before trying again.",
     "unsavedChanges": "Unsaved changes"
   },
   "create": {
