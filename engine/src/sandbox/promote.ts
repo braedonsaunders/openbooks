@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, withMaintenanceTransaction } from "../platform/db.ts";
+import { db, schema, withBypassContext, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid } from "./catalog.ts";
 import { withSandboxRefreshLock } from "./lifecycle.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
@@ -145,11 +145,29 @@ async function assertActiveActor(actorId: string, orgId: string): Promise<void> 
 async function assertCapturedSandboxReady(sandboxOrgId: string | null, productionOrgId: string): Promise<void> {
   if (!sandboxOrgId) throw new Error("change set has no source sandbox — recapture from a live sandbox");
   const sandbox = (await db.execute<{ status: string }>(sql`
-    select status from sandboxes where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId}`)).rows[0];
+    select status from sandboxes where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId} for share`)).rows[0];
   if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
   if (sandbox.status !== "ready") {
     throw new Error(`change set's sandbox is ${sandbox.status}, not ready — wait until it is ready and recapture before reviewing or applying`);
   }
+}
+
+/** Resolve the lock key before each change-set transition, then revalidate the
+ * sandbox under that lock and inside the transition transaction. Deletion and
+ * refresh use this same key, so a vanished sandbox cannot race review/apply. */
+async function withChangeSetSandboxLock<T>(changeSetId: string, work: () => Promise<T>): Promise<T> {
+  const sandboxId = await withBypassContext(async () => {
+    const changeSet = (await db.execute<{ org_id: string; sandbox_org_id: string | null }>(sql`
+      select org_id, sandbox_org_id from change_sets where id = ${changeSetId}`)).rows[0];
+    if (!changeSet) throw new Error(`change set not found: ${changeSetId}`);
+    if (!changeSet.sandbox_org_id) throw new Error("change set has no source sandbox — recapture from a live sandbox");
+    const sandbox = (await db.execute<{ id: string }>(sql`
+      select id from sandboxes
+       where org_id = ${changeSet.sandbox_org_id} and production_org_id = ${changeSet.org_id}`)).rows[0];
+    if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
+    return sandbox.id;
+  });
+  return withSandboxRefreshLock(assertUuid(sandboxId), work);
 }
 
 /** Freeze the lifecycle actor's sandbox-management authority. Review and
@@ -379,7 +397,7 @@ export async function buildChangeSet(
 export async function reviewChangeSet(changeSetId: string, reviewerId?: string | null): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(reviewerId, "change-set review");
-  await withMaintenanceTransaction(null, async () => {
+  await withChangeSetSandboxLock(id, () => withMaintenanceTransaction(null, async () => {
     const result = await db.execute<ChangeSetRow>(sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
@@ -402,14 +420,14 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
          set status = 'reviewed', reviewed_at = now(), reviewed_by = ${actor}, updated_at = now(), updated_by = ${actor}
        where id = ${id} and org_id = ${prod} and status = 'draft'`);
     await auditChangeSetTransition(id, prod, actor, "review", c);
-  });
+  }));
 }
 
 /** Approve a reviewed capture by a second independent production actor who holds admin.sandboxes.manage. */
 export async function approveChangeSet(changeSetId: string, approverId?: string | null): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(approverId, "change-set approval");
-  await withMaintenanceTransaction(null, async () => {
+  await withChangeSetSandboxLock(id, () => withMaintenanceTransaction(null, async () => {
     const result = await db.execute<ChangeSetRow>(sql`
       select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
@@ -431,14 +449,14 @@ export async function approveChangeSet(changeSetId: string, approverId?: string 
          set status = 'approved', approved_at = now(), approved_by = ${actor}, updated_at = now(), updated_by = ${actor}
        where id = ${id} and org_id = ${prod} and status = 'reviewed'`);
     await auditChangeSetTransition(id, prod, actor, "approve", c);
-  });
+  }));
 }
 
 /** Apply an approved change set to production in one transaction. */
 export async function applyChangeSet(changeSetId: string, applierId?: string | null): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(applierId, "change-set application");
-  await withMaintenanceTransaction(null, async () => {
+  await withChangeSetSandboxLock(id, () => withMaintenanceTransaction(null, async () => {
     await db.execute(sql`set local time zone 'UTC'`);
     const result = await db.execute<ChangeSetRow>(sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
@@ -630,5 +648,5 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
          set status = 'applied', applied_at = now(), applied_by = ${actor}, updated_at = now(), updated_by = ${actor}
        where id = ${id} and org_id = ${prod} and status = 'approved'`);
     await auditChangeSetTransition(id, prod, actor, "apply", c);
-  });
+  }));
 }
