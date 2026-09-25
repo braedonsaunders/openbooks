@@ -1328,7 +1328,18 @@ export async function declaredEmployerLevyFields(year: number): Promise<Declared
   const { PAYROLL_COUNTRY_PACKS } = await import("./packs.ts");
   const fields: DeclaredEmployerLevyField[] = [];
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
-    for (const levy of pack.employerAggregateLevies?.(taxYear) ?? []) {
+    let levies: readonly {
+      key: string; label: string; description: string; base: { scope: string };
+    }[];
+    try {
+      levies = pack.employerAggregateLevies?.(taxYear) ?? [];
+    } catch {
+      // A pack that refuses the year contributes no fields here, as in
+      // readiness and the commit fence — its own runs refuse the year
+      // downstream with the pack's own message.
+      continue;
+    }
+    for (const levy of levies) {
       fields.push({
         country,
         levyKey: levy.key,

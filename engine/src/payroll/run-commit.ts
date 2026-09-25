@@ -367,10 +367,19 @@ export async function commitPayRun(input: {
     // so the freshness gate below sees competing commits in fence order and
     // refuses the run whose room is gone. Declarations are read off every
     // pack (the key carries its country, so packs never contend); packs
-    // that declare none add no keys and behave exactly as before.
+    // that declare none add no keys and behave exactly as before. A pack
+    // that refuses the year contributes no keys here, as in readiness —
+    // otherwise one pack's untranscribed year would abort every other
+    // pack's commit.
     const levyFenceKeys: string[] = [];
     for (const [packCountry, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
-      for (const levy of pack.employerAggregateLevies?.(Number(run.tax_year)) ?? []) {
+      let levies: readonly { key: string; timing: string }[];
+      try {
+        levies = pack.employerAggregateLevies?.(Number(run.tax_year)) ?? [];
+      } catch {
+        continue;
+      }
+      for (const levy of levies) {
         if (levy.timing === "per_run") {
           levyFenceKeys.push(employerLevyFenceKey(orgId, run.tax_year, packCountry, levy.key));
         }
