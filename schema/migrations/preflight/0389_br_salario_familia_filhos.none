@@ -1,0 +1,1 @@
+Adding a nullable count column with no backfill is safe for existing profiles: null reads as no qualifying children, the same absent-means-none contract the engine already applies, and requires no operator data repair.
