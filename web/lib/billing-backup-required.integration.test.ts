@@ -4,22 +4,12 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import type { SessionUser } from './auth'
 
-// A backup-required billing request is enforced where it matters: the draft
-// leaves create-invoice with its packet already assembled, and no submit or
-// post of its invoice succeeds while the packet is missing. Packet rendering
-// itself is stubbed to one blank page (see the @openbooks/pdf hook): the
-// precision suite covers packet content, and the real renderer owns a browser
-// pool that outlives the test process.
+// Covers required packets and source-read authorization without launching the PDF renderer.
 const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __billingBackupSession: session })
 Object.assign(globalThis, { __billingBackupStubPdf: null as Buffer | null })
-// Thin re-export-plus-override of the real @openbooks/pdf surface: every name
-// this double does not stub (notably RendererUnavailableError, which
-// lib/api/pdf-renderer imports) resolves to the real implementation, so the
-// next export added to the package cannot break this double's link again.
-// Importing the real index never launches Chromium — the browser pool only
-// launches on first render — so the stub stays hermetic.
+// Re-export the real PDF package and override rendering to keep this DB test browser-free.
 const pdfStub = {
   shortCircuit: true as const,
   url: 'data:text/javascript,' + encodeURIComponent([
@@ -116,7 +106,6 @@ test('lifecycle submit refuses a backup-required invoice with no packet', { skip
     assert.ok(error instanceof ApplicationError, `expected an ApplicationError, got ${String(error)}`)
     assert.equal(error.code, 'invalid_input')
     assert.match(error.message, /backup packet/)
-    // The refusal leaves the draft unissued.
     const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`
       select status from documents where id = ${generated.id}`))).rows[0]?.status
     assert.equal(status, 'draft')
