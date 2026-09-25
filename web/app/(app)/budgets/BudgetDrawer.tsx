@@ -23,7 +23,7 @@ type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
 type Cell = { accountId: string; periodId: string; subsidiaryId: string; amount: string }
 type PendingCellSnapshot = { key: string; cell: Cell; version: number }
 
-/** Only retry a failed cell when no newer edit has superseded its snapshot. */
+/** Identify refused cells that no newer edit has superseded. */
 export function restoreFailedBudgetCells(
   snapshots: readonly PendingCellSnapshot[],
   latestVersions: ReadonlyMap<string, number>,
@@ -148,14 +148,26 @@ export function BudgetDrawer({
       })
       return true
     } catch {
-      restoreFailedBudgetCells(pending, pendingVersionsRef.current).forEach((cell) => {
-        pendingRef.current.set(cellKey(cell.accountId, cell.periodId, cell.subsidiaryId), cell)
+      const rejected = restoreFailedBudgetCells(pending, pendingVersionsRef.current)
+      const rejectedKeys = new Set(rejected.map((cell) => cellKey(cell.accountId, cell.periodId, cell.subsidiaryId)))
+      rejectedKeys.forEach((key) => pendingRef.current.delete(key))
+      setValues((current) => {
+        const next = { ...current }
+        for (const { key, cell } of pending) {
+          if (!rejectedKeys.has(key)) continue
+          const saved = initial.lines.find((line) => line.accountId === cell.accountId
+            && line.periodId === cell.periodId
+            && (line.subsidiaryId ?? '') === cell.subsidiaryId)
+          if (saved) next[key] = toDisplay(cell.accountId, saved.amount)
+          else delete next[key]
+        }
+        return next
       })
-      setSaveState('error')
+      setSaveState(pendingRef.current.size > 0 ? 'dirty' : 'error')
       toast.error(t('workspace.saveFailed'))
       return false
     }
-  }, [dims, execute, scenario.id, t, toStorage, unsaved])
+  }, [dims, execute, initial.lines, scenario.id, t, toDisplay, toStorage, unsaved])
 
   // Annual-total drafts keyed by account: while an annual figure is being
   // typed, the input is controlled and the totals below read the draft, so
