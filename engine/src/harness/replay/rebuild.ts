@@ -40,6 +40,29 @@ export interface RebuildReport {
   pass: boolean;
 }
 
+/**
+ * A rebuild passes only with zero fallbacks, zero hard failures, zero diffs
+ * and a passing integrity check. One predicate (not an inline expression) so
+ * the fallback-can-never-pass invariant has a behavioral test that fails
+ * when the rule weakens — not a source-text pin that fails on reformat.
+ */
+export function rebuildPasses(
+  report: Pick<
+    RebuildReport,
+    "fallbacks" | "hardFailures" | "trialBalanceDiffs" | "openBalanceDiffs" | "projectDiffs"
+  >,
+  integrityPass: boolean,
+): boolean {
+  return (
+    report.fallbacks.length === 0 &&
+    report.hardFailures.length === 0 &&
+    report.trialBalanceDiffs.length === 0 &&
+    report.openBalanceDiffs.length === 0 &&
+    report.projectDiffs.length === 0 &&
+    integrityPass
+  );
+}
+
 function flattenOpens(m: Record<string, { ar?: string; ap?: string }>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [party, sides] of Object.entries(m)) {
@@ -144,12 +167,6 @@ export async function rebuildDataset(
   report.openBalanceDiffs = diffKeyed(flattenOpens(opens), flattenOpens(golden.openBalances));
   report.projectDiffs = diffKeyed(flattenProjects(projects), flattenProjects(golden.projects));
   report.nativeIntegrity = integrity;
-  report.pass =
-    report.fallbacks.length === 0 &&
-    report.hardFailures.length === 0 &&
-    report.trialBalanceDiffs.length === 0 &&
-    report.openBalanceDiffs.length === 0 &&
-    report.projectDiffs.length === 0 &&
-    integrity.pass;
+  report.pass = rebuildPasses(report, integrity.pass);
   return { report, world: corpusWorld };
 }
