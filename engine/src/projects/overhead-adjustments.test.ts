@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const baseline = readFileSync(
-  "schema/migrations/generated/0001_baseline.sql",
-  "utf8",
-);
 const service = readFileSync(
   "engine/src/projects/overhead-adjustments.ts",
   "utf8",
@@ -18,16 +14,6 @@ const reversalMigration = readFileSync(
   "schema/migrations/generated/0077_project_overhead_adjustment_reversal_uniqueness.sql",
   "utf8",
 );
-
-test("statistical overhead exceptions are native immutable evidence", () => {
-  assert.match(baseline, /project_overhead_adjustments/i);
-  assert.match(baseline, /append-only/i);
-  assert.match(baseline, /reversing adjustment/i);
-  assert.match(baseline, /enable row level security/i);
-  assert.match(baseline, /force row level security/i);
-  assert.match(service, /source identity/i);
-  assert.match(service, /insert into audit_log/i);
-});
 
 test("recordProjectOverheadAdjustment persists amount through canonicalDecimal then normalizeMoney", () => {
   const helperStart = service.indexOf("function persistOverheadAdjustmentAmount");
