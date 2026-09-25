@@ -376,13 +376,21 @@ function buildNlPackFilings(): PayrollPackFilings {
         // A wrong jaaropgaaf is corrected where the wrong number IS: the
         // loonaangifte is corrected with a correctiebericht (Handboek
         // Loonheffingen 2026, hoofdstuk 14, Correctie), and the employee gets
-        // a corrected statement. No in-product correction file is built.
+        // a corrected statement. The corrected statement re-renders from the
+        // corrected committed runs through the generic amendment lifecycle
+        // (same form, amended only, with the supersede audit link); no
+        // correction FILE is built.
         amendment: {
-          supported: false,
-          refusal:
-            "a wrong jaaropgaaf is corrected by filing a corrected loonaangifte (correctiebericht) "
-            + "with the Belastingdienst and issuing a corrected statement — no in-product correction "
-            + "file is built (Handboek Loonheffingen 2026, hoofdstuk 14)",
+          supported: true,
+          revisions: ["amended"],
+          vehicle: "same_form",
+          slip: {
+            build: async (row, orgId, taxYear) => jaaropgaafSlip(orgId, taxYear, row.rowId),
+          },
+          downloadRefusal:
+            "no corrected-statement file is produced — re-issue the corrected jaaropgaaf from the "
+            + "corrected committed runs, and file the correctiebericht (loonaangifte correction) with "
+            + "the Belastingdienst (Handboek Loonheffingen 2026, hoofdstuk 14)",
         },
       },
     ],

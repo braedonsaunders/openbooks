@@ -38,8 +38,7 @@ test("the NL pack exists and is an installable EUR calendar-year pack", () => {
   });
   assert.equal(NL_PAYROLL_PACK.statutoryEngineLabel, "Loonbelastingtabellen");
   assert.equal(NL_PAYROLL_PACK.remittanceVendorSettingsKey, null);
-  // Retro pay is taxed as bijzondere beloning, never annualized as period
-  // income — the pack's nonPeriodic path, not a new engine.
+  // Retro pay is bijzondere beloning via the nonPeriodic path, not a new engine.
   assert.equal(NL_PAYROLL_PACK.retroactivePayTreatment, "non_periodic");
   // Employee-paid union dues buy no loonheffing deduction.
   assert.equal(NL_PAYROLL_PACK.employeeUnionDuesTaxTreatment, null);
@@ -139,13 +138,14 @@ test("the NL filings declare the loonaangifte programme and a populated jaaropga
   assert.equal(jaaropgaaf.label, "Jaaropgaaf");
   assert.equal(jaaropgaaf.cadence, "annual");
   assert.equal(jaaropgaaf.parseRowId("anything"), null);
-  assert.equal(jaaropgaaf.amendment.supported, false);
-  // The population reads committed stubs (database-owned: covered in
-  // jaaropgaaf.integration.test.ts); the static refusals are asserted here.
+  assert.equal(jaaropgaaf.amendment.supported, true);
+  // Population reads committed stubs (DB-owned: jaaropgaaf.integration.test.ts); static refusals asserted here.
   assert.match(jaaropgaaf.downloadRefusal ?? "", /no jaaropgaaf file builder exists/);
   assert.ok(jaaropgaaf.slip, "the statement the employee is owed is declared");
-  if (!jaaropgaaf.amendment.supported) {
-    assert.match(jaaropgaaf.amendment.refusal, /correctiebericht/);
+  if (jaaropgaaf.amendment.supported) {
+    assert.deepEqual(jaaropgaaf.amendment.revisions, ["amended"]);
+    assert.equal(jaaropgaaf.amendment.vehicle, "same_form");
+    assert.match(jaaropgaaf.amendment.downloadRefusal ?? "", /correctiebericht/);
   }
 });
 
