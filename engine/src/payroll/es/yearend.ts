@@ -117,6 +117,150 @@ export interface Es111Quarter {
   retenciones: string;
 }
 
+export interface Es216Quarter {
+  quarter: 1 | 2 | 3 | 4;
+  /** Distinct nonresident persons paid Spanish-source wages in the quarter. */
+  perceptores: number;
+  /** Spanish-source cash wages satisfied in the quarter (the IRNR base). */
+  percepciones: string;
+  /** IRNR withheld in the quarter (the declared `irnr` lines). */
+  retenciones: string;
+}
+
+/**
+ * The Modelo 216 quarterly worksheet: one row per calendar quarter with
+ * committed IRNR withholding, keyed by pay date (cash-basis, like the 111).
+ * Only stubs carrying a declared `irnr` deduction line count — a
+ * resident-only quarter files no 216, and its wages never appear here.
+ */
+export async function es216Quarters(orgId: string, taxYear: number): Promise<Es216Quarter[]> {
+  await assertEsFilingYear(orgId, taxYear, "the Modelo 216");
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    select extract(quarter from s.pay_date)::int as quarter,
+           count(distinct s.employee_party_id) as perceptores,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
+                  and coalesce(pc.taxable, true))) as percepciones,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.system_key = 'irnr')) as retenciones
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
+       and exists (select 1 from pay_stub_lines l2
+                     join pay_components pc2 on pc2.id = l2.component_id and pc2.org_id = l2.org_id
+                    where l2.org_id = ${orgId} and l2.stub_id = s.id and l2.kind = 'deduction'
+                      and pc2.system_key = 'irnr')
+     group by 1 order by 1
+  `));
+  if (rows.rows.length === 0) {
+    throw new PayrollError(
+      `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 216 reports IRNR `
+      + "actually withheld each period, so a year with only resident payrolls files no 216; "
+      + "calculate and commit a nonresident pay run first",
+    );
+  }
+  return rows.rows.map((row) => ({
+    quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
+    perceptores: Number(row.perceptores),
+    percepciones: num(row.percepciones),
+    retenciones: num(row.retenciones),
+  }));
+}
+
+export async function es216Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+  const quarters = await es216Quarters(orgId, taxYear);
+  return {
+    rowKey: "rowId",
+    columns: [
+      { key: "quarter", label: "Trimestre" },
+      { key: "perceptores", label: "N.º perceptores no residentes" },
+      { key: "percepciones", label: "Rentas satisfechas sujetas a IRNR", align: "right", money: true },
+      { key: "retenciones", label: "Retenciones IRNR practicadas", align: "right", money: true },
+    ],
+    rows: quarters.map((quarter) => ({
+      rowId: `Q${quarter.quarter}`,
+      quarter: `Q${quarter.quarter}`,
+      perceptores: String(quarter.perceptores),
+      percepciones: quarter.percepciones,
+      retenciones: quarter.retenciones,
+    })),
+  };
+}
+
+export interface Es296Slip {
+  employeePartyId: string;
+  employeeName: string;
+  percepcionIntegra: string;
+  retencionesPracticadas: string;
+}
+
+/**
+ * One Modelo 296 perceptor row per nonresident employee: the year's committed
+ * Spanish-source cash wages as percepción íntegra and the year's committed
+ * IRNR lines as retenciones practicadas. Same committed-stub grain as the
+ * 190, restricted to stubs that carry IRNR withholding.
+ */
+export async function es296Slips(orgId: string, taxYear: number): Promise<Es296Slip[]> {
+  await assertEsFilingYear(orgId, taxYear, "the Modelo 296");
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    select s.employee_party_id, p.display_name,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
+                  and coalesce(pc.taxable, true))) as percepcion,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.system_key = 'irnr')) as retencion
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       and r.run_status = 'committed'
+      join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
+       and exists (select 1 from pay_stub_lines l2
+                     join pay_components pc2 on pc2.id = l2.component_id and pc2.org_id = l2.org_id
+                    where l2.org_id = ${orgId} and l2.stub_id = s.id and l2.kind = 'deduction'
+                      and pc2.system_key = 'irnr')
+     group by s.employee_party_id, p.display_name
+     order by p.display_name
+  `));
+  if (rows.rows.length === 0) {
+    throw new PayrollError(
+      `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 296 summarises `
+      + "IRNR actually withheld per nonresident perceptor, so a year with only resident "
+      + "payrolls files no 296",
+    );
+  }
+  return rows.rows.map((row) => ({
+    employeePartyId: String(row.employee_party_id),
+    employeeName: String(row.display_name),
+    percepcionIntegra: num(row.percepcion),
+    retencionesPracticadas: num(row.retencion),
+  }));
+}
+
+export async function es296Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+  const slips = await es296Slips(orgId, taxYear);
+  return {
+    rowKey: "rowId",
+    columns: [
+      { key: "employee", label: "Perceptor no residente" },
+      { key: "percepcion", label: "Percepción íntegra", align: "right", money: true },
+      { key: "retenciones", label: "Retenciones IRNR practicadas", align: "right", money: true },
+    ],
+    rows: slips.map((slip) => ({
+      rowId: slip.employeePartyId,
+      employee: slip.employeeName,
+      percepcion: slip.percepcionIntegra,
+      retenciones: slip.retencionesPracticadas,
+    })),
+  };
+}
+
 /**
  * The Modelo 111 quarterly worksheet: one row per calendar quarter with
  * committed stubs, keyed by pay date (the 111 is cash-basis — percepciones
@@ -327,6 +471,93 @@ export async function es111Slip(
       "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero); "
         + "grandes empresas autoliquidan mensualmente — regroup the same committed stubs by "
         + "month from the pay dates above.",
+    ],
+  };
+}
+
+export async function es216Slip(
+  orgId: string, taxYear: number, rowId: string,
+): Promise<PayrollFilingSlipData> {
+  const quarters = await es216Quarters(orgId, taxYear);
+  const quarter = quarters.find((q) => `Q${q.quarter}` === rowId);
+  if (!quarter) {
+    throw new PayrollError(`no ${taxYear} Modelo 216 quarter matches the requested row`);
+  }
+  return {
+    formCode: "ES_216",
+    formName: "Modelo 216 — Retenciones IRNR sobre rendimientos del trabajo",
+    formNumber: "Modelo 216",
+    headerFields: [
+      { label: "Ejercicio", value: String(taxYear) },
+      { label: "Período", value: `Trimestre ${quarter.quarter} (Q${quarter.quarter})` },
+    ],
+    boxes: [
+      {
+        code: "perceptores",
+        label: "N.º de perceptores no residentes",
+        value: String(quarter.perceptores),
+      },
+      {
+        code: "percepciones",
+        label: "Rentas satisfechas sujetas a IRNR",
+        value: quarter.percepciones,
+        emphasis: true,
+      },
+      {
+        code: "retenciones",
+        label: "Retenciones IRNR practicadas",
+        value: quarter.retenciones,
+        emphasis: true,
+      },
+    ],
+    notes: [
+      "Cash-basis: rentas satisfechas en el trimestre — the quarter comes from each "
+        + "committed stub's pay date, restricted to stubs carrying IRNR withholding, "
+        + "and the worksheet ties to the pay runs to the cent.",
+      "Only rendimientos del trabajo satisfechos a no residentes travel here: "
+        + "resident payrolls file the 111, never the 216.",
+      "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero); "
+        + "grandes empresas autoliquidan mensualmente — regroup the same committed stubs by "
+        + "month from the pay dates above.",
+    ],
+  };
+}
+
+export async function es296Slip(
+  orgId: string, taxYear: number, rowId: string,
+): Promise<PayrollFilingSlipData> {
+  const slips = await es296Slips(orgId, taxYear);
+  const slip = slips.find((candidate) => candidate.employeePartyId === rowId);
+  if (!slip) {
+    throw new PayrollError(`no ${taxYear} Modelo 296 perceptor matches the requested row`);
+  }
+  return {
+    formCode: "ES_296",
+    formName: "Modelo 296 — Resumen anual de retenciones IRNR",
+    formNumber: "Modelo 296",
+    headerFields: [
+      { label: "Ejercicio", value: String(taxYear) },
+      { label: "Perceptor", value: slip.employeeName },
+    ],
+    boxes: [
+      {
+        code: "percepcion",
+        label: "Percepción íntegra — rentas del trabajo sujetas a IRNR",
+        value: slip.percepcionIntegra,
+        emphasis: true,
+      },
+      {
+        code: "retenciones",
+        label: "Retenciones IRNR practicadas",
+        value: slip.retencionesPracticadas,
+        emphasis: true,
+      },
+    ],
+    notes: [
+      "Annual summary of the same committed IRNR lines the quarterly 216 autoliquidaciones "
+        + "settled — the perceptor row ties to the pay runs to the cent.",
+      "Claves/subclaves and treaty-country detail come from the percepciones classification "
+        + "outside payroll; this row carries the amounts, never the clave.",
     ],
   };
 }
