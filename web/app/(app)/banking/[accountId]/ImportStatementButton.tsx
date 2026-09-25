@@ -28,6 +28,7 @@ interface StatementPreview {
   possibleDuplicates: number
   skipped: SkippedRow[]
   sourceRevision: number
+  accountId: string
 }
 
 interface Mapping {
@@ -131,6 +132,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const fieldId = useId()
   const fileReadVersion = useRef(0)
   const sourceRevision = useRef(0)
+  const [sourceRevisionView, setSourceRevisionView] = useState(0)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [source, setSource] = useState<StatementTextSource>('ofx')
@@ -147,9 +149,15 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const [openingBalance, setOpeningBalance] = useState('')
   const [closingBalance, setClosingBalance] = useState('')
 
+  function reviseInputs() {
+    const revision = ++sourceRevision.current
+    setSourceRevisionView(revision)
+    return revision
+  }
+
   function reset() {
     fileReadVersion.current += 1
-    sourceRevision.current += 1
+    reviseInputs()
     setActionError(null)
     setText('')
     setUploadEvidence(null)
@@ -163,7 +171,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
 
   function onTextChanged(next: string) {
     fileReadVersion.current += 1
-    sourceRevision.current += 1
+    reviseInputs()
     setActionError(null)
     setText(next)
     setUploadEvidence(null)
@@ -173,7 +181,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
 
   async function readFile(file: File) {
     const readVersion = ++fileReadVersion.current
-    const readSourceRevision = ++sourceRevision.current
+    const readSourceRevision = reviseInputs()
     setText('')
     setUploadEvidence(null)
     setHeader(null)
@@ -242,6 +250,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       }
     : { text }
   const hasSource = uploadEvidence !== null || text.trim() !== ''
+  const visiblePreview = preview?.accountId === accountId ? preview : null
 
   async function detectColumns() {
     const requestRevision = sourceRevision.current
@@ -250,7 +259,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     try {
       const data = (await post({ source: 'csv', ...sourcePayload, mode: 'columns' })) as { header: string[] }
       if (requestRevision !== sourceRevision.current) return
-      sourceRevision.current += 1
+      reviseInputs()
       setHeader(data.header)
       setPreview(null)
       setMapping({
@@ -294,6 +303,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         possibleDuplicates: data.possibleDuplicates ?? 0,
         skipped: data.skipped ?? [],
         sourceRevision: requestRevision,
+        accountId,
       })
       const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
       if (previewStatementDate) setStatementDate((current) => current || previewStatementDate)
@@ -309,7 +319,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   }
 
   async function runImport() {
-    if (!preview || preview.sourceRevision !== sourceRevision.current) {
+    if (!preview || preview.sourceRevision !== sourceRevision.current || preview.accountId !== accountId) {
       setPreview(null)
       return
     }
@@ -350,7 +360,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           disabled={busy}
           value={mapping[key]}
           onChange={(e) => {
-            sourceRevision.current += 1
+            reviseInputs()
             setActionError(null)
             setMapping((m) => ({ ...m, [key]: e.target.value }))
             setPreview(null)
@@ -382,17 +392,17 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             <Button variant="outline" disabled={busy || !hasSource || !csvReady} onClick={runPreview}>
               {t('preview')}
             </Button>
-            <Button disabled={busy || !preview || preview.imported === 0} onClick={runImport}>
+            <Button disabled={busy || !visiblePreview || visiblePreview.sourceRevision !== sourceRevisionView || visiblePreview.imported === 0} onClick={runImport}>
               <Upload size={15} />{' '}
-              {preview && preview.imported > 0 ? t('importCount', { count: preview.imported }) : t('importAction')}
+              {visiblePreview && visiblePreview.imported > 0 ? t('importCount', { count: visiblePreview.imported }) : t('importAction')}
             </Button>
           </>
         }
         footer={
           <div className="flex w-full items-center gap-3">
-            {preview ? (
+            {visiblePreview ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {t('previewSummary', { imported: preview.imported, duplicates: preview.duplicates, possibleDuplicates: preview.possibleDuplicates })}
+                {t('previewSummary', { imported: visiblePreview.imported, duplicates: visiblePreview.duplicates, possibleDuplicates: visiblePreview.possibleDuplicates })}
               </span>
             ) : null}
             <span className="flex-1" />
@@ -417,7 +427,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 value={source}
                 onChange={(e) => {
                   fileReadVersion.current += 1
-                  sourceRevision.current += 1
+                  reviseInputs()
                   setActionError(null)
                   setSource(e.target.value as StatementTextSource)
                   setHeader(null)
@@ -492,7 +502,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             )
           ) : null}
 
-          {preview ? (
+          {visiblePreview ? (
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={field}>
@@ -502,7 +512,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                     disabled={busy}
                     type="date"
                     value={statementDate}
-                    onChange={(e) => setStatementDate(e.target.value)}
+                    onChange={(e) => { reviseInputs(); setStatementDate(e.target.value) }}
                   />
                 </div>
                 <div className={field}>
@@ -512,7 +522,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                     disabled={busy}
                     inputMode="decimal"
                     value={openingBalance}
-                    onChange={(e) => setOpeningBalance(e.target.value)}
+                    onChange={(e) => { reviseInputs(); setOpeningBalance(e.target.value) }}
                     placeholder={t('optionalPlaceholder')}
                     className="text-right tabular-nums"
                   />
@@ -524,27 +534,27 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                     disabled={busy}
                     inputMode="decimal"
                     value={closingBalance}
-                    onChange={(e) => setClosingBalance(e.target.value)}
+                    onChange={(e) => { reviseInputs(); setClosingBalance(e.target.value) }}
                     placeholder={t('optionalPlaceholder')}
                     className="text-right tabular-nums"
                   />
                 </div>
               </div>
 
-              {preview.skipped.length > 0 ? (
+              {visiblePreview.skipped.length > 0 ? (
                 <div
                   role="note"
                   className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
                 >
-                  <p>{t('skippedNotice', { count: preview.skipped.length })}</p>
+                  <p>{t('skippedNotice', { count: visiblePreview.skipped.length })}</p>
                   <ul className="mt-1 list-disc pl-5">
-                    {preview.skipped.map((row) => (
+                    {visiblePreview.skipped.map((row) => (
                       <li key={row.line}>{t('skippedRow', { line: row.line, dateCell: row.dateCell })}</li>
                     ))}
                   </ul>
                 </div>
               ) : null}
-              {preview.imported === 0 ? (
+              {visiblePreview.imported === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
                   {t('nothingNew')}
                 </p>
@@ -560,7 +570,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {preview.lines.slice(0, PREVIEW_CAP).map((l, i) => (
+                      {visiblePreview.lines.slice(0, PREVIEW_CAP).map((l, i) => (
                         <tr key={i}>
                           <td className="px-3 py-1.5 whitespace-nowrap">{l.postedOn}</td>
                           <td className="max-w-[18rem] truncate px-3 py-1.5">
@@ -575,11 +585,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                       ))}
                     </tbody>
                   </table>
-                  {preview.lines.length > PREVIEW_CAP ? (
+                  {visiblePreview.lines.length > PREVIEW_CAP ? (
                     <div className="border-t border-slate-200 px-3 py-1.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      {t('moreLines', { count: preview.lines.length - PREVIEW_CAP })}
+                      {t('moreLines', { count: visiblePreview.lines.length - PREVIEW_CAP })}
                       <Badge variant="secondary" className="ml-2">
-                        {t('totalBadge', { count: preview.lines.length })}
+                        {t('totalBadge', { count: visiblePreview.lines.length })}
                       </Badge>
                     </div>
                   ) : null}
