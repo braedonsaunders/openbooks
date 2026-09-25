@@ -60,12 +60,10 @@
 --   …1701-1799  sandbox change sets and their items
 --   …a000-…     CRM opportunities, quotas, snapshots; custom records
 --
---   PGOPTIONS='-c app.bypass_rls=on' psql "$REVIEW_DB" -f scripts/review-tenant-fixtures.sql
+--   psql "$OPENBOOKS_BYPASS_DB_URL" -f scripts/review-tenant-fixtures.sql
 --
 -- Only ever seeds the SIM org. It is a simulated tenant; nothing here should
 -- be able to touch a real one.
-
-set app.bypass_rls = 'on';
 
 \set ON_ERROR_STOP on
 

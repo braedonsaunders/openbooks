@@ -3,10 +3,10 @@ import { registerRequestOrgResolver } from "../platform/db.ts";
 /**
  * Explicit trusted-database boundary for the integration-test process.
  *
- * Most engine integration tests predate request-scoped RLS and intentionally
- * exercise accounting invariants across setup, product calls, and teardown.
- * The test runner preloads this module so those tests retain that cross-org
- * authority without making missing production context authoritative again.
+ * Most engine integration tests intentionally exercise accounting invariants
+ * across setup, product calls, and teardown. The runner preloads this module to
+ * route those calls through OPENBOOKS_BYPASS_DB_URL (or the explicit test-admin
+ * fallback in db.ts), never by granting authority to a GUC on the app role.
  *
  * This module is deliberately not imported by application code. Refuse to
  * grant the boundary unless the repository test command supplies its explicit

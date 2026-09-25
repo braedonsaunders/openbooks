@@ -732,14 +732,13 @@ function qualified(table: string) {
  * Kernel-guard bypasses for the teardown transaction: `openbooks.amend` lets
  * posted documents/journal entries be deleted, `openbooks.sandbox_wipe` (with
  * the org flagged env_kind='sandbox') satisfies the append-only evidence
- * guards, and `app.bypass_rls` makes the wipe authoritative even for direct
- * callers outside the test runner's ambient bypass.
+ * guards. The enclosing transaction uses the dedicated database bypass role
+ * for direct table deletes.
  */
 async function setTeardownGucs(tx: TeardownTx): Promise<void> {
   await tx.execute(sql`
     select set_config('openbooks.amend', 'on', true),
-           set_config('openbooks.sandbox_wipe', 'on', true),
-           set_config('app.bypass_rls', 'on', true)`);
+           set_config('openbooks.sandbox_wipe', 'on', true)`);
 }
 
 /** Every base table in public that carries an org_id column. */

@@ -114,15 +114,22 @@ test("database access without an explicit organization context fails closed", { 
     assert.deepEqual(firstScoped.rows, [{ id: first.orgId }]);
 
     await client.query(
-      "select set_config('app.current_org', '', false), set_config('app.bypass_rls', 'on', false)",
+      "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'off', false)",
+      [first.orgId],
     );
-    const explicitlyPrivileged = await client.query<{ id: string }>(
+    await client.query("SET app.bypass_rls = 'on'");
+    await client.query("select set_config('app.bypass_rls', 'on', false)");
+    const forgedBypass = await client.query<{ id: string }>(
       "select id from orgs where id = any($1::uuid[]) order by id",
       [[first.orgId, second.orgId]],
     );
-    assert.deepEqual(
-      explicitlyPrivileged.rows.map((row) => row.id),
-      [first.orgId, second.orgId].sort(),
+    assert.deepEqual(forgedBypass.rows, [{ id: first.orgId }], "runtime role must ignore self-set bypass GUCs");
+    await assert.rejects(
+      client.query(
+        "insert into orgs (id, name, base_currency, country) values (gen_random_uuid(), 'forged cross-tenant org', 'USD', 'US')",
+      ),
+      (error: unknown) => (error as { code?: string }).code === "42501",
+      "runtime role must refuse cross-tenant inserts even after SET and set_config",
     );
   } finally {
     await client.end().catch(() => {});
@@ -143,14 +150,15 @@ test("database access without an explicit organization context fails closed", { 
  *
  * Read-only: it counts what is already there and never writes.
  */
-test("withBypassContext actually reaches the database with bypass", { skip: !DB }, async () => {
+test("withBypassContext routes through the dedicated bypass database role", { skip: !DB }, async () => {
   // env, not process.env: db.ts resolves the connection string from the
   // repo-root .env as well, and this must be the SAME database the pool uses.
-  const privileged = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  const bypassUrl = env.OPENBOOKS_BYPASS_DB_URL ?? env.OPENBOOKS_TEST_ADMIN_DB_URL
+    ?? env.OPENBOOKS_MIGRATION_DB_URL ?? env.OPENBOOKS_DB_URL!;
+  const privileged = new pg.Client({ connectionString: bypassUrl });
   await privileged.connect();
   let expected: number;
   try {
-    await privileged.query("select set_config('app.bypass_rls', 'on', false)");
     const counted = await privileged.query<{ n: number }>("select count(*)::int as n from orgs");
     expected = Number(counted.rows[0]!.n);
   } finally {
@@ -173,21 +181,13 @@ test("withBypassContext actually reaches the database with bypass", { skip: !DB 
   );
 
   // The scope must also be observable at the mechanism level, not just through
-  // one row count: inside withBypassContext the pooled statement carries the
-  // bypass GUCs (the pool wrapper applies them on the checked-out client
-  // immediately before each statement, so current_setting reflects exactly
-  // what this query ran with).
-  const scopedGucs = await withBypassContext(() =>
-    db.execute<{ org: string; bypass: string }>(
-      sql`select current_setting('app.current_org', true) as org,
-                 current_setting('app.bypass_rls', true) as bypass`,
-    ),
+  // one row count: inspect the authenticated database role selected by the
+  // context rather than a GUC that used to claim it granted privileges.
+  const scopedRole = await withBypassContext(() =>
+    db.execute<{ current_user: string }>(sql`select current_user`),
   );
-  assert.deepEqual(
-    { org: scopedGucs.rows[0]!.org, bypass: scopedGucs.rows[0]!.bypass },
-    { org: "", bypass: "on" },
-    "withBypassContext did not apply the bypass GUCs to its pooled statements",
-  );
+  assert.equal(scopedRole.rows[0]!.current_user, new URL(bypassUrl).username,
+    "withBypassContext did not route its pooled statements to the configured bypass role");
 
   // Outside any scope the posture is deny-by-default — but "deny" is a
   // property of the database ROLE, not of the GUCs alone. The trusted-test
