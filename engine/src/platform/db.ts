@@ -188,6 +188,14 @@ const rawLongConnect = async (bypass = false): Promise<pg.PoolClient> =>
   bypass ? rawBypassConnect(true) : protectCheckedOutClient(await longPool.connect(), "pg longPool");
 
 /**
+ * Timeout-free bypass checkout for maintenance callers that must see every
+ * row (migration replay harnesses). Sessions skip RLS by login, so no GUC is
+ * set: callers that stage explicit GUCs must restore them on release.
+ */
+export const connectBypassLongClient = async (): Promise<pg.PoolClient> =>
+  rawLongConnect(true);
+
+/**
  * Check out isolated capacity for governed user SQL. Tenant context and the
  * READ ONLY/openbooks_read transaction are established by sqlapi.ts after the
  * application role prepares the connection-local tenant context table.
