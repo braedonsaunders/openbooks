@@ -166,6 +166,53 @@ async function checkClockProjectEntity(
   }
 }
 
+/**
+ * Task/project pairing: a task always costs against exactly one project,
+ * so an event naming a task must name (or inherit) that task's project.
+ * Only newly chosen refs are judged — a newly chosen task against its
+ * event's project (its own, or the still-open pair's when the event only
+ * re-tasks the close), and a newly chosen project against the open pair's
+ * inherited task. Events that choose neither inherit the pair untouched,
+ * so a legacy mismatch recorded before this fence still closes.
+ */
+async function checkClockTaskPairing(
+  orgId: string,
+  projectId: string | null,
+  projectTaskId: string | null,
+  current: EventRow | null,
+): Promise<void> {
+  if (projectTaskId !== null) {
+    const task = await loadClockTask(orgId, projectTaskId);
+    if (!task) {
+      refuse("task_unknown", "The task is unknown in this organization — pick it from the picker and retry");
+    }
+    const partner = projectId ?? current?.project_id ?? null;
+    if (partner === null) {
+      refuse("task_without_project", "The clock event names a task but no project — pick the project the task belongs to and retry");
+    }
+    if (task.project_id !== partner) {
+      refuse("task_wrong_project", "The task does not belong to the event's project — pick a task from that project and retry");
+    }
+    return;
+  }
+  if (projectId !== null && current?.project_task_id != null) {
+    const task = await loadClockTask(orgId, current.project_task_id);
+    if (!task) {
+      refuse("task_unknown", "The task is unknown in this organization — pick it from the picker and retry");
+    }
+    if (task.project_id !== projectId) {
+      refuse("task_wrong_project", "The open entry's task does not belong to the new project — pick a task from that project and retry");
+    }
+  }
+}
+
+async function loadClockTask(orgId: string, taskId: string): Promise<{ project_id: string } | null> {
+  const row = (await db.execute<{ project_id: string }>(sql`
+    select project_id::text as project_id from project_tasks
+     where org_id = ${orgId} and id = ${taskId} limit 1`)).rows[0];
+  return row ?? null;
+}
+
 async function checkGeofence(
   orgId: string,
   projectId: string | null,
@@ -602,6 +649,7 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     // is unknown in this organization refuses by name instead of persisting
     // a dangling pointer (project_id carries no foreign key).
     await checkClockProjectEntity(input.orgId, input.employeePartyId, input.projectId ?? null);
+    await checkClockTaskPairing(input.orgId, input.projectId ?? null, input.projectTaskId ?? null, current);
     await checkPhotoRequirement(input);
     const geoCheck = await checkGeofence(input.orgId, input.projectId ?? null, input.geo ?? null);
 
