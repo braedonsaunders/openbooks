@@ -270,62 +270,47 @@ test('a failed transport releases the button with an inline error', async () => 
   }
 })
 
-test('typed server conflicts resolve through their code, never the raw message', async () => {
-  const { unmount } = await mountDrawer(null, () =>
-    Response.json({ error: 'a server-worded human message', code: 'duplicate' }, { status: 409 }),
-  )
-  try {
-    await fillValidCreate()
-    await clickSave(true)
-    assert.equal(alertText(), String(adminCatalog.errors?.duplicate), 'a duplicate maps to localized copy')
-  } finally {
-    await unmount()
-  }
-})
-
-test('typed validation failures render their message verbatim', async () => {
-  const refusal = 'Code must be lowercase with no spaces'
-  const { unmount } = await mountDrawer(null, () =>
-    Response.json({ error: refusal, code: 'invalid' }, { status: 400 }),
-  )
-  try {
-    await fillValidCreate()
-    await clickSave(true)
-    assert.equal(alertText(), refusal, 'an invalid refusal names its fix verbatim')
-  } finally {
-    await unmount()
-  }
-})
-
-test('server required-field refusals render through the field label', async () => {
-  const { unmount } = await mountDrawer(null, () =>
-    Response.json({ error: 'name is required', code: 'invalid' }, { status: 400 }),
-  )
-  try {
-    await fillValidCreate()
-    await clickSave(true)
-    assert.equal(
-      alertText(),
-      requiredCopy(FIELD_LABEL.name!),
-      'the server refusal renders exactly like client-side validate()',
-    )
-  } finally {
-    await unmount()
-  }
-})
-
-test('exclusion-conflict 409s resolve through the overlap code, never raw Postgres', async () => {
-  const { unmount } = await mountDrawer(null, () =>
-    Response.json({ error: 'conflicting key value violates exclusion constraint', code: 'overlap' }, { status: 409 }),
-  )
-  try {
-    await fillValidCreate()
-    await clickSave(true)
-    assert.equal(alertText(), String(adminCatalog.errors?.overlap), 'an overlap maps to localized copy')
-  } finally {
-    await unmount()
-  }
-})
+for (const [name, body, status, expected, message] of [
+  [
+    'typed server conflicts resolve through their code, never the raw message',
+    { error: 'a server-worded human message', code: 'duplicate' },
+    409,
+    String(adminCatalog.errors?.duplicate),
+    'a duplicate maps to localized copy',
+  ],
+  [
+    'typed validation failures render their message verbatim',
+    { error: 'Code must be lowercase with no spaces', code: 'invalid' },
+    400,
+    'Code must be lowercase with no spaces',
+    'an invalid refusal names its fix verbatim',
+  ],
+  [
+    'server required-field refusals render through the field label',
+    { error: 'name is required', code: 'invalid' },
+    400,
+    requiredCopy(FIELD_LABEL.name!),
+    'the server refusal renders exactly like client-side validate()',
+  ],
+  [
+    'exclusion-conflict 409s resolve through the overlap code, never raw Postgres',
+    { error: 'conflicting key value violates exclusion constraint', code: 'overlap' },
+    409,
+    String(adminCatalog.errors?.overlap),
+    'an overlap maps to localized copy',
+  ],
+] as Array<[string, Record<string, string>, number, string, string]>) {
+  test(name, async () => {
+    const { unmount } = await mountDrawer(null, () => Response.json(body, { status }))
+    try {
+      await fillValidCreate()
+      await clickSave(true)
+      assert.equal(alertText(), expected, message)
+    } finally {
+      await unmount()
+    }
+  })
+}
 
 test('creates mint one idempotency key per mounted session and reuse it across retries', async () => {
   let attempt = 0

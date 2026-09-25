@@ -62,44 +62,28 @@ function valid() {
   }
 }
 
-test('a valid account combination reports no conflicts', () => {
-  assert.deepEqual(costingOffsetConflicts(valid()), [])
-})
+for (const [name, selection] of [
+  ['a valid account combination reports no conflicts', valid()],
+  [
+    'an empty optional offset is not a conflict',
+    { ...valid(), adjustmentAccountId: '', varianceAccountId: '', receivedNotBilledAccountId: '' },
+  ],
+] as Array<[string, Parameters<typeof costingOffsetConflicts>[0]]>) {
+  test(name, () => {
+    assert.deepEqual(costingOffsetConflicts(selection), [])
+  })
+}
 
-test('an empty optional offset is not a conflict', () => {
-  assert.deepEqual(
-    costingOffsetConflicts({ ...valid(), adjustmentAccountId: '', varianceAccountId: '', receivedNotBilledAccountId: '' }),
-    [],
-  )
-})
-
-test('an adjustment account copying the asset account is a conflict', () => {
-  assert.deepEqual(
-    costingOffsetConflicts({ ...valid(), adjustmentAccountId: ASSET }),
-    ['adjustmentAccountId'],
-  )
-})
-
-test('a variance account copying the COGS-selected asset is a conflict', () => {
-  assert.deepEqual(
-    costingOffsetConflicts({ ...valid(), varianceAccountId: ASSET }),
-    ['varianceAccountId'],
-  )
-})
-
-test('a COGS account equal to the asset account is a conflict', () => {
-  assert.deepEqual(
-    costingOffsetConflicts({ ...valid(), cogsAccountId: ASSET }),
-    ['cogsAccountId'],
-  )
-})
-
-test('a received-not-billed account equal to the asset account is a conflict', () => {
-  assert.deepEqual(
-    costingOffsetConflicts({ ...valid(), receivedNotBilledAccountId: ASSET }),
-    ['receivedNotBilledAccountId'],
-  )
-})
+for (const [name, field] of [
+  ['an adjustment account copying the asset account is a conflict', 'adjustmentAccountId'],
+  ['a variance account copying the COGS-selected asset is a conflict', 'varianceAccountId'],
+  ['a COGS account equal to the asset account is a conflict', 'cogsAccountId'],
+  ['a received-not-billed account equal to the asset account is a conflict', 'receivedNotBilledAccountId'],
+] as Array<[string, 'adjustmentAccountId' | 'varianceAccountId' | 'cogsAccountId' | 'receivedNotBilledAccountId']>) {
+  test(name, () => {
+    assert.deepEqual(costingOffsetConflicts({ ...valid(), [field]: ASSET }), [field])
+  })
+}
 
 test('the comparison matches the server rule regardless of id casing', () => {
   assert.deepEqual(

@@ -118,65 +118,48 @@ test('a Bar-to-Table PATCH that the server accepts adopts the next revision', as
   assert.equal(sent[0]?.body.expectedUpdatedAt, REVISION)
 })
 
-test('a revision conflict surfaces the server refusal verbatim as a conflict', async () => {
-  const outcome = await requestCardSave({
-    fetchFn: (async () =>
-      jsonResponse(409, { error: 'this card changed after you opened it; reload and review the latest revision' })) as typeof fetch,
-    cardId: 'card-id',
-    draft: DRAFT,
-    revision: REVISION,
-    messages: MESSAGES,
+for (const [name, respond, expected] of [
+  [
+    'a revision conflict surfaces the server refusal verbatim as a conflict',
+    () => jsonResponse(409, { error: 'this card changed after you opened it; reload and review the latest revision' }),
+    {
+      kind: 'refused',
+      message: 'this card changed after you opened it; reload and review the latest revision',
+      conflict: true,
+    },
+  ],
+  [
+    'a validation refusal surfaces the field-level server message without conflict',
+    () => jsonResponse(422, { error: 'Card name cannot be empty' }),
+    { kind: 'refused', message: 'Card name cannot be empty', conflict: false },
+  ],
+  [
+    'a non-JSON refusal keeps the fallback with the status, never a parse error',
+    () => new Response('<html>proxy</html>', { status: 502 }),
+    { kind: 'refused', message: 'save failed fallback (status 502)', conflict: false },
+  ],
+  [
+    'a 2xx without the next revision refuses with the named remedy',
+    () => jsonResponse(200, { ok: true }),
+    { kind: 'refused', message: 'unusable revision remedy', conflict: false },
+  ],
+  [
+    'a 2xx that does not advance the carried revision is a refusal, never saved',
+    () => jsonResponse(200, { updated_at: REVISION }),
+    { kind: 'refused', message: 'unusable revision remedy', conflict: false },
+  ],
+] as Array<[string, () => Response, { kind: string; message: string; conflict: boolean }]>) {
+  test(name, async () => {
+    const outcome = await requestCardSave({
+      fetchFn: (async () => respond()) as typeof fetch,
+      cardId: 'card-id',
+      draft: DRAFT,
+      revision: REVISION,
+      messages: MESSAGES,
+    })
+    assert.deepEqual(outcome, expected)
   })
-  assert.deepEqual(outcome, {
-    kind: 'refused',
-    message: 'this card changed after you opened it; reload and review the latest revision',
-    conflict: true,
-  })
-})
-
-test('a validation refusal surfaces the field-level server message without conflict', async () => {
-  const outcome = await requestCardSave({
-    fetchFn: (async () => jsonResponse(422, { error: 'Card name cannot be empty' })) as typeof fetch,
-    cardId: 'card-id',
-    draft: DRAFT,
-    revision: REVISION,
-    messages: MESSAGES,
-  })
-  assert.deepEqual(outcome, { kind: 'refused', message: 'Card name cannot be empty', conflict: false })
-})
-
-test('a non-JSON refusal keeps the fallback with the status, never a parse error', async () => {
-  const outcome = await requestCardSave({
-    fetchFn: (async () => new Response('<html>proxy</html>', { status: 502 })) as typeof fetch,
-    cardId: 'card-id',
-    draft: DRAFT,
-    revision: REVISION,
-    messages: MESSAGES,
-  })
-  assert.deepEqual(outcome, { kind: 'refused', message: 'save failed fallback (status 502)', conflict: false })
-})
-
-test('a 2xx without the next revision refuses with the named remedy', async () => {
-  const outcome = await requestCardSave({
-    fetchFn: (async () => jsonResponse(200, { ok: true })) as typeof fetch,
-    cardId: 'card-id',
-    draft: DRAFT,
-    revision: REVISION,
-    messages: MESSAGES,
-  })
-  assert.deepEqual(outcome, { kind: 'refused', message: 'unusable revision remedy', conflict: false })
-})
-
-test('a 2xx that does not advance the carried revision is a refusal, never saved', async () => {
-  const outcome = await requestCardSave({
-    fetchFn: (async () => jsonResponse(200, { updated_at: REVISION })) as typeof fetch,
-    cardId: 'card-id',
-    draft: DRAFT,
-    revision: REVISION,
-    messages: MESSAGES,
-  })
-  assert.deepEqual(outcome, { kind: 'refused', message: 'unusable revision remedy', conflict: false })
-})
+}
 
 test('overlapping saves resolving out of order accept only the newest', async () => {
   // Two debounced autosaves overlap: Bar (seq 1, superseded) and Table
