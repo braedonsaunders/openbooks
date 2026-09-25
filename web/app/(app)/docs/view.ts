@@ -28,7 +28,14 @@ export interface DocsData {
 
 export async function loadDocsHome(): Promise<DocsData> {
   const t = await getTranslations('docs')
-  const groups = categoriesWithArticles()
+  const groups = categoriesWithArticles().map(({ category, articles }) => ({
+    category: {
+      ...category,
+      title: t(category.titleKey),
+      description: t(category.descriptionKey),
+    },
+    articles,
+  }))
   const startHere = ['welcome', 'quick-start', 'migration-and-cutover']
     .map(getArticle)
     .filter((article): article is NonNullable<typeof article> => Boolean(article))

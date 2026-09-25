@@ -24,5 +24,103 @@
     "browseTitle": "すべてのドキュメントを見る",
     "browseSubtitle": "トピック別にガイド全体を参照するか、サイドバーから検索できます。",
     "articleCount": "{count} 件の記事"
+  },
+  "categories": {
+    "getting-started": {
+      "title": "はじめに",
+      "description": "OpenBooks の方向付けと中心概念。"
+    },
+    "switching": {
+      "title": "OpenBooks への切り替え",
+      "description": "他の会計システムから移行するチーム向けの案内ガイド。"
+    },
+    "accounting": {
+      "title": "会計の基礎",
+      "description": "総勘定元帳モデル、取引ライフサイクル、勘定科目、ディメンション、マスタデータ。"
+    },
+    "transactions": {
+      "title": "販売と購買",
+      "description": "顧客・仕入先の取引フロー、支払、クレジット、消込。"
+    },
+    "banking-close": {
+      "title": "銀行と締め",
+      "description": "明細照合、消込、証憑、管理された期間締め。"
+    },
+    "projects": {
+      "title": "プロジェクトと請求",
+      "description": "プロジェクト種別、収益性、請求書発行と請求証憑。"
+    },
+    "reporting": {
+      "title": "レポートと分析",
+      "description": "財務諸表、元帳明細、ダッシュボード、分析、再利用可能なビュー。"
+    },
+    "integrations": {
+      "title": "連携と移行",
+      "description": "切り替えを計画し、移行した帳簿を検証し、エンティティ単位でソース接続を運用。"
+    },
+    "apps": {
+      "title": "アプリと拡張",
+      "description": "組織拡張機能のインストール、使用、更新、管理。"
+    },
+    "administration": {
+      "title": "管理",
+      "description": "設定、権限、インポート、ファイル、セキュリティ、不変の証跡。"
+    }
+  },
+  "sections": {
+    "getting-started-first-steps": {
+      "title": "最初のステップ"
+    },
+    "getting-started-using-openbooks": {
+      "title": "OpenBooks の使い方"
+    },
+    "switching-small-business": {
+      "title": "中小企業システム"
+    },
+    "switching-erp": {
+      "title": "ERP システム"
+    },
+    "accounting-ledger": {
+      "title": "元帳の基礎"
+    },
+    "accounting-master-data": {
+      "title": "マスタデータ"
+    },
+    "accounting-advanced": {
+      "title": "高度な会計"
+    },
+    "transactions-daily": {
+      "title": "日次ワークフロー"
+    },
+    "reporting-guides": {
+      "title": "レポートとインサイト"
+    },
+    "integrations-migration": {
+      "title": "移行と切り替え"
+    },
+    "integrations-connections": {
+      "title": "ソース接続"
+    },
+    "apps-build": {
+      "title": "アプリとスクリプト"
+    },
+    "apps-automation": {
+      "title": "自動化と連携"
+    },
+    "administration-organization": {
+      "title": "組織とアクセス"
+    },
+    "administration-company-setup": {
+      "title": "会社設定"
+    },
+    "administration-customize": {
+      "title": "カスタマイズ"
+    },
+    "administration-taxes": {
+      "title": "税金"
+    },
+    "administration-data": {
+      "title": "データと証跡"
+    }
   }
 }

@@ -37,8 +37,12 @@ export interface DocCategory {
   /** Stable category key. */
   key: string
   title: string
+  /** Stable catalog key for the localized title (`docs` namespace). */
+  titleKey: string
   /** One-line description shown on the docs home cards. */
   description: string
+  /** Stable catalog key for the localized description (`docs` namespace). */
+  descriptionKey: string
   /** nav-icon key (see components/sidebar-nav ICONS). */
   icon: string
   /** Sort order across the docs home + sidebar. */
@@ -49,6 +53,8 @@ export interface DocSection {
   /** Stable key, unique across the documentation registry. */
   key: string
   title: string
+  /** Stable catalog key for the localized title (`docs` namespace). */
+  titleKey: string
   /** Category this topic group belongs to. */
   category: string
   /** Optional parent section for arbitrarily deep navigation trees. */

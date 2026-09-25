@@ -24,5 +24,103 @@
     "browseTitle": "Explorar toda la documentación",
     "browseSubtitle": "Explore la guía completa por tema o use la búsqueda de la barra lateral.",
     "articleCount": "{count, plural, one {# artículo} other {# artículos}}"
+  },
+  "categories": {
+    "getting-started": {
+      "title": "Primeros pasos",
+      "description": "Orientación y conceptos básicos de OpenBooks."
+    },
+    "switching": {
+      "title": "Cambiar a OpenBooks",
+      "description": "Guías de familiarización para equipos que vienen de otro sistema contable."
+    },
+    "accounting": {
+      "title": "Fundamentos contables",
+      "description": "El modelo del libro mayor, el ciclo de vida de las transacciones, cuentas, dimensiones y datos maestros."
+    },
+    "transactions": {
+      "title": "Ventas y compras",
+      "description": "Ciclos de clientes y proveedores, pagos, abonos y aplicaciones."
+    },
+    "banking-close": {
+      "title": "Banco y cierre",
+      "description": "Conciliación bancaria, conciliación, evidencia y el cierre de período gobernado."
+    },
+    "projects": {
+      "title": "Proyectos y facturación",
+      "description": "Tipos de proyecto, rentabilidad, facturación y respaldo de facturas."
+    },
+    "reporting": {
+      "title": "Informes y análisis",
+      "description": "Estados financieros, detalle del libro mayor, paneles, análisis y vistas reutilizables."
+    },
+    "integrations": {
+      "title": "Integraciones y migración",
+      "description": "Planifique el cambio, compruebe los libros migrados y opere conexiones de origen por entidad."
+    },
+    "apps": {
+      "title": "Aplicaciones y extensiones",
+      "description": "Instale, use, actualice y administre las extensiones de la organización."
+    },
+    "administration": {
+      "title": "Administración",
+      "description": "Configuración, permisos, importaciones, archivos, seguridad y evidencia inmutable."
+    }
+  },
+  "sections": {
+    "getting-started-first-steps": {
+      "title": "Primeros pasos"
+    },
+    "getting-started-using-openbooks": {
+      "title": "Usar OpenBooks"
+    },
+    "switching-small-business": {
+      "title": "Pequeñas empresas"
+    },
+    "switching-erp": {
+      "title": "Sistemas ERP"
+    },
+    "accounting-ledger": {
+      "title": "Fundamentos del libro mayor"
+    },
+    "accounting-master-data": {
+      "title": "Datos maestros"
+    },
+    "accounting-advanced": {
+      "title": "Contabilidad avanzada"
+    },
+    "transactions-daily": {
+      "title": "Operaciones diarias"
+    },
+    "reporting-guides": {
+      "title": "Informes y análisis"
+    },
+    "integrations-migration": {
+      "title": "Migración y cambio"
+    },
+    "integrations-connections": {
+      "title": "Conexiones de origen"
+    },
+    "apps-build": {
+      "title": "Aplicaciones y scripts"
+    },
+    "apps-automation": {
+      "title": "Automatización e integración"
+    },
+    "administration-organization": {
+      "title": "Organización y acceso"
+    },
+    "administration-company-setup": {
+      "title": "Configuración de la empresa"
+    },
+    "administration-customize": {
+      "title": "Personalización"
+    },
+    "administration-taxes": {
+      "title": "Impuestos"
+    },
+    "administration-data": {
+      "title": "Datos y evidencia"
+    }
   }
 }
