@@ -104,8 +104,10 @@ export function PropertyManagementWorkspace({
 }) {
   const { money } = useMoney();
   const t = useTranslations("entities.propertyManagement.workspace");
+  const tCommon = useTranslations("common");
   const [data, setData] = useState<PropertyWorkspace>(empty);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("properties");
   const [createProperty, setCreateProperty] = useState(false);
@@ -136,11 +138,19 @@ export function PropertyManagementWorkspace({
         // must never become new Error(undefined) with an empty toast.
         if (!response.ok) throw new Error(await readApiErrorMessage(response, t("toasts.couldNotLoad")));
         setData(await response.json());
+        // A later success clears the failure: the panel below only stands
+        // for the current load, never a recovered one.
+        setLoadError(null);
       })
       .catch((error: unknown) => {
-        toast.error(
-          error instanceof Error && error.message ? error.message : t("toasts.couldNotLoad"),
-        );
+        const message =
+          error instanceof Error && error.message ? error.message : t("toasts.couldNotLoad");
+        toast.error(message);
+        // Remember the failure beside the toast: an initial load that never
+        // delivered must render as a failure, never a healthy zero
+        // portfolio. (A refetch over already-loaded data keeps rendering
+        // that data; the toast carries the failure there.)
+        setLoadError(message);
       })
       .finally(() => {
         setLoading(false);
@@ -216,6 +226,32 @@ export function PropertyManagementWorkspace({
     null;
   const selectedUnit =
     data.units.find((unit) => unit.id === selectedUnitId) ?? null;
+
+  // An initial load that never delivered renders as the failure it was —
+  // with a retry — never as a healthy zero portfolio. Stale-but-loaded data
+  // keeps rendering under the failure toast instead (see load() above).
+  const hasWorkspace =
+    data.properties.length > 0 || data.units.length > 0 || data.leases.length > 0;
+  if (!loading && loadError && !hasWorkspace) {
+    return (
+      <div
+        role="alert"
+        className="space-y-3 rounded-lg border border-red-300 bg-red-50 p-6 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+      >
+        <p className="font-medium">{loadError}</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setLoadError(null);
+            setLoading(true);
+            void load();
+          }}
+        >
+          {tCommon("actions.retry")}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

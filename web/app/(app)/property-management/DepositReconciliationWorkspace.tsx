@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { readApiErrorMessage } from "../../../lib/api-error";
 import { Empty, Field, Small, Status, formatGroupedMoney, sumByCurrency } from "./workspace-ui";
 import type { Money } from "./types";
 import { InteractiveTableRow } from '@/components/interactive-table-row'
@@ -47,6 +48,7 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
   const [asOf, setAsOf] = useState(useBusinessToday());
   const [result, setResult] = useState<ReconciliationResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   // Re-enter the loading state while refetching for another date, during
   // render (same committed value, no extra render).
   const [prevAsOf, setPrevAsOf] = useState(asOf);
@@ -60,15 +62,23 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
       cache: "no-store",
     })
       .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error ?? "Reconciliation failed");
-        if (!cancelled) setResult(body);
+        // The status is checked before the body parses: a non-JSON error
+        // page must name the failure, never throw out of .json().
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, "Reconciliation failed"));
+        if (!cancelled) {
+          setResult(await response.json());
+          setError(null);
+        }
       })
       .catch((error) => {
-        if (!cancelled)
-          toast.error(
-            error instanceof Error ? error.message : "Reconciliation failed",
-          );
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Reconciliation failed";
+          toast.error(message);
+          // A failed refetch drops to the failure state: stale balances
+          // must never keep rendering as if they were current.
+          setResult(null);
+          setError(message);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -112,6 +122,12 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
           </Field>
         </div>
       </div>
+      {error && rows.length === 0 ? (
+        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          {error}
+        </p>
+      ) : (
+      <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Small label="Deposit subledger" value={subledgerByCurrency.length ? formatGroupedMoney(subledgerByCurrency, money) : money(totals?.subledgerBalance ?? 0)} />
         <Small label="Linked posted GL" value={linkedByCurrency.length ? formatGroupedMoney(linkedByCurrency, money) : money(totals?.linkedGlBalance ?? 0)} />
@@ -197,6 +213,8 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
           <Empty title="No properties to reconcile" detail="Create a property and lease before running deposit reconciliation." />
         ) : null}
       </div>
+      </>
+      )}
     </div>
   );
 }
