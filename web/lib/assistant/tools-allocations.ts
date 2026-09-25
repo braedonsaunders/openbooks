@@ -43,7 +43,7 @@ import { previewAllocationRun } from "../../../engine/src/allocations/period-run
 import {
   allocationScopeVisible,
   previewPinError,
-} from "../../../engine/src/allocations/subsidiary-scope.ts";
+} from "../../../engine/src/organization/allocation-scope.ts";
 import {
   RunQueryError,
   getRun,

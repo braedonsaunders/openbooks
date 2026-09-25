@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
 import { isUuid } from "../../../../../lib/list-params";
 import { RunQueryError, getRun } from "../../../../../../engine/src/allocations/run-queries.ts";
-import { allocationScopeVisible } from "../../../../../../engine/src/allocations/subsidiary-scope.ts";
+import { allocationScopeVisible } from "../../../../../../engine/src/organization/allocation-scope.ts";
 
 export const runtime = "nodejs";
 

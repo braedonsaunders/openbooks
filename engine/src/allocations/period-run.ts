@@ -6,7 +6,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
-import { previewPinError, sourceScopeViolation, targetPinViolation } from "./subsidiary-scope.ts";
+import { previewPinError, sourceScopeViolation, targetPinViolation } from "../organization/allocation-scope.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
 import {

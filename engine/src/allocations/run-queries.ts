@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { allocationScopeVisible } from "./subsidiary-scope.ts";
+import { allocationScopeVisible } from "../organization/allocation-scope.ts";
 import type { AllocationRunStatus, AllocationRunTrigger, RunComputation } from "./types.ts";
 
 /**

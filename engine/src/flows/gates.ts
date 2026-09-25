@@ -18,7 +18,7 @@ import {
 } from "./targets.ts";
 import { activeDelegationPrincipal, activeDelegationPrincipals } from "./delegations.ts";
 import { emailActionUrls } from "./email-tokens.ts";
-import { allocationScopeVisible } from "../allocations/subsidiary-scope.ts";
+import { allocationScopeVisible } from "../organization/allocation-scope.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes

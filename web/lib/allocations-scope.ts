@@ -8,7 +8,7 @@ import {
 import {
   allocationRuleVisible,
   allocationScopeVisible,
-} from "../../engine/src/allocations/subsidiary-scope.ts";
+} from "../../engine/src/organization/allocation-scope.ts";
 import type { RuleInEffect } from "../../engine/src/allocations/types.ts";
 
 /**
