@@ -410,8 +410,15 @@ test("the employer path refuses a district with no entered rate, by name", () =>
     basis: "nonresident", side: "work", reach: "nonresident",
     certificateKey: null,
   } as const;
+  const districtShare = [{ region: "OR", subRegion: "LTD", workShare: "1", source: "employer work records", sourceWagesCurrentPeriod: "2000.00" }];
   assert.throws(
-    () => computeUsEmployerWithholding({ levy: { ...levy }, wages: "2000.00", tenantRates: () => undefined }),
+    () => computeUsEmployerWithholding({ levy: { ...levy }, wages: "2000.00", wageAllocations: districtShare, tenantRates: () => undefined }),
     /no transit payroll-tax rate has been entered for Lane Transit District/,
+  );
+  // A district with no recorded in-district share refuses by name rather
+  // than pricing the whole period as district wages.
+  assert.throws(
+    () => computeUsEmployerWithholding({ levy: { ...levy }, wages: "2000.00", tenantRates: () => ({ rate: "0.008" }) }),
+    /OR\/LTD needs exactly one current-period work allocation/,
   );
 });
