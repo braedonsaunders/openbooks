@@ -50,6 +50,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { PayrollError } from "../../error.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
 } from "../../certificates.ts";
@@ -491,12 +492,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const supplemental = U(input.supplemental ?? "0");
 
   // DE 44 p. 18: a supplemental payment made AT THE SAME TIME as regular wages
-  // must be aggregated and run through the schedules. This engine is handed one
-  // period's amounts together, which is that case, so the two are summed and
-  // the flat rates are not used. The separate-payment election is a real
-  // alternative the employer may make, and it is deliberately NOT implemented:
-  // it depends on facts about payment timing this engine is not given, and
-  // guessing which one applies would change withholding silently.
+  // must be aggregated and run through the schedules. A SEPARATELY paid
+  // supplement takes the flat election instead (bonuses/stock options 10.23%,
+  // other 6.6%) — but the election needs the payment's published wage
+  // category, which travels on the dispatch's classified earning components,
+  // not on this engine input. Aggregating a separate payment here would price
+  // a bonus-only check against the low-income exemption and file $0, so the
+  // engine refuses it: run the timed dispatch with classified components.
+  if (input.supplementalPaymentTiming === "separate" && supplemental > 0n) {
+    throw new PayrollError(
+      "California supplemental wages paid separately from regular wages take the DE 44 "
+      + "flat election (10.23% bonuses/stock options, 6.60% other), not the regular schedules. "
+      + "Price them through the timed withholding dispatch with each earning component classified "
+      + "by supplemental wage category — refused by name",
+    );
+  }
   const gross = wages + supplemental;
   trace("CA_GROSS", gross);
 
