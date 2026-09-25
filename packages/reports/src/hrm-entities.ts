@@ -1139,13 +1139,13 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     description:
       'HR documents — category, status and legal hold.',
     from: `hrm_documents d
-      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id`,
-    // Documents hang off the PERSON, not an employment, so this source has
-    // no legal-entity column. Declared as no-clamp rather than omitted: an
-    // absent key makes compileSubsidiaryScope THROW for any reader carrying
-    // an allowlist. Clamping would need a party-to-employment join and is a
-    // question for the owning lane, not an integration-time query rewrite.
-    subsidiaryScope: null,
+      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
+      LEFT JOIN worker_employments e ON e.id = d.employment_id AND e.org_id = d.org_id`,
+    // Narrowest link (the engine's documentScopePredicate): an
+    // employment-linked row clamps to THAT employment's employer subsidiary;
+    // employment-less rows (party-only issues, retention-anonymized
+    // delinks) carry NULL and fail closed for restricted readers.
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     orgColumn: 'd.org_id',
     requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
     featureKey: HRM_DOCUMENTS_FEATURE_KEY,
@@ -1172,9 +1172,13 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Document signers in order, with per-signer status.',
     from: `hrm_document_signers s
-      JOIN hrm_documents d ON d.id = s.document_id AND d.org_id = s.org_id`,
-    // Signers inherit the document's scope; see hrm_documents above.
-    subsidiaryScope: null,
+      JOIN hrm_documents d ON d.id = s.document_id AND d.org_id = s.org_id
+      LEFT JOIN worker_employments e ON e.id = d.employment_id AND e.org_id = d.org_id`,
+    // Signers inherit the document's scope through its employment link;
+    // see hrm_documents above. Employment-less documents fail closed here
+    // too, so a restricted reader never reaches another subsidiary's
+    // signer rows through the join.
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     orgColumn: 's.org_id',
     requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
     featureKey: HRM_DOCUMENTS_FEATURE_KEY,
@@ -1203,9 +1207,11 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       'Retention actions — due date, execution and blocks.',
     from: `hrm_retention_actions a
       JOIN hrm_documents d ON d.id = a.document_id AND d.org_id = a.org_id
-      JOIN hrm_retention_schedules s ON s.id = a.schedule_id AND s.org_id = a.org_id`,
-    // Retention actions inherit the document's scope; see hrm_documents.
-    subsidiaryScope: null,
+      JOIN hrm_retention_schedules s ON s.id = a.schedule_id AND s.org_id = a.org_id
+      LEFT JOIN worker_employments e ON e.id = d.employment_id AND e.org_id = d.org_id`,
+    // Retention actions inherit the document's scope through its employment
+    // link; see hrm_documents above. Employment-less documents fail closed.
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     orgColumn: 'a.org_id',
     requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
     featureKey: HRM_DOCUMENT_RETENTION_FEATURE_KEY,
