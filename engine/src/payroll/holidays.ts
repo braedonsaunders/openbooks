@@ -1678,7 +1678,13 @@ export function countHolidayQualifyingDays(input: {
  * `countHolidayQualifyingDays` — a rule with a 30-day qualifier and a 4-week
  * pay window makes one round trip, not two.
  */
-async function loadHolidayDayEvidence(
+/**
+ * Exported for the work-triggered grant engine (remembrance-grants.ts), which
+ * counts the same statute-defined day sets over its own window: one loader,
+ * not two. The input's lookback fields it does not need still travel with it
+ * — a narrower parameter would be a second contract for the same query.
+ */
+export async function loadHolidayDayEvidence(
   tx: Pick<typeof db, "execute">,
   input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId" | "excludeDocumentId">,
   window: { from: string; to: string },
@@ -1803,9 +1809,13 @@ export async function evidencedEntitledPayDays(
 }
 
 /** Approved hours worked on the holiday itself. */
-async function hoursOn(
+/**
+ * Approved hours worked on the holiday itself. Exported with
+ * loadHolidayDayEvidence above: the grant engine reads the same timesheets.
+ */
+export async function hoursOn(
   tx: Pick<typeof db, "execute">,
-  input: StatutoryHolidayPayInput,
+  input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId">,
   date: string,
 ): Promise<string> {
   const rows = (await tx.execute<{ hours: string }>(sql`

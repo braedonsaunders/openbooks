@@ -23,6 +23,14 @@ export interface EntitlementMovement {
   /** Component the movement should appear against on the stub, if any. */
   componentId: string | null;
   note: string | null;
+  /**
+   * Statutory provenance (0413): set only by work-triggered grants, which
+   * trace the movement to its holiday and carry the take-on date. Every other
+   * producer leaves all three null.
+   */
+  sourceHolidayKey?: string | null;
+  sourceHolidayDate?: string | null;
+  takeOn?: string | null;
 }
 
 export interface EntitlementWarning {

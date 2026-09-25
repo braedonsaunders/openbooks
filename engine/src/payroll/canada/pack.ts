@@ -7,7 +7,7 @@ import { T4127_FACTOR_LABELS } from "./t4127.ts";
 import { TP1015_FACTOR_LABELS } from "./quebec/tp1015.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./cra/remittance.ts";
 import { applyCaEmployerLevies } from "./employer-levies.ts";
-import { CA_JURISDICTIONS } from "./employment-standards.ts";
+import { CA_JURISDICTIONS, NS_REMEMBRANCE_ALTERNATE_DAY } from "./employment-standards.ts";
 import { caPackFilings } from "./filings.ts";
 import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS, PROVINCE_NAMES } from "./jurisdictions.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
@@ -77,6 +77,11 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   taxYear: { basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year" },
   regions: CA_REGIONS,
   jurisdictions: CA_JURISDICTIONS,
+  // Nova Scotia's Remembrance Day Act grants an alternate paid day off to
+  // employees who work November 11 (RSNS 1989 c 396) — the only
+  // work-triggered holiday grant declared by any pack. The generic seed
+  // layer provisions the alternate-day bank from this declaration.
+  alternateDayGrant: NS_REMEMBRANCE_ALTERNATE_DAY,
   // Source deductions are remitted to the Receiver General through the
   // org-configured CRA remittance vendor.
   remittanceVendorSettingsKey: "craRemittancePartyId",

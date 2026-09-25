@@ -67,4 +67,38 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
       { value: "6", label: "Saturday" },
     ],
   },
+  {
+    key: "ns_remembrance_business_class",
+    kind: "choice",
+    label: "Nova Scotia Remembrance Day business class",
+    refusalReason:
+      "An employee who worked November 11 cannot be granted or denied the statutory alternate paid day without it.",
+    legalBasis:
+      "Remembrance Day Act (Nova Scotia), RSNS 1989 c 396 — alternate day off with pay; "
+      + "exempt: farming, fishing, aquaculture, Christmas tree operations, forestry, industrial undertakings.",
+    // Only genuinely needed when an employee actually worked November 11:
+    // an unrecorded value refuses by name in the grant, naming the Setup
+    // page, rather than stopping every Canadian run.
+    required: false,
+    effectivePeriod: "date",
+    choices: [
+      { value: "general", label: "General business (covered by the Act)" },
+      { value: "farming", label: "Farming" },
+      { value: "fishing", label: "Fishing" },
+      { value: "aquaculture", label: "Aquaculture" },
+      { value: "christmas_tree", label: "Christmas tree operations" },
+      { value: "forestry", label: "Forestry (Labour Standards Code meaning)" },
+      { value: "industrial_undertaking", label: "Industrial undertaking (Labour Standards Code meaning)" },
+    ],
+  },
+];
+
+/** Business classes the Remembrance Day Act exempts from the alternate day. */
+export const NS_REMEMBRANCE_EXEMPT_BUSINESS_CLASSES: readonly string[] = [
+  "farming",
+  "fishing",
+  "aquaculture",
+  "christmas_tree",
+  "forestry",
+  "industrial_undertaking",
 ];
