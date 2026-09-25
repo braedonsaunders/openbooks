@@ -135,6 +135,20 @@ function authorize(
   };
 }
 
+/** Authorize the fixture actor, run the body, and always release the org. */
+async function withPayrollActor(
+  fixture: { orgId: string; actorId: string },
+  fn: () => Promise<void>,
+): Promise<void> {
+  try {
+    authorize(fixture.orgId, fixture.actorId);
+    await fn();
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(fixture.orgId);
+  }
+}
+
 function request(method: "PUT" | "POST", body: unknown): Request {
   return new Request("http://openbooks.test/api/payroll/settings", {
     method,
@@ -300,8 +314,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const responses = await Promise.all([
         PUT(request("PUT", { statutoryHolidayPay: true })),
         PUT(request("PUT", { eftFallbackToCheque: false })),
@@ -314,10 +327,7 @@ test(
         statutoryHolidayPay: true,
         eftFallbackToCheque: false,
       });
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -355,8 +365,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
 
       const accepted = await PUT(
         request("PUT", { rqRemittanceFrequency: "twice_monthly" }),
@@ -408,10 +417,7 @@ test(
         request("PUT", { craRemittanceFrequency: "twice_monthly" }),
       );
       assert.equal(craCrossAgency.status, 422);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -435,8 +441,7 @@ test(
         ),
       };
     });
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       // Pointing EI payable at a new account is the risk event: the API
       // still accepts it, but must carry a typed warning.
       const changed = await PUT(
@@ -466,10 +471,7 @@ test(
         ((await steady.json()) as { warnings?: unknown[] }).warnings ?? [],
         [],
       );
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -508,8 +510,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const before = await payrollState(fixture.orgId);
 
       const mistyped = await refusalOf(
@@ -545,10 +546,7 @@ test(
       const stored = (await payrollState(fixture.orgId)).settings ?? {};
       assert.equal(stored.netPayAccountId, fixture.accounts.ap);
       assert.equal(stored.wageExpenseAccountId, fixture.accounts.cogs);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -557,8 +555,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const before = await payrollState(fixture.orgId);
 
       const mistyped = await refusalOf(
@@ -597,10 +594,7 @@ test(
         (await payrollState(fixture.orgId)).settings?.craRemittancePartyId,
         fixture.vendorId,
       );
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -609,8 +603,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const bands = remittanceScheduleForFrequencyKey(
         "rqRemittanceFrequency",
       )!.frequencies.map((band) => band.frequency);
@@ -649,10 +642,7 @@ test(
         (await payrollState(fixture.orgId)).settings?.rqRemittanceFrequency,
         "twice_monthly",
       );
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -661,8 +651,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
 
       const cheque = await refusalOf(
         await PUT(request("PUT", { eftFallbackToCheque: "yes" })),
@@ -696,10 +685,7 @@ test(
       const stored = (await payrollState(fixture.orgId)).settings ?? {};
       assert.equal(stored.eftFallbackToCheque, true);
       assert.equal(stored.statutoryHolidayPay, true);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -708,8 +694,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const before = await payrollState(fixture.orgId);
 
       const nulled = await refusalOf(
@@ -764,10 +749,7 @@ test(
         (await payrollState(fixture.orgId)).settings?.t4Transmitter,
         { bn: "123456789", name: "Acme" },
       );
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -776,8 +758,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const before = await payrollState(fixture.orgId);
 
       const nulled = await refusalOf(
@@ -819,10 +800,7 @@ test(
         (await payrollState(fixture.orgId)).settings?.stubPassword,
         { enabled: false, expression: "" },
       );
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -831,8 +809,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const before = await payrollState(fixture.orgId);
       const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(", ");
 
@@ -865,10 +842,7 @@ test(
         (await payrollState(fixture.orgId)).settings?.countries,
         ["CA"],
       );
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -877,8 +851,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const before = await payrollState(fixture.orgId);
       const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(", ");
       const caPack = PAYROLL_COUNTRY_PACKS.CA;
@@ -991,10 +964,7 @@ test(
         `non-uuid slot account refuses by cause: ${malformedAccount.error}`,
       );
       assert.deepEqual(await payrollState(fixture.orgId), before);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -1003,8 +973,7 @@ test(
   { skip: !DB },
   async () => {
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       const installed = await POST(
         request("POST", { action: "install-pack", country: "CA" }),
       );
@@ -1020,10 +989,7 @@ test(
         (await payrollState(fixture.orgId)).taxAccount,
         fixture.accounts.ap,
       );
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 );
 
@@ -1039,8 +1005,7 @@ test(
       "../../../../../engine/src/payroll/packs.ts"
     );
     const fixture = await scratchPayrollOrg();
-    try {
-      authorize(fixture.orgId, fixture.actorId);
+    await withPayrollActor(fixture, async () => {
       // The route handlers that mutate wrap themselves in the org
       // transaction; reads rely on the ambient request-org context, which
       // only exists inside withOrgContext outside a Next request store.
@@ -1058,10 +1023,7 @@ test(
       assert.deepEqual(body.installablePacks, installablePayrollPacks());
       const gb = body.packs.find((pack) => pack.country === "GB");
       assert.equal(gb?.name, PAYROLL_COUNTRY_PACKS["GB"]!.name);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
+    });
   },
 )
 
