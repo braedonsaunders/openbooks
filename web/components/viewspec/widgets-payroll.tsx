@@ -77,6 +77,7 @@ export const PAYROLL_WIDGETS = {
       initial={props.initial as ComponentProps<typeof OpeningBalancesView>['initial']}
       fields={props.fields as ComponentProps<typeof OpeningBalancesView>['fields']}
       programs={props.programs as ComponentProps<typeof OpeningBalancesView>['programs']}
+      suiStates={props.suiStates as ComponentProps<typeof OpeningBalancesView>['suiStates']}
       components={props.components as ComponentProps<typeof OpeningBalancesView>['components']}
       canManage={props.canManage === true}
     />

@@ -340,7 +340,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'notifications-inbox': { props: ['rows'] },
   'notifications-mark-all-read': { props: ['unread'] },
   'open-chart-of-accounts': { props: ['href', 'label'] },
-  'opening-balances-grid': { props: ['canManage', 'components', 'currentYear', 'fields', 'initial', 'programs', 'year'] },
+  'opening-balances-grid': { props: ['canManage', 'components', 'currentYear', 'fields', 'initial', 'programs', 'suiStates', 'year'] },
   'opportunity-drawer': { props: ['drawer'] },
   'opportunity-kanban-board': { props: ['canManage', 'drawer', 'opportunities', 'showAllLabel', 'statuses', 'undatedLabel', 'undatedOnly'], open: true },
   'opportunity-view-switcher': { props: ['view'] },

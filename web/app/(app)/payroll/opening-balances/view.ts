@@ -9,6 +9,7 @@ import {
   employerLevyOpeningsForYear,
   type OpeningBalanceYear,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
+import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements-openings.ts'
 import { itSurtaxSaldoCarryIns } from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -84,6 +85,7 @@ export interface PayrollOpeningBalancesData {
     initial: OpeningBalanceYear
     fields: BalancesProps['fields']
     programs: BalancesProps['programs']
+    suiStates: BalancesProps['suiStates']
     components: BalancesProps['components']
     canManage: boolean
   }
@@ -166,6 +168,16 @@ export async function loadPayrollOpeningBalances(
         help: program.help,
         packs: [program.country],
       })),
+      // One SUI column per US state. The help is the same transfer
+      // determination the API serves (keep in sync with GET
+      // /api/payroll/opening-balances, suiStates.help): entering a state row
+      // asserts those wages transfer under the gaining state's rule.
+      suiStates: [...US_STATES].map((code) => ({
+        key: code,
+        label: code,
+        help: 'Pre-adoption wages insurable for unemployment insurance in this state. Enter only wages the gaining state\u2019s transfer rule lets transfer (most states credit same-employer wages reported to another state toward the new state\u2019s base).',
+        packs: ['US'],
+      })),
       components: data.components,
       canManage: can(authz, 'payroll.manage'),
     },
@@ -212,6 +224,7 @@ export function payrollOpeningBalancesSpec(_data: PayrollOpeningBalancesData): P
           initial: f('balances.initial'),
           fields: f('balances.fields'),
           programs: f('balances.programs'),
+          suiStates: f('balances.suiStates'),
           components: f('balances.components'),
           canManage: f('balances.canManage'),
         }),
