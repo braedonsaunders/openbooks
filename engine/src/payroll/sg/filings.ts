@@ -23,7 +23,10 @@
  *   becomes entitled" (§9c) — so payroll can only report the aggregate
  *   paid, and the slip says the employer must split it across the form's
  *   items before submitting (the W-2 "attributable figure, stated as such"
- *   precedent).
+ *   precedent). Contractual bonuses earned this year but paid next year sit
+ *   in next year's stubs: the slip carries those next-year earnings as the
+ *   `nextYearPaid` candidate pool with a review pointer, never silently
+ *   omitting them and never auto-adding them.
  * - Employee's compulsory CPF contribution (Deductions I): the `cpf_ee`
  *   deduction lines. The engine prices compulsory Table-1 shares only
  *   (Additional Wages are refused by name), which is exactly what §10(I)
@@ -86,6 +89,14 @@ export interface Ir8aSlip {
   employeeName: string;
   /** Taxable earnings paid through committed payroll (Notes items a–d aggregate). */
   employmentIncome: string;
+  /**
+   * Taxable earnings PAID in the following tax year through committed
+   * payroll (I6-payroll-292): the candidate pool for bonuses the employee
+   * became entitled to in this year but received next year (§9b). Never
+   * added to employmentIncome — the employer moves qualifying amounts into
+   * this year's items before submitting.
+   */
+  nextYearPaid: string;
   /** `cpf_ee` deduction lines — compulsory employee CPF (Deductions I). */
   employeeCpf: string;
   /** `cpf_er` employer-contribution lines — compulsory employer CPF. */
@@ -132,6 +143,29 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
       + "so a year with nothing committed has no slip to issue",
     );
   }
+  // Entitlement-year source (I6-payroll-292): contractual bonuses earned in
+  // this year but paid next year sit in next year's stubs, so the slip would
+  // silently omit them. The subledger carries no bonus classification or
+  // entitlement date, so this is the candidate pool — next-year earnings the
+  // employer must review for this-year entitlements (§9b) — never an
+  // automatic addition.
+  const nextYear = taxYear + 1;
+  const nextRows = (await db.execute<{ employee_party_id: unknown; next_income: unknown }>(sql`
+    select s.employee_party_id,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
+                  and coalesce(pc.taxable, true))) as next_income
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+                       and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.tax_year = ${nextYear} and s.country = 'SG'
+     group by s.employee_party_id
+  `));
+  const nextByEmployee = new Map<string, string>();
+  for (const row of nextRows.rows) {
+    nextByEmployee.set(String(row.employee_party_id), num(row.next_income));
+  }
   return rows.rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
@@ -139,6 +173,7 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
     employeeCpf: num(row.employee_cpf),
     employerCpf: num(row.employer_cpf),
     stubCount: Number(row.stub_count ?? 0),
+    nextYearPaid: nextByEmployee.get(String(row.employee_party_id)) ?? "0",
   }));
 }
 
@@ -199,7 +234,7 @@ async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<
   if (!slip) {
     throw new PayrollError(`no ${taxYear} Form IR8A matches the requested employee`);
   }
-  return {
+  const slipData: PayrollFilingSlipData = {
     formCode: "SG_IR8A",
     formName: "Form IR8A — Return of Employee's Remuneration (Auto-Inclusion Scheme)",
     formNumber: "Form IR8A",
@@ -256,6 +291,17 @@ async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<
       + "withholding box exists on this slip. (Explanatory Notes §5; IRAS, Reporting Employee Earnings)",
     ],
   };
+  // Entitlement-year review pointer (I6-payroll-292): bonuses earned this
+  // year but paid next year are assessed this year (§9b) yet sit in next
+  // year's stubs. Name the candidate pool so it cannot be silently omitted.
+  if (slip.nextYearPaid !== "0" && slip.nextYearPaid !== "0.00") {
+    (slipData.notes ??= []).push(
+      `Paid in ${taxYear + 1} through committed payroll: ${slip.nextYearPaid} — review for bonuses this employee `
+      + `became entitled to in ${taxYear} and move qualifying amounts into this year's items a)–d) before `
+      + "submitting; next-year regular pay stays in next year's return. (Explanatory Notes §9b)",
+    );
+  }
+  return slipData;
 }
 
 /**
