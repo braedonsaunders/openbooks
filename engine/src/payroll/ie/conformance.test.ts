@@ -33,6 +33,7 @@ function weekly(input: Partial<IeStatutoryInput>): IeStatutoryInput {
     basis: "cumulative",
     hasRpn: true,
     ...RPN_4000_44000,
+    uscCutoffAnnual: "70044",
     taxablePayPeriod: "0",
     taxablePayYtd: "0",
     taxPaidYtd: "0",
