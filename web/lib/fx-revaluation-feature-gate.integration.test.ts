@@ -76,16 +76,16 @@ test("disabled multi-currency blocks the FX service before any journal or audit 
 test("FX route rejects a feature disable committed after its initial guard", { skip: !enabled }, async () => {
   const org = await fixture();
   try {
-    const req = new Request("https://openbooks.test/api/close/run-revaluation", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ periodId: org.periodId }),
-    });
-    const original = req.json.bind(req);
     let before: Awaited<ReturnType<typeof evidence>> | undefined;
-    req.json = async () => {
-      await setFeature(org.orgId, false);
-      before = await evidence(org.orgId);
-      return original();
-    };
+    const req = new Request("https://openbooks.test/api/close/run-revaluation", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: new ReadableStream({ async pull(controller) {
+        await setFeature(org.orgId, false);
+        before = await evidence(org.orgId);
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({ periodId: org.periodId })));
+        controller.close();
+      } }, { highWaterMark: 0 }), duplex: "half",
+    } as RequestInit & { duplex: "half" });
     const response = await POST(req);
     assert.ok(before, "the native initial gate must have passed before disabling");
     assert.equal(response.status, 404, JSON.stringify(await response.json()));
