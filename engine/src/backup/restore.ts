@@ -453,7 +453,10 @@ async function validateSessionSecretEmailConfig(
   return "passed";
 }
 
-async function insertionOrder(client: pg.PoolClient, tableNames: readonly string[]): Promise<string[]> {
+async function insertionOrder(
+  client: pg.PoolClient,
+  tableNames: readonly string[],
+): Promise<{ tables: string[]; stagedSelfReferences: Map<string, string[]> }> {
   const names = new Set(tableNames);
   const edges = await client.query<{ child: string; parent: string }>(`
     select child.relname as child, parent.relname as parent
@@ -478,6 +481,38 @@ async function insertionOrder(client: pg.PoolClient, tableNames: readonly string
       indegree.set(child, (indegree.get(child) ?? 0) + 1);
     }
   }
+  const selfReferences = await client.query<{
+    table_name: string;
+    match_type: string;
+    columns: string[];
+    nullable_columns: string[] | null;
+  }>(`
+    select child.relname as table_name, constraint_row.confmatchtype as match_type,
+           array_agg(column_row.attname order by key_row.ordinality) as columns,
+           array_agg(column_row.attname order by key_row.ordinality)
+             filter (where not column_row.attnotnull) as nullable_columns
+      from pg_constraint constraint_row
+      join pg_class child on child.oid = constraint_row.conrelid
+      join pg_namespace namespace_row on namespace_row.oid = child.relnamespace
+      cross join lateral unnest(constraint_row.conkey) with ordinality key_row(attnum, ordinality)
+      join pg_attribute column_row on column_row.attrelid = child.oid and column_row.attnum = key_row.attnum
+     where constraint_row.contype = 'f'
+       and not constraint_row.condeferrable
+       and constraint_row.conrelid = constraint_row.confrelid
+       and namespace_row.nspname = 'public'
+       and child.relname = any($1::text[])
+     group by child.relname, constraint_row.conname, constraint_row.confmatchtype
+  `, [tableNames]);
+  const stagedSelfReferences = new Map<string, string[]>();
+  for (const reference of selfReferences.rows) {
+    const nullableColumns = reference.nullable_columns ?? [];
+    if (!nullableColumns.length || (reference.match_type === "f" && nullableColumns.length !== reference.columns.length)) {
+      throw new Error(`restore cannot stage non-deferrable self-reference on ${reference.table_name}`);
+    }
+    stagedSelfReferences.set(reference.table_name, [
+      ...new Set([...(stagedSelfReferences.get(reference.table_name) ?? []), ...nullableColumns]),
+    ]);
+  }
   const queue = [...names].filter((name) => indegree.get(name) === 0).sort();
   const ordered: string[] = [];
   while (queue.length) {
@@ -495,7 +530,10 @@ async function insertionOrder(client: pg.PoolClient, tableNames: readonly string
   }
   // orgs has no hard parent and must precede tenant rows for clarity even when
   // their org_id foreign keys are deferrable.
-  return ["orgs", ...ordered.filter((name) => name !== "orgs")];
+  return {
+    tables: ["orgs", ...ordered.filter((name) => name !== "orgs")],
+    stagedSelfReferences,
+  };
 }
 
 async function insertSpoolTable(
@@ -503,6 +541,7 @@ async function insertSpoolTable(
   inspection: BackupArchiveInspection,
   tableName: string,
   expectedRows: number,
+  stagedSelfReferences: readonly string[] = [],
 ): Promise<number> {
   if (expectedRows === 0) return 0;
   if (!TABLE_NAME_RE.test(tableName)) throw new Error(`unsafe backup table name ${tableName}`);
@@ -521,7 +560,10 @@ async function insertSpoolTable(
   for (const column of storable) {
     if (!TABLE_NAME_RE.test(column)) throw new Error(`unsafe column name ${column} on ${tableName}`);
   }
-  const columnList = storable.map((column) => `"${column}"`).join(", ");
+  const staged = new Set(stagedSelfReferences);
+  const insertColumns = storable.filter((column) => !staged.has(column));
+  if (!insertColumns.length) throw new Error(`restore target ${tableName} has no columns available for staged insertion`);
+  const columnList = insertColumns.map((column) => `"${column}"`).join(", ");
   const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
   let batch: string[] = [];
   let batchBytes = 0;
@@ -550,6 +592,63 @@ async function insertSpoolTable(
     throw new Error(`restore inserted ${inserted} ${tableName} rows; expected ${expectedRows}`);
   }
   return inserted;
+}
+
+async function restoreStagedSelfReferences(
+  client: pg.PoolClient,
+  inspection: BackupArchiveInspection,
+  tableName: string,
+  columns: readonly string[],
+  expectedRows: number,
+): Promise<void> {
+  if (!columns.length || !expectedRows) return;
+  const primaryKey = await client.query<{ column_name: string }>(`
+    select usage.column_name
+      from information_schema.key_column_usage usage
+      join information_schema.table_constraints constraint_row
+        on constraint_row.constraint_schema = usage.constraint_schema
+       and constraint_row.constraint_name = usage.constraint_name
+       and constraint_row.table_schema = usage.table_schema
+       and constraint_row.table_name = usage.table_name
+     where usage.table_schema = 'public'
+       and usage.table_name = $1
+       and constraint_row.constraint_type = 'PRIMARY KEY'
+     order by usage.ordinal_position
+  `, [tableName]);
+  const keyColumns = primaryKey.rows.map((row) => row.column_name);
+  if (!keyColumns.length) throw new Error(`restore target ${tableName} has no primary key for self-reference replay`);
+  for (const column of [...columns, ...keyColumns]) {
+    if (!TABLE_NAME_RE.test(column)) throw new Error(`unsafe column name ${column} on ${tableName}`);
+  }
+  const setClause = columns.map((column) => `"${column}" = source."${column}"`).join(", ");
+  const keyClause = keyColumns.map((column) => `target."${column}" = source."${column}"`).join(" and ");
+  const updateSql = `update public."${tableName}" as target set ${setClause}
+    from jsonb_populate_recordset(null::public."${tableName}", $1::jsonb) as source
+   where ${keyClause}`;
+  const path = join(inspection.spoolDir, `${tableName}.ndjson`);
+  const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
+  let batch: string[] = [];
+  let batchBytes = 0;
+  let updated = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    const result = await client.query(updateSql, [`[${batch.join(",")}]`]);
+    updated += result.rowCount ?? 0;
+    batch = [];
+    batchBytes = 0;
+  };
+  for await (const line of lines) {
+    if (!line) throw new Error(`empty spooled row for ${tableName}`);
+    const rowBytes = Buffer.byteLength(line);
+    if (batch.length && batchBytes + rowBytes > 4 * 1024 * 1024) await flush();
+    batch.push(line);
+    batchBytes += rowBytes;
+    if (batch.length >= 250 || batchBytes >= 4 * 1024 * 1024) await flush();
+  }
+  await flush();
+  if (updated !== expectedRows) {
+    throw new Error(`restore updated ${updated} ${tableName} self-references; expected ${expectedRows}`);
+  }
 }
 
 async function validateTenantReferences(client: pg.PoolClient, orgId: string): Promise<void> {
@@ -676,7 +775,7 @@ export async function restoreOrgBackup(args: {
       // absent (or a hand-made archive pointing outside) is refused by name
       // here instead of dying on a raw FK violation at commit.
       await validateOrgParentage(inspection, args.expectedOrgId);
-      const order = await insertionOrder(client, targetTables);
+      const insertion = await insertionOrder(client, targetTables);
       const rowCounts = new Map(inspection.tables.map((table) => [table.name, table.rows]));
       let interruptedBackupRunsClosed = 0;
       let mfaFactorsReset = 0;
@@ -703,11 +802,26 @@ export async function restoreOrgBackup(args: {
           await client.query(`alter table public."${tableName}" disable trigger user`);
         }
         let rowsRestored = 0;
-        for (const tableName of order) {
-          rowsRestored += await insertSpoolTable(client, inspection, tableName, rowCounts.get(tableName) ?? 0);
+        for (const tableName of insertion.tables) {
+          rowsRestored += await insertSpoolTable(
+            client,
+            inspection,
+            tableName,
+            rowCounts.get(tableName) ?? 0,
+            insertion.stagedSelfReferences.get(tableName),
+          );
         }
         if (rowsRestored !== inspection.totalRows) {
           throw new Error(`restore row total ${rowsRestored} does not match archive ${inspection.totalRows}`);
+        }
+        for (const [tableName, columns] of insertion.stagedSelfReferences) {
+          await restoreStagedSelfReferences(
+            client,
+            inspection,
+            tableName,
+            columns,
+            rowCounts.get(tableName) ?? 0,
+          );
         }
         // Drain deferred FK/constraint events before ALTER TABLE re-enables
         // user triggers; PostgreSQL refuses trigger DDL while a relation has
