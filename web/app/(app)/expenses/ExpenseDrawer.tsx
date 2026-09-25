@@ -349,8 +349,6 @@ export function ExpenseDrawer({
   const [mode, setMode] = useState<DrawerMode>(
     initialDrawerMode(initialMode, canEditStatus),
   )
-  const editable = mode === 'edit' && canEditStatus
-
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [paymentCardId, setPaymentCardId] = useState<string>(doc.payment_card_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -363,6 +361,7 @@ export function ExpenseDrawer({
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+  const editable = mode === 'edit' && canEditStatus && !busy
 
   const taxProfiles = useMemo(() => [
     ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
