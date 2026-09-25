@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { certificateDeclarationProblem, type ResolvedCertificate } from "../../certificates.ts";
 import "../../packs.ts";
+import { utahEmployerWaiverResult } from "../withholding.ts";
 import {
   UT_CERTIFICATE, UT_REGION, UT_WITHHOLDING, utScheduleFor,
 } from "./ut.ts";
@@ -176,13 +177,12 @@ test("UT head of household uses the Single column (tables footnote p. 12)", () =
   assert.equal(result.tax, money("12"));
 });
 
-test("UT exempt W-4 notation withholds nothing", () => {
+test("UT W-4 exemption and Commission waiver withhold nothing", () => {
   const result = UT_WITHHOLDING.compute({
     payDate: "2026-06-05", periodStart: "2026-06-01", periodsPerYear: 52, wages: "400.00", basis: "resident",
     certificate: cert({ filing_status: "single", exempt: "true" }),
   });
-  assert.equal(result.tax, money("0"));
-  assert.equal(result.factors.UT_EXEMPT, "1");
+  assert.deepEqual([result.tax, result.factors.UT_EXEMPT, utahEmployerWaiverResult().tax], [money("0"), "1", "0.0000"]);
 });
 
 test("UT refuses a pay frequency it prints no schedule for", () => {

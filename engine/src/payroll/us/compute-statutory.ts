@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import { U } from "../canada/decimal.ts";
 import { add, sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
+import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 // Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
@@ -118,6 +120,48 @@ export function resolveUsSuiYtdForCoverage(
   suiExempt: boolean,
 ): string {
   return suiExempt ? "0" : resolveUsSuiYtd(region, taxYear, ytd);
+}
+
+/** A finite Utah waiver suppresses withholding only when it covers every day in the payroll period. */
+async function utEmployerWaiverCoversPeriod(ctx: PayrollStatutoryComputeContext): Promise<boolean> {
+  const { run, subsidiaryId, tx, orgId } = ctx;
+  if (!subsidiaryId) return false;
+  const resolveAt = (asOf: string) => resolveStoredEmployerFact({
+    tx, orgId, subsidiaryId, country: "US", factKey: "ut_withholding_commission_waiver", asOf,
+  });
+  if (!run.period_start || !run.period_end) {
+    if (await resolveAt(run.pay_date!) === "approved") {
+      throw new PayrollPackError("US UT employer withholding waiver cannot be applied without the payroll period start and end dates");
+    }
+    return false;
+  }
+  const changes = await tx.execute<{ boundary: string }>(sql`
+    select distinct boundary::text as boundary
+      from (
+        select effective_from as boundary from payroll_employer_facts
+         where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}::uuid
+           and country = 'US'
+           and fact_key = 'ut_withholding_commission_waiver'
+           and effective_from > ${run.period_start}::date and effective_from <= ${run.period_end}::date
+        union all
+        select superseded_on as boundary from payroll_employer_facts
+         where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}::uuid
+           and country = 'US'
+           and fact_key = 'ut_withholding_commission_waiver'
+           and superseded_on > ${run.period_start}::date and superseded_on <= ${run.period_end}::date
+      ) boundaries
+     order by boundary
+  `);
+  const dates = [...new Set([run.period_start, ...changes.rows.map((row) => row.boundary), run.period_end])];
+  let approvedBoundaries = 0;
+  for (const date of dates) if (await resolveAt(date) === "approved") approvedBoundaries++;
+  if (approvedBoundaries === dates.length) return true;
+  if (approvedBoundaries > 0) {
+    throw new PayrollPackError(
+      "US UT employer withholding waiver covers only part of this payroll period; separate wages by service dates so the approved span is not applied outside its authorized dates",
+    );
+  }
+  return false;
 }
 
 /**
@@ -511,9 +555,13 @@ export async function computeUsStatutory(
       };
       continue;
     }
+    const employerWithholdingWaiver = levy.region === "UT"
+      ? await utEmployerWaiverCoversPeriod(ctx)
+      : false;
     const withheld = computeUsWithholding({
       levy,
       payDate: run.pay_date!,
+      employerWithholdingWaiver,
       periodStart: run.period_start!,
       employerEmployeeCount,
       periodEnd: run.period_end!,
