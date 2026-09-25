@@ -428,6 +428,20 @@
       "failed": "No se pudo crear el puesto.",
       "noEmployer": "No hay ninguna empresa empleadora disponible: pida acceso a una empresa a un administrador antes de crear el puesto."
     },
+    "manage": {
+      "revise": "Revisar puesto",
+      "fund": "Financiar período",
+      "close": "Cerrar puesto",
+      "title": "Título",
+      "plannedFte": "FTE planificadas",
+      "status": "Estado",
+      "effectiveDate": "Fecha de vigencia",
+      "period": "Período contable",
+      "fundedFte": "FTE financiadas",
+      "reason": "Motivo",
+      "failed": "No se pudo guardar el cambio del puesto.",
+      "saved": "Cambio del puesto guardado."
+    },
     "segmentsLabel": "Estado"
   },
   "processes": {

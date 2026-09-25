@@ -428,6 +428,20 @@
       "failed": "The position could not be created.",
       "noEmployer": "No employing subsidiary is available — ask an administrator for subsidiary access before creating the position."
     },
+    "manage": {
+      "revise": "Revise position",
+      "fund": "Fund period",
+      "close": "Close position",
+      "title": "Title",
+      "plannedFte": "Planned FTE",
+      "status": "Status",
+      "effectiveDate": "Effective date",
+      "period": "Accounting period",
+      "fundedFte": "Funded FTE",
+      "reason": "Reason",
+      "failed": "The position change could not be saved.",
+      "saved": "Position change saved."
+    },
     "segmentsLabel": "Status"
   },
   "processes": {

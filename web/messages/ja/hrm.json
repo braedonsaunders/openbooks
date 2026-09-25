@@ -428,6 +428,20 @@
       "failed": "ポジションを作成できませんでした。",
       "noEmployer": "利用可能な雇用主がありません — ポジションを作成する前に、管理者に子会社のアクセスを依頼してください。"
     },
+    "manage": {
+      "revise": "職位を改訂",
+      "fund": "期間に予算を設定",
+      "close": "職位を終了",
+      "title": "タイトル",
+      "plannedFte": "計画FTE",
+      "status": "ステータス",
+      "effectiveDate": "適用日",
+      "period": "会計期間",
+      "fundedFte": "予算FTE",
+      "reason": "理由",
+      "failed": "職位の変更を保存できませんでした。",
+      "saved": "職位の変更を保存しました。"
+    },
     "segmentsLabel": "ステータス"
   },
   "processes": {

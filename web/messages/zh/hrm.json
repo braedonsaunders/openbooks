@@ -428,6 +428,20 @@
       "failed": "无法创建职位。",
       "noEmployer": "没有可用的雇主子公司 — 请先向管理员申请子公司访问权限，再创建职位。"
     },
+    "manage": {
+      "revise": "修订职位",
+      "fund": "为期间提供资金",
+      "close": "关闭职位",
+      "title": "职位名称",
+      "plannedFte": "计划全职当量",
+      "status": "状态",
+      "effectiveDate": "生效日期",
+      "period": "会计期间",
+      "fundedFte": "已资助全职当量",
+      "reason": "原因",
+      "failed": "无法保存职位变更。",
+      "saved": "职位变更已保存。"
+    },
     "segmentsLabel": "状态"
   },
   "processes": {

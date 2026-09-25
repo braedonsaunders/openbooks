@@ -428,6 +428,20 @@
       "failed": "Die Stelle konnte nicht angelegt werden.",
       "noEmployer": "Keine anstellende Gesellschaft verfügbar — bitten Sie einen Administrator um Zugriff auf eine Gesellschaft, bevor Sie eine Stelle anlegen."
     },
+    "manage": {
+      "revise": "Überarbeiten",
+      "fund": "Finanzieren",
+      "close": "Schließen",
+      "title": "Titel",
+      "plannedFte": "Geplante FTE",
+      "status": "Status",
+      "effectiveDate": "Wirksamkeitsdatum",
+      "period": "Abrechnungsperiode",
+      "fundedFte": "Finanzierte FTE",
+      "reason": "Grund",
+      "failed": "Die Positionsänderung ist fehlgeschlagen.",
+      "saved": "Positionsänderung gespeichert."
+    },
     "segmentsLabel": "Status"
   },
   "processes": {

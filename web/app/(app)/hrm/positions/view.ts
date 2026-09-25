@@ -30,6 +30,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
 import type { PositionCreateProps } from './PositionCreateForm'
+import type { PositionManageProps } from './PositionManageForm'
 
 /**
  * Positions tab, split into a loader and a spec.
@@ -130,6 +131,7 @@ export interface PositionsPageData {
     warnings: string[]
     refusal: string | null
     closeHref: string
+    manage: PositionManageProps | null
   } | null
   missingDetail: string | null
   /** The create form's loader-resolved inputs when the URL asks for `position=new`. */
@@ -347,6 +349,43 @@ export async function loadPositionsPage(
         knownAt: new Date().toISOString(),
       })
       const to = resolved.version.effectiveTo
+      let manage: PositionManageProps | null = null
+      if (canManage && resolved.version.status !== 'closed') {
+        const periods = (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
+          select id::text as id, name, starts_on::text as "startsOn", ends_on::text as "endsOn"
+            from accounting_periods
+           where org_id = ${authz.user.orgId}::uuid
+           order by starts_on desc, period_number desc
+           limit 200
+        `)).rows
+        const fundedByPeriod = new Map(resolved.funding.map((plan) => [plan.periodId, plan.fundedFte]))
+        manage = {
+          positionId,
+          effectiveDate,
+          title: resolved.version.title,
+          plannedFte: resolved.version.plannedFte,
+          status: resolved.version.status,
+          periods: periods.map((period) => ({
+            value: period.id,
+            label: `${period.name} · ${period.startsOn} – ${period.endsOn}`,
+            fundedFte: fundedByPeriod.get(period.id) ?? '0.0000',
+          })),
+          labels: {
+            revise: t('positions.manage.revise'),
+            fund: t('positions.manage.fund'),
+            close: t('positions.manage.close'),
+            title: t('positions.manage.title'),
+            plannedFte: t('positions.manage.plannedFte'),
+            status: t('positions.manage.status'),
+            effectiveDate: t('positions.manage.effectiveDate'),
+            period: t('positions.manage.period'),
+            fundedFte: t('positions.manage.fundedFte'),
+            reason: t('positions.manage.reason'),
+            failed: t('positions.manage.failed'),
+            saved: t('positions.manage.saved'),
+          },
+        }
+      }
       detail = {
         code: resolved.positionCode,
         title: resolved.version.title,
@@ -375,6 +414,7 @@ export async function loadPositionsPage(
         warnings: [...resolved.disagreementWarnings],
         refusal: resolved.vacancy.refusal?.message ?? null,
         closeHref: hrefFor(effectiveDate, status, null),
+        manage,
       }
     } catch (error) {
       // A bookmarked id that no longer resolves (never a live list id)

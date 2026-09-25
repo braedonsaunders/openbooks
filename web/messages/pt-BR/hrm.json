@@ -428,6 +428,20 @@
       "failed": "Não foi possível criar a posição.",
       "noEmployer": "Nenhuma subsidiária empregadora disponível — peça acesso a uma subsidiária a um administrador antes de criar a posição."
     },
+    "manage": {
+      "revise": "Revisar cargo",
+      "fund": "Financiar período",
+      "close": "Encerrar cargo",
+      "title": "Título",
+      "plannedFte": "FTE planejado",
+      "status": "Situação",
+      "effectiveDate": "Data de vigência",
+      "period": "Período contábil",
+      "fundedFte": "FTE financiado",
+      "reason": "Motivo",
+      "failed": "Não foi possível salvar a alteração do cargo.",
+      "saved": "Alteração do cargo salva."
+    },
     "segmentsLabel": "Status"
   },
   "processes": {
