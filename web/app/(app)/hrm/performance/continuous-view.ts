@@ -78,6 +78,16 @@ export interface ContinuousData {
     title: string
     description: string
     newLabel: string
+    newHref: string
+    create: {
+      cycles: { value: string; label: string }[]
+      nameLabel: string
+      cycleLabel: string
+      submitLabel: string
+      cancelLabel: string
+      closeHref: string
+      failed: string
+    } | null
     sessionsEmpty: string
     sessionCols: { name: string; status: string; opened: string }
     sessions: { id: string; name: string; status: string; statusLabel: string; href: string }[]
@@ -115,15 +125,6 @@ export interface ContinuousData {
       openLabel: string
       closeLabel: string
       failed: string
-      create: {
-        cycles: { value: string; label: string }[]
-        nameLabel: string
-        cycleLabel: string
-        submitLabel: string
-        cancelLabel: string
-        closeHref: string
-        failed: string
-      } | null
     } | null
     detailError: ContinuousLoadError | null
   } | null
@@ -232,7 +233,10 @@ export async function loadContinuousTab(
   let calibration: ContinuousData['calibration'] = null
   if (tab === 'calibration' && showCalibration) {
     const sessions = await listCalibrationSessions({ orgId: authz.user.orgId, actorId: authz.user.id })
-    const sessionId = typeof sp.session === 'string' && sp.session.length > 0 ? sp.session : sessions[0]?.id ?? null
+    // ?session=new opens the create dialog: it is not a session id, so it
+    // never reaches getCalibrationSession (whose requireId rejects it).
+    const creating = sp.session === 'new'
+    const sessionId = creating ? null : typeof sp.session === 'string' && sp.session.length > 0 ? sp.session : sessions[0]?.id ?? null
     type CalibrationDetail = NonNullable<NonNullable<ContinuousData['calibration']>['detail']>
     let detail: CalibrationDetail | null = null
     let detailError: ContinuousLoadError | null = null
@@ -250,7 +254,6 @@ export async function loadContinuousTab(
         const distribution = await calibrationDistribution({ orgId: authz.user.orgId, actorId: authz.user.id, id: sessionId })
         const distEntries = [...Object.entries(distribution.calibrated)]
         const distMax = Math.max(1, ...distEntries.map(([, count]) => count))
-        const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id })
         detail = {
           id: session.id,
           name: session.name,
@@ -292,18 +295,6 @@ export async function loadContinuousTab(
           openLabel: t('performance.continuous.calibration.openSession'),
           closeLabel: t('performance.continuous.calibration.closeSession'),
           failed: t('performance.actionFailed'),
-          create:
-            sp.session === 'new'
-              ? {
-                  cycles: cycles.map((c) => ({ value: c.id, label: c.name })),
-                  nameLabel: t('performance.continuous.calibration.sessionName'),
-                  cycleLabel: t('performance.continuous.calibration.sessionCycle'),
-                  submitLabel: t('performance.continuous.calibration.createSession'),
-                  cancelLabel: t('performance.cancel'),
-                  closeHref: '/hrm/performance?tab=calibration',
-                  failed: t('performance.actionFailed'),
-                }
-              : null,
         }
       } catch (error) {
         // A session that vanished (or left scope) simply has no detail —
@@ -319,10 +310,27 @@ export async function loadContinuousTab(
         detail = null
       }
     }
+    // The create dialog resolves without a session: the cycle picker lists
+    // the manager's visible cycles, and the POST endpoint owns the grant.
+    let create: NonNullable<ContinuousData['calibration']>['create'] = null
+    if (creating) {
+      const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id })
+      create = {
+        cycles: cycles.map((c) => ({ value: c.id, label: c.name })),
+        nameLabel: t('performance.continuous.calibration.sessionName'),
+        cycleLabel: t('performance.continuous.calibration.sessionCycle'),
+        submitLabel: t('performance.continuous.calibration.createSession'),
+        cancelLabel: t('performance.cancel'),
+        closeHref: '/hrm/performance?tab=calibration',
+        failed: t('performance.actionFailed'),
+      }
+    }
     calibration = {
       title: t('performance.continuous.calibration.title'),
       description: t('performance.continuous.calibration.description'),
       newLabel: t('performance.continuous.calibration.newSession'),
+      newHref: '/hrm/performance?tab=calibration&session=new',
+      create,
       sessionsEmpty: t('performance.continuous.calibration.sessionsEmpty'),
       sessionCols: {
         name: t('performance.continuous.calibration.colSession'),
@@ -516,6 +524,7 @@ export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
   if (data.tab === 'calibration' && data.calibration) {
     const cal = data.calibration
     blocks.push(
+      widgetBlock('link-button', { href: cal.newHref, label: cal.newLabel, iconKey: 'plus' }),
       table({
         variant: 'app',
         rows: f('continuous.calibration.sessions'),
@@ -562,11 +571,13 @@ export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
           widgetBlock('hrm-calibration-missing', { title: d.missingTitle, missing: d.missing }),
         )
       }
-      if (d.create) {
-        blocks.push(widgetBlock('hrm-session-dialog', { create: d.create }))
-      }
     } else if (cal.detailError) {
       blocks.push(...loadErrorBlocks(cal.detailError))
+    }
+    // The create dialog rides ?session=new with no session behind it, so
+    // it renders beside the detail (or its absence), never inside it.
+    if (cal.create) {
+      blocks.push(widgetBlock('hrm-session-dialog', { create: cal.create }))
     }
   }
   if (data.tab === 'talent' && data.talentError) {
