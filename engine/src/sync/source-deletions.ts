@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -275,37 +276,55 @@ export async function mirrorSourceDeletion(input: {
            )
          )`);
 
-      const reversal = (await tx
-        .insert(schema.journalEntries)
-        .values({
-          orgId: input.orgId,
-          bookId: entry.bookId,
-          subsidiaryId: entry.subsidiaryId,
-          entryNumber: await nextFreeEntryNumber(
-            tx,
-            input.orgId,
-            `${entry.entryNumber}-SOURCE-DELETE`,
-          ),
-          postingDate: entry.postingDate,
-          periodId: entry.periodId,
-          memo: `Source deletion ${input.source}:${input.sourceRef}`,
-          status: "draft",
-          sourceDocumentId: document.id,
-          origin: "migration",
-          reversesEntryId: entry.id,
-        })
-        .returning({ id: schema.journalEntries.id }))[0]!;
-      await tx.insert(schema.journalLines).values(
-        reversalJournalLines(lines, { entryId: reversal.id, orgId: input.orgId }),
-      );
-      await tx
-        .update(schema.journalEntries)
-        .set({ status: "posted", postedAt: new Date() })
-        .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, input.orgId)));
-      await tx
-        .update(schema.journalEntries)
-        .set({ status: "reversed" })
-        .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, input.orgId)));
+      // The reversal posts through the ONE ledger API; the deleted entry is
+      // then marked reversed — never edited or removed.
+      const mirror = reversalJournalLines(lines, { entryId: "", orgId: input.orgId });
+      const postedReversal = await postEntry(tx, {
+        orgId: input.orgId,
+        bookId: entry.bookId,
+        subsidiaryId: entry.subsidiaryId,
+        entryNumber: await nextFreeEntryNumber(
+          tx,
+          input.orgId,
+          `${entry.entryNumber}-SOURCE-DELETE`,
+        ),
+        postingDate: entry.postingDate,
+        periodId: entry.periodId,
+        memo: `Source deletion ${input.source}:${input.sourceRef}`,
+        sourceDocumentId: document.id,
+        origin: "migration",
+        reversesEntryId: entry.id,
+        actorId: null,
+        closeModules: [closeModuleForDocument(document.kind)],
+        allowImportedLocks: true,
+        allowInactiveAccounts: true,
+        lines: mirror.map((line) => ({
+          accountId: line.accountId,
+          subsidiaryId: line.subsidiaryId,
+          amount: line.amount,
+          currency: line.currency,
+          txnAmount: line.txnAmount,
+          fxRate: line.fxRate,
+          memo: line.memo,
+          partyId: line.partyId,
+          departmentId: line.departmentId,
+          projectId: line.projectId,
+          locationId: line.locationId,
+          classId: line.classId,
+          equipmentUnitId: line.equipmentUnitId,
+          extraDims: line.extraDims ?? {},
+          paymentCardId: line.paymentCardId,
+          taxCodeId: line.taxCodeId,
+          quantity: line.quantity,
+          unit: line.unit,
+          custom: (line.custom ?? {}) as Record<string, unknown>,
+          contributorKind: line.contributorKind,
+          contributorRef: line.contributorRef,
+          lineNumber: line.lineNumber,
+        })),
+      });
+      const reversal = { id: postedReversal.entryId };
+      await markEntryReversed(tx, { orgId: input.orgId, entryId: entry.id, actorId: null });
       await tx.execute(sql`
         update documents
            set status = 'voided', voided_at = now(), open_balance = null,
@@ -437,39 +456,55 @@ export async function resolveSourceDeletion(input: {
           throw new SourceDeletionResolutionError(
             "document disappeared while resolving deletion",
           );
-        const reversal = (await tx
-          .insert(schema.journalEntries)
-          .values({
-            orgId: input.orgId,
-            bookId: entry.bookId,
-            subsidiaryId: entry.subsidiaryId,
-            entryNumber: await nextFreeEntryNumber(
-              tx,
-              input.orgId,
-              `${entry.entryNumber}-SOURCE-DELETE`,
-            ),
-            postingDate,
-            periodId: entry.periodId,
-            memo: `Source deletion ${source}:${input.sourceRef}${input.note ? ` — ${input.note}` : ""}`,
-            status: "draft",
-            sourceDocumentId: document.id,
-            origin: "migration",
-            reversesEntryId: entry.id,
-            createdBy: input.actorId,
-            updatedBy: input.actorId,
-          })
-          .returning({ id: schema.journalEntries.id }))[0]!;
-        await tx.insert(schema.journalLines).values(
-          reversalJournalLines(lines, { entryId: reversal.id, orgId: input.orgId }),
-        );
-        await tx
-          .update(schema.journalEntries)
-          .set({ status: "posted", postedAt: new Date() })
-          .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, input.orgId)));
-        await tx
-          .update(schema.journalEntries)
-          .set({ status: "reversed" })
-          .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, input.orgId)));
+        // The reversal posts through the ONE ledger API; the deleted entry
+        // is then marked reversed — never edited or removed.
+        const mirror = reversalJournalLines(lines, { entryId: "", orgId: input.orgId });
+        const postedReversal = await postEntry(tx, {
+          orgId: input.orgId,
+          bookId: entry.bookId,
+          subsidiaryId: entry.subsidiaryId,
+          entryNumber: await nextFreeEntryNumber(
+            tx,
+            input.orgId,
+            `${entry.entryNumber}-SOURCE-DELETE`,
+          ),
+          postingDate,
+          periodId: entry.periodId,
+          memo: `Source deletion ${source}:${input.sourceRef}${input.note ? ` — ${input.note}` : ""}`,
+          sourceDocumentId: document.id,
+          origin: "migration",
+          reversesEntryId: entry.id,
+          actorId: input.actorId,
+          closeModules: [closeModuleForDocument(document.kind)],
+          allowImportedLocks: true,
+          allowInactiveAccounts: true,
+          lines: mirror.map((line) => ({
+            accountId: line.accountId,
+            subsidiaryId: line.subsidiaryId,
+            amount: line.amount,
+            currency: line.currency,
+            txnAmount: line.txnAmount,
+            fxRate: line.fxRate,
+            memo: line.memo,
+            partyId: line.partyId,
+            departmentId: line.departmentId,
+            projectId: line.projectId,
+            locationId: line.locationId,
+            classId: line.classId,
+            equipmentUnitId: line.equipmentUnitId,
+            extraDims: line.extraDims ?? {},
+            paymentCardId: line.paymentCardId,
+            taxCodeId: line.taxCodeId,
+            quantity: line.quantity,
+            unit: line.unit,
+            custom: (line.custom ?? {}) as Record<string, unknown>,
+            contributorKind: line.contributorKind,
+            contributorRef: line.contributorRef,
+            lineNumber: line.lineNumber,
+          })),
+        });
+        const reversal = { id: postedReversal.entryId };
+        await markEntryReversed(tx, { orgId: input.orgId, entryId: entry.id, actorId: input.actorId });
         await tx.execute(sql`
           update documents
              set status = 'voided', voided_at = now(),

@@ -6,6 +6,7 @@ import { db, withOrg } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { civilDateFromParts, daysInCivilMonth } from "../platform/business-date.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import type { MigrationSource } from "./source.ts";
 
 /**
@@ -201,63 +202,54 @@ export async function trueUpResidualGl(
             subsidiaryIds: [subsidiaryId],
             modules: ["gl"],
           });
+          // Every journal write routes through the ONE ledger API: the
+          // true-up audit payload travels with the posting.
           const entryId = randomUUID();
-          await db.execute(sql`
-            insert into journal_entries
-              (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-               period_id, memo, status, origin, custom, created_by, updated_by)
-            values
-              (${entryId}, ${orgId}, ${bookId}, ${subsidiaryId},
-               ${`OPENING-${openingDate}-${entryId.slice(0, 8)}`}, ${openingDate}, ${periodId},
-               ${`Migration opening balance ${source.name} ${openingDate}`}, 'draft',
-               'migration', ${JSON.stringify({
-                 sourceProjection: {
-                   kind: "connector_trueup",
-                   sourceName: source.name,
-                   refKey,
-                   syncRunId: control.syncRunId ?? null,
-                   openingBalance: true,
-                   openingDate,
-                 },
-               })}::jsonb,
-               ${control.actorId ?? null}, ${control.actorId ?? null})
-          `);
-          let lineNumber = 0;
-          for (const [accountId, units] of [...openingUnits.entries()].sort()) {
-            await db.execute(sql`
-              insert into journal_lines
-                (org_id, entry_id, line_number, account_id, subsidiary_id,
-                 amount, currency, txn_amount, fx_rate, is_open_item)
-              values
-                (${orgId}, ${entryId}, ${++lineNumber}, ${accountId},
-                 ${subsidiaryId}, ${fromUnits(units)},
-                 ${org.rows[0].base_currency}, ${fromUnits(units)}, 1, false)
-            `);
+          const postedOpening = await postEntry(db, {
+            id: entryId,
+            orgId,
+            bookId,
+            subsidiaryId,
+            entryNumber: `OPENING-${openingDate}-${entryId.slice(0, 8)}`,
+            postingDate: openingDate,
+            periodId,
+            memo: `Migration opening balance ${source.name} ${openingDate}`,
+            origin: "migration",
+            custom: {
+              sourceProjection: {
+                kind: "connector_trueup",
+                sourceName: source.name,
+                refKey,
+                syncRunId: control.syncRunId ?? null,
+                openingBalance: true,
+                openingDate,
+              },
+            },
+            actorId: control.actorId,
+            currency: org.rows[0].base_currency,
+            closeModules: ["gl"],
+            auditAction: "insert",
+            requestId: control.syncRunId ?? "migration_gl_opening_balance",
+            auditChanges: {
+              mode: "migration_gl_opening_balance",
+              source: source.name,
+              openingDate,
+              syncRunId: control.syncRunId ?? null,
+              lineCount: openingUnits.size,
+            },
+            lines: [...openingUnits.entries()]
+              .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+              .map(([accountId, units]) => ({
+                accountId,
+                amount: fromUnits(units),
+              })),
+          });
+          if (postedOpening.entryId !== entryId)
+            throw new Error("true-up opening balance was not posted");
+          for (const [accountId, units] of openingUnits) {
             byAccountTotal.set(accountId, (byAccountTotal.get(accountId) ?? 0n) + units);
             lines++;
           }
-          await db.execute(sql`
-            update journal_entries
-               set status = 'posted', posted_at = now(),
-                   posted_by = ${control.actorId ?? null},
-                   updated_at = now(), updated_by = ${control.actorId ?? null}
-             where id = ${entryId} and org_id = ${orgId}
-          `);
-          await db.execute(sql`
-            insert into audit_log
-              (org_id, table_name, row_id, action, changes, actor_id, request_id)
-            values
-              (${orgId}, 'journal_entries', ${entryId}, 'insert',
-               ${JSON.stringify({
-                 mode: "migration_gl_opening_balance",
-                 source: source.name,
-                 openingDate,
-                 syncRunId: control.syncRunId ?? null,
-                 lineCount: openingUnits.size,
-               })}::jsonb,
-               ${control.actorId ?? null},
-               ${control.syncRunId ?? "migration_gl_opening_balance"})
-          `);
           entries++;
         }
       }
@@ -372,64 +364,53 @@ export async function trueUpResidualGl(
       // The id is client-generated randomUUID (v4) — never a DB uuidv7 whose
       // leading bytes repeat for ~50 days — so the whole id is a collision-
       // free per-generation salt under journal_entries_org_number.
+      // Every journal write routes through the ONE ledger API: the true-up
+      // audit payload travels with the posting.
       const entryId = randomUUID();
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, origin, custom, created_by, updated_by)
-        values
-          (${entryId}, ${orgId}, ${bookId}, ${subsidiaryId},
-           ${`TRUEUP-${month}-${entryId}`}, ${endOn}, ${periodId},
-           ${`Migration GL true-up ${source.name} ${month}`}, 'draft',
-           'migration', ${JSON.stringify({
-             sourceProjection: {
-               kind: "connector_trueup",
-               sourceName: source.name,
-               refKey,
-               syncRunId: control.syncRunId ?? null,
-             },
-           })}::jsonb,
-           ${control.actorId ?? null}, ${control.actorId ?? null})
-      `);
-      let lineNumber = 0;
+      const postedTrueup = await postEntry(db, {
+        id: entryId,
+        orgId,
+        bookId,
+        subsidiaryId,
+        entryNumber: `TRUEUP-${month}-${entryId}`,
+        postingDate: endOn,
+        periodId,
+        memo: `Migration GL true-up ${source.name} ${month}`,
+        origin: "migration",
+        custom: {
+          sourceProjection: {
+            kind: "connector_trueup",
+            sourceName: source.name,
+            refKey,
+            syncRunId: control.syncRunId ?? null,
+          },
+        },
+        actorId: control.actorId,
+        currency: org.rows[0].base_currency,
+        closeModules: ["gl"],
+        auditAction: "insert",
+        requestId: control.syncRunId ?? "migration_gl_trueup",
+        auditChanges: {
+          mode: "migration_gl_trueup",
+          source: source.name,
+          month,
+          syncRunId: control.syncRunId ?? null,
+          lineCount: entryLines.length,
+        },
+        lines: entryLines.map(([accountId, units]) => ({
+          accountId,
+          amount: fromUnits(units),
+        })),
+      });
+      if (postedTrueup.entryId !== entryId)
+        throw new Error("true-up residual was not posted");
       for (const [accountId, units] of entryLines) {
-        await db.execute(sql`
-          insert into journal_lines
-            (org_id, entry_id, line_number, account_id, subsidiary_id,
-             amount, currency, txn_amount, fx_rate, is_open_item)
-          values
-            (${orgId}, ${entryId}, ${++lineNumber}, ${accountId},
-             ${subsidiaryId}, ${fromUnits(units)},
-             ${org.rows[0].base_currency}, ${fromUnits(units)}, 1, false)
-        `);
         byAccountTotal.set(
           accountId,
           (byAccountTotal.get(accountId) ?? 0n) + units,
         );
         lines++;
       }
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now(),
-               posted_by = ${control.actorId ?? null},
-               updated_at = now(), updated_by = ${control.actorId ?? null}
-         where id = ${entryId} and org_id = ${orgId}
-      `);
-      await db.execute(sql`
-        insert into audit_log
-          (org_id, table_name, row_id, action, changes, actor_id, request_id)
-        values
-          (${orgId}, 'journal_entries', ${entryId}, 'insert',
-           ${JSON.stringify({
-             mode: "migration_gl_trueup",
-             source: source.name,
-             month,
-             syncRunId: control.syncRunId ?? null,
-             lineCount: entryLines.length,
-           })}::jsonb,
-           ${control.actorId ?? null},
-           ${control.syncRunId ?? "migration_gl_trueup"})
-      `);
       entries++;
     }
     return {

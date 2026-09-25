@@ -21,6 +21,7 @@ import {
   reconcileAssetDepreciationStatusWithRunner,
 } from "./depreciation.ts";
 import { lockAssetRow, postAssetLifecycleEntry } from "./asset-lifecycle.ts";
+import { markEntryReversed } from "../ledger/post-entry.ts";
 interface ReversalInput {
   sourceChangeId: string;
   effectiveOn: string;
@@ -277,13 +278,13 @@ export async function applyAssetReversal(
           throw new Error("the source asset journal reversal was not posted");
         entryIds.push(id);
         reversingEntries.set(entry.id, id);
-        const changed = await db.execute(
-          sql`update journal_entries set status='reversed',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${entry.id} and status='posted' returning id`,
-        );
-        if (changed.rows.length !== 1)
+        try {
+          await markEntryReversed(db, { orgId, entryId: entry.id, actorId });
+        } catch {
           throw new Error(
             "source asset journal could not be linked to its reversal",
           );
+        }
       }
       for (const event of now.events) {
         const journal = event.journal_entry_id

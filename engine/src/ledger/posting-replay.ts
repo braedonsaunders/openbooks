@@ -7,6 +7,7 @@ import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
+import { markEntryReversed, postEntry } from "./post-entry.ts";
 import { type PostingDeps, PostingError } from "./posting-contracts.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
@@ -420,49 +421,60 @@ export async function regenerateGlImpactTx(
         }
       : null,
   };
-  const reversal = (await tx
-    .insert(schema.journalEntries)
-    .values({
-      orgId: doc.orgId,
-      bookId: entry.bookId,
-      subsidiaryId: entry.subsidiaryId,
-      entryNumber: await nextFreeEntryNumber(
-        tx,
-        doc.orgId,
-        `${entry.entryNumber}-SOURCE-REV`,
-      ),
-      postingDate: entry.postingDate,
-      periodId: entry.periodId,
-      memo: `Source correction reversal: ${reason}`,
-      status: "draft",
-      sourceDocumentId: doc.id,
-      origin: "migration",
-      reversesEntryId: entry.id,
-      custom: evidence,
-      createdBy: correction.actorId,
-      updatedBy: correction.actorId,
-    })
-    .returning({ id: schema.journalEntries.id }))[0]!;
-  await tx.insert(schema.journalLines).values(
-    reversalJournalLines(existing, { entryId: reversal.id, orgId: doc.orgId }),
-  );
-  await tx
-    .update(schema.journalEntries)
-    .set({
-      status: "posted",
-      postedAt: new Date(),
-      postedBy: correction.actorId,
-      updatedBy: correction.actorId,
-    })
-    .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, doc.orgId)));
-  await tx
-    .update(schema.journalEntries)
-    .set({
-      status: "reversed",
-      updatedAt: new Date(),
-      updatedBy: correction.actorId,
-    })
-    .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId)));
+  // The reversal posts through the ONE ledger API; the corrected entry is
+  // then marked reversed — never edited.
+  const mirror = reversalJournalLines(existing, { entryId: "", orgId: doc.orgId });
+  const postedReversal = await postEntry(tx, {
+    orgId: doc.orgId,
+    bookId: entry.bookId,
+    subsidiaryId: entry.subsidiaryId,
+    entryNumber: await nextFreeEntryNumber(
+      tx,
+      doc.orgId,
+      `${entry.entryNumber}-SOURCE-REV`,
+    ),
+    postingDate: entry.postingDate,
+    periodId: entry.periodId,
+    memo: `Source correction reversal: ${reason}`,
+    sourceDocumentId: doc.id,
+    origin: "migration",
+    reversesEntryId: entry.id,
+    custom: evidence,
+    actorId: correction.actorId,
+    closeModules: [module],
+    allowImportedLocks: true,
+    allowInactiveAccounts: true,
+    lines: mirror.map((line) => ({
+      accountId: line.accountId,
+      subsidiaryId: line.subsidiaryId,
+      amount: line.amount,
+      currency: line.currency,
+      txnAmount: line.txnAmount,
+      fxRate: line.fxRate,
+      memo: line.memo,
+      partyId: line.partyId,
+      departmentId: line.departmentId,
+      projectId: line.projectId,
+      locationId: line.locationId,
+      classId: line.classId,
+      equipmentUnitId: line.equipmentUnitId,
+      extraDims: line.extraDims ?? {},
+      paymentCardId: line.paymentCardId,
+      taxCodeId: line.taxCodeId,
+      quantity: line.quantity,
+      unit: line.unit,
+      custom: (line.custom ?? {}) as Record<string, unknown>,
+      contributorKind: line.contributorKind,
+      contributorRef: line.contributorRef,
+      lineNumber: line.lineNumber,
+    })),
+  });
+  const reversal = { id: postedReversal.entryId };
+  await markEntryReversed(tx, {
+    orgId: doc.orgId,
+    entryId: entry.id,
+    actorId: correction.actorId,
+  });
 
   // Repeated corrections of one document reverse the prior replacement and
   // post a new one; number each generation past its predecessors so the
@@ -474,68 +486,59 @@ export async function regenerateGlImpactTx(
        and reverses_entry_id is null
        and custom->>'mode' = 'append_only_source_correction'`));
   const correctionGen = (priorCorrections.rows[0]?.n ?? 0) + 1;
-  const replacement = (await tx
-    .insert(schema.journalEntries)
-    .values({
-      orgId: doc.orgId,
-      bookId: entry.bookId,
-      subsidiaryId: subApplied.docSubId,
-      entryNumber: await nextFreeEntryNumber(
-        tx,
-        doc.orgId,
-        correctionGen === 1
-          ? `${doc.documentNumber}-SOURCE-CORR`
-          : `${doc.documentNumber}-SOURCE-CORR-${correctionGen}`,
-      ),
-      postingDate,
-      periodId: period.id,
-      memo: doc.memo,
-      status: "draft",
-      sourceDocumentId: doc.id,
-      origin: subApplied.multi ? "intercompany" : "migration",
-      custom: {
-        ...evidence,
-        reversalEntryId: reversal.id,
-      },
-      createdBy: correction.actorId,
-      updatedBy: correction.actorId,
-    })
-    .returning({ id: schema.journalEntries.id }))[0]!;
-  const replacementLines = await tx
-    .insert(schema.journalLines)
-    .values(kernelLines.map((line, index) => ({
-      orgId: doc.orgId,
-      entryId: replacement.id,
-      lineNumber: index + 1,
+  // The replacement posts through the ONE ledger API.
+  const postedReplacement = await postEntry(tx, {
+    orgId: doc.orgId,
+    bookId: entry.bookId,
+    subsidiaryId: subApplied.docSubId,
+    entryNumber: await nextFreeEntryNumber(
+      tx,
+      doc.orgId,
+      correctionGen === 1
+        ? `${doc.documentNumber}-SOURCE-CORR`
+        : `${doc.documentNumber}-SOURCE-CORR-${correctionGen}`,
+    ),
+    postingDate,
+    periodId: period.id,
+    memo: doc.memo,
+    sourceDocumentId: doc.id,
+    origin: subApplied.multi ? "intercompany" : "migration",
+    custom: {
+      ...evidence,
+      reversalEntryId: reversal.id,
+    },
+    actorId: correction.actorId,
+    closeModules: [module],
+    allowImportedLocks: true,
+    allowInactiveAccounts: true,
+    lines: kernelLines.map((line) => ({
       accountId: line.accountId,
       subsidiaryId: line.subsidiaryId,
       amount: line.amount,
       currency: line.currency,
       txnAmount: line.txnAmount,
       fxRate: line.fxRate,
-      partyId: line.partyId ?? null,
-      departmentId: line.departmentId ?? null,
-      projectId: line.projectId ?? null,
-      locationId: line.locationId ?? null,
-      classId: line.classId ?? null,
-      equipmentUnitId: line.equipmentUnitId ?? null,
+      memo: line.memo,
+      partyId: line.partyId,
+      departmentId: line.departmentId,
+      projectId: line.projectId,
+      locationId: line.locationId,
+      classId: line.classId,
+      equipmentUnitId: line.equipmentUnitId,
       extraDims: line.extraDims ?? {},
-      paymentCardId: line.paymentCardId ?? null,
-      taxCodeId: line.taxCodeId ?? null,
-      memo: line.memo ?? null,
-      dueDate: line.dueDate ?? null,
-      isOpenItem: line.isOpenItem ?? false,
-    })))
-    .returning();
-  await tx
-    .update(schema.journalEntries)
-    .set({
-      status: "posted",
-      postedAt: new Date(),
-      postedBy: correction.actorId,
-      updatedBy: correction.actorId,
-    })
-    .where(and(eq(schema.journalEntries.id, replacement.id), eq(schema.journalEntries.orgId, doc.orgId)));
+      paymentCardId: line.paymentCardId,
+      taxCodeId: line.taxCodeId,
+      dueDate: line.dueDate,
+      isOpenItem: line.isOpenItem,
+    })),
+  });
+  const replacement = { id: postedReplacement.entryId };
+  // Application transfer below reads full line fields; the API returns ids
+  // in line order, so rejoin them with the posted kernel lines.
+  const replacementLines = kernelLines.map((line, index) => ({
+    ...line,
+    id: postedReplacement.lines[index]!.id,
+  }));
   const updated = await tx
     .update(schema.documents)
     .set({

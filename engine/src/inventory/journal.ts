@@ -3,6 +3,7 @@ import { type SqlExecutor } from "../platform/db.ts";
 import { isZero, sum } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 // ---------------------------------------------------------------------------
 // Shared kernel poster
@@ -106,26 +107,33 @@ export async function postInventoryEntry(
   const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
     where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`)).rows[0];
   if (!book) throw new InventoryError("inventory journal requires an active posting book");
-  const entryRes = (await tx.execute<{ id: string }>(sql`
-    insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, custom, created_by, updated_by, posted_by)
-    values (${p.orgId}, ${p.bookId}, ${p.subsidiaryId}, ${p.entryNumber}, ${p.date}, ${p.periodId}, ${p.memo},
-            'draft', 'inventory', ${JSON.stringify(p.custom ?? {})}::jsonb, ${p.actorId ?? null}, ${p.actorId ?? null}, null)
-    returning id`));
-  const eid = entryRes.rows[0]!.id;
-  for (let i = 0; i < p.lines.length; i++) {
-    const l = p.lines[i]!;
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-         department_id, project_id, location_id, memo)
-      values (${p.orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${p.subsidiaryId}, ${l.amount}, ${p.currency}, ${l.amount}, 1,
-              ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.locationId ?? null}, ${l.memo ?? p.memo})`);
-  }
-  await tx.execute(
-    sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${p.actorId ?? null}, updated_by = ${p.actorId ?? null} where id = ${eid} and org_id = ${p.orgId}`,
-  );
-  return eid;
+  // Every journal write routes through the ONE ledger API: it owns balance
+  // validation, the open-period check, the posting lock, the single
+  // multi-row line insert, and the audit record. The InventoryError checks
+  // above stay the caller-facing contract; the API is the backstop.
+  const posted = await postEntry(tx, {
+    orgId: p.orgId,
+    bookId: p.bookId,
+    subsidiaryId: p.subsidiaryId,
+    entryNumber: p.entryNumber,
+    postingDate: p.date,
+    periodId: p.periodId,
+    memo: p.memo,
+    origin: "inventory",
+    custom: p.custom ?? {},
+    actorId: p.actorId,
+    currency: p.currency,
+    closeModules: [],
+    lines: p.lines.map((l) => ({
+      accountId: l.accountId,
+      amount: l.amount,
+      departmentId: l.departmentId,
+      projectId: l.projectId,
+      locationId: l.locationId,
+      memo: l.memo ?? p.memo,
+    })),
+  });
+  return posted.entryId;
 }
 
 /** An offset hitting the valuation account would break inventory GL = layer value. */

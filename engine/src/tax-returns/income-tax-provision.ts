@@ -17,6 +17,7 @@ import {
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 
 /**
@@ -1992,34 +1993,57 @@ export async function postProvisionRun(
          order by entry_number
       `));
       for (const priorEntry of priorEntries.rows) {
-        const reversalEntryId = randomUUID();
-        await db.execute(sql`
-          insert into journal_entries
-            (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
-          values (${reversalEntryId}, ${orgId}, ${bookId}, ${priorEntry.subsidiary_id},
-                  ${provisionReversalEntryNumber(run.fiscalYear, priorRun.version, orgId, priorEntry.subsidiary_id)},
-                  ${run.periodTo}, ${periodId}, ${`Reverse income tax provision FY${run.fiscalYear}`}, 'draft', 'tax_provision',
-                  ${priorEntry.id}, ${actorId}, ${actorId})
-        `);
         // Mirror-copy negates each line in place: subsidiary, currency and
-        // functional amounts carry over exactly as originally posted.
-        await db.execute(sql`
-          insert into journal_lines
-            (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-          select ${orgId}, ${reversalEntryId}, line_number, account_id, subsidiary_id, -amount, currency, -txn_amount, fx_rate,
-                 'Reversal — ' || coalesce(memo, '')
+        // functional amounts carry over exactly as originally posted. The
+        // reversal posts through the ONE ledger API; the prior entry is then
+        // marked reversed — never edited.
+        const mirrorSource = (await db.execute<{
+          line_number: number;
+          account_id: string;
+          subsidiary_id: string;
+          amount: string;
+          currency: string | null;
+          txn_amount: string;
+          fx_rate: string;
+          memo: string | null;
+        }>(sql`
+          select line_number, account_id, subsidiary_id, amount::text as amount,
+                 currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo
             from journal_lines where org_id = ${orgId} and entry_id = ${priorEntry.id}
-        `);
-        await db.execute(
-          sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${reversalEntryId} and org_id = ${orgId}`,
-        );
-        await db.execute(sql`
-          update journal_entries
-             set status = 'reversed', updated_at = now(), updated_by = ${actorId}
-           where org_id = ${orgId}
-             and id = ${priorEntry.id}
-             and status = 'posted'
-        `);
+            order by line_number
+        `)).rows;
+        const reversalEntryId = randomUUID();
+        const postedReversal = await postEntry(db, {
+          id: reversalEntryId,
+          orgId,
+          bookId,
+          subsidiaryId: priorEntry.subsidiary_id,
+          entryNumber: provisionReversalEntryNumber(run.fiscalYear, priorRun.version, orgId, priorEntry.subsidiary_id),
+          postingDate: run.periodTo,
+          periodId,
+          memo: `Reverse income tax provision FY${run.fiscalYear}`,
+          origin: "tax_provision",
+          reversesEntryId: priorEntry.id,
+          actorId,
+          closeModules: ["tax"],
+          lines: mirrorSource.map((line) => ({
+            accountId: line.account_id,
+            subsidiaryId: line.subsidiary_id,
+            amount: neg(line.amount),
+            currency: line.currency,
+            txnAmount: neg(line.txn_amount),
+            fxRate: line.fx_rate,
+            memo: `Reversal — ${line.memo ?? ""}`,
+            lineNumber: line.line_number,
+          })),
+        });
+        if (postedReversal.entryId !== reversalEntryId)
+          throw new IncomeTaxProvisionError("prior provision reversal was not posted");
+        try {
+          await markEntryReversed(db, { orgId, entryId: priorEntry.id, actorId });
+        } catch {
+          throw new IncomeTaxProvisionError("prior provision entry could not be linked to its reversal");
+        }
         reversalEntryIds.push(reversalEntryId);
       }
       await db.execute(sql`
@@ -2041,30 +2065,32 @@ export async function postProvisionRun(
       `);
     }
 
-    // One journal per entity, in the entity's functional currency.
+    // One journal per entity, in the entity's functional currency. Every
+    // journal write routes through the ONE ledger API.
     const entryIds: string[] = [];
     for (const plan of plans) {
       const entryId = randomUUID();
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-        values (${entryId}, ${orgId}, ${bookId}, ${plan.entity.subsidiaryId},
-                ${provisionEntryNumber(run.fiscalYear, run.version, orgId, plan.entity.subsidiaryId)},
-                ${run.periodTo}, ${periodId}, ${`Income tax provision FY${run.fiscalYear} (v${run.version})`}, 'draft', 'tax_provision',
-                ${actorId}, ${actorId})
-      `);
-      for (let i = 0; i < plan.lines.length; i++) {
-        const l = plan.lines[i]!;
-        await db.execute(sql`
-          insert into journal_lines
-            (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-          values (${orgId}, ${entryId}, ${i + 1}, ${l.accountId}, ${plan.entity.subsidiaryId},
-                  ${l.amount}, ${plan.entity.currency}, ${l.amount}, 1, ${l.memo})
-        `);
-      }
-      await db.execute(
-        sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId} and org_id = ${orgId}`,
-      );
+      const postedPlan = await postEntry(db, {
+        id: entryId,
+        orgId,
+        bookId,
+        subsidiaryId: plan.entity.subsidiaryId,
+        entryNumber: provisionEntryNumber(run.fiscalYear, run.version, orgId, plan.entity.subsidiaryId),
+        postingDate: run.periodTo,
+        periodId,
+        memo: `Income tax provision FY${run.fiscalYear} (v${run.version})`,
+        origin: "tax_provision",
+        actorId,
+        currency: plan.entity.currency,
+        closeModules: ["tax"],
+        lines: plan.lines.map((l) => ({
+          accountId: l.accountId,
+          amount: l.amount,
+          memo: l.memo,
+        })),
+      });
+      if (postedPlan.entryId !== entryId)
+        throw new IncomeTaxProvisionError("provision journal was not posted");
       entryIds.push(entryId);
     }
     const entryId = entryIds[0]!;

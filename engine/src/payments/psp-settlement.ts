@@ -9,6 +9,7 @@ import { sealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { ScopeNotFoundError, assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./acceptance.ts";
 
 /**
@@ -1405,28 +1406,30 @@ export async function postSettlementBatch(
       throw error;
     }
 
+    // Every journal write routes through the ONE ledger API.
     const entryId = randomUUID();
     const entryNumber =
       `PSP-${b.provider.toUpperCase()}-${b.external_ref}`.slice(0, 64);
-    await db.execute(sql`
-      insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-      values (${entryId}, ${orgId}, ${bookId}, ${subsidiaryId}, ${entryNumber}, ${b.settlement_date}, ${periodId},
-              ${b.memo ?? `PSP ${b.provider} ${b.external_ref}`}, 'draft', 'document', ${actorId}, ${actorId})
-    `);
-    let ln = 0;
-    for (const l of jlines) {
-      ln++;
-      await db.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-        values (${orgId}, ${entryId}, ${ln}, ${l.accountId}, ${subsidiaryId}, ${l.amount},
-                ${b.currency}, ${l.amount}, 1, ${l.memo})
-      `);
-    }
-    await db.execute(
-      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId} and org_id = ${orgId}`,
-    );
+    const postedEntry = await postEntry(db, {
+      id: entryId,
+      orgId,
+      bookId,
+      subsidiaryId,
+      entryNumber,
+      postingDate: b.settlement_date,
+      periodId,
+      memo: b.memo ?? `PSP ${b.provider} ${b.external_ref}`,
+      origin: "document",
+      actorId,
+      currency: b.currency,
+      lines: jlines.map((l) => ({
+        accountId: l.accountId,
+        amount: l.amount,
+        memo: l.memo,
+      })),
+    });
+    if (postedEntry.entryId !== entryId)
+      throw new PspSettlementError("settlement journal was not posted");
     await db.execute(sql`
       update psp_settlement_batches set status = 'posted', journal_entry_id = ${entryId}, posted_at = now(),
              subsidiary_id = ${subsidiaryId}, updated_at = now(), updated_by = ${actorId}
@@ -1536,48 +1539,44 @@ export async function reverseSettlementBatch(
       throw new PspSettlementError("settlement source journal has no lines");
     }
 
+    // The reversal mirrors the source lines exactly through the ONE ledger
+    // API; the source entry is then marked reversed — never edited.
     const entryId = randomUUID();
-    await db.execute(sql`
-      insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-         period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
-      values
-        (${entryId}, ${orgId}, ${original.book_id}, ${original.subsidiary_id},
-         ${`${original.entry_number}-VOID`}, ${input.reversalDate}, ${periodId},
-         ${`Reversal: ${reason}`}, 'draft', ${original.origin},
-         ${b.journal_entry_id}, ${actorId}, ${actorId})
-    `);
-    for (const line of lines.rows) {
-      await db.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-           currency, txn_amount, fx_rate, memo, party_id, department_id,
-           project_id, location_id, class_id, equipment_unit_id,
-             payment_card_id, tax_code_id, extra_dims)
-        values
-          (${orgId}, ${entryId}, ${Number(line.line_number)},
-           ${String(line.account_id)}, ${String(line.subsidiary_id)},
-           ${neg(String(line.amount))}, ${String(line.currency)},
-           ${neg(String(line.txn_amount))}, ${String(line.fx_rate)},
-           ${line.memo == null ? null : String(line.memo)},
-           ${line.party_id ?? null}, ${line.department_id ?? null},
-           ${line.project_id ?? null}, ${line.location_id ?? null},
-           ${line.class_id ?? null}, ${line.equipment_unit_id ?? null},
-           ${line.payment_card_id ?? null}, ${line.tax_code_id ?? null},
-             ${JSON.stringify(line.extra_dims ?? {})}::jsonb)
-      `);
-    }
-    await db.execute(sql`
-      update journal_entries
-         set status = 'posted', posted_at = now(), posted_by = ${actorId},
-             updated_at = now(), updated_by = ${actorId}
-       where id = ${entryId} and org_id = ${orgId}
-    `);
-    await db.execute(sql`
-      update journal_entries
-         set status = 'reversed', updated_at = now(), updated_by = ${actorId}
-       where id = ${b.journal_entry_id} and org_id = ${orgId}
-    `);
+    const postedReversal = await postEntry(db, {
+      id: entryId,
+      orgId,
+      bookId: original.book_id,
+      subsidiaryId: original.subsidiary_id,
+      entryNumber: `${original.entry_number}-VOID`,
+      postingDate: input.reversalDate,
+      periodId,
+      memo: `Reversal: ${reason}`,
+      origin: original.origin,
+      reversesEntryId: b.journal_entry_id,
+      actorId,
+      lines: lines.rows.map((line) => ({
+        accountId: String(line.account_id),
+        subsidiaryId: String(line.subsidiary_id),
+        amount: neg(String(line.amount)),
+        currency: String(line.currency),
+        txnAmount: neg(String(line.txn_amount)),
+        fxRate: String(line.fx_rate),
+        memo: line.memo == null ? null : String(line.memo),
+        partyId: line.party_id ?? null,
+        departmentId: line.department_id ?? null,
+        projectId: line.project_id ?? null,
+        locationId: line.location_id ?? null,
+        classId: line.class_id ?? null,
+        equipmentUnitId: line.equipment_unit_id ?? null,
+        paymentCardId: line.payment_card_id ?? null,
+        taxCodeId: line.tax_code_id ?? null,
+        extraDims: (line.extra_dims ?? {}) as Record<string, string>,
+        lineNumber: Number(line.line_number),
+      })),
+    });
+    if (postedReversal.entryId !== entryId)
+      throw new PspSettlementError("settlement reversal was not posted");
+    await markEntryReversed(db, { orgId, entryId: b.journal_entry_id, actorId });
     await db.execute(sql`
       update psp_settlement_batches
          set status = 'void', reversal_entry_id = ${entryId},

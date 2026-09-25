@@ -24,6 +24,7 @@ import {
   toUnits,
 } from "../money/money.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import {
   loadSubsidiaryContext,
@@ -581,18 +582,28 @@ export async function consolidateAssetTransfers(
       lines,
     });
     assertFinalKernelBalance(lines);
+    // Every journal write routes through the ONE ledger API.
     const id = randomUUID();
-    await tx.execute(
-      sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,created_by,updated_by) values(${id},${orgId},${transfer.book_id},${entity.id},${`AST-ELIM-${id}`},${cutoff},${periodId},${`Asset transfer consolidation ${period.name}`},'draft','translation',${actorId},${actorId})`,
-    );
-    for (const [i, line] of lines.entries())
-      await tx.execute(
-        sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo) values(${orgId},${id},${i + 1},${line.accountId},${entity.id},${line.amount},${entity.baseCurrency},${line.amount},1,'Asset transfer group basis')`,
-      );
-    const posted = await tx.execute(
-      sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actorId} where org_id=${orgId} and id=${id} and status='draft' returning id`,
-    );
-    if (posted.rows.length !== 1)
+    const postedEntry = await postEntry(tx, {
+      id,
+      orgId,
+      bookId: transfer.book_id,
+      subsidiaryId: entity.id,
+      entryNumber: `AST-ELIM-${id}`,
+      postingDate: cutoff,
+      periodId,
+      memo: `Asset transfer consolidation ${period.name}`,
+      origin: "translation",
+      actorId,
+      currency: entity.baseCurrency,
+      closeModules: ["assets"],
+      lines: lines.map((line) => ({
+        accountId: line.accountId,
+        amount: line.amount,
+        memo: "Asset transfer group basis",
+      })),
+    });
+    if (postedEntry.entryId !== id)
       throw new Error("asset transfer consolidation was not posted");
     await tx.execute(
       sql`insert into asset_transfer_consolidation_entries(org_id,transfer_id,period_id,journal_entry_id,target_balances,created_by) values(${orgId},${transfer.id},${periodId},${id},${JSON.stringify(target)}::jsonb,${actorId})`,

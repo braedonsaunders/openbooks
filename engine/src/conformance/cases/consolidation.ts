@@ -5,9 +5,9 @@ import { measureLossOfControl } from "../../consolidation/loss-of-control-measur
  * These cases drive the product's actual consolidation machinery against a
  * scratch tenant: `runOwnershipConsolidation` (acquisition elimination, NCI,
  * equity method, translated through `deriveConsolidatedRates`) and
- * `runAutoElimination` (period intercompany netting). Fixtures post straight
- * to journal_entries/journal_lines the way the engine's own consolidation
- * tests do — the runs under test read posted journal entries, not source
+ * `runAutoElimination` (period intercompany netting). Fixtures post through
+ * the ONE ledger API the way the engine's own consolidation tests do — the
+ * runs under test read posted journal entries, not source
  * documents — and `capture` observes the complete ledger movement each run
  * causes. Amounts are stated in the subsidiary's functional currency and
  * translated by the engine, never pre-translated by the case.
@@ -21,6 +21,7 @@ import {
   runOwnershipConsolidation,
 } from "../../consolidation/consolidation.ts";
 import { db } from "../../platform/db.ts";
+import { postEntry } from "../../ledger/post-entry.ts";
 import { capture, setSpotRate } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
@@ -32,9 +33,9 @@ interface FixtureLine {
 }
 
 /**
- * Post balanced journal lines straight to the ledger (the consolidation runs
- * read posted entries). One transaction: the entry-balance triggers are
- * deferred to commit, so the entry must arrive whole — line-by-line
+ * Post balanced journal lines through the ONE ledger API (the consolidation
+ * runs read posted entries). One transaction: the entry-balance triggers
+ * are deferred to commit, so the entry must arrive whole — line-by-line
  * autocommit inserts trip the balance check on the first unbalanced line.
  */
 async function postFixtureEntry(
@@ -48,20 +49,24 @@ async function postFixtureEntry(
   const ledger = ctx.ledger!;
   const entryId = randomUUID();
   await db.transaction(async (tx) => {
-    await tx.execute(sql`
-      insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
-      values
-        (${entryId}, ${ledger.orgId}, ${ledger.bookId}, ${subsidiaryId}, ${number}, ${date}, ${ledger.periodId}, ${memo}, 'draft', 'manual')`);
-    for (const [index, line] of lines.entries()) {
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
-        values
-          (${ledger.orgId}, ${entryId}, ${index + 1}, ${line.accountId}, ${subsidiaryId}, ${line.amount}, ${line.currency}, ${line.amount}, '1')`);
-    }
-    await tx.execute(sql`
-      update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+    const posted = await postEntry(tx, {
+      id: entryId,
+      orgId: ledger.orgId,
+      bookId: ledger.bookId,
+      subsidiaryId,
+      entryNumber: number,
+      postingDate: date,
+      periodId: ledger.periodId,
+      memo,
+      origin: "manual",
+      lines: lines.map((line) => ({
+        accountId: line.accountId,
+        amount: line.amount,
+        currency: line.currency,
+      })),
+    });
+    if (posted.entryId !== entryId)
+      throw new Error(`fixture journal ${number} was not posted`);
   });
 }
 

@@ -25,6 +25,7 @@ import {
 } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import {
   assertFinancialChangeApproved,
   completeFinancialChange,
@@ -1086,18 +1087,28 @@ async function post(
       "restore the active posting accounts required by this approved disposal journal",
     );
   assertFinalKernelBalance(scoped);
+  // Every journal write routes through the ONE ledger API.
   const id = randomUUID();
-  await tx.execute(
-    sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by,updated_by) values(${id},${orgId},${s.bookId},${subsidiaryId},${number},${date},${s.period.id},'Approved loss of control','draft','translation',${reversesEntryId ?? null},${actorId},${actorId})`,
-  );
-  for (const [i, l] of material.entries())
-    await tx.execute(
-      sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo) values(${orgId},${id},${i + 1},${l.accountId},${subsidiaryId},${l.amount},${currency},${l.amount},1,${l.description})`,
-    );
-  const posted = await tx.execute(
-    sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actorId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and status='draft' returning id`,
-  );
-  if (posted.rows.length !== 1)
+  const postedEntry = await postEntry(tx, {
+    id,
+    orgId,
+    bookId: s.bookId,
+    subsidiaryId,
+    entryNumber: number,
+    postingDate: date,
+    periodId: s.period.id,
+    memo: "Approved loss of control",
+    origin: "translation",
+    reversesEntryId,
+    actorId,
+    currency,
+    lines: material.map((l) => ({
+      accountId: l.accountId,
+      amount: l.amount,
+      memo: l.description,
+    })),
+  });
+  if (postedEntry.entryId !== id)
     throw new Error("loss-of-control journal was not posted");
   return id;
 }
@@ -1424,13 +1435,13 @@ export async function applyLossOfControlReversal(
         entry.id,
       );
       if (id) entryIds.push(id);
-      const reversed = await tx.execute(
-        sql`update journal_entries set status='reversed',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${entry.id} and status='posted' returning id`,
-      );
-      if (reversed.rows.length !== 1)
+      try {
+        await markEntryReversed(tx, { orgId, entryId: entry.id, actorId });
+      } catch {
         throw new Error(
           "a disposal journal could not be linked to its correction",
         );
+      }
     }
     const restored = await runOwnershipConsolidationIn(
       orgId,

@@ -8,6 +8,7 @@ import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 
 /**
  * Fixed-asset lifecycle posting — disposal by sale and write-off.
@@ -651,29 +652,30 @@ export async function disposeAsset(
       subsidiaryIds: [asset.subsidiary_id],
     });
 
-    const entryRes = await tx.execute<{ id: string }>(sql`
-      insert into journal_entries
-        (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-      values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${`DISP-${asset.asset_number}-${randomUUID()}`}, ${opts.date},
-              (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-                 and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),
-              ${`${status === "written_off" ? "Write-off" : "Disposal"} — ${asset.asset_number}`},
-              'draft', 'disposal', ${opts.actorId}, ${opts.actorId})
-      returning id`);
-    const eid = entryRes.rows[0]!.id;
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i]!;
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-           department_id, project_id, location_id, memo)
-        values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${asset.subsidiary_id}, ${l.amount},
-                ${asset.base_currency}, ${l.amount}, 1, ${asset.department_id}, ${asset.project_id},
-                ${asset.location_id}, ${`${status} ${asset.asset_number}`})`);
-    }
-    await tx.execute(
-      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`,
-    );
+    // Every journal write routes through the ONE ledger API: it owns balance
+    // validation, the open-period check, the posting lock, the single
+    // multi-row line insert, and the audit record.
+    const posted = await postEntry(tx, {
+      orgId,
+      bookId,
+      subsidiaryId: asset.subsidiary_id,
+      entryNumber: `DISP-${asset.asset_number}-${randomUUID()}`,
+      postingDate: opts.date,
+      periodId: period.rows[0].id,
+      memo: `${status === "written_off" ? "Write-off" : "Disposal"} — ${asset.asset_number}`,
+      origin: "disposal",
+      actorId: opts.actorId,
+      currency: asset.base_currency,
+      lines: lines.map((l) => ({
+        accountId: l.accountId,
+        amount: l.amount,
+        departmentId: asset.department_id,
+        projectId: asset.project_id,
+        locationId: asset.location_id,
+        memo: `${status} ${asset.asset_number}`,
+      })),
+    });
+    const eid = posted.entryId;
     await tx.execute(
       sql`update fixed_assets set status = ${status}, updated_at = now(), updated_by = ${opts.actorId} where id = ${assetId} and org_id = ${orgId}`,
     );
@@ -933,47 +935,74 @@ export async function reverseAssetLifecycleEvent(
       ],
     });
 
-    const reversalEntry = await tx.execute<{ id: string }>(sql`
-      insert into journal_entries
-        (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
-         memo, status, origin, reverses_entry_id, created_by, updated_by)
-      values
-        (${orgId}, ${source.book_id}, ${source.subsidiary_id},
-         ${`${source.entry_number}-REV`}, ${opts.date}, ${period.rows[0].id},
-         ${`Reversal — ${reason}`}, 'draft', ${source.origin},
-         ${source.journal_entry_id}, ${opts.actorId}, ${opts.actorId})
-      returning id
-    `);
-    const reversalEntryId = reversalEntry.rows[0]!.id;
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-         currency, txn_amount, fx_rate, memo, party_id, department_id,
-         project_id, location_id, class_id, equipment_unit_id, payment_card_id,
-           extra_dims, tax_code_id, quantity, unit, due_date, is_open_item,
-           custom)
-      select org_id, ${reversalEntryId}, line_number, account_id, subsidiary_id,
-             -amount, currency, -txn_amount, fx_rate,
-             ${`Reversal — ${reason}`}, party_id, department_id, project_id,
-             location_id, class_id, equipment_unit_id, payment_card_id,
-             extra_dims, tax_code_id,
-             case when quantity is null then null else -quantity end,
-             unit, null, false, custom
+    // The reversal mirrors the source lines exactly through the ONE ledger
+    // API; the source entry is then marked reversed — never edited.
+    const mirrorLines = (await tx.execute<{
+      line_number: number;
+      account_id: string;
+      subsidiary_id: string;
+      amount: string;
+      currency: string | null;
+      txn_amount: string;
+      fx_rate: string;
+      party_id: string | null;
+      department_id: string | null;
+      project_id: string | null;
+      location_id: string | null;
+      class_id: string | null;
+      equipment_unit_id: string | null;
+      payment_card_id: string | null;
+      extra_dims: unknown;
+      tax_code_id: string | null;
+      quantity: string | null;
+      unit: string | null;
+      custom: unknown;
+    }>(sql`
+      select line_number, account_id, subsidiary_id, amount::text as amount,
+             currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate,
+             party_id, department_id, project_id, location_id, class_id,
+             equipment_unit_id, payment_card_id, extra_dims, tax_code_id,
+             quantity::text as quantity, unit, custom
         from journal_lines
        where entry_id = ${source.journal_entry_id} and org_id = ${orgId}
        order by line_number
-    `);
-    await tx.execute(sql`
-      update journal_entries
-         set status = 'posted', posted_at = now(), posted_by = ${opts.actorId},
-             updated_at = now(), updated_by = ${opts.actorId}
-       where id = ${reversalEntryId} and org_id = ${orgId}
-    `);
-    await tx.execute(sql`
-      update journal_entries
-         set status = 'reversed', updated_at = now(), updated_by = ${opts.actorId}
-       where id = ${source.journal_entry_id} and org_id = ${orgId}
-    `);
+    `)).rows;
+    const posted = await postEntry(tx, {
+      orgId,
+      bookId: source.book_id,
+      subsidiaryId: source.subsidiary_id,
+      entryNumber: `${source.entry_number}-REV`,
+      postingDate: opts.date,
+      periodId: period.rows[0].id,
+      memo: `Reversal — ${reason}`,
+      origin: source.origin,
+      reversesEntryId: source.journal_entry_id,
+      actorId: opts.actorId,
+      lines: mirrorLines.map((line) => ({
+        accountId: line.account_id,
+        subsidiaryId: line.subsidiary_id,
+        amount: neg(line.amount),
+        currency: line.currency,
+        txnAmount: neg(line.txn_amount),
+        fxRate: line.fx_rate,
+        memo: `Reversal — ${reason}`,
+        partyId: line.party_id,
+        departmentId: line.department_id,
+        projectId: line.project_id,
+        locationId: line.location_id,
+        classId: line.class_id,
+        equipmentUnitId: line.equipment_unit_id,
+        paymentCardId: line.payment_card_id,
+        extraDims: (line.extra_dims ?? {}) as Record<string, string>,
+        taxCodeId: line.tax_code_id,
+        quantity: line.quantity == null ? null : neg(line.quantity),
+        unit: line.unit,
+        custom: (line.custom ?? {}) as Record<string, unknown>,
+        lineNumber: line.line_number,
+      })),
+    });
+    const reversalEntryId = posted.entryId;
+    await markEntryReversed(tx, { orgId, entryId: source.journal_entry_id, actorId: opts.actorId });
 
     let restoredStatus: "in_service" | "fully_depreciated" | null = null;
     if (source.kind === "disposed" || source.kind === "written_off") {
@@ -1226,30 +1255,28 @@ export async function remeasureAsset(
     // An asset can be remeasured repeatedly; the entry number must be unique
     // per physical journal under journal_entries_org_number.
     const entryNumber = `${kind === "impaired" ? "IMPR" : "REVAL"}-${asset.asset_number}-${randomUUID().slice(0, 8)}`;
-    const entryRes = await tx.execute<{ id: string }>(sql`
-      insert into journal_entries
-        (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-      values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${entryNumber},
-              ${opts.date},
-              (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-                 and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),
-              ${`${kind === "impaired" ? "Impairment" : "Revaluation"} — ${asset.asset_number}`},
-              'draft', 'revaluation', ${opts.actorId}, ${opts.actorId})
-      returning id`);
-    const eid = entryRes.rows[0]!.id;
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i]!;
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-           department_id, project_id, location_id, memo)
-        values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${asset.subsidiary_id}, ${l.amount},
-                ${asset.base_currency}, ${l.amount}, 1, ${asset.department_id}, ${asset.project_id},
-                ${asset.location_id}, ${`${kind} ${asset.asset_number}`})`);
-    }
-    await tx.execute(
-      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`,
-    );
+    // Every journal write routes through the ONE ledger API.
+    const posted = await postEntry(tx, {
+      orgId,
+      bookId,
+      subsidiaryId: asset.subsidiary_id,
+      entryNumber,
+      postingDate: opts.date,
+      periodId: remeasurePeriod.rows[0].id,
+      memo: `${kind === "impaired" ? "Impairment" : "Revaluation"} — ${asset.asset_number}`,
+      origin: "revaluation",
+      actorId: opts.actorId,
+      currency: asset.base_currency,
+      lines: lines.map((l) => ({
+        accountId: l.accountId,
+        amount: l.amount,
+        departmentId: asset.department_id,
+        projectId: asset.project_id,
+        locationId: asset.location_id,
+        memo: `${kind} ${asset.asset_number}`,
+      })),
+    });
+    const eid = posted.entryId;
     await tx.execute(sql`
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by, created_at)
       values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId}, clock_timestamp())`);
@@ -1325,20 +1352,33 @@ export async function postAssetLifecycleEntry(
     periodId: periods[0]!.id,
     subsidiaryIds: [args.asset.subsidiary_id],
   });
-  const inserted = await tx.execute<{ id: string }>(
-    sql`insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by,updated_by) values(${args.orgId},${args.bookId},${args.asset.subsidiary_id},${args.number},${args.date},${periods[0]!.id},${args.memo},'draft',${args.origin ?? "disposal"},${args.reversesEntryId ?? null},${args.actorId},${args.actorId}) returning id`,
-  );
-  if (inserted.rows.length !== 1)
-    throw new AssetLifecycleError("asset change journal was not created");
-  const id = inserted.rows[0]!.id;
-  for (const [i, line] of lines.entries())
-    await tx.execute(
-      sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,department_id,project_id,location_id,memo) values(${args.orgId},${id},${i + 1},${line.accountId},${args.asset.subsidiary_id},${line.amount},${line.currency ?? args.currency},${line.txnAmount ?? line.amount},${line.fxRate ?? "1"},${args.asset.department_id},${args.asset.project_id},${args.asset.location_id},${args.memo})`,
-    );
-  const posted = await tx.execute(
-    sql`update journal_entries set status='posted',posted_at=now(),posted_by=${args.actorId},updated_by=${args.actorId},updated_at=now() where org_id=${args.orgId} and id=${id} and status='draft' returning id`,
-  );
-  if (posted.rows.length !== 1)
-    throw new AssetLifecycleError("asset change journal was not posted");
-  return id;
+  // Every journal write routes through the ONE ledger API: the pre-checks
+  // above stay the caller-facing contract (AssetLifecycleError), the API is
+  // the backstop that also owns the posting lock, the single multi-row line
+  // insert, and the audit record.
+  const posted = await postEntry(tx, {
+    orgId: args.orgId,
+    bookId: args.bookId,
+    subsidiaryId: args.asset.subsidiary_id,
+    entryNumber: args.number,
+    postingDate: args.date,
+    periodId: periods[0]!.id,
+    memo: args.memo,
+    origin: args.origin ?? "disposal",
+    reversesEntryId: args.reversesEntryId,
+    actorId: args.actorId,
+    currency: args.currency,
+    lines: lines.map((line) => ({
+      accountId: line.accountId,
+      amount: line.amount,
+      currency: line.currency,
+      txnAmount: line.txnAmount,
+      fxRate: line.fxRate,
+      departmentId: args.asset.department_id,
+      projectId: args.asset.project_id,
+      locationId: args.asset.location_id,
+      memo: args.memo,
+    })),
+  });
+  return posted.entryId;
 }
