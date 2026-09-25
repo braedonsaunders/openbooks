@@ -5567,6 +5567,7 @@
     "asOfPeriod": "Stichtagsperiode",
     "choosePeriod": "Periode auswählen…",
     "periodOption": "{name} · Ende {endsOn} · {calendar}",
+    "periodCount": "{count} zulässige Perioden verfügbar",
     "create": "Sandbox erstellen",
     "cutoffDescription": "Die Kopie enthält Buchungen bis einschließlich des Enddatums der ausgewählten Periode, unabhängig vom zugehörigen Kalender.",
     "reviewChanges": "Änderungssätze prüfen",

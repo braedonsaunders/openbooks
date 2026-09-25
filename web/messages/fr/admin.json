@@ -5567,6 +5567,7 @@
     "asOfPeriod": "Période de référence",
     "choosePeriod": "Choisir une période…",
     "periodOption": "{name} · fin : {endsOn} · {calendar}",
+    "periodCount": "{count} périodes admissibles disponibles",
     "create": "Créer le bac à sable",
     "cutoffDescription": "La copie inclut les écritures comptables enregistrées au plus tard à la date de fin de la période choisie, quel que soit son calendrier.",
     "reviewChanges": "Examiner les ensembles de modifications",

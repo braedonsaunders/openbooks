@@ -5567,6 +5567,7 @@
     "asOfPeriod": "Período de referência",
     "choosePeriod": "Escolha um período…",
     "periodOption": "{name} · termina em {endsOn} · {calendar}",
+    "periodCount": "{count} períodos elegíveis disponíveis",
     "create": "Criar sandbox",
     "cutoffDescription": "A cópia inclui lançamentos contabilizados até a data final do período escolhido, independentemente do calendário ao qual ele pertence.",
     "reviewChanges": "Revisar conjuntos de alterações",

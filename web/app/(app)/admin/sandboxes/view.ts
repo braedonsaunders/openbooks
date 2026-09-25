@@ -53,8 +53,7 @@ export async function loadSandboxes(): Promise<SandboxesData> {
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id
      where p.org_id = ${authz.user.productionOrgId}
-     order by p.ends_on desc, p.name
-     limit 240`))
+     order by p.ends_on desc, p.name`))
 
   return {
     title: 'Environments',

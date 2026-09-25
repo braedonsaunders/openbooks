@@ -5567,6 +5567,7 @@
     "asOfPeriod": "基準期間",
     "choosePeriod": "期間を選択…",
     "periodOption": "{name} · 期末 {endsOn} · {calendar}",
+    "periodCount": "選択可能な期間は{count}件です",
     "create": "サンドボックスを作成",
     "cutoffDescription": "選択した期間の終了日までに転記された仕訳を、期間カレンダーに関係なく複製します。",
     "reviewChanges": "変更セットを確認",
