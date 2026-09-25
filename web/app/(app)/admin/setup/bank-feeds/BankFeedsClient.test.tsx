@@ -260,12 +260,7 @@ test('an empty GL picker explains the precondition and links the Chart of Accoun
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
+  unmountAfter(t, host, root)
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -315,6 +310,15 @@ function actionButton(host: Element, label: string): HTMLButtonElement {
   return btn
 }
 
+function unmountAfter(t: import('node:test').TestContext, host: HTMLDivElement, root: { unmount(): void }) {
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+}
+
 async function clickAndSettle(btn: HTMLButtonElement) {
   await act(async () => {
     btn.click()
@@ -325,60 +329,51 @@ async function clickAndSettle(btn: HTMLButtonElement) {
   })
 }
 
-test('a non-JSON 500 on sync is a named failure, never a phantom import (F4T2-14)', async (t) => {
-  const { host, root } = await mountFeed((async () => new Response('', { status: 500 })) as typeof fetch)
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+// One Sync click drives the same mount/click/read flow; the rows differ only
+// in what the server answers and what must (not) render for it.
+for (const [name, respond, present, phantomMessage, checkBusy] of [
+  [
+    'a non-JSON 500 on sync is a named failure, never a phantom import (F4T2-14)',
+    () => new Response('', { status: 500 }),
+    /Request failed \(HTTP 500\)/,
+    'no phantom import toast for work the server never did',
+    true,
+  ],
+  [
+    'a named 422 on sync surfaces the server refusal (F4T2-14)',
+    () => Response.json({ error: 'not an API provider' }, { status: 422 }),
+    /Sync failed: not an API provider/,
+    'no phantom import for a refused sync',
+    false,
+  ],
+  [
+    'a successful sync still reports its counts (F4T2-14)',
+    () => Response.json({ imported: 3, duplicates: 1 }, { status: 200 }),
+    /Imported 3 new, 1 duplicate/,
+    null,
+    false,
+  ],
+] as Array<[string, () => Response, RegExp, string | null, boolean]>) {
+  test(name, async (t) => {
+    const { host, root } = await mountFeed(respond as typeof fetch)
+    unmountAfter(t, host, root)
+    const btn = actionButton(host, 'Sync')
+    await clickAndSettle(btn)
+    assert.match(host.textContent ?? '', present)
+    if (phantomMessage !== null) {
+      assert.doesNotMatch(host.textContent ?? '', /Imported/, phantomMessage)
+    }
+    if (checkBusy) {
+      assert.equal(btn.disabled, false, 'busy releases after the failure')
+    }
   })
-  const btn = actionButton(host, 'Sync')
-  await clickAndSettle(btn)
-  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
-  assert.doesNotMatch(host.textContent ?? '', /Imported/, 'no phantom import toast for work the server never did')
-  assert.equal(btn.disabled, false, 'busy releases after the failure')
-})
-
-test('a named 422 on sync surfaces the server refusal (F4T2-14)', async (t) => {
-  const { host, root } = await mountFeed(
-    (async () => Response.json({ error: 'not an API provider' }, { status: 422 })) as typeof fetch,
-  )
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickAndSettle(actionButton(host, 'Sync'))
-  assert.match(host.textContent ?? '', /Sync failed: not an API provider/)
-  assert.doesNotMatch(host.textContent ?? '', /Imported/)
-})
-
-test('a successful sync still reports its counts (F4T2-14)', async (t) => {
-  const { host, root } = await mountFeed(
-    (async () => Response.json({ imported: 3, duplicates: 1 }, { status: 200 })) as typeof fetch,
-  )
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickAndSettle(actionButton(host, 'Sync'))
-  assert.match(host.textContent ?? '', /Imported 3 new, 1 duplicate/)
-})
+}
 
 test('a refused probe reports its detail, a verified one confirms (F4T2-14)', async (t) => {
   const refused = await mountFeed(
     (async () => Response.json({ ok: false, detail: 'bad token' }, { status: 200 })) as typeof fetch,
   )
-  t.after(async () => {
-    await act(async () => {
-      refused.root.unmount()
-    })
-    refused.host.remove()
-  })
+  unmountAfter(t, refused.host, refused.root)
   await clickAndSettle(actionButton(refused.host, 'Test'))
   assert.match(refused.host.textContent ?? '', /Test failed: bad token/)
 })
@@ -389,12 +384,7 @@ test('an unbound identifying schedule reads paused, bound and CSV routes do not'
     { id: 'sched-bound-ofx', format: 'ofx', expectedExternalAccountId: 'BR001-77' },
     { id: 'sched-unbound-csv', format: 'csv', expectedExternalAccountId: null },
   ])
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
+  unmountAfter(t, host, root)
   const badges = [...host.querySelectorAll('li')].filter((li) =>
     (li.textContent ?? '').includes('Paused: expected account not set'),
   )
@@ -458,17 +448,50 @@ function scheduleRemoveButton(host: Element): HTMLButtonElement {
 // case showed the one-time secret as success while the routing never
 // happened). Every refusal surfaces; the secret display names a failed
 // routing instead of reading as success.
-test('a refused pause surfaces instead of silently re-rendering (F4T2-13)', async (t) => {
-  const { host, root } = await mountFeed((async () => new Response('', { status: 500 })) as typeof fetch)
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+// Every F4T2-13 refusal drives the same shape — mount against a 500 fetch,
+// press one or two buttons, read the named failure. The binding row adds the
+// stays-open check.
+for (const [name, mountRow, clicks, checkOpen] of [
+  [
+    'a refused pause surfaces instead of silently re-rendering (F4T2-13)',
+    () => mountFeed((async () => new Response('', { status: 500 })) as typeof fetch),
+    ['Pause'],
+    false,
+  ],
+  [
+    'a refused binding save stays open with the error (F4T2-13)',
+    () => mountSftpCustom(
+      (async () => new Response('', { status: 500 })) as typeof fetch,
+      [{ id: 'sched-bind', format: 'csv', expectedExternalAccountId: null }],
+    ),
+    ['no account bound', 'Save'],
+    true,
+  ],
+  [
+    'a refused add-route surfaces instead of a silent list (F4T2-13)',
+    () => mountSftpCustom(
+      (async () => new Response('', { status: 500 })) as typeof fetch,
+      [{ id: 'sched-route', format: 'csv', expectedExternalAccountId: null }],
+    ),
+    ['Routing', 'Add route'],
+    false,
+  ],
+] as Array<[string, () => Promise<{ host: HTMLDivElement; root: { unmount(): void } }>, string[], boolean]>) {
+  test(name, async (t) => {
+    const { host, root } = await mountRow()
+    unmountAfter(t, host, root)
+    for (const label of clicks) {
+      await clickAndSettle(actionButton(host, label))
+    }
+    assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
+    if (checkOpen) {
+      assert.ok(
+        [...host.querySelectorAll('button')].some((b) => (b.textContent ?? '').trim() === 'Save'),
+        'the refused editor must stay open instead of pretending the binding held',
+      )
+    }
   })
-  await clickAndSettle(actionButton(host, 'Pause'))
-  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
-})
+}
 
 async function mountSftpCustom(
   fetchImpl: typeof fetch,
@@ -477,42 +500,6 @@ async function mountSftpCustom(
   globalThis.fetch = fetchImpl
   return mountSftpSchedules(schedules)
 }
-
-test('a refused binding save stays open with the error (F4T2-13)', async (t) => {
-  const { host, root } = await mountSftpCustom(
-    (async () => new Response('', { status: 500 })) as typeof fetch,
-    [{ id: 'sched-bind', format: 'csv', expectedExternalAccountId: null }],
-  )
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickAndSettle(actionButton(host, 'no account bound'))
-  await clickAndSettle(actionButton(host, 'Save'))
-  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
-  assert.ok(
-    [...host.querySelectorAll('button')].some((b) => (b.textContent ?? '').trim() === 'Save'),
-    'the refused editor must stay open instead of pretending the binding held',
-  )
-})
-
-test('a refused add-route surfaces instead of a silent list (F4T2-13)', async (t) => {
-  const { host, root } = await mountSftpCustom(
-    (async () => new Response('', { status: 500 })) as typeof fetch,
-    [{ id: 'sched-route', format: 'csv', expectedExternalAccountId: null }],
-  )
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickAndSettle(actionButton(host, 'Routing'))
-  await clickAndSettle(actionButton(host, 'Add route'))
-  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
-})
 
 test('a failed auto-route still shows the secret but names the routing failure (F4T2-13)', async (t) => {
   globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
@@ -542,12 +529,7 @@ test('a failed auto-route still shows the secret but names the routing failure (
     )
     await tick()
   })
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
+  unmountAfter(t, host, root)
   await clickAndSettle(actionButton(host, '+ Add connection'))
   const sftpTile = [...host.querySelectorAll('button')].find((b) =>
     [...b.querySelectorAll('div')].some((d) => (d.textContent ?? '').trim() === 'SFTP file drop'),
