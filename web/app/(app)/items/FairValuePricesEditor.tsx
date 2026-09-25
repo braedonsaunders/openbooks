@@ -136,7 +136,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
 
       {form ? (
         <Card>
-          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4"><fieldset disabled={busy} className="contents">
             <div className={field}>
               <Label>{t('currency')}<span className="text-red-500"> *</span></Label>
               <Input value={form.currency} maxLength={3} className="uppercase" onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} placeholder="USD" />
@@ -170,6 +170,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
               <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
               <Button variant="outline" onClick={() => setForm(null)}>{common('actions.cancel')}</Button>
             </div>
+            </fieldset>
           </CardContent>
         </Card>
       ) : null}

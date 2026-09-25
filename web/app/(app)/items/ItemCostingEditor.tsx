@@ -327,7 +327,7 @@ export function ItemCostingEditor({
 
       {editing ? (
         <Card>
-          <CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          <CardContent className="p-4"><fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}>
               <Label>{t('method')}</Label>
               <Select value={costingMethod} onChange={(e) => setCostingMethod(e.target.value)}>
@@ -500,6 +500,7 @@ export function ItemCostingEditor({
               <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
               <Button variant="outline" onClick={cancel}>{common('actions.cancel')}</Button>
             </div>
+            </fieldset>
           </CardContent>
         </Card>
       ) : loaded && !profile ? (

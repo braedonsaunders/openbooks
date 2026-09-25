@@ -147,7 +147,7 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
       </div>
 
       {editingId !== null ? (
-        <Card><CardContent className="space-y-4 p-4">
+        <Card><CardContent className="space-y-4 p-4"><fieldset disabled={busy} className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1"><Label>{t('scope')}</Label><Select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="base">{t('scopes.base')}</option><option value="level">{t('scopes.level')}</option><option value="customer">{t('scopes.customer')}</option></Select></div>
             {scope === 'level' ? <div className="space-y-1"><Label>{t('priceLevel')}</Label><Select value={priceLevelId} onChange={(event) => setPriceLevelId(event.target.value)}>{data?.levels.filter((level) => !level.is_base).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</Select></div> : null}
@@ -170,6 +170,7 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
           </div>
           {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
           <div className="flex gap-2"><Button disabled={busy || !currency || (scope === 'level' && !priceLevelId) || (scope === 'customer' && !customerId)} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button><Button variant="outline" onClick={() => setEditingId(null)}>{common('actions.cancel')}</Button></div>
+          </fieldset>
         </CardContent></Card>
       ) : null}
 
