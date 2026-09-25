@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -97,6 +97,13 @@ export function DashboardBuilder({
   const saveSequenceRef = useRef(0)
   const saveRunningRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Declared before the autosave effect so its teardown runs first: the
+  // debounce cleanup can then tell a re-run (re-arm the timer) from an
+  // unmount (flush the latest payload, never drop it).
+  const mountedRef = useRef(true)
+  useEffect(() => () => {
+    mountedRef.current = false
+  }, [])
 
   const flushSave = async () => {
     if (saveRunningRef.current) return
@@ -167,7 +174,9 @@ export function DashboardBuilder({
     setSaveState('dirty')
     const sequence = ++saveSequenceRef.current
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    let sent = false
     saveTimerRef.current = setTimeout(() => {
+      sent = true
       saveTimerRef.current = null
       pendingSaveRef.current = { payload, sequence }
       setSaveState('saving')
@@ -178,9 +187,30 @@ export function DashboardBuilder({
         clearTimeout(saveTimerRef.current)
         saveTimerRef.current = null
       }
+      if (mountedRef.current || ro) return
+      // Unmount (Back, or any navigation) with a debounced edit that never
+      // sent: queue the latest payload and flush instead of dropping it.
+      // An in-flight save is left to finish; its finally flushes this next.
+      // This render's sequence is reused rather than minting a fresh one:
+      // the counter only advances here, so it is exactly current.
+      if (!sent) {
+        pendingSaveRef.current = { payload, sequence }
+        void flushSave()
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, ro])
+
+  useEffect(() => {
+    if (ro || saveState === 'saved') return
+    // A full unload (refresh, tab close) would drop a debounced edit the
+    // unmount flush cannot send: warn first, never lose silently.
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [ro, saveState])
 
   function addCard(cardId: string) {
     // Stack new cards at the bottom, half width by default.
@@ -258,12 +288,28 @@ export function DashboardBuilder({
     }
   }
 
+  // Back never drops work silently. An unsent debounced edit is flushed by
+  // the unmount cleanup, so Back only asks when the machine is dirty or
+  // errored and that flush could still fail. An in-flight save finishes in
+  // the background after navigation.
+  async function goBack(event: ReactMouseEvent<HTMLAnchorElement>) {
+    if (ro || saveState === 'saved' || saveState === 'saving') return
+    event.preventDefault()
+    const ok = await confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+    if (ok) router.push('/insights/dashboards')
+  }
+
   return (
     <DetailPageLayout
       header={
         <div className="space-y-3">
           <Link
             href="/insights/dashboards"
+            onClick={(event) => void goBack(event)}
             className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
           >
             <ChevronLeft size={15} /> {t('builder.back')}
