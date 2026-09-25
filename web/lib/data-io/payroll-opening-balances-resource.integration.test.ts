@@ -239,7 +239,7 @@ test(
       assert.equal(preview.created, 0);
       assert.equal(preview.updated, 0);
       assert.equal(preview.warnings?.length, 1);
-      assert.match(preview.warnings![0]!.message, /nothing/i);
+      assert.match(preview.warnings![0]!.message ?? "", /nothing/i);
 
       const committed = await resource.write(rows, "insert", { ...ctx, dryRun: false });
       assert.equal(committed.failed, 0);
