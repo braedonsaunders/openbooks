@@ -83,7 +83,7 @@ export async function GET() {
   return NextResponse.json(workspace);
 }
 
-const glActions = new Set(["recordDeposit", "reverseDeposit", "finalizeCam", "levelRent"]);
+const glActions = new Set(["recordDeposit", "reverseDeposit", "finalizeCam", "reopenCamPool", "levelRent"]);
 const billingActions = new Set(["billRent", "billCam", "assessLateFees"]);
 const knownActions = new Set([
   "createProperty",
