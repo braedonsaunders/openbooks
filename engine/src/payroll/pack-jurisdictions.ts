@@ -59,6 +59,59 @@ export function jurisdictionKey(
 }
 
 /**
+ * The country pack owning an employment jurisdiction key — the documented
+ * inverse of `jurisdictionKey`'s `${country}-${region}` construction
+ * ("CA-NB" → "CA"; a bare country key returns itself).
+ */
+export function countryOfJurisdiction(jurisdictionKeyValue: string): string {
+  const dash = jurisdictionKeyValue.indexOf("-");
+  return dash < 0 ? jurisdictionKeyValue : jurisdictionKeyValue.slice(0, dash);
+}
+
+/** One pack-recognised occupation class: the key the profile stores, the
+ *  pack's English label, and the section that names it. Surfaces that VALIDATE
+ *  a stored answer read `occupationCapValues`; surfaces that OFFER one read
+ *  `holidayOccupationClassesOf` for the employee's own jurisdiction. */
+export interface RecognisedHolidayOccupation {
+  classKey: string;
+  label: string;
+  citation: string;
+}
+
+/**
+ * Every occupation class one employment jurisdiction's holiday-pay rules
+ * recognise — the capped values and the excluded classes of every edition,
+ * derived from the declarations, never a hand-maintained list, and naming no
+ * province here. An employee answers with their own jurisdiction's classes
+ * (or a stored answer from the country vocabulary, which stays clearable).
+ */
+export function holidayOccupationClassesOf(jurisdictionKeyValue: string): readonly RecognisedHolidayOccupation[] {
+  const jurisdiction = declaredJurisdictions().find((entry) => entry.key === jurisdictionKeyValue);
+  const classes: RecognisedHolidayOccupation[] = [];
+  for (const edition of jurisdiction?.holidayPay ?? []) {
+    const rule = edition.rule;
+    for (const value of rule.weeklyCap?.values ?? []) {
+      if (!classes.some((entry) => entry.classKey === value)) {
+        classes.push({ classKey: value, label: humanizeOccupationClass(value), citation: rule.citation });
+      }
+    }
+    for (const [classKey, arm] of Object.entries(rule.excludedOccupations ?? {})) {
+      if (!classes.some((entry) => entry.classKey === classKey)) {
+        classes.push({ classKey, label: arm.label, citation: arm.citation });
+      }
+    }
+  }
+  return classes;
+}
+
+/** Fallback English label for a weekly-cap value the pack does not label —
+ *  excluded occupations always carry their own label, so only the capped and
+ *  general values arrive here. */
+function humanizeOccupationClass(value: string): string {
+  return value.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+/**
  * Why a `labour_jurisdiction` value cannot govern an employment, or null if it
  * can — the API-boundary validator, shaped like `filingAccountProblem`.
  *

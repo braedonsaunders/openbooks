@@ -91,8 +91,8 @@ export function packStatutoryComponents(country: string): readonly PayrollStatut
 /**
  * Every storable occupation class any of the country's holiday rules names —
  * the closed vocabulary the profile boundary validates against. Walks the
- * pack's own declarations, so a newly priced occupation becomes storable
- * with no edit at the boundary.
+ * pack's own declarations (weekly-cap values and excluded occupations alike),
+ * so a newly priced occupation becomes storable with no edit at the boundary.
  */
 export function occupationCapValues(country: string): readonly string[] {
   const pack = PAYROLL_COUNTRY_PACKS[country];
@@ -100,6 +100,7 @@ export function occupationCapValues(country: string): readonly string[] {
   for (const jurisdiction of pack?.jurisdictions ?? []) {
     for (const edition of jurisdiction.holidayPay ?? []) {
       for (const value of edition.rule.weeklyCap?.values ?? []) values.add(value);
+      for (const value of Object.keys(edition.rule.excludedOccupations ?? {})) values.add(value);
     }
   }
   return [...values];
