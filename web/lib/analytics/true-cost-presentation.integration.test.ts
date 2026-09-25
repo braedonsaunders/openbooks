@@ -84,6 +84,10 @@ test('true cost translates every burden functional to presentation', { skip: !en
       // Monthly burden carries the translated time category.
       const july = data.monthly.find((m) => m.month === '2026-07')!
       assert.equal(july.burden, 1175)
+      // A restricted reader sees only the home subsidiary's burden and crew.
+      const fenced = await trueCostData(org.orgId, JULY, new Set([org.subsidiaryId]))
+      assert.equal(fenced.kpis.totalOverhead, 500)
+      assert.deepEqual(fenced.labor.employees.map((e) => e.id).sort(), [cadEmp])
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

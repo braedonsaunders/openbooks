@@ -10,8 +10,9 @@ import test from 'node:test'
 //
 // The loader's subsidiary fence has no cheap distinguishing interface: it is
 // threaded straight into trueCostData, whose `subsidiary_id in (fence)`
-// semantics are owned by the reader's own integration tests in
-// web/lib/analytics. These tests pin the two refusals.
+// semantics are owned by the restricted read in
+// web/lib/analytics/true-cost-presentation.integration.test.ts. These tests
+// pin the two refusals.
 const stateKey = Symbol.for('openbooks.true-cost-permission-test')
 const state: { user: unknown | null } = { user: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
@@ -91,9 +92,9 @@ async function grant(orgId: string, userId: string, permission: string): Promise
     values (${userId}, ${orgId}, ${permission}, 'grant')`))
 }
 
-async function enableProjects(orgId: string): Promise<void> {
+async function setProjects(orgId: string, on: boolean): Promise<void> {
   await withBypass(() => db.execute(
-    sql`update orgs set settings = '{"features": {"projects": true}}'::jsonb where id = ${orgId}`,
+    sql`update orgs set settings = ${JSON.stringify({ features: { projects: on } })}::jsonb where id = ${orgId}`,
   ))
 }
 
@@ -110,18 +111,12 @@ test('a reader without reports.read is sent to access-denied naming the permissi
   }
 })
 
-async function disableProjects(orgId: string): Promise<void> {
-  await withBypass(() => db.execute(
-    sql`update orgs set settings = '{"features": {"projects": false}}'::jsonb where id = ${orgId}`,
-  ))
-}
-
 test('a gated reader with projects explicitly off is sent to the feature gate', async () => {
   const { orgId, userId } = await freshReader()
   try {
     await grant(orgId, userId, 'reports.read')
     // Projects defaults on: only an explicit off flips the gate.
-    await disableProjects(orgId)
+    await setProjects(orgId, false)
     await assert.rejects(
       withOrgContext(orgId, () => loadTrueCost({})),
       /NEXT_REDIRECT:\/feature-required\?feature=projects/,
@@ -136,7 +131,7 @@ test('a gated reader with the feature loads the dashboard shell', async () => {
   const { orgId, userId } = await freshReader()
   try {
     await grant(orgId, userId, 'reports.read')
-    await enableProjects(orgId)
+    await setProjects(orgId, true)
     const data = await withOrgContext(orgId, () => loadTrueCost({}))
     assert.equal(data.reportHref, '/reports/true-cost', 'no query in, no query out')
     assert.ok(data.data, 'the dashboard carries its cost payload')
