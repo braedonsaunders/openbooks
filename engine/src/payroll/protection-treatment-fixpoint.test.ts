@@ -24,8 +24,10 @@ import { calculateAu2027 } from "./au/compute-statutory.ts";
 import { reduceTaxBases } from "./treatment-bases.ts";
 import { settleDeductionProtection } from "./run-protection.ts";
 import { type Line } from "./run-stub-records.ts";
+import type { Money } from "../money/brands.ts";
 
-const GROSS = "3653.8500";
+// Canonical fixture money, branded like the production lines under test.
+const GROSS = "3653.8500" as Money;
 
 function paygFor(sacrifice: string): string {
   const reduced = reduceTaxBases(
@@ -62,7 +64,7 @@ test("a protected pre-tax sacrifice converges with tax priced on the capped amou
       componentId: "sac",
       kind: "deduction",
       description: "Salary sacrifice",
-      amount: "2000.0000",
+      amount: "2000.0000" as Money,
       sequence: 300,
       taxTreatment: "salary_sacrifice",
       protectionBase: "net_pay",
@@ -75,7 +77,7 @@ test("a protected pre-tax sacrifice converges with tax priced on the capped amou
     componentId: "sg",
     kind: "employer_contribution",
     description: "Superannuation guarantee",
-    amount: "438.4600",
+    amount: "438.4600" as Money,
     sequence: 210,
     assessedOn: "earnings",
   });
@@ -90,7 +92,7 @@ test("a protected pre-tax sacrifice converges with tax priced on the capped amou
       componentId: "payg",
       kind: "deduction",
       description: "PAYG withholding",
-      amount: paygFor(sacrifice),
+      amount: paygFor(sacrifice) as Money,
       sequence: 110,
       assessedOn: "taxable_income",
     });
