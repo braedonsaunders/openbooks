@@ -178,6 +178,21 @@ test("a restricted actor cannot rewrite another entity's filing history", { skip
 test("a filing account from the wrong legal entity refuses before the update", { skip: !DB }, async () => {
   const fx = await seedTwoEntities();
   try {
+    // An account the org does not hold refuses by name (not a raw FK error),
+    // naming the unknown id so the preflight row stays visible.
+    const unknownAccount = randomUUID();
+    await assert.rejects(
+      reconcilePayrollFilingAccounts({
+        orgId: fx.orgId,
+        actorId: fx.adminId,
+        rows: [{ stubId: fx.stubA, filingAccountId: unknownAccount, ...evidence }],
+      }),
+      (error: unknown) => {
+        const message = (error as Error).message;
+        assert.ok(message.includes(unknownAccount), `refusal names ${unknownAccount}: ${message}`);
+        return true;
+      },
+    );
     await assert.rejects(
       reconcilePayrollFilingAccounts({
         orgId: fx.orgId,
