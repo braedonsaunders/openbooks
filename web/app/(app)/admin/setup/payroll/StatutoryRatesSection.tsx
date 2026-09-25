@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
@@ -149,23 +149,27 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
     setDraft(next)
   }
   const [failure, setFailure] = useState<string | null>(null)
+  const loadSequence = useRef(0)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   const load = useCallback((forYear: number | null) => {
+    const sequence = ++loadSequence.current
     const query = forYear ? `?year=${forYear}` : ''
     return fetch(`/api/payroll/settings/rates${query}`).then(async (res) => {
       // The status is checked before the body is parsed: a non-JSON error body
       // (this route rethrows non-domain errors as an unhandled empty 500) must
       // surface the failure, never a SyntaxError from res.json().
       if (!res.ok) {
-        setFailure(await readApiErrorMessage(res, 'failed'))
+        const message = await readApiErrorMessage(res, 'failed')
+        if (sequence === loadSequence.current) setFailure(message)
         return
       }
       const payload: Payload & { error?: string } = await res.json()
+      if (sequence !== loadSequence.current) return
       setFailure(null)
       setData(payload)
-      setYear(payload.year)
+      if (forYear == null) setYear(payload.year)
     })
   }, [])
 
@@ -348,7 +352,12 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           <Select
             id="rates-year"
             value={String(year ?? '')}
-            onChange={(e) => void load(Number(e.target.value))}
+            onChange={(e) => {
+              const nextYear = Number(e.target.value)
+              setYear(nextYear)
+              setData(null)
+              void load(nextYear)
+            }}
           >
             {yearOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
