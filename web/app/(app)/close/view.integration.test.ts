@@ -22,6 +22,12 @@ const translationsMock = `
       return msg.replace(/\\{(\\w+)\\}/g, (m, name) => (params != null && params[name] !== undefined ? String(params[name]) : m));
     };
   }
+  export async function getFormatter() {
+    return {
+      number: (value, format, opts) => new Intl.NumberFormat('en', typeof format === 'object' ? format : opts).format(Number(value)),
+      dateTime: (value, format, opts) => new Intl.DateTimeFormat('en', typeof format === 'object' ? format : opts).format(value instanceof Date ? value : new Date(String(value))),
+    };
+  }
 `
 registerHooks({
   resolve(specifier, context, next) {
