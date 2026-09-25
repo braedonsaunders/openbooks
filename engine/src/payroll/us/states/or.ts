@@ -45,11 +45,12 @@ import {
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
-import { roundDiv } from "../../../money/money.ts";
+import { mulRatio, roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -400,7 +401,22 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     throw new PayrollError(`invalid pay periods per year for Oregon withholding: ${P}`);
   }
 
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const gross = U(input.wages) + U(input.supplemental ?? "0");
+  const regionalAllocations = (input.wageAllocations ?? []).filter((allocation) =>
+    allocation.subRegion === null,
+  );
+  // Oregon's 2026 instructions tell part-year and nonresident employees to
+  // use only the Oregon column. A resident is taxed on the full wage amount;
+  // a nonresident with region-level allocation evidence is priced only on its
+  // sourced Oregon share. Once the employer supplies a regional allocation,
+  // a missing or duplicate Oregon row is an unknown basis, not zero wages.
+  const wages = input.basis === "resident" || regionalAllocations.length === 0
+    ? gross
+    : U(mulRatio(
+      D(gross),
+      rate6(requireUsWageAllocation(input.wageAllocations, "OR", null).workShare),
+      1_000_000n,
+    ));
 
   // HB 2119 / OR-W-4 instructions: no withholding statement on file → 8%.
   // emptyResolvedCertificate and resolveCertificate-with-no-row both report
