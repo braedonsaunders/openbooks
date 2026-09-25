@@ -1,6 +1,8 @@
 import 'server-only'
 
+import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
+import { isUuid } from '../../../../lib/list-params'
 import {
   badge,
   column,
@@ -297,6 +299,9 @@ export async function loadPositionsPage(
   const positionId = typeof sp.position === 'string' && sp.position.length > 0 && sp.position !== 'new'
     ? sp.position
     : null
+  // A malformed id is never a live row id: 404 like the template page
+  // instead of throwing out of the detail read as a 500.
+  if (positionId !== null && !isUuid(positionId)) notFound()
 
   const vacancy = await getVacancyAsOf({
     orgId: authz.user.orgId,
