@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { useBusinessToday } from '../../../components/business-date-provider'
 
 /**
@@ -148,6 +149,57 @@ export function ChangeRequestDrawer({
   const [action, setAction] = useState('')
   const [reasonCode, setReasonCode] = useState('')
   const [reasonOptions, setReasonOptions] = useState<{ action: string; reasonCode: string; label: string }[]>([])
+  // A dirty draft never closes silently: Cancel, the X button, Escape, and
+  // the backdrop all route through onClose, which asks first, so typed work
+  // survives a stray click — the same shared guard the lease forms use.
+  const [initialForm] = useState(() =>
+    JSON.stringify({
+      kind,
+      status,
+      effectiveFrom,
+      effectiveTo,
+      effectiveDate,
+      assignmentKey,
+      jobTitle,
+      departmentId,
+      locationId,
+      fte,
+      primary,
+      managerEmploymentId,
+      positionId,
+      unassign,
+      reason,
+      action,
+      reasonCode,
+    }),
+  )
+  const dirty =
+    JSON.stringify({
+      kind,
+      status,
+      effectiveFrom,
+      effectiveTo,
+      effectiveDate,
+      assignmentKey,
+      jobTitle,
+      departmentId,
+      locationId,
+      fte,
+      primary,
+      managerEmploymentId,
+      positionId,
+      unassign,
+      reason,
+      action,
+      reasonCode,
+    }) !== initialForm
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy,
+    onClose,
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
   const managerRequestId = useRef(0)
   const locationRequestId = useRef(0)
   const positionRequestId = useRef(0)
@@ -529,13 +581,13 @@ export function ChangeRequestDrawer({
   return (
     <Drawer
       open
-      onClose={onClose}
+      onClose={() => void closeGuard.close()}
       size="md"
       title={t(editing ? 'employment.changeRequests.titleEdit' : 'employment.changeRequests.titleNew')}
       description={t('employment.changeRequests.authoringDescription')}
       headerActions={
         <>
-          <Button variant="outline" disabled={busy} onClick={onClose}>
+          <Button variant="outline" disabled={busy} onClick={() => void closeGuard.close()}>
             {tCommon('actions.cancel')}
           </Button>
           <Button variant="outline" disabled={busy} onClick={saveDraft}>
