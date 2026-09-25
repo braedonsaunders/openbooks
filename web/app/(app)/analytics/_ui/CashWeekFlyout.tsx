@@ -103,11 +103,9 @@ export function CashWeekFlyout({
   // ledger has tens of thousands of open items and only one week is ever open.
   // Fetch this week's rows when the flyout mounts; fall back to whatever the
   // row already carries (analytics callers that still embed them).
-  const [fetched, setFetched] = useState<{ ar: ForecastEntry[]; ap: ForecastEntry[] } | null>(
-    week.arEntries.length || week.apEntries.length
-      ? { ar: week.arEntries, ap: week.apEntries }
-      : null,
-  )
+  const [fetched, setFetched] = useState<{ ar: ForecastEntry[]; ap: ForecastEntry[] } | null>(week.arEntries.length || week.apEntries.length ? { ar: week.arEntries, ap: week.apEntries } : null)
+  const [fetchState, setFetchState] = useState<'loading' | 'loaded' | 'failed'>(fetched ? 'loaded' : 'loading')
+  const [fetchAttempt, setFetchAttempt] = useState(0)
   useEffect(() => {
     if (fetched) return
     let cancelled = false
@@ -115,15 +113,18 @@ export function CashWeekFlyout({
     fetch(`/api/cash/week-entries?${params}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
       .then((d) => {
-        if (!cancelled) setFetched({ ar: d.arEntries ?? [], ap: d.apEntries ?? [] })
+        if (!cancelled) {
+          setFetched({ ar: d.arEntries ?? [], ap: d.apEntries ?? [] })
+          setFetchState('loaded')
+        }
       })
       .catch(() => {
-        if (!cancelled) setFetched({ ar: [], ap: [] })
+        if (!cancelled) setFetchState('failed')
       })
     return () => {
       cancelled = true
     }
-  }, [week.weekStart, fetched])
+  }, [week.weekStart, fetched, fetchAttempt])
   const weekCats = categories.filter((c) => compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
   const otherIn = sumMoney(weekCats.filter((c) => c.direction === 'inflow').map((c) => c.weekly[weekIndex] ?? ZERO_MONEY))
   const catOuts = weekCats.filter((c) => c.direction === 'outflow')
@@ -299,7 +300,17 @@ export function CashWeekFlyout({
 
           {/* transaction table */}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {paged.length === 0 ? (
+            {fetchState === 'loading' ? (
+              <p className="px-6 py-10 text-center text-sm text-slate-400">{tCommon('feedback.loading')}</p>
+            ) : fetchState === 'failed' ? (
+              <div role="alert" className="px-6 py-10 text-center text-sm text-red-600 dark:text-red-400">
+                <p>{tCommon('feedback.loadFailed')}</p>
+                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => {
+                  setFetchState('loading')
+                  setFetchAttempt((attempt) => attempt + 1)
+                }}>{tCommon('actions.retry')}</Button>
+              </div>
+            ) : paged.length === 0 ? (
               <p className="px-6 py-10 text-center text-sm text-slate-400">
                 {search ? t('empty.noMatches') : t('empty.noneThisWeek', { side: side === 'ar' ? t('empty.inflows') : t('empty.outflows') })}
               </p>
