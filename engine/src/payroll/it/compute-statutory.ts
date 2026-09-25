@@ -636,6 +636,21 @@ export async function computeItStatutoryWithRates(
       ? undefined
       : bool(answers["anzianita_post_1995"]),
   });
+  // The annual calculation above is valid as a liability, but it cannot be
+  // divided into monthly withholding: regional saldo needs the prior-year
+  // assessment, while municipal saldo and the 30% advance need that balance,
+  // the current assessment, paid-to-date amounts, and the calendar month.
+  // None of those assessment/settlement facts is carried into this adapter.
+  // https://www.inps.it/it/it/dettaglio-approfondimento.schede-informative.53546.pensioni-addizionali-irpef-regionali-e-comunali.html
+  throw new ItPayrollRefusal(
+    `IT ${taxYear} payroll refuses addizionale withholding: the prior-year regional balance and municipal `
+    + "balance/paid-to-date amounts are unknown. Regional saldo is withheld after year-end in up to 11 "
+    + "instalments; municipal saldo uses up to 11 instalments plus a 30% current-year advance in up to 9 "
+    + "instalments from March. Supply the assessed balances and withholding history through a supported "
+    + `payroll source, or have a qualified Italian payroll provider price the schedule before posting; current-year `
+    + `annual liabilities (${result.addizionaleRegionale} regional, ${result.addizionaleComunale} municipal) are not `
+    + "the prior-year assessed balances. See INPS guidance.",
+  );
   pushStatutory("income_tax", "deduction", "IRPEF", result.period.irpef, 110);
   pushStatutory("regional_surtax", "deduction", "Addizionale regionale all'IRPEF", result.period.addizionaleRegionale, 115);
   pushStatutory("municipal_surtax", "deduction", "Addizionale comunale all'IRPEF", result.period.addizionaleComunale, 120);

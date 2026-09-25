@@ -3,14 +3,13 @@
  *
  * The pack is installable:true for 2025 (proven by tax-year-2025.test.ts)
  * and 2026 (proven by tax-year-2026.test.ts); later years are refused by
- * name. All 20 regions are supported (no region publishes its own tables —
- * surtaxes compute from tenant-declared rates), and every withholding entry
- * is implemented. The wrapper glue is tested here with injected rates (no
- * Postgres); the DB resolution lives in the thin production entry only.
+ * name. All 20 regions are supported (no region publishes its own tables),
+ * but monthly surtax withholding refuses without prior-year settlement facts.
+ * Wrapper glue is tested with injected rates (no Postgres).
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { add, cmp } from "../../money/money.ts";
+import { cmp } from "../../money/money.ts";
 import { PayrollError } from "../error.ts";
 import { resolveCertificate } from "../certificates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
@@ -321,92 +320,13 @@ test("missing declared rates refuse naming the scope point", async () => {
   );
 });
 
-test("a 9.500 worker is paid +141,96/month in credits, and YTD matches cash", async () => {
-  // The whole argument for the generic `credit` kind, pinned end to end:
-  // annual 9.500,04 (791,67 x 12, no pensionable base) owes TI 1.200 +
-  // somma 5,3% x 9.500,04 = 503,50 a year = 100,00 + 41,96 a month. Before
-  // the credit channel this refused by name; as factors it would have
-  // underpaid every monthly net by 141,96 while YTD claimed 1.703,50 paid.
-  const { ctx, pushed } = fakeCtx({ income: "791.67", pensionable: "0.00" });
-  const factors = await computeItStatutoryWithRates(ctx, {
+test("monthly adapter refuses surtax without prior-year balances or withholding history", async () => {
+  const { ctx } = fakeCtx({ income: "791.67", pensionable: "0.00" });
+  await assert.rejects(computeItStatutoryWithRates(ctx, {
     regionalRate: "1.23",
     municipalRate: "0.8",
     municipalExemption: null,
-  });
-  assert.equal(factors["TI"], "100.0000");
-  assert.equal(factors["SOMMA"], "41.9600");
-  const ti = pushed.find((p) => p.systemKey === "ti_payout")!;
-  const somma = pushed.find((p) => p.systemKey === "somma_payout")!;
-  assert.equal(ti.kind, "credit");
-  assert.equal(somma.kind, "credit");
-  // The stub lines ARE the cash, the factors ARE what year-to-date reads:
-  // equal amounts, and together the 141,96 the month is owed.
-  assert.equal(ti.amount, factors["TI"]);
-  assert.equal(somma.amount, factors["SOMMA"]);
-  assert.equal(add(ti.amount, somma.amount), "141.9600");
-  assert.deepEqual(pushed.map((p) => [p.systemKey, p.kind, p.sequence]), [
-    ["income_tax", "deduction", 110],
-    ["regional_surtax", "deduction", 115],
-    ["municipal_surtax", "deduction", 120],
-    ["ti_payout", "credit", 140],
-    ["somma_payout", "credit", 145],
-  ]);
-});
-
-test("a one-off bonus counts once in the INPS base and still withholds IRPEF", async () => {
-  // A December bonus with no periodic income: the 20000 one-off is
-  // pensionable, so the pensionable leg carries it and nonPeriodic adds it
-  // again. Annualising the whole leg priced 13 months of INPS (a 260000
-  // base: 2160.98 a month), wiping the lavoroNet so IRPEF priced zero and no
-  // income_tax line was pushed at all. The recurring leg annualises; the
-  // one-off enters once: INPS on 20000, IRPEF on what remains.
-  const { ctx, pushed } = fakeCtx({
-    taxYear: 2026,
-    income: "0.0000",
-    pensionable: "20000.0000",
-    nonPeriodic: "20000.0000",
-    pensionableNonPeriodic: "20000.0000",
-  });
-  const factors = await computeItStatutoryWithRates(ctx, {
-    regionalRate: "1.23",
-    municipalRate: "0.8",
-    municipalExemption: null,
-  });
-  assert.equal(factors["INPS_W"], "153.1700");
-  // Hand-verified: lavoroNet 20000 − 1838.00 = 18162; lorda 23% = 4177.26;
-  // detrazione lavoro 1910 + 1190 × 9838/13000 (4dp truncated) = 2810.47;
-  // netta 1366.79, /12 half-up = 113.90.
-  assert.equal(factors["IRPEF"], "113.9000");
-  const inps = pushed.find((p) => p.systemKey === "inps" && p.kind === "deduction")!;
-  assert.equal(inps.amount, factors["INPS_W"]);
-  const irpef = pushed.find((p) => p.systemKey === "income_tax");
-  assert.ok(irpef, "IRPEF is pushed, not suppressed as zero");
-  assert.equal(irpef!.amount, factors["IRPEF"]);
-});
-
-test("wrapper pushes five lines when no payout is owed, TI/SOMMA factors zero", async () => {
-  const { ctx, pushed } = fakeCtx({});
-  const factors = await computeItStatutoryWithRates(ctx, {
-    regionalRate: "1.23",
-    municipalRate: "0.8",
-    municipalExemption: null,
-  });
-  assert.equal(factors["I"], "2500.00");
-  assert.equal(factors["PI"], "2500.00");
-  // Annual 30.000: IRPEF netta 3.221,63/12, INPS matches the golden.
-  // TI and somma are 0 here, so no credit lines are pushed (pushStatutory
-  // skips zeros) while the factors stay present at zero for YTD shape.
-  assert.equal(factors["IRPEF"], "268.4700");
-  assert.equal(factors["INPS_W"], "229.7500");
-  assert.equal(factors["TI"], "0.0000");
-  assert.equal(factors["SOMMA"], "0.0000");
-  assert.deepEqual(pushed.map((p) => [p.systemKey, p.sequence]), [
-    ["income_tax", 110],
-    ["regional_surtax", 115],
-    ["municipal_surtax", 120],
-    ["inps", 130],
-    ["inps", 230],
-  ]);
+  }), /prior-year regional balance.*municipal balance\/paid-to-date amounts/);
 });
 
 test("CU is populated with a slip; the 770 stays declared and refused", async () => {
