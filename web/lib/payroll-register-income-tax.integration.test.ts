@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 registerHooks({ resolve(s, c, n) { if (s === 'server-only') return { url: 'data:text/javascript,export{}', shortCircuit: true }; return n(s, c) } })
 const { db, pool } = await import('@openbooks/engine/src/platform/db.ts')
 const { withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PAYROLL_COUNTRY_PACKS, eiColumnSystemKeys, employeeSocialInsuranceSystemKeys, packStatutoryComponents } = await import('@openbooks/engine/src/payroll/packs.ts')
 const { REPORT_ENTITY_MAP } = await import('@openbooks/reports')
 const { compileCustomQuery } = await import('@openbooks/reports')
@@ -54,11 +54,14 @@ test('payroll register social buckets: eleven packs counted, QPIP folded into EI
     assert.ok(catalog.pay_stubs!.from.includes(`'pit'`), 'executed catalog inlines the live key set')
     assert.ok(catalog.pay_stubs!.from.includes(`'qpip'`), 'QPIP rides the executed derivation')
 
+    // pay_stubs.employment_id is NOT NULL: every stub employee carries the
+    // HRM employment the payroll engine requires next to the profile.
     const employee = async (name: string) => {
       const id = randomUUID()
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`)
-      return id
+      const employmentId = await seedWorkerEmployment(orgId, id, org.subsidiaryId)
+      return { id, employmentId }
     }
     const component = async (code: string, name: string, kind: string, systemKey: string, country: string) => {
       const id = randomUUID()
@@ -85,9 +88,10 @@ test('payroll register social buckets: eleven packs counted, QPIP folded into EI
       factors: Record<string, string>, lines: { componentId: string; kind: string; description: string; amount: string }[],
     ) => {
       const stubId = randomUUID()
-      await db.execute(sql`insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+      const emp = await employee(name)
+      await db.execute(sql`insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                            periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost, factors)
-        values (${stubId}, ${orgId}, ${docId}, ${await employee(name)}, ${province},
+        values (${stubId}, ${orgId}, ${docId}, ${emp.id}, ${emp.employmentId}, ${province},
                 12, '2026-07-31', 2026, ${currency}, ${gross}, ${net}, ${gross}, ${JSON.stringify(factors)}::jsonb)`)
       let sequence = 100
       for (const line of lines) {
@@ -337,10 +341,11 @@ test('payroll register: every statutory employee deduction appears in some colum
       const partyId = randomUUID()
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${partyId}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`)
+      const employmentId = await seedWorkerEmployment(orgId, partyId, org.subsidiaryId)
       const stubId = randomUUID()
-      await db.execute(sql`insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+      await db.execute(sql`insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                            periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost, factors)
-        values (${stubId}, ${orgId}, ${docId}, ${partyId}, ${country},
+        values (${stubId}, ${orgId}, ${docId}, ${partyId}, ${employmentId}, ${country},
                 12, '2026-07-31', 2026, ${COVERAGE_CURRENCY[country]}, '100000.0000', '60000.0000', '100000.0000', '{}'::jsonb)`)
       let sequence = 100
       for (const component of packStatutoryComponents(country)) {
