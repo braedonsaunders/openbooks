@@ -75,7 +75,7 @@ async function seedTagManualFlow(orgId: string): Promise<void> {
   }
   await withBypassContext(() =>
     db.execute(sql`
-      insert into flows (id, org_id, name, subject_kind, graph)
+      insert into flows (id, org_id, name, subject_kind, enabled, graph)
       values (${randomUUID()}, ${orgId}, 'Manual tag flow', 'vendor_bill', true,
               ${JSON.stringify(graph)}::jsonb)`),
   )

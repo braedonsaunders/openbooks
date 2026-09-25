@@ -211,7 +211,7 @@ test('documents/actions submit with refused routing commits no script effects', 
       // An unparseable on_submit flow: the dispatch fails, so the submission
       // is refused with a flowError after the script effects are written.
       await db.execute(sql`
-        insert into flows (id, org_id, name, subject_kind, graph)
+        insert into flows (id, org_id, name, subject_kind, enabled, graph)
         values (${randomUUID()}, ${org.orgId}, 'Broken flow', 'customer_invoice', true,
           ${JSON.stringify({ nodes: 'not-an-array' })}::jsonb)`)
     })
