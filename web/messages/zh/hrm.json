@@ -2055,7 +2055,14 @@
       "preview": "预览合并字段",
       "submit": "生成",
       "failed": "生成失败。",
-      "noTemplates": "没有可用模板——请先在设置中声明模板。"
+      "noTemplates": "没有可用模板——请先在设置中声明模板。",
+      "modeGenerate": "从模板生成",
+      "modeUpload": "上传现有文件",
+      "uploadCategory": "文档类别",
+      "uploadFile": "源文件",
+      "uploadSubmit": "登记已上传文档",
+      "noCategories": "没有启用的文档类别——请先在设置中声明。",
+      "uploadTooLarge": "请选择不超过 10 MB 的文件。"
     }
   },
   "surveys": {

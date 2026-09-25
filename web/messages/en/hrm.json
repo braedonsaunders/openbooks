@@ -2111,7 +2111,14 @@
       "preview": "Preview merge fields",
       "submit": "Generate",
       "failed": "Generation failed.",
-      "noTemplates": "No active templates — declare templates under Setup first."
+      "noTemplates": "No active templates — declare templates under Setup first.",
+      "modeGenerate": "Generate from template",
+      "modeUpload": "Upload existing file",
+      "uploadCategory": "Document category",
+      "uploadFile": "Source file",
+      "uploadSubmit": "Register uploaded document",
+      "noCategories": "No active document categories — declare one under Setup first.",
+      "uploadTooLarge": "Choose a file no larger than 10 MB."
     }
   },
   "surveys": {

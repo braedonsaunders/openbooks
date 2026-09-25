@@ -30,6 +30,8 @@ function msg(labels: Record<string, string>, key: string): string {
   return labels[key] ?? key
 }
 
+const MAX_HRM_DOCUMENT_BYTES = 10 * 1024 * 1024
+
 async function post(url: string, body: unknown, failed: string, onRefusal?: (message: string) => void, headers?: Record<string, string>): Promise<boolean> {
   // A transport failure rejects instead of resolving: without the catch
   // the caller's await throws past its reset and the operator gets an
@@ -271,6 +273,9 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
   const [templateId, setTemplateId] = useState('')
   const [partyId, setPartyId] = useState('')
   const [title, setTitle] = useState('')
+  const [mode, setMode] = useState<'generate' | 'upload'>('generate')
+  const [categoryKey, setCategoryKey] = useState('')
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
   // The preview is fingerprinted by the exact subject (and template) that
   // produced it (I4-webui-165): changing the person or template drops the
   // prior preview immediately, and a late response for a superseded subject
@@ -338,12 +343,56 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
     }
   }
 
+  async function upload() {
+    if (submittingRef.current || !uploadFile) return
+    if (uploadFile.size > MAX_HRM_DOCUMENT_BYTES) {
+      setFailed(msg(labels, 'uploadTooLarge'))
+      return
+    }
+    submittingRef.current = true
+    setSubmitting(true)
+    setFailed(null)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('file read failed'))
+        reader.onerror = () => reject(new Error('file read failed'))
+        reader.readAsDataURL(uploadFile)
+      })
+      const comma = dataUrl.indexOf(',')
+      if (comma < 0) throw new Error('file encoding failed')
+      const response = await fetch('/api/hrm/documents?mode=upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          partyId,
+          categoryKey,
+          title: title.trim(),
+          filename: uploadFile.name,
+          contentType: uploadFile.type || 'application/octet-stream',
+          fileBase64: dataUrl.slice(comma + 1),
+        }),
+      })
+      if (!response.ok) {
+        setFailed(await readApiErrorMessage(response, msg(labels, 'failed')))
+        return
+      }
+      router.push('/hrm/documents')
+      router.refresh()
+    } catch {
+      setFailed(msg(labels, 'failed'))
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
+    }
+  }
+
   // A half-filled generate draft is unsaved work: drawer-level dismiss
   // (Escape, backdrop, X) asks before abandoning it. An in-flight generate
   // cannot be dismissed, even with a discard confirmation.
   async function confirmDiscard() {
     if (submitting) return false
-    if (!templateId && !partyId && !title.trim()) return true
+    if (!templateId && !partyId && !title.trim() && !uploadFile && !categoryKey) return true
     return confirmDialog({
       message: tCommon('feedback.unsavedChanges'),
       confirmLabel: tCommon('confirm.discardChanges'),
@@ -354,9 +403,13 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
   return (
     <UrlDrawer open closeHref={generate.closeHref} title={msg(labels, 'title')} beforeClose={confirmDiscard}>
       <div className="flex flex-col gap-4">
-        {generate.templates.length === 0 ? (
+        <div className="flex gap-2">
+          <Button variant={mode === 'generate' ? 'default' : 'outline'} onClick={() => { setMode('generate'); setFailed(null) }}>{msg(labels, 'modeGenerate')}</Button>
+          <Button variant={mode === 'upload' ? 'default' : 'outline'} onClick={() => { setMode('upload'); setFailed(null) }}>{msg(labels, 'modeUpload')}</Button>
+        </div>
+        {mode === 'generate' && generate.templates.length === 0 ? (
           <p className="text-sm text-slate-500">{msg(labels, 'noTemplates')}</p>
-        ) : (
+        ) : mode === 'generate' ? (
           <>
             <div>
               <Label id={`${fieldId}-template-label`}>{msg(labels, 'template')}</Label>
@@ -408,6 +461,36 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
               </Table>
             )}
             {failed && <p className="text-sm text-red-600">{failed}</p>}
+          </>
+        ) : (
+          <>
+            {generate.categories.length === 0 ? <p className="text-sm text-slate-500">{msg(labels, 'noCategories')}</p> : null}
+            <div>
+              <Label id={`${fieldId}-upload-category-label`}>{msg(labels, 'uploadCategory')}</Label>
+              <Select id={`${fieldId}-upload-category`} aria-labelledby={`${fieldId}-upload-category-label`} value={categoryKey} onChange={(event) => setCategoryKey(event.target.value)}>
+                <option value="">{msg(labels, 'uploadCategory')}</option>
+                {generate.categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+              </Select>
+            </div>
+            <div>
+              <Label id={`${fieldId}-upload-person-label`}>{msg(labels, 'person')}</Label>
+              <Select id={`${fieldId}-upload-person`} aria-labelledby={`${fieldId}-upload-person-label`} value={partyId} onChange={(event) => setPartyId(event.target.value)}>
+                <option value="">{msg(labels, 'person')}</option>
+                {generate.people.map((person) => <option key={person.value} value={person.value}>{person.label}</option>)}
+              </Select>
+            </div>
+            <div>
+              <Label id={`${fieldId}-upload-title-label`} htmlFor={`${fieldId}-upload-title`}>{msg(labels, 'docTitle')}</Label>
+              <Input id={`${fieldId}-upload-title`} aria-labelledby={`${fieldId}-upload-title-label`} value={title} onChange={(event) => setTitle(event.target.value)} />
+            </div>
+            <div>
+              <Label id={`${fieldId}-upload-file-label`} htmlFor={`${fieldId}-upload-file`}>{msg(labels, 'uploadFile')}</Label>
+              <Input id={`${fieldId}-upload-file`} type="file" aria-labelledby={`${fieldId}-upload-file-label`} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
+            </div>
+            <Button onClick={upload} disabled={submitting || !uploadFile || !categoryKey || !partyId || !title.trim() || generate.categories.length === 0}>
+              {msg(labels, 'uploadSubmit')}
+            </Button>
+            {failed && <p className="text-sm text-red-600" role="alert">{failed}</p>}
           </>
         )}
       </div>

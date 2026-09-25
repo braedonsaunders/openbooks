@@ -2055,7 +2055,14 @@
       "preview": "Aperçu des champs",
       "submit": "Générer",
       "failed": "La génération a échoué.",
-      "noTemplates": "Aucun modèle actif — déclarez d’abord des modèles dans Configuration."
+      "noTemplates": "Aucun modèle actif — déclarez d’abord des modèles dans Configuration.",
+      "modeGenerate": "Générer à partir d’un modèle",
+      "modeUpload": "Téléverser un fichier existant",
+      "uploadCategory": "Catégorie du document",
+      "uploadFile": "Fichier source",
+      "uploadSubmit": "Enregistrer le document téléversé",
+      "noCategories": "Aucune catégorie active — déclarez-en une dans Configuration.",
+      "uploadTooLarge": "Choisissez un fichier de 10 Mo maximum."
     }
   },
   "surveys": {
