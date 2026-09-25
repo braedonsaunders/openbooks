@@ -187,7 +187,11 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
       if (requestGeneration.current !== generation) return
       setResponse({ status: 0, ms: Math.round(performance.now() - start), ok: false, body: (e as Error).message })
     } finally {
-      if (requestGeneration.current === generation) setBusy(false)
+      // Always release: the generation guards above already retired this
+      // response when the request changed mid-flight, but busy gates the
+      // Send button — conditioning the release on a matching generation
+      // leaves Send disabled forever after any mid-flight edit.
+      setBusy(false)
     }
   }, [selected, token, method, id, body, hasBody])
 
