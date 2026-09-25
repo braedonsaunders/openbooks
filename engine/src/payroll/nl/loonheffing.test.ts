@@ -1,19 +1,14 @@
 /**
  * NL 2026 loonheffing conformance tests — the parity bar from
  * `engine/src/payroll/canada/t4127.test.ts`, all four mechanisms:
- *
- * 1. Goldens from the authority's own published output: rows of the witte
- *    maandtabel (Nederland, Standaard, uitgave januari 2026,
- *    download.belastingdienst.nl) — the "zonder loonheffingskorting" column
- *    pins X1/F, the "met" column pins X/F after kortingen, and the
- *    "verrekende arbeidskorting" column pins ARK/F independently.
- * 2. Hand-worked cases independent of the engine: the AHK phase-out and the
- *    three-stage ARK build-up recomputed by hand in the comments.
+ * 1. Goldens from the authority's published witte maandtabel (Nederland,
+ *    Standaard, januari 2026): "zonder" pins X1/F, "met" pins X/F, and
+ *    "verrekende arbeidskorting" pins ARK/F independently.
+ * 2. Hand-worked cases independent of the engine (AHK phase-out, three-stage
+ *    ARK build-up recomputed by hand in the comments).
  * 3. Date resolution that THROWS outside the transcribed year.
  * 4. A sweep across every band boundary (schijven, AHK, ARK, Lmax, premieloon).
- *
- * Money assertions use the engine's integer cents through d4-style 4dp
- * strings; table figures below are quoted verbatim (Dutch commas converted).
+ * Money asserts use integer cents; table figures are quoted verbatim.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -229,17 +224,21 @@ test("Lmax golden and the above-Lmax systematiek-1 rule", () => {
 test("jonggehandicaptenkorting: Tabel 13 slices, AOW+ herleiding from the worked example", () => {
   // Zonder korting, so X1 shows whole: € 2.002,50 → x = 715,83.
   // JGK maandslice: € 923/12 = 76,92 (Tabel 13: "per maand € 76,92").
-  const jong = calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: false, jgkApply: true, ...DECL });
+  const jong = calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: false, jgkApply: true, jgkBasis: "wajong_benefit", ...DECL });
   assert.equal(cents2(jong.jgkReductionCents), "76.92");
   assert.equal(cents2(jong.withholdingCents), "638.91");
   // AOW+: the §5.2 worked example herleids € 923 to € 210 (8,10/35,75) +
   // € 252 (9,75/35,75) = € 462; maandslice 462/12 = 38,50.
-  const aow = calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: false, ageClass: "aow_1946", jgkApply: true, ...DECL });
+  const aow = calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: false, ageClass: "aow_1946", jgkApply: true, jgkBasis: "wajong_benefit", ...DECL });
   assert.equal(cents2(aow.jgkReductionCents), "38.50");
   assert.equal(cents2(aow.withholdingCents), "318.92");
   // The reduction never drives the withholding below € 0 ("maar niet verder dan tot € 0").
-  const tiny = calculateNlStatutory({ income: "4.50", periodsPerYear: 12, applyKorting: true, jgkApply: true, ...DECL });
+  const tiny = calculateNlStatutory({ income: "4.50", periodsPerYear: 12, applyKorting: true, jgkApply: true, jgkBasis: "wajong_benefit", ...DECL });
   assert.equal(cents2(tiny.withholdingCents), "0.00");
+  // A bare election with no Wajong entitlement, or an entitlement-letter basis
+  // with no retained UWV reference, refuses instead of pricing the korting.
+  assert.throws(() => calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: false, jgkApply: true, ...DECL }), /Wajong entitlement/);
+  assert.throws(() => calculateNlStatutory({ income: "2002.50", periodsPerYear: 12, applyKorting: false, jgkApply: true, jgkBasis: "uwv_entitlement", ...DECL }), /UWV entitlement letter/);
 });
 
 test("employer premiums: AWf low/high, Aof low/high, Whk beschikking, Zvw 6,10%", () => {
