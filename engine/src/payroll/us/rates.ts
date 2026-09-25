@@ -492,8 +492,11 @@ const US_FUTA_SLOT: PayrollStatutoryRateSlot = {
   label: "Effective FUTA rate",
   scope: "region",
   systemKeys: ["futa"],
-  // This is an optional account-scoped override. Otherwise calculation resolves
-  // the IRS Schedule A rate for the jurisdiction and year, or refuses if absent.
+  // This is an optional account-scoped override of the NET rate. Otherwise
+  // calculation accrues the statutory 0.6% default. Schedule A credit
+  // reductions never price here: they apply on the Form 940 year-end true-up
+  // (futaScheduleATrueUp in pub15t.ts), once USDOL publishes that year's
+  // schedule in November — never as a pay-run gate.
   whenUnconfigured: "zero",
   citation: "IRC 3301/3302; USDOL annual credit-reduction determination (Form 940 Schedule A)",
   variesBecause:
@@ -504,8 +507,9 @@ const US_FUTA_SLOT: PayrollStatutoryRateSlot = {
     {
       key: "rate", label: "Effective rate", kind: "rate", decimals: 4,
       min: "0", max: "0.2", required: true,
-      help: "As a decimal: 0.006 is the standard 0.6% after the full credit. Add the state's "
-        + "credit reduction for a credit-reduction state (0.009 for a 0.3% reduction).",
+      help: "As a decimal: 0.006 is the standard 0.6% after the full credit. Enter the net rate "
+        + "only — never add the state's Schedule A credit reduction here; it applies on the Form 940 "
+        + "year-end true-up.",
     },
   ],
 };

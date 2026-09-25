@@ -13,7 +13,7 @@ import test from "node:test";
 import { payrollCertificate, resolveCertificate } from "../certificates.ts";
 import { PAYROLL_COUNTRY_PACKS } from "../packs.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
-import { calculatePub15T } from "./pub15t.ts";
+import { calculatePub15T, futaScheduleATrueUp } from "./pub15t.ts";
 import { NO_WITHHOLDING_STATES, RATES_2026, ratesForPayDate, US_STATES } from "./rates.ts";
 
 function calculateWithConfiguredFuta(input: Parameters<typeof calculatePub15T>[0]) {
@@ -197,46 +197,46 @@ test("FUTA cap and configured SUI", () => {
   assert.equal(result.suta, money("13.50"));
 });
 
-test("FUTA refuses multi-state UI wages without Schedule A state allocation", () => {
-  // IRS Instructions for Form 940: FUTA wages excluded from state UI do not qualify (https://www.irs.gov/instructions/i940).
-  assert.throws(() => calculatePub15T({
+test("FUTA per-period accrues the net rate across UI jurisdictions, never a Schedule A gate", () => {
+  // The credit reduction is a Form 940 year-end true-up: per-period payroll
+  // attributes nothing and refuses nothing, even across UI jurisdictions.
+  // IRS Instructions for Form 940 (https://www.irs.gov/instructions/i940) govern the return, not the run.
+  const result = calculatePub15T({
     payDate: "2026-04-15", periodsPerYear: 26, wages: "1000.00", filingStatus: "single",
     futaEffectiveRate: "0.012", futaWorkAllocations: [{ region: "CA" }, { region: "TX" }],
-  }), /FUTA credit-reduction calculation refused.*state-specific FUTA taxable wages.*Schedule A/);
+  });
+  assert.equal(result.futa, money("12.00"));
 });
 
-test("FUTA uses the effective 2025 Schedule A rate for California without an override", () => {
-  // IRS 2025 Schedule A (Form 940) lists California's 1.2% credit reduction;
-  // add it to the ordinary 0.6% net rate: $7,000 × 1.8% = $126.
-  // https://www.irs.gov/pub/irs-prior/f940sa--2025.pdf
-  for (const state of US_STATES) {
-    const result = calculatePub15T({
-      payDate: "2025-12-31", periodsPerYear: 26, wages: "7000.00",
-      filingStatus: "single", futaRegion: state,
-    });
-    assert.equal(result.futa, money(state === "CA" ? "126.00" : "42.00"), state);
+test("FUTA per-period ignores Schedule A: every state accrues the 0.6% default", () => {
+  // Transcribed reductions (2025 CA 1.2%, 2024 CA/NY 0.9% — sources beside
+  // FUTA_CREDIT_REDUCTION in pub15t.ts) price on the year-end true-up, never
+  // here: $7,000 × 0.6% = $42.00 in every state and every transcribed year,
+  // and in 2026 with no schedule at all.
+  for (const payDate of ["2024-12-31", "2025-12-31", "2026-12-31"]) {
+    for (const state of US_STATES) {
+      const result = calculatePub15T({
+        payDate, periodsPerYear: 26, wages: "7000.00",
+        filingStatus: "single", futaRegion: state,
+      });
+      assert.equal(result.futa, money("42.00"), `${payDate} ${state}`);
+    }
   }
 });
 
-test("FUTA Schedule A resolution keeps the 2024 reductions effective for their own year", () => {
-  // IRS 2024 Schedule A lists CA and NY at 0.9%; 0.6% + 0.9% = 1.5%.
-  // https://www.irs.gov/pub/irs-prior/f940sa--2024.pdf
-  for (const state of US_STATES) {
-    const result = calculatePub15T({
-      payDate: "2024-12-31", periodsPerYear: 26, wages: "7000.00",
-      filingStatus: "single", futaRegion: state,
-    });
-    assert.equal(result.futa, money(state === "CA" || state === "NY" ? "105.00" : "42.00"), state);
-  }
+test("FUTA Schedule A true-up prices transcribed years state by state", () => {
+  // 2025: California 1.2% the only state (CT/NY repaid before 2025-11-10,
+  // verified against https://www.irs.gov/pub/irs-prior/f940sa--2025.pdf).
+  assert.equal(futaScheduleATrueUp(2025, { CA: "7000.00", TX: "7000.00" }), money("84.00"));
+  // 2024: CA and NY at 0.9% (https://www.irs.gov/pub/irs-prior/f940sa--2024.pdf).
+  assert.equal(futaScheduleATrueUp(2024, { CA: "7000.00", NY: "7000.00", TX: "7000.00" }), money("126.00"));
 });
 
-test("FUTA refuses a year without a transcribed Schedule A instead of using 0.6%", () => {
+test("FUTA true-up refuses an untranscribed Schedule A year instead of accruing zero", () => {
+  // USDOL publishes in November: an earlier 2026 true-up would silently price zero.
   assert.throws(
-    () => calculatePub15T({
-      payDate: "2026-12-31", periodsPerYear: 26, wages: "7000.00",
-      filingStatus: "single", futaRegion: "CA",
-    }),
-    /FUTA credit-reduction rates for 2026 are not transcribed from Form 940 Schedule A.*refused by name/,
+    () => futaScheduleATrueUp(2026, { CA: "7000.00" }),
+    /Form 940 year-end true-up refused.*FUTA credit-reduction rates for 2026 are not transcribed.*refused by name/,
   );
 });
 
