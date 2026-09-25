@@ -16,7 +16,8 @@ import { type AllocationInput } from "./settlement-policy.ts";
  * the existing posting rules pick up the right bank account.
  */
 
-export type PaymentKind = "vendor_payment" | "customer_payment";
+import type { PaymentKind } from "../payments-core/payment-document-lock.ts";
+export type { PaymentKind } from "../payments-core/payment-document-lock.ts";
 export type OpenItemSide = "ap" | "ar";
 
 export const PAYMENT_KIND_SIDE: Record<PaymentKind, OpenItemSide> = {

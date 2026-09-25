@@ -8,6 +8,7 @@ import { applyInventoryReturnsForCustomerCredit } from "../inventory/documents-c
 import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
+import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
 /**
  * Emit post-commit effects for a caller that used `deferEffects` so a larger
@@ -164,8 +165,6 @@ export async function runPostDocumentEffects(
       );
     }
     if (doc.kind === "customer_payment") {
-      const { finalizePaymentAcceptanceForDocument } =
-        await import("../payments/acceptance.ts");
       await finalizePaymentAcceptanceForDocument(doc.id);
     }
     if (claimed && !options.alreadyClaimed) {

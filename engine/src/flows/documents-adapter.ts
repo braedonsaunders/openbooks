@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { ambientTenantOrgId, db, schema } from "../platform/db.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELDS } from "../platform/payment-system-fields.ts";
-import { lockEditablePaymentDocument } from "../payments/payment-documents.ts";
+import { lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import {
   captureTransactionAuditSnapshot,

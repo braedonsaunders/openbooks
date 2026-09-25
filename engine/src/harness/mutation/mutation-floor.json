@@ -64,7 +64,7 @@
       "mode": "unit",
       "inheritedFrom": "engine/src/ledger/posting.ts"
     },
-    "engine/src/payments/payment-documents.ts": {
+    "engine/src/payments-core/payment-document-lock.ts": {
       "ratio": 0.041666666666666664,
       "measured": 24,
       "mode": "unit",
