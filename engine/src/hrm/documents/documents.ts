@@ -656,7 +656,7 @@ export async function sendDocument(input: {
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
-    const doc = await loadDocument(db, input.orgId, input.documentId);
+    const doc = await loadDocument(db, input.orgId, input.documentId, true);
     await requireRowSubjectInScope(db, input.orgId, input.actorId, { employmentId: doc.employment_id, partyId: doc.party_id });
     if (doc.status !== "draft") {
       throw new HrmDocumentsError(
@@ -727,11 +727,14 @@ export async function sendDocument(input: {
     const updated = (await db.execute<DocumentRow>(sql`
       update hrm_documents
          set status = 'sent', sent_at = now(), updated_at = now(), updated_by = ${input.actorId}
-       where org_id = ${input.orgId} and id = ${doc.id}
+       where org_id = ${input.orgId} and id = ${doc.id} and status = 'draft'
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `)).rows[0];
+    if (!updated) {
+      throw new HrmDocumentsError("REFUSED", "this document is no longer a draft — reload and review its current status");
+    }
     await recordEvent(db, input.orgId, doc.id, "sent", input.actorId);
     return { document: toDTO(updated), deliveries };
   });
@@ -908,6 +911,8 @@ export async function readTokenDocument(
     throw new HrmDocumentsError("FORBIDDEN", "this signing link is invalid or expired — ask HR to re-send the document");
   }
   return withOrgTransaction(claims.orgId, async () => {
+    const first = await assertTokenSigner(db, token);
+    await loadDocument(db, claims.orgId, first.doc.id, true);
     const { doc, signer, signers } = await assertTokenSigner(db, token);
     if (signer.status === "pending") {
       const touched = (await db.execute<{ n: string }>(sql`
@@ -919,10 +924,14 @@ export async function readTokenDocument(
       if (touched === 1) {
         await recordEvent(db, claims.orgId, doc.id, "viewed", null);
         if (doc.status === "sent") {
-          await db.execute(sql`
+          const viewed = (await db.execute(sql`
             update hrm_documents set status = 'viewed', updated_at = now()
              where org_id = ${claims.orgId} and id = ${doc.id} and status = 'sent'
-          `);
+            returning id
+          `)).rows.length;
+          if (viewed !== 1) {
+            throw new HrmDocumentsError("REFUSED", "this document is no longer open — reload to see its current status");
+          }
           doc.status = "viewed";
         }
       }
@@ -998,10 +1007,14 @@ async function applySignature(
     await recordEvent(exec, orgId, doc.id, "signed", null);
     const remaining = signers.filter((s) => s.id !== signer.id && s.status !== "signed");
     if (remaining.length > 0) {
-      await exec.execute(sql`
+      const advanced = (await exec.execute(sql`
         update hrm_documents set status = 'partially_signed', updated_at = now()
-         where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed')
-      `);
+         where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed', 'partially_signed')
+        returning id
+      `)).rows.length;
+      if (advanced !== 1) {
+        throw new HrmDocumentsError("REFUSED", "this document is no longer open for signature — ask HR to review its current status");
+      }
       return toDTO({ ...doc, status: "partially_signed" });
     }
     // Final signature: append the certificate page, complete, retain.
@@ -1017,10 +1030,14 @@ async function applySignature(
       update hrm_documents
          set status = 'signed', completed_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${doc.id}
+         and status in ('sent', 'viewed', 'partially_signed')
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `)).rows[0];
+    if (!completed) {
+      throw new HrmDocumentsError("REFUSED", "this document is no longer open for signature — ask HR to review its current status");
+    }
     const { applyCompletionRetention } = await import("./retention.ts");
     await applyCompletionRetention(exec, orgId, completed.id, null);
     return toDTO((await loadDocument(exec, orgId, completed.id)));
@@ -1045,9 +1062,8 @@ export async function signTokenDocument(input: {
     throw new HrmDocumentsError("FORBIDDEN", "this signing link is invalid or expired — ask HR to re-send the document");
   }
   return withOrgTransaction(claims.orgId, async () => {
-    await db.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${"hrm-doc-sign:" + claims.orgId + ":" + claims.rowId}, 0))
-    `);
+    const first = await assertTokenSigner(db, input.token);
+    await loadDocument(db, claims.orgId, first.doc.id, true);
     const { orgId, doc, signer, signers } = await assertTokenSigner(db, input.token);
     if (signer.status === "signed") {
       throw new HrmDocumentsError("REFUSED", "this link already signed — a signature is recorded once and never replayed");
@@ -1076,10 +1092,7 @@ export async function signOwnDocument(input: {
   const name = input.name.trim().slice(0, 120);
   if (!name) throw new HrmDocumentsError("VALIDATION", "your name is required to sign");
   return withOrgTransaction(input.orgId, async () => {
-    await db.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${"hrm-doc-sign:" + input.orgId + ":" + input.documentId}, 0))
-    `);
-    const doc = await loadDocument(db, input.orgId, input.documentId);
+    const doc = await loadDocument(db, input.orgId, input.documentId, true);
     const ownParty = await loadActorPartyId(db, input.orgId, input.actorId);
     if (!ownParty) {
       throw new HrmDocumentsError(
@@ -1147,6 +1160,8 @@ export async function declineTokenDocument(input: {
     throw new HrmDocumentsError("FORBIDDEN", "this signing link is invalid or expired — ask HR to re-send the document");
   }
   return withOrgTransaction(claims.orgId, async () => {
+    const first = await assertTokenSigner(db, input.token);
+    await loadDocument(db, claims.orgId, first.doc.id, true);
     const { orgId, doc, signer } = await assertTokenSigner(db, input.token);
     if (signer.status === "signed" || signer.status === "declined") {
       throw new HrmDocumentsError("REFUSED", "this link already answered — a decline is recorded once and never replayed");
@@ -1163,11 +1178,14 @@ export async function declineTokenDocument(input: {
     await recordEvent(db, orgId, doc.id, "declined", null);
     const updated = (await db.execute<DocumentRow>(sql`
       update hrm_documents set status = 'declined', updated_at = now()
-       where org_id = ${orgId} and id = ${doc.id}
+       where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed', 'partially_signed')
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `)).rows[0];
+    if (!updated) {
+      throw new HrmDocumentsError("REFUSED", "this document is no longer open for a response — ask HR to review its current status");
+    }
     return toDTO(updated);
   });
 }
@@ -1189,6 +1207,8 @@ export async function acknowledgeDocument(input: {
       throw new HrmDocumentsError("FORBIDDEN", "this link is invalid or expired — ask HR to re-send the document");
     }
     return withOrgTransaction(claims.orgId, async () => {
+      const first = await assertTokenSigner(db, input.token!);
+      await loadDocument(db, claims.orgId, first.doc.id, true);
       const { orgId, doc: tokenDoc, signer } = await assertTokenSigner(db, input.token!);
       const doc = await loadDocument(db, orgId, tokenDoc.id, true);
       await requireAcknowledgmentOnlyAndOpen(db, orgId, doc);
@@ -1210,7 +1230,10 @@ export async function acknowledgeDocument(input: {
         returning id, employment_id, party_id, template_id, category_key, title, file_id,
                   status, sent_at, completed_at::text as completed_at,
                   expires_at, retain_until::text as retain_until, legal_hold
-      `)).rows[0]!;
+      `)).rows[0];
+      if (!updated) {
+        throw new HrmDocumentsError("REFUSED", "this document is no longer open for acknowledgment");
+      }
       await recordEvent(db, orgId, doc.id, "acknowledged", null);
       const { applyCompletionRetention } = await import("./retention.ts");
       await applyCompletionRetention(db, orgId, updated.id, null);
@@ -1269,7 +1292,7 @@ export async function voidDocument(input: {
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
-    const doc = await loadDocument(db, input.orgId, input.documentId);
+    const doc = await loadDocument(db, input.orgId, input.documentId, true);
     await requireRowSubjectInScope(db, input.orgId, input.actorId, { employmentId: doc.employment_id, partyId: doc.party_id });
     if (doc.status === "voided") throw new HrmDocumentsError("REFUSED", "this document is already voided");
     if (doc.status === "signed" || doc.status === "acknowledged") {
@@ -1283,10 +1306,14 @@ export async function voidDocument(input: {
       update hrm_documents
          set status = 'voided', void_reason = ${reason}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${doc.id}
+         and status not in ('signed', 'acknowledged', 'voided', 'deleted')
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `)).rows[0];
+    if (!updated) {
+      throw new HrmDocumentsError("REFUSED", "this document is no longer eligible to void — reload and review its current status");
+    }
     await recordEvent(db, input.orgId, doc.id, "voided", input.actorId);
     return toDTO(updated);
   });
