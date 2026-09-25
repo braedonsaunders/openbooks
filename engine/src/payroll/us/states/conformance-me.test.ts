@@ -1,9 +1,7 @@
 /**
- * Maine withholding CONFORMANCE goldens.
- *
- * Every expected figure is transcribed from the 2026 Withholding Tables
- * booklet (Revised December 2025) or is that publication's own arithmetic
- * on its own printed numbers.
+ * Maine withholding CONFORMANCE goldens: every figure transcribed from the
+ * 2026 Withholding Tables booklet (Revised August 2026) or its own
+ * arithmetic on its printed numbers.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -32,14 +30,14 @@ test("ME printed percents, phase-out, and Examples 2–3 annual arithmetic", () 
   assert.equal(pctToRate("5.80"), "0.0580");
   assert.equal(pctToRate("6.75"), "0.0675");
   assert.equal(pctToRate("7.15"), "0.0715");
-  assert.equal(meStandardDeduction(U("52000"), false, ME_RATES_2026), U("12450"));
-  assert.equal(meStandardDeduction(U("102250"), false, ME_RATES_2026), U("12450"));
+  assert.equal(meStandardDeduction(U("52000"), false, ME_RATES_2026), U("12850"));
+  assert.equal(meStandardDeduction(U("102250"), false, ME_RATES_2026), U("12850"));
   assert.equal(meStandardDeduction(U("177250"), false, ME_RATES_2026), U("0"));
-  // Example 3: $27,750 × $120,550 / $150,000 = $22,302 (booklet).
-  assert.equal(meStandardDeduction(U("234000"), true, ME_RATES_2026), U("22302"));
-  // Example 2 annualized withholding prints $1,694. Example 3 prints $13,338.
-  assert.equal(meRoundToDollar(meAnnualTax(U("28950"), false)), U("1694"));
-  assert.equal(meRoundToDollar(meAnnualTax(U("201098"), true)), U("13338"));
+  // Example 3: $28,550 × $120,550 / $150,000 = $22,945 (booklet).
+  assert.equal(meStandardDeduction(U("234000"), true, ME_RATES_2026), U("22945"));
+  // Example 2 annualized withholding prints $1,667. Example 3 prints $13,292.
+  assert.equal(meRoundToDollar(meAnnualTax(U("28550"), false)), U("1667"));
+  assert.equal(meRoundToDollar(meAnnualTax(U("200455"), true)), U("13292"));
 });
 
 test("ME Example 1 — $300 weekly, single, 2 allowances: $0", () => {
@@ -49,37 +47,37 @@ test("ME Example 1 — $300 weekly, single, 2 allowances: $0", () => {
   });
   assert.equal(result.factors.ME_ANNUAL_WAGES, money("15600"));
   assert.equal(result.factors.ME_ALLOWANCES, money("10600"));
-  assert.equal(result.factors.ME_STANDARD_DEDUCTION, money("12450"));
+  assert.equal(result.factors.ME_STANDARD_DEDUCTION, money("12850"));
   assert.equal(result.factors.ME_TAXABLE, money("0"));
   assert.equal(result.tax, money("0"));
 });
 
-test("ME Example 2 — $1,000 weekly, single, 2 allowances: $33", () => {
-  // $52,000 − $10,600 − $12,450 = $28,950.
-  // $1,589 + $1,550 × 6.75% = $1,693.625 → $1,694.
-  // $1,694 ÷ 52 = $32.58, rounded to $33.
+test("ME Example 2 — $1,000 weekly, single, 2 allowances: $32", () => {
+  // $52,000 − $10,600 − $12,850 = $28,550.
+  // $1,589 + $1,150 × 6.75% = $1,666.625 → $1,667.
+  // $1,667 ÷ 52 = $32.06, rounded to $32.
   const result = ME_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
     basis: "resident", certificate: cert({ filing_status: "single", allowances: "2" }),
   });
   assert.equal(result.factors.ME_ANNUAL_WAGES, money("52000"));
-  assert.equal(result.factors.ME_TAXABLE, money("28950"));
-  assert.equal(result.factors.ME_ANNUAL_TAX, money("1694"));
-  assert.equal(result.tax, money("33"));
+  assert.equal(result.factors.ME_TAXABLE, money("28550"));
+  assert.equal(result.factors.ME_ANNUAL_TAX, money("1667"));
+  assert.equal(result.tax, money("32"));
 });
 
-test("ME Example 3 — $4,500 weekly, married, 2 allowances: $257", () => {
-  // Standard deduction phases to $22,302. Taxable $201,098.
-  // Annualized withholding $13,338. $13,338 ÷ 52 = $256.50 → $257.
+test("ME Example 3 — $4,500 weekly, married, 2 allowances: $256", () => {
+  // Standard deduction phases to $22,945. Taxable $200,455.
+  // Annualized withholding $13,292. $13,292 ÷ 52 = $255.62 → $256.
   const result = ME_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "4500.00",
     basis: "resident", certificate: cert({ filing_status: "married", allowances: "2" }),
   });
   assert.equal(result.factors.ME_ANNUAL_WAGES, money("234000"));
-  assert.equal(result.factors.ME_STANDARD_DEDUCTION, money("22302"));
-  assert.equal(result.factors.ME_TAXABLE, money("201098"));
-  assert.equal(result.factors.ME_ANNUAL_TAX, money("13338"));
-  assert.equal(result.tax, money("257"));
+  assert.equal(result.factors.ME_STANDARD_DEDUCTION, money("22945"));
+  assert.equal(result.factors.ME_TAXABLE, money("200455"));
+  assert.equal(result.factors.ME_ANNUAL_TAX, money("13292"));
+  assert.equal(result.tax, money("256"));
 });
 
 test("ME missing W-4ME withholds as single with zero allowances", () => {
@@ -101,7 +99,7 @@ test("ME extra withholding is added and exempt is zero", () => {
     basis: "resident",
     certificate: cert({ filing_status: "single", allowances: "2", additional_per_period: "5.00" }),
   });
-  assert.equal(extra.tax, money("38"));
+  assert.equal(extra.tax, money("37"));
   assert.equal(ME_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
     basis: "resident", certificate: cert({ exempt: "true" }),

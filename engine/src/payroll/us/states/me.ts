@@ -2,18 +2,18 @@
  * Maine income-tax withholding — 2026 percentage method.
  *
  * Source (fetched from maine.gov, not memory):
- *   Withholding Tables for Individual Income Tax, Revised December 2025
+ *   Withholding Tables for Individual Income Tax, Revised August 2026
  *     (2026 booklet),
- *     https://www.maine.gov/revenue/sites/maine.gov.revenue/files/inline-files/26_wh_tab_instr.pdf
+ *     https://www.maine.gov/revenue/sites/maine.gov.revenue/files/inline-files/26_wh_tab_instr_August2026.pdf
  *     — Percentage Method Steps 1–6; $5,300 per allowance; withholding
- *       standard deduction $12,450 / $27,750 with the printed phase-out;
- *       2026 rate schedules; official Examples 1–3 ($0 / $33 / $257);
- *       invalid or missing W-4ME → single, zero allowances; daily × 260.
- *   Plus the August 2026 revision for the high-income surcharge only:
- *     26_wh_tab_instr_August2026.pdf — additional 2% on annualized income
- *     above $1,000,000 single / $1,500,000 married (I6-payroll-97).
+ *       standard deduction $12,850 / $28,550 with the printed phase-out;
+ *       2026 rate schedules; 2% surcharge above $1,000,000 single /
+ *       $1,500,000 married annualized income (I6-payroll-97); official
+ *       Examples 1–3 ($0 / $32 / $256); invalid or missing W-4ME → single,
+ *       zero allowances; daily × 260. The August revision supersedes the
+ *       December 2025 booklet's $12,450 / $27,750 deductions.
  *
- * The booklet's own note: the $12,450 / $27,750 withholding deductions
+ * The booklet's own note: the $12,850 / $28,550 withholding deductions
  * differ from the $15,300 / $30,600 return amounts. This engine uses the
  * withholding booklet figures, not the return figures.
  *
@@ -57,11 +57,8 @@ export interface MeYearRates {
   singlePhaseSpan: string;
   marriedPhaseSpan: string;
   supplementalRate: string;
-  /**
-   * August 2026 revision: additional 2% on annualized withholding income
-   * above the filing-status threshold (I6-payroll-97). Transcribed here,
-   * not in the December 2025 booklet the rest of this module follows.
-   */
+  /** August 2026 revision: additional 2% on annualized withholding income
+   * above the filing-status threshold (I6-payroll-97). */
   singleSurchargeThreshold: string;
   marriedSurchargeThreshold: string;
   surchargeRate: string;
@@ -71,8 +68,8 @@ export const ME_RATES_2026: MeYearRates = {
   year: 2026,
   status: "published",
   allowance: "5300",
-  singleStandardDeduction: "12450",
-  marriedStandardDeduction: "27750",
+  singleStandardDeduction: "12850",
+  marriedStandardDeduction: "28550",
   singlePhaseStart: "102250",
   singlePhaseEnd: "177250",
   marriedPhaseStart: "204550",
@@ -95,8 +92,9 @@ export const ME_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   effectiveFrom: "2026-01-01",
   citation:
     "Maine Revenue Services, Withholding Tables for Individual Income Tax, "
-    + "Revised December 2025 — 2026 percentage method Steps 1–6, $5,300 "
-    + "allowance, $12,450 / $27,750 withholding standard deduction, Examples 1–3",
+    + "Revised August 2026 — 2026 percentage method Steps 1–6, $5,300 "
+    + "allowance, $12,850 / $28,550 withholding standard deduction, 2% "
+    + "surcharge above $1M single / $1.5M married, Examples 1–3",
   status: "published",
   region: "ME",
 }];
@@ -117,8 +115,8 @@ export function meRoundToDollar(units: bigint): bigint {
 /**
  * Step 3 standard deduction, including the phase-out.
  *
- * Example 3 prints $27,750 × $120,550 / $150,000 = $22,302 — the exact
- * product is $22,301.75, rounded to the nearest dollar. That is the
+ * Example 3 prints $28,550 × $120,550 / $150,000 = $22,945 — the exact
+ * product is $22,944.68, rounded to the nearest dollar. That is the
  * booklet's own arithmetic, not an engine guess.
  */
 export function meStandardDeduction(annualWages: bigint, married: boolean, rates: MeYearRates): bigint {
@@ -248,7 +246,7 @@ export const ME_CERTIFICATE: PayrollCertificate = {
   purpose: "withholding",
   citation:
     "Maine Revenue Services, Withholding Tables for Individual Income Tax, "
-    + "Revised December 2025 (2026 booklet); Form W-4ME (2026); MRS Rule 803",
+    + "Revised August 2026 (2026 booklet); Form W-4ME (2026); MRS Rule 803",
   summary:
     "Sets Maine marital status and withholding allowances. If the employee "
     + "does not provide a valid W-4ME, MRS requires withholding as single "
