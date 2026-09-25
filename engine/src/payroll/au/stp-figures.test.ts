@@ -29,15 +29,15 @@ test("STP row ids round-trip every emitted shape and refuse foreign ones", () =>
 
 test("STP-reportable gross lessens the total by each separately-itemised amount", () => {
   assert.equal(
-    stpReportableGross({ gross: "5250.0000", overtime: "450.0000", bonusesCommissions: "0", paidLeave: "0" }),
+    stpReportableGross({ gross: "5250.0000", overtime: "450.0000", bonusesCommissions: "0", paidLeave: "0", allowances: "0" }),
     "4800.0000",
   );
   assert.equal(
-    stpReportableGross({ gross: "5300.0000", overtime: "0", bonusesCommissions: "500.0000", paidLeave: "200.0000" }),
+    stpReportableGross({ gross: "5300.0000", overtime: "0", bonusesCommissions: "500.0000", paidLeave: "200.0000", allowances: "0" }),
     "4600.0000",
   );
   assert.equal(
-    stpReportableGross({ gross: "2400.0000", overtime: "0", bonusesCommissions: "0", paidLeave: "0" }),
+    stpReportableGross({ gross: "2400.0000", overtime: "0", bonusesCommissions: "0", paidLeave: "0", allowances: "0" }),
     "2400.0000",
   );
 });

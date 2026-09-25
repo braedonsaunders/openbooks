@@ -43,6 +43,7 @@ async function stpPopulation(orgId: string, taxYear: number): Promise<PayrollFil
       { key: "overtime", label: "Overtime", align: "right", money: true },
       { key: "bonuses", label: "Bonuses & commissions", align: "right", money: true },
       { key: "paidLeave", label: "Paid leave", align: "right", money: true },
+      { key: "allowances", label: "Allowances", align: "right", money: true },
       { key: "payg", label: "PAYG withheld", align: "right", money: true },
       { key: "sg", label: "SG liability", align: "right", money: true },
       { key: "sacrifice", label: "Salary sacrifice", align: "right", money: true },
@@ -54,6 +55,7 @@ async function stpPopulation(orgId: string, taxYear: number): Promise<PayrollFil
       overtime: row.overtime,
       bonuses: row.bonusesCommissions,
       paidLeave: row.paidLeave,
+      allowances: row.allowances,
       payg: row.paygWithheld,
       sg: row.sgLiability,
       sacrifice: row.salarySacrifice,
@@ -98,6 +100,7 @@ async function stpSlip(orgId: string, taxYear: number, rowId: string): Promise<P
       { code: "OT", label: "Overtime", value: row.overtime },
       { code: "BONUS", label: "Bonuses and commissions", value: row.bonusesCommissions },
       { code: "LEAVE", label: "Paid leave", value: row.paidLeave },
+      { code: "ALLOW", label: "Allowances — STP Phase 2 separately-itemised", value: row.allowances },
       { code: "PAYG", label: "PAYG withholding (income tax + Medicare + STSL)", value: row.paygWithheld },
       {
         code: "SG",
@@ -121,9 +124,13 @@ async function stpSlip(orgId: string, taxYear: number, rowId: string): Promise<P
       "The SG liability is what STP carries — at a minimum the SG liability or OTE (ATO STP Phase 2 "
       + "employer reporting guidelines). Cash contributions actually paid to the fund are never "
       + "STP-reported. Priced at 12% of ordinary time earnings (SGAA 1992 s17A(2)).",
-      "Allowances, directors' fees, employment termination payments and lump sums are NOT separately "
-      + "itemised: the subledger carries no STP income-type classification for them, so any such "
-      + "amounts paid through custom components sit in gross — itemise them in STP-enabled software.",
+      "Allowances posted through the Allowance component are itemised above and excluded from "
+      + "STP-reportable gross. An allowance paid through any other component sits in gross "
+      + "unclassified: re-post it through the Allowance component before finalising — amounts "
+      + "left in gross are lodged as gross, not as allowances. Directors' fees, employment "
+      + "termination payments and lump sums are NOT separately itemised: the subledger carries "
+      + "no classification for them, so any such amounts paid through custom components sit in "
+      + "gross — itemise them in STP-enabled software.",
       "The employee's tax file number is deliberately absent: it is the STP matching key the employer "
       + "holds on the TFN declaration and enters in STP-enabled software, never a value this "
       + "reconciliation persists or prints.",
@@ -160,8 +167,9 @@ export function auPackFilings(): PayrollPackFilings {
           "There is no ATO file this product builds: STP pay events, update "
           + "events and the finalisation indicator are transmitted by "
           + "STP-enabled payroll software over the ATO's STP channel, not as "
-          + "a downloadable return — the reconciliation above is the complete "
-          + "source data to lodge",
+          + "a downloadable return — the reconciliation above is the source "
+          + "data to lodge, complete only for amounts posted through classified "
+          + "components (allowances must travel on the Allowance component)",
         amendment: {
           supported: false,
           refusal:

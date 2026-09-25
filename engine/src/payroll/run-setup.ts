@@ -96,11 +96,19 @@ const STAT_HOLIDAY_COMPONENTS: SeedComponent[] = [
   { code: "STATPREM", name: "Statutory holiday premium", kind: "earning", systemKey: "stat_holiday_premium", sequence: 26 },
 ];
 
-/** Jurisdiction-free earning baseline shared by every country pack. */
+/**
+ * Jurisdiction-free earning baseline shared by every country pack.
+ *
+ * The allowance channel is the typed home for separately-reportable
+ * allowances (AU STP Phase 2 itemises allowances by type; other packs split
+ * their own categories off the same key): amounts posted here carry their
+ * classification into every filing, instead of dissolving into gross.
+ */
 const BASELINE_COMPONENTS: SeedComponent[] = [
   { code: "BASE", name: "Base pay", kind: "earning", systemKey: "base_pay", basis: "per_hour", sequence: 10 },
   { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
   ...STAT_HOLIDAY_COMPONENTS,
+  { code: "ALLOW", name: "Allowance", kind: "earning", systemKey: "allowance", vacationable: false, sequence: 27 },
   { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
   { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
 ];
