@@ -225,10 +225,11 @@ test("single-currency reconcilable accounts select and submit the base currency"
   });
 });
 
-test("the reconcilable currency refusal remains visible in the form", async (t) => {
-  const { calls } = await mountDrawer(t, {
-    response: () => Response.json({ error: "reconcilable_currency_required" }, { status: 422 }),
-  });
+async function fillReconcilableForm(
+  t: import("node:test").TestContext,
+  options?: Parameters<typeof mountDrawer>[1],
+) {
+  const mounted = await mountDrawer(t, options);
   const inputs = [...document.querySelectorAll("input")].filter(
     (el) => (el as HTMLInputElement).type !== "checkbox",
   ) as HTMLInputElement[];
@@ -238,6 +239,13 @@ test("the reconcilable currency refusal remains visible in the form", async (t) 
     await tick();
     createButton().click();
     await tick();
+  });
+  return mounted;
+}
+
+test("the reconcilable currency refusal remains visible in the form", async (t) => {
+  const { calls } = await fillReconcilableForm(t, {
+    response: () => Response.json({ error: "reconcilable_currency_required" }, { status: 422 }),
   });
 
   assert.equal(calls.length, 1, "the server refusal must be received");
@@ -248,17 +256,7 @@ test("the reconcilable currency refusal remains visible in the form", async (t) 
 });
 
 test("a reconcilable account refuses locally when no settlement currency is available", async (t) => {
-  const { calls } = await mountDrawer(t, { baseCurrency: "" });
-  const inputs = [...document.querySelectorAll("input")].filter(
-    (el) => (el as HTMLInputElement).type !== "checkbox",
-  ) as HTMLInputElement[];
-  await act(async () => {
-    setInput(inputs[0]!, "Operating bank");
-    reconcilableCheckbox().click();
-    await tick();
-    createButton().click();
-    await tick();
-  });
+  const { calls } = await fillReconcilableForm(t, { baseCurrency: "" });
 
   assert.equal(calls.length, 0, "the form must not send a request without a settlement currency");
   assert.equal(

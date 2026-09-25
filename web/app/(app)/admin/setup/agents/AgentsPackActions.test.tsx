@@ -62,96 +62,75 @@ const { AgentsPackActions } = await import("./AgentsPackActions");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 /** : a rejected run must explain why instead of failing silently. */
-test("a 409 claimed_elsewhere run explains that a scan is already running", async (t) => {
-  const refreshes: string[] = [];
-  globalThis.__agentsTestRouter = {
-    push() {},
-    refresh() {
-      refreshes.push("refresh");
-    },
-  };
-  globalThis.__agentsTestToasts = [];
-  const prior = globalThis.fetch;
-  globalThis.fetch = (async () => Response.json({ status: "claimed_elsewhere", agentKey: "collections" }, { status: 409 })) as typeof fetch;
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
+for (const [name, respond, kind, countMessage, match, matchMessage, checkRefresh] of [
+  [
+    "a 409 claimed_elsewhere run explains that a scan is already running",
+    () => Response.json({ status: "claimed_elsewhere", agentKey: "collections" }, { status: 409 }),
+    "error",
+    "the rejected run must surface exactly one error toast",
+    /already running/i,
+    "the 409 must explain that a scan is already running",
+    true,
+  ],
+  [
+    "a completed run still toasts its finding count",
+    () => Response.json({ status: "completed", detected: 3, autoResolved: 0 }),
+    "success",
+    "the completed run must toast once",
+    /3/,
+    "the success toast must carry the finding count",
+    false,
+  ],
+] as Array<[string, () => Response, string, string, RegExp, string, boolean]>) {
+  test(name, async (t) => {
+    const refreshes: string[] = [];
+    globalThis.__agentsTestRouter = {
+      push() {},
+      refresh() {
+        refreshes.push("refresh");
+      },
+    };
+    globalThis.__agentsTestToasts = [];
+    const prior = globalThis.fetch;
+    globalThis.fetch = (async () => respond()) as typeof fetch;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    t.after(async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+      globalThis.fetch = prior;
     });
-    host.remove();
-    globalThis.fetch = prior;
-  });
-  await act(async () => {
-    root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <AgentsPackActions
-          agentKey="collections"
-          policy={{}}
-          packTitle="Collections"
-          enabled
-          featureEnabled
-          configureHref="/admin/setup/agents/collections"
-          configureLabel="Configure"
-        />
-      </NextIntlClientProvider>,
-    );
-    await tick();
-  });
-  const runNow = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Run now"));
-  assert.ok(runNow, "run-now button must render");
-  await act(async () => {
-    runNow.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    await tick();
-    await tick();
-  });
-  const errors = (globalThis.__agentsTestToasts ?? []).filter((toast) => toast.kind === "error");
-  assert.equal(errors.length, 1, "the rejected run must surface exactly one error toast");
-  assert.match(errors[0]!.message, /already running/i, "the 409 must explain that a scan is already running");
-  assert.ok(refreshes.length >= 1, "the row must refresh to converge on the in-flight run");
-});
-
-test("a completed run still toasts its finding count", async (t) => {
-  globalThis.__agentsTestRouter = { push() {}, refresh() {} };
-  globalThis.__agentsTestToasts = [];
-  const prior = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    Response.json({ status: "completed", detected: 3, autoResolved: 0 })) as typeof fetch;
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  t.after(async () => {
     await act(async () => {
-      root.unmount();
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <AgentsPackActions
+            agentKey="collections"
+            policy={{}}
+            packTitle="Collections"
+            enabled
+            featureEnabled
+            configureHref="/admin/setup/agents/collections"
+            configureLabel="Configure"
+          />
+        </NextIntlClientProvider>,
+      );
+      await tick();
     });
-    host.remove();
-    globalThis.fetch = prior;
+    const runNow = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Run now"));
+    assert.ok(runNow, "run-now button must render");
+    await act(async () => {
+      runNow.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    const notices = (globalThis.__agentsTestToasts ?? []).filter((toast) => toast.kind === kind);
+    assert.equal(notices.length, 1, countMessage);
+    assert.match(notices[0]!.message, match, matchMessage);
+    if (checkRefresh) {
+      assert.ok(refreshes.length >= 1, "the row must refresh to converge on the in-flight run");
+    }
   });
-  await act(async () => {
-    root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <AgentsPackActions
-          agentKey="collections"
-          policy={{}}
-          packTitle="Collections"
-          enabled
-          featureEnabled
-          configureHref="/admin/setup/agents/collections"
-          configureLabel="Configure"
-        />
-      </NextIntlClientProvider>,
-    );
-    await tick();
-  });
-  const runNow = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Run now"));
-  assert.ok(runNow, "run-now button must render");
-  await act(async () => {
-    runNow.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    await tick();
-    await tick();
-  });
-  const successes = (globalThis.__agentsTestToasts ?? []).filter((toast) => toast.kind === "success");
-  assert.equal(successes.length, 1, "the completed run must toast once");
-  assert.match(successes[0]!.message, /3/, "the success toast must carry the finding count");
-});
+}
