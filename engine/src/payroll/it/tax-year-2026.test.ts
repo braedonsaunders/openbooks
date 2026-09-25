@@ -243,7 +243,7 @@ test("refused list carries 2025's gaps plus the 2026-only substitute regimes", (
   assert.ok(!IT_REFUSED_2026.some((r) => r.includes("rinnovi contrattuali")), "c. 7 rinnovi priced, not refused");
   assert.ok(!IT_REFUSED_2026.some((r) => r.includes("c. 10–11")), "c. 10–11 turni priced, not refused");
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("200.000")), "sterilizzazione recorded, not branched");
-  assert.ok(IT_REFUSED_2026.some((r) => r.includes("c. 18–21")), "tourism integrativo refused by name");
+  assert.ok(!IT_REFUSED_2026.some((r) => r.includes("c. 18–21")), "c. 18–21 tourism speciale priced, not refused");
 });
 
 test("c. 2 +65 boundary is cent-precise: 25,000.00 / 25,000.01 / 25,000.50", () => {

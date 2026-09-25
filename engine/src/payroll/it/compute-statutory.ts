@@ -42,6 +42,9 @@
  * 2026-only 5%/15% substitute regimes price components the engine has no
  * inputs for, so pay carrying those facts is refused by name under
  * IT_REFUSED_2026 rather than computed (enforceIt2026SubstituteRegimes).
+ * The c. 18–21 tourism speciale is the exception: it prices from the
+ * it_turismo_speciale attestation (IT-TOURISM-2026-IMPL) and refuses only
+ * unattested or out-of-window claims.
  *
  * Declining the callback is NOT a reason to empty `regions.supported`: Link 4
  * of resolveEmployeePayrollContext gates every employee on that list whatever
@@ -328,14 +331,39 @@ export interface It2025Input {
   shiftAllowances2026?: string | null;
   /**
    * 2026 tourism/hospitality/food-service night and festive work pay
-   * (I6-payroll-123): L. 199/2025 art. 1 c. 18–21 grants a 15% trattamento
-   * integrativo speciale for prestazioni 1 Jan–30 Sep 2026, which the engine
-   * does not compute — any positive amount refuses by name.
+   * (IT-TOURISM-2026-IMPL): qualifying gross for prestazioni 1 January–30
+   * September 2026. The engine prices the 15% trattamento integrativo
+   * speciale (L. 199/2025 art. 1 c. 18–21, extending L. 207/2024 c. 18–21;
+   * AdE Circ. 3/E/2026 FAQ) when the eligibility facts are declared, and
+   * refuses by name when they are missing. The qualifying amount stays
+   * inside annualGrossEmployment (ordinary taxable); the 15% credit is
+   * additional pay outside the IRPEF imponibile.
    */
   tourismSpecialPay2026?: {
+    /** Qualifying gross for night/festive prestazioni in the window. */
     readonly amount: string;
+    /** Descriptive sector (e.g. "turismo"); the attestation is eligibleSector. */
     readonly sector?: string | null;
+    /** Representative work date; must fall in 2026-01-01..2026-09-30. */
     readonly workDate?: string | null;
+    /**
+     * The employer operates an eligible establishment (somministrazione di
+     * alimenti e bevande, turismo, termale). Required true — without it the
+     * engine cannot gate the sector and refuses.
+     */
+    readonly eligibleSector?: boolean;
+    /**
+     * The worker requested the treatment and self-certified the 2025 income
+     * (constitutive per AdE Circ. 3/E/2026). Required true — without it the
+     * engine refuses rather than paying an unclaimed credit.
+     */
+    readonly workerRequested?: boolean;
+    /**
+     * Autocertified 2025 lavoro income (all employers, cassa allargata to
+     * 12 Jan 2026). Above EUR 40,000 the worker is ineligible and the
+     * amount stays ordinary taxable (no credit, no refusal).
+     */
+    readonly priorYearIncome?: string | null;
   } | null;
   /**
    * Theoretical annual lavoro base for the c. 4 somma band (rapportato
@@ -388,6 +416,8 @@ export interface It2025Result {
   ulterioreDetrazione: string;
   irpefNetta: string;
   trattamentoIntegrativo: string;
+  /** 2026 tourism speciale credit (IT-TOURISM-2026-IMPL), outside IRPEF. */
+  trattamentoSpeciale: string;
   somma: string;
   inpsWorker: string;
   inpsEmployer: string;
@@ -418,6 +448,7 @@ export interface It2025Result {
     addizionaleRegionale: string;
     addizionaleComunale: string;
     trattamentoIntegrativo: string;
+    trattamentoSpeciale: string;
     somma: string;
     sostitutivaRinnovi: string;
     sostitutivaTurni: string;
@@ -435,9 +466,11 @@ function daysInTaxYear(year: number): number {
 }
 
 /**
- * Give IT_REFUSED_2026 arms (I6-payroll-51, I6-payroll-123): the 2026-only
- * substitute regimes are declared in the refusal list, and any pay carrying
- * the facts refuses here before ordinary IRPEF prices it at the wrong rate.
+ * Give IT_REFUSED_2026 arms (I6-payroll-51): the 2026-only substitute regimes
+ * are declared in the refusal list, and any pay carrying the facts refuses
+ * here before ordinary IRPEF prices it at the wrong rate. The c. 18–21
+ * tourism speciale is not an arm: it prices in calculateItWithTables
+ * (IT-TOURISM-2026-IMPL).
  */
 function enforceIt2026SubstituteRegimes(input: It2025Input): void {
   const refused = "IT_REFUSED_2026";
@@ -461,18 +494,9 @@ function enforceIt2026SubstituteRegimes(input: It2025Input): void {
       + "ordinary IRPEF (pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
     );
   }
-  const special = input.tourismSpecialPay2026;
-  if (special != null && positive(special.amount, "tourismSpecialPay2026.amount") > ZERO) {
-    const sector = special.sector ?? "(sector unstated)";
-    const date = special.workDate ?? "(date unstated)";
-    refuse(
-      `IT 2026 refuses ${special.amount} of tourism/hospitality/food-service night and festive pay (${sector}, `
-      + `${date}): L. 199/2025 art. 1 c. 18–21 grants a 15% trattamento integrativo speciale for prestazioni `
-      + `1 January–30 September 2026, which the engine does not compute — see ${refused}. Verify the sector, `
-      + "night/festive character, and work date, then price the credit outside ordinary IRPEF (pay-run "
-      + "adjustment, engine/src/payroll/run-adjustments.ts)",
-    );
-  }
+  // c. 18–21 tourism speciale is NOT refused here: it prices inside
+  // calculateItWithTables from the it_turismo_speciale attestation
+  // (IT-TOURISM-2026-IMPL), with constitutive eligibility gates there.
 }
 
 function needNonNegative(value: string, what: string, year: number): bigint {
@@ -631,7 +655,63 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   }
   const oneOff = needNonNegative(input.nonPeriodicAnnual ?? "0", "nonPeriodicAnnual", year);
   const annualPensionable = needNonNegative(input.annualPensionable, "annualPensionable", year);
-  const pensBase = annualPensionable + oneOff;
+  // Trattamento integrativo speciale (IT-TOURISM-2026-IMPL): 15% of the
+  // qualifying night/festive gross, paid as additional non-imponibile income
+  // (L. 199/2025 art. 1 c. 18–21; AdE Circ. 3/E/2026 FAQ). Eligibility is
+  // constitutive — sector attestation, worker request with autocertified
+  // 2025 income, prestazioni inside 1 Jan–30 Sep 2026 — so qualifying pay
+  // with missing facts refuses by name; only a demonstrated over-threshold
+  // prior income prices ordinary (no credit).
+  let trattamentoSpeciale = ZERO;
+  const special = input.tourismSpecialPay2026;
+  if (year === 2026 && special != null && special.amount !== "") {
+    const qualifying = needNonNegative(special.amount, "tourismSpecialPay2026.amount", year);
+    if (qualifying > ZERO) {
+      const sector = special.sector ?? "(sector unstated)";
+      const date = special.workDate ?? "(date unstated)";
+      if (special.eligibleSector !== true) {
+        refuse(
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
+          + "integrativo speciale: the eligible establishment was not attested (somministrazione di alimenti e "
+          + `bevande, turismo, termale) — see ${refused}. Attest eligibleSector or price the amount as ordinary pay`,
+        );
+      }
+      if (special.workerRequested !== true) {
+        refuse(
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
+          + "integrativo speciale: the worker's request with autocertified 2025 income is constitutive (AdE Circ. "
+          + `3/E/2026) — see ${refused}. File the request or price the amount as ordinary pay`,
+        );
+      }
+      if (special.workDate == null || special.workDate === "" || special.workDate < "2026-01-01" || special.workDate > "2026-09-30") {
+        refuse(
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
+          + "integrativo speciale: the prestazioni must fall in 1 January–30 September 2026 (L. 199/2025 art. 1 "
+          + `c. 18) — see ${refused}. Verify the work date, or price out-of-window pay as ordinary`,
+        );
+      }
+      if (special.priorYearIncome == null || special.priorYearIncome === "") {
+        refuse(
+          `IT 2026 cannot price ${special.amount} of night/festive pay (${sector}, ${date}) under the trattamento `
+          + "integrativo speciale: the autocertified 2025 lavoro income (all employers, cassa allargata to "
+          + `12 Jan 2026) is missing — see ${refused}. Carry priorYearIncome or price the amount as ordinary pay`,
+        );
+      }
+      // Over EUR 40,000 of 2025 lavoro income the worker is ineligible: the
+      // amount stays ordinary taxable and no credit prices (deterministic
+      // rule application, not silence).
+      if (needNonNegative(special.priorYearIncome, "tourismSpecialPay2026.priorYearIncome", year) <= U("40000")) {
+        trattamentoSpeciale = r2(mulPct(qualifying, "15"));
+      }
+    }
+  }
+  // The speciale credit is additional compensation, so it enters the INPS
+  // pensionable base under the general contribution principle (art. 12
+  // L. 153/1969: everything paid in relation to the employment is
+  // contributivo absent an explicit exclusion) — stated engine rule; the
+  // transcribed sources state the IRPEF exclusion only. It never enters the
+  // IRPEF imponibile (c. 18: non concorre alla formazione del reddito).
+  const pensBase = annualPensionable + oneOff + trattamentoSpeciale;
 
   // A full-time year can carry up to 26 contribution days in each of 12
   // months. Below that statutory floor, days in alta, hours/part-time and
@@ -859,6 +939,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     ulterioreDetrazione: D(ulterioreCapped),
     irpefNetta: D(irpefNetta),
     trattamentoIntegrativo: D(trattamentoIntegrativo),
+    trattamentoSpeciale: D(trattamentoSpeciale),
     somma: D(somma),
     inpsWorker: D(inpsWorker),
     inpsEmployer: D(inpsEmployer),
@@ -880,6 +961,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       addizionaleRegionale: per(addRegionale),
       addizionaleComunale: per(addComunale),
       trattamentoIntegrativo: per(trattamentoIntegrativo),
+      trattamentoSpeciale: per(trattamentoSpeciale),
       somma: per(somma),
       sostitutivaRinnovi: D(sostRinnovi),
       sostitutivaTurni: D(sostTurni),
@@ -925,6 +1007,7 @@ export const IT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   INPS_ER: "INPS — contributi IVS a carico del datore",
   TI: "Trattamento integrativo",
   SOMMA: "Somma di cui al comma 4 (L. 207/2024)",
+  SPECIALE: "Trattamento integrativo speciale (turismo)",
   CONG_IRPEF_ANNUAL: "Conguaglio — IRPEF annuale ricalcolata (art. 23 DPR 600/1973)",
   CONG_IRPEF_YTD: "Conguaglio — IRPEF trattenuta nell'anno",
   CONG_IRPEF_DELTA: "Conguaglio — differenza IRPEF",
@@ -1108,6 +1191,22 @@ export async function computeItStatutoryWithRates(
     isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
       ? undefined
       : bool(answers["anzianita_post_1995"]),
+    // Tourism speciale claim (IT-TOURISM-2026-IMPL): the worker's request
+    // with autocertified facts rides it_turismo_speciale; absent, the
+    // engine prices ordinary (no claim, no credit, no refusal).
+    tourismSpecialPay2026: (() => {
+      const turismo = certificateFor("it_turismo_speciale");
+      if (turismo == null) return undefined;
+      const t = turismo.answers ?? {};
+      return {
+        amount: t["importo_qualificante"] ?? "",
+        sector: null,
+        workDate: t["data_prestazione"] ?? null,
+        eligibleSector: t["settore_ammesso"] === "true" ? true : t["settore_ammesso"] === "false" ? false : undefined,
+        workerRequested: t["richiesta"] === "true" ? true : t["richiesta"] === "false" ? false : undefined,
+        priorYearIncome: t["reddito_2025"] ?? null,
+      };
+    })(),
   });
   // The period figures below are 1/12 advances of the current-year liability,
   // trued up by the December conguaglio (see ./conguaglio.ts), not the
@@ -1129,6 +1228,9 @@ export async function computeItStatutoryWithRates(
   pushStatutory("sostitutiva_premi", "deduction", "Sostitutiva 1% premi di risultato", result.period.sostitutivaPremi, 113);
   pushStatutory("ti_payout", "credit", "Trattamento integrativo", result.period.trattamentoIntegrativo, 140);
   pushStatutory("somma_payout", "credit", "Somma di cui al comma 4 (L. 207/2024)", result.period.somma, 145);
+  if (result.trattamentoSpeciale !== "0.0000") {
+    pushStatutory("speciale_payout", "credit", "Trattamento integrativo speciale (turismo)", result.period.trattamentoSpeciale, 147);
+  }
   pushStatutory("inps", "employer_contribution", "INPS — contributi IVS a carico del datore", result.period.inpsEmployer, 230);
   return {
     I: income,
@@ -1143,6 +1245,7 @@ export async function computeItStatutoryWithRates(
     INPS_ER: result.period.inpsEmployer,
     TI: result.period.trattamentoIntegrativo,
     SOMMA: result.period.somma,
+    SPECIALE: result.period.trattamentoSpeciale,
   };
 }
 

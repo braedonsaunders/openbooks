@@ -14,12 +14,74 @@
  * What is NOT here: the 8/5/2-per-mille choices are expressed on the scheda
  * attached to the CU/730, not to the employer as a withholding input, so no
  * certificate declares them; INPS exemptions have no employee-filed form.
+ * The second certificate below is not a second allowances form: it is the
+ * worker's one-off request for the 2026 tourism trattamento integrativo
+ * speciale with its autocertified facts (L. 199/2025 art. 1 c. 18–21).
  */
 import type { PayrollPackCertificates } from "../certificates.ts";
 
 export const IT_CERTIFICATES: PayrollPackCertificates = {
   country: "IT",
   certificates: [
+    {
+      key: "it_turismo_speciale",
+      form: "Richiesta e autocertificazione (L. 199/2025 art. 1 c. 18–21)",
+      label: "Trattamento integrativo speciale turismo — richiesta del lavoratore",
+      scope: { level: "country" },
+      purpose: "withholding",
+      citation:
+        "L. 199/2025 art. 1 c. 18–21 (estende L. 207/2024 c. 18–21); AdE Circ. 3/E/2026 FAQ "
+        + "(richiesta del lavoratore, autocertificazione del reddito 2025, indicazione in CU, recupero in F24)",
+      summary:
+        "The worker's request for the 2026 tourism night/festive-work trattamento integrativo speciale, "
+        + "with the autocertified 2025 lavoro income, the qualifying gross for prestazioni 1 January–30 "
+        + "September 2026, and the employer's eligible-establishment attestation. Without it the 15% credit "
+        + "cannot price and qualifying pay stays ordinary taxable.",
+      storage: "certificate_rows",
+      fields: [
+        {
+          key: "richiesta",
+          label: "Richiesta del trattamento da parte del lavoratore",
+          kind: "flag",
+          help: "The worker requested the speciale treatment and self-certified the 2025 income — "
+            + "constitutive (AdE Circ. 3/E/2026). Without an explicit yes the engine refuses qualifying pay "
+            + "rather than paying an unclaimed credit.",
+        },
+        {
+          key: "settore_ammesso",
+          label: "Esercizio ammissibile (somministrazione / turismo / termale)",
+          kind: "flag",
+          help: "The employer attests an eligible establishment: esercizi di somministrazione di alimenti "
+            + "e bevande, comparto del turismo, stabilimenti termali. The engine cannot gate the sector "
+            + "itself, so without an explicit yes qualifying pay refuses.",
+        },
+        {
+          key: "reddito_2025",
+          label: "Reddito di lavoro dipendente 2025 autocertificato (EUR)",
+          kind: "amount",
+          decimals: 2,
+          min: "0",
+          help: "Autocertified 2025 lavoro income across all employers, cassa allargata to 12 January 2026. "
+            + "Above EUR 40,000 the worker is ineligible and the amount stays ordinary taxable.",
+        },
+        {
+          key: "importo_qualificante",
+          label: "Retribuzioni per notturno/festivi nel periodo (EUR)",
+          kind: "amount",
+          decimals: 2,
+          min: "0",
+          help: "Gross remuneration for night work and festive-holiday overtime in 1 January–30 September "
+            + "2026. Stays inside the ordinary taxable gross; the 15% credit prices on top of it.",
+        },
+        {
+          key: "data_prestazione",
+          label: "Data della prestazione (AAAA-MM-GG)",
+          kind: "code",
+          help: "Representative work date of the qualifying prestazioni; must fall in 1 January–30 "
+            + "September 2026.",
+        },
+      ],
+    },
     {
       key: "it_detrazioni",
       // Not a numbered form: the declaration has no preprinted number, so the
