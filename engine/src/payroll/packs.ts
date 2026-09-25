@@ -666,11 +666,25 @@ export interface PayrollCountryPack {
    * bands and due-date rules as DATA (see `PayrollRemittanceSchedule`). The
    * generic remittance layer dates a bill from the schedule governing its
    * destination vendor and never from a jurisdiction branch — a destination
-   * with no declared schedule keeps the legacy CRA-function behaviour.
+   * with no declared schedule keeps the legacy registration-timetable
+   * behaviour only when its pack allows the fallback below, and otherwise
+   * refuses instead of borrowing another authority's timetable.
    * OPTIONAL: a pack with no agency of its own to remit to on its own
    * timetable declares none (the US pack's federal deposits ride EFTPS).
    */
    remittanceSchedules?: readonly PayrollRemittanceSchedule[];
+  /**
+   * Whether destinations this pack declares (its vendor keys) but for which
+   * no schedule governs the period may fall back to the legacy
+   * registration-based timetable (the CRA remitter-type function) instead of
+   * refusing. Absent/false = refuse: a declared but undated destination must
+   * never borrow another authority's timetable (see remittanceGroupDueDate).
+   * Declared ONLY by the pack whose authority owns that timetable — today
+   * the CA pack, while the CRA schedule handoff (F-f7-001) still leaves the
+   * legacy function the live path for destinations the schedule does not
+   * yet govern.
+   */
+  allowsRegistrationTimetableFallback?: boolean;
   /**
    * region code → the `tax_administration` calendar key whose holidays move
    * a statutory remittance deadline for a payroll worked WHOLLY in that
@@ -2940,6 +2954,19 @@ export function packRemittanceVendorSettingsKeys(country: string): string[] {
     }
   }
   return [...keys];
+}
+
+/**
+ * Whether destinations `country`'s pack declares but leaves unscheduled may
+ * fall back to the legacy registration timetable instead of refusing (see
+ * `allowsRegistrationTimetableFallback`). Unknown countries — and packs that
+ * do not declare it — refuse: an undated destination must never borrow
+ * another authority's timetable.
+ */
+export function packAllowsRegistrationTimetableFallback(country: string): boolean {
+  const pack = PAYROLL_COUNTRY_PACKS[country];
+  if (!pack) return false;
+  return pack.allowsRegistrationTimetableFallback ?? false;
 }
 
 /**

@@ -18,6 +18,8 @@ import {
 import { PayrollError } from "./error.ts";
 import {
   allRemittanceSchedules,
+  packAllowsRegistrationTimetableFallback,
+  packRemittanceVendorSettingsKeys,
   PAYROLL_COUNTRY_PACKS,
   remittanceBandForAverage,
   remittanceFrequencyBand,
@@ -130,9 +132,13 @@ export interface RemittanceGroup {
   /**
    * The destination's declared remittance schedule for the queried period —
    * authority, frequency, and the due date the bill will carry — or null when
-   * no pack declares the destination (the legacy CRA-function path). A
-   * scheduled destination NEVER inherits the filing account's CRA remitter
-   * type: that registration is with another agency.
+   * no schedule governs the destination. Null keeps the legacy
+   * registration-timetable path only for unattributed legacy groups and for
+   * destinations whose pack allows that fallback; a declared destination
+   * without a timetable or fallback refuses at billing instead of borrowing
+   * another authority's (see remittanceGroupDueDate). A scheduled destination
+   * NEVER inherits the filing account's CRA remitter type: that registration
+   * is with another agency.
    */
   schedule: RemittanceGroupSchedule | null;
   /**
@@ -1712,6 +1718,52 @@ export function scheduleForRemittanceGroup(input: {
 }
 
 /**
+ * Destination countries behind a remittance group's vendor keys, resolved
+ * through the packs' own vendor declarations. Empty when no row carried a
+ * declared vendor key (legacy unattributed groups).
+ */
+function remittanceDestinationCountries(vendorKeys: readonly string[]): string[] {
+  const countries = new Set<string>();
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    const declared = new Set(packRemittanceVendorSettingsKeys(country));
+    for (const key of vendorKeys) {
+      if (declared.has(key)) countries.add(country);
+    }
+  }
+  return [...countries].sort();
+}
+
+/**
+ * The bill's dating rule, shared by the write path (createRemittanceBill)
+ * and the read path (the agent's due-date forecast) so the two cannot
+ * disagree: a pack-declared destination schedule when one governs; otherwise
+ * the legacy registration timetable for legacy unattributed groups and for
+ * destinations whose pack allows that fallback — and a named refusal for a
+ * declared destination with no timetable and no fallback (an ATO or Revenue
+ * bill dated to CRA's 15th pays on the wrong day with a wrong on-time
+ * story). Which packs allow the fallback is pack data
+ * (allowsRegistrationTimetableFallback), never a country branch here.
+ */
+export function remittanceGroupDueDate(
+  group: Pick<RemittanceGroup, "schedule" | "vendorKeys" | "filingAccount" | "regionalCalendar">,
+  periodTo: string,
+): string {
+  if (group.schedule) return group.schedule.dueDate;
+  const undated = remittanceDestinationCountries(group.vendorKeys).filter(
+    (country) => !packAllowsRegistrationTimetableFallback(country),
+  );
+  if (undated.length > 0) {
+    throw new PayrollError(
+      `no remittance schedule is declared for ${undated.join("/")} — the bill cannot borrow CRA's `
+      + "timetable. Declare the destination timetable, then regenerate this bill",
+    );
+  }
+  return remittanceDueDate(periodTo, group.filingAccount.remitterType, {
+    regionalCalendar: group.regionalCalendar,
+  });
+}
+
+/**
  * Advisory: does last year's measured monthly average for a scheduled
  * destination sit in a different band than the frequency the bills date at?
  *
@@ -2274,12 +2326,11 @@ export async function createRemittanceBill(
     // The bill's due date comes from the DESTINATION's schedule when a pack
     // declares one (Revenu Québec's, today) — the filing account's CRA
     // remitter type is a registration with another agency and never applies
-    // to a scheduled destination. Undeclared destinations keep the legacy
-    // CRA-function behaviour.
-    const dueDate = group.schedule?.dueDate
-      ?? remittanceDueDate(input.to, group.filingAccount.remitterType, {
-        regionalCalendar: group.regionalCalendar,
-      });
+    // to a scheduled destination. A destination with no declared schedule
+    // refuses instead of borrowing another authority's timetable, unless its
+    // pack allows the legacy fallback; legacy unattributed groups keep the
+    // CRA path (see remittanceGroupDueDate).
+    const dueDate = remittanceGroupDueDate(group, input.to);
     const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, memo, subtotal, tax_total, total, custom,
