@@ -74,7 +74,7 @@ const json = (body: unknown) =>
 
 test("post rechecks the locked batch after a concurrent subsidiary rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     const subsidiaryB = randomUUID();
@@ -93,8 +93,7 @@ test("post rechecks the locked batch after a concurrent subsidiary rehome", asyn
     }));
     state.user = { orgId: org.orgId, id: actorId };
     state.allowed = new Set([org.subsidiaryId]);
-    await holder.query("begin");
-    await holder.query("select set_config('app.bypass_rls', 'on', true)");
+    await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
     const held = await holder.query("select id from psp_settlement_batches where id = $1 for update", [imported.batchId]);
     assert.equal(held.rows.length, 1);
     let settled = false;
@@ -126,7 +125,7 @@ test("post rechecks the locked batch after a concurrent subsidiary rehome", asyn
 
 test("reverse rechecks the locked batch after a concurrent subsidiary rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     const subsidiaryB = randomUUID();
@@ -146,8 +145,7 @@ test("reverse rechecks the locked batch after a concurrent subsidiary rehome", a
     await postSettlementBatch(org.orgId, imported.batchId, actorId, null);
     state.user = { orgId: org.orgId, id: actorId };
     state.allowed = new Set([org.subsidiaryId]);
-    await holder.query("begin");
-    await holder.query("select set_config('app.bypass_rls', 'on', true)");
+    await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
     const held = await holder.query("select id from psp_settlement_batches where id = $1 for update", [imported.batchId]);
     assert.equal(held.rows.length, 1);
     let settled = false;

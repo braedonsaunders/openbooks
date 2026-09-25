@@ -274,19 +274,15 @@ test(
     const first = await seed();
     const second = await seed();
     let removePause: (() => Promise<void>) | undefined;
-    const observer = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+    const observer = new Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL });
     let observerOpen = false;
     try {
       removePause = await installStagingPause(first.orgId);
       await observer.connect();
       observerOpen = true;
       await observer.query("set statement_timeout = '1000ms'");
-      // A raw monitoring session carries no test bypass, so under FORCE RLS
-      // the other tenant's periods are invisible and the probe below reads
-      // NULL. Scope it explicitly (the rate-book concurrent-writer idiom),
-      // session-level: unlike that writer this probe holds no transaction,
-      // so a statement-local set would die with the SELECT itself.
-      await observer.query("select set_config('app.bypass_rls','on',false)");
+      // 0399 gates the bypass GUC by session role, so the observer connects
+      // as the privileged test login above instead of setting the GUC.
 
       routeState.authz = null;
       routeState.authzQueue = [authorize(first), authorize(second)];

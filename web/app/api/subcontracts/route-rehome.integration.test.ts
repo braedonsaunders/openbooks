@@ -56,7 +56,7 @@ function session(orgId: string, actorId: string): SessionUser {
 
 test("POST rechecks the project scope after waiting out a concurrent rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Subcontract clerk", "subcontract_clerk"));
     await withBypassContext(() => db.execute(sql`
@@ -91,8 +91,7 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
     }))).id;
     state.user = session(org.orgId, actorId);
     state.allowedSubsidiaryId = org.subsidiaryId;
-    await holder.query("begin");
-    await holder.query("select set_config('app.bypass_rls', 'on', true)");
+    await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
     const locked = await holder.query("select id from projects where id = $1 for update", [projectId]);
     assert.equal(locked.rows.length, 1);
     let settled = false;
@@ -130,7 +129,7 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
 
 test("GET detail retries a stale snapshot after a project is rehomed", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Subcontract clerk", "subcontract_clerk"));
     await withBypassContext(() => db.execute(sql`
@@ -165,8 +164,7 @@ test("GET detail retries a stale snapshot after a project is rehomed", async () 
     }))).id;
     state.user = session(org.orgId, actorId);
     state.allowedSubsidiaryId = org.subsidiaryId;
-    await holder.query("begin");
-    await holder.query("select set_config('app.bypass_rls', 'on', true)");
+    await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
     await holder.query("select id from projects where id = $1 for update", [projectId]);
     let settledResponse: Response | undefined;
     const pending = withOrgContext(org.orgId, () => GET(new Request(
