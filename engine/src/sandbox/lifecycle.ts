@@ -468,11 +468,11 @@ export interface RefreshOptions {
 /**
  * Run refresh work in one timeout-free transaction while keeping the existing
  * clone/wipe helpers on their normal `withOrg(null)` entry points. Those
- * helpers reuse an active transaction only when its context is non-bypass;
- * the maintenance transaction itself is (correctly) marked bypass. Reusing
+ * helpers reuse an active transaction when it is tenant-scoped or bypass;
+ * the maintenance transaction itself is marked bypass. Reusing
  * its pinned executor under a non-bypass context is safe here because the
- * connection's transaction-local GUC remains `app.bypass_rls = on`; it simply
- * makes nested `withOrg(null)` calls participate instead of opening a second
+ * connection uses the dedicated bypass role; it simply makes nested
+ * `withOrg(null)` calls participate instead of opening a second
  * transaction that could commit a partial wipe.
  */
 async function inRefreshTransaction<T>(
@@ -584,7 +584,7 @@ export async function refreshSandbox(
         await neuterSandbox(s.org_id);
         if (s.masked) await scrubSandboxOrgIdentity(s.org_id);
         // Status stays 'refreshing' through commit. The proof cannot run inside
-        // this unit: the pinned connection keeps app.bypass_rls=on, so a
+        // this unit: the pinned connection uses the dedicated bypass role, so a
         // ready write here would publish the clone before isolation is proven.
       }, {
         isolationLevel: "REPEATABLE READ",

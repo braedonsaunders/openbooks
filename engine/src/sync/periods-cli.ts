@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withBypassContext } from "../platform/db.ts";
 import { buildSource, type ConnectionRow } from "./connection.ts";
 import { syncSourceAccountingPeriods } from "./migrate.ts";
 
@@ -13,7 +13,7 @@ const argv = process.argv.slice(2);
 const connectionIndex = argv.indexOf("--connection");
 const requestedId = connectionIndex >= 0 ? argv[connectionIndex + 1] : null;
 
-await db.execute(sql`set app.bypass_rls = on`);
+await withBypassContext(async () => {
 const result = (await db.execute<ConnectionRow>(sql`
   select id, org_id as "orgId", source, display_name as "displayName",
          auth_kind as "authKind", status, config, secrets,
@@ -30,3 +30,4 @@ for (const connection of result.rows) {
   const stats = await syncSourceAccountingPeriods(buildSource(connection), connection.orgId);
   console.log(`${connection.displayName}: ${stats.created} created, ${stats.updated} updated, ${stats.skipped} skipped`);
 }
+});

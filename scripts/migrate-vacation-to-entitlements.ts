@@ -407,12 +407,12 @@ async function main(): Promise<number> {
   if (orgs.rows.length === 0) {
     // Zero here is almost never an empty database. It is what a tenant-spanning
     // read looks like when RLS denied it: the `orgs` policy returns no rows
-    // rather than an error when `app.bypass_rls` is off. Say so, loudly, so
+    // rather than an error without the dedicated bypass role. Say so, loudly, so
     // nobody reads "0 employees checked" as a clean tie-out again.
     console.error(
       "no orgs visible — either the database is genuinely empty, or this process "
       + "did not hold RLS bypass (see withBypassContext in engine/src/platform/db.ts). "
-      + "Confirm with: psql \"$OPENBOOKS_DB_URL\" -c \"set app.bypass_rls='on'\" -c 'select count(*) from orgs'",
+      + "Confirm with: psql \"$OPENBOOKS_BYPASS_DB_URL\" -c 'select count(*) from orgs'",
     );
     return 1;
   }
