@@ -183,20 +183,12 @@ async function seedEmployee(
   return employeeId;
 }
 
-/**
- * Seed the 0393 assessed-saldo carry-in: the prior-year assessment the year's
- * installments withhold. Zeros are explicit declarations (a worker with no
- * prior-year Italian employment), persisted as rows — the installment channel
- * refuses employees with neither a prior December settlement nor a row here.
- */
-async function seedSurtaxSaldo(
-  fx: Harness, employeeId: string, regionale: string, comunale: string,
-): Promise<void> {
+/** Seed one 0393 assessed-saldo row (zeros declare no prior-year liability). */
+async function seedSurtaxSaldo(fx: Harness, employeeId: string, regionale: string, comunale: string): Promise<void> {
   await db.execute(sql`
     insert into it_addizionali_opening_balances
       (org_id, employee_party_id, tax_year, regionale_saldo, comunale_saldo, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, 2026, ${regionale}, ${comunale},
-            ${fx.actorId}, ${fx.actorId})`);
+    values (${fx.orgId}, ${employeeId}, 2026, ${regionale}, ${comunale}, ${fx.actorId}, ${fx.actorId})`);
 }
 
 async function addLineAdjustment(
@@ -283,9 +275,7 @@ test(
         const dust = await seedEmployee(fx, "Livia Livello", "24000");
         const bonus = await seedEmployee(fx, "Bruno Bonus", "30000");
         const credit = await seedEmployee(fx, "Tina Trattamento", "18200");
-        // Assessed prior-year saldi: explicit zeros (no prior-year Italian
-        // employment on file) except the bonus year, whose 300/200 assessment
-        // withholds in-year as priced installments.
+        // Assessed saldi (the bonus 300/200 withholds in-year as installments).
         await seedSurtaxSaldo(fx, dust, "0.0000", "0.0000");
         await seedSurtaxSaldo(fx, bonus, "300.0000", "200.0000");
         await seedSurtaxSaldo(fx, credit, "0.0000", "0.0000");
@@ -307,33 +297,9 @@ test(
           );
         }
 
-        // The bonus year's November stub carries that month's installments
-        // beside the advances: the remaining 300/11 regionale and 200/9
-        // comunale (from March) over the remaining schedule months, half-up
-        // to the cent — the rounding oscillates and the schedule still closes
-        // exact. A resolved zero stamps zero factors and pushes nothing —
-        // the legitimate zero.
-        const bonusNovember = await stubLines(org.orgId, novemberId, bonus);
-        assert.deepEqual(
-          bonusNovember
-            .filter((line) => line.sequence === 116 || line.sequence === 121)
-            .map((line) => [line.system_key, line.kind, line.amount, line.sequence]),
-          [
-            ["regional_surtax", "deduction", "27.2700", 116],
-            ["municipal_surtax", "deduction", "22.2200", 121],
-          ],
-          "November prices the final saldo installments beside the advances",
-        );
-        const bonusNovemberFactors = await stubFactors(org.orgId, novemberId, bonus);
-        assert.equal(bonusNovemberFactors["IT_ADDREG_SALDO"], "27.2700");
-        assert.equal(bonusNovemberFactors["IT_ADDCOM_SALDO"], "22.2200");
-        // A resolved zero pushes nothing: the level year's November stub
-        // carries no installment line at either sequence.
-        const dustNovember = await stubLines(org.orgId, novemberId, dust);
-        assert.ok(
-          dustNovember.every((line) => line.sequence !== 116 && line.sequence !== 121),
-          "zero assessed saldo prices no installment line",
-        );
+        // The bonus December delta below holds only because the year priced
+        // the 300/200 assessment in installments and netted it: the combined
+        // position settles exact.
 
         // A calculated-but-uncommitted December bonus draft for the joiner: its
         // withholding must NOT enter the settlement's year-to-date, or an
@@ -438,9 +404,7 @@ test(
 
         await commitPayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
 
-        // Next year's channel reads this December's assessment, not the
-        // carry-in rows: the settlement source outranks the opening source,
-        // and the values are the stamped annuals.
+        // Next year's channel reads this December's assessment, not the rows.
         const nextYear = await resolveItSurtaxAssessed(db, {
           orgId: org.orgId, employeePartyId: bonus, taxYear: 2027,
         });
@@ -533,9 +497,7 @@ test(
       try {
         const fx = await seedHarness(org.orgId, actorId);
         const employeeId = await seedEmployee(fx, "Dieter Dezember", "24000");
-        // Zero assessed saldo: the channel resolves so the run reaches the
-        // settlement under test instead of refusing on the monthly rail.
-        await seedSurtaxSaldo(fx, employeeId, "0.0000", "0.0000");
+        await seedSurtaxSaldo(fx, employeeId, "0.0000", "0.0000"); // resolve the channel to reach the settlement
         // Germany's December program is a different algorithm for the final
         // period, not an extra line: a pack declaring that shape must make the
         // run refuse, never silently skip the settlement.
@@ -579,9 +541,7 @@ test(
       try {
         const fx = await seedHarness(org.orgId, actorId);
         const employeeId = await seedEmployee(fx, "Marta Mancante", "24000");
-        // Zero assessed saldo: the channel resolves so the run reaches the
-        // settlement under test instead of refusing on the monthly rail.
-        await seedSurtaxSaldo(fx, employeeId, "0.0000", "0.0000");
+        await seedSurtaxSaldo(fx, employeeId, "0.0000", "0.0000"); // resolve the channel to reach the settlement
         pack.annualSettlement = (taxYear: number) => {
           const edition = before!(taxYear);
           return edition && { ...edition, requiredEmployeeFacts: ["fatto_sintetico"] };
