@@ -12,6 +12,7 @@ import test from 'node:test'
 // is the loader's per-session drawer key.
 
 const root = pathToFileURL(process.cwd() + '/').href
+const SOURCE_ID = '019f68a5-6a24-78ec-bed6-cc04e06f2078'
 const stateKey = Symbol.for('openbooks.customization-duplicate-guard')
 const state: { statements: unknown[] } = { statements: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
@@ -57,7 +58,13 @@ registerHooks({
         source: `
           const state = globalThis[Symbol.for('openbooks.customization-duplicate-guard')]
           export const db = {
-            execute: async (query) => { state.statements.push(query); return { rows: [] } },
+            execute: async (query) => {
+              state.statements.push(query)
+              const rows = JSON.stringify(query).includes(${JSON.stringify(SOURCE_ID)})
+                ? [{ id: ${JSON.stringify(SOURCE_ID)}, name: 'Source', description: null, isDefault: true, isActive: true, allowedRoles: null, layout: {}, recordType: 'vendor_bill' }]
+                : []
+              return { rows }
+            },
             transaction: async (fn) => fn({ execute: async (query) => { state.statements.push(query); return { rows: [] } } }),
           }
         `,
@@ -132,16 +139,6 @@ registerHooks({
 })
 
 const { loadCustomization } = await import('./view')
-
-const SOURCE_ID = '019f68a5-6a24-78ec-bed6-cc04e06f2078'
-
-/**
- * F-t10-002 — opening Duplicate after editing the org-default form carried
- * isDefault=true (plus the old name/layout seed) into the create session,
- * so the copy silently stole the org default on save. The drawer remounts
- * per session — edit-<id> vs create-from-<source> — so no session inherits
- * another's state.
- */
 test('form drawer remounts per session so duplicate never inherits edit state', async () => {
   const edit = await loadCustomization({ recordType: 'vendor_bill', form: SOURCE_ID })
   const duplicate = await loadCustomization({ recordType: 'vendor_bill', form: 'new', from: SOURCE_ID })
