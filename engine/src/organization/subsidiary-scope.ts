@@ -140,6 +140,7 @@ export interface LockedProjectScope {
 export type ScopeRowKind =
   | "party"
   | "project"
+  | "equipment_unit"
   | "document"
   | "fixed_asset"
   | "account"
@@ -169,7 +170,11 @@ export async function lockScopeRow(
     ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
         select p.id, p.subsidiary_id as "subsidiaryId" from parties p
          where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`)
-    : kind === "project"
+    : kind === "equipment_unit"
+      ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+          select e.id, e.subsidiary_id as "subsidiaryId" from equipment_units e
+           where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`)
+      : kind === "project"
       ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
           select p.id, p.subsidiary_id as "subsidiaryId" from projects p
            where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`)

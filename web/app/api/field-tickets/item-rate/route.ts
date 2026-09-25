@@ -6,6 +6,7 @@ import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { resolveItemRate } from '../../../../lib/item-rates'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 export const runtime = 'nodejs'
 
@@ -71,8 +72,10 @@ export async function GET(req: Request) {
       onDate,
       baseQuantity: quantity,
       rateUnitCode,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
   } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not resolve item rate' }, { status: 422 })
   }
   const fallbackRate = item.rows[0].default_rate ?? item.rows[0].default_cost ?? '0'

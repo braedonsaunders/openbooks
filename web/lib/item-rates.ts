@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { isLegacyProvenance } from '@openbooks/engine/src/platform/legacy-provenance.ts'
 import { cmp, mul, normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
 import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/sales/item-rate-pricing.ts'
@@ -123,7 +124,19 @@ export async function resolveItemRate(input: {
   baseQuantity: string
   /** Explicit package choice (for example day, week, or month). */
   rateUnitCode?: string | null
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
 }): Promise<ResolvedItemRate | null> {
+  return withOrgTransaction(input.orgId, async () => {
+  const targets = [
+    { kind: 'project' as const, id: input.projectId },
+    ...(input.equipmentUnitId ? [{ kind: 'equipment_unit' as const, id: input.equipmentUnitId }] : []),
+  ]
+  const scopeRows = await lockScopeRows(db, input.orgId, targets, input.allowedSubsidiaryIds ?? null, 'share')
+  const projectScope = scopeRows.find((row) => row.id === input.projectId)
+  const equipmentScope = input.equipmentUnitId ? scopeRows.find((row) => row.id === input.equipmentUnitId) : null
+  if (!projectScope || (equipmentScope && equipmentScope.subsidiaryId !== projectScope.subsidiaryId)) {
+    throw new ScopeNotFoundError()
+  }
   // Ordinary consumables/materials use the simple item Cost + Price. Only
   // items explicitly configured with a rate profile participate in dated,
   // customer/project/equipment rate books and package-tier pricing.
@@ -286,6 +299,7 @@ export async function resolveItemRate(input: {
     }
   }
   return null
+  })
 }
 
 /**
