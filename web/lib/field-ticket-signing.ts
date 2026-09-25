@@ -86,6 +86,7 @@ export async function sendTicketForSignature(args: {
     status: 'queued',
     categoryKey: 'document',
     meta: { recordType: 'field_ticket', recordId: args.ticketId, purpose: 'signature_request' },
+    actor: { kind: 'user', userId: args.userId },
   })
   await db.execute(sql`
     insert into field_ticket_signature_requests

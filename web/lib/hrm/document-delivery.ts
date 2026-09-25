@@ -59,6 +59,7 @@ async function orgName(orgId: string): Promise<string> {
 
 async function sendEmail(args: {
   orgId: string;
+  actorId: string;
   to: string;
   subject: string;
   html: string;
@@ -83,6 +84,7 @@ async function sendEmail(args: {
     status: "queued",
     categoryKey: "hrm.invitation",
     meta: {},
+    actor: { kind: "user", userId: args.actorId },
   });
   try {
     const outcome = await sendVia(
@@ -131,6 +133,7 @@ export async function deliverSignatureInvitations(args: {
     if (recipient.email) {
       const sent = await sendEmail({
         orgId: args.orgId,
+        actorId: args.actorId,
         to: recipient.email,
         subject: email.subject,
         html: email.html,
@@ -186,6 +189,7 @@ export async function deliverSurveyInvitations(args: {
     if (recipient.email) {
       const sent = await sendEmail({
         orgId: args.orgId,
+        actorId: args.actorId,
         to: recipient.email,
         subject: email.subject,
         html: email.html,

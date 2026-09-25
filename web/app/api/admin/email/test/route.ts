@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     status: 'queued',
     categoryKey: 'test',
     meta: { userId: gate.user.id },
+    actor: { kind: 'user', userId: gate.user.id },
   })
   try {
     const outcome = await sendVia(transport, {
