@@ -242,3 +242,22 @@ test("eligible French payroll refuses missing contractual hours by name", async 
   await assert.rejects(computeFrStatutory(ctx), /contractual hours for this pay period are missing/);
   assert.deepEqual(pushed, [], "no statutory line is emitted after the refusal");
 });
+
+test("an eligible filing account prices the reduced 3.45% family rate through the adapter", async () => {
+  // I6-payroll-44 addendum: the adapter never passed the resolved fr_allocfam
+  // eligibility, so an eligible employer over-accrued at 5.25%. 2 000 € × 3.45% = 69.00.
+  let query = 0;
+  const ctx = {
+    tx: { execute: async () => (++query === 1 ? { rows: [{ fact_value: "10.00" }] } : { rows: [{ fact_value: "ordinary" }] }) },
+    orgId: "org", subsidiaryId: "legal-employer", filingAccountId: "siret-eligible",
+    resolveStatutoryRates: async () => ({
+      values: (slotKey: string) => slotKey === "fr_atmp" ? { taux: "1.1000" } : slotKey === "fr_allocfam" ? { reduced_rate_eligible: "true" } : null,
+    }) as never,
+    taxYear: 2026, region: "FR",
+    run: { pay_date: "2026-06-15", run_type: "regular" },
+    income: "2000.00", gross: "2000.0000", nonPeriodic: "0.0000", periodsPerYear: 12,
+    certificateFor: () => ({ answers: { domicile: "metropole", rgdu_eligibility: "excluded" } }),
+    pushStatutory: () => {},
+  } as never;
+  assert.equal((await computeFrStatutory(ctx)).FAM_ER, "69.0000");
+});
