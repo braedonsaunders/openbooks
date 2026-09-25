@@ -500,7 +500,10 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
   }
 }
 
-export async function tick(): Promise<void> {
+export async function tick(
+  claimTick: typeof withTickClaim = withTickClaim,
+  publishHealth: typeof publishSchedulerTickHealth = publishSchedulerTickHealth,
+): Promise<void> {
   if (running) {
     // B2-SCH-1: an overrun tick used to vanish here with no log or metric
     // while scans silently missed their cadence. Every overlap skip is now
@@ -510,14 +513,14 @@ export async function tick(): Promise<void> {
       `[scheduler] tick overlap: the previous tick is still running, skipping this 60s pass ` +
         `(overlap skip #${skipped.overlapSkips}, ${skipped.consecutiveSkips} consecutive)`,
     );
-    await publishSchedulerTickHealth();
+    await publishHealth();
     return;
   }
   running = true;
   try {
     // One cross-replica claim around the ENTIRE scan set: a replica that loses
     // the race skips every duty below, not merely one subsystem.
-    await withTickClaim(WEB_TICK_LOCK_KEY, async () => {
+    const claimResult = await claimTick(WEB_TICK_LOCK_KEY, async () => {
       await recoverLostScriptOccurrences();
       await runDueScripts();
 
@@ -623,7 +626,15 @@ export async function tick(): Promise<void> {
         console.error("[scheduler] continuous-close scan failed:", e);
       }
     });
-    recordTickOutcome(true);
+    if (claimResult === null) {
+      const skipped = recordTickOverlapSkip();
+      console.warn(
+        `[scheduler] tick claim held by another replica; skipping this pass ` +
+          `(overlap skip #${skipped.overlapSkips}, ${skipped.consecutiveSkips} consecutive)`,
+      );
+    } else {
+      recordTickOutcome(true);
+    }
   } catch (e) {
     // Never let a tick rejection escape setInterval — an unhandled rejection
     // would take down the whole server process on a transient DB error.
@@ -631,6 +642,6 @@ export async function tick(): Promise<void> {
     recordTickOutcome(false);
   } finally {
     running = false;
-    await publishSchedulerTickHealth();
+    await publishHealth();
   }
 }

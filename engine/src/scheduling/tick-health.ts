@@ -25,7 +25,7 @@ export type SchedulerDutyFailure = {
 };
 
 export type SchedulerTickHealth = {
-  /** Lifetime overlap skips recorded by this process. */
+  /** Lifetime scheduler passes skipped because a local or replica tick still held the claim. */
   overlapSkips: number;
   /** Consecutive skips since the last completed tick; drives the degraded signal. */
   consecutiveSkips: number;
@@ -63,9 +63,9 @@ export function resetSchedulerTickHealth(): void {
 }
 
 /**
- * Record one overlap skip: the previous tick was still running when the
- * next 60s boundary fired, so this pass stands down. Returns the updated
- * health for the caller's structured log.
+ * Record one skipped pass: either this process was still busy at the next
+ * 60s boundary or another replica held the cross-replica claim. Returns the
+ * updated health for the caller's structured log.
  */
 export function recordTickOverlapSkip(): SchedulerTickHealth {
   health = {
