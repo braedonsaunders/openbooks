@@ -5,7 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { analyze, importsOf, stripComments, stronglyConnected } from "./check-engine-boundaries.mjs";
 
-// A synthetic engine: two low modules, one orchestrator, a pinned cycle.
+// A synthetic engine: two low modules, one orchestrator. Acyclic since C15
+// retired the "cycles" pin: any cycle is refused.
 function scaffold(manifest, files) {
   const root = mkdtempSync(join(tmpdir(), "engine-boundaries-"));
   mkdirSync(join(root, "engine/src"), { recursive: true });
@@ -22,19 +23,19 @@ const MANIFEST = {
     platform: { description: "db", dependsOn: [] },
     records: { description: "primitives", dependsOn: ["platform"] },
     ledger: { description: "posting", dependsOn: ["payments", "platform", "records"] },
-    payments: { description: "payments", dependsOn: ["ledger", "platform"] },
+    payments: { description: "payments", dependsOn: ["platform"] },
   },
-  cycles: [["ledger", "payments"]],
+  cycles: [],
 };
 const FILES = {
   "platform/db.ts": "export const db = 1;\n",
   "records/numbering.ts": 'import { db } from "../platform/db.ts";\nexport const next = () => db;\n',
   "ledger/posting-example.ts": 'import { db } from "@openbooks/engine/src/platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport async function post() { const { pay } = await import("../payments/payment-example.ts"); return pay(next(), db); }\n',
-  "payments/payment-example.ts": 'import type { post } from "../ledger/posting-example.ts";\nimport { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
+  "payments/payment-example.ts": 'import { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
   "ledger/posting.test.ts": 'import { pay } from "../payments/payment-example.ts";\nimport { x } from "@/lib/anything.ts";\n',
 };
 
-test("a clean tree passes: every file in a module, every edge declared and used, cycle pinned", () => {
+test("a clean acyclic tree passes: every file in a module, every edge declared and used", () => {
   const root = scaffold(MANIFEST, FILES);
   try {
     const { problems, files } = analyze(root);
@@ -74,34 +75,45 @@ test("an undeclared cross-module import names file, line, both modules and the r
 
 test("a declared edge nothing uses is refused, so the manifest cannot grant permission in advance", () => {
   const manifest = structuredClone(MANIFEST);
-  manifest.modules.payments.dependsOn = ["ledger", "platform", "records"];
+  manifest.modules.records.dependsOn = ["payments", "platform"];
   const root = scaffold(manifest, FILES);
   try {
     const { problems } = analyze(root);
     assert.deepEqual(problems.length, 1, problems.join("\n"));
-    assert.match(problems[0], /module "payments" declares dependsOn "records" but no non-test file in engine\/src\/payments\/ imports it/);
+    assert.match(problems[0], /module "records" declares dependsOn "payments" but no non-test file in engine\/src\/records\/ imports it/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("a declaration that grows a pinned cycle is refused; a pin that no longer exists must be struck", () => {
-  const grown = structuredClone(MANIFEST);
-  grown.modules.records.dependsOn = ["payments", "platform"];
-  grown.modules.payments.dependsOn = ["ledger", "platform", "records"];
+test("any cycle is refused, with both modules named and the remedy", () => {
+  const manifest = structuredClone(MANIFEST);
+  manifest.modules.payments.dependsOn = ["ledger", "platform"];
   const files = {
     ...FILES,
-    "records/numbering.ts": 'import { db } from "../platform/db.ts";\nimport { pay } from "../payments/payment-example.ts";\nexport const next = () => pay(db, db);\n',
-    "payments/payment-example.ts": 'import type { post } from "../ledger/posting-example.ts";\nimport { db } from "../platform/db.ts";\nimport { next } from "../records/numbering.ts";\nexport const pay = (n, d) => n + d + db + next();\n',
+    "payments/payment-example.ts": 'import type { post } from "../ledger/posting-example.ts";\nimport { db } from "../platform/db.ts";\nexport const pay = (n, d) => n + d + db;\n',
   };
-  const root = scaffold(grown, files);
+  const root = scaffold(manifest, files);
   try {
     const { problems } = analyze(root);
-    const cycleProblems = problems.filter((p) => /cycle/.test(p));
-    assert.equal(cycleProblems.length, 2, problems.join("\n"));
-    assert.match(cycleProblems[0], /cycle through \{ledger, payments, records\} that is not pinned/);
-    assert.match(cycleProblems[0], /nearest pinned cycle is \{ledger, payments\}; this change grew it/);
-    assert.match(cycleProblems[1], /pinned cycle \{ledger, payments\} no longer exists/);
+    assert.equal(problems.length, 1, problems.join("\n"));
+    assert.match(problems[0], /contains a cycle through \{ledger, payments\}/);
+    assert.match(problems[0], /must be acyclic/);
+    assert.match(problems[0], /remove an edge/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a retired pin entry is refused even when the graph is acyclic", () => {
+  const manifest = structuredClone(MANIFEST);
+  manifest.cycles = [["ledger", "payments"]];
+  const root = scaffold(manifest, FILES);
+  try {
+    const { problems } = analyze(root);
+    assert.equal(problems.length, 1, problems.join("\n"));
+    assert.match(problems[0], /"cycles" pin is retired/);
+    assert.match(problems[0], /must stay empty/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
