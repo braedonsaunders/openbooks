@@ -5624,6 +5624,18 @@
         "record": "Registro",
         "change": "Cambio"
       },
+      "tables": {
+        "user_scripts": "Scripts",
+        "custom_field_defs": "Campos personalizados",
+        "form_layouts": "Diseños de formularios",
+        "list_views": "Vistas de lista",
+        "saved_reports": "Informes guardados",
+        "saved_views": "Vistas guardadas",
+        "statement_layouts": "Diseños de estados",
+        "report_definitions": "Definiciones de informes",
+        "account_groups": "Grupos de cuentas",
+        "app_roles": "Roles de aplicaciones"
+      },
       "capturedFrom": "Capturado de {name}",
       "retained": "Conjunto de cambios de configuración conservado",
       "listTitle": "Conjuntos de cambios",

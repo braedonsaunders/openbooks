@@ -5624,6 +5624,18 @@
         "record": "レコード",
         "change": "変更"
       },
+      "tables": {
+        "user_scripts": "スクリプト",
+        "custom_field_defs": "カスタム項目",
+        "form_layouts": "フォームレイアウト",
+        "list_views": "リストビュー",
+        "saved_reports": "保存済みレポート",
+        "saved_views": "保存済みビュー",
+        "statement_layouts": "明細書レイアウト",
+        "report_definitions": "レポート定義",
+        "account_groups": "勘定グループ",
+        "app_roles": "アプリのロール"
+      },
       "capturedFrom": "{name} から取得",
       "retained": "保持された構成変更セット",
       "listTitle": "変更セット",

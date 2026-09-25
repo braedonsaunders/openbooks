@@ -5624,6 +5624,18 @@
         "record": "Record",
         "change": "Change"
       },
+      "tables": {
+        "user_scripts": "Scripts",
+        "custom_field_defs": "Custom fields",
+        "form_layouts": "Form layouts",
+        "list_views": "List views",
+        "saved_reports": "Saved reports",
+        "saved_views": "Saved views",
+        "statement_layouts": "Statement layouts",
+        "report_definitions": "Report definitions",
+        "account_groups": "Account groups",
+        "app_roles": "App roles"
+      },
       "capturedFrom": "Captured from {name}",
       "retained": "Retained configuration change set",
       "listTitle": "Change sets",
