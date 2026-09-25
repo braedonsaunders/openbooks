@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { addCalendarDays, businessToday, utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
 import { listFindings } from '@openbooks/engine/src/hrm/construction/findings.ts'
@@ -15,6 +14,7 @@ import { isFeatureEnabled } from '../features'
 import { setupSectionParams } from '../list-params'
 import { complianceHref } from './workspace-href'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import { listScopedProjectOptions } from '../scoped-options'
 
 /**
  * Compliance workspace loader (HR-13) — findings, rate schedules,
@@ -272,11 +272,10 @@ export async function loadCompliancePage(
       isFeatureEnabled(orgId, 'hrmPerDiem'),
     ])
     empty.sectionOff = !({ findings: true, rates: ratesOn, certified: certifiedOn, classes: classesOn, perdiem: perdiemOn }[section])
-    const projects = (
-      await db.execute<{ id: string; name: string }>(sql`
-        select id::text as id, name from projects where org_id = ${orgId} order by name
-      `)
-    ).rows
+    // Subsidiary-scoped through the shared project reader (activeOnly off to
+    // keep the current row set: the name map must resolve findings on
+    // inactive projects exactly as before, only without other-entity rows).
+    const projects = await listScopedProjectOptions(orgId, authz.allowedSubsidiaryIds, false)
     const projectName = new Map(projects.map((project) => [project.id, project.name]))
     const findings = await listFindings(db, orgId, actorId, null)
     const kinds = ['ratio_breach', 'missing_rate', 'class_unresolved', 'registration_missing', 'fringe_mismatch'].map(
