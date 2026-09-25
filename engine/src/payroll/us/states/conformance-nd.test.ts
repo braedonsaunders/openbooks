@@ -12,17 +12,17 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_TRIBAL_CERTIFICATE, ND_WITHHOLDING, ndAnnualTax,
+  ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_TRIBAL_CERTIFICATE, ND_WAGE_EXCLUSION_CERTIFICATE, ND_WITHHOLDING, ndAnnualTax,
 } from "./nd.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
-  resolvedCertificate(ND_CERTIFICATE, answers);
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate => resolvedCertificate(ND_CERTIFICATE, answers);
 
 test("ND certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(ND_CERTIFICATE), null);
   assert.equal(certificateDeclarationProblem(ND_NDWM_CERTIFICATE), null);
+  assert.equal(certificateDeclarationProblem(ND_WAGE_EXCLUSION_CERTIFICATE), null);
   assert.equal(ND_REGION.implemented, true);
   assert.equal(ND_REGION.certificateKey, "us_nd_w4");
 });
@@ -32,18 +32,13 @@ test("ND Form NDW-M requires the spouse's eligibility facts and attached depende
     payDate: "2026-03-06", periodsPerYear: 52, wages: "1800.00", basis: "resident" as const,
     certificate: cert(),
   };
-  const incomplete = resolvedCertificate(ND_NDWM_CERTIFICATE, {
-    employee_is_civilian_spouse: "true",
-    both_domiciled_outside_nd: "true",
-  });
+  const incomplete = resolvedCertificate(ND_NDWM_CERTIFICATE, { employee_is_civilian_spouse: "true", both_domiciled_outside_nd: "true" });
   assert.throws(() => ND_WITHHOLDING.compute({
     ...input, supportingCertificates: { us_nd_ndwm: incomplete },
   }), /North Dakota military-spouse withholding exemption requires proof that .*permanent duty station.*solely.*military ID/);
 
-  const complete = resolvedCertificate(ND_NDWM_CERTIFICATE, Object.fromEntries([
-    "employee_is_civilian_spouse", "both_domiciled_outside_nd", "servicemember_stationed_in_nd",
-    "employee_present_solely_to_accompany", "dependent_military_id_attached",
-  ].map((key) => [key, "true"])));
+  const complete = resolvedCertificate(ND_NDWM_CERTIFICATE, Object.fromEntries(
+    ["employee_is_civilian_spouse", "both_domiciled_outside_nd", "servicemember_stationed_in_nd", "employee_present_solely_to_accompany", "dependent_military_id_attached"].map((key) => [key, "true"])));
   const result = ND_WITHHOLDING.compute({
     ...input, supportingCertificates: { us_nd_ndwm: complete },
   });
@@ -66,8 +61,7 @@ test("ND Section 2 worksheet — $1,800 weekly Single, table arithmetic", () => 
   // match the wage-bracket cell for $1,800–$1,825 weekly Single, not this
   // table. The engine follows the Annual Percentage Method Table.
   const result = ND_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident", certificate: cert({ filing_status: "single" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident", certificate: cert({ filing_status: "single" }),
   });
   assert.equal(result.factors.ND_ANNUAL_WAGES, money("93600"));
   assert.equal(result.factors.ND_ANNUAL_TAX, money("701.51"));
@@ -79,8 +73,7 @@ test("ND pre-2020 W-4 Section 1 uses the $97 weekly allowance and printed $10 ex
   // Table 1 Single: 1.95% × ($1,606 − $1,108) = $9.71 → nearest dollar $10.
   // https://www.tax.nd.gov/sites/www/files/documents/forms/individual/2026-iit/2026-income-tax-withholding-rates-booklet.pdf
   const result = ND_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident", certificate: cert({ filing_status: "single" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident", certificate: cert({ filing_status: "single" }),
     federalLegacyW4: { status: "single", allowances: 2 },
   });
   assert.equal(result.factors.ND_W4_METHOD, "pre_2020_section_1");
@@ -91,31 +84,23 @@ test("ND pre-2020 W-4 Section 1 uses the $97 weekly allowance and printed $10 ex
 
 test("ND no W-4 withholds as single", () => {
   const empty = ND_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident", certificate: resolveCertificate({ certificate: ND_CERTIFICATE }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident", certificate: resolveCertificate({ certificate: ND_CERTIFICATE }),
   });
   const single = ND_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident", certificate: cert({ filing_status: "single" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident", certificate: cert({ filing_status: "single" }),
   });
   assert.equal(empty.tax, single.tax);
 });
 
 test("ND extra withholding is added, exempt is zero, and an unpublished period is refused", () => {
   assert.equal(ND_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident",
-    certificate: cert({ filing_status: "single", additional_per_period: "5.00" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident", certificate: cert({ filing_status: "single", additional_per_period: "5.00" }),
   }).tax, money("18"));
   assert.equal(ND_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident", certificate: cert({ exempt: "true" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident", certificate: cert({ exempt: "true" }),
   }).tax, money("0"));
   assert.throws(
-    () => ND_WITHHOLDING.compute({
-      payDate: "2026-03-15", periodsPerYear: 1, wages: "93600",
-      basis: "resident", certificate: cert({ filing_status: "single" }),
-    }),
+    () => ND_WITHHOLDING.compute({ payDate: "2026-03-15", periodsPerYear: 1, wages: "93600", basis: "resident", certificate: cert({ filing_status: "single" }) }),
     /publishes withholding tables/,
   );
 });
@@ -124,14 +109,9 @@ test("ND reservation exemption prices only the off-reservation wages", () => {
   // Guideline p. 2: $2,000 weekly single is $17 on full wages; with $600 of
   // reservation-source wages attested, the $1,400 remainder withholds $6.
   const result = ND_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "2000.00",
-    basis: "nonresident", certificate: cert({ filing_status: "single" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "2000.00", basis: "nonresident", certificate: cert({ filing_status: "single" }),
     supportingCertificates: {
-      [ND_TRIBAL_CERTIFICATE.key]: resolvedCertificate(ND_TRIBAL_CERTIFICATE, {
-        enrolled_member: "true",
-        lives_on_reservation: "true",
-        reservation_source_wages: "600.00",
-      }),
+      [ND_TRIBAL_CERTIFICATE.key]: resolvedCertificate(ND_TRIBAL_CERTIFICATE, { enrolled_member: "true", lives_on_reservation: "true", reservation_source_wages: "600.00" }),
     },
   });
   assert.equal(result.tax, money("6"));
@@ -139,10 +119,28 @@ test("ND reservation exemption prices only the off-reservation wages", () => {
 
 test("ND refuses a year it has not transcribed", () => {
   assert.throws(
-    () => ND_WITHHOLDING.compute({
-      payDate: "2027-01-15", periodsPerYear: 52, wages: "1800",
-      basis: "resident", certificate: cert({ filing_status: "single" }),
-    }),
+    () => ND_WITHHOLDING.compute({ payDate: "2027-01-15", periodsPerYear: 52, wages: "1800", basis: "resident", certificate: cert({ filing_status: "single" }) }),
     /2027 North Dakota income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
+});
+
+test("ND excludes qualifying military pay and attested solely agricultural labor", () => {
+  // Withholding guideline pp. 2–3: the military-pay deduction removes
+  // qualifying pay unless the employee elects withholding; farm/ranch labor
+  // is excluded only when it is the employee's sole service, with
+  // inconsistent attestations refused by name.
+  const exclusion = (answers: Record<string, string>) => resolvedCertificate(ND_WAGE_EXCLUSION_CERTIFICATE, answers);
+  const base = { payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident" as const, certificate: cert({ filing_status: "single" }) };
+  const military = [{ category: "military_pay", amount: "800.00" }] as const;
+  const excluded = ND_WITHHOLDING.compute({ ...base, statutoryExemptionAmounts: [...military] });
+  assert.equal(excluded.tax, money("0"));
+  assert.equal(excluded.factors.ND_EXEMPT_MILITARY_PAY, money("800"));
+  const voluntary = ND_WITHHOLDING.compute({ ...base, statutoryExemptionAmounts: [...military], supportingCertificates: { us_nd_wage_exclusion: exclusion({ ag_labor_sole: "false", military_voluntary_withholding: "true" }) } });
+  assert.equal(voluntary.tax, ND_WITHHOLDING.compute({ ...base }).tax);
+  assert.equal(voluntary.factors.ND_MILITARY_VOLUNTARY, "1");
+  const ag = ND_WITHHOLDING.compute({ ...base, supportingCertificates: { us_nd_wage_exclusion: exclusion({ ag_labor_sole: "true", ag_period_wages: "800", military_voluntary_withholding: "false" }) } });
+  assert.equal(ag.tax, money("0"));
+  assert.equal(ag.factors.ND_EXEMPT_AG_LABOR, money("800"));
+  assert.throws(() => ND_WITHHOLDING.compute({ ...base, supportingCertificates: { us_nd_wage_exclusion: exclusion({ ag_labor_sole: "true", ag_period_wages: "900", military_voluntary_withholding: "false" }) } }), /attested agricultural wages exceed this period's pay/);
+  assert.throws(() => ND_WITHHOLDING.compute({ ...base, supportingCertificates: { us_nd_wage_exclusion: exclusion({ ag_labor_sole: "true", military_voluntary_withholding: "false" }) } }), /agricultural-labor exclusion needs this period's qualifying wages/);
 });
