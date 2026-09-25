@@ -5,6 +5,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { cmp, formatMoney, isZero, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../exact-decimal";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { signProposal, type JournalLinePreview, type JournalPreview } from "./proposals";
 
@@ -83,6 +84,7 @@ const draftJournalEntry: AssistantToolDef = {
       const r = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and is_active and not is_summary
+           ${subsidiaryVisibleFilter(sql`accounts.subsidiary_id`, authz.allowedSubsidiaryIds)}
            and (number = ${key} or lower(name) = lower(${key}))
          order by (number = ${key}) desc
          limit 2

@@ -7,7 +7,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { allocateDocumentNumber } from "@openbooks/engine/src/records/numbering.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { normalizeMoney, sum, toUnits } from "@openbooks/engine/src/money/money.ts";
-import { can, guardPermission } from "../../../../lib/authz";
+import { can, guardPermission, subsidiaryScopeAllows } from "../../../../lib/authz";
 import { applicationContextFromSession } from "../../../../lib/application/context";
 import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/proposals";
@@ -42,6 +42,8 @@ function exactMoney(v: unknown): string | "invalid" {
  */
 
 export const runtime = "nodejs";
+
+class AccountScopeChangedError extends Error {}
 
 export async function POST(req: Request) {
   const gate = await guardPermission("assistant.write");
@@ -150,47 +152,74 @@ export async function POST(req: Request) {
     "assistant",
     req.headers.get("x-request-id") || randomUUID(),
   );
-  const result = await executeIdempotent({
-    context,
-    operation: "assistant.commit.create_journal_entry",
-    idempotencyKey: body.confirmToken,
-    request: { kind: body.kind, preview: p },
-    execute: () => db.transaction(async (tx) => {
-      // Allocate the organization-wide JE number on the same transaction
-      // connection as the document. A line or header failure therefore rolls
-      // the sequence watermark back along with the draft.
-      const documentNumber = await allocateDocumentNumber(tx, user.orgId, "journal", "JE-");
-      const inserted = (await tx.execute<{ id: string; document_number: string }>(sql`
-        insert into documents (
-          org_id, kind, document_number, subsidiary_id, document_date, currency,
-          memo, subtotal, tax_total, total, created_by
-        )
-        values (
-          ${user.orgId}, 'journal', ${documentNumber}, ${subsidiary.id}, ${p.documentDate},
-          ${subsidiary.base_currency}, ${p.memo}, ${totalDebits}, '0', ${totalDebits}, ${user.id}
-        )
-        returning id, document_number
-      `));
-      const doc = inserted.rows[0];
-      if (!doc) throw new Error("journal draft could not be created");
+  let result: {
+    replayed: boolean;
+    value: { ok: true; id: string; documentNumber: string; href: string };
+  };
+  try {
+    result = await executeIdempotent({
+      context,
+      operation: "assistant.commit.create_journal_entry",
+      idempotencyKey: body.confirmToken,
+      request: { kind: body.kind, preview: p },
+      execute: () => db.transaction(async (tx) => {
+        const accountIds = [...new Set(lines.map((line) => line.accountId))];
+        const lockedAccounts = accountIds.length === 0 ? [] : (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
+          select id, subsidiary_id
+            from accounts
+           where org_id = ${user.orgId}
+             and id = any(${`{${accountIds.join(",")}}`}::uuid[])
+           order by id
+           for share
+        `)).rows;
+        if (
+          lockedAccounts.length !== accountIds.length
+          || lockedAccounts.some((account) => !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, account.subsidiary_id))
+        ) {
+          throw new AccountScopeChangedError("not found");
+        }
 
-      for (let i = 0; i < lines.length; i++) {
-        const l = lines[i]!;
-        await tx.execute(sql`
-          insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                      quantity, unit_price, amount)
-          values (${user.orgId}, ${doc.id}, ${i + 1}, ${l.accountId}, ${l.description},
-                  '1', ${l.amount}, ${l.amount})
-        `);
-      }
-      return {
-        ok: true as const,
-        id: doc.id,
-        documentNumber: doc.document_number,
-        href: `/journal?entry=${doc.id}`,
-      };
-    }),
-  });
+        // Allocate the organization-wide JE number on the same transaction
+        // connection as the document. A line or header failure therefore rolls
+        // the sequence watermark back along with the draft.
+        const documentNumber = await allocateDocumentNumber(tx, user.orgId, "journal", "JE-");
+        const inserted = (await tx.execute<{ id: string; document_number: string }>(sql`
+          insert into documents (
+            org_id, kind, document_number, subsidiary_id, document_date, currency,
+            memo, subtotal, tax_total, total, created_by
+          )
+          values (
+            ${user.orgId}, 'journal', ${documentNumber}, ${subsidiary.id}, ${p.documentDate},
+            ${subsidiary.base_currency}, ${p.memo}, ${totalDebits}, '0', ${totalDebits}, ${user.id}
+          )
+          returning id, document_number
+        `));
+        const doc = inserted.rows[0];
+        if (!doc) throw new Error("journal draft could not be created");
+
+        for (let i = 0; i < lines.length; i++) {
+          const l = lines[i]!;
+          await tx.execute(sql`
+            insert into document_lines (org_id, document_id, line_number, account_id, description,
+                                        quantity, unit_price, amount)
+            values (${user.orgId}, ${doc.id}, ${i + 1}, ${l.accountId}, ${l.description},
+                    '1', ${l.amount}, ${l.amount})
+          `);
+        }
+        return {
+          ok: true as const,
+          id: doc.id,
+          documentNumber: doc.document_number,
+          href: `/journal?entry=${doc.id}`,
+        };
+      }),
+    });
+  } catch (error) {
+    if (error instanceof AccountScopeChangedError) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    throw error;
+  }
 
   return NextResponse.json(result.value);
 }
