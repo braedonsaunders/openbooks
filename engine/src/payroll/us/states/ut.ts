@@ -286,6 +286,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     factors.UT_EXEMPT = "1";
     return {
       state: "UT", year: edition.year, tax: D(0n), taxSupplemental: D(0n), factors,
+      statutoryTax: D(0n), additionalWithholding: D(0n),
     };
   }
 
@@ -329,6 +330,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "UT",
     year: edition.year,
     tax: D(tax),
+    statutoryTax: D(tax),
+    additionalWithholding: D(0n),
     taxSupplemental: D(0n),
     factors,
   };
@@ -440,11 +443,11 @@ export const UT_REGION: PayrollRegionWithholding = {
   implemented: true,
   // Pub 14 p. 2: withhold if you "pay wages to any employee for work done in Utah".
   taxesNonresidentWages: true,
-  // Pub 14 p. 2: also withhold on "wages to Utah resident employees for work
-  // done outside Utah (you may reduce the Utah tax by any tax withheld by the
-  // other state)". That offset is not modelled — declared, not approximated.
+  // Pub 14 p. 2: resident wages earned outside Utah remain subject to
+  // withholding, reduced by the same-period tax actually withheld elsewhere.
   residentWithholding: "required_net_of_credit",
-  residentWithholdingImplemented: false,
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_ut_w4",
   subRegions: [],
   subRegionConflictRule: "both",

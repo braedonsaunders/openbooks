@@ -128,6 +128,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "LA",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -219,11 +221,13 @@ export const LA_REGION: PayrollRegionWithholding = {
   label: "Louisiana income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "waive_when_work_region_withheld" },
   certificateKey: "us_la_l4",
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Louisiana Department of Revenue, R-1306 (1/26); Form R-1300 (L-4) (1/26)",
+    "Louisiana Department of Revenue, withholding FAQ (resident wages worked in another state); "
+    + "R-1306 (1/26); Form R-1300 (L-4) (1/26)",
 };

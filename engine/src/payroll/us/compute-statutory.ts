@@ -371,6 +371,7 @@ export async function computeUsStatutory(
       regularWageTaxWithheldFor: ytd.regularWageTaxWithheldKeys,
       wageAllocations: ctx.workAllocations,
       residentWithholdingFacts: levy.basis === "resident_out_of_region"
+        && levy.residentWithholdingMethod?.kind !== "full"
         ? resolveUsResidentWithholdingFacts(
           sum([income, nonPeriodic]),
           ctx.workAllocations,
@@ -397,7 +398,7 @@ export async function computeUsStatutory(
     });
     if (!withheld) continue;
     if (levy.level === "region" && levy.side === "work") {
-      workRegionTaxes.push({ region: levy.region, amount: withheld.tax });
+      workRegionTaxes.push({ region: levy.region, amount: withheld.statutoryTax ?? withheld.tax });
     }
     if (levy.level === "region") regionTax = withheld.tax;
     const lineSequence = sequence++;

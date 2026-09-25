@@ -178,7 +178,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   if (certificateFlag(input.certificate, "exempt")) {
     return {
-      state: "MN", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      state: "MN", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n),
       factors: { MN_EXEMPT: "1" },
     };
   }
@@ -202,7 +202,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   if (taxable === 0n) {
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MN", year: rates.year, tax: D(extra), taxSupplemental: D(0n),
+      state: "MN", year: rates.year, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra), taxSupplemental: D(0n),
       factors: { ...factors, MN_ANNUAL_TAX: D(0n), MN_WITHHELD: D(extra) },
     };
   }
@@ -219,6 +219,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "MN",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -353,12 +355,12 @@ export const MN_REGION: PayrollRegionWithholding = {
   // Booklet p. 4: withhold from a nonresident on Minnesota-source wages unless
   // reciprocity (MI/ND on Form MWR) or expected pay is under $15,300.
   taxesNonresidentWages: true,
-  // Booklet p. 5: a Minnesota resident working in another state (other than
-  // Michigan or North Dakota) "may be required" to have Minnesota withheld —
-  // the employer completes a worksheet. Declared required as the base rule;
-  // the worksheet and the reciprocity exception are not implemented.
+  // Booklet p. 5: resident withholding uses the worksheet's Minnesota tax
+  // less the work-state tax, floored at zero; the shared resident-credit path
+  // applies that calculation to this engine's statutory amount.
   residentWithholding: "required",
-  residentWithholdingImplemented: false,
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_mn_w4mn",
   subRegions: [],
   subRegionConflictRule: "both",

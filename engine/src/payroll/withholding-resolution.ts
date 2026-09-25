@@ -117,6 +117,7 @@ import {
 } from "./withholding-jurisdictions.ts";
 import { type PayrollReciprocityAgreement, reciprocityAgreement } from "./reciprocity.ts";
 import { PayrollError } from "./error.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 
 export class PayrollWithholdingResolutionError extends PayrollError {}
 
@@ -186,8 +187,63 @@ export interface ResolvedWithholdingLevy {
    * against this one. The engine must compute that region first.
    */
   creditAgainstRegion?: string;
+  /** The residence region's declared full, credit, or eligibility-waiver method. */
+  residentWithholdingMethod?: PayrollRegionWithholding["residentWithholdingMethod"];
   /** The agreement that produced this levy, when reciprocity applies. */
   agreement?: PayrollReciprocityAgreement;
+}
+
+export interface ResidentWithholdingAdjustment {
+  statutoryTax: string;
+  additionalWithholding: string;
+  tax: string;
+  outcome: "withheld" | "eligible_to_waive_covered_wages";
+  workRegionTaxCredit: string;
+}
+
+/** Apply a region-declared resident rule; elective additional withholding never receives a credit. */
+export function adjustResidentWithholding(
+  statutoryTax: string,
+  additionalWithholding: string,
+  workRegionTaxes: readonly { region: string; amount: string }[],
+  method: PayrollRegionWithholding["residentWithholdingMethod"],
+): ResidentWithholdingAdjustment {
+  const statutory = toUnits(statutoryTax);
+  const additional = toUnits(additionalWithholding);
+  let credit = 0n;
+  if (method?.kind === "net_of_work_region_tax") {
+    credit = workRegionTaxes.reduce((total, tax) => total + toUnits(tax.amount), 0n);
+  }
+  const appliedCredit = statutory < credit ? statutory : credit;
+  const remainingStatutory = statutory > appliedCredit ? statutory - appliedCredit : 0n;
+  return {
+    statutoryTax: fromUnits(remainingStatutory),
+    additionalWithholding: fromUnits(additional),
+    tax: fromUnits(remainingStatutory + additional),
+    outcome: "withheld",
+    workRegionTaxCredit: fromUnits(appliedCredit),
+  };
+}
+
+/**
+ * A withholding waiver applies to the wages that meet its eligibility test,
+ * not to the tax computed on all wages. Return the covered amount so the state
+ * calculator can price only the remaining wages. Additional withholding is
+ * deliberately outside this operation.
+ */
+export function residentWaivedWages(
+  workRegionTaxes: readonly { region: string; amount: string }[],
+  workRegionWages: readonly { region: string; amount: string }[],
+  method: PayrollRegionWithholding["residentWithholdingMethod"],
+): string {
+  if (method?.kind !== "waive_when_work_region_withheld") return "0.0000";
+  const taxByRegion = new Map(workRegionTaxes.map((tax) => [tax.region, toUnits(tax.amount)]));
+  return fromUnits(workRegionWages.reduce((covered, wages) => {
+    const isCoveredRegion = method.regions === undefined || method.regions.includes(wages.region);
+    return isCoveredRegion && (taxByRegion.get(wages.region) ?? 0n) > 0n
+      ? covered + toUnits(wages.amount)
+      : covered;
+  }, 0n));
 }
 
 /** A levy the pack DECLARES and the engine cannot compute. Never silent. */
@@ -417,7 +473,11 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
       }
       case "required":
       case "required_net_of_credit": {
-        const netOfCredit = residence.residentWithholding === "required_net_of_credit";
+        const method = residence.residentWithholdingMethod
+          ?? (residence.residentWithholding === "required_net_of_credit"
+            ? { kind: "net_of_work_region_tax" as const }
+            : { kind: "full" as const });
+        const netOfCredit = method.kind === "net_of_work_region_tax";
         if (!residence.implemented || !residence.residentWithholdingImplemented) {
           // REFUSE. Withholding only the work region here under-withholds an
           // employee by the whole residence-region liability, and nothing
@@ -440,6 +500,7 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
           basis: "resident_out_of_region", side: "residence", reach: "resident",
           certificateKey: residence.certificateKey ?? null,
           ...(netOfCredit ? { creditAgainstRegion: workRegion } : {}),
+          residentWithholdingMethod: method,
         });
         trace.push(
           `${residence.label} also applies to its resident's out-of-region wages`

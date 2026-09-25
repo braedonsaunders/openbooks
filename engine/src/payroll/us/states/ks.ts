@@ -257,7 +257,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   if (certificateFlag(input.certificate, "exempt")) {
     trace("KS_EXEMPT", 1n);
-    return { state: "KS", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "KS", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   // Missing K-4: "the employer must withhold wages at the single rate with no
@@ -282,6 +282,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "KS",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -394,8 +396,9 @@ export const KS_REGION: PayrollRegionWithholding = {
   label: "Kansas income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  residentWithholding: "required_net_of_credit",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_ks_k4",
   subRegions: [],
   subRegionConflictRule: "both",

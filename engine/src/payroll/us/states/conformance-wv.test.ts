@@ -28,7 +28,7 @@ const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
 test("WV certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(WV_CERTIFICATE), null);
   assert.equal(certificateDeclarationProblem(WV_IT104NR_CERTIFICATE), null);
-  assert.equal(WV_REGION.implemented, true);
+  assert.equal(WV_REGION.residentWithholding, "required"); assert.equal(WV_REGION.residentWithholdingMethod?.kind, "full");
   assert.equal(WV_REGION.certificateKey, "us_wv_it104");
 });
 

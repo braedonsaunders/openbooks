@@ -188,6 +188,12 @@ export type PayrollResidentWithholding =
    */
   | "unknown";
 
+/** How a residence region treats computed work-region withholding. */
+export type PayrollResidentWithholdingMethod =
+  | { kind: "full" }
+  | { kind: "net_of_work_region_tax" }
+  | { kind: "waive_when_work_region_withheld"; regions?: readonly string[] };
+
 export interface PayrollRegionWithholding {
   /** The region code, as `PayrollRegionCoverage.known` spells it. */
   region: string;
@@ -211,6 +217,8 @@ export interface PayrollRegionWithholding {
    * whole module exists to prevent.
    */
   residentWithholdingImplemented: boolean;
+  /** The published work-region credit or withholding-waiver calculation, when applicable. */
+  residentWithholdingMethod?: PayrollResidentWithholdingMethod;
   /** The withholding certificate for the region, when one exists. */
   certificateKey?: string;
   subRegions: readonly PayrollSubRegionLevy[];

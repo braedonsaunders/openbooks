@@ -36,7 +36,7 @@ test("MD certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(MD_MW507_NR), null);
   assert.equal(MD_REGION.implemented, true);
   assert.equal(MD_REGION.certificateKey, "us_md_mw507");
-  assert.equal(MD_REGION.residentWithholdingImplemented, false);
+  assert.equal(MD_REGION.residentWithholdingImplemented, true);
   assert.equal(MD_REGION.subRegions.length, 24);
   for (const field of MD_CERTIFICATE.fields) {
     assert.ok(field.help.length > 20, `${field.key} help is too thin`);

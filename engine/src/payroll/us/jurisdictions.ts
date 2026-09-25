@@ -1429,11 +1429,9 @@ const MA_REGION: PayrollRegionWithholding = {
   label: "Massachusetts income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  // NOT ESTABLISHED: Circular M is a table of rates and methods and states no
-  // rule for a Massachusetts resident's wages earned in another state.
-  // Declared unknown rather than assumed.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  residentWithholding: "required_net_of_credit",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_ma_m4",
   // Massachusetts has no local income taxes of any kind.
   subRegions: [],

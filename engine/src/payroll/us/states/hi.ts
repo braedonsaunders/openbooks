@@ -138,7 +138,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       );
     }
     factors.HI_CERTIFIED_DISABLED_NOT_SUBJECT = "1";
-    return { state: "HI", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "HI", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
   if (status === "nonresident_military_spouse") {
     requireMilitarySpouseEligibility(input.certificate, "Hawaii", [
@@ -147,7 +147,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       { key: "same_non_hawaii_domicile", description: "the spouse and servicemember are domiciled in the same state outside Hawaii" },
     ]);
     factors.HI_NONRESIDENT_MILITARY_SPOUSE_NOT_SUBJECT = "1";
-    return { state: "HI", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "HI", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
@@ -177,6 +177,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "HI",
     year: rates.year,
     tax: D(withheld),
+    statutoryTax: D(withheld === 0n ? 0n : periodTax),
+    additionalWithholding: D(withheld === 0n ? 0n : extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -308,8 +310,9 @@ export const HI_REGION: PayrollRegionWithholding = {
   label: "Hawaii income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "full" },
   certificateKey: "us_hi_hw4",
   subRegions: [],
   subRegionConflictRule: "both",

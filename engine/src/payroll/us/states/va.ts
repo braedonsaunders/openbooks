@@ -187,7 +187,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     || militarySpouseExempt
   ) {
     trace("VA_EXEMPT", 1n);
-    return { state: "VA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    return { state: "VA", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
   }
 
   // p. 19: add supplemental paid with regular wages and withhold on the total.
@@ -225,6 +225,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "VA",
     year: rates.year,
     tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
     taxSupplemental: D(0n),
     factors,
   };
@@ -374,14 +376,13 @@ export const VA_REGION: PayrollRegionWithholding = {
   // Guide p. 11: "A resident of Virginia who performs or performed services
   // outside Virginia for wages" is an employee subject to withholding.
   residentWithholding: "required",
-  // Not implemented: an out-of-state assignment needs a work-state credit
-  // rule this engine is not given. Declared and refused, never approximated.
-  residentWithholdingImplemented: false,
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_va_va4",
   // Virginia publishes no local wage income tax an employer withholds.
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
     "Virginia Department of Taxation, Income Tax Withholding Guide for Employers, Rev. 05/25 "
-    + "(2614086), Formula Method (p. 21); Form VA-4",
+    + "(2614086), Formula Method (p. 21); Forms VA-4 and VA-4B (other-state credit)",
 };
