@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { ActionError, kindForStatus, transportError } from '@braedonsaunders/appkit-errors'
+import { Alert, Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { useAppAction } from '@/lib/use-app-action'
 
 interface RateBook { id: string; name: string; currency: string; is_default: boolean; latest_version_id: string | null }
 interface Assignment {
@@ -46,7 +48,8 @@ export function RateBookAssignmentSection({
   const [visible, setVisible] = useState(false)
   const [rateBooks, setRateBooks] = useState<RateBook[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
-  const [busy, setBusy] = useState(false)
+  const { busy, execute } = useAppAction()
+  const [failure, setFailure] = useState<string | null>(null)
   const [canManage, setCanManage] = useState(false)
   const [canOpenPricing, setCanOpenPricing] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -60,6 +63,24 @@ export function RateBookAssignmentSection({
 
   const scopeParam = scope === 'customer' ? `customerId=${scopeId}` : `projectId=${scopeId}`
   const scopeBody = scope === 'customer' ? { customerId: scopeId } : { projectId: scopeId }
+
+  async function assignmentAction(url: string, init: RequestInit) {
+    try {
+      const res = await fetch(url, init)
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({})) as { errorCode?: unknown }
+        const code = typeof payload.errorCode === 'string' ? payload.errorCode : 'save'
+        const key = t.has(`errors.${code}` as never) ? `errors.${code}` : 'errors.save'
+        return {
+          ok: false as const,
+          error: new ActionError({ kind: kindForStatus(res.status), status: res.status, code, serverMessage: t(key as never) }),
+        }
+      }
+      return { ok: true as const, status: res.status, data: await res.json().catch(() => ({})) }
+    } catch (error) {
+      return { ok: false as const, error: transportError(error instanceof Error ? error.message : String(error)) }
+    }
+  }
 
   async function load(generation = ++loadGeneration.current) {
     if (generation !== loadGeneration.current) return
@@ -131,7 +152,6 @@ export function RateBookAssignmentSection({
       toast.error(t('rateBookRequired'))
       return
     }
-    setBusy(true)
     const body: Record<string, unknown> = {
       ...scopeBody,
       rateBookId: form.rateBookId,
@@ -141,34 +161,35 @@ export function RateBookAssignmentSection({
       isActive: form.isActive,
     }
     if (form.id) body.id = form.id
-    const res = await fetch('/api/rate-book-assignments', {
+    setFailure(null)
+    const fallbackMessage = t('errors.save')
+    await execute(() => assignmentAction('/api/rate-book-assignments', {
       method: form.id ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    }), {
+      fallbackMessage,
+      onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
+      onOk: () => {
+        toast.success(form.id ? common('feedback.saved') : t('created'))
+        setForm(null)
+        void load()
+      },
     })
-    const data = await res.json().catch(() => ({}))
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(t(`errors.${typeof data.errorCode === 'string' ? data.errorCode : 'save'}`))
-      return
-    }
-    toast.success(form.id ? common('feedback.saved') : t('created'))
-    setForm(null)
-    await load()
   }
 
   async function remove(id: string) {
     if (!confirm(t('confirmDelete'))) return
-    setBusy(true)
-    const res = await fetch(`/api/rate-book-assignments?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    const data = await res.json().catch(() => ({}))
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(t(`errors.${typeof data.errorCode === 'string' ? data.errorCode : 'save'}`))
-      return
-    }
-    toast.success(common('feedback.deleted'))
-    await load()
+    setFailure(null)
+    const fallbackMessage = t('errors.save')
+    await execute(() => assignmentAction(`/api/rate-book-assignments?id=${encodeURIComponent(id)}`, { method: 'DELETE' }), {
+      fallbackMessage,
+      onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
+      onOk: () => {
+        toast.success(common('feedback.deleted'))
+        void load()
+      },
+    })
   }
 
   if (!visible && !loadError) return null
@@ -204,6 +225,8 @@ export function RateBookAssignmentSection({
           </Button>
         ) : null}
       </div>
+
+      {failure ? <Alert variant="destructive">{failure}</Alert> : null}
 
       {loadError ? (
         <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
