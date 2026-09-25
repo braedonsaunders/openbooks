@@ -1293,7 +1293,8 @@
       "active": "Activo",
       "achieved": "Logrado",
       "missed": "No logrado",
-      "cancelled": "Cancelado"
+      "cancelled": "Cancelado",
+      "unknown": "Estado desconocido"
     },
     "enrollmentStatus": {
       "elected": "Elegido",

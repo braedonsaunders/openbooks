@@ -1293,7 +1293,8 @@
       "active": "Aktiv",
       "achieved": "Erreicht",
       "missed": "Verfehlt",
-      "cancelled": "Abgebrochen"
+      "cancelled": "Abgebrochen",
+      "unknown": "Unbekannter Status"
     },
     "enrollmentStatus": {
       "elected": "Gewählt",

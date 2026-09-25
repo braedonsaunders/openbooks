@@ -1293,7 +1293,8 @@
       "active": "进行中",
       "achieved": "已达成",
       "missed": "未达成",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "unknown": "未知状态"
     },
     "enrollmentStatus": {
       "elected": "已选择",

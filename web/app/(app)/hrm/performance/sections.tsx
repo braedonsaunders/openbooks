@@ -126,7 +126,7 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
           <ul className="mt-1 space-y-1.5">
             {review.goals.map((goal) => (
               <li key={goal.id} className="text-sm text-slate-600 dark:text-slate-300">
-                <span className="font-medium">{goal.title}</span> · {goal.status} · {goal.progress}%
+                <span className="font-medium">{goal.title}</span> · {goal.statusLabel} · {goal.progress}%
               </li>
             ))}
           </ul>
