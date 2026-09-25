@@ -182,6 +182,14 @@ export interface ResolvedWithholdingLevy {
   reach: PayrollLevyReach;
   /** The certificate whose answers drive it, when one is declared. */
   certificateKey: string | null;
+  statutoryComponent?: {
+    systemKey: string;
+    kind: "deduction" | "employer_contribution";
+  };
+  withholdingMethod?: {
+    kind: "flat_rate";
+    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+  };
   /**
    * For `required_net_of_credit`: the region whose withholding is credited
    * against this one. The engine must compute that region first.
@@ -569,6 +577,8 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
       found.push({
         level: "sub_region", region: region.region, subRegion: code, label: levy.label,
         basis: reach, side, reach, certificateKey: levy.certificateKey ?? null,
+        statutoryComponent: levy.statutoryComponent,
+        withholdingMethod: levy.withholdingMethod,
       });
     }
     return found;

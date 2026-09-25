@@ -359,6 +359,21 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "or_statewide_transit_tax",
+      regions: ["OR"],
+      components: [
+        {
+          code: "OR-STT",
+          name: "Oregon Statewide Transit Tax",
+          systemKey: "or_statewide_transit_tax",
+          kind: "deduction",
+          sequence: 141,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+      ],
+    },
+    {
       key: "transit_payroll_tax",
       regions: ["OR"],
       components: [

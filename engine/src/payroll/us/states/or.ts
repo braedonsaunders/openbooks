@@ -726,11 +726,19 @@ export const OR_REGION: PayrollRegionWithholding = {
       kind: "statewide_transit",
       reaches: ["resident", "nonresident"],
       rateSource: { kind: "pack" },
-      implemented: false,
+      automatic: true,
+      statutoryComponent: { systemKey: "or_statewide_transit_tax", kind: "deduction" },
+      withholdingMethod: {
+        kind: "flat_rate",
+        rates: [{
+          effectiveFrom: "2018-07-01",
+          rate: "0.001",
+          source: "Oregon DOR Statewide Transit Tax (https://www.oregon.gov/dor/programs/businesses/Pages/statewide-transit-tax.aspx)",
+        }],
+      },
+      implemented: true,
       citation:
-        "Publication 150-206-436 (Rev. 12-31-25) does not publish the statewide "
-        + "transit tax or a withholding computation for it. Declared so the gap is "
-        + "named; the 0.1% figure on Form OQ is not transcribed here.",
+        "Oregon Department of Revenue, Statewide Transit Tax, 0.1% withholding rate since July 1, 2018",
     },
   ],
   subRegionConflictRule: "both",

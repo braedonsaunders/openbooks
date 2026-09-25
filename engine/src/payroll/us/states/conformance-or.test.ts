@@ -332,17 +332,17 @@ test("OR transit districts refuse without an entered rate and never invent one",
     () => orTransitWithholding({ wages: "2000.00", rate: "", district: "Lane Transit District" }),
     /Inventing 0\.8237% or 0\.80% from Form OQ/,
   );
-  // An employer-entered rate computes; 0.8237% is NOT a pack constant.
-  assert.equal(
-    orTransitWithholding({ wages: "1000.00", rate: "0.01", district: "TriMet" }),
-    money("10"),
-  );
-  const trimet = OR_REGION.subRegions.find((sub) => sub.code === "TRIMET");
-  const ltd = OR_REGION.subRegions.find((sub) => sub.code === "LTD");
+  assert.equal(orTransitWithholding({ wages: "1000.00", rate: "0.01", district: "TriMet" }), money("10"));
   const stt = OR_REGION.subRegions.find((sub) => sub.code === "STT");
-  assert.equal(trimet?.rateSource.kind, "tenant");
-  assert.equal(ltd?.rateSource.kind, "tenant");
-  assert.equal(stt?.implemented, false);
+  assert.equal(stt?.automatic, true);
+  const stateTax = computeUsWithholding({
+    levy: { level: "sub_region", region: "OR", subRegion: "STT", label: stt!.label,
+      basis: "resident", side: "residence", reach: "resident", certificateKey: null,
+      statutoryComponent: stt!.statutoryComponent, withholdingMethod: stt!.withholdingMethod },
+    payDate: "2026-07-21", periodEnd: "2026-07-18", periodsPerYear: 26,
+    wages: "1000.00", federalIncomeTax: "0.00", certificateFor: () => null, tenantRates: () => undefined,
+  });
+  assert.equal(stateTax?.tax, money("1.00"));
 });
 
 test("OR FAQ 10 — negative withholding is zero", () => {
