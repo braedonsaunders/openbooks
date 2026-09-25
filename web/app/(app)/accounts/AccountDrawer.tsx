@@ -246,11 +246,18 @@ export function AccountDrawer({
       toast.success(t(createMode ? 'drawer.created' : 'drawer.saved'))
     // Typing hygiene is advisory: the save stands, and the server's warning
     // (e.g. a bank-typed account with no bank corroboration) surfaces as its
-    // own toast so it cannot be mistaken for a failure.
+    // own toast so it cannot be mistaken for a failure. Coded warnings
+    // resolve through the accounts catalog; anything else shows verbatim.
     const warnings = Array.isArray((data as { warnings?: unknown }).warnings)
-      ? (data as { warnings: unknown[] }).warnings.filter((w): w is string => typeof w === 'string')
+      ? (data as { warnings: unknown[] }).warnings
       : []
-    if (warnings.length > 0) toast.warning(warnings[0])
+    const hygiene = warnings.find(
+      (w): w is { code: string; name: string } =>
+        typeof w === 'object' && w !== null && (w as { code?: unknown }).code === 'asset_bank_uncorroborated',
+    )
+    const legacy = warnings.find((w): w is string => typeof w === 'string')
+    if (hygiene) toast.warning(t('hygiene.assetBankUncorroborated', { name: hygiene.name }))
+    else if (legacy) toast.warning(legacy)
       if (createMode) {
         const createdId = data?.account?.id
         const separator = closeHref.includes('?') ? '&' : '?'

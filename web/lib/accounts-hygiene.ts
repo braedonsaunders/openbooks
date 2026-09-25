@@ -28,22 +28,41 @@ export interface AssetBankHygieneInput {
   hasStatements?: boolean;
 }
 
+export const ASSET_BANK_UNCORROBORATED = "asset_bank_uncorroborated" as const;
+
+export interface AssetBankHygieneWarning {
+  /** Stable code; UIs resolve it through the accounts locale catalog. */
+  code: typeof ASSET_BANK_UNCORROBORATED;
+  /** Account display name for the catalog `{name}` parameter. */
+  name: string;
+  /**
+   * English fallback for consumers without a viewer locale (API clients,
+   * logs, import previews). User-facing surfaces with a locale must
+   * resolve `code` through the catalog instead of showing this verbatim.
+   */
+  message: string;
+}
+
 /**
- * A human-readable warning when an `asset_bank` typing carries no
- * corroboration, else null. Pure (no I/O) so the API routes, the master-data
- * importer, and unit tests all share it.
+ * A hygiene warning when an `asset_bank` typing carries no corroboration,
+ * else null. Pure (no I/O) so the API routes, the master-data importer,
+ * and unit tests all share it.
  */
-export function assetBankHygieneWarning(input: AssetBankHygieneInput): string | null {
+export function assetBankHygieneWarning(input: AssetBankHygieneInput): AssetBankHygieneWarning | null {
   if (input.type !== "asset_bank") return null;
   // Summary accounts never post and the cash queries exclude them.
   if (input.isSummary) return null;
   if (input.reconcilable || input.hasStatements) return null;
   const name = input.name.trim();
   if (name && BANK_LIKE_NAME.test(name)) return null;
-  return (
-    `"${name || "(unnamed)"}" is typed as a bank account but has no bank-like name ` +
-    `and is not statement-reconcilable, so it will be counted as cash everywhere. ` +
-    `Confirm the type (clearing, provision, and credit-facility accounts are commonly ` +
-    `mistyped) or enable statement reconciliation.`
-  );
+  const displayName = name || "(unnamed)";
+  return {
+    code: ASSET_BANK_UNCORROBORATED,
+    name: displayName,
+    message:
+      `"${displayName}" is typed as a bank account but has no bank-like name ` +
+      `and is not statement-reconcilable, so it will be counted as cash everywhere. ` +
+      `Confirm the type (clearing, provision, and credit-facility accounts are commonly ` +
+      `mistyped) or enable statement reconciliation.`,
+  };
 }

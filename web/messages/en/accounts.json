@@ -41,6 +41,9 @@
     "income": "Income",
     "expense": "Expenses"
   },
+  "hygiene": {
+    "assetBankUncorroborated": "\"{name}\" is typed as a bank account but has no bank-like name and is not statement-reconcilable, so it will be counted as cash everywhere. Confirm the type (clearing, provision, and credit-facility accounts are commonly mistyped) or enable statement reconciliation."
+  },
   "drawer": {
     "saved": "Account saved",
     "created": "Account created",

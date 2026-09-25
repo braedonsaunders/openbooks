@@ -41,6 +41,9 @@
     "income": "Erträge",
     "expense": "Aufwendungen"
   },
+  "hygiene": {
+    "assetBankUncorroborated": "„{name}“ ist als Bankkonto typisiert, hat aber keinen bankähnlichen Namen und ist nicht abstimmfähig, daher wird es überall als Bargeld gezählt. Prüfen Sie die Typisierung (Verrechnungs-, Rückstellungs- und Kreditkonten werden häufig falsch typisiert) oder aktivieren Sie die Kontoauszugsabstimmung."
+  },
   "drawer": {
     "saved": "Konto gespeichert",
     "typeLocked": "Der Typ kann nicht mehr geändert werden, sobald das Konto Buchungsaktivität aufweist.",

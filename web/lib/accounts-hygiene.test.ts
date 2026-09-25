@@ -36,7 +36,9 @@ test('an uncorroborated asset_bank warns naming the account', () => {
   for (const name of ['Operating', 'Provision for Future Income Tax', 'Payroll Clearing', 'RBC Line of Credit']) {
     const warning = assetBankHygieneWarning({ type: 'asset_bank', name })
     assert.ok(warning, `${name} should warn`)
-    assert.match(warning!, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    assert.equal(warning!.code, 'asset_bank_uncorroborated')
+    assert.equal(warning!.name, name)
+    assert.match(warning!.message, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
 })
 

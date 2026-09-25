@@ -41,6 +41,9 @@
     "income": "Ingresos",
     "expense": "Gastos"
   },
+  "hygiene": {
+    "assetBankUncorroborated": "«{name}» está clasificada como cuenta bancaria pero no tiene un nombre bancario ni es conciliable, por lo que se contará como efectivo en todas partes. Confirme el tipo (las cuentas de compensación, provisión y crédito se clasifican mal con frecuencia) o active la conciliación."
+  },
   "drawer": {
     "saved": "Cuenta guardada",
     "created": "Cuenta creada",
