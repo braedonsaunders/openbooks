@@ -2184,6 +2184,7 @@
   "drillDrawer": {
     "title": "Écritures justificatives",
     "supporting": "Les écritures à l’origine de la valeur sélectionnée dans le rapport.",
+    "supportingCapped": "10 000 écritures justificatives au maximum sont affichées ; le résultat est limité et peut être incomplet.",
     "loadFailed": "Impossible de charger les écritures justificatives.",
     "recordLoadFailed": "Impossible d’ouvrir la transaction."
   },

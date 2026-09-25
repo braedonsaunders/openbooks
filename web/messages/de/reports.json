@@ -2204,6 +2204,7 @@
   "drillDrawer": {
     "title": "Zugrunde liegende Datensätze",
     "supporting": "Die Datensätze hinter dem ausgewählten Berichtswert.",
+    "supportingCapped": "Es werden höchstens 10.000 zugrunde liegende Datensätze angezeigt; das Ergebnis ist begrenzt und möglicherweise unvollständig.",
     "loadFailed": "Die zugrunde liegenden Datensätze konnten nicht geladen werden.",
     "recordLoadFailed": "Die Transaktion konnte nicht geöffnet werden."
   },

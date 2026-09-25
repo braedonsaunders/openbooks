@@ -2204,6 +2204,7 @@
   "drillDrawer": {
     "title": "Supporting records",
     "supporting": "The records behind the selected report value.",
+    "supportingCapped": "Showing at most 10,000 supporting records; this result is capped and may be incomplete.",
     "loadFailed": "Could not load the supporting records.",
     "recordLoadFailed": "Could not open the transaction."
   },
