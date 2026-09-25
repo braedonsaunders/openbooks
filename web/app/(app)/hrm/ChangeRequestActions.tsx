@@ -86,21 +86,26 @@ export function ChangeRequestActions({
 
   async function openEdit() {
     setLoadingEdit(true)
-    const res = await fetch(`/api/hrm/change-requests/${request.id}`)
-    setLoadingEdit(false)
-    if (!res.ok) {
-      const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
-      toast.error(message)
-      return
+    try {
+      const res = await fetch(`/api/hrm/change-requests/${request.id}`)
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
+        toast.error(message)
+        return
+      }
+      const data = await res.json().catch(() => ({}))
+      const payload = (data as { request?: { payload?: unknown } }).request?.payload
+      if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+        const message = t('employment.changeRequests.requestFailed')
+        toast.error(message)
+        return
+      }
+      setEditing({ id: request.id, payload: payload as Record<string, unknown> })
+    } catch {
+      toast.error(t('employment.changeRequests.requestFailed'))
+    } finally {
+      setLoadingEdit(false)
     }
-    const data = await res.json().catch(() => ({}))
-    const payload = (data as { request?: { payload?: unknown } }).request?.payload
-    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
-      const message = t('employment.changeRequests.requestFailed')
-      toast.error(message)
-      return
-    }
-    setEditing({ id: request.id, payload: payload as Record<string, unknown> })
   }
 
   return (
@@ -184,23 +189,30 @@ function LifecycleReasonDrawer({
     }
     setBusy(true)
     setError(null)
-    const res = await fetch(`/api/hrm/change-requests/${requestId}/${action}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: reason.trim() }),
-    })
-    setBusy(false)
-    if (!res.ok) {
-      const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
+    try {
+      const res = await fetch(`/api/hrm/change-requests/${requestId}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
+      })
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
+        setError(message)
+        toast.error(message)
+        return
+      }
+      await res.json().catch(() => ({}))
+      toast.success(
+        t(action === 'submit' ? 'employment.changeRequests.submittedToast' : 'employment.changeRequests.withdrawnToast'),
+      )
+      onDone()
+    } catch {
+      const message = t('employment.changeRequests.requestFailed')
       setError(message)
       toast.error(message)
-      return
+    } finally {
+      setBusy(false)
     }
-    await res.json().catch(() => ({}))
-    toast.success(
-      t(action === 'submit' ? 'employment.changeRequests.submittedToast' : 'employment.changeRequests.withdrawnToast'),
-    )
-    onDone()
   }
 
   return (
