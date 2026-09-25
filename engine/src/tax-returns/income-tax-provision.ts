@@ -14,8 +14,8 @@ import {
   sum,
   toUnits,
 } from "../money/money.ts";
-import { assertPeriodModulesOpen } from "../close/period-policy.ts";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
 import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";

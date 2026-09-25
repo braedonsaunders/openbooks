@@ -25,7 +25,7 @@ import {
 } from "../money/money.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
 import { postEntry } from "../ledger/post-entry.ts";
-import { assertPeriodModulesOpen } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import {
   loadSubsidiaryContext,
   validateSubsidiaryRestrictions,

@@ -5,8 +5,8 @@ import { postPaymentWithApplications } from "../payments/payment-posting.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "../payments/settlement-policy.ts";
 import { createScriptJournal, type ScriptJournalLine } from "../ledger/journal-writes.ts";
 import { sum } from "../money/money.ts";
-import { setPeriodLockState } from "../close/period-locks.ts";
-import { CLOSE_MODULES } from "../close/period-policy.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
+import { CLOSE_MODULES } from "../periods/period-policy.ts";
 import {
   collectibleOpenItems,
   postDraftDocument,

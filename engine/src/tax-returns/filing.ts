@@ -9,8 +9,8 @@ import {
   type TaxReturnResult,
   type TaxReturnTranslation,
 } from "./return.ts";
-import { resolveCoveringPeriodsInWindow } from "../close/period-resolution.ts";
-import { periodScopeAdvisoryLock } from "../close/period-locks.ts";
+import { resolveCoveringPeriodsInWindow } from "../periods/period-resolution.ts";
+import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 
 /**

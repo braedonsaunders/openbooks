@@ -1,4 +1,4 @@
-import { CloseError } from "./period-policy.ts";
+import { CloseError } from "../periods/period-policy.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";

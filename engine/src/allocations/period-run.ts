@@ -14,7 +14,7 @@ import {
   reverseProjectGlEntryWithinTransaction,
   type GlLine,
 } from "../projects/recognition.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, orgContext } from "../platform/db.ts";
 import { add, cmp, isZero, neg } from "../money/money.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { adjustInventory } from "./movements.ts";
 import { loadSubsidiaryContext, uuidArray } from "../organization/subsidiaries.ts";
 import { assertInventoryFeature } from "./profile-policy.ts";

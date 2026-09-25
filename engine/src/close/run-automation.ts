@@ -1,4 +1,4 @@
-import { CloseError } from "./period-policy.ts";
+import { CloseError } from "../periods/period-policy.ts";
 import { advancedCloseEnabled } from "./features.ts";
 import { claimCloseAutomationExecution, commitCloseEffectStage, finishCloseExecution, CloseAutomationLeaseFencedError, type CloseAutomationContext } from "./automations.ts";
 import { createHash } from "node:crypto";

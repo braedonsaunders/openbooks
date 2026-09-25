@@ -1,4 +1,4 @@
-import { CloseError, NON_POSTING_DOCUMENT_KINDS } from "./period-policy.ts";
+import { CloseError, NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";

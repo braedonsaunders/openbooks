@@ -4,7 +4,7 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
-import { DOCUMENT_KINDS } from "../close/period-policy.ts";
+import { DOCUMENT_KINDS } from "../periods/period-policy.ts";
 import { DOC_KIND_FEATURE } from "../records/document-kind-features.ts";
 import { addCalendarDays, parseIsoDate, businessToday } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";

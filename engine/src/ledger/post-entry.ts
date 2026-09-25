@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../periods/period-policy.ts";
 import { sumMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";

@@ -1,4 +1,4 @@
-import { CloseError } from "./period-policy.ts";
+import { CloseError } from "../periods/period-policy.ts";
 import { advancedCloseEnabled } from "./features.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../platform/db.ts";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { setPeriodLockState } from "../close/period-locks.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { deleteDocument } from "./document-delete.ts";
 import { completeRequestedDocumentVoid, DocumentVoidError, rejectRequestedDocumentVoid, requestDocumentVoid } from "./document-void.ts";

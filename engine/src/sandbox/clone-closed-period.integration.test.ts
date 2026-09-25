@@ -6,7 +6,7 @@ import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropSampleCloneOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { setPeriodLockState } from "../close/period-locks.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import {

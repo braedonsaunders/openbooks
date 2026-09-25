@@ -5,7 +5,7 @@ import { unitCostPerQuantity } from "./costing.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 
 export function persistReceiptMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);

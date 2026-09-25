@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { CloseError } from "./period-policy.ts";
+import { CloseError } from "../periods/period-policy.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
 

@@ -11,7 +11,7 @@ import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
 import { postEntry } from "../ledger/post-entry.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 
 /**

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { assertPeriodModulesOpen } from "../close/period-policy.ts";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { db, withOrg } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { civilDateFromParts, daysInCivilMonth } from "../platform/business-date.ts";

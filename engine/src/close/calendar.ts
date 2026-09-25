@@ -1,8 +1,8 @@
-import { CloseError, CLOSE_MODULES } from "./period-policy.ts";
+import { CloseError, CLOSE_MODULES } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
-import { periodScopeAdvisoryLock } from "./period-locks.ts";
+import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 type CalendarRow = {
   id: string;
   cadence:

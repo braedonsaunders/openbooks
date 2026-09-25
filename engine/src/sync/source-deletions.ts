@@ -7,7 +7,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
-import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen, closeModuleForDocument } from "../periods/period-policy.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 
 export type SourceDeletionAction = "retain" | "void";

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import type { db } from "../platform/db.ts";
 import type { AllocationDriverAsOf, DriverAsOf } from "./types.ts";
 

@@ -3,7 +3,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/src/close/approvals.ts";
 import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/src/close/run-completion.ts";
-import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
+import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
 import { refreshCloseRun } from "@openbooks/engine/src/close/run-automation.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../../../lib/features";

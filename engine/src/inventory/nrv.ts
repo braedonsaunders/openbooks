@@ -12,7 +12,7 @@ import { inventoryOffsetAccountProblem, postInventoryEntry, stockLocationDim } f
 import { orgReportingFramework, type ReportingFramework } from "../platform/reporting-framework.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 
 /**
  * Lower of cost and net realisable value — IAS 2.28-33 / ASC 330-10-35.

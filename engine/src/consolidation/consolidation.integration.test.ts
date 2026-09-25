@@ -5,7 +5,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryResult } from "pg";
 import { refreshCloseRun } from "../close/run-automation.ts";
-import { setPeriodLockState } from "../close/period-locks.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import { startCloseRun } from "../close/run-start.ts";
 import { ConsolidationError, deriveConsolidatedRates, runAutoElimination, runCombinedConsolidation, runOwnershipConsolidation } from "./consolidation.ts";
 import { consolidateAssetTransfers } from "./asset-transfers.ts";

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { resolveCoveringPeriod } from "./period-resolution.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 // The single shared "period covering a date" resolver for ordinary

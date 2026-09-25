@@ -4,9 +4,8 @@ import test from "node:test";
 import { AU_PACK_RATES } from "./au/rates.ts";
 import { CA_PACK_RATES } from "./canada/rates.ts";
 import {
-  declaredPackRates, packSlotAppliesToPopulation, payrollPack, setPackSlotAccount,
+  declaredPackRates, packSlotAppliesToPopulation, payrollPack, PayrollPackError, setPackSlotAccount,
 } from "./packs.ts";
-import { PayrollPackError } from "./payroll-error.ts";
 import {
   assertConfiguredStatutoryRates,
   buildResolution,

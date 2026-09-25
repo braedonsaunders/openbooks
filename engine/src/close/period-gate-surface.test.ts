@@ -9,7 +9,7 @@ import test from "node:test";
  * nothing about the allowImportedLocks exemption — it refuses
  * source-owned imported locks exactly like user locks — while the shared
  * app gate (assertPeriodModulesOpen / arePeriodModulesOpen in
- * engine/src/close/period-policy.ts) carries the exemption policy explicitly, defaulting
+ * engine/src/periods/period-policy.ts) carries the exemption policy explicitly, defaulting
  * to no exemption. Every direct caller is a second, silent answer to "may
  * something post into this period" that can disagree with the gate: a
  * migration replay allowed through postDocument --migration would be
@@ -77,7 +77,7 @@ test("app-layer code never calls raw period_module_is_closed SQL", () => {
     [],
     `direct period_module_is_closed() calls answer "may this post" without the ` +
       `allowImportedLocks exemption policy the shared gate carries: route through ` +
-      `assertPeriodModulesOpen / arePeriodModulesOpen in engine/src/close/period-policy.ts ` +
+      `assertPeriodModulesOpen / arePeriodModulesOpen in engine/src/periods/period-policy.ts ` +
       `(default: imported locks refuse like user locks; only historical replay ` +
       `may opt in). Offenders:\n${offenders.join("\n")}`,
   );

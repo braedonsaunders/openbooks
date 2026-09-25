@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { postDocument } from "./posting-document.ts";
-import { setPeriodLockState } from "../close/period-locks.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import {
   createScratchOrg,
   createScratchUser,

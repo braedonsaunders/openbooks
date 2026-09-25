@@ -15,7 +15,7 @@ import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HRM_DOCUMENTS_FEATURE_KEY } from "./documents.ts";
 import { storeCabinetFile } from "./cabinet.ts";
 import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
-import { decryptRespondentLink } from "../../hrm/surveys/responses.ts";
+import { decryptRespondentLink } from "../surveys/responses.ts";
 import { dsarCoverageManifest } from "./dsar-coverage.ts";
 
 /**

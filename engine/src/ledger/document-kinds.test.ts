@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DOCUMENT_KINDS } from "../close/period-policy.ts";
+import { DOCUMENT_KINDS } from "../periods/period-policy.ts";
 import { RULES } from "./posting-rules.ts";
 import {
   DOCUMENT_FLOW_KINDS,

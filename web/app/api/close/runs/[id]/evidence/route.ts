@@ -2,7 +2,7 @@ import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { addCloseEvidence } from "@openbooks/engine/src/close/tasks.ts";
-import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
+import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
 import { guardFeaturePermission } from "../../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../../lib/list-params";
 

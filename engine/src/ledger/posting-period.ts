@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { type Doc, PostingError } from "./posting-contracts.ts";
 /**
  * Resolve the authoritative accounting period independently from transaction

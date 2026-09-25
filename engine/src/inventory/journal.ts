@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { isZero, sum } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { postEntry } from "../ledger/post-entry.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 // ---------------------------------------------------------------------------
