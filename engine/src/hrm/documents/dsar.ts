@@ -396,27 +396,66 @@ async function fetchExportFileBytes(
  * never fails another worker's export.
  */
 /**
- * Subject-data projection for the payroll profile: every live column of
- * employee_payroll_profiles EXCEPT the deny set below. The hand-kept list
- * this replaces silently dropped each new payroll pack column (0389's
- * br_salario_familia_filhos, then 0406's es_contrato_temporal) from the
- * subject's own file while the export still reported ready — a
- * completeness lie in the other direction. Deriving the list from the
- * catalog flips the default: a new held column exports unless denied.
+ * Subject-data projection for a held-data table: every live column EXCEPT
+ * the deny set the caller passes. Hand-kept column lists silently drop
+ * each new payroll pack column (0389's br_salario_familia_filhos, then
+ * 0406's es_contrato_temporal) from the subject's own file while the
+ * export still reports ready — a completeness lie in the other direction.
+ * Deriving the list from the catalog flips the default: a new held
+ * column exports unless denied.
  *
  * Denied by name, never by drift:
- * - org_id, employee_party_id, created_by, updated_by: tenancy, subject
+ * - org_id, the subject link, created_by, updated_by: tenancy, subject
  *   link and audit actors, uniformly omitted across every DSAR module
  *   (the payload already carries orgId/partyId at the top level);
- * - sin_encrypted: the sealed SIN envelope — authentication-grade secret
- *   material (reseal_secret in engine/src/sandbox/masking.ts, the single
- *   registry that classifies it), never subject-visible data. sin_last3
- *   stays: it identifies the record.
- * A future sealed-secret column must join this set (and that registry) —
- * inclusion is the default, secrecy is explicit. Numerics and dates cast
- * to text exactly as the hand list did; everything else reads raw, so the
- * payload shape for existing keys is byte-identical.
+ * - sealed secret envelopes (sin_encrypted on the profile):
+ *   authentication-grade secret material (reseal_secret in
+ *   engine/src/sandbox/masking.ts, the single registry that classifies
+ *   it), never subject-visible data.
+ * A future sealed-secret column must join the deny set (and that
+ * registry) — inclusion is the default, secrecy is explicit. Numerics
+ * and dates cast to text exactly as the retired hand lists did;
+ * everything else reads raw, so payload shapes stay byte-identical.
  */
+const HELD_DATA_TEXT_CAST_TYPES: ReadonlySet<string> = new Set([
+  "numeric",
+  "date",
+  "timestamptz",
+  "timestamp",
+]);
+
+async function heldDataProjection(table: string, denied: ReadonlySet<string>): Promise<SQL> {
+  const columns = (await db.execute<{ column_name: string; udt_name: string }>(sql`
+    select column_name, udt_name
+      from information_schema.columns
+     where table_schema = 'public' and table_name = ${table}
+     order by ordinal_position
+  `)).rows;
+  const names = new Set(columns.map((column) => column.column_name));
+  // Fail closed on a catalog the deny set no longer describes: a renamed
+  // secret that stops matching its deny entry must refuse loudly, never
+  // export under its new name.
+  for (const deniedColumn of denied) {
+    if (!names.has(deniedColumn)) {
+      throw new Error(
+        `DSAR ${table} deny-list names unknown column ${deniedColumn} — rebase it on the live schema`,
+      );
+    }
+  }
+  const picked = columns.filter((column) => !denied.has(column.column_name));
+  if (picked.length === 0) {
+    throw new Error(`DSAR ${table} projection is empty — nothing held about the subject would export`);
+  }
+  return sql.join(
+    picked.map((column) =>
+      HELD_DATA_TEXT_CAST_TYPES.has(column.udt_name)
+        ? sql`${sql.identifier(column.column_name)}::text as ${sql.identifier(column.column_name)}`
+        : sql`${sql.identifier(column.column_name)}`,
+    ),
+    sql`, `,
+  );
+}
+
 const PAYROLL_PROFILE_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "org_id",
   "employee_party_id",
@@ -425,44 +464,39 @@ const PAYROLL_PROFILE_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
-const PAYROLL_PROFILE_TEXT_CAST_TYPES: ReadonlySet<string> = new Set([
-  "numeric",
-  "date",
-  "timestamptz",
-  "timestamp",
+// Scoping-only deny sets: these three tables carry no secret columns, so
+// only tenancy, the subject link and audit actors are withheld —
+// everything else held about the subject exports by catalog default.
+const WORK_LOCATION_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employment_id",
+  "created_by",
+  "updated_by",
 ]);
 
-async function payrollProfileProjection(): Promise<SQL> {
-  const columns = (await db.execute<{ column_name: string; udt_name: string }>(sql`
-    select column_name, udt_name
-      from information_schema.columns
-     where table_schema = 'public' and table_name = 'employee_payroll_profiles'
-     order by ordinal_position
-  `)).rows;
-  const names = new Set(columns.map((column) => column.column_name));
-  // Fail closed on a catalog the deny set no longer describes: a renamed
-  // secret that stops matching its deny entry must refuse loudly, never
-  // export under its new name.
-  for (const denied of PAYROLL_PROFILE_DENIED_COLUMNS) {
-    if (!names.has(denied)) {
-      throw new Error(
-        `DSAR payroll profile deny-list names unknown column ${denied} — rebase it on the live schema`,
-      );
-    }
-  }
-  const picked = columns.filter((column) => !PAYROLL_PROFILE_DENIED_COLUMNS.has(column.column_name));
-  if (picked.length === 0) {
-    throw new Error("DSAR payroll profile projection is empty — nothing held about the subject would export");
-  }
-  return sql.join(
-    picked.map((column) =>
-      PAYROLL_PROFILE_TEXT_CAST_TYPES.has(column.udt_name)
-        ? sql`${sql.identifier(column.column_name)}::text as ${sql.identifier(column.column_name)}`
-        : sql`${sql.identifier(column.column_name)}`,
-    ),
-    sql`, `,
-  );
-}
+const ROE_SEPARATION_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const IT_ADDIZIONALI_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+// Payment breakdown of the subject's separation events (transitive under
+// the events via separation_event_id): the component reference stays —
+// it says what the amount is for — only scoping columns are withheld.
+const ROE_PAYMENTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "separation_event_id",
+  "created_by",
+  "updated_by",
+]);
 
 export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
@@ -933,10 +967,40 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
          order by country, certificate_key, effective_from nulls last
       `)).rows;
       payload.payrollProfiles = (await db.execute<Record<string, unknown>>(sql`
-        select ${await payrollProfileProjection()}
+        select ${await heldDataProjection("employee_payroll_profiles", PAYROLL_PROFILE_DENIED_COLUMNS)}
           from employee_payroll_profiles
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
+      `)).rows;
+      payload.workLocationAllocations = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_work_location_allocations", WORK_LOCATION_DENIED_COLUMNS)}
+          from payroll_work_location_allocations
+         where org_id = ${orgId}
+           and employment_id in (
+             select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+           )
+         order by period_start
+      `)).rows;
+      payload.roeSeparationEvents = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_roe_separation_events", ROE_SEPARATION_DENIED_COLUMNS)}
+          from payroll_roe_separation_events
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by interruption_on
+      `)).rows;
+      payload.itAddizionaliOpeningBalances = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("it_addizionali_opening_balances", IT_ADDIZIONALI_DENIED_COLUMNS)}
+          from it_addizionali_opening_balances
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by tax_year
+      `)).rows;
+      payload.roeSeparationPayments = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_roe_separation_payments", ROE_PAYMENTS_DENIED_COLUMNS)}
+          from payroll_roe_separation_payments
+         where org_id = ${orgId}
+           and separation_event_id in (
+             select id from payroll_roe_separation_events where org_id = ${orgId} and employee_party_id = ${partyId}
+           )
+         order by expected_payment_on
       `)).rows;
     });
 

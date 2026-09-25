@@ -918,6 +918,21 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },
 ];
 
+/**
+ * Audit-writing triggers: they never refuse, but their AFTER DELETE arm
+ * files a fresh audit_log row while teardown is deleting — after the
+ * audit_log sweep already ran — so the wipe reports a leftover it just
+ * created. Disable the writer for the table's own delete pass only, same
+ * scoped-transaction shape as GUARDED_EVIDENCE above; the INSERT-time rows
+ * still sweep normally through audit_log.
+ */
+const AUDIT_WRITER_TRIGGERS: { table: string; trigger: string }[] = [
+  {
+    table: "payroll_work_location_allocations",
+    trigger: "payroll_work_location_allocation_audit",
+  },
+];
+
 type DisposableOrgKind = "scratch" | "sim";
 
 function disposableOrgPredicate(kind: DisposableOrgKind) {
@@ -1148,11 +1163,12 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
     await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
   });
 
-  // Evidence tables with unconditional delete guards: disable the specific
-  // guard trigger, delete, re-enable — all inside one transaction, and only
-  // when rows actually exist (the ALTER needs table ownership and a brief
-  // exclusive lock, so don't pay for it on every teardown).
-  for (const { table, trigger } of GUARDED_EVIDENCE) {
+  // Evidence tables with unconditional delete guards, plus tables whose
+  // audit-writing triggers would file fresh audit rows mid-wipe: disable
+  // the specific trigger, delete, re-enable — all inside one transaction,
+  // and only when rows actually exist (the ALTER needs table ownership and
+  // a brief exclusive lock, so don't pay for it on every teardown).
+  for (const { table, trigger } of [...GUARDED_EVIDENCE, ...AUDIT_WRITER_TRIGGERS]) {
     if (!present.has(table)) continue;
     if (!SQL_IDENT.test(trigger)) throw new Error(`unsafe trigger identifier: ${trigger}`);
     await db.transaction(async (tx) => {
@@ -1745,8 +1761,9 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
 
         // These guards are intentionally unconditional. Disable only the named
         // test-evidence triggers for this transaction, exactly as full teardown
-        // does, and re-enable them before commit.
-        for (const { table, trigger } of GUARDED_EVIDENCE) {
+        // does, and re-enable them before commit. Audit writers ride along:
+        // their delete arm would file rows into the restored slot.
+        for (const { table, trigger } of [...GUARDED_EVIDENCE, ...AUDIT_WRITER_TRIGGERS]) {
           if (!touched.has(table)) continue;
           await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
         }
@@ -1901,7 +1918,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           if (failures.length === sweepTodo.length) break;
           sweepTodo = failures.map((failure) => failure.table);
         }
-        for (const { table, trigger } of GUARDED_EVIDENCE) {
+        for (const { table, trigger } of [...GUARDED_EVIDENCE, ...AUDIT_WRITER_TRIGGERS]) {
           if (!touched.has(table)) continue;
           await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
         }

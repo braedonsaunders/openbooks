@@ -243,6 +243,11 @@ async function seedPayrollIdentity(h: Harness): Promise<void> {
   const scheduleId = randomUUID();
   await db.execute(sql`insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end) values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-09'::date)`);
   await db.execute(sql`insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, sin_encrypted, sin_last3, es_contrato_temporal, br_salario_familia_filhos) values (${org.orgId}, ${h.partyId}, ${h.employmentId}, ${scheduleId}, 'CA', 'ON', 'sealed-envelope-bytes', '123', 'false', 2)`);
+  await db.execute(sql`insert into payroll_work_location_allocations (org_id, employment_id, period_start, period_end, region, subregion, service_days, source, change_reason) values (${org.orgId}, ${h.employmentId}, '2026-01-01'::date, '2026-01-31'::date, 'ON', 'Toronto', 20, 'hr_records', 'seed')`);
+  await db.execute(sql`insert into payroll_roe_separation_events (org_id, employee_party_id, interruption_on, last_insurable_earnings_on, status, change_reason) values (${org.orgId}, ${h.partyId}, '2026-03-31'::date, '2026-03-28'::date, 'confirmed', 'layoff')`);
+  await db.execute(sql`insert into pay_components (org_id, code, name, kind, basis, value, taxable, pensionable, insurable, vacationable, non_periodic, tax_treatment, sequence, protection_base, protection_priority, include_in_disposable_earnings, program_exclusions, is_active) values (${org.orgId}, 'ROE_SEV', 'Severance', 'earning', 'fixed_amount', 1000, true, true, true, false, false, 'none', 1, 'none', 0, true, '{}'::text[], true)`);
+  await db.execute(sql`insert into payroll_roe_separation_payments (org_id, separation_event_id, pay_component_id, amount, payment_status, expected_payment_on, change_reason) values (${org.orgId}, (select id from payroll_roe_separation_events where org_id = ${org.orgId} and employee_party_id = ${h.partyId}), (select id from pay_components where org_id = ${org.orgId} and code = 'ROE_SEV'), 2500, 'will_pay', '2026-04-15'::date, 'severance')`);
+  await db.execute(sql`insert into it_addizionali_opening_balances (org_id, employee_party_id, tax_year, regionale_saldo, comunale_saldo) values (${org.orgId}, ${h.partyId}, 2025, 100.50, 25.25)`);
   await db.execute(sql`insert into employee_tax_certificates (org_id, employee_party_id, employment_id, country, certificate_key, answers, effective_from) values (${org.orgId}, ${h.partyId}, ${h.employmentId}, 'CA', 'ca_td1_ON', '{"total_claim_amount": "15000.0000"}'::jsonb, '2026-01-01'::date)`);
 }
 
@@ -310,6 +315,10 @@ test("an export carries every new domain and the manifest names them all", { ski
       clockEvents: unknown[];
       taxCertificates: { certificate_key: string }[];
       payrollProfiles: Record<string, unknown>[];
+      workLocationAllocations: Record<string, unknown>[];
+      roeSeparationEvents: Record<string, unknown>[];
+      roeSeparationPayments: Record<string, unknown>[];
+      itAddizionaliOpeningBalances: Record<string, unknown>[];
       goals: unknown[];
       reviews: unknown[];
       reviewAnswers: unknown[];
@@ -346,6 +355,10 @@ test("an export carries every new domain and the manifest names them all", { ski
     assert.ok(!("sin_encrypted" in profile), "the sealed SIN envelope is never exported");
     assert.equal(profile.es_contrato_temporal, "false");
     assert.equal(profile.br_salario_familia_filhos, 2);
+    assert.deepEqual(manifest.workLocationAllocations.map((r) => r.region), ["ON"]);
+    assert.deepEqual(manifest.roeSeparationEvents.map((r) => r.status), ["confirmed"]);
+    assert.deepEqual(manifest.roeSeparationPayments.map((r) => r.amount), ["2500.0000"]);
+    assert.deepEqual(manifest.itAddizionaliOpeningBalances.map((r) => r.tax_year), [2025]);
     const gathered = new Map(manifest.manifest.gathered.map((g) => [g.module, g.status]));
     for (const module of ["recruiting", "qualifications", "statements", "surveys", "clock_events", "exports"]) {
       assert.equal(gathered.get(module), "included", `${module} must be gathered`);
