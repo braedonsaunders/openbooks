@@ -32,7 +32,7 @@ registerHooks({
     if (specifier === 'next-intl/server') {
       return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     }
-    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
+    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && (context.parentURL?.endsWith('/web/lib/authz.ts') || context.parentURL?.endsWith('/web/lib/consolidation.ts'))) {
       return virtual('export async function currentUser(){return globalThis.__baseCurrencyRefusalUser.user}')
     }
     // Feature gates are authz: the currency branch under test sits behind

@@ -104,7 +104,7 @@ const { requirePermission } = await import("./authz.ts");
 const { requireSuperAdmin } = await import("./super-admin.ts");
 const { requireFeatureEnabled } = await import("./feature-gates.ts");
 const { requireComplianceFeature, requireLienWaiverFeature } = await import("./compliance.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 function fakeUser(isSuperAdmin: boolean): NonNullable<typeof globalThis.__gateUser> {
   return {

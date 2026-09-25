@@ -9,7 +9,7 @@ registerHooks({
   },
 });
 
-const { db, env, withBypass } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, env, withBypass, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { lockSuperAdminActor } = await import("./super-admin.ts");
 const { sql } = await import("drizzle-orm");
@@ -36,7 +36,8 @@ test("a privileged write rechecks super-admin status after waiting for concurren
     const deadline = Date.now() + 5_000;
     let waiting = false;
     while (Date.now() < deadline) {
-      waiting = (await withBypass(() => db.execute<{ waiting: boolean }>(sql`
+      // Context-only bypass: revoker and writer pin both bypass-long-pool slots.
+      waiting = (await withBypassContext(() => db.execute<{ waiting: boolean }>(sql`
         select exists (
           select 1 from pg_stat_activity
            where datname = current_database() and state = 'active' and wait_event_type = 'Lock'
