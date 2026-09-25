@@ -70,15 +70,15 @@ test('banking cockpit reads the primary book only', { skip: !env.OPENBOOKS_DB_UR
     const home = await withBypass(() => bankingHome(scratch.orgId))
     const bank = home.accounts.find((a) => a.id === scratch.accounts.bank)
     assert.ok(bank, 'roster carries the bank account')
-    assert.equal(bank.balance, 100, 'roster balance excludes the secondary-book posting')
-    assert.equal(home.totalCash, 100, 'cash total excludes the secondary-book posting')
+    assert.equal(bank.balance, '100.0000', 'roster balance excludes the secondary-book posting')
+    assert.equal(home.totalCash, '100.0000', 'cash total excludes the secondary-book posting')
     // netFlow7d rides the same book-scoped flows query as the trend (the
     // fixture period predates the trailing-7-day window, so it is covered
     // through the trend assertion below).
     assert.ok(home.trend.length > 0)
     assert.equal(
       home.trend[home.trend.length - 1]!.balance,
-      100,
+      '100.0000',
       'trend excludes the secondary-book posting',
     )
   } finally {

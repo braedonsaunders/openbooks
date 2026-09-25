@@ -35,7 +35,7 @@ function blockedData(): BankingData {
     unmatchedLabel: 'Unmatched', unmatchedValue: '0', unmatchedSub: 'All matched', unmatchedAccent: 'emerald',
     openReconsLabel: 'Open reconciliations', openReconsValue: '0', openReconsSub: 'None open',
     netFlowLabel: 'Net flow', netFlowValue: '$0.00', netFlowAccent: 'emerald', netFlowTone: 'positive',
-    rosterTitle: 'Accounts', rosterAccounts: [], totalCash: 0, totalCards: 0,
+    rosterTitle: 'Accounts', rosterAccounts: [], totalCash: '0.0000', totalCards: '0.0000',
     trendTitle: 'Cash trend', trendHint: '', trendSeriesName: 'Cash', trendLabels: [], trendData: [],
     directoryTitle: 'Directory', directory: [], attentionTitle: 'Attention', attentionAllClear: 'All clear', attention: [],
   } as unknown as BankingData

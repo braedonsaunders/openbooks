@@ -52,12 +52,12 @@ const freshDate = new Date(today.getTime() - 3 * 86_400_000)
 const accounts = [
   {
     id: 'bank-old', number: '1010', name: 'Operating account', type: 'asset_bank', currency: 'USD',
-    balance: 1250, unmatched: 0, openReconciliationId: null, reconciledThrough: day(freshDate),
+    balance: '1250.0000', unmatched: 0, openReconciliationId: null, reconciledThrough: day(freshDate),
     lastStatementDate: day(staleDate), lastImportedAt: new Date().toISOString(), spark: [],
   },
   {
     id: 'bank-current', number: '1020', name: 'Reserve account', type: 'asset_bank', currency: 'USD',
-    balance: 2500, unmatched: 0, openReconciliationId: null, reconciledThrough: day(freshDate),
+    balance: '2500.0000', unmatched: 0, openReconciliationId: null, reconciledThrough: day(freshDate),
     lastStatementDate: day(freshDate), lastImportedAt: null, spark: [],
   },
 ]
@@ -84,8 +84,8 @@ test('recent import does not make an old statement appear current in the roster 
           { currency: 'USD' } as React.ComponentProps<typeof MoneyProvider>,
           React.createElement(AccountsRosterPanel, {
             accounts,
-            totalCash: 3750,
-            totalCards: 0,
+            totalCash: '3750.0000',
+            totalCards: '0.0000',
             layoutPrefs: {},
           }),
         ),
