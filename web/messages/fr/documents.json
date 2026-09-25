@@ -170,7 +170,11 @@
     "partialDeleted": "{done} déplacés dans la Corbeille — {skipped} ignorés ({reasons})",
     "deleteFailed": "Impossible de supprimer la sélection",
     "downloadFailed": "Impossible de télécharger la sélection",
-    "nothingDownloadable": "Sélectionnez des fichiers à télécharger"
+    "nothingDownloadable": "Sélectionnez des fichiers à télécharger",
+    "tooManyFiles": "Le téléchargement accepte au maximum {count} fichiers. Réduisez votre sélection.",
+    "selectionTooLarge": "Les fichiers sélectionnés dépassent la limite non compressée de 250 Mo. Réduisez votre sélection.",
+    "nothingAvailable": "Aucun des fichiers sélectionnés ne peut être téléchargé. Vérifiez les accès ou choisissez d’autres fichiers.",
+    "downloadForbidden": "Vous n’avez pas l’autorisation de télécharger ces fichiers. Demandez l’accès à une personne administratrice."
   },
   "trash": {
     "title": "Corbeille",

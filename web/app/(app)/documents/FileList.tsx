@@ -164,7 +164,14 @@ export function FileList({
         body: JSON.stringify({ fileIds: ids }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, tb('downloadFailed')))
+        const message = await readApiErrorMessage(res, tb('downloadFailed'))
+        const countLimit = /^too many files \(limit (\d+)\)$/.exec(message)?.[1]
+        if (res.status === 403) toast.error(tb('downloadForbidden'))
+        else if (countLimit) toast.error(tb('tooManyFiles', { count: countLimit }))
+        else if (message === 'zip source exceeds 250 MB limit') toast.error(tb('selectionTooLarge'))
+        else if (message === 'nothing to download') toast.error(tb('nothingAvailable'))
+        else if (message === 'no files selected') toast.error(tb('nothingDownloadable'))
+        else toast.error(message)
         return
       }
       const blob = await res.blob()

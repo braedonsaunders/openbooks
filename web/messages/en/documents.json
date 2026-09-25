@@ -168,7 +168,11 @@
     "partialDeleted": "Moved {done} to Trash — {skipped} skipped ({reasons})",
     "deleteFailed": "Could not delete selection",
     "downloadFailed": "Could not download selection",
-    "nothingDownloadable": "Select files to download"
+    "nothingDownloadable": "Select files to download",
+    "tooManyFiles": "The download accepts up to {count} files. Reduce your selection.",
+    "selectionTooLarge": "The selected files exceed the 250 MB uncompressed limit. Reduce your selection.",
+    "nothingAvailable": "No selected files are available to download. Check access or select other files.",
+    "downloadForbidden": "You do not have permission to download these files. Ask an administrator for access."
   },
   "trash": {
     "title": "Trash",
