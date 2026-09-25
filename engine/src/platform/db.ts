@@ -32,6 +32,23 @@ const databaseUrl =
     ? env.OPENBOOKS_MIGRATION_DB_URL || env.OPENBOOKS_DB_URL
     : env.OPENBOOKS_DB_URL;
 
+// Cross-tenant work has a physically separate credential and pool. Production
+// never aliases this to the runtime URL; explicit local/test bootstrap may use
+// the migration/admin URL for compatibility with disposable databases.
+const bypassDatabaseUrl = env.OPENBOOKS_BYPASS_DB_URL?.trim()
+  || ((env.NODE_ENV === "development" || env.NODE_ENV === "test")
+    ? (env.OPENBOOKS_BYPASS_DB_URL || env.OPENBOOKS_TEST_ADMIN_DB_URL || env.OPENBOOKS_MIGRATION_DB_URL || env.OPENBOOKS_DB_URL)
+    : undefined);
+if (env.NODE_ENV === "production" && !bypassDatabaseUrl) {
+  throw new Error("[database-security] refusing production startup: OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login");
+}
+function requireBypassDatabaseUrl(): string {
+  if (!bypassDatabaseUrl) {
+    throw new Error("[database-security] cross-tenant operation refused: configure OPENBOOKS_BYPASS_DB_URL with the dedicated BYPASSRLS login");
+  }
+  return bypassDatabaseUrl;
+}
+
 /**
  * Pool size per process. Ten connections suits one web replica behind the
  * swarm; a single process serving many concurrent operators over a slow link
@@ -61,6 +78,23 @@ const basePool = new pg.Pool({
   query_timeout: 120_000,
   statement_timeout: 120_000,
 });
+
+const bypassPool = bypassDatabaseUrl ? new pg.Pool({
+  connectionString: bypassDatabaseUrl,
+  max: Math.min(BASE_POOL_MAX, 4),
+  keepAlive: true,
+  connectionTimeoutMillis: 30_000,
+  query_timeout: 120_000,
+  statement_timeout: 120_000,
+}) : null;
+const bypassLongPool = bypassDatabaseUrl ? new pg.Pool({
+  connectionString: bypassDatabaseUrl,
+  max: 2,
+  keepAlive: true,
+  connectionTimeoutMillis: 30_000,
+  query_timeout: 0,
+  statement_timeout: 0,
+}) : null;
 // A transient network interruption can make
 // an idle pool client emit 'error'; with no listener, Node crashes the whole
 // process — fatal for long-running jobs. Swallow it: the pool reconnects on the
@@ -136,8 +170,8 @@ function protectCheckedOutClient(client: pg.PoolClient, label: string): pg.PoolC
   return client;
 }
 
-const rawLongConnect = async (): Promise<pg.PoolClient> =>
-  protectCheckedOutClient(await longPool.connect(), "pg longPool");
+const rawLongConnect = async (bypass = false): Promise<pg.PoolClient> =>
+  bypass ? rawBypassConnect(true) : protectCheckedOutClient(await longPool.connect(), "pg longPool");
 
 /**
  * Check out isolated capacity for governed user SQL. Tenant context and the
@@ -169,16 +203,14 @@ export { longPool };
 // ---------------------------------------------------------------------------
 // Tenant isolation via Postgres RLS.
 //
-// Every row-level-secured table's policy keys off two GUCs: `app.current_org`
-// (the tenant) and `app.bypass_rls` (trusted server-side code that must span
-// orgs — the clone engine, seeds, migrations). The policy DENIES by default:
-// with no org set and bypass off, business tables return zero rows.
+// Policies key off the tenant GUC and deny by default. Cross-tenant work uses
+// a separate BYPASSRLS database credential, never an application-settable GUC.
 //
-// The GUCs are applied per checked-out connection from an AsyncLocalStorage
-// context (withOrg/withBypass) or, when none is active, from a host-registered
+// Tenant scope is applied per checked-out runtime connection from an
+// AsyncLocalStorage context (withOrg) or, when none is active, from a host-registered
 // per-request resolver (see registerRequestOrgResolver). Code that runs with
 // NEITHER is denied by default: it receives an empty organization and bypass
-// remains off. Org-spanning work must therefore cross an explicit withBypass or
+// remains absent. Org-spanning work must therefore cross an explicit withBypass or
 // withBypassContext boundary; absence of application context is never treated
 // as authority.
 // ---------------------------------------------------------------------------
@@ -220,6 +252,10 @@ function activeOrgCtx(): OrgCtx | undefined {
   return orgContext.getStore() ?? dbRuntime.__openbooksRequestOrgResolver?.();
 }
 
+function activeBypass(): boolean {
+  return activeOrgCtx()?.bypass === true;
+}
+
 /**
  * The ambient tenant id for defense-in-depth explicit predicates. Resolves
  * from the same source the pooled-query wrapper applies GUCs from (the
@@ -254,19 +290,23 @@ const rawConnect = async (): Promise<pg.PoolClient> =>
     await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(basePool),
     "pg pool",
   );
+const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
+  const target = long ? bypassLongPool : bypassPool;
+  if (!target) requireBypassDatabaseUrl();
+  return protectCheckedOutClient(await target!.connect(), long ? "pg bypass long pool" : "pg bypass pool");
+};
 
-/** Set the RLS GUCs on a client from the active context (deny if none). */
+/** Set tenant scope on a runtime-role client from context (deny if none). */
 async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise<void> {
-  const bypass = ctx?.bypass === true;
-  const org = bypass ? "" : ctx?.orgId ?? "";
+  const org = ctx?.bypass ? "" : ctx?.orgId ?? "";
   await client.query(
-    "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', $2, false)",
-    [org, bypass ? "on" : "off"],
+    "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'off', false)",
+    [org],
   );
 }
 
 // Wrap the pool so drizzle's `db.execute` and `db.transaction` transparently
-// carry the RLS GUCs. Each pooled query brackets applyGuc + the query on one
+// carry tenant RLS scope. Each pooled query brackets applyGuc + the query on one
 // dedicated client; each pooled connect (used by drizzle transactions) applies
 // the GUCs up front.
 type PoolQueryInput = string | pg.QueryConfig<unknown[]>;
@@ -275,9 +315,11 @@ const queryWithOrgContext = async (
   params?: unknown[],
 ): Promise<pg.QueryResult> => {
   const ctx = activeOrgCtx();
-  const client = await rawConnect();
+  const isBypass = ctx?.bypass === true;
+  const client = isBypass ? await rawBypassConnect() : await rawConnect();
   try {
-    await applyGuc(client, ctx);
+    if (isBypass) await client.query("select set_config('app.current_org', '', false)");
+    else await applyGuc(client, ctx);
     return await client.query(text, params);
   } finally {
     client.release();
@@ -293,14 +335,16 @@ type PoolConnectCallback = (
 const connectWithOrgContext = async (
   callback?: PoolConnectCallback,
 ): Promise<pg.PoolClient | void> => {
-  const client = await rawConnect();
+  const isBypass = activeBypass();
+  const client = isBypass ? await rawBypassConnect() : await rawConnect();
   // The client is checked out before either step below can fail, and on the
   // SUCCESS path the caller owns it — so only the failure paths release here.
   // Without these, a throw from applyGuc (or from a callback that throws
   // synchronously) escaped with the connection still checked out, leaking it
   // out of the pool for the life of the process.
   try {
-    await applyGuc(client, activeOrgCtx());
+    if (isBypass) await client.query("select set_config('app.current_org', '', false)");
+    else await applyGuc(client, activeOrgCtx());
   } catch (error) {
     client.release(error as Error);
     throw error;
@@ -367,6 +411,23 @@ export async function assertSafeRuntimeDatabaseRole(): Promise<void> {
   console.log(
     `[database-security] runtime role ${row.current_user} verified: tenant RLS cannot be bypassed by role privilege`,
   );
+  if (!bypassPool) requireBypassDatabaseUrl();
+  const bypassPosture = await bypassPool!.query<{
+    current_user: string;
+    bypass_rls: boolean;
+    superuser: boolean;
+  }>(`
+    select current_user, role.rolbypassrls as bypass_rls, role.rolsuper as superuser
+      from pg_roles role where role.rolname = current_user
+  `);
+  const trustedRole = bypassPosture.rows[0];
+  const localAdminFallback = env.NODE_ENV === "development" || env.NODE_ENV === "test";
+  if (!trustedRole || (!trustedRole.bypass_rls && !(localAdminFallback && trustedRole.superuser))) {
+    throw new Error(
+      `[database-security] refusing startup: OPENBOOKS_BYPASS_DB_URL login ${trustedRole?.current_user ?? "unknown"} lacks BYPASSRLS; configure the dedicated trusted database role`,
+    );
+  }
+  console.log(`[database-security] bypass role ${trustedRole.current_user} verified`);
 }
 
 /**
@@ -402,6 +463,7 @@ export async function withMaintenanceTransaction<T>(
   opts: MaintenanceTransactionOptions = {},
 ): Promise<T> {
   const active = orgContext.getStore();
+  if (active?.txDb && active.bypass) return fn();
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
       throw new Error("cannot change organization inside an active tenant transaction");
@@ -412,8 +474,8 @@ export async function withMaintenanceTransaction<T>(
     // the caller's snapshot needs.
     return fn();
   }
-  const client = await rawLongConnect();
   const bypass = orgId === null;
+  const client = await rawLongConnect(bypass);
   try {
     // Session lock first, in autocommit: a waiter blocks here holding no
     // snapshot, so it begins (below) only after the holder commits or rolls
@@ -434,10 +496,7 @@ export async function withMaintenanceTransaction<T>(
       }
       await client.query(`SET TRANSACTION ISOLATION LEVEL ${opts.isolationLevel}`);
     }
-    await client.query(
-      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', $2, true)",
-      [bypass ? "" : orgId, bypass ? "on" : "off"],
-    );
+    await client.query("select set_config('app.current_org', $1, true)", [bypass ? "" : orgId]);
     const txDb = drizzle({ client });
     // runInOrgContext, not orgContext.run: the scope must outlive the
     // callback's lazy work, or it lands on a pooled connection with the
@@ -502,6 +561,7 @@ export async function withOrgTransaction<T>(
   opts: OrgTransactionOptions = {},
 ): Promise<T> {
   const active = orgContext.getStore();
+  if (active?.txDb && active.bypass) return fn();
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
       throw new Error("cannot change organization inside an active tenant transaction");
@@ -581,13 +641,14 @@ export function withOrgContext<T>(orgId: string, fn: () => Promise<T>): Promise<
  *
  * `orgContext.run` would return that un-started thenable, and the CALLER's
  * `await` would then schedule `.then` outside the scope. The pooled-query
- * wrapper reads `activeOrgCtx()` at execution time, sees no store, and applies
- * the deny-by-default GUCs — so the caller gets ZERO ROWS AND NO ERROR while
- * believing it holds bypass. Every tenant-spanning verification written that
- * way passes vacuously.
+ * wrapper reads `activeOrgCtx()` at execution time, sees no bypass scope, and
+ * uses the constrained runtime pool — so the caller gets ZERO ROWS AND NO
+ * ERROR while believing it holds bypass. Every tenant-spanning verification
+ * written that way passes vacuously.
  *
  * Awaiting inside the scope schedules that microtask from within it, so the
- * GUCs are applied from the context the caller actually asked for. Callbacks
+ * trusted pool routing is selected from the context the caller actually asked
+ * for. Callbacks
  * that are plain `async` functions were never affected (their bodies start
  * synchronously); this makes the two shapes behave identically, which is the
  * only defensible contract.
@@ -597,9 +658,9 @@ async function runInOrgContext<T>(ctx: OrgCtx, fn: () => Promise<T>): Promise<T>
 }
 
 /**
- * The app-wide database handle. Inside a `withOrg` block it routes to the pinned
- * transaction connection; otherwise to the pool (which carries the RLS GUCs
- * from the active AsyncLocalStorage context on every query).
+ * The app-wide database handle. Inside a scoped transaction it routes to the
+ * pinned connection; otherwise to the runtime pool or the separate BYPASSRLS
+ * pool selected by an explicit bypass context.
  */
 export const db = new Proxy(poolDb, {
   get(target, prop, receiver) {
