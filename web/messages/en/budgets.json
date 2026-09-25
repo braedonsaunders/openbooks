@@ -149,6 +149,10 @@
     "apply": "Apply import",
     "imported": "{count, plural, one {# budget cell imported} other {# budget cells imported}}",
     "failed": "The worksheet could not be imported.",
+    "refused": "Import refused: {reason}",
+    "duplicateColumns": "Duplicate columns: {detail}",
+    "fileHasNoRows": "The selected file has no data rows.",
+    "budgetIsLocked": "This budget is locked and cannot accept an import.",
     "rowError": "Row {row}, {field}: {message}"
   }
 }

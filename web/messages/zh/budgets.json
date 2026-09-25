@@ -149,6 +149,10 @@
     "apply": "应用导入",
     "imported": "{count, plural, one {已导入 # 个预算单元格} other {已导入 # 个预算单元格}}",
     "failed": "无法导入工作表。",
+    "refused": "导入被拒绝：{reason}",
+    "duplicateColumns": "列重复：{detail}",
+    "fileHasNoRows": "所选文件中没有数据行。",
+    "budgetIsLocked": "此预算已锁定，无法导入。",
     "rowError": "第 {row} 行，{field}：{message}"
   }
 }
