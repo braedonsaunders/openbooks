@@ -1188,7 +1188,7 @@ function CompositePanel({ data }: { data: TrueCostData }) {
           </div>
           <div className="mt-2 flex items-center gap-2">
             <input value={newProfile} onChange={(e) => setNewProfile(e.target.value)} placeholder={t('config.newProfilePlaceholder')} className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-            <button type="button" disabled={busy || !newProfile.trim()} onClick={() => { const name = newProfile.trim(); setNewProfile(''); void run(async () => {
+            <button type="button" disabled={busy || !newProfile.trim()} onClick={() => { const name = newProfile.trim(); void run(async () => {
               const res = await fetch('/api/analytics/true-cost/config')
               if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Could not load True Cost configuration') }
               const cfg = await res.json() as TrueCostConfigResponse
@@ -1197,10 +1197,14 @@ function CompositePanel({ data }: { data: TrueCostData }) {
               const id = `profile_${Math.random().toString(36).slice(2, 10)}`
               cfg.profiles.push({ ...active, id, name })
               cfg.activeProfileId = id
-              return apiCall('/api/analytics/true-cost/config', {
+              // Clear the input only once the save lands: a refused save
+              // must not lose what the user typed.
+              const result = await apiCall('/api/analytics/true-cost/config', {
                 method: 'PUT',
                 body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
               })
+              if (result.ok) setNewProfile('')
+              return result
             }) }} className="rounded-md border border-teal-500/50 px-2 py-1 text-[11px] font-medium text-teal-600 hover:bg-teal-50 disabled:opacity-40 dark:text-teal-400 dark:hover:bg-teal-950/40">{t('config.duplicateActive')}</button>
           </div>
           <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('config.profileNote')}</p>
@@ -1285,8 +1289,13 @@ function CustomCategoryManager({ data }: { data: TrueCostData }) {
     if (type === 'manual') cat.manualConfig = { entryMode: 'fixed_total', fixedTotal }
     else if (type === 'derived') cat.derivedConfig = { sourceCategory, percentage, allocationBase: 'same' }
     else cat.formulaConfig = { formula }
-    setName(''); setFixedTotal(''); setFormula('')
-    void run(() => mutateActiveProfile((p) => { p.customCategories ??= []; p.customCategories.push(cat) }))
+    void run(async () => {
+      const result = await mutateActiveProfile((p) => { p.customCategories ??= []; p.customCategories.push(cat) })
+      // Clear the inputs only once the save lands: a refused save must not
+      // lose what the user typed.
+      if (result.ok) { setName(''); setFixedTotal(''); setFormula('') }
+      return result
+    })
   }
   const remove = (id: string) => run(() => mutateActiveProfile((p) => { p.customCategories = (p.customCategories ?? []).filter((c: CustomCategory) => c.id !== id) }))
   const fixedTotalIsZero = /^[-+]?0+(?:\.0+)?$/.test(fixedTotal.trim())
