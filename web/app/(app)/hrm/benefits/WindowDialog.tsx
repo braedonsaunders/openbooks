@@ -65,25 +65,33 @@ export function WindowDialog({
       return
     }
     setSaving(true)
-    const res = await fetch('/api/hrm/enrollment-windows', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: name.trim(),
-        kind,
-        opensOn,
-        closesOn,
-        planYearStartOn,
-        employerSubsidiaryId: subsidiary || null,
-        departmentId: department || null,
-      }),
-    })
-    setSaving(false)
-    if (!res.ok) {
-      toast.error(await readApiErrorMessage(res, t('benefits.windowFailed')))
-      return
+    try {
+      const res = await fetch('/api/hrm/enrollment-windows', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          kind,
+          opensOn,
+          closesOn,
+          planYearStartOn,
+          employerSubsidiaryId: subsidiary || null,
+          departmentId: department || null,
+        }),
+      })
+      // res.ok first, always: a refusal body is read only for its message.
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('benefits.windowFailed')))
+        return
+      }
+      close()
+    } catch {
+      // A transport failure rejects before any HTTP response: surface the
+      // localized failure instead of stranding the form on saving.
+      toast.error(t('benefits.windowFailed'))
+    } finally {
+      setSaving(false)
     }
-    close()
   }
 
   return (
