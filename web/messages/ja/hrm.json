@@ -949,6 +949,7 @@
         "description": "評価サイクルに対する格付けグリッド:提案値と調整値を監査証跡付きで。",
         "newSession": "新規セッション",
         "sessionsEmpty": "キャリブレーションセッションはまだありません。",
+        "status": { "draft": "下書き", "open": "進行中", "closed": "終了", "unknown": "不明なステータス" },
         "colSession": "セッション",
         "colStatus": "ステータス",
         "colOpened": "開始",

@@ -949,6 +949,7 @@
         "description": "A matriz de notas sobre um ciclo de avaliação: proposto diante de calibrado, com trilha de auditoria.",
         "newSession": "Nova sessão",
         "sessionsEmpty": "Ainda não há sessões de calibração.",
+        "status": { "draft": "Rascunho", "open": "Aberta", "closed": "Encerrada", "unknown": "Status desconhecido" },
         "colSession": "Sessão",
         "colStatus": "Status",
         "colOpened": "Aberta",

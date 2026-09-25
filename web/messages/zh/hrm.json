@@ -949,6 +949,7 @@
         "description": "评估周期上的评分矩阵:提案值与校准值对照,并附审计轨迹。",
         "newSession": "新建会话",
         "sessionsEmpty": "暂无校准会话。",
+        "status": { "draft": "草稿", "open": "进行中", "closed": "已关闭", "unknown": "未知状态" },
         "colSession": "会话",
         "colStatus": "状态",
         "colOpened": "已开始",

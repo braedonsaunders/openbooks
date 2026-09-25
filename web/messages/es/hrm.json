@@ -949,6 +949,7 @@
         "description": "La matriz de calificaciones sobre un ciclo de evaluación: propuesto frente a calibrado, con auditoría.",
         "newSession": "Nueva sesión",
         "sessionsEmpty": "Aún no hay sesiones de calibración.",
+        "status": { "draft": "Borrador", "open": "Abierta", "closed": "Cerrada", "unknown": "Estado desconocido" },
         "colSession": "Sesión",
         "colStatus": "Estado",
         "colOpened": "Abierta",
