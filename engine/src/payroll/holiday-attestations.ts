@@ -161,6 +161,11 @@ export function mergeHolidayEligibility(
     const entry: StatutoryHolidayEligibilityFacts = {};
     const commission = request?.paidOnCommission ?? stored.commissions.get(employeeId);
     if (commission !== undefined) entry.paidOnCommission = commission;
+    // Construction class is per-request only (no stored surface): the
+    // operator asserts the employment class on the run being calculated.
+    if (request?.constructionEmployee !== undefined) {
+      entry.constructionEmployee = request.constructionEmployee;
+    }
     if (request?.absentWithoutConsent !== undefined) {
       entry.absentWithoutConsent = request.absentWithoutConsent;
     } else {
@@ -177,7 +182,7 @@ export function mergeHolidayEligibility(
     const entitled = stored.entitledDays.get(employeeId);
     if (entitled?.size) entry.entitledDayAttestations = Object.fromEntries(entitled);
     if (entry.paidOnCommission !== undefined || entry.absentWithoutConsent !== undefined
-        || entry.entitledDayAttestations !== undefined) {
+        || entry.entitledDayAttestations !== undefined || entry.constructionEmployee !== undefined) {
       merged[employeeId] = entry;
     }
   }

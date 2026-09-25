@@ -305,12 +305,32 @@ const SK_HOLIDAY_PAY: PayrollHolidayPayRule = {
  * s. 25(1): an employee who works the day gets the overtime wage rate for the
  * hours worked IN ADDITION to the general holiday pay.
  *
- * NOT transcribed, deliberately: s. 30 puts CONSTRUCTION employees on a
- * separate regime entirely — 4% of annual wages in place of any per-holiday
- * entitlement, ss. 22–29 disapplied. This declaration is the general regime; a
- * Manitoba construction employer is over-paid by it, not under-paid, but it is
- * a real gap and it is named here rather than hidden.
+ * CONSTRUCTION employees are NOT on this declaration: s. 30 puts them on a
+ * separate regime entirely — 4% of wages in place of any per-holiday
+ * entitlement, ss. 22–29 disapplied — transcribed as MB_CONSTRUCTION_HOLIDAY
+ * below and dispatched by the engine for employees asserted as construction.
+ * Running a construction employee through this general declaration over-pays
+ * the holiday and omits the 4%; the engine never does that once the class is
+ * asserted.
  */
+/**
+ * Manitoba construction employees, Employment Standards Code, CCSM c E110,
+ * s. 30, with the Construction Industry fact sheet's reading.
+ *
+ * s. 30 disapplies ss. 22–29 for the class and replaces every per-holiday
+ * entitlement with 4% of wages, accrued on each pay on that pay's regular
+ * wages; an employee who works a general holiday is paid 1.5× the regular
+ * wage for the hours worked. There are no qualifying tests, no lookback,
+ * and no commission/absence assertions for this class — the statute asks
+ * none. The 4% is wages (taxable, pensionable, insurable, vacationable),
+ * exactly like the general holiday pay it replaces.
+ */
+export const MB_CONSTRUCTION_HOLIDAY = {
+  citation: "The Employment Standards Code (Manitoba), CCSM c E110, s. 30",
+  percent: "4",
+  premiumMultiplier: "1.5",
+} as const;
+
 const MB_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "The Employment Standards Code (Manitoba), CCSM c E110, ss. 22–25",
   basis: {

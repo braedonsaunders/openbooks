@@ -33,6 +33,7 @@ export const dynamic = 'force-dynamic'
 interface HolidayEligibilityFacts {
   paidOnCommission?: boolean
   absentWithoutConsent?: boolean
+  constructionEmployee?: boolean
 }
 
 /**
@@ -64,15 +65,15 @@ function parseHolidayEligibility(
     if (facts === null || typeof facts !== 'object' || Array.isArray(facts)) {
       return {
         ok: false,
-        refusal: `holidayEligibility["${employeeId}"] must be a map of attestation facts — got "${suppliedValue(facts)}"; pass paidOnCommission and absentWithoutConsent as true or false, or omit the entry`,
+        refusal: `holidayEligibility["${employeeId}"] must be a map of attestation facts — got "${suppliedValue(facts)}"; pass paidOnCommission, absentWithoutConsent, and constructionEmployee as true or false, or omit the entry`,
       }
     }
     const entry: HolidayEligibilityFacts = {}
     for (const [key, fact] of Object.entries(facts as Record<string, unknown>)) {
-      if (key !== 'paidOnCommission' && key !== 'absentWithoutConsent') {
+      if (key !== 'paidOnCommission' && key !== 'absentWithoutConsent' && key !== 'constructionEmployee') {
         return {
           ok: false,
-          refusal: `holidayEligibility["${employeeId}"] has unknown fact "${suppliedValue(key)}" — only paidOnCommission and absentWithoutConsent exist; fix the name and try again`,
+          refusal: `holidayEligibility["${employeeId}"] has unknown fact "${suppliedValue(key)}" — only paidOnCommission, absentWithoutConsent, and constructionEmployee exist; fix the name and try again`,
         }
       }
       if (typeof fact !== 'boolean') {

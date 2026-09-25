@@ -196,8 +196,8 @@ test('holidayEligibility refusals name the cause, value, and remedy', async () =
   const cases: Array<{ name: string; value: unknown; patterns: RegExp[] }> = [
     { name: 'non-map', value: null, patterns: [/holidayEligibility must be a map of employee ids/, /got "a null"/, /or omit it/] },
     { name: 'non-uuid key', value: { nope: {} }, patterns: [/holidayEligibility key "nope" is not an employee id/, /fix that key/] },
-    { name: 'non-object facts', value: { [uuid(1)]: 'yes' }, patterns: [new RegExp(`holidayEligibility\\["${uuid(1)}"\\] must be a map of attestation facts`), /got "yes"/, /paidOnCommission and absentWithoutConsent/] },
-    { name: 'unknown fact', value: { [uuid(1)]: { onLeave: true } }, patterns: [/has unknown fact "onLeave"/, /only paidOnCommission and absentWithoutConsent exist/] },
+    { name: 'non-object facts', value: { [uuid(1)]: 'yes' }, patterns: [new RegExp(`holidayEligibility\\["${uuid(1)}"\\] must be a map of attestation facts`), /got "yes"/, /paidOnCommission, absentWithoutConsent, and constructionEmployee/] },
+    { name: 'unknown fact', value: { [uuid(1)]: { onLeave: true } }, patterns: [/has unknown fact "onLeave"/, /only paidOnCommission, absentWithoutConsent, and constructionEmployee exist/] },
     { name: 'non-boolean fact', value: { [uuid(1)]: { paidOnCommission: 'yes' } }, patterns: [/paidOnCommission must be true or false/, /got "yes"/] },
   ]
   for (const { name, value, patterns } of cases) {
