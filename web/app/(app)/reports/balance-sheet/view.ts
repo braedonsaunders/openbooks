@@ -8,6 +8,7 @@ import {
   pageHeader,
   paper,
   ref,
+  textBlock,
   widget,
   widgetBlock,
   type PageSpec,
@@ -62,6 +63,10 @@ export interface BalanceSheetData {
   ratesReady: boolean
   /** Null exactly when ratesBlocked is set; never rendered then. */
   view: unknown
+  /** True when the breakout produced more dimension columns than
+   * MAX_MATRIX_COLUMNS and the matrix was capped. */
+  truncated: boolean
+  truncatedLabel: string
   scale: unknown
   currency: string | undefined
   drill: unknown
@@ -180,6 +185,8 @@ export async function loadBalanceSheet(
     ratesBlocked,
     ratesReady: ratesBlocked === null,
     view,
+    truncated: view?.truncated ?? false,
+    truncatedLabel: t('filterBar.truncated'),
     scale: q.scale,
     currency: subView?.currency ?? org?.base_currency,
     drill: {
@@ -236,6 +243,10 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
           ],
         },
       ),
+      // The matrix caps breakout columns at MAX_MATRIX_COLUMNS: warn when it
+      // did, exactly like the P&L, so a narrowed-looking sheet is legible as
+      // truncated rather than complete.
+      textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
       {
         ...widgetBlock('balance-check', {
           equation: data.equationLabel,
