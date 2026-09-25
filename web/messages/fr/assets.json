@@ -194,6 +194,7 @@
     "deleteTitle": "Supprimer cet actif ?",
     "deleteMessage": "Cela supprime définitivement l'actif brouillon et son plan. Cette action est irréversible.",
     "deleted": "Actif supprimé",
+    "deleteOutcomeUnknown": "La suppression n’a pas pu être confirmée. Actualisez la page pour vérifier si elle a abouti avant de réessayer.",
     "unsavedChanges": "Modifications non enregistrées"
   },
   "create": {

@@ -194,6 +194,7 @@
     "deleteTitle": "Diese Anlage löschen?",
     "deleteMessage": "Dadurch werden der Anlagenentwurf und sein Plan endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "deleted": "Anlage gelöscht",
+    "deleteOutcomeUnknown": "Der Löschvorgang konnte nicht bestätigt werden. Aktualisieren Sie die Seite, um den Status zu prüfen, bevor Sie es erneut versuchen.",
     "unsavedChanges": "Nicht gespeicherte Änderungen"
   },
   "create": {

@@ -419,11 +419,18 @@ export function AssetDrawer({
       confirmLabel: tCommon('actions.delete'), tone: 'danger',
     }))) return
     setBusy(true)
-    const res = await fetch(`/api/assets/${a.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      toast.success(t('drawer.deleted')); router.push('/assets'); router.refresh()
-    } else {
-      toast.error((await res.json().catch(() => null))?.error ?? t('drawer.saveFailed')); setBusy(false)
+    try {
+      const res = await fetch(`/api/assets/${a.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success(t('drawer.deleted')); router.push('/assets'); router.refresh()
+      } else {
+        toast.error((await res.json().catch(() => null))?.error ?? t('drawer.saveFailed'))
+      }
+    } catch {
+      toast.error(t('drawer.deleteOutcomeUnknown'))
+      router.refresh()
+    } finally {
+      setBusy(false)
     }
   }
 
