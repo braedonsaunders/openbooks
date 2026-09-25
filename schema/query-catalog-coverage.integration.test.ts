@@ -10,7 +10,7 @@ type Category = { prefixes: string[]; reason: string };
 
 const EXCLUDED_CATEGORIES: Category[] = [
   {
-    prefixes: ["hrm_", "worker_employment", "employment_", "position", "work_"],
+    prefixes: ["hrm_", "worker_employment", "employment_", "position", "work_", "payroll_work_location_"],
     reason:
       "HR, employment and worker records carry PII and compensation-confidential data; governed reporting flows through aggregates, not row detail (0184 rationale style).",
   },
@@ -20,10 +20,10 @@ const EXCLUDED_CATEGORIES: Category[] = [
       "payroll_parallel_",
       "payroll_prior_",
       "payroll_retro_",
-      "payroll_anomaly_",
+      "payroll_anomaly_", "payroll_roe_", "it_addizionali_",
     ],
     reason:
-      "filing submissions carry taxpayer PII; parallel, prior, retro and anomaly tables are computation runs or import staging, not books of record.",
+      "filing submissions, ROE filing inputs and addizionali opening carry-ins carry taxpayer and employee PII; parallel, prior, retro, anomaly, ROE and carry-in tables are computation runs, import staging or filing policy, not books of record.",
   },
   {
     prefixes: ["time_clock_", "time_kiosks", "worker_clock_", "crew_"],
@@ -75,9 +75,9 @@ const EXCLUDED_CATEGORIES: Category[] = [
       "import_",
       "change_set",
       "script_",
-      "backup_",
+      "backup_", "storage_cleanup_",
     ],
-    reason: "operational and audit logs, not reporting.",
+    reason: "operational runtimes, outboxes and audit logs, not reporting.",
   },
   {
     prefixes: ["file", "folder", "masking_"],

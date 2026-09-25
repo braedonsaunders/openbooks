@@ -84,39 +84,6 @@ const hooks = registerHooks({
 const { resolveNav } = await import('./resolve.ts')
 const { defaultNavConfig } = await import('./registry.ts')
 
-const REPORTER = { key: 'reporter', name: 'Reporter', iconKey: 'chart' }
-const t = (key: string) => key
-
-function hrefs(groups: Array<{ items: Array<{ href?: string }> }>): string[] {
-  return groups.flatMap((group) => group.items.map((item) => item.href ?? ''))
-}
-
-test('installing an app does not place it in organization navigation', async () => {
-  navState.configRows = []
-  navState.appRows = [{ ...REPORTER }]
-
-  const groups = await resolveNav('org-1', () => true, [], t)
-  assert.ok(groups.length > 0, 'the default workspace still resolves')
-  assert.ok(
-    hrefs(groups).every((href) => !href.startsWith('/apps/')),
-    'an installed app with no explicit shortcut stays out of the sidebar',
-  )
-})
-
-test('an explicitly placed app shortcut resolves against its install', async () => {
-  const config = defaultNavConfig()
-  config.groups[0]!.items.push({ kind: 'app', appKey: 'reporter' })
-  navState.configRows = [{ config }]
-  navState.appRows = [{ ...REPORTER }]
-
-  const groups = await resolveNav('org-1', () => true, [], t)
-  const placed = groups
-    .flatMap((group) => group.items)
-    .find((item) => item.href === '/apps/reporter')
-  assert.ok(placed, 'the explicit shortcut resolves to the installed app')
-  assert.equal(placed.label, 'Reporter')
-})
-
 // --- NavEditor removal (jsdom + the real component and design system) ---
 
 const { JSDOM } = await import('jsdom')
@@ -159,6 +126,39 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { NavEditor } = await import('../../app/(app)/admin/navigation/NavEditor.tsx')
 hooks.deregister()
+
+const REPORTER = { key: 'reporter', name: 'Reporter', iconKey: 'chart' }
+const t = (key: string) => key
+
+function hrefs(groups: Array<{ items: Array<{ href?: string }> }>): string[] {
+  return groups.flatMap((group) => group.items.map((item) => item.href ?? ''))
+}
+
+test('installing an app does not place it in organization navigation', async () => {
+  navState.configRows = []
+  navState.appRows = [{ ...REPORTER }]
+
+  const groups = await resolveNav('org-1', () => true, [], t)
+  assert.ok(groups.length > 0, 'the default workspace still resolves')
+  assert.ok(
+    hrefs(groups).every((href) => !href.startsWith('/apps/')),
+    'an installed app with no explicit shortcut stays out of the sidebar',
+  )
+})
+
+test('an explicitly placed app shortcut resolves against its install', async () => {
+  const config = defaultNavConfig()
+  config.groups[0]!.items.push({ kind: 'app', appKey: 'reporter' })
+  navState.configRows = [{ config }]
+  navState.appRows = [{ ...REPORTER }]
+
+  const groups = await resolveNav('org-1', () => true, [], t)
+  const placed = groups
+    .flatMap((group) => group.items)
+    .find((item) => item.href === '/apps/reporter')
+  assert.ok(placed, 'the explicit shortcut resolves to the installed app')
+  assert.equal(placed.label, 'Reporter')
+})
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 

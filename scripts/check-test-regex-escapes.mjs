@@ -174,6 +174,9 @@ export const ALLOWLIST = [
   { file: "scripts/test-fixture-architecture.test.mjs", snippet: "\\$\\{receipt", reason: "pins owner source text that really contains backslash-n escape sequences" },
   { file: "engine/src/provisioning/bootstrap-safety.test.ts", snippet: "seed-project-types", reason: "pins the \\. stem escape inside isSeedProjectTypesCli's entrypoint regex (seed-project-types.ts:80), whose text really contains a backslash" },
   { file: "scripts/test-workflow.test.mjs", snippet: "package-lock", reason: "pins the scope job's grep over the build's own inputs in test.yml:66, whose text really contains backslash escapes (\\.github, package-lock\\.json) so the minimal correct pattern carries \\\\ runs" },
+  { file: "packages/pdf/src/statement.test.ts", snippet: "nrtbf", reason: "PDF literal-string unescaper: raw content streams really contain backslash escapes (\\n, \\(, \\NNN octal)" },
+  { file: "packages/pdf/src/statement.test.ts", snippet: "0-9A-Fa-f", reason: "PDF show-string decoder: literal runs are delimited by backslash-paren in the raw stream text" },
+  { file: "packages/pdf/src/statement.test.ts", snippet: "1 0 0 1", reason: "PDF text-position tokenizer: TJ/Tj strings carry backslash-escaped parens in the raw stream text" },
 ];
 
 export function isAllowlisted(file, snippet) {

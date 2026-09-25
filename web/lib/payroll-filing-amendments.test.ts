@@ -131,47 +131,6 @@ const CANCEL = {
   revision: 'cancelled',
 }
 
-test('an unconfirmed cancellation is refused before any write', async () => {
-  amendState.granted = new Set(['payroll.run'])
-  amendState.issued = []
-
-  const response = await cancelPost({ ...CANCEL, reason: 'Duplicate slip' })
-
-  assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'cancellation must be explicitly confirmed' })
-  assert.deepEqual(amendState.issued, [])
-})
-
-test('a reason-less cancellation is refused before any write', async () => {
-  amendState.granted = new Set(['payroll.run'])
-  amendState.issued = []
-
-  const response = await cancelPost({ ...CANCEL, confirmedCancellation: true, reason: '   ' })
-
-  assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'a nonblank cancellation reason is required' })
-  assert.deepEqual(amendState.issued, [])
-})
-
-test('a confirmed cancellation persists its trimmed reason as the filing note', async () => {
-  amendState.granted = new Set(['payroll.run'])
-  amendState.issued = []
-
-  const response = await cancelPost({
-    ...CANCEL,
-    confirmedCancellation: true,
-    reason: '  Employee belonged to the other entity  ',
-  })
-
-  assert.equal(response.status, 200)
-  const issued = amendState.issued.at(-1) as { note: string; reason: string; revision: string }
-  assert.equal(issued.revision, 'cancelled')
-  assert.equal(issued.note, 'Employee belonged to the other entity')
-  assert.equal(issued.reason, 'Employee belonged to the other entity')
-  const body = (await response.json()) as { submission: { revision: string } }
-  assert.equal(body.submission.revision, 'cancelled')
-})
-
 // --- FilingCorrectionSection (jsdom + the real section component) ---
 
 const { JSDOM } = await import('jsdom')
@@ -248,6 +207,47 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { FilingCorrectionSection } = await import('../app/(app)/payroll/_ui/filing-amendments.tsx')
 sectionHooks.deregister()
+
+test('an unconfirmed cancellation is refused before any write', async () => {
+  amendState.granted = new Set(['payroll.run'])
+  amendState.issued = []
+
+  const response = await cancelPost({ ...CANCEL, reason: 'Duplicate slip' })
+
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: 'cancellation must be explicitly confirmed' })
+  assert.deepEqual(amendState.issued, [])
+})
+
+test('a reason-less cancellation is refused before any write', async () => {
+  amendState.granted = new Set(['payroll.run'])
+  amendState.issued = []
+
+  const response = await cancelPost({ ...CANCEL, confirmedCancellation: true, reason: '   ' })
+
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: 'a nonblank cancellation reason is required' })
+  assert.deepEqual(amendState.issued, [])
+})
+
+test('a confirmed cancellation persists its trimmed reason as the filing note', async () => {
+  amendState.granted = new Set(['payroll.run'])
+  amendState.issued = []
+
+  const response = await cancelPost({
+    ...CANCEL,
+    confirmedCancellation: true,
+    reason: '  Employee belonged to the other entity  ',
+  })
+
+  assert.equal(response.status, 200)
+  const issued = amendState.issued.at(-1) as { note: string; reason: string; revision: string }
+  assert.equal(issued.revision, 'cancelled')
+  assert.equal(issued.note, 'Employee belonged to the other entity')
+  assert.equal(issued.reason, 'Employee belonged to the other entity')
+  const body = (await response.json()) as { submission: { revision: string } }
+  assert.equal(body.submission.revision, 'cancelled')
+})
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 

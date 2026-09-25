@@ -585,48 +585,10 @@ const inRegions = (regions, index) => regions.some(([start, end]) => index >= st
 // fails the build); a file fixed must leave this list in the same commit
 // (a stale entry fails the build). Shrink this list only by fixing files —
 // never add an entry without a slot-probe verification behind it.
-// 109 files, 831 unscoped writes.
+// 2 files, 2 unscoped writes.
 export const BASELINE_EXPOSED = new Map([
-  ["web/app/(app)/admin/setup/agents/overview-loader.integration.test.ts", { writes: 5, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
-  ["web/app/(app)/admin/setup/agents/view-permission.integration.test.ts", { writes: 2, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
-  ["web/app/(app)/dashboard/_metrics-approval-union.integration.test.ts", { writes: 8, via: "authz.ts -> auth.ts" }],
-  ["web/app/(app)/dashboard/_metrics-arap-tiles.integration.test.ts", { writes: 11, via: "authz.ts -> auth.ts" }],
-  ["web/app/api/admin/setup/overhead/route-publish-validation.integration.test.ts", { writes: 1, via: "route.ts -> overhead-publish.ts -> true-cost-data.ts -> money-server.ts -> locale.ts -> auth.ts" }],
-  ["web/app/api/admin/users/route.integration.test.ts", { writes: 3, via: "route.ts -> auth-reset.ts -> auth.ts" }],
-  ["web/app/api/ap-capture/capture-revision-guard.integration.test.ts", { writes: 6, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/compliance/information-returns/route-threshold.integration.test.ts", { writes: 2, via: "route.ts -> compliance.ts -> core.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/crm/activities/[id]/route-duration.integration.test.ts", { writes: 2, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/documents/[id]/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/journals/[id]/route-custom-preservation.integration.test.ts", { writes: 4, via: "documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/app/api/journals/[id]/route-malformed-id.integration.test.ts", { writes: 1, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/application/setup-commands.integration.test.ts", { writes: 13, via: "tool-catalog.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/apps/custom-field-controls.integration.test.ts", { writes: 15, via: "store.ts -> platform.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/apps/query-catalog.integration.test.ts", { writes: 5, via: "custom-record-report-catalog.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tool-contract.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-assets.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-equipment.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-expenses.integration.test.ts", { writes: 13, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-files-scope.integration.test.ts", { writes: 7, via: "registry.ts -> tools.ts -> data.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-inventory.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-meta.integration.test.ts", { writes: 6, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-ops.integration.test.ts", { writes: 12, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-orders.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-subcontracts.integration.test.ts", { writes: 2, via: "registry.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/crm-forecast-snapshots.integration.test.ts", { writes: 5, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/crm-party-lifecycle.integration.test.ts", { writes: 9, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/crm-write-validation.integration.test.ts", { writes: 1, via: "route.ts -> crm.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/data-io/transaction-roundtrip.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/data-io/transaction-subsidiary.integration.test.ts", { writes: 2, via: "transaction-resources.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/module-home/purchasing-pulse-tieout.integration.test.ts", { writes: 5, via: "core.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/module-home/purchasing-subsidiaryless-scope.integration.test.ts", { writes: 8, via: "purchasing.ts -> core.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/order-billed-unwind.integration.test.ts", { writes: 4, via: "order-cycle.ts -> bills.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/order-read-scope.integration.test.ts", { writes: 8, via: "handlers.ts -> authz.ts -> auth.ts" }],
-  ["web/lib/project-billing-accounting.integration.test.ts", { writes: 46, via: "bills.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/recurring-controls.integration.test.ts", { writes: 7, via: "route.ts -> documents.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/report-drill-scope.integration.test.ts", { writes: 1, via: "transaction-detail.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/reports/aging-null-subsidiary.integration.test.ts", { writes: 2, via: "aging.ts -> org-scope.ts -> auth.ts" }],
-  ["web/lib/statement-book-selection.integration.test.ts", { writes: 4, via: "authz.ts -> auth.ts" }],
-  ["web/lib/wip-account-policy.integration.test.ts", { writes: 5, via: "wip-billing.ts -> bills.ts -> org-scope.ts -> auth.ts" }],
+  ["web/app/(app)/admin/setup/agents/view-permission.integration.test.ts", { writes: 1, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
+  ["web/lib/assistant/tools-meta.integration.test.ts", { writes: 1, via: "registry.ts -> authz.ts -> auth.ts" }],
 ]);
 
 

@@ -150,43 +150,6 @@ const viewUrl = './view.ts?forecast-undated-scope'
 const { loadForecasts } = (await import(viewUrl)) as typeof import('./view.ts')
 forecastHooks.deregister()
 
-function forecastScope(owner: string | null, team: string | null) {
-  forecastState.grants = new Set(['crm.forecasts.read'])
-  const sp: Record<string, string> = {}
-  if (owner) sp.owner = owner
-  if (team) sp.team = team
-  return loadForecasts(sp)
-}
-
-test('the undated link carries the active owner scope', async () => {
-  const data = await forecastScope(OWNER, null)
-  assert.equal(data.hasExcludedUndated, true)
-  const href = new URL(data.excludedUndatedHref, 'https://app.test')
-  assert.equal(href.pathname, '/crm/opportunities')
-  assert.equal(href.searchParams.get('view'), 'board')
-  assert.equal(href.searchParams.get('undated'), '1')
-  assert.equal(href.searchParams.get('owner'), OWNER)
-})
-
-test('the undated link carries the active team scope', async () => {
-  const data = await forecastScope(null, TEAM)
-  const href = new URL(data.excludedUndatedHref, 'https://app.test')
-  assert.equal(href.searchParams.get('team'), TEAM)
-  assert.equal(href.searchParams.get('owner'), null)
-})
-
-test('owner wins over team on the undated link', async () => {
-  const data = await forecastScope(OWNER, TEAM)
-  const href = new URL(data.excludedUndatedHref, 'https://app.test')
-  assert.equal(href.searchParams.get('owner'), OWNER)
-  assert.equal(href.searchParams.get('team'), null)
-})
-
-test('the unscoped undated link stays exactly as before', async () => {
-  const data = await forecastScope(null, null)
-  assert.equal(data.excludedUndatedHref, '/crm/opportunities?view=board&undated=1')
-})
-
 // -- opportunities half ---------------------------------------------------
 
 const boardStateKey = Symbol.for('openbooks.opportunity-board-scope-test')
@@ -310,6 +273,43 @@ const boardHooks = registerHooks({
 const boardViewUrl = '../opportunities/view.ts?board-scope-test'
 const { loadOpportunities } = (await import(boardViewUrl)) as typeof import('../opportunities/view.ts')
 boardHooks.deregister()
+function forecastScope(owner: string | null, team: string | null) {
+  forecastState.grants = new Set(['crm.forecasts.read'])
+  const sp: Record<string, string> = {}
+  if (owner) sp.owner = owner
+  if (team) sp.team = team
+  return loadForecasts(sp)
+}
+
+test('the undated link carries the active owner scope', async () => {
+  const data = await forecastScope(OWNER, null)
+  assert.equal(data.hasExcludedUndated, true)
+  const href = new URL(data.excludedUndatedHref, 'https://app.test')
+  assert.equal(href.pathname, '/crm/opportunities')
+  assert.equal(href.searchParams.get('view'), 'board')
+  assert.equal(href.searchParams.get('undated'), '1')
+  assert.equal(href.searchParams.get('owner'), OWNER)
+})
+
+test('the undated link carries the active team scope', async () => {
+  const data = await forecastScope(null, TEAM)
+  const href = new URL(data.excludedUndatedHref, 'https://app.test')
+  assert.equal(href.searchParams.get('team'), TEAM)
+  assert.equal(href.searchParams.get('owner'), null)
+})
+
+test('owner wins over team on the undated link', async () => {
+  const data = await forecastScope(OWNER, TEAM)
+  const href = new URL(data.excludedUndatedHref, 'https://app.test')
+  assert.equal(href.searchParams.get('owner'), OWNER)
+  assert.equal(href.searchParams.get('team'), null)
+})
+
+test('the unscoped undated link stays exactly as before', async () => {
+  const data = await forecastScope(null, null)
+  assert.equal(data.excludedUndatedHref, '/crm/opportunities?view=board&undated=1')
+})
+
 
 function boardQuery(): string {
   const found = boardState.queries.filter((text) => text.includes('from crm_opportunities o'))

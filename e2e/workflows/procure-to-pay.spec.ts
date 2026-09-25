@@ -431,7 +431,7 @@ test.describe("procure-to-pay workflows", () => {
         name: `P2P 2-10 Net 30 ${TAG}`,
         netDays: 30,
         discountDays: 10,
-        discountPercent: 2.5,
+        discountPercent: '2.5',
         isActive: true,
       });
       shared.terms210 = str(req(d210, "POST payment-terms 2/10").id, "terms id");

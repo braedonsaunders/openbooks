@@ -2,26 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { safeNextPath } from '../../lib/login-return-path'
 
-test('safeNextPath preserves same-origin relative destinations', () => {
-  assert.equal(safeNextPath('/reports?view=profit-and-loss#totals'), '/reports?view=profit-and-loss#totals')
-  assert.equal(safeNextPath('/'), '/')
-})
-
-test('safeNextPath fails closed for unsafe, malformed, empty, and oversized values', () => {
-  for (const value of [
-    'https://evil.example/phishing',
-    '//evil.example/phishing',
-    '/\\evil.example/phishing',
-    '/\\[malformed',
-    'not a URL',
-    '',
-    null,
-    'x'.repeat(2049),
-  ]) {
-    assert.equal(safeNextPath(value), '/', `expected fallback for ${JSON.stringify(value)}`)
-  }
-})
-
 // Password, MFA, and OIDC navigation must all share the validated
 // destination: the page defers to safeNextPath instead of a local helper,
 // so an evil ?next= can never become a navigation target or a start-link
@@ -89,6 +69,26 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../messages/en')).default
 const Login = (await import('./page.tsx')).default
+
+test('safeNextPath preserves same-origin relative destinations', () => {
+  assert.equal(safeNextPath('/reports?view=profit-and-loss#totals'), '/reports?view=profit-and-loss#totals')
+  assert.equal(safeNextPath('/'), '/')
+})
+
+test('safeNextPath fails closed for unsafe, malformed, empty, and oversized values', () => {
+  for (const value of [
+    'https://evil.example/phishing',
+    '//evil.example/phishing',
+    '/\\evil.example/phishing',
+    '/\\[malformed',
+    'not a URL',
+    '',
+    null,
+    'x'.repeat(2049),
+  ]) {
+    assert.equal(safeNextPath(value), '/', `expected fallback for ${JSON.stringify(value)}`)
+  }
+})
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
 
