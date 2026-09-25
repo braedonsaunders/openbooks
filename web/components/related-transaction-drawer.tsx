@@ -1,6 +1,4 @@
 import 'server-only'
-import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
-
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { loadPaymentDocument, openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
@@ -19,7 +17,9 @@ import { resolveFormLayout } from '../lib/customization/resolve'
 import { isFeatureEnabled } from '../lib/features'
 import { loadFieldTicketDrawerData } from '../lib/field-ticket-drawer-data'
 import { DOC_KINDS, createPermission, postPermission, readPermission } from "../lib/document-kinds.ts";
-import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, dimensionOptions, isDocKindEnabled, partyOptions, taxCodeOptions, taxGroupOptions } from "../lib/documents.ts";
+import { isDocKindEnabled, taxCodeOptions, taxGroupOptions } from "../lib/documents.ts";
+import { listScopedAccountOptions, listScopedCardOptions, listScopedPartyOptions } from '../lib/scoped-options'
+import { dimensionOptions as reportDimensionOptions } from '../lib/reports/filters'
 import { loadDocument } from "../../engine/src/ledger/document-service.ts";
 import { canRecallExpenseReport, loadExpenseReport } from '../lib/expenses'
 import { loadJournalDoc } from '../lib/journals'
@@ -34,10 +34,18 @@ type DrawerProps<T extends RelatedTransactionDrawerData['type']> = Extract<
   { type: T }
 >['props']
 type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
-type PaymentProps = DrawerProps<'payment'>
 type OrderProps = DrawerProps<'order'>
 type ExpenseProps = DrawerProps<'expense'>
 type JournalProps = DrawerProps<'journal'>
+
+async function scopedAccountOptions(
+  orgId: string,
+  allowedSubsidiaryIds: Authz['allowedSubsidiaryIds'],
+  options: Parameters<typeof listScopedAccountOptions>[2] = {},
+) {
+  const rows = await listScopedAccountOptions(orgId, allowedSubsidiaryIds, options)
+  return rows.map(({ number, ...account }) => ({ ...account, number: number ?? undefined }))
+}
 type DocumentProps = DrawerProps<'document'>
 
 function canSeeDocument(doc: Record<string, unknown>, partyId: string | undefined, authz: Authz): boolean {
@@ -154,18 +162,9 @@ export async function loadRelatedTransactionDrawerData({
     if (!payment || !canSeeDocument((payment.doc), partyId, authz)) return null
 
     const side = PAYMENT_KIND_SIDE[paymentKind]
-    const partyFilter = side === 'ap'
-      ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
-      : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
     const [parties, banks, resolvedForm] = await Promise.all([
-      db.execute<ElementOf<PaymentProps['parties']>>(sql`
-        select id, display_name from parties p
-         where p.org_id = ${authz.user.orgId} and ${partyFilter} and p.is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
-         order by display_name limit 2000`),
-      db.execute<ElementOf<PaymentProps['bankAccounts']>>(sql`
-        select id, number, name from accounts
-         where org_id = ${authz.user.orgId} and type = 'asset_bank' and is_active and not is_summary
-         order by number nulls last, name`),
+      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: side === 'ap' ? 'vendor' : 'customer', activeOnly: true }).then((rows) => ({ rows })),
+      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['asset_bank'], activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
       resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
@@ -199,12 +198,9 @@ export async function loadRelatedTransactionDrawerData({
     if (!can(authz, permission)) return null
     const order = await loadOrder(id, authz.user.orgId, orderKind, authz.allowedSubsidiaryIds)
     if (!order || !canSeeDocument((order.doc), partyId, authz)) return null
-    const roleCondition = orderKind === 'purchase_order'
-      ? sql`exists (select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
-      : sql`exists (select 1 from customer_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
-    const [parties, accounts, items, taxCodes, taxGroups, departments, projects, segments, subsidiaries, resolvedForm] = await Promise.all([
-      db.execute<ElementOf<OrderProps['parties']>>(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`),
-      db.execute<ElementOf<OrderProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`),
+    const [parties, accounts, items, taxCodes, taxGroups, dimensions, segments, subsidiaries, resolvedForm] = await Promise.all([
+      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: orderKind === 'purchase_order' ? 'vendor' : 'customer', activeOnly: true }).then((rows) => ({ rows })),
+      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
       db.execute<ElementOf<OrderProps['items']>>(sql`
         select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items
          where org_id = ${authz.user.orgId} and is_active
@@ -219,9 +215,8 @@ export async function loadRelatedTransactionDrawerData({
          order by name limit 2000`),
       taxCodeOptions(),
       taxGroupOptions(),
-      db.execute<ElementOf<OrderProps['departments']>>(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`),
-      db.execute<ElementOf<OrderProps['projects']>>(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`),
-      customSegmentOptions(authz.user.orgId),
+      reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
+      customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
       visibleSubsidiaries(authz),
       resolveFormLayout({
         orgId: authz.user.orgId,
@@ -243,8 +238,8 @@ export async function loadRelatedTransactionDrawerData({
         items: items.rows,
         taxCodes: (taxCodes),
         taxGroups: (taxGroups),
-        departments: departments.rows,
-        projects: projects.rows,
+        departments: dimensions.departments,
+        projects: dimensions.projects,
         segments,
         subsidiaries: (subsidiaries ?? []).map((subsidiary) => ({
           id: subsidiary.id,
@@ -261,18 +256,14 @@ export async function loadRelatedTransactionDrawerData({
     const report = await loadExpenseReport(id, authz.user.orgId)
     if (!report || !canSeeDocument((report.doc), partyId, authz)) return null
     const [employees, accounts, taxCodes, taxGroups, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
-      db.execute<ElementOf<ExpenseProps['employees']>>(sql`
-        select p.id, p.display_name from parties p
-         where p.org_id = ${authz.user.orgId} and p.is_active
-           and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
-         order by p.display_name limit 2000`),
-      db.execute<ElementOf<ExpenseProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('expense','expense_other','cogs') and is_active and not is_summary order by number nulls last`),
+      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: 'employee', activeOnly: true }).then((rows) => ({ rows })),
+      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['expense', 'expense_other', 'cogs'], activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
       taxCodeOptions(),
       taxGroupOptions(),
-      dimensionOptions(),
+      reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
       loadFieldDefs('documents', 'expense_report'),
       loadFieldDefs('document_lines', 'expense_report'),
-      customSegmentOptions(authz.user.orgId),
+      customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
     ])
     const resolvedForm = await resolveFormLayout({
       orgId: authz.user.orgId,
@@ -309,13 +300,13 @@ export async function loadRelatedTransactionDrawerData({
     const journal = await loadJournalDoc(id, authz.user.orgId, authz.allowedSubsidiaryIds)
     if (!journal || !canSeeDocument((journal.doc), partyId, authz)) return null
     const [parties, accounts, dimensions, headerDefs, lineDefs, subsidiaries, segments] = await Promise.all([
-      db.execute<ElementOf<JournalProps['parties']>>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`),
-      db.execute<ElementOf<JournalProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`),
-      dimensionOptions(),
+      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { activeOnly: true }).then((rows) => ({ rows })),
+      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
+      reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
       loadFieldDefs('documents', 'journal'),
       loadFieldDefs('document_lines', 'journal'),
       visibleSubsidiaries(authz),
-      customSegmentOptions(authz.user.orgId),
+      customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
     ])
     const resolvedForm = await resolveFormLayout({
       orgId: authz.user.orgId,
@@ -362,10 +353,10 @@ export async function loadRelatedTransactionDrawerData({
     loadFieldDefs('document_lines', kind),
   ])
   const [parties, accounts, taxCodes, dimensions, items, cards, cardAccounts, banks, subsidiaries, resolvedForm] = await Promise.all([
-    config.partyRole ? partyOptions(config.partyRole) : Promise.resolve(undefined),
-    accountOptions(config),
+    config.partyRole ? listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: config.partyRole, activeOnly: true }) : Promise.resolve(undefined),
+    scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: config.accountTypes ?? undefined, activeOnly: true, postingOnly: true }),
     config.hasTax ? taxCodeOptions() : Promise.resolve(undefined),
-    dimensionOptions(),
+    reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
     db.execute(sql`
       select id, code, name from items
        where org_id = ${authz.user.orgId} and is_active
@@ -378,9 +369,13 @@ export async function loadRelatedTransactionDrawerData({
            )
          )
        order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
-    config.fundingSource === 'card' ? cardOptions() : Promise.resolve(undefined),
-    config.fundingSource === 'card' ? cardLiabilityAccountOptions() : Promise.resolve(undefined),
-    config.fundingSource === 'bank' || kind === 'transfer' ? bankAccountOptions() : Promise.resolve(undefined),
+    config.fundingSource === 'card' ? listScopedCardOptions(authz.user.orgId, authz.allowedSubsidiaryIds) : Promise.resolve(undefined),
+    config.fundingSource === 'card'
+      ? scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['liability_card'], activeOnly: true, postingOnly: true, reconcilableOnly: true })
+      : Promise.resolve(undefined),
+    config.fundingSource === 'bank' || kind === 'transfer'
+      ? scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['asset_bank'], activeOnly: true, postingOnly: true, reconcilableOnly: true })
+      : Promise.resolve(undefined),
     visibleSubsidiaries(authz),
     resolveFormLayout({
       orgId: authz.user.orgId,
