@@ -36,6 +36,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
+import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 
 /**
@@ -155,13 +156,14 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const authz = await getAuthz()
   const canSeePayroll = !!authz && can(authz, 'payroll.read')
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
   const [reg, opts, org] = subView
     ? await Promise.all([
         partyRegister(side, { bookId: selectedBook.id, from: period.from, to: period.to, dims, canSeePayroll }),
         dimensionOptions(undefined, undefined, dims.subsidiaryIds),
         orgInfo(),
       ])
-    : [null, await dimensionOptions(), await orgInfo()]
+    : [null, await dimensionOptions(undefined, undefined, optionScope), await orgInfo()]
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
   const keepParams = toSearchParams(q)
   keepParams.set('book', selectedBook.id)

@@ -22,6 +22,8 @@ import { decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-fo
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
+import { getAuthz } from '@/lib/authz'
+import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 
 /**
  * The balance sheet, split into a loader and a spec — the same statement
@@ -118,8 +120,10 @@ export async function loadBalanceSheet(
       deriveHref: '/close',
     }
   }
+  const authz = await getAuthz()
+  const optionScope = dimensionOptionsScope(subView?.subsidiary?.ids, authz?.allowedSubsidiaryIds)
   const [opts, org] = await Promise.all([
-    dimensionOptions(undefined, undefined, subView?.subsidiary?.ids),
+    dimensionOptions(undefined, undefined, optionScope),
     orgInfo(),
   ])
 
