@@ -127,15 +127,15 @@ async function createPaymentRunWithinTransaction(
 ): Promise<{ id: string; runNumber: string }> {
   if (opts.billDocumentIds.length === 0) throw new PaymentError("select at least one bill to pay");
 
-  // Lock the requested source documents, then their payees in stable order.
-  // A bill can remain in subsidiary A after its party is rehomed to B; the
-  // service must authorize the live party before reading its payment details.
-  await lockScopeRows(
-    db,
-    opts.orgId,
-    opts.billDocumentIds.map((id) => ({ kind: "document" as const, id })),
-    opts.allowedSubsidiaryIds,
-  );
+  // Lock the payees in stable order before reading payment details. A bill
+  // can remain in subsidiary A after its party is rehomed to B; the service
+  // must authorize the live party first. Source documents are locked later,
+  // at the serialization point after numbering (below): the partial unique
+  // index already serializes competing source claims, so holding bill update
+  // locks across the filter, release evaluation, and numbering would pin
+  // every concurrent reservation of the same bills — including behind a
+  // creation parked on the sequence or the profile row, where a racing
+  // reservation's source FK check could not proceed past this transaction.
   const sourceParties = (await db.execute<{ id: string; party_id: string | null }>(sql`
     select id, party_id from documents
      where org_id = ${opts.orgId} and id in ${opts.billDocumentIds}
@@ -193,7 +193,12 @@ async function createPaymentRunWithinTransaction(
     }
   }
 
-  const profiles = (await db.execute<{
+  // Lock-free profile read for bill selection only. Taking the row lock here
+  // would hold it across run numbering, where a parked creation blocks every
+  // concurrent run touching this profile (the claim-fence proof parks there
+  // deliberately). The authoritative locked re-read after numbering
+  // revalidates the selection fields before the run insert.
+  const prefilter = (await db.execute<{
     id: string;
     bank_account_id: string;
     bank_subsidiary_id: string | null;
@@ -212,22 +217,8 @@ async function createPaymentRunWithinTransaction(
       join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
                         and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
-     for update of p, a
-  `));
-  const profile = profiles.rows[0];
-  if (!profile) throw new PaymentError("payment bank profile was not found or is inactive");
-  if (!subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.subsidiary_id)
-    || !subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.bank_subsidiary_id)) {
-    throw new ScopeNotFoundError();
-  }
-  if (profile.direction === "debit") throw new PaymentError("a debit-only bank profile cannot pay vendor bills");
-  const method = profile.rail === "cpa005_credit" ? "eft"
-    : profile.rail === "nacha_credit" ? "ach"
-    : profile.rail === "sepa_credit" ? "sepa"
-    : profile.rail === "positive_pay" ? "positive_pay"
-    : profile.rail === "custom" ? "custom"
-    : profile.rail === "cheque" ? "cheque"
-    : "wire";
+  `)).rows[0];
+  if (!prefilter) throw new PaymentError("payment bank profile was not found or is inactive");
 
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
@@ -252,8 +243,8 @@ async function createPaymentRunWithinTransaction(
      where d.id in ${opts.billDocumentIds}
        and d.org_id = ${opts.orgId} and d.kind in ('vendor_bill', 'expense_report') and d.status = 'posted'
        and d.payment_hold_reason is null
-       and d.currency = ${profile.currency}
-       and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
+       and d.currency = ${prefilter.currency}
+       and (${prefilter.subsidiary_id}::uuid is null or d.subsidiary_id = ${prefilter.subsidiary_id})
        and not exists (
          select 1
            from payment_run_items selected
@@ -346,6 +337,63 @@ async function createPaymentRunWithinTransaction(
   }
 
   const runNumber = await nextNumber(opts.orgId, "payment_run", "RUN-");
+
+  // Authoritative profile lock (I1-refix-128): lock and recheck the profile
+  // and bank account in the creation transaction, and verify scope before
+  // using them. This sits after numbering so a creation parked on the
+  // sequence holds no profile row lock. Refuse when the selection fields
+  // moved under the filter — bills were matched on the prefilter read.
+  const profiles = (await db.execute<{
+    id: string;
+    bank_account_id: string;
+    bank_subsidiary_id: string | null;
+    subsidiary_id: string | null;
+    currency: string;
+    require_run_approval: boolean;
+    settings: Record<string, unknown>;
+    rail: string;
+    direction: string;
+  }>(sql`
+    select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
+           p.currency, p.require_run_approval, p.settings,
+           f.rail, f.direction
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
+      join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
+                        and a.type = 'asset_bank' and a.is_active and not a.is_summary
+     where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
+     for update of p, a
+  `));
+  const profile = profiles.rows[0];
+  if (!profile) throw new PaymentError("payment bank profile was not found or is inactive");
+  if (profile.currency !== prefilter.currency || profile.subsidiary_id !== prefilter.subsidiary_id) {
+    throw new PaymentError("payment bank profile changed while the run was being created — retry");
+  }
+  if (!subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.subsidiary_id)
+    || !subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.bank_subsidiary_id)) {
+    throw new ScopeNotFoundError();
+  }
+  if (profile.direction === "debit") throw new PaymentError("a debit-only bank profile cannot pay vendor bills");
+
+  // Source-document locks, taken at the serialization point instead of
+  // creation head (see above). lockScopeRows re-verifies bill scope here, so
+  // a bill rehomed after the filter is still refused before the run insert;
+  // posting re-derives live balances as the final amount gate. This sits
+  // after the profile lock so a creation parked on the profile row holds no
+  // bill lock a concurrent reservation must wait past.
+  await lockScopeRows(
+    db,
+    opts.orgId,
+    opts.billDocumentIds.map((id) => ({ kind: "document" as const, id })),
+    opts.allowedSubsidiaryIds,
+  );
+  const method = profile.rail === "cpa005_credit" ? "eft"
+    : profile.rail === "nacha_credit" ? "ach"
+    : profile.rail === "sepa_credit" ? "sepa"
+    : profile.rail === "positive_pay" ? "positive_pay"
+    : profile.rail === "custom" ? "custom"
+    : profile.rail === "cheque" ? "cheque"
+    : "wire";
 
   const run = (await db
     .insert(schema.paymentRuns)
