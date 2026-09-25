@@ -167,6 +167,21 @@ test("AU instrument: general example 3 withholds $940 monthly", () => {
   assert.equal(monthly.payg, "940.0000");
 });
 
+/** Schedule 1, "Bi-monthly payments": sum the month's payments, use the
+ * monthly steps, then divide the monthly withholding by two. The 2 ×
+ * $2,700.165 payments reproduce General example 3's $5,400.33 monthly base.
+ */
+test("AU instrument: bi-monthly withholding is half the monthly calculation", () => {
+  const monthly = calculateAu2027({
+    ...WEEKLY, income: "5400.33", pensionable: "0", periodsPerYear: 12,
+  });
+  const twiceMonthly = calculateAu2027({
+    ...WEEKLY, income: "2700.165", pensionable: "0", periodsPerYear: 24,
+  });
+  assert.equal(monthly.payg, "940.0000");
+  assert.equal(twiceMonthly.payg, "470.0000");
+});
+
 /**
  * Schedule 8 example 1: threshold claimed, "weekly earnings of $2,608.36",
  * "x = 2,608.99", "Weekly withholding amount (y) = ... (0.1700 × 2,608.99)

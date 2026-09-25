@@ -7,7 +7,10 @@
  * Ignore any cents in the result and then add 99 cents", monthly — "multiply
  * this amount by three and then divide by 13. Ignore any cents in the result
  * and then add 99 cents" after the 33-cent rule, quarterly — "divide ...
- * by 13. Ignore any cents in the result and then add 99 cents"), the TFN
+ * by 13. Ignore any cents in the result and then add 99 cents"),
+ * bi-monthly (semi-monthly) — apply the monthly steps to the month's combined payments,
+ * then divide the monthly withholding by two (the "Bi-monthly payments"
+ * instruction), the TFN
  * declaration selects scale 1 (no threshold claim), 2 (threshold claimed)
  * or 3 (foreign resident), and a Medicare levy variation declaration
  * claiming a full or half exemption takes scale 5 or 6 instead — even
@@ -32,7 +35,7 @@
  * Refused by name: no-TFN payees (scale 4), foreign residents claiming a
  * Medicare exemption (no quotable scale covers the combination), working
  * holiday makers (Schedule 15), pay frequencies outside
- * weekly/fortnightly/monthly/quarterly, the family/spouse levy adjustment
+ * weekly/fortnightly/monthly/quarterly/bi-monthly, the family/spouse levy adjustment
  * (WLA) machinery, and every other schedule — see AU_REFUSED_2027.
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts — the same
@@ -87,7 +90,7 @@ function wholeDollars(u: bigint): bigint {
 }
 
 export interface Au2027Input {
-  /** Period earnings for a weekly/fortnightly/monthly/quarterly pay, decimal. */
+  /** Period earnings for weekly/fortnightly/semi-monthly/monthly/quarterly pay, decimal. */
   income: string;
   residency: "australian_resident" | "foreign_resident";
   workingHolidayMaker: boolean;
@@ -99,7 +102,7 @@ export interface Au2027Input {
   stslDebt: boolean;
   /** Period ordinary-time earnings (qualifying-earnings proxy), decimal. */
   pensionable: string;
-  /** One of 52 (weekly), 26 (fortnightly), 12 (monthly), 4 (quarterly). */
+  /** One of 52 (weekly), 26 (fortnightly), 24 (semi-monthly), 12 (monthly), 4 (quarterly). */
   periodsPerYear: number;
 }
 
@@ -154,7 +157,9 @@ function scaleFor(input: Au2027Input): readonly AuSchedule1Row[] {
 /**
  * Weekly equivalent x in units: whole dollars plus 99 cents, per the
  * instrument's per-frequency rules. Allowances are unseen, so earnings
- * alone enter (the instrument adds allowances to earnings first).
+ * alone enter (the instrument adds allowances to earnings first). A 24-pay
+ * schedule applies the published bi-monthly method by doubling the period
+ * amount to form the month's total.
  */
 function weeklyEquivalent(incomeUnits: bigint, periodsPerYear: number): bigint {
   if (incomeUnits < 0n) {
@@ -173,11 +178,13 @@ function weeklyEquivalent(incomeUnits: bigint, periodsPerYear: number): bigint {
     whole = ((cents * 3n) / (13n * 100n)) * DOLLAR;
   } else if (periodsPerYear === 4) {
     whole = (incomeUnits / (13n * DOLLAR)) * DOLLAR;
+  } else if (periodsPerYear === 24) {
+    return weeklyEquivalent(incomeUnits * 2n, 12);
   } else {
     throw new PayrollPackError(
       `AU PAYG withholding for ${periodsPerYear} pays per year is refused by `
-      + "name: the instrument publishes weekly, fortnightly, monthly and "
-      + "quarterly methods only (see AU_REFUSED_2027)",
+      + "name: the instrument publishes weekly, fortnightly, monthly, bi-monthly "
+      + "(semi-monthly) and quarterly methods only (see AU_REFUSED_2027)",
     );
   }
   return whole + 9900n;
@@ -209,7 +216,9 @@ export function calculateAu2027(input: Au2027Input): Au2027Result {
       ? weekly * 2n
       : input.periodsPerYear === 12
         ? (weekly * 13n * 2n + 3n) / 6n
-        : weekly * 13n;
+        : input.periodsPerYear === 24
+          ? ((weekly * 13n * 2n + 3n) / 6n) / 2n
+          : weekly * 13n;
   // Super Guarantee: 12% of period qualifying earnings (SGAA 17A(2)). No
   // annual maximum-contributions-base cap: the 2026–27 concessional-cap
   // input is refused by name (see AU_REFUSED_2027).

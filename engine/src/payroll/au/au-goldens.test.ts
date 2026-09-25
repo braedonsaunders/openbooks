@@ -241,7 +241,7 @@ test("AU engine refuses no-TFN, WHM and unsupported frequencies by name", () => 
     () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear: 0 }),
     /periodsPerYear/,
   );
-  for (const periodsPerYear of [1, 24]) {
+  for (const periodsPerYear of [1]) {
     assert.throws(
       () => calculateAu2027({ ...RESIDENT, income: "1000", pensionable: "0", periodsPerYear }),
       /refused by name/,
