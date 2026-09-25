@@ -30,15 +30,6 @@ const state: RouteState = { issues: [], gateScope: null, guardCalls: [], section
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
@@ -143,7 +134,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
+  ['@/lib/api/json', new URL('../../../../../lib/api/json.ts', import.meta.url).href],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
@@ -195,6 +186,13 @@ function post(body: Record<string, unknown>): Promise<Response> {
 function get(query: string): Promise<Response> {
   return GET(new Request(`http://openbooks.test/api/payroll/year-end/amendments${query}`))
 }
+
+test('POST uses the shared refusal for a non-object JSON body', async () => {
+  reset()
+  const response = await POST(new Request('http://openbooks.test/api/payroll/year-end/amendments', { method: 'POST', body: 'null' }))
+  assert.equal(response.status, 400)
+  assert.equal((await response.json()).error, 'invalid request body')
+})
 
 test('the API rejects a cancellation that lacks explicit confirmation', async () => {
   reset()

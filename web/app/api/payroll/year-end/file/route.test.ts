@@ -4,15 +4,6 @@ import test from 'node:test'
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
@@ -70,7 +61,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
+  ['@/lib/api/json', new URL('../../../../../lib/api/json.ts', import.meta.url).href],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
   ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
@@ -209,4 +200,10 @@ test('ROE selection: an absent section still refuses a malformed id', async () =
   const wellFormed = await post({ filing: 'roe', employees: `${id}:left the company` })
   assert.notEqual(wellFormed.status, 422)
   assert.deepEqual(routeState.roeCalls, [[id]], 'the scope guard still runs without a section')
+})
+
+test('POST uses the shared refusal for a non-object JSON body', async () => {
+  const response = await POST(new Request('http://openbooks.test/api/payroll/year-end/file', { method: 'POST', body: 'null' }))
+  assert.equal(response.status, 400)
+  assert.equal((await response.json()).error, 'invalid request body')
 })
