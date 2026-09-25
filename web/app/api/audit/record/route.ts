@@ -62,7 +62,30 @@ export async function GET(request: NextRequest) {
           from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`))
   const metadata = record.rows[0]
   if (!metadata) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (table !== 'item_rate_versions') {
+  if (table === 'item_rate_versions') {
+    // Rate-card versions carry no subsidiary_id of their own: their
+    // subsidiary lineage lives in labor_rate_version_scopes, so the shared
+    // record gate above cannot see it. A version naming only another
+    // subsidiary prices none of this caller's work, so its history is that
+    // subsidiary's material and stays hidden behind the same uniform 404.
+    // Versions with no subsidiary rows price every subsidiary and stay
+    // visible to restricted callers, exactly as the pricing engine treats
+    // them (web/lib/item-rates.ts versionScopePredicate).
+    const allowed = authz.allowedSubsidiaryIds
+    if (allowed !== null) {
+      const scopeRows = await db.execute<{ subsidiaryId: string | null }>(sql`
+        select s.scope_value_id as "subsidiaryId"
+          from labor_rate_version_scopes s
+         where s.org_id = ${authz.user.orgId} and s.version_id = ${recordId}
+           and s.scope_type = 'subsidiary'`)
+      const named = scopeRows.rows
+        .map((row) => row.subsidiaryId)
+        .filter((id): id is string => id !== null)
+      if (named.length > 0 && !named.some((id) => allowed.has(id))) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
+  } else {
     const denied = guardSubsidiaryScope(authz, metadata.subsidiaryId ?? null,
       table === 'parties' ? { orgWideNull: true } : {})
     if (denied) return denied
