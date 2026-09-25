@@ -32,6 +32,7 @@ const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import('@openbooks/engine/src/testing/fixtures.ts')
 const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
+const { loadJournalDoc } = await import('../../../../lib/journals')
 const { GET, DELETE } = await import('./route')
 
 function asUser(id: string, orgId: string): SessionUser {
@@ -79,17 +80,17 @@ async function revisionToken(documentId: string): Promise<string> {
 
 const ctxFor = (id: string) => ({ params: Promise.resolve({ id }) })
 
-test('journal GET waits on a journal rehome in flight instead of racing it', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('journal drawer loads wait on a rehome before reading detail', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, visible } = await fixture()
   const writer = await pool.connect()
-  let pending: Promise<Response> | undefined
+  let pending: Promise<Awaited<ReturnType<typeof loadJournalDoc>>> | undefined
   try {
     const hidden = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and parent_id=${org.subsidiaryId} limit 1`)).rows[0]!.id
     await writer.query('begin')
     await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
     const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
     await withBypassContext(() => (writer.query('update documents set subsidiary_id=$1 where id=$2', [hidden, visible])))
-    pending = withOrgContext(org.orgId, () => GET(new Request('http://journals.local/api'), ctxFor(visible)))
+    pending = withOrgContext(org.orgId, () => loadJournalDoc(visible, org.orgId, new Set([org.subsidiaryId])))
     let blocked = false
     for (let n = 0; n < 200; n++) {
       blocked = !!((await pool.query('select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))', [pid])).rowCount)
@@ -98,8 +99,7 @@ test('journal GET waits on a journal rehome in flight instead of racing it', { s
     }
     assert.ok(blocked, 'the detail waits on the locked journal instead of reading the pre-rehome row')
     await writer.query('commit')
-    const response = await pending
-    assert.equal(response.status, 404, JSON.stringify(await response.clone().json()))
+    assert.equal(await pending, null)
   } finally {
     await writer.query('rollback').catch(() => {})
     await pending?.catch(() => {})
@@ -117,8 +117,7 @@ test('journal GET and DELETE enforce the caller subsidiary scope', { skip: !proc
       assert.equal(seen.status, 200, JSON.stringify(await seen.clone().json()))
 
       const hiddenGet = await GET(new Request('http://journals.local/api'), ctxFor(concealed))
-      assert.equal(hiddenGet.status, 404)
-      assert.deepEqual(await hiddenGet.json(), { error: 'not found' })
+      assert.deepEqual([hiddenGet.status, await hiddenGet.json(), await loadJournalDoc(concealed, org.orgId, new Set([org.subsidiaryId]))], [404, { error: 'not found' }, null])
 
       const hiddenDelete = await DELETE(
         new Request('http://journals.local/api', {

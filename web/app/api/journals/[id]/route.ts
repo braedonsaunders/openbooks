@@ -57,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
              for share`,
     ))
     if (!owned.rows[0]) return null
-    const loaded = await loadJournalDoc(id, gate.user.orgId)
+    const loaded = await loadJournalDoc(id, gate.user.orgId, gate.allowedSubsidiaryIds)
     if (!loaded) return null
     return withExactDocumentRevision(loaded, id, gate.user.orgId)
   })
@@ -389,7 +389,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     const journal = await withOrgTransaction(user.orgId, async () => {
       await lockScopeRow(db, user.orgId, 'document', id, gate.allowedSubsidiaryIds, 'share')
-      const loaded = await loadJournalDoc(id, user.orgId)
+      const loaded = await loadJournalDoc(id, user.orgId, gate.allowedSubsidiaryIds)
       return loaded ? withExactDocumentRevision(loaded, id, user.orgId) : null
     })
     if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
