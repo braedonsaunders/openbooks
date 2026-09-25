@@ -343,13 +343,13 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_calibration_entries: 'emp.employer_subsidiary_id',
     hrm_talent_reviews: 'e.employer_subsidiary_id',
     // HR-17 end
-    // HR-19 begin: documents, signers, retention, surveys, and the org
-    // chart carry no subsidiary clamp (HR-16 null spelling): documents
-    // and surveys are org-wide HR artifacts, and the tree read itself
-    // resolves without a subsidiary scope.
-    hrm_documents: null,
-    hrm_document_signers: null,
-    hrm_retention_actions: null,
+    // HR-19 begin: documents, signers and retention clamp to the document
+    // employment's employer subsidiary (employment-less rows fail closed
+    // for restricted readers); surveys stay org-wide HR artifacts under
+    // their grant, and the tree read itself resolves without a scope.
+    hrm_documents: 'e.employer_subsidiary_id',
+    hrm_document_signers: 'e.employer_subsidiary_id',
+    hrm_retention_actions: 'e.employer_subsidiary_id',
     hrm_survey_results: null,
     // The chart reads worker_employments, which carries the legal entity,
     // so it CLAMPS. Unclamped it would show a subsidiary-scoped reader every
