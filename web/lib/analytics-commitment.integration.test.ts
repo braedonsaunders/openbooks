@@ -30,8 +30,8 @@ for (const scenario of ['empty', 'balanced', 'excess purchases'] as const) {
       await withOrgContext(org.orgId, async () => {
         const data = await spendVelocityData(org.orgId, { from: '2026-07-01', to: '2026-07-31', label: 'Commitment review' }, null);
         const { summary } = data.commitmentCliff;
-        assert.equal(summary.totalPO, scenario === 'empty' ? 0 : scenario === 'excess purchases' ? 250 : 100);
-        assert.equal(summary.totalSO, scenario === 'empty' ? 0 : 100);
+        assert.equal(summary.totalPO, scenario === 'empty' ? '0.0000' : scenario === 'excess purchases' ? '250.0000' : '100.0000');
+        assert.equal(summary.totalSO, scenario === 'empty' ? '0.0000' : '100.0000');
         assert.equal(summary.ratio, scenario === 'empty' ? 0 : scenario === 'excess purchases' ? 2.5 : 1);
         assert.equal(summary.status, scenario === 'excess purchases' ? 'critical' : 'healthy');
         assert.equal(summary.poVelocity, 0);
