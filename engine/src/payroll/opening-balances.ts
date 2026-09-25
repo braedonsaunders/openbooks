@@ -13,6 +13,7 @@ import {
 } from "./fences.ts";
 import type { PayrollSubsidiaryScope } from "./scope.ts";
 import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
+import { requirePayrollFeature } from "./feature-gate.ts";
 
 function openingSubsidiaryScopeFilter(
   column: SQL,
@@ -778,6 +779,7 @@ export async function saveOpeningBalances(input: {
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
+    await requirePayrollFeature(tx, input.orgId)
     // The route's scope query is only an early refusal. Lock the current
     // employee rows again in the write transaction so a rehome cannot move a
     // caller-approved employee out of scope before any carry-in is changed.
@@ -1261,6 +1263,7 @@ export async function saveEmployerLevyOpening(input: {
   );
 
   return db.transaction(async (tx) => {
+    await requirePayrollFeature(tx, input.orgId)
     await takeEmployerLevyFences(
       tx,
       input.rows.map((row) => employerLevyFenceKey(input.orgId, year, row.country, row.levyKey)),

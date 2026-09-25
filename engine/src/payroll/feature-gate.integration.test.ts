@@ -5,6 +5,8 @@ import { db, pool, withOrgTransaction } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
+import { saveEmployerLevyOpening, saveOpeningBalances } from "./opening-balances.ts";
+import { saveEntitlementOpenings } from "./entitlements-openings-save.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 
@@ -20,24 +22,21 @@ async function evidence(orgId: string) {
   ) as state`)).rows[0]!.state;
 }
 
-for (const operation of ["create", "calculate", "dry-run", "simulate", "commit"] as const) {
+for (const operation of ["create", "calculate", "dry-run", "simulate", "commit", "opening balances", "employer levies", "entitlement openings"] as const) {
   test(`disabled Payroll refuses ${operation} without changing evidence`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedAdoption();
     try {
-      const { input } = await calculatedRun(fx);
-      if (operation === "simulate") await commitPayRun(input);
+      const input = operation === "opening balances" || operation === "employer levies" || operation === "entitlement openings" ? undefined : (await calculatedRun(fx)).input;
+      if (operation === "simulate") await commitPayRun(input!);
       const before = await evidence(fx.orgId);
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":false}'::jsonb) where id=${fx.orgId}`);
-      const run = () => operation === "create" ? createPayRun({ orgId: fx.orgId, actorId: fx.actorId,
-        payScheduleId: fx.scheduleId, periodStart: "2026-06-21", periodEnd: "2026-07-04" })
-        : operation === "commit" ? commitPayRun(input)
-        : calculatePayRun({ ...input, dryRun: operation === "dry-run", simulate: operation === "simulate" });
+      const run = () => operation === "create" ? createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: "2026-06-21", periodEnd: "2026-07-04" }) : operation === "commit" ? commitPayRun(input!) : operation === "opening balances" ? saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{ employeePartyId: fx.employeeId, amounts: {} }] }) : operation === "employer levies" ? saveEmployerLevyOpening({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{ country: "CA", levyKey: "unused", region: null, baseYtd: "1" }] }) : operation === "entitlement openings" ? saveEntitlementOpenings({ orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01", rows: [{ employeePartyId: fx.employeeId, amounts: {} }] }) : calculatePayRun({ ...input!, dryRun: operation === "dry-run", simulate: operation === "simulate" });
       await withOrgTransaction(fx.orgId, async () => {
         await assert.rejects(run(), /payroll feature is disabled/i);
         assert.deepEqual(await evidence(fx.orgId), before);
       });
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,payroll}','true'::jsonb) where id=${fx.orgId}`);
-      assert.ok(await run(), "reenabling Payroll restores the operation against preserved data");
+      if (!operation.includes("opening") && operation !== "employer levies") assert.ok(await run(), "reenabling Payroll restores the operation against preserved data");
     } finally { await dropScratchOrgReporting(fx.orgId); }
   });
 }
