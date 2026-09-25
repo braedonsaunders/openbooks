@@ -7,6 +7,9 @@ import { Copy, KeyRound, ShieldAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@openbooks/ui'
 import { PERMISSION_GROUPS, type CataloguePermission } from '@/lib/permissions'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
 
 export type KeyRow = {
   id: string
@@ -47,7 +50,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
   const [rateLimit, setRateLimit] = useState(
     creating ? '120' : keyRow?.rate_limit_per_min == null ? '' : String(keyRow.rate_limit_per_min),
   )
-  const [busy, setBusy] = useState(false)
+  const { busy, refusal, execute } = useAppAction()
   const [createdKey, setCreatedKey] = useState<string | null>(null)
 
   const selectedCount = useMemo(
@@ -91,8 +94,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
       toast.error(t('drawer.scopesRequired'))
       return
     }
-    setBusy(true)
-    const res = await fetch('/api/admin/api-keys', {
+    await execute(() => fetchAction<{ plaintext: string }>('/api/admin/api-keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -101,16 +103,11 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
         scopes: [...selected],
         rateLimitPerMin: rateLimit.trim() === '' ? null : Number(rateLimit),
       }),
+    }), {
+      fallbackMessage: t('drawer.saveFailed'),
+      successMessage: t('drawer.created'),
+      onOk: (data) => { setCreatedKey(data.plaintext); router.refresh() },
     })
-    const data = await res.json()
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(data.error ?? t('drawer.saveFailed'))
-      return
-    }
-    setCreatedKey(data.plaintext)
-    toast.success(t('drawer.created'))
-    router.refresh()
   }
 
   async function saveChanges() {
@@ -123,8 +120,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
       toast.error(t('drawer.scopesRequired'))
       return
     }
-    setBusy(true)
-    const res = await fetch('/api/admin/api-keys', {
+    await execute(() => fetchAction('/api/admin/api-keys', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -134,37 +130,26 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
         scopes: [...selected],
         rateLimitPerMin: rateLimit.trim() === '' ? null : Number(rateLimit),
       }),
+    }), {
+      fallbackMessage: t('drawer.saveFailed'),
+      successMessage: t('drawer.updated'),
+      onOk: () => { router.push('/admin/api-keys'); router.refresh() },
     })
-    const data = await res.json()
-    setBusy(false)
-    if (!res.ok) {
-      toast.error(data.error ?? t('drawer.saveFailed'))
-      return
-    }
-    toast.success(t('drawer.updated'))
-    router.push('/admin/api-keys')
-    router.refresh()
   }
 
   async function revoke() {
     if (!keyRow) return
     const ok = confirm(t('drawer.revokeConfirm'))
     if (!ok) return
-    setBusy(true)
-    const res = await fetch('/api/admin/api-keys', {
+    await execute(() => fetchAction('/api/admin/api-keys', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: keyRow.id }),
+    }), {
+      fallbackMessage: t('drawer.revokeFailed'),
+      successMessage: t('drawer.revoked'),
+      onOk: () => { router.push('/admin/api-keys'); router.refresh() },
     })
-    setBusy(false)
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      toast.error(data.error ?? t('drawer.revokeFailed'))
-      return
-    }
-    toast.success(t('drawer.revoked'))
-    router.push('/admin/api-keys')
-    router.refresh()
   }
 
   function copyKey() {
@@ -199,6 +184,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
         </>
       }
     >
+      <ActionAlert error={refusal} fallbackMessage={t('drawer.saveFailed')} />
       {createdKey ? (
         <div className="space-y-4 p-1">
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
