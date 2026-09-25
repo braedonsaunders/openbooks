@@ -9,6 +9,7 @@ import { Plus } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 
@@ -320,11 +321,14 @@ function CreateCountDrawer({
   onClose: () => void
 }) {
   const t = useTranslations('inventory')
+  const tCommon = useTranslations('common')
   const [locationId, setLocationId] = useState('')
   const [subsidiaryId, setSubsidiaryId] = useState(subsidiaryOptions[0]?.value ?? '')
   // The count date defaults to the org's business day from the server, never
   // the browser's UTC day (tomorrow after 5pm Pacific).
-  const [date, setDate] = useState(useBusinessToday())
+  const initialDate = useBusinessToday()
+  const initialLines = [{ itemId: '', stockLocationId: '', lotId: '' }]
+  const [date, setDate] = useState(initialDate)
   const [memo, setMemo] = useState('')
   const [lines, setLines] = useState<{ itemId: string; stockLocationId: string; lotId: string }[]>([
     { itemId: '', stockLocationId: '', lotId: '' },
@@ -334,6 +338,12 @@ function CreateCountDrawer({
   // Per-row refusals stay pinned to the row that caused them; fully empty
   // rows are inert filler and are reported by the form-level refusal instead.
   const [lineErrors, setLineErrors] = useState<Record<number, string>>({})
+  const closeGuard = useDirtyClose({
+    dirty: locationId !== '' || subsidiaryId !== (subsidiaryOptions[0]?.value ?? '') || date !== initialDate || memo !== '' ||
+      JSON.stringify(lines) !== JSON.stringify(initialLines),
+    busy, onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
+  })
   // ONE retry identity per intended create: a lost create response followed
   // by Open count again must return the ORIGINAL count, not open a second
   // one. Reused on retry; rotates only after success or an input change (a
@@ -398,6 +408,7 @@ function CreateCountDrawer({
     <UrlDrawer
       open
       closeHref="/inventory?inventoryView=counts"
+      beforeClose={closeGuard.beforeClose}
       size="2xl"
       title={t('counts.create.title')}
       headerActions={
@@ -421,6 +432,7 @@ function CreateCountDrawer({
               {t('counts.create.location')} <span className="text-red-500">*</span>
             </Label>
             <SearchSelect
+              disabled={busy}
               value={locationId}
               onChange={(v) => {
                 setLocationId(v)
@@ -446,6 +458,7 @@ function CreateCountDrawer({
               {t('counts.create.subsidiary')} <span className="text-red-500">*</span>
             </Label>
             <SearchSelect
+              disabled={busy}
               value={subsidiaryId}
               onChange={setSubsidiaryId}
               options={subsidiaryOptions}
@@ -458,11 +471,11 @@ function CreateCountDrawer({
             <Label>
               {t('counts.columns.date')} <span className="text-red-500">*</span>
             </Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input type="date" disabled={busy} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className={field}>
             <Label>{t('counts.columns.memo')}</Label>
-            <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+            <Input disabled={busy} value={memo} onChange={(e) => setMemo(e.target.value)} />
           </div>
         </div>
         <div className="space-y-3">
@@ -501,6 +514,7 @@ function CreateCountDrawer({
               <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
                 <div className="space-y-1">
                 <SearchSelect
+                  disabled={busy}
                   value={line.itemId}
                   onChange={(v) => {
                     clearRowError()
@@ -517,6 +531,7 @@ function CreateCountDrawer({
                   {t('counts.columns.stockLocation')} <span className="text-red-500">*</span>
                 </Label>
                 <SearchSelect
+                  disabled={busy}
                   value={line.stockLocationId}
                   onChange={(v) => {
                     clearRowError()
@@ -547,6 +562,7 @@ function CreateCountDrawer({
                 ) : null}
                 </div>
                 <SearchSelect
+                  disabled={busy}
                   value={line.lotId}
                   onChange={(v) => setLines((prev) => prev.map((p, j) => (j === i ? { ...p, lotId: v } : p)))}
                   options={lotOptions}
@@ -557,7 +573,7 @@ function CreateCountDrawer({
                 <Button
                   variant="ghost"
                   onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}
-                  disabled={lines.length <= 1}
+                  disabled={busy || lines.length <= 1}
                 >
                   {t('counts.create.removeLine')}
                 </Button>
@@ -566,6 +582,7 @@ function CreateCountDrawer({
           })}
           <Button
             variant="secondary"
+            disabled={busy}
             onClick={() => setLines((prev) => [...prev, { itemId: '', stockLocationId: '', lotId: '' }])}
           >
             {t('counts.create.addLine')}
@@ -666,6 +683,7 @@ function CountDetailBody({
         header.status === 'counting' && canPost && !l.adjustmentMovementId ? (
           <span className="inline-flex flex-wrap items-center gap-1">
             <Input
+              disabled={busy}
               inputMode="decimal"
               className="w-24 text-right tabular-nums"
               placeholder={l.countedQuantity ?? ''}
@@ -778,6 +796,7 @@ function CountDetailBody({
               <span className="inline-flex items-center gap-1">
                 <Input
                   type="date"
+                  disabled={busy}
                   className="w-40"
                   value={countDate}
                   onChange={(e) => setCountDate(e.target.value)}
