@@ -319,8 +319,12 @@ export const RI_REGION: PayrollRegionWithholding = {
   label: "Rhode Island income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // The Division of Taxation treats out-of-state employers' Rhode Island
+  // withholding for RI residents as a convenience ("may wish to withhold")
+  // — permitted, never required. The double-tax credit (RI-1040 /
+  // PIT 03-09) is return-level.
+  residentWithholding: "not_required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_ri_riw4",
   subRegions: [],
   subRegionConflictRule: "both",

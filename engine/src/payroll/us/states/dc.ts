@@ -499,11 +499,11 @@ export const DC_REGION: PayrollRegionWithholding = {
   // puts the burden the other way: nonresidence must be CERTIFIED (D-4A) to
   // stop withholding, so withholding applies until that certificate exists.
   taxesNonresidentWages: true,
-  // NOT ESTABLISHED by FR-230 or Notice 2022-08: whether a DC resident's
-  // wages earned entirely outside the District must be withheld on.
-  // Declared unknown.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // FR-230: DC tax is withheld from a DC resident working outside the
+  // District only when the employee voluntarily agrees — withholding is
+  // permitted, never required.
+  residentWithholding: "not_required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_dc_d4",
   // No sub-region levies: the District levies one income tax directly.
   subRegions: [],

@@ -305,8 +305,12 @@ export const MS_REGION: PayrollRegionWithholding = {
   label: "Mississippi income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // 35 Miss. Code R. 3-11-09-100: a resident's out-of-state wages may be
+  // excluded from Mississippi withholding to the extent tax is withheld for
+  // the work state — a conditional waiver, not a credit.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "waive_when_work_region_withheld" },
   certificateKey: "us_ms_89350",
   subRegions: [],
   subRegionConflictRule: "both",

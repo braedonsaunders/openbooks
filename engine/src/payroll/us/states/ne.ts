@@ -331,8 +331,13 @@ export const NE_REGION: PayrollRegionWithholding = {
   label: "Nebraska income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // 316 NAC ch. 21 § 005.01 subjects all resident wages even when the work
+  // is outside Nebraska; § 005.02 reduces Nebraska withholding by the
+  // other state's required withholding, floored at zero (both worked
+  // examples) — a genuine net-of-credit calculation.
+  residentWithholding: "required_net_of_credit",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_ne_w4n",
   subRegions: [],
   subRegionConflictRule: "both",

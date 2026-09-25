@@ -431,11 +431,12 @@ export const IA_REGION: PayrollRegionWithholding = {
   // IAC 701—307 and the withholding-information page: compensation paid for
   // services performed in Iowa is subject to Iowa withholding.
   taxesNonresidentWages: true,
-  // NOT ESTABLISHED by the 2026 formula booklet: whether Iowa requires an
-  // employer to withhold from an Iowa RESIDENT's wages earned in another
-  // state. Declared unknown rather than assumed.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // Iowa Code § 422.16 requires withholding on wages paid to a resident
+  // employee. The out-of-state credit (IA 1040) is return-level only — no
+  // employer withholding-credit mechanism — so the full resident tax
+  // is withheld.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_ia_iaw4",
   // Iowa school-district surtax is claimed on the annual return / via extra
   // withholding on IA W-4 line 8 — the 2026 employer formula does not apply

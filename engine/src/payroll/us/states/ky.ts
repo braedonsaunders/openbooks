@@ -210,10 +210,11 @@ export const KY_REGION: PayrollRegionWithholding = {
   // KRS 141 and the Department's employer page: withhold for resident and
   // nonresident employees unless a published exemption applies.
   taxesNonresidentWages: true,
-  // NOT ESTABLISHED by 42A003: whether a Kentucky resident's wages earned
-  // entirely outside Kentucky must be withheld on. Declared unknown.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // 42A003: an out-of-state employer MAY voluntarily withhold Kentucky tax
+  // on a Kentucky resident working outside Kentucky — permitted, never
+  // required.
+  residentWithholding: "not_required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_ky_k4",
   // Kentucky cities levy occupational-license / payroll taxes that are not
   // the state income tax and are not in 42A003. They are not modelled here.
