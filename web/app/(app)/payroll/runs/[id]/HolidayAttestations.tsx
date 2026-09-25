@@ -39,7 +39,7 @@ export interface AttestationError {
   employeePartyId?: string
   holidayKey?: string
   holidayDate?: string
-  neededFact?: 'paidOnCommission' | 'absentWithoutConsent'
+  neededFact?: 'paidOnCommission' | 'absentWithoutConsent' | 'entitledDayAssessment'
 }
 
 interface DemandingHoliday {
@@ -48,6 +48,9 @@ interface DemandingHoliday {
   name: string
   needsCommissionStatus: boolean
   needsAbsenceAssertion: boolean
+  needsEntitlementDayAssessment: boolean
+  evidencedDayCount?: number
+  attestedDayCount?: number
 }
 
 interface AttestationEmployee {
@@ -58,14 +61,16 @@ interface AttestationEmployee {
   demanding: DemandingHoliday[]
 }
 
-type NeededFact = 'paidOnCommission' | 'absentWithoutConsent' | null
+type NeededFact = 'paidOnCommission' | 'absentWithoutConsent' | 'entitledDayAssessment' | null
 
 function classifyError(error: AttestationError): NeededFact {
-  if (error.neededFact === 'paidOnCommission' || error.neededFact === 'absentWithoutConsent') {
+  if (error.neededFact === 'paidOnCommission' || error.neededFact === 'absentWithoutConsent'
+      || error.neededFact === 'entitledDayAssessment') {
     return error.neededFact
   }
   if (/commission-pay status/.test(error.message)) return 'paidOnCommission'
   if (/last-and-first-shift/.test(error.message)) return 'absentWithoutConsent'
+  if (/entitlement-day evidence is complete/.test(error.message)) return 'entitledDayAssessment'
   return null
 }
 
@@ -204,6 +209,7 @@ function AttestationRow(props: {
   const { error, needed, attested, busy, onFile } = props
   const [commission, setCommission] = useState('')
   const [absence, setAbsence] = useState<Record<string, string>>({})
+  const [complete, setComplete] = useState<Record<string, string>>({})
 
   if (needed === 'paidOnCommission') {
     const standing = attested.paidOnCommission
@@ -242,6 +248,59 @@ function AttestationRow(props: {
             {t('saveRecalculate')}
           </Button>
         </div>
+      </div>
+    )
+  }
+
+  if (needed === 'entitledDayAssessment') {
+    const holidays = attested.demanding.filter((holiday) => holiday.needsEntitlementDayAssessment)
+    const explicit = error.holidayKey && error.holidayDate
+      ? holidays.filter((holiday) => holiday.key === error.holidayKey && holiday.date === error.holidayDate)
+      : holidays
+    if (explicit.length === 0) return null
+    return (
+      <div className="rounded-lg bg-white/70 px-3 py-2.5 dark:bg-slate-900/60">
+        <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+          {error.employee}: {t('entitlementTitle')}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {t('entitlementExplanation')}
+        </p>
+        {explicit.map((holiday) => {
+          const occurrence = `${holiday.key}|${holiday.date}`
+          return (
+            <div key={occurrence} className="mt-2 flex flex-wrap items-end gap-2">
+              <div>
+                <Label htmlFor={`att-ent-${attested.employeePartyId}-${occurrence}`}>
+                  {t('holidayDate', { holiday: holiday.name, date: holiday.date })}: {' '}
+                  {t('entitlementCount', { count: holiday.evidencedDayCount ?? 0 })}
+                  {holiday.attestedDayCount !== undefined
+                    ? ` ${t('entitlementFiled', { count: holiday.attestedDayCount })}` : ''}
+                </Label>
+                <Select
+                  id={`att-ent-${attested.employeePartyId}-${occurrence}`}
+                  value={complete[occurrence] ?? ''}
+                  onChange={(e) => setComplete((prev) => ({ ...prev, [occurrence]: e.target.value }))}
+                >
+                  <option value="">{t('choose')}</option>
+                  <option value="true">{t('entitlementConfirm')}</option>
+                </Select>
+              </div>
+              <Button
+                size="sm"
+                disabled={busy || holiday.evidencedDayCount === undefined || complete[occurrence] !== 'true'}
+                onClick={() => void onFile({
+                  employeePartyId: attested.employeePartyId,
+                  holidayKey: holiday.key, holidayDate: holiday.date,
+                  entitlementEvidenceComplete: true,
+                })}
+              >
+                {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+                {t('saveRecalculate')}
+              </Button>
+            </div>
+          )
+        })}
       </div>
     )
   }

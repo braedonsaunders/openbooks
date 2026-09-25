@@ -1320,16 +1320,14 @@ test("a paid statutory holiday is itself a day wages were earned on", () => {
   // holiday it can see the employee was actually paid for.
   const evidence: HolidayDayEvidence = {
     workedOn: ["2026-06-01", "2026-06-02", "2026-06-03"],
+    owedPaidOn: ["2026-06-16"],
     paidPeriodsWithoutHours: [],
     paidHolidays: ["2026-06-15"],
   };
   const base = { employee: "Test Employee", window: JUNE_2026, evidence, schedule: pattern("8") };
   assert.equal(countHolidayQualifyingDays({ ...base, counting: "worked" }), 3);
   assert.equal(countHolidayQualifyingDays({ ...base, counting: "worked_or_earned_wages" }), 4);
-  // Nova Scotia's "entitled to receive pay" is broader again in the statute,
-  // and identical here — the one place it reaches further is pay the employer
-  // owed and never recorded, which is by construction not in the database.
-  assert.equal(countHolidayQualifyingDays({ ...base, counting: "entitled_to_pay" }), 4);
+  assert.equal(countHolidayQualifyingDays({ ...base, counting: "entitled_to_pay" }), 5);
 });
 
 test("hours on the stub mean the day count is the timesheet's, not the period's", () => {

@@ -979,6 +979,8 @@ export interface StatutoryHolidayPayInput {
    */
   paidOnCommission?: boolean;
   absentWithoutConsent?: boolean;
+  /** Audited complete-evidence assertions by holiday occurrence key. */
+  entitledDayAttestations?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -990,6 +992,7 @@ export interface StatutoryHolidayPayInput {
 export interface StatutoryHolidayEligibilityFacts {
   paidOnCommission?: boolean;
   absentWithoutConsent?: boolean;
+  entitledDayAttestations?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -1000,11 +1003,8 @@ export interface StatutoryHolidayEligibilityFacts {
  * holiday pay. Throws, naming the jurisdiction, when the pack does not declare
  * it at all.
  *
- * The lookback reads COMMITTED stubs only, and allocates a stub whose pay
- * period straddles the window boundary in proportion to the days of overlap.
- * Earnings are recorded per pay period, not per day, so some allocation is
- * unavoidable; doing it pro rata with exact ratio arithmetic (money.ts) is
- * the one choice that is both defensible and reproducible.
+ * The lookback reads committed stubs and only attributes boundary earnings
+ * when their dated lines establish which side of the window earned them.
  */
 export async function resolveStatutoryHolidayPay(
   tx: Pick<typeof db, "execute">,
@@ -1143,6 +1143,17 @@ export async function resolveStatutoryHolidayPay(
           counting: qualifyingCounting, evidence, schedule,
         })
       : daysWorked;
+    const dayQualifier = rule.qualifying.minDaysWorkedInWindow;
+    if (dayQualifier?.counting === "entitled_to_pay"
+        && daysWorkedInQualifyingWindow < dayQualifier.days) {
+      const occurrence = `${holiday.key}|${holiday.date}`;
+      const attestedCount = input.entitledDayAttestations?.[occurrence];
+      if (attestedCount !== daysWorkedInQualifyingWindow) {
+        throw new PayrollHolidayError(
+          `${input.employeeName}: ${holiday.name} (${holiday.date}) has ${daysWorkedInQualifyingWindow} evidenced days entitled to pay in the preceding ${dayQualifier.ofDays}; approve or correct owed paid-leave days, then attest that this run's entitlement-day evidence is complete for this holiday before calculating`,
+        );
+      }
+    }
 
     const result = computeStatutoryHolidayPay(rule, {
       employee: input.employeeName,
@@ -1331,13 +1342,9 @@ async function lookbackEarnings(
  *
  * WHAT THIS DATA MODEL CAN AND CANNOT SEE, because the answer decides money.
  *
- * Exactly one thing in this product is dated to a DAY: `time_entries.worked_on`.
- * Earnings are recorded per PAY PERIOD — `pay_stub_lines` carries no date at
- * all, only its stub's period — and an entitlement draw-down is a single
- * `entitlement_ledger.movement_date` (the run's date, not the days of leave)
- * with no hours on it for a bank payout. So "which days did this employee earn
- * wages on" cannot be answered from the ledger directly, and inventing an
- * allocation would put a made-up day count into a divisor.
+ * Approved time, approved paid leave and day-resolved earning lines carry
+ * civil dates. An entitlement ledger draw-down carries only the run date;
+ * it cannot identify leave days by itself.
  *
  * What CAN be asserted honestly:
  *
@@ -1345,7 +1352,10 @@ async function lookbackEarnings(
  *     paid leave for the many employers who book leave as a timesheet line
  *     against a leave time type (which is how an hourly employee's vacation is
  *     already recorded and already counted).
- *  2. `paidPeriodsWithoutHours` — a committed pay period with positive earnings
+ *  2. `earnedOn` and `owedPaidOn` — day-dated committed earning lines and
+ *     approved paid leave absences, respectively. The latter counts for
+ *     "entitled to receive pay" even before the amount is paid.
+ *  3. `paidPeriodsWithoutHours` — a committed pay period with positive earnings
  *     and NO hours on any earning line. That is pay FOR THE PERIOD rather than
  *     for hours: a salary, or a period spent entirely on paid leave drawn from
  *     a bank. The "no hours anywhere" test is what keeps it honest — a stub
@@ -1353,20 +1363,22 @@ async function lookbackEarnings(
  *     above, so nothing is added and nothing is double-counted. It is also what
  *     stops a 4%-on-every-cheque vacation line from making every hourly
  *     employee's whole period qualify.
- *  3. `paidHolidays` — observed paid statutory holidays inside the window that
+ *  4. `paidHolidays` — observed paid statutory holidays inside the window that
  *     the employee was actually paid statutory holiday pay for. BC's own
  *     guideline counts these expressly, and its worked example ($3,200 ÷ 20)
  *     reaches twenty by adding a paid Christmas Day to nineteen worked days.
  *
- * The gap this leaves, stated rather than hidden: a pay period that MIXES
- * worked days with untimed paid absence contributes only its worked days,
- * because the model cannot say which of the remaining days the absence covered.
- * Booking the leave as time entries is the recording practice that closes it,
- * and it is the practice the product already supports.
+ * Untimed paid absence inside an hourly stub contributes only when an approved
+ * absence or dated earning line identifies the days. A negative entitlement
+ * decision additionally needs the run-specific completeness attestation.
  */
 export interface HolidayDayEvidence {
   /** Distinct dates with approved time (hours > 0). */
   workedOn: readonly string[];
+  /** Committed earnings proven to belong to one day. */
+  earnedOn?: readonly string[];
+  /** Approved paid absence days owed under the employer's leave policy. */
+  owedPaidOn?: readonly string[];
   /** Committed periods paid for the period rather than for hours. */
   paidPeriodsWithoutHours: readonly { from: string; to: string }[];
   /** Dates of observed paid holidays the employee was paid for. */
@@ -1404,15 +1416,10 @@ export function countHolidayQualifyingDays(input: {
   const inWindow = (date: string) => date >= window.from && date <= window.to;
   const days = new Set<string>(evidence.workedOn.filter(inWindow));
   if (counting === "worked") return days.size;
-
-  // `worked_or_earned_wages` (BC ESA ss. 44–45) and `entitled_to_pay` (NS
-  // Labour Standards Code s. 42(1)) are DIFFERENT SENTENCES and are declared
-  // separately, but they resolve to the same day set here, and the honest
-  // reason is that the one place they diverge is invisible by construction:
-  // Nova Scotia reaches pay the employer OWED and never recorded, and nothing
-  // an employer never recorded is in this database. When something does record
-  // it — an unpaid-wages claim, an accrued-but-unpaid leave day — the widening
-  // is a branch on `counting` here and not a re-reading of any jurisdiction.
+  for (const date of evidence.earnedOn ?? []) if (inWindow(date)) days.add(date);
+  if (counting === "entitled_to_pay") {
+    for (const date of evidence.owedPaidOn ?? []) if (inWindow(date)) days.add(date);
+  }
   for (const date of evidence.paidHolidays) if (inWindow(date)) days.add(date);
 
   for (const period of evidence.paidPeriodsWithoutHours) {
@@ -1447,7 +1454,7 @@ export function countHolidayQualifyingDays(input: {
  */
 async function loadHolidayDayEvidence(
   tx: Pick<typeof db, "execute">,
-  input: StatutoryHolidayPayInput,
+  input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId" | "excludeDocumentId">,
   window: { from: string; to: string },
   /** The observed calendar over the same window; empty when only worked days
    *  are being counted, in which case nothing below is read. */
@@ -1471,6 +1478,31 @@ async function loadHolidayDayEvidence(
     return { workedOn, paidPeriodsWithoutHours: [], paidHolidays: [] };
   }
 
+  const [earned, owed] = await Promise.all([
+    tx.execute<{ earned_on: string | Date }>(sql`
+      select l.earned_from as earned_on
+        from pay_stub_lines l
+        join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       where l.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
+         and r.run_status = 'committed' and s.pay_run_document_id <> ${input.excludeDocumentId}
+         and l.kind = 'earning' and l.earned_from = l.earned_to
+         and l.earned_from between ${window.from} and ${window.to}
+       group by l.earned_from having sum(l.amount) > 0`),
+    tx.execute<{ on_date: string | Date }>(sql`
+      select distinct a.on_date
+        from hrm_absences a
+        join worker_employments e on e.id = a.employment_id and e.org_id = a.org_id
+        join hrm_leave_requests r on r.id = a.leave_request_id and r.org_id = a.org_id
+        join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
+       where a.org_id = ${input.orgId} and e.worker_party_id = ${input.employeePartyId}
+         and a.on_date between ${window.from} and ${window.to}
+         and r.status = 'approved' and t.paid and a.hours > 0
+         and a.reversal_of is null
+         and not exists (select 1 from hrm_absences reversal
+                          where reversal.org_id = a.org_id and reversal.reversal_of = a.id)`),
+  ]);
+
   // One row per committed stub overlapping the window, with the hours and the
   // earnings on it. The classification is done here rather than in SQL so the
   // rule ("paid for the period, not for hours") is readable beside the comment
@@ -1481,7 +1513,7 @@ async function loadHolidayDayEvidence(
     }>(sql`
     select r.period_start, r.period_end,
            coalesce(sum(case when l.kind = 'earning' then l.hours end), 0)::text as hours,
-           coalesce(sum(case when l.kind = 'earning' then l.amount end), 0)::text as earnings,
+           coalesce(sum(case when l.kind = 'earning' and l.earned_from is null then l.amount end), 0)::text as earnings,
            coalesce(sum(case when l.kind = 'earning'
                               and c.system_key = 'stat_holiday' then l.amount end), 0)::text
              as holiday_pay
@@ -1511,7 +1543,37 @@ async function loadHolidayDayEvidence(
       holidayPaidPeriods.some((p) => p.from <= holiday.date && p.to >= holiday.date))
     .map((holiday) => holiday.date);
 
-  return { workedOn, paidPeriodsWithoutHours, paidHolidays };
+  return {
+    workedOn,
+    earnedOn: earned.rows.map((row) => day(row.earned_on)),
+    owedPaidOn: owed.rows.map((row) => day(row.on_date)),
+    paidPeriodsWithoutHours, paidHolidays,
+  };
+}
+
+/** The current, independently computed count a run-specific assertion attests. */
+export async function evidencedEntitledPayDays(
+  tx: Pick<typeof db, "execute">,
+  input: {
+    orgId: string; employeePartyId: string; employeeName: string;
+    excludeDocumentId: string; jurisdiction: string; holidayDate: string;
+  },
+): Promise<number> {
+  const rule = statutoryHolidayPayRule(input.jurisdiction, input.holidayDate);
+  const qualifier = rule?.qualifying.minDaysWorkedInWindow;
+  if (qualifier?.counting !== "entitled_to_pay") {
+    throw new PayrollHolidayError(`${input.jurisdiction} does not declare an entitlement-to-pay day assessment on ${input.holidayDate}`);
+  }
+  const window = spanBefore(shiftDays(input.holidayDate, -1), qualifier.ofDays);
+  const overrides = await loadHolidayOverrides(tx, input.orgId, input.jurisdiction);
+  const observed = resolveObservedHolidays({
+    jurisdiction: input.jurisdiction, from: window.from, to: window.to, overrides,
+  });
+  const schedule = await resolveWorkSchedule(tx, input.orgId, input.employeePartyId, input.holidayDate);
+  const evidence = await loadHolidayDayEvidence(tx, input, window, observed, true);
+  return countHolidayQualifyingDays({
+    employee: input.employeeName, window, counting: "entitled_to_pay", evidence, schedule,
+  });
 }
 
 /** Approved hours worked on the holiday itself. */
