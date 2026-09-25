@@ -1,9 +1,10 @@
-import { pool, withBypassContext } from "../platform/db.ts";
+import { withBypassContext } from "../platform/db.ts";
 import { dispatchQueuedReportRuns, dispatchReportDeliveries, materializeDueReportRuns } from "../delivery/report-delivery.ts";
 import { ensureScanOutboxRows, processDueSchedulerOutbox } from "../scheduling/outbox.ts";
 import { processDuePostingEffects } from "../ledger/posting-effects.ts";
 import { processGateTimers } from "../flows/gates.ts";
 import { runInSpan } from "../platform/telemetry.ts";
+import { WORKER_TICK_LOCK_KEY, withTickClaim } from "../scheduling/lock.ts";
 
 /**
  * The database is the durable scheduler/outbox; Redis queues are rebuilt from
@@ -25,15 +26,13 @@ import { runInSpan } from "../platform/telemetry.ts";
  * connection broke mid-tick the client is discarded rather than returned to the
  * pool, so a stale claim can never leak back into circulation.
  *
- * This module owns the claim primitive; engine/src/scheduling/lock.ts is the
+ * Ticks are claimed through the shared primitive in engine/src/scheduling/lock.ts is the
  * shared façade where every scheduler topology picks its lock identity and
  * borrows the same primitive, so the report-scheduler tick and the broader web
  * scheduler tick each exclude their own replicas without suppressing each
  * other's non-identical duty sets.
  */
 const TICK_INTERVAL_MS = 60_000;
-/** Cross-replica identity of the report scheduler's tick, re-exported by scheduler-lock.ts. */
-export const TICK_LOCK_KEY = "openbooks:report-scheduler-tick";
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
@@ -44,48 +43,11 @@ export function startReportScheduler(): void {
   void tick();
 }
 
-/**
- * Run `body` under the cross-replica tick claim for `lockKey`. Returns null
- * when another replica holds the claim (body never runs); otherwise resolves
- * with body's result after releasing the claim, including when body throws.
- * Each topology passes its own identity from scheduler-lock.ts, so two
- * topologies with different duty sets never suppress each other while the
- * replicas of ONE topology stay mutually exclusive.
- */
-export async function withTickClaim<T>(lockKey: string, body: () => Promise<T>): Promise<T | null> {
-  const client = await pool.connect();
-  let held = false;
-  try {
-    const claimed = await client.query<{ locked: boolean }>(
-      "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
-      [lockKey],
-    );
-    if (claimed.rows[0]?.locked !== true) {
-      console.log(`[${lockKey}] tick claim held by another replica; skipping`);
-      return null;
-    }
-    held = true;
-    return await body();
-  } finally {
-    let discard: Error | undefined;
-    if (held) {
-      try {
-        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
-      } catch (e) {
-        // The session may have died while held; destroy this connection so the
-        // lock dies with it instead of being reused while still locked.
-        discard = e as Error;
-      }
-    }
-    client.release(discard);
-  }
-}
-
 export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    await withTickClaim(TICK_LOCK_KEY, async () => {
+    await withTickClaim(WORKER_TICK_LOCK_KEY, async () => {
       // One span per claimed pass: every outbox/report attempt below joins it
       // as a child, so a collector shows the full tick tree per replica.
       await runInSpan("scheduler.tick", undefined, async () => {

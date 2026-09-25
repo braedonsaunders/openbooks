@@ -6,7 +6,7 @@ import {
   registerWorkerDuty,
   runWorkerDuties,
   WorkerDutyError,
-} from "./duties.ts";
+} from "../scheduling/duties.ts";
 
 test("duties register, list, and run in order", async () => {
   clearWorkerDuties();

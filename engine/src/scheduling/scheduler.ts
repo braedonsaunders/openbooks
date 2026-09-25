@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { recordOutboxAttempt } from "../platform/telemetry.ts";
 import { WEB_TICK_LOCK_KEY, withTickClaim } from "./lock.ts";
+import { runWorkerDuties } from "./duties.ts";
 import {
   publishSchedulerTickHealth,
   recordTickDutyFailures,
@@ -647,7 +648,6 @@ export async function tick(
       // scanner read as healthy. Failed duties are named in the log and
       // stored in the tick health beside the overlap-skip counter.
       try {
-        const { runWorkerDuties } = await import("../worker/duties.ts");
         const dutySummary = await runWorkerDuties();
         const dutyFailures = dutySummary
           .filter((duty) => !duty.ok)
