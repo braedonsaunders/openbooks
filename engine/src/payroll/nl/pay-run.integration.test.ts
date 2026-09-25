@@ -158,7 +158,7 @@ test(
       // plus the pack's three certificates — no profile column, no default.
       const employee = await nlEmployee(fx, "Jan Modaal", [
         { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
-        { key: "nl_premies", answers: { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25" } },
+        { key: "nl_premies", answers: { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25", sv_loon_ytd: "0" } },
         { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
       ]);
       const run = await createPayRun({
@@ -211,6 +211,7 @@ test(
     try {
       const employee = await nlEmployee(fx, "No Premies", [
         { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
+        { key: "nl_premies", answers: { sv_loon_ytd: "0" } },
         { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
       ]);
       const run = await createPayRun({

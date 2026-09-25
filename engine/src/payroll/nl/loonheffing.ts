@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { toCents } from "../../money/money.ts";
 import { PayrollError } from "../error.ts";
 import {
@@ -584,6 +585,32 @@ export const NL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   B: "Bonus / non-periodic pay this period",
 };
 
+/**
+ * This employer's own committed current-year SV-loon base for the annual
+ * maximumpremieloon: the SV_BASE factors on committed, non-voided stubs
+ * for the same employee and year, excluding the run being calculated
+ * (drafts may be abandoned — counting them would let unpaid base consume
+ * the cap in a later run). The declared sv_loon_ytd opening covers only
+ * pay BEFORE this employer; the two sum to the effective year-to-date.
+ */
+async function nlCommittedSvBase(args: Pick<
+  PayrollStatutoryComputeContext,
+  "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId"
+>): Promise<string> {
+  const { tx, orgId, employeePartyId, taxYear, documentId } = args;
+  const rows = await tx.execute<{ sv: string }>(sql`
+    select coalesce(sum((s.factors->>'SV_BASE')::numeric), 0)::text as sv
+    from pay_stubs s
+    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+    join documents d on d.id = r.document_id and d.org_id = r.org_id
+    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
+      and r.run_status = 'committed'
+      and d.status <> 'voided'
+  `);
+  return rows.rows[0]?.sv ?? "0";
+}
+
 export async function computeNlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
@@ -634,7 +661,29 @@ export async function computeNlStatutory(
     return certificateFlag(resolved, key);
   };
   const whkRaw = premies?.answers["whk_percent"] ?? null;
-  const ytdRaw = premies?.answers["sv_loon_ytd"] ?? null;
+  // The annual cap prices the verified opening balance plus this
+  // employer's own committed current-year SV base. A blank opening
+  // refuses: midyear conversions must copy the prior provider's report,
+  // and all-year employees record an explicit 0 — an assumed zero would
+  // reintroduce the missing-history under-accrual.
+  // Parse the SV leg first so malformed money refuses as money, not as
+  // a missing opening. An unpaid stub prices withholding only and needs
+  // no SV facts at all.
+  const svLegCents = parseCents(insurable === "" ? income : insurable, "period SV wage");
+  let effectiveYtd = "0.0000";
+  if (svLegCents > 0n) {
+    const opening = premies === null ? null : certificateAmount(premies, "sv_loon_ytd");
+    if (opening === null) {
+      throw new PayrollError(
+        "the NL payroll pack cannot price SV premiums without a verified premieloon opening balance — "
+        + "record the SV wage already paid this year before this employer on the nl_premies certificate "
+        + "(sv_loon_ytd; an explicit 0 for an employee employed all year by this employer) before running payroll",
+      );
+    }
+    const { tx, orgId, employeePartyId, documentId } = ctx;
+    const committed = await nlCommittedSvBase({ tx, orgId, employeePartyId, taxYear, documentId });
+    effectiveYtd = d4(parseCents(opening, "SV opening balance") + parseCents(committed, "committed SV base"));
+  }
 
   const result = calculateNlStatutory({
     income,
@@ -642,9 +691,7 @@ export async function computeNlStatutory(
     applyKorting,
     ageClass,
     svWage: insurable === "" ? null : insurable,
-    svWageYtd: ytdRaw === null || ytdRaw === ""
-      ? null
-      : premies === null ? null : certificateAmount(premies, "sv_loon_ytd"),
+    svWageYtd: effectiveYtd,
     awfLow: flagOrNull(premies, "awf_laag"),
     ufo: premies === null ? false : certificateFlag(premies, "ufo"),
     aofHigh: flagOrNull(premies, "aof_hoog"),

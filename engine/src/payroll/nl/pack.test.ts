@@ -169,7 +169,7 @@ function stubStored(rows: Record<string, Record<string, string>>): StoredCertifi
   }));
 }
 
-const PREMIES = { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25" };
+const PREMIES = { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25", sv_loon_ytd: "0" };
 
 function stubContext(
   stored: Record<string, Record<string, string>> = {
@@ -188,7 +188,9 @@ function stubContext(
   };
   const storedCertificates = stubStored(stored);
   const ctx: PayrollStatutoryComputeContext = {
-    tx: {} as never,
+    // No committed history in unit tests: the annual cap prices the
+    // declared opening alone.
+    tx: { execute: async () => ({ rows: [{ sv: "0" }] }) } as never,
     orgId: "org",
     documentId: "doc",
     employeePartyId: "emp",
@@ -274,6 +276,7 @@ test("computeStatutory refuses a missing opgaaf age class instead of assuming un
 test("computeStatutory refuses SV premiums without the declared SV facts", async () => {
   const { ctx } = stubContext({
     nl_loonheffingen: { age_class: "under_aow" },
+    nl_premies: { sv_loon_ytd: "0" },
     nl_tax_liability: { liability_class: "standard_resident" },
   });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /AWf/);
