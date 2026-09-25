@@ -432,6 +432,11 @@ export function AssistantApp({
     if (!running?.run) return
     const runId = running.run.runId
     const conversationId = currentId
+    // The reattached run is stoppable: Stop reads this map for the explicit
+    // server abort, and without this registration it only ends local
+    // reading while the server run continues.
+    const runIds = runIdsRef.current
+    runIds.set(conversationId, runId)
     let cancelled = false
     const poll = async () => {
       try {
@@ -455,6 +460,7 @@ export function AssistantApp({
             // keep the synced tail; the next navigation converges
           }
           settleTurn(conversationId)
+          runIds.delete(conversationId)
         }
       } catch {
         // transient: the next tick retries
@@ -465,6 +471,7 @@ export function AssistantApp({
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      if (runIds.get(conversationId) === runId) runIds.delete(conversationId)
     }
   }, [currentId, messages, viewKey])
 
