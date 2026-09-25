@@ -21,6 +21,7 @@ import { businessTimeZone } from "../../platform/business-date.ts";
 import { isUuid } from "../../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, isForeignKeyViolation, refuse } from "./errors.ts";
+import { taskPairingCode } from "./task-pairing.ts";
 import { assertNoFieldTimeSourceCollision, lockEmployeeTimeSources } from "./source-collision.ts";
 import { isClockPhotoSql } from "./photos.ts";
 import { lockActiveKioskToken } from "./kiosk-token-lock.ts";
@@ -182,35 +183,28 @@ async function checkClockTaskPairing(
   current: EventRow | null,
 ): Promise<void> {
   if (projectTaskId !== null) {
-    const task = await loadClockTask(orgId, projectTaskId);
-    if (!task) {
-      refuse("task_unknown", "The task is unknown in this organization — pick it from the picker and retry");
-    }
     const partner = projectId ?? current?.project_id ?? null;
-    if (partner === null) {
-      refuse("task_without_project", "The clock event names a task but no project — pick the project the task belongs to and retry");
+    const code = await taskPairingCode(orgId, partner, projectTaskId);
+    if (code === "task_unknown") {
+      refuse(code, "The task is unknown in this organization — pick it from the picker and retry");
     }
-    if (task.project_id !== partner) {
-      refuse("task_wrong_project", "The task does not belong to the event's project — pick a task from that project and retry");
+    if (code === "task_without_project") {
+      refuse(code, "The clock event names a task but no project — pick the project the task belongs to and retry");
+    }
+    if (code === "task_wrong_project") {
+      refuse(code, "The task does not belong to the event's project — pick a task from that project and retry");
     }
     return;
   }
   if (projectId !== null && current?.project_task_id != null) {
-    const task = await loadClockTask(orgId, current.project_task_id);
-    if (!task) {
-      refuse("task_unknown", "The task is unknown in this organization — pick it from the picker and retry");
+    const code = await taskPairingCode(orgId, projectId, current.project_task_id);
+    if (code === "task_unknown") {
+      refuse(code, "The task is unknown in this organization — pick it from the picker and retry");
     }
-    if (task.project_id !== projectId) {
-      refuse("task_wrong_project", "The open entry's task does not belong to the new project — pick a task from that project and retry");
+    if (code === "task_wrong_project") {
+      refuse(code, "The open entry's task does not belong to the new project — pick a task from that project and retry");
     }
   }
-}
-
-async function loadClockTask(orgId: string, taskId: string): Promise<{ project_id: string } | null> {
-  const row = (await db.execute<{ project_id: string }>(sql`
-    select project_id::text as project_id from project_tasks
-     where org_id = ${orgId} and id = ${taskId} limit 1`)).rows[0];
-  return row ?? null;
 }
 
 async function checkGeofence(

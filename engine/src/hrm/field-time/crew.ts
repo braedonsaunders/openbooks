@@ -31,6 +31,7 @@ import {
 import { EffectiveEmploymentError, resolveEffectiveEmployment } from "../effective-employment.ts";
 import { keyedFingerprint } from "../../platform/secrets.ts";
 import { FieldTimeError, isUniqueViolation, refuse } from "./errors.ts";
+import { taskPairingCode } from "./task-pairing.ts";
 import {
   FIELD_TIME_CREW_ENTRY_FEATURE,
   FIELD_TIME_EQUIPMENT_FEATURE,
@@ -701,9 +702,12 @@ async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: 
   const charges: ChargeSpec[] = [];
   for (const line of lines) {
     if (line.projectTaskId) {
-      const task = (await db.execute<{ id: string }>(sql`
-        select id from project_tasks where org_id = ${orgId} and id = ${line.projectTaskId}`)).rows[0];
-      if (!task) refuse("task_unknown", "A batch line names a task outside this organization — fix the lines before posting");
+      // Same pairing rule as clock events (task-pairing.ts): the task must
+      // be known and sit on the batch's project — a task from another
+      // project would post its cost against the wrong job.
+      const code = await taskPairingCode(orgId, batch.project_id, line.projectTaskId);
+      if (code === "task_unknown") refuse(code, "A batch line names a task outside this organization — fix the lines before posting");
+      if (code === "task_wrong_project") refuse(code, "A batch line names a task outside the batch's project — fix the lines before posting");
     }
     const equipmentId = equipmentOn ? line.equipmentId : null;
     const equipmentHours = equipmentOn ? line.equipmentHours : null;
