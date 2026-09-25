@@ -226,11 +226,11 @@ export function WidgetCard({
     case 'team-quals':
       return <PersonaRows title={t('widgets.teamQuals')} icon={<BookOpen size={14} />} href="/hrm" rows={[]} empty={t('persona.noExpiringQuals')} />
     case 'admin-attention':
-      return <PersonaRows title={t('widgets.adminAttention')} icon={<AlertTriangle size={14} />} rows={(data.adminAttention ?? []).map((a) => ({ label: a.label, detail: String(a.count), href: a.href }))} empty={t('persona.allClear')} />
+      return <PersonaRows title={t('widgets.adminAttention')} icon={<AlertTriangle size={14} />} rows={(data.adminAttention ?? []).map((a) => ({ label: a.label, detail: a.unavailable ? t('persona.unavailable') : String(a.count), href: a.href }))} empty={t('persona.allClear')} />
     case 'workflow-errors':
       return data.workflowErrors === null
         ? <PersonaEmpty title={t('widgets.workflowErrors')} icon={<Activity size={14} />} />
-        : <MetricTile icon={<Activity size={15} />} label={t('widgets.workflowErrors')} value={String(data.workflowErrors.count)} href="/admin/flows" tone={data.workflowErrors.count > 0 ? 'rose' : 'emerald'} hint={data.workflowErrors.count > 0 ? t('persona.needsAttention') : t('persona.allClear')} />
+        : <MetricTile icon={<Activity size={15} />} label={t('widgets.workflowErrors')} value={data.workflowErrors.unavailable ? t('persona.unavailable') : String(data.workflowErrors.count)} href="/admin/flows" tone={data.workflowErrors.unavailable ? 'amber' : data.workflowErrors.count > 0 ? 'rose' : 'emerald'} hint={data.workflowErrors.unavailable ? t('persona.unavailable') : (data.workflowErrors.count > 0 ? t('persona.needsAttention') : t('persona.allClear'))} />
     case 'admin-calendar':
       return <PersonaRows title={t('widgets.adminCalendar')} icon={<CalendarClock size={14} />} rows={(data.adminCalendar ?? []).map((c) => ({ label: c.label, detail: c.date }))} empty={t('persona.nothingUpcoming')} />
     case 'list-close-readiness':

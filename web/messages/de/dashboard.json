@@ -226,6 +226,7 @@
     "attentionPayrollSetup": "Lohnabrechnung benötigt Verrechnungskonten",
     "attentionBankLines": "Nicht zugeordnete Bankzeilen",
     "attentionCloseRuns": "Offene Abschlussläufe",
+    "unavailable": "Nicht verfügbar",
     "calendarPayrollRemittance": "Ausstehende Lohnabführung",
     "nothingWaiting": "Nichts wartet auf Sie.",
     "noBalances": "Keine berechenbaren Konten.",

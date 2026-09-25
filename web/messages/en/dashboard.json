@@ -226,6 +226,7 @@
     "attentionPayrollSetup": "Payroll setup needs control accounts",
     "attentionBankLines": "Bank lines unmatched",
     "attentionCloseRuns": "Open close runs",
+    "unavailable": "Unavailable",
     "calendarPayrollRemittance": "Payroll remittance pending",
     "nothingWaiting": "Nothing waits on you.",
     "noBalances": "No computable balances.",

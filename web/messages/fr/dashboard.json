@@ -226,6 +226,7 @@
     "attentionPayrollSetup": "La paie nécessite des comptes de contrôle",
     "attentionBankLines": "Lignes bancaires non rapprochées",
     "attentionCloseRuns": "Clôtures ouvertes",
+    "unavailable": "Indisponible",
     "calendarPayrollRemittance": "Versement des retenues de paie en attente",
     "nothingWaiting": "Rien ne vous attend.",
     "noBalances": "Aucun solde calculable.",

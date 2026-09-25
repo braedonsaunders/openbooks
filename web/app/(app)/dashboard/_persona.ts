@@ -104,8 +104,8 @@ export interface PersonaMetrics {
   teamNudges: { text: string; href: string }[] | null
   teamHeadcount: number | null
   teamQuals: { name: string; detail: string }[] | null
-  adminAttention: { label: string; count: number; href: string }[] | null
-  workflowErrors: { count: number; href: string } | null
+  adminAttention: { label: string; count: number; href: string; unavailable?: true }[] | null
+  workflowErrors: { count: number; href: string; unavailable?: true } | null
   adminCalendar: { label: string; date: string }[] | null
 }
 
@@ -401,7 +401,7 @@ export async function loadPersonaMetrics(
   }
 
   if (need('adminAttention') && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
-    const attention: { label: string; count: number; href: string }[] = []
+    const attention: { label: string; count: number; href: string; unavailable?: true }[] = []
     if (can(authz, 'hrm.employment.read')) {
       const pending = await listInbox(ctx ?? await inboxContext(authz), {
         kinds: ['hrm_leave_request', 'hrm_change_request', 'hrm_process_step'],
@@ -415,22 +415,44 @@ export async function loadPersonaMetrics(
       const missing = home?.missingSettings.length ?? 0
       if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
     }
-    const unmatched = can(authz, 'banking.read') ? (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from bank_statement_lines
-       where org_id = ${orgId} and match_status = 'unmatched'`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0 : 0
-    if (unmatched > 0) attention.push({ label: tp('attentionBankLines'), count: unmatched, href: '/banking/match' })
-    const openClose = can(authz, 'close.run') ? (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from close_runs
-       where org_id = ${orgId} and status not in ('closed', 'cancelled')`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0 : 0
-    if (openClose > 0) attention.push({ label: tp('attentionCloseRuns'), count: openClose, href: '/close' })
+    // A failed operator-control count reads as unavailable, never as a
+    // verified zero that would hide a real backlog. A probe the caller may
+    // not run stays silent (as zero); only a failed query is unavailable.
+    let unmatched: number | null
+    try {
+      unmatched = can(authz, 'banking.read') ? (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from bank_statement_lines
+         where org_id = ${orgId} and match_status = 'unmatched'`)).rows[0]?.n ?? 0 : 0
+    } catch {
+      unmatched = null
+    }
+    if (unmatched === null) attention.push({ label: tp('attentionBankLines'), count: 0, href: '/banking/match', unavailable: true })
+    else if (unmatched > 0) attention.push({ label: tp('attentionBankLines'), count: unmatched, href: '/banking/match' })
+    let openClose: number | null
+    try {
+      openClose = can(authz, 'close.run') ? (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from close_runs
+         where org_id = ${orgId} and status not in ('closed', 'cancelled')`)).rows[0]?.n ?? 0 : 0
+    } catch {
+      openClose = null
+    }
+    if (openClose === null) attention.push({ label: tp('attentionCloseRuns'), count: 0, href: '/close', unavailable: true })
+    else if (openClose > 0) attention.push({ label: tp('attentionCloseRuns'), count: openClose, href: '/close' })
     out.adminAttention = attention
   }
 
   if (need('workflowErrors') && can(authz, 'flows.manage') && authz.allowedSubsidiaryIds === null) {
-    const failed = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from flow_runs
-       where org_id = ${orgId} and status = 'failed'`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0
-    out.workflowErrors = { count: failed, href: '/admin/flows' }
+    let failed: number | null
+    try {
+      failed = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from flow_runs
+         where org_id = ${orgId} and status = 'failed'`)).rows[0]?.n ?? 0
+    } catch {
+      failed = null
+    }
+    out.workflowErrors = failed === null
+      ? { count: 0, href: '/admin/flows', unavailable: true }
+      : { count: failed, href: '/admin/flows' }
   }
 
   if (need('adminCalendar') && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {

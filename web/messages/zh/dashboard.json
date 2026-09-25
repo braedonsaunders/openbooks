@@ -226,6 +226,7 @@
     "attentionPayrollSetup": "工资设置需要控制账户",
     "attentionBankLines": "未匹配的银行流水",
     "attentionCloseRuns": "未完成的结账",
+    "unavailable": "不可用",
     "calendarPayrollRemittance": "待缴工资款项",
     "nothingWaiting": "暂无等待事项。",
     "noBalances": "暂无可计算的余额。",
