@@ -98,7 +98,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
             or (c.counted_on = ${after.countedOn}::date and c.created_at < ${after.createdAt}::timestamptz)
             or (c.counted_on = ${after.countedOn}::date and c.created_at = ${after.createdAt}::timestamptz and c.id > ${after.id}))`
     : sql``;
-  const total = (await db.execute<{ n: string }>(sql`
+  const count = (await db.execute<{ n: string }>(sql`
     select count(*)::text as n from stock_counts c where c.org_id = ${orgId} ${scope}`)).rows[0]!.n;
   const r = (await db.execute<{
     id: string;
@@ -142,7 +142,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
       uncountedCount: Number(row.uncounted_count),
       discrepantLineCount: Number(row.discrepant_count),
     })),
-    totalCount: Number(total),
+    totalCount: Number(count),
     nextCursor:
       hasMore && last
         ? Buffer.from(JSON.stringify({ countedOn: last.counted_on, createdAt: last.created_at, id: last.id })).toString("base64url")

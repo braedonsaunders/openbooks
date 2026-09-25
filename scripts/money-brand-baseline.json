@@ -1,4 +1,11 @@
 {
-  "$comment": "Ceiling on heuristic money-shaped Number()/parseFloat()/unary-+ crossings in engine/src and packages/*/src (non-test). Branded Money/Rate/Quantity conversions fail unconditionally outside this count. This ceiling may only be lowered: adoption slices convert a site below to the engine/src/money/brands.ts boundary and lower it. See scripts/check-money-brand.mjs.",
-  "ceiling": 9
+  "$comment": "Ceiling on heuristic money-shaped Number()/parseFloat()/unary-+ crossings in engine/src and packages/*/src (non-test). Branded Money/Rate/Quantity conversions fail unconditionally outside this count. This ceiling may only be lowered. Sites that remain are DOCUMENTED display/connector boundaries below: external data or UI meters, never ledger arithmetic. See scripts/check-money-brand.mjs.",
+  "ceiling": 6,
+  "displayBoundaries": [
+    "engine/src/projects/financials.ts marginPct: exact bigint ratio crossed once into a UI percentage (measures record notes it is not dollars); the ledger figures stay exact.",
+    "engine/src/sync/project-financials-verify.ts f(): exact 2dp money crossed once for a $-with-commas display string.",
+    "engine/src/sync/qbo-native.ts isClearedBatch: external connector JSON amounts (already floats upstream) zero-tested only, never arithmeticked.",
+    "engine/src/sync/qbo-source.ts void-balance skip: same external-data zero-test as above.",
+    "engine/src/tax/us-nexus.ts salesPct (x2): exact unit ratio crossed once into a UI progress meter; the status decision above it is exact."
+  ]
 }

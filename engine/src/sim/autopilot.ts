@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { cmp } from "../money/money.ts";
 import { addDays, dayOfMonth, isMonthEnd, recordCoverage } from "./manifest.ts";
 import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";
@@ -113,8 +114,16 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
   const receipts = (await observe.arReceipts(world)) as { id: string; suggested: { lineId: string; amount: string }[] | null }[];
   for (const r of receipts) {
     // Only apply positive allocations (a short-pay of a tiny invoice can round to
-    // 0.00, which the payment engine correctly rejects).
-    const alloc = (r.suggested ?? []).filter((s) => Number(s.amount) > 0.005).map((s) => ({ lineId: s.lineId, amount: s.amount }));
+    // 0.00, which the payment engine correctly rejects). Exact comparison:
+    // identical verdicts to the old float threshold on every decimal input,
+    // and an unreadable amount is dropped here exactly as NaN was.
+    const alloc = (r.suggested ?? []).filter((s) => {
+      try {
+        return cmp(s.amount, "0.0050") > 0;
+      } catch {
+        return false;
+      }
+    }).map((s) => ({ lineId: s.lineId, amount: s.amount }));
     if (alloc.length === 0) continue;
     try {
       await ops.applyReceipt(world, r.id, alloc, world.actors.arClerk);
