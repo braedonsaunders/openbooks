@@ -275,17 +275,40 @@ export async function getEmailAttachmentBlob(id: string): Promise<Buffer | null>
 /** Best-effort: a failed delete must never fail a delivery. The worker
  *  deletes eagerly on terminal states; a blob orphaned by a crash between
  *  send and delete stays under the unlisted prefix until an operator clears
- *  it — it is never re-read, because only live job payloads reference ids. */
+ *  it — it is never re-read, because only live job payloads reference ids.
+ *
+ *  DeleteObjects reports per-object failures inside a RESOLVED response, so
+ *  awaiting the send is not proof: every returned entry in `Errors` is a
+ *  surviving blob. Failed keys retry once (deletes are idempotent) and
+ *  anything still failing is logged by key for the operator sweep. */
 export async function deleteEmailAttachmentBlobs(ids: string[]): Promise<void> {
+  const pending = new Set<string>();
   for (const id of ids) {
     try {
       assertEmailAttachmentId(id);
-      await s3().send(new DeleteObjectsCommand({
-        Bucket: env.S3_BUCKET!,
-        Delete: { Objects: [{ Key: emailAttachmentKey(id) }], Quiet: true },
-      }));
+      pending.add(id);
     } catch (error) {
       console.error("[file-storage] email attachment cleanup failed (object orphaned):", (error as Error).message);
+    }
+  }
+  for (let attempt = 0; attempt < 2 && pending.size > 0; attempt += 1) {
+    for (const id of [...pending]) {
+      try {
+        const result = await s3().send(new DeleteObjectsCommand({
+          Bucket: env.S3_BUCKET!,
+          Delete: { Objects: [{ Key: emailAttachmentKey(id) }], Quiet: true },
+        }));
+        const failures = result.Errors ?? [];
+        if (failures.length === 0) {
+          pending.delete(id);
+        } else {
+          for (const failure of failures) {
+            console.error("[file-storage] email attachment cleanup failed (object orphaned):", failure.Key, failure.Message);
+          }
+        }
+      } catch (error) {
+        console.error("[file-storage] email attachment cleanup failed (object orphaned):", (error as Error).message);
+      }
     }
   }
 }
