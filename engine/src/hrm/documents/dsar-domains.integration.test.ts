@@ -207,9 +207,11 @@ async function seedSurvey(h: Harness): Promise<void> {
     insert into hrm_survey_invitations (org_id, survey_id, party_id, token_hash)
     values (${org.orgId}, ${surveyId}, ${h.partyId}, ${randomUUID()})
   `);
+  // 0363 requires one answer per question id: the seeded answer names its
+  // question instead of the bare legacy shape.
   await db.execute(sql`
     insert into hrm_survey_responses (org_id, survey_id, respondent_link_enc, answers)
-    values (${org.orgId}, ${surveyId}, ${encryptRespondentLink(org.orgId, h.partyId)}, '[{"a": 1}]'::jsonb)
+    values (${org.orgId}, ${surveyId}, ${encryptRespondentLink(org.orgId, h.partyId)}, '[{"questionId": "engagement-1", "a": 1}]'::jsonb)
   `);
 }
 
