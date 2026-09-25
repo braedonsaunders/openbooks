@@ -204,34 +204,40 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const employee = url.searchParams.get('employee')
   if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'employee required' }, { status: 422 })
-  const today = await businessToday(gate.user.orgId)
-  const [rates, org, currencies, employeeContext] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
-      select id, rate, currency, basis, annual_hours, effective_from::text as effective_from,
-             effective_to::text as effective_to, notes,
-             effective_from <= ${today} and (effective_to is null or effective_to >= ${today}) as is_current
-        from labor_cost_rates
-       where org_id = ${gate.user.orgId} and employee_party_id = ${employee} and is_active
-       order by effective_from desc`),
-    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${gate.user.orgId}`),
-    configuredCurrencies(gate.user.orgId),
-    db.execute<{ base_currency: string | null; subsidiaryId: string | null }>(sql`
+  return withOrgTransaction(gate.user.orgId, async () => {
+    // Lock ownership before loading the confidential rates. A rehome waits
+    // until the authorized response has been constructed.
+    const employeeContext = await db.execute<{ base_currency: string | null; subsidiaryId: string | null }>(sql`
       select s.base_currency, p.subsidiary_id as "subsidiaryId"
         from parties p
         left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id and s.is_active
-       where p.org_id = ${gate.user.orgId} and p.id = ${employee}`),
-  ])
-  const orgCurrency = org.rows[0]?.base_currency ?? 'CAD'
-  // Wage data is confidential per subsidiary: an employee outside the caller's
-  // subsidiary scope is indistinguishable from a nonexistent one.
-  const scopeDenied = guardSubsidiaryScope(gate, employeeContext.rows[0]?.subsidiaryId ?? null, {
-    orgWideNull: true,
-  })
-  if (scopeDenied) return scopeDenied
-  return NextResponse.json({
-    rates: rates.rows,
-    currencies,
-    defaultCurrency: employeeContext.rows[0]?.base_currency ?? orgCurrency,
+       where p.org_id = ${gate.user.orgId} and p.id = ${employee}
+       for share of p`)
+    if (employeeContext.rows.length !== 1) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // Wage data is confidential per subsidiary: an employee outside the
+    // caller's subsidiary scope is indistinguishable from a nonexistent one.
+    const scopeDenied = guardSubsidiaryScope(gate, employeeContext.rows[0]!.subsidiaryId, {
+      orgWideNull: true,
+    })
+    if (scopeDenied) return scopeDenied
+    const today = await businessToday(gate.user.orgId)
+    const [rates, org, currencies] = await Promise.all([
+      db.execute<Record<string, unknown>>(sql`
+        select id, rate, currency, basis, annual_hours, effective_from::text as effective_from,
+               effective_to::text as effective_to, notes,
+               effective_from <= ${today} and (effective_to is null or effective_to >= ${today}) as is_current
+          from labor_cost_rates
+         where org_id = ${gate.user.orgId} and employee_party_id = ${employee} and is_active
+         order by effective_from desc`),
+      db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${gate.user.orgId}`),
+      configuredCurrencies(gate.user.orgId),
+    ])
+    const orgCurrency = org.rows[0]?.base_currency ?? 'CAD'
+    return NextResponse.json({
+      rates: rates.rows,
+      currencies,
+      defaultCurrency: employeeContext.rows[0]!.base_currency ?? orgCurrency,
+    })
   })
 }
 
