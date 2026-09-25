@@ -1815,6 +1815,10 @@
       "pending_verification": "待验证",
       "not_yet_effective": "尚未生效"
     },
+    "severityNames": {
+      "block": "阻止",
+      "warn": "警告"
+    },
     "emptyTitle": "尚未记录资质",
     "emptyDescription": "记录班组的执照和认证以管理派工。",
     "ledgerTruncated": "共 {total} 条，显示 {shown} 条。",

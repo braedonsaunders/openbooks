@@ -197,6 +197,10 @@ function statusLabel(t: HrmT, status: DerivedQualificationStatus): string {
   return t.has(`qualifications.statusNames.${status}`) ? t(`qualifications.statusNames.${status}`) : status
 }
 
+function severityLabel(t: HrmT, severity: string): string {
+  return t.has(`qualifications.severityNames.${severity}`) ? t(`qualifications.severityNames.${severity}`) : severity
+}
+
 export async function loadQualificationsPage(
   authz: Authz,
   sp: Record<string, string | undefined>,
@@ -480,6 +484,7 @@ export async function loadQualificationsPage(
       subjectName: r.subjectName,
       typeCode: r.typeCode,
       severity: r.severity,
+      severityLabel: severityLabel(t, r.severity),
       severityVariant: (r.severity === 'block' ? 'danger' : 'warn') as 'danger' | 'warn',
       windowLabel: r.requiredTo ? `${r.requiredFrom} – ${r.requiredTo}` : t('qualifications.windowOpen', { from: r.requiredFrom }),
     })),

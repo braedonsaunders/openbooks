@@ -1815,6 +1815,10 @@
       "pending_verification": "Verificação pendente",
       "not_yet_effective": "Ainda não vigente"
     },
+    "severityNames": {
+      "block": "Bloqueio",
+      "warn": "Alerta"
+    },
     "emptyTitle": "Nenhuma qualificação registrada",
     "emptyDescription": "Registre as licenças e certificações da equipe para controlar as alocações.",
     "ledgerTruncated": "Mostrando {shown} de {total}.",

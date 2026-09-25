@@ -1815,6 +1815,10 @@
       "pending_verification": "Prüfung ausstehend",
       "not_yet_effective": "Noch nicht wirksam"
     },
+    "severityNames": {
+      "block": "Blockierend",
+      "warn": "Warnung"
+    },
     "emptyTitle": "Keine Qualifikationen erfasst",
     "emptyDescription": "Erfassen Sie Lizenzen und Zertifizierungen der Mannschaft, um Einsätze zu steuern.",
     "ledgerTruncated": "{shown} von {total} werden angezeigt.",

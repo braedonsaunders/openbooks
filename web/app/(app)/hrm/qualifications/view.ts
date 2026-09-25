@@ -157,7 +157,7 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
                     columns: [
                       column(f('columns.subject'), text(item('subjectName'))),
                       column(f('columns.type'), text(item('typeCode'))),
-                      column(f('columns.severity'), badge(item('severity'), { variant: item('severityVariant') })),
+                      column(f('columns.severity'), badge(item('severityLabel'), { variant: item('severityVariant') })),
                       column(f('columns.window'), text(item('windowLabel'), { className: 'tabular-nums' })),
                       ...(data.canManage ? [column('', {
                         kind: 'widget',
