@@ -108,8 +108,7 @@ test("FR regions are national: one known region, and it is supported", () => {
 test("FR certificate declares the PAS rate option, not a W-4 clone", () => {
   const declared = FR_PAYROLL_PACK.certificates();
   assert.equal(declared.country, "FR");
-  assert.equal(declared.certificates.length, 1);
-  const cert = declared.certificates[0];
+  const cert = declared.certificates.find((item) => item.key === "fr_pas_option");
   assert.ok(cert);
   assert.equal(cert.key, "fr_pas_option");
   assert.equal(cert.form, "2043");

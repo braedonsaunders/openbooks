@@ -42,9 +42,8 @@
  *   transcribed, never priced with grille I. DOM domiciles are refused by
  *   name likewise.
  *
- * What this pass does NOT do (stated): APEC (cadres only, no channel),
- * a conventionally modified 60/40 split, the Alsace-Moselle salary
- * supplement, and PAS reduced-rate modulation.
+ * What this pass does NOT do (stated): a conventionally modified 60/40 split, the Alsace-Moselle salary
+ * supplement, the AGS interim variant, and PAS reduced-rate modulation.
  * The brut/net-imposable bridge IS modelled: the stub's earnings figure
  * is the brut, and the PAS assiette is derived by
  * calculateFrNetImposable2026 (see ./cotisations.ts) — the rate never
@@ -64,7 +63,7 @@ import {
   frPasDefaultRateUnits,
   frPasEditionForVersement,
 } from "./tables-2026.ts";
-import { calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
+import { calculateFrApec2026, calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
 import { frAllocFamReducedEligible } from "./statutory-rates.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
@@ -149,6 +148,9 @@ export const FR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CEG_ER: "Contribution d'équilibre général (employeur)",
   CET_SAL: "Contribution d'équilibre technique (salariale)",
   CET_ER: "Contribution d'équilibre technique (employeur)",
+  APEC_BASE: "Assiette APEC (4 PASS)",
+  APEC_SAL: "Cotisation APEC (salariale)",
+  APEC_ER: "Cotisation APEC (employeur)",
   FR_RGDU_COEFFICIENT: "Coefficient RGDU annuel",
   FR_RGDU_SMIC: "SMIC contractuel du mois pour RGDU",
   FR_RGDU_ADJUSTMENT: "Régularisation RGDU du mois",
@@ -359,6 +361,21 @@ export async function computeFrStatutory(
   const contratCdd = resolveEmployeeFact(
     "FR", "fr_contrat_cdd", empFact("FR", ctx.emp ?? {}, "fr_contrat_cdd"),
   ) === "true";
+  // APEC prices only for attested covered workers; uncovered tranches and
+  // periods price zero through the same function, never a silent skip.
+  const apecEligibility = resolveEmployeeFact(
+    "FR",
+    "fr_apec_eligibility",
+    empFact("FR", {
+      fr_apec_eligibility: certificateFor("fr_apec_status")?.answers.apec_eligibility ?? null,
+    }, "fr_apec_eligibility"),
+  );
+  const apec = calculateFrApec2026({
+    brut: base,
+    payDate,
+    periodsPerYear,
+    covered: apecEligibility === "covered",
+  });
   // The stub's earnings figure is the brut. PAS prices on the net imposable
   // derived from it (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10) —
   // never on the brut. Cotisations price on the brut below.
@@ -366,6 +383,7 @@ export async function computeFrStatutory(
     brut: base,
     payDate,
     periodsPerYear,
+    apecEmployeeContribution: apec.employee,
   });
   const result = calculateFrPas2026({
     base: net.netImposable,
@@ -518,6 +536,8 @@ export async function computeFrStatutory(
   pushStatutory("ceg", "employer_contribution", "Contribution d'équilibre général (employeur)", cots.cegEr, 241);
   pushStatutory("cet", "deduction", "Contribution d'équilibre technique (salariale)", cots.cetSal, 142);
   pushStatutory("cet", "employer_contribution", "Contribution d'équilibre technique (employeur)", cots.cetEr, 242);
+  pushStatutory("apec", "deduction", "Cotisation APEC (salariale)", apec.employee, 143);
+  pushStatutory("apec", "employer_contribution", "Cotisation APEC (employeur)", apec.employer, 243);
   return {
     BASE: result.monthlyBase,
     TAUX_PAS: result.ratePct,
@@ -541,6 +561,9 @@ export async function computeFrStatutory(
     CEG_ER: cots.cegEr,
     CET_SAL: cots.cetSal,
     CET_ER: cots.cetEr,
+    APEC_BASE: apec.base,
+    APEC_SAL: apec.employee,
+    APEC_ER: apec.employer,
     FR_RGDU_COEFFICIENT: rgdu.coefficient,
     FR_RGDU_SMIC: currentSmic,
     FR_RGDU_ADJUSTMENT: rgdu.periodAdjustment,

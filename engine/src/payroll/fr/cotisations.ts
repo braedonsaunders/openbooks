@@ -40,8 +40,7 @@
  * from the quoted totals; CEG 2,15 % (T1) and 2,70 % (T2) split the same
  * way; CET 0,35 % on the T1+T2 assiettes strictly above the plafond.
  *
- * What this pass does NOT do (named refusals, stated): APEC 0,06 %
- * (cadres only — no cadre-status channel), a conventionally modified
+ * What this pass does NOT do (named refusals, stated): a conventionally modified
  * 60/40 split (no tenant-override channel), AT/MP and versement mobilité
  * (tenant-declared — the pure function accepts declared rates and prices
  * them, but no pack channel carries them to the adapter), and the
@@ -68,11 +67,13 @@ import {
   FR_DIALOGUE_SOCIAL_ER_2026,
   FR_FNAL_ER_2026,
   FR_MALADIE_ER_2026,
+  FR_QUATRE_PASS_2026,
   FR_VIEILLESSE_ER_2026,
   FR_VIEILLESSE_SAL_2026,
   frCotisationYearForPayDate,
 } from "./cotisations-2026.ts";
 import {
+  FR_APEC_2026,
   FR_ARRCO_TAUX_2026,
   FR_CEG_2026,
   FR_CET_2026,
@@ -143,6 +144,28 @@ function cappedPerPeriod(
     throw new PayrollPackError(`FR ${what} capped base went negative: engine defect`);
   }
   return per;
+}
+
+export function calculateFrApec2026(input: {
+  brut: string;
+  payDate: string;
+  periodsPerYear: number;
+  covered: boolean;
+}): { base: string; employee: string; employer: string } {
+  frRetraiteYearForPayDate(input.payDate);
+  if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
+    throw new PayrollPackError(`FR APEC needs a positive integer periodsPerYear, got ${input.periodsPerYear}`);
+  }
+  const brut = U(input.brut);
+  if (brut < 0n) throw new PayrollPackError(`FR APEC brut must be non-negative, got "${input.brut}"`);
+  const base = input.covered
+    ? cappedPerPeriod(brut, input.periodsPerYear, U(FR_QUATRE_PASS_2026), "APEC 4 PASS")
+    : 0n;
+  return {
+    base: D(base),
+    employee: D(lineOf(base, rate6(FR_APEC_2026.employeeRate))),
+    employer: D(lineOf(base, rate6(FR_APEC_2026.employerRate))),
+  };
 }
 
 export interface FrCotisations2026Input {
@@ -523,6 +546,8 @@ export interface FrNetImposable2026Input {
   payDate: string;
   /** Usual pay periodicity; 12 = monthly caps directly. */
   periodsPerYear: number;
+  /** Resolved covered APEC employee share; zero only for a declared non-covered employee. */
+  apecEmployeeContribution?: string;
 }
 
 export interface FrNetImposable2026Result {
@@ -547,7 +572,8 @@ export interface FrNetImposable2026Result {
  * BOFiP BOI-IR-PAS-20-10-10 I-A §10: assiette = montant net imposable).
  *
  * Composition: brut − vieillesse − CSG 6,8 pts (CGI art. 154 quinquies) −
- * ARRCO − CEG (CGI art. 83 1°). The CSG 2,4 pts, the CRDS and the CET
+ * ARRCO − CEG − mandatory covered APEC share (CGI art. 83 1° and BOFiP
+ * BOI-RSA-CHAMP-20-10-20260407). The CSG 2,4 pts, the CRDS and the CET
  * salariale are non déductibles and stay in the base, i.e.
  * netImposable = netSocial + csgNonDeductible + crds + cetSal — the
  * identity the regression test pins so the add-back cannot silently drop.
@@ -610,11 +636,13 @@ export function calculateFrNetImposable2026(
   const ceg = lineOf(t1Base, cegT1.sal) + lineOf(t2Base, cegT2.sal);
   const cetApplies = annualised > passAnnual;
   const cet = cetApplies ? lineOf(t1Base + t2Base, cetSplit.sal) : 0n;
+  const apecSal = U(input.apecEmployeeContribution ?? "0");
+  if (apecSal < 0n) throw new PayrollPackError("FR net imposable APEC employee contribution cannot be negative");
 
   // Payslip arithmetic on centime-rounded lines: net social first, then the
   // non-déductible add-back. netImposable is equivalently brut minus the
   // déductible lines — both forms are returned so tests pin the identity.
-  const netSocial = brut - vieillesse - (csgDed + csgNonDed) - crds - arrco - ceg - cet;
+  const netSocial = brut - vieillesse - (csgDed + csgNonDed) - crds - arrco - ceg - cet - apecSal;
   const netImposable = netSocial + csgNonDed + crds + cet;
 
   return {

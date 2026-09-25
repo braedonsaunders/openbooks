@@ -145,18 +145,19 @@ export const FR_CET_2026 = {
 } as const;
 
 /**
- * APEC (cadres only) — transcribed and NOT applied:
+ * APEC (ANI articles 2.1 and 2.2):
  *
  * "APEC (pour les salariés cadres) Assiette Tranche 1 + Tranche 2
  * limitée à 4 fois le plafond de la sécurité sociale Part salariale
  * Part patronale Total 0,024% 0,036% 0,06%"
  *
- * No pack channel carries the employee's cadre status, so the engine
- * refuses APEC by name (see FR_COTISATION_REFUSALS_2026) instead of
- * charging every salary 0,06 % or silently dropping it for cadres.
+ * Coverage is carried by the effective fr_apec_status certificate. The
+ * split rates below come from the published 0.06% total and official split.
  */
 export const FR_APEC_2026 = {
   rate: "0.0006",
+  employeeRate: "0.00024",
+  employerRate: "0.00036",
   quote:
     "APEC (pour les salariés cadres) Assiette Tranche 1 + Tranche 2 "
     + "limitée à 4 fois le plafond de la sécurité sociale Part salariale "

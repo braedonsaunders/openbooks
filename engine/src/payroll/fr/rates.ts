@@ -10,14 +10,13 @@ import type { PayrollTaxYearSupport } from "../tax-years.ts";
  * rates are transcribed in ./cotisations-2026.ts from the browser-rendered
  * URSSAF taux-secteur-privé and plafonds pages (both verified 200; the
  * server HTML is a JS shell — "reachable, JS-rendered", not "connection
- * reset"). PAS, the URSSAF cotisations and AGIRC-ARRCO (T1/T2, CEG,
- * CET) compute, proven by the parity harnesses. `installable` is true:
+ * reset"). PAS, URSSAF cotisations, AGIRC-ARRCO (T1/T2, CEG, CET), and
+ * covered APEC shares compute, proven by the parity harnesses. `installable` is true:
  * the 2026 payslip computes and the packAccounts.FR.slots.* labels (pas,
  * salariales, retraite_comp, patronales) have shipped in web/messages in
  * all seven locales — the messages-catalog gate fires on those four keys.
  * Tenant-declared
- * AT/MP / versement mobilité rates have no engine channel and APEC is
- * refused by name — narrow, named, and stated
+ * AT/MP / versement mobilité rates have no engine channel
  * (see FR_COTISATION_REFUSALS_2026).
  */
 export const FR_TAX_YEARS: PayrollTaxYearSupport = {

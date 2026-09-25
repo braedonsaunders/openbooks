@@ -1,8 +1,18 @@
 import { registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
-/** Required statutory inputs for the 2026 RGDU path, plus the CDD contract flag for CPF-CDD. */
+/** Required statutory inputs for the 2026 APEC and RGDU paths, plus the CDD contract flag for CPF-CDD. */
 export const FR_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
+  {
+    key: "fr_apec_eligibility",
+    kind: "choice",
+    label: "APEC cadre and assimilated coverage",
+    choices: ["covered", "not_covered"],
+    refusalReason:
+      "APEC is mandatory for employees classified under ANI articles 2.1 or 2.2; record the applicable classification before payroll can determine the employee and employer contributions",
+    required: true,
+    producer: { kind: "certificate", certificate: "fr_apec_status", field: "apec_eligibility" },
+  },
   {
     key: "fr_rgdu_eligible",
     kind: "choice",

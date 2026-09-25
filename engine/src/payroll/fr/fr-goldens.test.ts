@@ -211,8 +211,7 @@ test("the retired lumped domicile refuses with the re-affirmation remedy", async
 });
 
 test("eligible French payroll refuses missing contractual hours by name", async () => {
-  // CSS D.241-7 IV adjusts the annual SMIC to contractual hours and eligible
-  // extra hours; absence must never turn into a silent zero-SMIC RGDU.
+  // CSS D.241-7 IV adjusts the annual SMIC to contractual hours and eligible extra hours.
   // https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000046843821
   const pushed: unknown[] = [];
   let query = 0;
@@ -237,7 +236,7 @@ test("eligible French payroll refuses missing contractual hours by name", async 
     nonPeriodic: "0.0000",
     periodsPerYear: 12,
     employerEffectif: "12.00",
-    certificateFor: () => ({ answers: { domicile: "metropole", rgdu_eligibility: "eligible" } }),
+    certificateFor: () => ({ answers: { domicile: "metropole", rgdu_eligibility: "eligible", apec_eligibility: "not_covered" } }),
     pushStatutory: (...args: unknown[]) => pushed.push(args),
   } as never;
 
@@ -258,7 +257,7 @@ test("an eligible filing account prices the reduced 3.45% family rate through th
     taxYear: 2026, region: "FR",
     run: { pay_date: "2026-06-15", run_type: "regular" },
     income: "2000.00", gross: "2000.0000", nonPeriodic: "0.0000", periodsPerYear: 12,
-    certificateFor: () => ({ answers: { domicile: "metropole", rgdu_eligibility: "excluded" } }),
+    certificateFor: () => ({ answers: { domicile: "metropole", rgdu_eligibility: "excluded", apec_eligibility: "not_covered" } }),
     pushStatutory: () => {},
   } as never;
   assert.equal((await computeFrStatutory(ctx)).FAM_ER, "69.0000");
