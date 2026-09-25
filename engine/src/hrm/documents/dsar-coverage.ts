@@ -74,6 +74,7 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_travel_pay_entries", domain: "payroll", linkage: "direct" },
   { table: "payroll_work_location_allocations", domain: "payroll", linkage: "direct" },
   { table: "payroll_roe_separation_events", domain: "payroll", linkage: "direct" },
+  { table: "payroll_roe_separation_payments", domain: "payroll", linkage: "transitive" },
   { table: "it_addizionali_opening_balances", domain: "payroll", linkage: "direct" },
   { table: "hrm_candidates", domain: "recruiting", linkage: "direct" },
   { table: "hrm_candidate_consents", domain: "recruiting", linkage: "transitive" },
