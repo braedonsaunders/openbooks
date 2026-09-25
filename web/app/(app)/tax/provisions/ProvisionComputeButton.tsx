@@ -70,35 +70,40 @@ export function ProvisionComputeButton() {
   async function compute() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/tax/provisions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        fiscalYear,
-        permanentDifferences: permanent,
-        additionalDifferences: temporary,
-        lossCarryforwardUsed: lossUsed || "0",
-        valuationAllowance: va || "0",
-      }),
-    });
-    if (!res.ok) {
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      setBusy(false);
-      setError(describeRowError(json.error));
-      return;
-    }
-    const json = (await res.json().catch(() => ({}))) as { runId?: unknown };
-    // A 2xx without a run id is a broken success: navigating on would land
-    // on /tax/provisions/undefined. Refuse in the dialog instead.
-    if (typeof json.runId !== "string" || json.runId === "") {
-      setBusy(false);
+    try {
+      const res = await fetch("/api/tax/provisions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fiscalYear,
+          permanentDifferences: permanent,
+          additionalDifferences: temporary,
+          lossCarryforwardUsed: lossUsed || "0",
+          valuationAllowance: va || "0",
+        }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(describeRowError(json.error));
+        return;
+      }
+      const json = (await res.json().catch(() => ({}))) as { runId?: unknown };
+      // A 2xx without a run id is a broken success: navigating on would land
+      // on /tax/provisions/undefined. Refuse in the dialog instead.
+      if (typeof json.runId !== "string" || json.runId === "") {
+        setError(t("computeFailed"));
+        return;
+      }
+      setOpen(false);
+      router.push(`/tax/provisions/${json.runId}`);
+      router.refresh();
+    } catch {
+      // A transport failure rejects the fetch: without this catch the
+      // button stays busy forever with no error shown.
       setError(t("computeFailed"));
-      return;
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
-    setOpen(false);
-    router.push(`/tax/provisions/${json.runId}`);
-    router.refresh();
   }
 
   return (
