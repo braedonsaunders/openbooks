@@ -314,8 +314,8 @@ export function PaymentDrawer({
     setPrevPartyKeys({ partyId, side, isDraft })
     if (isDraft) {
       setAllocs({})
-      if (!partyId) setOpenItems([])
-      else setLoadingItems(true)
+      setOpenItems([])
+      if (partyId) setLoadingItems(true)
     }
   }
   // Mount-skip mirror: the mount pass keeps the passed initialOpenItems; only
