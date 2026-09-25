@@ -40,7 +40,11 @@ function normalizeInitialTask(task: InitialWorkBreakdownTask): WorkBreakdownTask
         : 'open',
     estimatedHours: task.estimated_hours ?? '',
     estimatedCost: task.estimated_cost ?? '',
-    updatedAt: new Date(task.updated_at).toISOString(),
+    // The server revision text echoes back as expectedUpdatedAt: pass it
+    // through untouched. Re-serializing through Date truncates to 3
+    // fractional digits, which fails DOCUMENT_REVISION_PATTERN (6 digits)
+    // and refuses every edit of an initially loaded task with 422.
+    updatedAt: task.updated_at,
   }
 }
 
