@@ -2113,10 +2113,7 @@ test("a partially failed run still accepts legitimate file regeneration and repr
       parents: [null, first.id],
     });
 
-    // A retryable run may contain a mixture of already-sent and still-pending
-    // instructions. A replacement file must never contain the sent instruction
-    // again, so this surface refuses the mixed composition before superseding
-    // the current artifact.
+    // Refuse both idempotent retrieval and reprocessing after one instruction was sent.
     await withOrgContext(org.orgId, () => db.execute(sql`
       update payment_instructions set status = 'sent', updated_by = ${actorId}
        where id = ${seeded.instructionId} and org_id = ${org.orgId}
@@ -2126,8 +2123,10 @@ test("a partially failed run still accepts legitimate file regeneration and repr
        where id = ${seeded.runId} and org_id = ${org.orgId}
     `));
     await expectGenerationRefused(withOrgContext(org.orgId, () =>
+      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId)), /already left pending/);
+    await expectGenerationRefused(withOrgContext(org.orgId, () =>
       generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: second.id })),
-    /already left pending while the file was rendered/);
+    /already left pending/);
     const afterRefusal = await withOrgContext(org.orgId, async () =>
       (await db.execute<{ statuses: string[]; sequences: number[] }>(sql`
         select array_agg(status order by sequence_number) as statuses,

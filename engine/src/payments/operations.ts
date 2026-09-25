@@ -812,6 +812,23 @@ async function storeArtifactFile(
 
 const GENERATABLE_RUN_STATUSES = ["approved", "generated", "delivered", "partially_failed"];
 
+/** Lock the unsent composition shared by file generation and SFTP delivery. */
+async function lockPendingPaymentInstructions(runId: string, orgId: string): Promise<string[]> {
+  const instructions = (await db.execute<{ id: string; status: string }>(sql`
+    select id, status from payment_instructions
+     where payment_run_id = ${runId} and org_id = ${orgId}
+     order by id for update
+  `)).rows;
+  const ineligible = instructions.find((instruction) =>
+    instruction.status !== "pending" && instruction.status !== "cancelled");
+  if (ineligible) {
+    throw new PaymentError(
+      "payment instructions already left pending; do not deliver or regenerate a file containing previously sent instructions",
+    );
+  }
+  return instructions.filter((instruction) => instruction.status === "pending").map((instruction) => instruction.id);
+}
+
 async function findLiveRunArtifact(
   runId: string,
   orgId: string,
@@ -847,12 +864,6 @@ export async function generatePaymentFileArtifact(
   // inside the tenant transaction below against committed state.
   if (!GENERATABLE_RUN_STATUSES.includes(status)) {
     throw new PaymentError("approve the payment run before generating its file");
-  }
-  // Fast-path dedupe probe. Concurrent generators can both see no live
-  // artifact here; the transaction below re-checks under the run's row lock.
-  if (!opts?.reprocessFileId) {
-    const live = await findLiveRunArtifact(runId, orgId);
-    if (live) return live;
   }
   const now = opts?.now ?? new Date();
   // Stamp the run's first-file instant ONCE (coalesce) before rendering: the
@@ -901,17 +912,10 @@ export async function generatePaymentFileArtifact(
     // Rendering happened before the run lock. Bind those bytes to the exact
     // pending instruction set under the lock: a partially failed run may
     // already have sent siblings, and re-exporting them would pay twice.
-    const lockedInstructions = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status from payment_instructions
-       where payment_run_id = ${runId} and org_id = ${orgId}
-       order by id
-       for update
-    `)).rows;
+    const pendingIds = await lockPendingPaymentInstructions(runId, orgId);
     const renderedIds = ctx.payments.map((payment) => payment.id).sort();
-    const pendingIds = lockedInstructions.filter((instruction) => instruction.status === "pending").map((instruction) => instruction.id);
     if (
-      lockedInstructions.some((instruction) => instruction.status !== "pending")
-      || renderedIds.length !== pendingIds.length
+      renderedIds.length !== pendingIds.length
       || renderedIds.some((id, index) => id !== pendingIds[index])
     ) {
       throw new PaymentError(
@@ -1191,16 +1195,26 @@ export async function claimPaymentFileDelivery(opts: {
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
   return withOrgTransaction(opts.orgId, async () => {
-    // Lock the row first so the state judged below is committed state, not
-    // a snapshot: a void, supersede, rejection, or rollback that commits
-    // first leaves no claimable state behind, and concurrent claimants
-    // serialize on this lock.
+    // Read the immutable run link, then use the generation/posting lock order:
+    // run → instructions → file. This prevents both stale eligibility and
+    // cycles with a generator that must lock the run before the artifact.
+    const reference = (await db.execute<{ payment_run_id: string }>(sql`
+      select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
+    `)).rows[0];
+    if (!reference) throw deliveryClaimRefusal(null, null);
+    const run = (await db.execute<{ id: string }>(sql`
+      select id from payment_runs where id = ${reference.payment_run_id} and org_id = ${opts.orgId} for update
+    `)).rows[0];
+    if (!run) throw deliveryClaimRefusal(null, null);
+    await lockPendingPaymentInstructions(reference.payment_run_id, opts.orgId);
+    // The file state is judged only after its row lock; a void, supersede,
+    // rejection, or rollback that commits first leaves no claimable state.
     const current = (await db.execute<{ payment_run_id: string; status: string; delivery_claim_owner: string | null }>(sql`
       select payment_run_id, status, delivery_claim_owner from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId}
        for update
     `)).rows[0];
-    if (!current || (current.status !== "approved" && current.status !== "delivered")) {
+    if (!current || current.payment_run_id !== reference.payment_run_id || (current.status !== "approved" && current.status !== "delivered")) {
       throw deliveryClaimRefusal(current?.status ?? null, current?.delivery_claim_owner ?? null);
     }
     // Predicated on the judged state (belt and braces — the row is already
@@ -1274,10 +1288,19 @@ export async function recordPaymentFileSftpDelivery(opts: {
   response?: Record<string, unknown>;
 }): Promise<void> {
   await withOrgTransaction(opts.orgId, async () => {
+    const reference = (await db.execute<{ payment_run_id: string }>(sql`
+      select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
+    `)).rows[0];
+    if (!reference) throw new PaymentError("payment file not found");
+    const run = (await db.execute<{ id: string }>(sql`
+      select id from payment_runs where id = ${reference.payment_run_id} and org_id = ${opts.orgId} for update
+    `)).rows[0];
+    if (!run) throw new PaymentError("payment run not found");
     const file = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId}
          and status = 'delivering' and delivery_claim_token = ${opts.claimToken}
+       for update
     `));
     if (!file.rows[0]) {
       const current = (await db.execute<{ status: string; delivery_claim_owner: string | null }>(sql`
@@ -1433,6 +1456,16 @@ export async function resolveUncertainDelivery(opts: {
     throw new PaymentError("uncertain delivery outcome must be 'delivered' or 'approved'");
   }
   await withOrgTransaction(opts.orgId, async () => {
+    const reference = (await db.execute<{ payment_run_id: string }>(sql`
+      select payment_run_id from payment_files
+       where id = ${opts.fileId} and org_id = ${opts.orgId}
+         ${opts.runId ? sql`and payment_run_id = ${opts.runId}` : sql``}
+    `)).rows[0];
+    if (!reference) throw new PaymentError("payment file not found");
+    const run = (await db.execute<{ id: string }>(sql`
+      select id from payment_runs where id = ${reference.payment_run_id} and org_id = ${opts.orgId} for update
+    `)).rows[0];
+    if (!run) throw new PaymentError("payment run not found");
     const file = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId} and status = 'delivery_uncertain'
