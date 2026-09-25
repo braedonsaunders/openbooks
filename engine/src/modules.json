@@ -52,6 +52,7 @@
       "dependsOn": [
         "flows",
         "hrm",
+        "money",
         "organization",
         "platform",
         "scheduling"

@@ -4,6 +4,7 @@ import { listUserDelegations } from "../flows/delegations.ts";
 import { decideGateAsSystem } from "../flows/gates.ts";
 import { loadSubjectSnapshot } from "./registry.ts";
 import type { SubjectSnapshot } from "./evaluate.ts";
+import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 
 /**
  * HR-16 exception-only approval — scoring over the EXISTING Flows gates.
@@ -122,14 +123,25 @@ export function scoreException(
   }
 
   if (subjectKind === "expense_report") {
-    const maxAmount = num("max_amount");
+    const maxAmount = canonicalDecimal(thresholds["max_amount"], 4);
     if (maxAmount === null) {
       throw new ApprovalPolicyError(
         "expense_report exception scoring needs a max_amount threshold — configure it in approval settings before enabling exception-only",
       );
     }
-    const total = toNumber(snapshot.fields["total"], "total");
-    check("max_amount", maxAmount, total, total <= maxAmount, `report total ${total} exceeds ${maxAmount}`);
+    const total = canonicalDecimal(snapshot.fields["total"], 4);
+    if (total === null) {
+      throw new ApprovalPolicyError(
+        "exception scoring needs an exact decimal string 'total' on the expense report — fix the subject or disable exception-only",
+      );
+    }
+    check(
+      "max_amount",
+      maxAmount,
+      total,
+      compareDecimal(total, maxAmount) <= 0,
+      `report total ${total} exceeds ${maxAmount}`,
+    );
     return { within: breaches.length === 0, checked, breaches };
   }
 

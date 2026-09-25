@@ -50,11 +50,11 @@ test("leave and expense scoring", () => {
   assert.deepEqual(leave.checked, ["max_days: threshold 3, actual 2", "requires_balance: threshold true, actual true"]);
   const expense = scoreException(
     "expense_report",
-    { entity: "expense_report", fields: { total: 5000 }, scope: {} },
-    { max_amount: 500 },
+    { entity: "expense_report", fields: { total: "9007199254740993.01" }, scope: {} },
+    { max_amount: "9007199254740993" },
   );
   assert.equal(expense.within, false);
-  assert.deepEqual(expense.checked, ["max_amount: threshold 500, actual 5000"]);
+  assert.deepEqual(expense.checked, ["max_amount: threshold \"9007199254740993\", actual \"9007199254740993.01\""]);
 });
 
 test("no-rule disposition: flag on auto-approves with named absence, off routes human", () => {
