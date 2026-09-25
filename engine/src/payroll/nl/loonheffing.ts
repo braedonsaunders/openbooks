@@ -591,6 +591,27 @@ export async function computeNlStatutory(
   assertRegionSupported(region);
   nlRatesForTaxYear(taxYear);
 
+  // Table selection precedes every amount: only the standard resident
+  // situation prices from the witte tabellen. Foreign-resident and partial-
+  // liability employees need the Rekenvoorschriften herleidingssituatie /
+  // woonland tables (chapters 7–8), which are not transcribed.
+  const liability = certificateFor("nl_tax_liability");
+  const liabilityClass = liability === null ? null : certificateChoice(liability, "liability_class");
+  if (liabilityClass === null) {
+    throw new PayrollError(
+      "the NL payroll pack cannot calculate without a recorded tax-liability classification — record "
+      + "standard_resident, foreign_resident or partial_dutch_liability on the nl_tax_liability certificate "
+      + "(Belasting- en premieplicht) before running payroll",
+    );
+  }
+  if (liabilityClass !== "standard_resident") {
+    throw new PayrollError(
+      `the NL payroll pack prices only the standard resident witte tabellen — liability class "${liabilityClass}" `
+      + "needs the Rekenvoorschriften 2026 herleidingssituatie/woonland tables (chapters 7–8), which are not "
+      + "transcribed. Complete this run in payroll software that implements the applicable table",
+    );
+  }
+
   const opgaaf = certificateFor("nl_loonheffingen");
   const applyKorting = opgaaf === null ? false : certificateFlag(opgaaf, "apply_loonheffingskorting");
   const ageClass = opgaaf === null

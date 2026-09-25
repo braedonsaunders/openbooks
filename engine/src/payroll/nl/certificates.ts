@@ -225,9 +225,64 @@ const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
   ],
 };
 
+/**
+ * Belasting- en premieplicht (the employer's own per-employee record, not a
+ * Belastingdienst form).
+ *
+ * The engine transcribes only the standard resident situation (the witte
+ * tabellen for a fully liable employee). The Rekenvoorschriften distinguish
+ * standard from herleidingssituaties with woonland-specific tables
+ * (chapters 7–8); a foreign-resident or partially liable employee must not
+ * be priced from the resident table. There is no lawful default — the
+ * classification is absent until the employer records it — so the engine
+ * refuses to calculate without it, and refuses the non-standard classes by
+ * name until their tables are transcribed.
+ */
+const BELASTING_PREMIEPLICHT: PayrollCertificate = {
+  key: "nl_tax_liability",
+  form: "Belasting- en premieplicht (werkgeversadministratie)",
+  label: "Tax and premium liability class",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "Belastingdienst, Rekenvoorschriften 2026 v2 (standard versus "
+    + "herleidingssituaties, woonland-specific tables, chapters 7–8)",
+  summary:
+    "The employer's per-employee liability classification for table selection: "
+    + "only the standard resident situation prices from the witte tabellen.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "liability_class",
+      label: "Belasting- en premieplicht",
+      kind: "choice",
+      choices: [
+        {
+          value: "standard_resident",
+          label: "Standard resident (volledig belasting- en premieplichtig)",
+          help: "Living in the Netherlands and fully liable: priced from the witte tabellen.",
+        },
+        {
+          value: "foreign_resident",
+          label: "Foreign resident (woonland buiten Nederland)",
+          help: "Not priced: the woonland-specific tables are not transcribed.",
+        },
+        {
+          value: "partial_dutch_liability",
+          label: "Partial Dutch liability (beperkt belasting- of premieplichtig)",
+          help: "Not priced: the herleidingssituatie tables are not transcribed.",
+        },
+      ],
+      required: true,
+      help: "Which liability situation selects the table. Only the standard resident "
+        + "situation is implemented; any other situation refuses by name.",
+    },
+  ],
+};
+
 const NL_CERTIFICATES: PayrollPackCertificates = {
   country: "NL",
-  certificates: [OPGAAF_LOONHEFFINGEN, PREMIES_WERKNEMERSVERZEKERINGEN],
+  certificates: [OPGAAF_LOONHEFFINGEN, PREMIES_WERKNEMERSVERZEKERINGEN, BELASTING_PREMIEPLICHT],
 };
 
 export { NL_CERTIFICATES };
