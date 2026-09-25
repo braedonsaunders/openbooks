@@ -1476,6 +1476,7 @@
     "certifiedTitle": "Paie certifiée",
     "classesTitle": "Classes",
     "perdiemTitle": "Indemnités journalières",
+    "unknownFormat": "Format inconnu",
     "empty": "Rien ici pour le moment.",
     "emptyAction": "Configurez ci-dessous dans Paramètres.",
     "active": "Actif",

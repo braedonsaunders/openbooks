@@ -1476,6 +1476,7 @@
     "certifiedTitle": "認証給与",
     "classesTitle": "クラス",
     "perdiemTitle": "日当",
+    "unknownFormat": "不明な形式",
     "empty": "まだ何もありません。",
     "emptyAction": "下の設定で構成してください。",
     "active": "有効",
