@@ -1845,7 +1845,13 @@
       "issuedOn": "Emitida el",
       "expiresOn": "Vence el",
       "identifier": "Número de licencia",
-      "notes": "Notas"
+      "notes": "Notas",
+      "evidence": "Archivo de evidencia",
+      "evidencePlaceholder": "Buscar en el archivador de archivos",
+      "evidenceSearchPlaceholder": "Buscar archivos…",
+      "evidenceSearchHint": "Escribe al menos dos caracteres para buscar.",
+      "evidenceRequired": "Selecciona evidencia para este tipo de cualificación.",
+      "evidenceSearchFailed": "No se pudieron buscar archivos."
     },
     "tiles": {
       "expiring": "Próximas a vencer",

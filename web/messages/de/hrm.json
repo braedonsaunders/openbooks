@@ -1845,7 +1845,13 @@
       "issuedOn": "Ausgestellt am",
       "expiresOn": "Läuft ab am",
       "identifier": "Lizenznummer",
-      "notes": "Notizen"
+      "notes": "Notizen",
+      "evidence": "Nachweisdatei",
+      "evidencePlaceholder": "Dateiablage durchsuchen",
+      "evidenceSearchPlaceholder": "Dateien suchen…",
+      "evidenceSearchHint": "Geben Sie mindestens zwei Zeichen ein.",
+      "evidenceRequired": "Wählen Sie einen Nachweis für diesen Qualifikationstyp.",
+      "evidenceSearchFailed": "Dateien konnten nicht durchsucht werden."
     },
     "tiles": {
       "expiring": "Läuft bald ab",

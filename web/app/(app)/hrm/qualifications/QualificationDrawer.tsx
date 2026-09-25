@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useBusinessToday } from '../../../../components/business-date-provider'
@@ -81,12 +81,55 @@ export function QualificationDrawer({
   // a silent empty list.
   const [employments, setEmployments] = useState<{ value: string; label: string }[]>([])
   const [employmentsError, setEmploymentsError] = useState<string | null>(null)
+  const [evidenceFileId, setEvidenceFileId] = useState('')
+  const [evidenceQuery, setEvidenceQuery] = useState('')
+  const [evidenceFiles, setEvidenceFiles] = useState<{ value: string; label: string }[]>([])
+  const [evidenceError, setEvidenceError] = useState<string | null>(null)
+  const [evidenceLoading, setEvidenceLoading] = useState(false)
   const [status, setStatus] = useState<string | undefined>(undefined)
   // Loading is a fact about the state, not a second copy of it: the
   // drawer is loading while an id is open, its row has not arrived, and
   // nothing has failed.
   const loading = qualificationId !== null && loaded?.id !== qualificationId && status === undefined
   const [form, setForm] = useState({ employmentId: '', typeId: '', issuedOn: '', expiresOn: '', identifier: '', notes: '' })
+  const selectedType = types.find((type) => type.id === form.typeId)
+
+  useEffect(() => {
+    if (!selectedType?.requiresEvidence || evidenceQuery.trim().length < 2) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const query = evidenceQuery.trim()
+        const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(query)}&perPage=20`)
+        if (!res.ok) {
+          if (!cancelled) setEvidenceError(t('qualifications.recordForm.evidenceSearchFailed'))
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as { files?: unknown }
+        if (!Array.isArray(payload.files)) {
+          if (!cancelled) setEvidenceError(t('qualifications.recordForm.evidenceSearchFailed'))
+          return
+        }
+        if (!cancelled) {
+          setEvidenceFiles(payload.files.flatMap((file) => {
+            if (!file || typeof file !== 'object') return []
+            const row = file as { id?: unknown; name?: unknown }
+            return typeof row.id === 'string'
+              ? [{ value: row.id, label: typeof row.name === 'string' ? row.name : row.id }]
+              : []
+          }))
+        }
+      } catch {
+        if (!cancelled) setEvidenceError(t('qualifications.recordForm.evidenceSearchFailed'))
+      } finally {
+        if (!cancelled) setEvidenceLoading(false)
+      }
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [evidenceQuery, selectedType?.requiresEvidence, t])
 
   const loadTypes = useCallback(async (): Promise<void> => {
     const requestId = ++typeRequestId.current
@@ -235,6 +278,7 @@ export function QualificationDrawer({
       expiresOn: form.expiresOn || null,
       identifier: form.identifier || null,
       notes: form.notes || null,
+      evidenceFileId: evidenceFileId || undefined,
     }, t('qualifications.recordForm.recordFailed'))
   }
 
@@ -345,7 +389,14 @@ export function QualificationDrawer({
           </div>
           <div>
             <Label htmlFor="q-type">{t('qualifications.recordForm.type')}</Label>
-            <Select id="q-type" value={form.typeId} onChange={(e) => setForm({ ...form, typeId: e.target.value })}>
+            <Select id="q-type" value={form.typeId} onChange={(e) => {
+              setForm({ ...form, typeId: e.target.value })
+              setEvidenceFileId('')
+              setEvidenceQuery('')
+              setEvidenceFiles([])
+              setEvidenceError(null)
+              setEvidenceLoading(false)
+            }}>
               <option value="">{tCommon('actions.select')}</option>
               {types.map((type) => (
                 <option key={type.id} value={type.id}>{type.code} · {type.name}</option>
@@ -360,6 +411,33 @@ export function QualificationDrawer({
               </p>
             ) : null}
           </div>
+          {selectedType?.requiresEvidence ? (
+            <div>
+              <Label htmlFor="q-evidence">{t('qualifications.recordForm.evidence')}</Label>
+              <p className="mb-1 text-sm text-amber-700 dark:text-amber-300">{t('qualifications.recordForm.evidenceRequired')}</p>
+              <SearchSelect
+                id="q-evidence"
+                ariaLabel={t('qualifications.recordForm.evidence')}
+                value={evidenceFileId}
+                onChange={setEvidenceFileId}
+                options={evidenceFiles}
+                placeholder={t('qualifications.recordForm.evidencePlaceholder')}
+                searchPlaceholder={t('qualifications.recordForm.evidenceSearchPlaceholder')}
+                emptyLabel={t('qualifications.recordForm.evidenceSearchHint')}
+                statusMessage={evidenceError ?? (evidenceQuery.trim().length < 2 ? t('qualifications.recordForm.evidenceSearchHint') : undefined)}
+                statusTone={evidenceError ? 'error' : 'muted'}
+                loading={evidenceLoading}
+                remote
+                searchable
+                onSearchChange={(query) => {
+                  setEvidenceQuery(query)
+                  setEvidenceFiles([])
+                  setEvidenceError(null)
+                  setEvidenceLoading(Boolean(selectedType?.requiresEvidence && query.trim().length >= 2))
+                }}
+              />
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="q-issued">{t('qualifications.recordForm.issuedOn')}</Label>
@@ -379,7 +457,7 @@ export function QualificationDrawer({
             <Textarea id="q-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
           <div>
-            <Button onClick={record} disabled={!form.employmentId || !form.typeId || !form.issuedOn}>
+            <Button onClick={record} disabled={!form.employmentId || !form.typeId || !form.issuedOn || Boolean(selectedType?.requiresEvidence && !evidenceFileId)}>
               {t('qualifications.record')}
             </Button>
           </div>

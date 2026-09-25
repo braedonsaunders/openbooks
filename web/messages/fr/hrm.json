@@ -1845,7 +1845,13 @@
       "issuedOn": "Délivrée le",
       "expiresOn": "Expire le",
       "identifier": "Numéro de licence",
-      "notes": "Notes"
+      "notes": "Notes",
+      "evidence": "Fichier justificatif",
+      "evidencePlaceholder": "Rechercher dans le classeur de fichiers",
+      "evidenceSearchPlaceholder": "Rechercher des fichiers…",
+      "evidenceSearchHint": "Saisissez au moins deux caractères pour rechercher.",
+      "evidenceRequired": "Sélectionnez un justificatif pour ce type de qualification.",
+      "evidenceSearchFailed": "La recherche de fichiers a échoué."
     },
     "tiles": {
       "expiring": "Bientôt expirées",

@@ -1845,7 +1845,13 @@
       "issuedOn": "Emitida em",
       "expiresOn": "Vence em",
       "identifier": "Número da licença",
-      "notes": "Notas"
+      "notes": "Notas",
+      "evidence": "Arquivo comprobatório",
+      "evidencePlaceholder": "Pesquisar no Arquivo de arquivos",
+      "evidenceSearchPlaceholder": "Pesquisar arquivos…",
+      "evidenceSearchHint": "Digite pelo menos dois caracteres para pesquisar.",
+      "evidenceRequired": "Selecione a evidência para este tipo de qualificação.",
+      "evidenceSearchFailed": "Não foi possível pesquisar arquivos."
     },
     "tiles": {
       "expiring": "Vencendo em breve",

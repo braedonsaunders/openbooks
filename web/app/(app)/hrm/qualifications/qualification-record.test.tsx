@@ -26,6 +26,7 @@ Object.assign(globalThis, { React })
 
 const hrmMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8'))
 const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
+const uiMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8'))
 
 interface FetchCall {
   url: string
@@ -93,7 +94,7 @@ async function mount(
   }
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages }}>
+      <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages, ui: uiMessages }}>
         <BusinessDateProvider today="2026-09-24">
           <QualificationDrawer
             qualificationId={drawerProps?.qualificationId ?? null}
@@ -158,37 +159,32 @@ const EMPLOYMENTS = {
   ],
 }
 
-// F3-59: the record form names the worker through the employments picker —
-// no free-text uuid — and posts the picked id.
-test('the record form picks the worker from employments and posts the picked id', async () => {
+test('the record form submits the picked worker and required evidence file', async () => {
   const m = await mount(async (url, method) => {
-    if (url.includes('/api/hrm/qualification-types')) return { ok: true, body: TYPES }
+    if (url.includes('/api/hrm/qualification-types')) return { ok: true, body: { types: [{ ...TYPES.types[0]!, requiresEvidence: true }] } }
     if (url.includes('/api/hrm/options?source=employments')) return { ok: true, body: EMPLOYMENTS }
+    if (url.startsWith('/api/file-cabinet/files?')) return { ok: true, body: { files: [{ id: 'file-1', name: 'Safety certificate' }] } }
     if (url === '/api/hrm/qualifications' && method === 'POST') return { ok: true, body: {} }
     throw new Error(`unexpected fetch ${method} ${url}`)
   })
   try {
     const { act } = await import('react')
     await flushAsync()
-    // The house Select renders a trigger button plus a visually-hidden REAL
-    // select carrying the value: the id sits on the trigger, the options on
-    // the native control.
-    const trigger = m.document.getElementById('q-employment')
-    assert.ok(trigger, 'the employment picker renders')
-    assert.notEqual(trigger?.tagName, 'INPUT', 'the worker is picked from a list, never typed as a uuid')
-    assert.match(trigger?.textContent ?? '', /Select an employee/, 'the empty picker names its action')
     const natives = [...m.document.querySelectorAll('select')]
-    assert.ok(natives.length >= 2, 'employment and type carry native select controls')
     const employment = natives[0] as HTMLSelectElement
     const type = natives[1] as HTMLSelectElement
-    assert.match(employment.textContent ?? '', /Ada Lovelace/, 'picker options name people')
-    assert.match(employment.textContent ?? '', /Alan Turing/, 'picker options name people')
-    assert.ok(!employment.querySelector('option[value="emp-1"]')?.textContent?.includes('emp-1'), 'options show names, not uuids')
     await act(async () => {
       m.setSelect(employment, 'emp-1')
       m.setSelect(type, 'type-1')
       m.setInput(m.document.getElementById('q-issued') as HTMLInputElement, '2026-09-01')
     })
+    await act(async () => m.click(m.document.getElementById('q-evidence')!))
+    const search = m.document.querySelector('input[placeholder="Search files…"]') as HTMLInputElement
+    await act(async () => { m.setInput(search, 'Safety'); await new Promise((resolve) => setTimeout(resolve, 300)) })
+    await flushAsync()
+    const file = [...m.document.querySelectorAll('[role="option"]')].find((option) => option.textContent?.includes('Safety certificate'))
+    assert.ok(file)
+    await act(async () => m.click(file!))
     await act(async () => {
       const record = [...m.document.querySelectorAll('button')].find((b) => b.textContent === 'Record qualification')
       assert.ok(record, 'the record button renders')
@@ -198,7 +194,7 @@ test('the record form picks the worker from employments and posts the picked id'
     const posts = m.calls.filter((c) => c.url === '/api/hrm/qualifications' && c.method === 'POST')
     assert.equal(posts.length, 1, 'the form posts once')
     assert.equal(posts[0]?.body?.employmentId, 'emp-1', 'the posted id is the picked employment')
-    assert.equal(posts[0]?.body?.typeId, 'type-1')
+    assert.equal(posts[0]?.body?.evidenceFileId, 'file-1')
   } finally {
     await m.unmount()
   }

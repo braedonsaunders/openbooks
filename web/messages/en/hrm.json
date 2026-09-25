@@ -1901,7 +1901,13 @@
       "issuedOn": "Issued on",
       "expiresOn": "Expires on",
       "identifier": "License number",
-      "notes": "Notes"
+      "notes": "Notes",
+      "evidence": "Evidence file",
+      "evidencePlaceholder": "Search the File Cabinet",
+      "evidenceSearchPlaceholder": "Search files…",
+      "evidenceSearchHint": "Enter at least two characters to search.",
+      "evidenceRequired": "Select evidence for this qualification type.",
+      "evidenceSearchFailed": "Files could not be searched."
     },
     "tiles": {
       "expiring": "Expiring soon",
