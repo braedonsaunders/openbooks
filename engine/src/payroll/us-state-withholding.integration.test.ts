@@ -16,7 +16,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedWorkAllocation } from "../testing/fixtures.ts";
 
 /**
  * The US state withholding engine, ON A REAL PAY RUN.
@@ -180,6 +180,12 @@ interface EmployeeOptions {
     subRegion?: string | null;
     answers?: Record<string, string>;
   }[];
+  /**
+   * Locality the hire works the whole period in. Locality taxes refuse by
+   * name without exactly one current-period work allocation, so hires in
+   * those localities state theirs; everyone else files nothing.
+   */
+  locality?: { region: string; subregion: string | null; workShare: string };
 }
 
 async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Promise<string> {
@@ -200,6 +206,12 @@ async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Pro
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
+  if (opts.locality) {
+    await seedWorkAllocation(
+      fx.orgId, employmentId, PERIOD_START, PERIOD_END,
+      opts.locality.region, opts.locality.subregion, opts.locality.workShare,
+    );
+  }
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, residence_region, pay_basis,
@@ -460,6 +472,7 @@ test(
           key: "us_or_transit_record", region: "OR",
           answers: { work_transit_district: "TRIMET" },
         }],
+        locality: { region: "OR", subregion: "TRIMET", workShare: "1" },
       });
 
       const { run, result } = await runPayroll(fx);
@@ -480,10 +493,16 @@ test(
          where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and s.employee_party_id = ${rider}
       `)).rows;
-      const transit = lines.filter((line) => /transit/i.test(line.description));
-      assert.equal(transit.length, 1, "exactly one transit line");
+      // The statewide transit deduction matches /transit/i too, so the
+      // district line is selected by its mark: the pack posts the district
+      // levy once, at employer cost, beside the statewide employee line.
+      const transit = lines.filter((line) => /trimet/i.test(line.description));
+      assert.equal(transit.length, 1, "exactly one district transit line");
       assert.equal(transit[0]!.kind, "employer_contribution", "the employer's pocket, not the cheque");
       assert.equal(transit[0]!.amount, factors.OR_TRANSIT_TAX!);
+      const statewide = lines.filter((line) => /statewide transit/i.test(line.description));
+      assert.equal(statewide.length, 1, "the statewide employee transit line still posts beside it");
+      assert.equal(statewide[0]!.kind, "deduction");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -670,6 +689,7 @@ test(
           key: "us_oh_municipal_record", region: "OH",
           answers: { work_municipality: "WESTERVILLE" },
         }],
+        locality: { region: "OH", subregion: "WESTERVILLE", workShare: "1" },
       });
       // The control: an Ohio employee in no taxing municipality is paid
       // normally, so the refusal above is about the missing RATE and not about

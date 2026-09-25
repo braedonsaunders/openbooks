@@ -646,6 +646,34 @@ export async function seedWorkerEmployment(
   return id;
 }
 
+/**
+ * Record HR's period work allocation for a scratch employment: the source the
+ * payroll engine uses for untimed/salaried work when no approved time entries
+ * carry a work region. Locality taxes (transit districts, municipal income
+ * tax) refuse by name without exactly one current-period allocation, so hires
+ * in those localities carry one; everyone else files nothing. The share is
+ * explicit — single-locality hires state the whole period — never defaulted.
+ */
+export async function seedWorkAllocation(
+  orgId: string,
+  employmentId: string,
+  periodStart: string,
+  periodEnd: string,
+  region: string,
+  subregion: string | null,
+  workShare: string,
+  source = "hr_records",
+  changeReason = "test fixture allocation",
+): Promise<void> {
+  await assertFixtureDatabase();
+  await db.execute(sql`
+    insert into payroll_work_location_allocations
+      (org_id, employment_id, period_start, period_end, region, subregion,
+       service_days, work_share, source, change_reason)
+    values (${orgId}, ${employmentId}, ${periodStart}::date, ${periodEnd}::date,
+            ${region}, ${subregion}, null, ${workShare}, ${source}, ${changeReason})`);
+}
+
 /** Seed the users an approval-flow test needs. Passwords are placeholders. */
 export async function seedFlowActors(orgId: string): Promise<FlowActors> {
   const mk = async (name: string, role: string): Promise<string> => {
