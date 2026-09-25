@@ -171,11 +171,16 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     };
   }
 
-  if (certificateFlag(input.certificate, "exempt")) {
+  if (certificateFlag(input.certificate, "exempt") && input.basis !== "nonresident") {
     return {
       state: "IA", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
       factors: { IA_EXEMPT: "1" },
     };
+  }
+  if (certificateFlag(input.certificate, "exempt")) {
+    // The 2026 IA W-4 bars nonresidents from claiming exemption from
+    // withholding, so the flag is disregarded and normal withholding applies.
+    trace("IA_EXEMPT_DISREGARDED_NONRESIDENT", 1n);
   }
 
   const legacy = certificateFlag(input.certificate, "pre_2024");
@@ -248,6 +253,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 export const IA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IA_MILITARY_SPOUSE_EXEMPT: "Iowa qualifying military-spouse wages exempt from withholding",
   IA_EXEMPT: "Exempt from Iowa withholding",
+  IA_EXEMPT_DISREGARDED_NONRESIDENT:
+    "Nonresident exemption claim disregarded (2026 IA W-4 bars it)",
   IA_FORM: "Iowa certificate form version",
   IA_COLUMN: "Iowa table column",
   IA_PERIOD: "Iowa formula period",

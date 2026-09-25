@@ -219,6 +219,16 @@ test("IA line 8 is added AFTER the rate; an unlisted frequency annualizes", () =
   assert.equal(exempt.tax, money("0"));
 });
 
+test("IA nonresident EXEMPT claim is disregarded", () => {
+  // The 2026 IA W-4 bars nonresidents from claiming exemption, so Example 1
+  // inputs still withhold $59.26 instead of zero.
+  const result = IA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 26, wages: "2100.00", basis: "nonresident",
+    certificate: cert({ filing_status: "other", total_allowance: "40", exempt: "true" }),
+  });
+  assert.equal(result.tax, money("59.26"));
+});
+
 test("IA refuses a year it has not transcribed", () => {
   assert.throws(
     () => IA_WITHHOLDING.compute({
