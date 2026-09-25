@@ -216,8 +216,8 @@ export async function loadAccounting(): Promise<AccountingData> {
       id: r.id,
       label: RATIO_DEFS[r.id]?.label ?? r.id,
       calc: r.calc,
-      value: fmtRatio(r.value, r.format, moneyCompact),
-      benchmark: fmtRatio(r.benchmark, r.format, moneyCompact),
+      value: fmtRatio(r.value, r.format, moneyCompact, format),
+      benchmark: fmtRatio(r.benchmark, r.format, moneyCompact, format),
       grade: r.grade ?? '—',
       score: r.score,
     })),
@@ -345,15 +345,20 @@ export function accountingSpec(data: AccountingData): PageSpec {
   })
 }
 
-function fmtRatio(value: number, format: RatioResult['format'], moneyCompact: (value: number) => string): string {
+function fmtRatio(
+  value: number,
+  format: RatioResult['format'],
+  moneyCompact: (value: number) => string,
+  formatter: Awaited<ReturnType<typeof getFormatter>>,
+): string {
   switch (format) {
     case 'pct':
-      return `${(value * 100).toFixed(1)}%`
+      return `${formatter.number(value * 100, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
     case 'money':
       return moneyCompact(value)
     case 'num':
-      return `${value.toFixed(2)}×`
+      return `${formatter.number(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`
     default:
-      return value.toFixed(1)
+      return formatter.number(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   }
 }
