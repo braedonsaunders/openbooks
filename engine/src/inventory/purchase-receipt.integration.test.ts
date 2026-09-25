@@ -431,7 +431,7 @@ test("a reversed goods receipt is dead coverage: the later bill receives into la
     const org = await createScratchOrg();
     try {
       const userId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID()));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
