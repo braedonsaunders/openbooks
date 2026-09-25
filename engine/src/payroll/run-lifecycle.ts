@@ -13,6 +13,7 @@ import {
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockScopeRows } from "../organization/subsidiary-scope.ts";
 import { resolvePayrollRunContext } from "./packs.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { type ScheduleRow, DAY, iso, at, nextPeriodAfter } from "./run-calendar.ts";
@@ -188,6 +189,17 @@ export async function createPayRun(input: {
               + "the whole schedule",
         );
       }
+      // The route's precheck can become stale while a party is being rehomed.
+      // Lock the named employees in stable order and authorize their current
+      // subsidiary before the schedule roster is used to persist exclusions.
+      await lockScopeRows(
+        tx,
+        orgId,
+        scopedEmployeeIds.map((id) => ({ kind: "party", id })),
+        input.allowedSubsidiaryIds ?? null,
+        "share",
+        { orgWideNull: true },
+      );
       const onSchedule = (await tx.execute<{ employee_party_id: string }>(sql`
         select prof.employee_party_id
           from employee_payroll_profiles prof
