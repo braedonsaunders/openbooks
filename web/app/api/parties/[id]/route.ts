@@ -11,6 +11,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../lib/countries'
 import { isIsoCalendarDate } from '../../../../lib/crm-dates'
 import { loadParty } from '../_lib'
+import { denyLockedOutsidePartyScope } from './bank-accounts/party-scope'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
@@ -416,7 +417,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    await db.transaction(async (tx) => {
+    const lockedOutcome = await db.transaction(async (tx) => {
+      // Locked scope recheck: the unlocked precheck above may have
+      // authorized a party a concurrent A→B rehome moves before this
+      // commits. Locking FOR UPDATE first makes the verdict see the latest
+      // committed subsidiary and makes the rehome block until this commits
+      // — the same pattern as the bank-account writes.
+      const lockedDenied = await denyLockedOutsidePartyScope(tx, gate, id)
+      if (lockedDenied) return lockedDenied
       if (body.isActive === false && existingParty.is_active) {
         // Opportunity writers lock this same account before assigning or
         // activating work. Check dependencies only after that lock settles.
@@ -834,6 +842,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         )
       `)
     })
+    if (lockedOutcome instanceof NextResponse) return lockedOutcome
   } catch (e: unknown) {
     if (e instanceof PartyPatchValidationError) return e.response
     if (e instanceof PartyLifecycleError) return bad(e.message)
