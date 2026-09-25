@@ -9,6 +9,7 @@ import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/src
 import { controlDeps } from "../../engine/src/ledger/document-service.ts";
 import { can, resolveAuthzByUserId } from "./authz";
 import { nextDocumentNumber } from "./bills.ts";
+import { lockBankMatchRuleSet } from './banking-rule-set-lock'
 import {
   type RuleCriteria,
   type RuleOutcome,
@@ -161,6 +162,10 @@ async function applyRuleIfStillCurrent(
   ensureReconciliation: () => Promise<string>,
 ): Promise<RuleApplyOutcome> {
   return withOrgTransaction(orgId, async () => {
+    // The rule-set advisory lock serializes edits and bulk scans; the row
+    // lock below also protects this exact rule against direct concurrent
+    // state changes (I1-refix-160).
+    await lockBankMatchRuleSet(orgId)
     const current = (await db.execute<RuleRow>(sql`
       select id, name, criteria, outcome, priority, is_active
         from bank_match_rules
@@ -199,37 +204,39 @@ export async function applyRulesToAccount(
   accountId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<ApplyResult> {
-  requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope)
   const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
-  const rules = await loadActiveRules(orgId)
   const result: ApplyResult = { matched: 0, excluded: 0, categorized: 0, suggested: 0, scanned: 0 }
-  if (rules.length === 0) return result
-
-  const lines = await loadLines(orgId, accountId, 'unmatched')
-  result.scanned = lines.length
-  if (lines.length === 0) return result
-
-  let reconciliationId: string | null = null
-  const ensureReconciliation = async (): Promise<string> => {
-    if (!reconciliationId) reconciliationId = await ensureOpenReconciliation(orgId, userId, accountId, scope)
-    return reconciliationId
-  }
-
-  for (const line of lines) {
-    const rule = firstMatchingRule(line, accountId, rules)
-    if (!rule) continue
-    const applied = await applyRuleIfStillCurrent(
-      orgId, userId, accountId, line, rule, ctx, ensureReconciliation,
-    )
-    if (applied === 'excluded') result.excluded++
-    if (applied === 'categorized') {
-      result.categorized++
-      result.matched++
+  return withOrgTransaction(orgId, async () => {
+    // Rule create/edit/delete takes this same tenant lock. Keep it from the
+    // candidate snapshot through the final line so a new higher-priority rule
+    // cannot appear between scan and apply (I1-refix-160).
+    await lockBankMatchRuleSet(orgId)
+    requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope)
+    const rules = await loadActiveRules(orgId)
+    if (rules.length === 0) return result
+    const lines = await loadLines(orgId, accountId, 'unmatched')
+    result.scanned = lines.length
+    if (lines.length === 0) return result
+    let reconciliationId: string | null = null
+    const ensureReconciliation = async (): Promise<string> => {
+      if (!reconciliationId) reconciliationId = await ensureOpenReconciliation(orgId, userId, accountId, scope)
+      return reconciliationId
     }
-    if (applied === 'suggested') result.suggested++
-  }
-
-  return result
+    for (const line of lines) {
+      const rule = firstMatchingRule(line, accountId, rules)
+      if (!rule) continue
+      const applied = await applyRuleIfStillCurrent(
+        orgId, userId, accountId, line, rule, ctx, ensureReconciliation,
+      )
+      if (applied === 'excluded') result.excluded++
+      if (applied === 'categorized') {
+        result.categorized++
+        result.matched++
+      }
+      if (applied === 'suggested') result.suggested++
+    }
+    return result
+  })
 }
 
 /**
