@@ -61,15 +61,7 @@ interface SaveError {
  * are frozen by the same committed run — a second screen would be a second place
  * to forget.
  */
-export function OpeningBalancesView({
-  year,
-  currentYear,
-  initial,
-  fields,
-  programs,
-  components,
-  canManage,
-}: {
+type OpeningBalancesViewProps = {
   year: number
   /** Organization business year — not the UTC calendar year. */
   currentYear: number
@@ -79,7 +71,21 @@ export function OpeningBalancesView({
   programs: ProgramDescriptor[]
   components: ComponentDescriptor[]
   canManage: boolean
-}) {
+}
+
+export function OpeningBalancesView(props: OpeningBalancesViewProps) {
+  return <OpeningBalancesYearView key={props.year} {...props} />
+}
+
+function OpeningBalancesYearView({
+  year,
+  currentYear,
+  initial,
+  fields,
+  programs,
+  components,
+  canManage,
+}: OpeningBalancesViewProps) {
   const t = useTranslations('payroll')
   const router = useRouter()
   const text = (key: string, fallback: string) =>
