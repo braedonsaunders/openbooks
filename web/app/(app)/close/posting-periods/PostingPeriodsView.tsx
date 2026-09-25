@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { ArrowLeft, Play } from 'lucide-react'
 import {
   Badge,
@@ -35,28 +36,37 @@ type CommitResult = {
 
 export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; runId: string | null }) {
   const t = useTranslations('close')
+  const tc = useTranslations('common')
   const [rows, setRows] = useState<Candidate[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CommitResult | null>(null)
+  const [previewFailed, setPreviewFailed] = useState(false)
 
-  useEffect(() => {
+  const loadPreview = useCallback(async (signal?: AbortSignal) => {
     if (!bookId) return
     const url = `/api/close/posting-periods?bookId=${encodeURIComponent(bookId)}`
-    let cancelled = false
-    async function load() {
-      const response = await fetch(url)
+    try {
+      const response = await fetch(url, { signal })
       if (!response.ok) {
-        toast.error(t('postingPeriods.previewFailed'))
-        return
+        throw new Error(await readApiErrorMessage(response, t('postingPeriods.previewFailed')))
       }
       const preview = (await response.json()) as { rows: Candidate[] }
-      if (!cancelled) setRows(preview.rows)
-    }
-    void load()
-    return () => {
-      cancelled = true
+      setRows(preview.rows)
+      setPreviewFailed(false)
+    } catch {
+      if (signal?.aborted) return
+      setPreviewFailed(true)
+      toast.error(t('postingPeriods.previewFailed'))
     }
   }, [bookId, t])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void Promise.resolve().then(() => loadPreview(controller.signal))
+    return () => {
+      controller.abort()
+    }
+  }, [loadPreview])
 
   const assignable = (rows ?? []).filter((row) => !row.blocked)
   const blocked = (rows ?? []).filter((row) => row.blocked)
@@ -132,7 +142,12 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
           <CardDescription>{t('postingPeriods.previewDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
-          {rows === null ? (
+          {previewFailed ? (
+            <div role="alert" className="space-y-2 text-sm text-red-600">
+              <p>{t('postingPeriods.previewFailed')}</p>
+              <Button variant="outline" onClick={() => void loadPreview()}>{tc('actions.retry')}</Button>
+            </div>
+          ) : rows === null ? (
             <p className="text-sm text-slate-500">{t('postingPeriods.loading')}</p>
           ) : rows.length === 0 ? (
             <p className="text-sm text-slate-500">{t('postingPeriods.empty')}</p>
