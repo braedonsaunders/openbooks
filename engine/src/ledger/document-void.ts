@@ -234,6 +234,11 @@ export async function requestDocumentVoid(
         "stale-revision",
       );
     }
+    // A released payroll bank file refuses here, before the reservation:
+    // the pay-run document sits in draft while committed, so the zero-row
+    // reservation below would otherwise answer with the generic draft/status
+    // refusal and the operator would never see the file number or its remedy.
+    await refuseReleasedPayRunBankFile(db, input.orgId, input.documentId);
     // This compare-and-set is the single-winner claim. PostgreSQL locks the
     // aggregate row and rechecks the predicate after a concurrent waiter
     // resumes. Every material before_void effect stays in this same
@@ -614,6 +619,39 @@ async function assertRetainageDrawVoidable(
 }
 
 /**
+ * A released payroll bank file locks its pay run against voiding (I6-payroll-299).
+ * Runs in the REQUEST path before the reservation, so the operator sees the
+ * file number and its remedy instead of the generic draft/status refusal the
+ * zero-row reservation falls back to — and again at COMPLETION, which stays
+ * the race backstop for a release landing between request and completion.
+ * Lock order matches completion (artifact rows first): a release either
+ * finishes first and is refused here, or waits until the void makes the run
+ * ineligible for release.
+ */
+async function refuseReleasedPayRunBankFile(
+  executor: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  const bankFiles = (await executor.execute<{
+    file_number: string;
+    release_count: number;
+  }>(sql`
+    select f.file_number, f.release_count
+      from pay_run_bank_files f
+     where f.org_id = ${orgId} and f.pay_run_document_id = ${documentId}
+     order by f.file_number, f.id
+     for update of f
+  `)).rows;
+  const releasedBankFile = bankFiles.find((file) => file.release_count > 0);
+  if (releasedBankFile) {
+    throw new DocumentVoidError(
+      `this pay run has released EFT bank file ${releasedBankFile.file_number}; record the payment or reverse it at the bank and mark the artifact before voiding`,
+    );
+  }
+}
+
+/**
  * Complete a previously stored request. Called directly when no gate exists,
  * or by the flow adapter after the final configured approval.
  */
@@ -628,26 +666,9 @@ export async function completeRequestedDocumentVoid(
       kind: string;
       previousStatus: string;
     } = await db.transaction(async (tx) => {
-      // Bank-file release locks the artifact before the run and document.
-      // Take those artifact locks before this void follows the document lock
-      // protocol, so a release either finishes first and is refused below, or
-      // waits until the void makes the run ineligible for release.
-      const bankFiles = (await tx.execute<{
-        file_number: string;
-        release_count: number;
-      }>(sql`
-        select f.file_number, f.release_count
-          from pay_run_bank_files f
-         where f.org_id = ${orgId} and f.pay_run_document_id = ${documentId}
-         order by f.file_number, f.id
-         for update of f
-      `)).rows;
-      const releasedBankFile = bankFiles.find((file) => file.release_count > 0);
-      if (releasedBankFile) {
-        throw new DocumentVoidError(
-          `this pay run has released EFT bank file ${releasedBankFile.file_number}; record the payment or reverse it at the bank and mark the artifact before voiding`,
-        );
-      }
+      // Completion-time backstop for the request-path check above: a release
+      // landing between request and completion is refused here instead.
+      await refuseReleasedPayRunBankFile(tx, orgId, documentId);
 
       // Discover the source entry and all currently live application endpoints
       // before taking locks. lockApplicationEvidence then acquires the shared
