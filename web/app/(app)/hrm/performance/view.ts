@@ -29,6 +29,7 @@ import {
 import { isUuid } from '@/lib/list-params'
 import { listReviewTemplates } from '@openbooks/engine/src/hrm/performance/review-cycles.ts'
 import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
+import { HrmPerformanceError } from '@openbooks/engine/src/hrm/performance/errors.ts'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, getAuthz } from '../../../../lib/authz'
@@ -100,6 +101,23 @@ export interface PerformanceGoalRow {
   progress: number
 }
 
+/**
+ * A drawer read that failed for an unexpected reason (typed NOT_FOUND
+ * and FORBIDDEN stay on the missing state). The drawer renders the
+ * localized message with a retry link that re-runs the loader — a dead
+ * read never looks like a deleted record again.
+ */
+export interface PerformanceLoadError {
+  message: string
+  retryHref: string
+  retryLabel: string
+}
+
+/** True for the typed absence/scope refusals the missing state already names. */
+function isExpectedAbsence(error: unknown): boolean {
+  return error instanceof HrmPerformanceError && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
+}
+
 export interface PerformancePageData {
   title: string
   description: string
@@ -148,6 +166,7 @@ export interface PerformancePageData {
     closeHref: string
   } | null
   missingDetail: string | null
+  detailError: PerformanceLoadError | null
   review: {
     id: string
     kindLabel: string
@@ -182,6 +201,7 @@ export interface PerformancePageData {
     draft: { href: string; label: string } | null
   } | null
   missingReview: string | null
+  reviewError: PerformanceLoadError | null
   retention: {
     title: string
     turnoverLabel: string
@@ -219,6 +239,7 @@ export interface PerformancePageData {
     closeHref: string
   } | null
   missingExit: string | null
+  exitError: PerformanceLoadError | null
   create: {
     /** The drawer's accessible name — a dialog must never render untitled. */
     title: string
@@ -369,6 +390,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         ...widgetBlock('hrm-cycle-drawer', {
           detail: data.detail,
           missingDetail: data.missingDetail,
+          loadError: data.detailError,
         }),
         when: f('drawerOpen'),
       },
@@ -376,6 +398,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         ...widgetBlock('hrm-review-drawer', {
           review: data.review,
           missingReview: data.missingReview,
+          loadError: data.reviewError,
         }),
         when: f('reviewOpen'),
       },
@@ -392,6 +415,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         ...widgetBlock('hrm-exit-drawer', {
           exit: data.exit,
           missingExit: data.missingExit,
+          loadError: data.exitError,
         }),
         when: f('exitOpen'),
       },
@@ -415,6 +439,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
   const t = await getTranslations('hrm')
+  const retryLabel = (await getTranslations('common'))('actions.retry')
   const tabs = await hrmGroupTabs(authz, '/hrm/performance')
 
   // The `mine` pseudo-status is the self-service segment: cycles the actor
@@ -494,6 +519,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
 
   let detail: PerformancePageData['detail'] = null
   let missingDetail: string | null = null
+  let detailError: PerformancePageData['detailError'] = null
   if (cycleId) {
     try {
       const full = await getCycleDetail({
@@ -540,13 +566,24 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         },
         closeHref: performanceHref(preservedParams, { status: rawStatus }),
       }
-    } catch {
-      missingDetail = t('performance.cycleNotFound')
+    } catch (error) {
+      // A deleted or out-of-scope cycle stays "not found"; anything else
+      // is an outage the open drawer must report with a retry.
+      if (isExpectedAbsence(error)) {
+        missingDetail = t('performance.cycleNotFound')
+      } else {
+        detailError = {
+          message: t('performance.cycleLoadFailed'),
+          retryHref: performanceHref(preservedParams, { status: rawStatus, cycle: cycleId }),
+          retryLabel,
+        }
+      }
     }
   }
 
   let review: PerformancePageData['review'] = null
   let missingReview: string | null = null
+  let reviewError: PerformancePageData['reviewError'] = null
   let draftDrawer: AiDraftDrawerData | null = null
   if (reviewId) {
     try {
@@ -636,8 +673,16 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         closeHref: reviewHref,
         fieldId: firstText ? `text-${firstText.id}` : '',
       })
-    } catch {
-      missingReview = t('performance.reviewNotFound')
+    } catch (error) {
+      if (isExpectedAbsence(error)) {
+        missingReview = t('performance.reviewNotFound')
+      } else {
+        reviewError = {
+          message: t('performance.reviewLoadFailed'),
+          retryHref: performanceHref(preservedParams, { status: rawStatus, cycle: cycleId, review: reviewId }),
+          retryLabel,
+        }
+      }
     }
   }
 
@@ -669,6 +714,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
   const exitEmploymentId = typeof sp.exit === 'string' && sp.exit.length > 0 ? sp.exit : null
   let exit: PerformancePageData['exit'] = null
   let missingExit: string | null = null
+  let exitError: PerformancePageData['exitError'] = null
   if (exitEmploymentId) {
     if (isUuid(exitEmploymentId) && (canRetain || canManage)) {
       try {
@@ -698,8 +744,16 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
           title: t('performance.exitTitle'),
           closeHref: performanceHref(preservedParams, { status: rawStatus, cycle: cycleId, review: reviewId }),
         }
-      } catch {
-        missingExit = t('performance.exitNotFound')
+      } catch (error) {
+        if (isExpectedAbsence(error)) {
+          missingExit = t('performance.exitNotFound')
+        } else {
+          exitError = {
+            message: t('performance.exitLoadFailed'),
+            retryHref: performanceHref(preservedParams, { status: rawStatus, cycle: cycleId, review: reviewId, exit: exitEmploymentId }),
+            retryLabel,
+          }
+        }
       }
     } else {
       missingExit = t('performance.exitNotFound')
@@ -759,15 +813,18 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
     empty: t('performance.empty'),
     detail,
     missingDetail,
+    detailError,
     review,
     missingReview,
+    reviewError,
     retention,
     create,
     exit,
     missingExit,
-    drawerOpen: detail !== null || missingDetail !== null || creating,
-    reviewOpen: review !== null || missingReview !== null,
-    exitOpen: exit !== null || missingExit !== null,
+    exitError,
+    drawerOpen: detail !== null || missingDetail !== null || detailError !== null || creating,
+    reviewOpen: review !== null || missingReview !== null || reviewError !== null,
+    exitOpen: exit !== null || missingExit !== null || exitError !== null,
     cyclesTab,
     continuous,
     draftDrawer,

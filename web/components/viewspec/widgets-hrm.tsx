@@ -179,6 +179,7 @@ export const HRM_WIDGETS = {
     <CycleDrawer
       detail={(props.detail as ComponentProps<typeof CycleDrawer>['detail']) ?? null}
       missingDetail={str(props, 'missingDetail') ?? null}
+      loadError={(props.loadError as ComponentProps<typeof CycleDrawer>['loadError']) ?? null}
     />
   ),
   /** The review flyout: the snapshot answers with the answer form, the
@@ -187,6 +188,7 @@ export const HRM_WIDGETS = {
     <ReviewDrawer
       review={(props.review as ComponentProps<typeof ReviewDrawer>['review']) ?? null}
       missingReview={str(props, 'missingReview') ?? null}
+      loadError={(props.loadError as ComponentProps<typeof ReviewDrawer>['loadError']) ?? null}
     />
   ),
   /** The cycle create dialog, opened from the page header through
@@ -199,7 +201,11 @@ export const HRM_WIDGETS = {
    *  Null payload renders nothing — the spec's `when` gate already omits
    *  it, so this is the second half of the same guard. */
   'hrm-exit-drawer': (props) => (
-    <ExitDrawer exit={(props.exit as ComponentProps<typeof ExitDrawer>['exit']) ?? null} missingExit={str(props, 'missingExit') ?? null} />
+    <ExitDrawer
+      exit={(props.exit as ComponentProps<typeof ExitDrawer>['exit']) ?? null}
+      missingExit={str(props, 'missingExit') ?? null}
+      loadError={(props.loadError as ComponentProps<typeof ExitDrawer>['loadError']) ?? null}
+    />
   ),
   /** Leave filing and detail entry point: the existing LeaveDrawer over a
    *  request id (detail) or null (filing), closing by navigating the search
