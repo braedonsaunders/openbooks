@@ -5,6 +5,7 @@ import {
   requireHrmPositionManage,
   requirePositionManageForEmployer,
 } from "./authorization.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { HRM_FEATURE_KEY } from "./employment-read.ts";
 import {
   intervalsOverlap,
@@ -396,17 +397,32 @@ async function assertPositionRefs(
     locationId?: string | null;
     employerSubsidiaryId?: string | null;
     periodId?: string | null;
+    // Actor subsidiary scope (null = unrestricted). A department anchored
+    // to a subsidiary outside it is refused by name — the create picker
+    // only offers visible departments, and the write must agree.
+    allowedSubsidiaryIds?: ReadonlySet<string> | null;
   },
 ): Promise<void> {
   const { orgId } = args;
   if (args.departmentId) {
-    const found = (await exec.execute(sql`
-      select 1 as one from departments where org_id = ${orgId} and id = ${args.departmentId}
+    const found = (await exec.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from departments where org_id = ${orgId} and id = ${args.departmentId}
     `)).rows[0];
     if (!found) {
       throw new HrmPositionError(
         "INVALID_INPUT",
         "the department is not visible in this organization — pick a department of this organization",
+      );
+    }
+    if (
+      args.allowedSubsidiaryIds !== undefined &&
+      args.allowedSubsidiaryIds !== null &&
+      found.subsidiaryId !== null &&
+      !args.allowedSubsidiaryIds.has(found.subsidiaryId)
+    ) {
+      throw new HrmPositionError(
+        "INVALID_INPUT",
+        "the department is not visible in your subsidiary scope — pick a department of a subsidiary you can see",
       );
     }
   }
@@ -637,8 +653,8 @@ export async function createPosition(query: CreatePositionQuery): Promise<Positi
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeature(db, orgId);
-    await requirePositionManageForEmployer(db, orgId, actorId, employerSubsidiaryId);
-    await assertPositionRefs(db, { orgId, departmentId, locationId, employerSubsidiaryId });
+    const allowed = await requirePositionManageForEmployer(db, orgId, actorId, employerSubsidiaryId);
+    await assertPositionRefs(db, { orgId, departmentId, locationId, employerSubsidiaryId, allowedSubsidiaryIds: allowed });
     const clash = (await db.execute(sql`
       select 1 as one from positions where org_id = ${orgId} and position_code = ${positionCode}
     `)).rows[0];
@@ -788,7 +804,13 @@ export async function revisePosition(query: RevisePositionQuery): Promise<Positi
       query.employerSubsidiaryId === undefined
         ? base.employer_subsidiary_id
         : requireUuid("employerSubsidiaryId", query.employerSubsidiaryId);
-    await assertPositionRefs(db, { orgId, departmentId, locationId, employerSubsidiaryId });
+    await assertPositionRefs(db, {
+      orgId,
+      departmentId,
+      locationId,
+      employerSubsidiaryId,
+      allowedSubsidiaryIds: await actorAllowedSubsidiaryIds(db, orgId, actorId),
+    });
     const successor = {
       title: query.title === undefined ? base.title : requireTitle(query.title),
       departmentId,
