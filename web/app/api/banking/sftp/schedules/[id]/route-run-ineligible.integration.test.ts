@@ -84,6 +84,12 @@ const mockImportJob = `
     state.runCalls.push({ orgId, scheduleId })
     return state.runResult
   }
+  // Mirrors sftpImportScheduleRunLockKey in engine/src/sftp/import-job.ts
+  // (the route hashes it into an advisory-lock key; tests assert refusal
+  // behavior, never the key bytes).
+  export function sftpImportScheduleRunLockKey(orgId, scheduleId) {
+    return 'sftp-import-schedule:' + orgId + ':' + scheduleId
+  }
 `;
 
 const hooks = registerHooks({
@@ -152,6 +158,14 @@ async function seed(withFeature = true): Promise<Fixture> {
            set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'true'::jsonb)
          where id = ${org.orgId}`);
     }
+    // The stale-race case below is only stale when the schedule is otherwise
+    // fully eligible: the run diagnosis refuses a non-reconcilable native
+    // account before the stale branch, so the fixture bank account is a live
+    // reconcilable one (mirrors the engine's own unbound-notice fixture).
+    await db.execute(sql`
+      update accounts set reconcilable = true, currency_restriction = 'CAD'
+       where id = ${org.accounts.bank} and org_id = ${org.orgId}
+    `);
     return {
       orgId: org.orgId,
       actorId,

@@ -50,6 +50,12 @@ async function refuseUnexecutedRun(scheduleId: string, orgId: string): Promise<N
     server_active: boolean | null
     env_kind: string
     feeds_on: boolean
+    account_id: string | null
+    account_number: string | null
+    account_name: string | null
+    account_active: boolean | null
+    account_reconcilable: boolean | null
+    account_summary: boolean | null
   }>(sql`
     select sc.is_active as schedule_active,
            sv.id as server_id,
@@ -57,10 +63,17 @@ async function refuseUnexecutedRun(scheduleId: string, orgId: string): Promise<N
            o.env_kind,
            -- Registry fallback shape (non-boolean stored values fall back to
            -- the default instead of throwing 22P02).
-           case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end as feeds_on
+           case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end as feeds_on,
+           a.id as account_id,
+           a.number as account_number,
+           a.name as account_name,
+           a.is_active as account_active,
+           a.reconcilable as account_reconcilable,
+           a.is_summary as account_summary
       from sftp_import_schedules sc
       left join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
       join orgs o on o.id = sc.org_id
+      left join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
      where sc.id = ${scheduleId} and sc.org_id = ${orgId}
   `))
   const row = diagnosis.rows[0]
@@ -94,6 +107,24 @@ async function refuseUnexecutedRun(scheduleId: string, orgId: string): Promise<N
   if (!row.feeds_on) {
     return NextResponse.json(
       { error: 'Bank feeds are disabled — enable bank feeds in Company Settings → Features before running.', code: 'BANK_FEEDS_DISABLED' },
+      { status: 409 },
+    )
+  }
+  // The engine refuses the tick when the bound account is gone or ineligible,
+  // but that refusal arrives as a no-result scan — without this branch the
+  // diagnosis above passes everything and the operator gets the stale-race
+  // message for an account that will never import, no matter how often the
+  // run is retried.
+  if (!row.account_id) {
+    return NextResponse.json(
+      { error: 'The bank account for this schedule no longer exists — rebind the schedule to a live reconcilable account in Company Settings → Bank Feeds before running.', code: 'SCHEDULE_ACCOUNT_MISSING' },
+      { status: 409 },
+    )
+  }
+  if (!row.account_active || !row.account_reconcilable || row.account_summary) {
+    const label = [row.account_number, row.account_name].filter((part) => part !== null && part !== '').join(' · ') || 'the bound bank account'
+    return NextResponse.json(
+      { error: `The bank account ${label} bound to this schedule is not eligible for import (it must be active, reconcilable, and non-summary) — rebind the schedule to a live reconcilable account in Company Settings → Bank Feeds before running.`, code: 'SCHEDULE_ACCOUNT_INELIGIBLE' },
       { status: 409 },
     )
   }
