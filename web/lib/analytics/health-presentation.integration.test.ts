@@ -95,32 +95,32 @@ test('health dashboard translates every reader to presentation', { skip: !env.OP
     await withOrgContext(org.orgId, async () => {
       const data = await healthData(JULY, org.orgId, null)
       const july = data.monthly.find((m) => m.month === '2026-07')!
-      assert.equal(july.revenue, 335)
+      assert.equal(july.revenue, '335.0000')
       // The scratch "cogs" account carries type 'expense', so the legs land
       // in the opex bucket — the translated bucket is what matters here.
-      assert.equal(july.opex, 235)
+      assert.equal(july.opex, '235.0000')
 
       const ops = data.segments.department.find((s) => s.name === 'Ops')!
       assert.ok(ops, 'Ops segment present')
-      assert.equal(ops.operatingIncome, -235)
+      assert.equal(ops.operatingIncome, '-235.0000')
 
       const cogsDriver = data.drivers.cost.find((d) => d.id === org.accounts.cogs)!
       assert.ok(cogsDriver, 'cogs driver present')
-      assert.equal(cogsDriver.current, 235)
+      assert.equal(cogsDriver.current, '235.0000')
 
       const revenueItem = data.items.rows.find((r) => r.id === org.accounts.revenue)!
       assert.ok(revenueItem, 'revenue item present')
-      assert.equal(revenueItem.current, 335)
+      assert.equal(revenueItem.current, '335.0000')
 
       // Totals sum every row (revenue included, pre-existing shape); the
       // per-row figures prove each side translates.
       const cogsBudget = data.budget.rows.find((r) => r.accountId === org.accounts.cogs)!
-      assert.equal(cogsBudget.actual, 235)
-      assert.equal(cogsBudget.budget, 2350)
+      assert.equal(cogsBudget.actual, '235.0000')
+      assert.equal(cogsBudget.budget, '2350.0000')
       const revenueBudget = data.budget.rows.find((r) => r.accountId === org.accounts.revenue)!
-      assert.equal(revenueBudget.actual, 335)
-      assert.equal(data.budget.totals.actual, 570)
-      assert.equal(data.budget.totals.budget, 2350)
+      assert.equal(revenueBudget.actual, '335.0000')
+      assert.equal(data.budget.totals.actual, '570.0000')
+      assert.equal(data.budget.totals.budget, '2350.0000')
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

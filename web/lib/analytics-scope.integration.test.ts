@@ -113,7 +113,7 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
               assert.equal((Array.isArray(spenders) ? spenders : spenders.items).reduce((total,row) => total + row.totalSpend,0), mode === 'all' ? 22 : mode === 'empty' ? 0 : 2);
             }
             if (surface === 'customer') {
-              assert.equal((profitability as { summary: { totalRevenue: number } }).summary.totalRevenue, expectedRevenue);
+              assert.equal((profitability as { summary: { totalRevenue: number } }).summary.totalRevenue, expectedRevenue.toFixed(4));
               assert.equal(JSON.stringify(profitability).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             }
           });

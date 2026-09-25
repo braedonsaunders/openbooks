@@ -34,7 +34,7 @@ test('the health dashboard echoes each calendar range with zero aggregates', asy
         );
         assert.equal(result.figures.revenue, 0);
         assert.equal(result.monthly.length, 12);
-        assert.equal(result.budget.totals.actual, 0);
+        assert.equal(result.budget.totals.actual, '0.0000');
         assert.deepEqual(result.segments.department, []);
       }
     });
