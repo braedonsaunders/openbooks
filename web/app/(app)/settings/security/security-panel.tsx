@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
+import { readApiErrorMessage } from "@/lib/api-error";
 import { Button, Card, CardContent, Input, Label } from "@openbooks/ui";
 
 type MfaStatus = { enabled: boolean; recoveryCodesRemaining: number };
@@ -16,7 +17,12 @@ type Session = {
   current: boolean;
 };
 
-export async function jsonRequest(url: string, init: RequestInit | undefined, requestFailed: string) {
+export async function jsonRequest(
+  url: string,
+  init: RequestInit | undefined,
+  requestFailed: string,
+  lockoutMessage?: (seconds: number) => string,
+) {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -27,13 +33,33 @@ export async function jsonRequest(url: string, init: RequestInit | undefined, re
   } catch {
     throw new Error(requestFailed);
   }
-  if (!response.ok) throw new Error(requestFailed);
+  // A refusal carries its remedy in the body: the 409 names the pending
+  // session ("MFA setup is already pending in another session; ..."), and
+  // the 429 lockout carries its retryAfter. Collapsing either to the
+  // generic text hides the only thing the operator can act on.
+  if (!response.ok) {
+    const message = await readApiErrorMessage(response.clone(), requestFailed);
+    const body = (await response.json().catch(() => null)) as { retryAfter?: unknown } | null;
+    const retryAfter =
+      body && typeof body.retryAfter === "number" && Number.isFinite(body.retryAfter)
+        ? Math.max(0, Math.ceil(body.retryAfter))
+        : null;
+    if (retryAfter !== null && lockoutMessage) throw new Error(lockoutMessage(retryAfter));
+    throw new Error(message);
+  }
   return response.json().catch(() => ({}));
 }
 
 export function SecurityPanel() {
   const t = useTranslations("shell.securityPage");
+  const tLogin = useTranslations("login");
   const requestFailed = t("requestFailed");
+  // Memoized: reload() closes over it, and a fresh closure every render
+  // would re-fire the load effect into a reload loop.
+  const lockoutMessage = useCallback(
+    (seconds: number) => tLogin("tooManyAttempts", { seconds }),
+    [tLogin],
+  );
   const tCommon = useTranslations("common");
   const { dateTime } = useViewerFormat();
   const router = useRouter();
@@ -51,13 +77,13 @@ export function SecurityPanel() {
   // response), never synchronously in the effect body.
   const reload = useCallback(() => {
     return Promise.all([
-      jsonRequest("/api/auth/mfa", undefined, requestFailed),
-      jsonRequest("/api/auth/sessions", undefined, requestFailed),
+      jsonRequest("/api/auth/mfa", undefined, requestFailed, lockoutMessage),
+      jsonRequest("/api/auth/sessions", undefined, requestFailed, lockoutMessage),
     ]).then(([mfa, sessionResult]) => {
       setStatus(mfa);
       setSessions(sessionResult.sessions);
     });
-  }, [requestFailed]);
+  }, [requestFailed, lockoutMessage]);
 
   useEffect(() => {
     void reload().then(
@@ -112,7 +138,7 @@ export function SecurityPanel() {
                 setSetup(await jsonRequest("/api/auth/mfa", {
                   method: "POST",
                   body: JSON.stringify({ password }),
-                }, requestFailed));
+                }, requestFailed, lockoutMessage));
                 setPassword("");
               })}>
                 {t("setupAuthenticator")}
@@ -133,7 +159,7 @@ export function SecurityPanel() {
                 <Input id="confirm-mfa" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} />
               </div>
               <Button disabled={busy || !code} onClick={() => void act(async () => {
-                const result = await jsonRequest("/api/auth/mfa", { method: "PUT", body: JSON.stringify({ code }) }, requestFailed);
+                const result = await jsonRequest("/api/auth/mfa", { method: "PUT", body: JSON.stringify({ code }) }, requestFailed, lockoutMessage);
                 setRecoveryCodes(result.recoveryCodes);
                 setSetup(null);
                 setCode("");
@@ -155,7 +181,7 @@ export function SecurityPanel() {
                 <Input id="disable-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
               </div>
               <Button variant="outline" disabled={busy || !password || !code} onClick={() => void act(async () => {
-                const result = await jsonRequest("/api/auth/mfa/recovery", { method: "POST", body: JSON.stringify({ password, code }) }, requestFailed);
+                const result = await jsonRequest("/api/auth/mfa/recovery", { method: "POST", body: JSON.stringify({ password, code }) }, requestFailed, lockoutMessage);
                 setRecoveryCodes(result.recoveryCodes);
                 setPassword("");
                 setCode("");
@@ -164,7 +190,7 @@ export function SecurityPanel() {
                 {t("replaceRecoveryCodes")}
               </Button>
               <Button variant="destructive" disabled={busy || !password || !code} onClick={() => void act(async () => {
-                await jsonRequest("/api/auth/mfa", { method: "DELETE", body: JSON.stringify({ password, code }) }, requestFailed);
+                await jsonRequest("/api/auth/mfa", { method: "DELETE", body: JSON.stringify({ password, code }) }, requestFailed, lockoutMessage);
                 setPassword("");
                 setCode("");
                 setRecoveryCodes(null);
@@ -208,7 +234,7 @@ export function SecurityPanel() {
                   <p className="text-xs text-slate-500">{t("lastUsed", { date: dateTime(new Date(session.lastSeenAt)) })}</p>
                 </div>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => {
-                  await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" }, requestFailed);
+                  await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" }, requestFailed, lockoutMessage);
                   if (session.current) router.push("/login");
                   else await reload();
                 })}>
@@ -220,7 +246,7 @@ export function SecurityPanel() {
           </div>
           {loaded && sessions.length > 1 ? (
             <Button variant="outline" disabled={busy} onClick={() => void act(async () => {
-              await jsonRequest("/api/auth/sessions", { method: "DELETE" }, requestFailed);
+              await jsonRequest("/api/auth/sessions", { method: "DELETE" }, requestFailed, lockoutMessage);
               await reload();
             })}>
               {t("revokeOtherSessions")}
