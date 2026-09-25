@@ -135,6 +135,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           return bad('invalid_subsidiary')
         }
       }
+      if (body.subsidiaryId !== undefined && String(subsidiaryId) !== String(current.subsidiary_id)) {
+        const history = await tx.execute(sql`
+          select 1
+           where exists (
+             select 1
+               from document_lines dl
+               join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+              where dl.org_id = ${gate.user.orgId} and dl.equipment_unit_id = ${id}
+                and ((d.kind = 'project_charge' and d.status in ('approved', 'posted'))
+                  or (d.kind = 'customer_invoice' and d.status = 'posted'))
+           ) or exists (
+             select 1
+               from journal_lines jl
+               join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+              where jl.org_id = ${gate.user.orgId} and jl.equipment_unit_id = ${id}
+                and je.status in ('posted', 'reversed')
+           )`)
+        if (history.rows[0]) {
+          return NextResponse.json({
+            error: 'equipment_history_prevents_rehome',
+            code: 'equipment_history_prevents_rehome',
+            message: 'Equipment with approved charges or posted accounting history cannot be moved. Keep it in its current subsidiary and create a new unit in the target subsidiary.',
+          }, { status: 422 })
+        }
+      }
       const fixedAssetId = body.fixedAssetId !== undefined ? text(body.fixedAssetId) : current.fixed_asset_id
       const rateBookId = body.rateBookId !== undefined ? text(body.rateBookId) : current.rate_book_id
       for (const [value, label] of [[fixedAssetId, 'Fixed asset'], [rateBookId, 'Rate book']] as const) {
