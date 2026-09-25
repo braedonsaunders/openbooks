@@ -1313,7 +1313,8 @@
       "qcCsbYtd": "Aportaciones QPP adicionales sobre bonificaciones",
       "ficaWithheldYtd": "Impuesto FICA retenido",
       "qpipEmployerYtd": "Primas QPIP del empleador",
-      "wcbAssessableYtd": "Ingresos evaluables WCB"
+      "wcbAssessableYtd": "Ingresos evaluables WCB",
+      "qcTaxYtd": "Impuesto de Quebec retenido"
     },
     "componentHelp": "Cuánto del límite anual de este componente ya usó el empleado este año, en su sistema de nómina anterior. Sin esto el límite reinicia en cero y el empleado puede aportar un segundo límite anual completo.",
     "componentCap": "Límite anual",

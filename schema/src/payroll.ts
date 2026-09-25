@@ -1005,6 +1005,14 @@ export const payrollOpeningBalances = pgTable(
      */
     ehtRemunerationYtd: money("eht_remuneration_ytd").notNull().default("0"),
     /**
+     * Québec income-tax-withheld history (migration 0395). Same declaration
+     * pattern as the history above: the CA pack declares it and this model
+     * only stores what the declarations name. Distinct from tax_ytd, which
+     * is the federal T4-box-22 money: the RL-1 Box E carry-in reads this
+     * column, never the federal one.
+     */
+    qcTaxYtd: money("qc_tax_ytd").notNull().default("0"),
+    /**
      * DEPRECATED (2026-08-17). No pay run reads this any more: an opening
      * vacation balance is an `entitlement_ledger` row with `kind = 'opening'`
      * against the org's vacation plan, loaded through

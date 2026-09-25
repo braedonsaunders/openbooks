@@ -1313,7 +1313,8 @@
       "qcCsbYtd": "Québec additional-QPP bonus contributions",
       "ficaWithheldYtd": "FICA tax withheld",
       "qpipEmployerYtd": "QPIP employer premiums",
-      "wcbAssessableYtd": "WCB assessable earnings"
+      "wcbAssessableYtd": "WCB assessable earnings",
+      "qcTaxYtd": "Québec income tax withheld"
     },
     "componentHelp": "How much of this component's annual cap the employee has already used this year, at your previous payroll system. Without it the cap restarts at zero and the employee can contribute a second full annual limit.",
     "componentCap": "Annual cap",

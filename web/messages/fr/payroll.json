@@ -1313,7 +1313,8 @@
       "qcCsbYtd": "Cotisations QPP additionnelles sur primes",
       "ficaWithheldYtd": "Impôt FICA retenu",
       "qpipEmployerYtd": "Cotisations QPIP de l'employeur",
-      "wcbAssessableYtd": "Gains assurables WCB"
+      "wcbAssessableYtd": "Gains assurables WCB",
+      "qcTaxYtd": "Impôt du Québec retenu"
     },
     "componentHelp": "La part du plafond annuel de cette composante que l’employé a déjà utilisée cette année, dans votre ancien système de paie. Sans elle, le plafond repart de zéro et l’employé peut cotiser un deuxième plafond annuel complet.",
     "componentCap": "Plafond annuel",

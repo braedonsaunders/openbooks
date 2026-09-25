@@ -1313,7 +1313,8 @@
       "qcCsbYtd": "Contribuições QPP adicionais sobre bônus",
       "ficaWithheldYtd": "Imposto FICA retido",
       "qpipEmployerYtd": "Contribuições QPIP do empregador",
-      "wcbAssessableYtd": "Rendimentos avaliáveis WCB"
+      "wcbAssessableYtd": "Rendimentos avaliáveis WCB",
+      "qcTaxYtd": "Imposto de renda do Quebec retido"
     },
     "componentHelp": "Quanto do teto anual deste componente o funcionário já usou neste ano, no sistema de folha anterior. Sem isso, o teto recomeça do zero e o funcionário pode contribuir um segundo limite anual integral.",
     "componentCap": "Teto anual",
