@@ -7,6 +7,7 @@ import type {
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
 import { AU_PACK_RATES } from "./rates.ts";
+import { AU_SUPER_2027 } from "./tax-year-2027.ts";
 
 /**
  * Phase 8 — the AU pack's earnings-assessed employer levy: workers'
@@ -14,8 +15,11 @@ import { AU_PACK_RATES } from "./rates.ts";
  *
  * Each state's insurer sets the employer's premium rate (a tenant-entered
  * regional fraction such as 0.012 for 1.2% — see `au_workers_comp` in
- * ./rates.ts, kind "rate", NOT a percent), and the premium is that fraction
- * of the stub's assessable wages with no exemption and no cap. Linear in the
+ * ./rates.ts, kind "rate", NOT a percent). Rateable remuneration includes
+ * employer superannuation contributions (WorkSafe Victoria, "How remuneration
+ * works", "Superannuation contributions", https://www.worksafe.vic.gov.au/how-remuneration-works).
+ * Include the SG amount generated
+ * from this stub's OTE alongside its gross wages. Linear in the
  * base, so per-stub assessment sums to the employer's liability exactly and
  * the per-employee channel (this hook) prices identically to an aggregate
  * one — no `employerAggregateLevies` declaration needed.
@@ -50,6 +54,7 @@ function rateUnits(rate: string): bigint {
 export function assessAuWorkersComp(
   gross: string,
   rate: string,
+  pensionable: string,
 ): { amount: string; assessable: string } {
   const units = rateUnits(rate);
   if (units > RATE_SCALE) {
@@ -59,9 +64,20 @@ export function assessAuWorkersComp(
     );
   }
   const earnings = toUnits(gross);
-  if (earnings <= 0n) return { amount: "0.0000", assessable: "0.0000" };
-  const cents = roundDiv(earnings * units, RATE_SCALE * CENTS_PER_UNIT);
-  return { amount: fromUnits(cents * CENTS_PER_UNIT), assessable: gross };
+  const ote = toUnits(pensionable);
+  if (earnings < 0n || ote < 0n) {
+    throw new PayrollPackError("AU workers' compensation gross and OTE bases must be non-negative");
+  }
+  // Match the pack's SG computation: 12% of OTE, rounded half-up to cents.
+  const superCents = roundDiv(
+    ote * rateUnits(AU_SUPER_2027.chargeRate), RATE_SCALE * CENTS_PER_UNIT,
+  );
+  const assessableUnits = earnings + superCents * CENTS_PER_UNIT;
+  const cents = roundDiv(assessableUnits * units, RATE_SCALE * CENTS_PER_UNIT);
+  return {
+    amount: fromUnits(cents * CENTS_PER_UNIT),
+    assessable: fromUnits(assessableUnits),
+  };
 }
 
 export async function applyAuEmployerLevies(
@@ -75,7 +91,10 @@ export async function applyAuEmployerLevies(
   if (rate == null || rate === "") return { ...EMPTY_EMPLOYER_LEVY_FACTORS };
   const gross = sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
   if (toUnits(gross) <= 0n) return { ...EMPTY_EMPLOYER_LEVY_FACTORS };
-  const { amount } = assessAuWorkersComp(gross, rate);
+  const pensionable = sum(lines
+    .filter((line) => line.kind === "earning" && !line.accrualOnly && (line.pensionable ?? true))
+    .map((line) => line.amount));
+  const { amount, assessable } = assessAuWorkersComp(gross, rate, pensionable);
   pushStatutory("wcb", "employer_contribution", "Workers' compensation", amount, 260);
-  return { ...EMPTY_EMPLOYER_LEVY_FACTORS, wcbAmount: amount, wcbAssessable: gross };
+  return { ...EMPTY_EMPLOYER_LEVY_FACTORS, wcbAmount: amount, wcbAssessable: assessable };
 }
