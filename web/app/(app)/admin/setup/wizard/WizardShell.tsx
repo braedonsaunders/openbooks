@@ -59,7 +59,7 @@ export function WizardShell(props: {
             type="button"
             onClick={props.skip.onClick}
             disabled={props.skip.disabled}
-            className="absolute right-6 top-6 z-10 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="absolute right-6 top-6 z-10 flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-lg transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={16} /> {props.skip.label}
           </button>
