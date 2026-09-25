@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { withOrg } from "@openbooks/engine/src/platform/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, num, capList, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
+import { dateInput, num, capList, decimalText, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { healthData } from "../analytics/health-data";
 import { customerData, customerProfitability } from "../analytics/customer-data";
 import { vendorData } from "../analytics/vendor-data";
@@ -410,14 +410,14 @@ const trueCostTool: AssistantToolDef = {
             rateFormat: c.rateFormat,
             includeInComposite: c.includeInComposite,
             accounts: capList(
-              c.accounts.map((x) => ({ id: x.id, number: x.number, name: x.name, amount: num(x.amount), pinned: x.pinned })),
+              c.accounts.map((x) => ({ id: x.id, number: x.number, name: x.name, amount: decimalText(x.amount), pinned: x.pinned })),
               10,
             ),
           })),
           50,
         ),
         unassigned: capList(
-          r.unassigned.map((x) => ({ id: x.id, number: x.number, name: x.name, amount: num(x.amount), pinned: x.pinned })),
+          r.unassigned.map((x) => ({ id: x.id, number: x.number, name: x.name, amount: decimalText(x.amount), pinned: x.pinned })),
           25,
         ),
         totals: r.totals,

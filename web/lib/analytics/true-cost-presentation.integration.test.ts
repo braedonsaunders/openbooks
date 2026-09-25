@@ -77,7 +77,7 @@ test('true cost translates every burden functional to presentation', { skip: !en
       // Unassigned expense: 100 CAD + 135 CAD.
       const unassigned = data.unassigned.find((u) => u.id === org.accounts.cogs)!
       assert.ok(unassigned, 'unassigned expense present')
-      assert.equal(unassigned.amount, 235)
+      assert.equal(unassigned.amount, "235.0000")
       // Employee rates translate before any averaging: 50 and 67.5.
       const cad = data.labor.employees.find((e) => e.id === cadEmp)!
       const us = data.labor.employees.find((e) => e.id === usEmp)!
@@ -86,7 +86,7 @@ test('true cost translates every burden functional to presentation', { skip: !en
       assert.equal(data.labor.weighted, 58.75)
       // Monthly burden carries the translated time category.
       const july = data.monthly.find((m) => m.month === '2026-07')!
-      assert.equal(july.burden, 1175)
+      assert.equal(july.burden, "1175.0000")
       // A restricted reader sees only the home subsidiary's burden and crew.
       const fenced = await trueCostData(org.orgId, JULY, new Set([org.subsidiaryId]))
       assert.equal(fenced.kpis.totalOverhead, 500)
