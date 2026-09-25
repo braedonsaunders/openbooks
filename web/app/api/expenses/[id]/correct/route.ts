@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockedDocumentScopeDenied } from '../../../../../lib/document-scope.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
@@ -84,6 +85,14 @@ export async function POST(
     // the generic contract there is no post-commit flow dispatch here; the
     // replacement runs its on_submit flows when it is submitted.
     outcome = await withOrgTransaction(user.orgId, async () => {
+      // Locked scope recheck: a rehome that landed after the precheck
+      // must not let this unit correct-and-void another subsidiary's
+      // document. The replacement draft and the controlled void below
+      // share this transaction, so the lock covers both.
+      const relocked = await lockedDocumentScopeDenied(gate, id)
+      // DocumentEditError (not the void error) so the refusal keeps the
+      // uniform missing shape — no extra code field to tell it apart.
+      if (relocked) throw new DocumentEditError(404, 'not found')
       const replacement = await createExpenseCorrectionDraft(id, body, {
         orgId: user.orgId,
         userId: user.id,
