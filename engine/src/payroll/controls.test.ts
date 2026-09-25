@@ -21,7 +21,7 @@ import { isCanadianSin, renderRoeXml, type RoeRecordToFile } from "./canada/roex
 import { roeCandidates, t4Slips, type RoeRecord } from "./yearend.ts";
 import { employeeYtd } from "./canada/compute-statutory.ts";
 import { usEmployeeYtd } from "./us/compute-statutory.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Payroll control tests.
@@ -72,6 +72,7 @@ interface PayRunFixture {
   documentId: string;
   scheduleId: string;
   employeeId: string;
+  employmentId: string;
   subsidiaryId: string;
 }
 
@@ -110,13 +111,18 @@ async function seedPayRun(options: {
                                   effective_from, effective_to, is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, 'CAD', '30', ${options.rateBasis ?? "hour"}, 2080,
             '2026-01-01', ${options.rateEffectiveTo ?? null}, true, ${actorId}, ${actorId})`);
+  // Stubs carry a NOT NULL employment and stub calculation refuses employees
+  // without an HRM employment, so the hire carries one throughout.
+  const employmentId = await seedWorkerEmployment(
+    org.orgId, employeeId, options.employeeSubsidiaryId ?? org.subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           province, pay_basis, country, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', ${options.payBasis ?? "hourly"},
-            ${options.country ?? "CA"}, 1, 1, '4', 'accrue', true, ${actorId}, ${actorId})`);
+    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'ON',
+            ${options.payBasis ?? "hourly"}, ${options.country ?? "CA"}, 1, 1, '4', 'accrue', true,
+            ${actorId}, ${actorId})`);
 
   const documentId = randomUUID();
   await db.execute(sql`
@@ -132,7 +138,7 @@ async function seedPayRun(options: {
             ${options.calculated === false ? null : sql`now()`}, ${actorId}, ${actorId})`);
 
   return {
-    orgId: org.orgId, actorId, documentId, scheduleId, employeeId,
+    orgId: org.orgId, actorId, documentId, scheduleId, employeeId, employmentId,
     subsidiaryId: org.subsidiaryId,
   };
 }
@@ -323,11 +329,11 @@ test(
 async function seedCommittedStub(run: PayRunFixture, gross: string): Promise<string> {
   const stubId = randomUUID();
   await db.execute(sql`
-    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                            periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
                            pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-    values (${stubId}, ${run.orgId}, ${run.documentId}, ${run.employeeId}, 'ON', 26, '2026-07-21',
-            2026, 'CAD', ${gross}, ${gross}, ${gross}, ${gross},
+    values (${stubId}, ${run.orgId}, ${run.documentId}, ${run.employeeId}, ${run.employmentId}, 'ON',
+            26, '2026-07-21', 2026, 'CAD', ${gross}, ${gross}, ${gross}, ${gross},
             ${JSON.stringify({ C: "0", C2: "0", EI: "0" })}::jsonb, ${run.actorId}, ${run.actorId})`);
   return stubId;
 }
@@ -357,12 +363,13 @@ test(
           values (${documentId}, ${current.orgId}, ${current.scheduleId}, ${periodStart}, ${periodEnd},
                   ${periodEnd}, 2026, ${runStatus}, ${current.actorId}, ${current.actorId})`);
         await db.execute(sql`
-          insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
-                                 periods_per_year, pay_date, tax_year, currency_code, gross,
+          insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+                                 province, periods_per_year, pay_date, tax_year, currency_code, gross,
                                  pensionable_earnings, insurable_earnings, net_pay, factors,
                                  created_by, updated_by)
-          values (${randomUUID()}, ${current.orgId}, ${documentId}, ${current.employeeId}, 'ON',
-                  26, ${periodEnd}, 2026, 'CAD', ${gross}, ${gross}, ${gross}, ${gross},
+          values (${randomUUID()}, ${current.orgId}, ${documentId}, ${current.employeeId},
+                  ${current.employmentId}, 'ON', 26, ${periodEnd}, 2026, 'CAD', ${gross}, ${gross},
+                  ${gross}, ${gross},
                   ${JSON.stringify({
                     C: gross, C2: gross, EI: gross, QPIP: gross,
                     SS: gross, MED: gross, MED2: gross,
@@ -610,11 +617,11 @@ test(
         values (${otherId}, ${run.orgId}, ${run.scheduleId}, '2026-07-19', '2026-07-19',
                 '2026-07-22', 2026, 'bonus', 'committed', ${run.actorId}, ${run.actorId})`);
       await db.execute(sql`
-        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                periods_per_year, pay_date, tax_year, currency_code, gross,
                                created_by, updated_by)
-        values (${run.orgId}, ${otherId}, ${run.employeeId}, 'ON', 26, '2026-07-22', 2026, 'CAD',
-                '5000', ${run.actorId}, ${run.actorId})`);
+        values (${run.orgId}, ${otherId}, ${run.employeeId}, ${run.employmentId}, 'ON', 26,
+                '2026-07-22', 2026, 'CAD', '5000', ${run.actorId}, ${run.actorId})`);
 
       assert.ok(
         (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("ytd"),
