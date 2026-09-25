@@ -249,7 +249,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-upcoming-changes': { props: ['ends', 'endsEmpty', 'endsTitle', 'notAvailable', 'starts', 'startsEmpty', 'startsTitle', 'truncated', 'truncatedNote'] },
   'hrm-verb-chip': { props: ['label'] },
   'hrm-window-dialog': { props: ['closeHref', 'departmentOptions', 'subsidiaryOptions'] },
-  'hrm-window-drawer': { props: ['closeHref', 'drawer'] },
+  'hrm-window-drawer': { props: ['canManage', 'closeHref', 'drawer'] },
   'identity-cell': { props: ['detail', 'name'] },
   'identity-record-card': { props: ['facts', 'title'] },
   'import-statement': { props: ['accountId'] },

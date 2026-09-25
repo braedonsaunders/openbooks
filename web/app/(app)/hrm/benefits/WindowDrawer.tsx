@@ -16,7 +16,16 @@ import type { WindowDrawerData } from '../../../../lib/hrm/benefits'
  * required reason) and opening a draft ride the window routes inside, and
  * the list refreshes after every transition.
  */
-export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; closeHref: string }) {
+export function WindowDrawer({
+  drawer,
+  closeHref,
+  canManage,
+}: {
+  drawer: WindowDrawerData
+  closeHref: string
+  /** Holds hrm.benefits.manage (mirrors the open/close route guards). */
+  canManage: boolean
+}) {
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const reasonId = useId()
@@ -107,18 +116,23 @@ export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; 
             </ul>
           )}
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          {window.status === 'draft' ? (
-            <Button disabled={working} onClick={() => transition('open', {})}>
-              {t('benefits.openAction')}
-            </Button>
-          ) : null}
-          {window.status === 'open' && !closing ? (
-            <Button variant="outline" onClick={() => setClosing(true)}>
-              {t('benefits.closeAction')}
-            </Button>
-          ) : null}
-        </div>
+        {/* Window transitions need hrm.benefits.manage (the route guard):
+            read-only viewers get the progress and enrolments above, never
+            the Open/Close affordances. */}
+        {canManage ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            {window.status === 'draft' ? (
+              <Button disabled={working} onClick={() => transition('open', {})}>
+                {t('benefits.openAction')}
+              </Button>
+            ) : null}
+            {window.status === 'open' && !closing ? (
+              <Button variant="outline" onClick={() => setClosing(true)}>
+                {t('benefits.closeAction')}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         {closing ? (
           <div className="flex flex-col gap-2">
             <Label htmlFor={reasonId}>{t('benefits.closeReasonPlaceholder')}</Label>
