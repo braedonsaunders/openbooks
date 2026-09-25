@@ -506,8 +506,8 @@ test("a clock-in onto another subsidiary's project refuses by name", { skip: !DB
     const projectId = randomUUID();
     await withOrg(org.orgId, async () => {
       await db.execute(sql`
-        insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${otherSub}, ${org.orgId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSub}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id) values (${worker}, ${org.orgId}, 'person', 'Crew Hand', ${org.subsidiaryId})`);
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${otherSub}, 'JOB-OTHER', 'Other entity job', 'active', true, '{}'::jsonb)`);
       const code = await refusesCode(() => recordClockEvent({
