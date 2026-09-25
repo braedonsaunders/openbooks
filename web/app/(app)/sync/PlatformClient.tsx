@@ -842,6 +842,12 @@ export function PlatformClient() {
                     variant="ghost"
                     size="sm"
                     disabled={busy === `${c.id}:del`}
+                    aria-busy={busy === `${c.id}:del`}
+                    aria-label={
+                      busy === `${c.id}:del`
+                        ? t("actions.removing", { name: c.displayName })
+                        : t("actions.remove", { name: c.displayName })
+                    }
                     onClick={() => remove(c)}
                   >
                     <Trash2 size={14} />

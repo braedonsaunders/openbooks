@@ -41,6 +41,8 @@
     "pauseMirror": "Pause mirror",
     "enableMirror": "Enable mirror",
     "edit": "Edit",
+    "remove": "Remove connection \"{name}\"",
+    "removing": "Removing connection \"{name}\"…",
     "downloadQwc": "Download Web Connector",
     "retainDeletion": "Retain with evidence",
     "voidDeletion": "Reverse and void"

@@ -41,6 +41,8 @@
     "pauseMirror": "暂停镜像",
     "enableMirror": "启用镜像",
     "edit": "编辑",
+    "remove": "删除连接“{name}”",
+    "removing": "正在删除连接“{name}”…",
     "downloadQwc": "下载 Web Connector",
     "retainDeletion": "留存并附证据",
     "voidDeletion": "冲销并作废"
