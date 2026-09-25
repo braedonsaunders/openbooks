@@ -4,10 +4,6 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-// Report filter pickers must not offer another legal entity's dimensions.
-// dimensionOptions used to list every active department/location/class and
-// up to 500 journal-active projects org-wide, so a reader fenced to one
-// subsidiary could see — and select — dimensions they may never read.
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') {
@@ -32,6 +28,7 @@ test(
     const org = await withBypass(() => createScratchOrg())
     const subB = randomUUID()
     const projectB = randomUUID()
+    const segmentId = randomUUID()
     try {
       await withBypass(() =>
         db.execute(sql`
@@ -53,16 +50,16 @@ test(
           values (${projectB}, ${org.orgId}, ${subB}, 'HIDDEN', 'Hidden project', 'active', true, '{}'::jsonb)
         `),
       )
+      await withBypass(() => db.execute(sql`insert into segment_definitions(id,org_id,key,name,plural_name) values(${segmentId},${org.orgId},'scope_dimension','Scoped dimension','Scoped dimensions')`))
+      await withBypass(() => db.execute(sql`insert into segment_values(org_id,segment_id,name,subsidiary_id) values(${org.orgId},${segmentId},'Hidden segment value',${subB})`))
 
       await withOrgContext(org.orgId, async () => {
         const scoped = await dimensionOptions(org.orgId, undefined, [org.subsidiaryId])
         const deptNames = scoped.departments.map((d) => d.name)
         assert.ok(deptNames.includes('Scoped dept A'))
         assert.ok(deptNames.includes('Org-wide dept'), 'org-wide dimensions stay usable in a scoped view')
-        assert.ok(!deptNames.includes('Scoped dept B'), 'another subsidiary’s department must not be offered')
+        assert.ok(!deptNames.includes('Scoped dept B') && scoped.segments.every((segment) => segment.values.every((value) => value.name !== 'Hidden segment value')), 'another subsidiary’s dimensions must not be offered')
 
-        // The selected-project union arm obeys the same scope: a hidden
-        // project is not smuggled back in through the explicit selection.
         const withHidden = await dimensionOptions(org.orgId, projectB, [org.subsidiaryId])
         assert.ok(
           !withHidden.projects.some((p) => p.id === projectB),

@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 export type SegmentValueOption = {
   id: string
@@ -48,8 +49,18 @@ interface SegmentRegistryRow extends Record<string, unknown> {
   values: SegmentValueOption[]
 }
 
-export async function segmentRegistry(orgId?: string): Promise<SegmentDefinitionOption[]> {
+export async function segmentRegistry(
+  orgId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | readonly string[] | null,
+): Promise<SegmentDefinitionOption[]> {
   const orgFilter = orgId ? sql`and sd.org_id = ${orgId}` : sql``
+  const subsidiaryScope = allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(
+        sql`sv.subsidiary_id`,
+        allowedSubsidiaryIds === null ? null : new Set(allowedSubsidiaryIds),
+        { orgWideNull: true },
+      )
   const result = (await db.execute<SegmentRegistryRow>(sql`
     select sd.id, sd.key, sd.name, sd.plural_name, sd.source_kind,
            sd.storage_column, sd.is_hierarchical, sd.show_on_header,
@@ -66,6 +77,7 @@ export async function segmentRegistry(orgId?: string): Promise<SegmentDefinition
       from segment_definitions sd
       left join segment_values sv on sv.segment_id = sd.id
        and sv.org_id = sd.org_id and sv.is_active
+       ${subsidiaryScope}
      where sd.is_active ${orgFilter}
      group by sd.id
      order by sd.sort_order, sd.name
