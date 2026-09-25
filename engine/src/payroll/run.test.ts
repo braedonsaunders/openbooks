@@ -9,11 +9,12 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement, payRunRefusalDigest } from "./run-calculation-evidence.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { mutatePayRunAdjustment } from './run-adjustments.ts'
 import { createRetroPayRun, proposeRetroPay } from './retro-store.ts'
 import { PayrollError } from './error.ts'
 import { abs, add, cmp, div, neg, sum } from '../money/money.ts'
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from '../testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from '../testing/fixtures.ts'
 
 test('allocateProportionally splits exactly with the remainder on the last bucket', () => {
   const splits = allocateProportionally('100.0000', [
@@ -127,6 +128,7 @@ async function hourlyCalcFixture(label: string, days: { workedOn: string; hours:
       },
     })}::jsonb where id = ${org.orgId}`)
   await seedPayrollComponents(org.orgId, actorId, 'CA')
+  await seedOntarioEhtFixture(org.orgId, actorId)
   const scheduleId = randomUUID()
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -142,11 +144,14 @@ async function hourlyCalcFixture(label: string, days: { workedOn: string; hours:
                                   is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true,
             ${actorId}, ${actorId})`)
+  // Hires carry an HRM employment or stub calculation refuses them.
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_method, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, federal_claim_code,
+                                           provincial_claim_code, vacation_method, is_active,
+                                           created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             'accrue', true, ${actorId}, ${actorId})`)
   for (const day of days) {
     await db.execute(sql`
@@ -159,7 +164,7 @@ async function hourlyCalcFixture(label: string, days: { workedOn: string; hours:
     orgId: org.orgId, actorId, payScheduleId: scheduleId,
     periodStart: '2026-07-05', periodEnd: '2026-07-18',
   })
-  return { orgId: org.orgId, actorId, employeeId, scheduleId, documentId: run.documentId }
+  return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, employeeId, scheduleId, documentId: run.documentId }
 }
 
 test('a retro run settles quantified back pay; a regular run never does', { skip: !DB }, async () => {
@@ -196,6 +201,7 @@ test('a retro run settles quantified back pay; a regular run never does', { skip
         },
       })}::jsonb where id = ${org.orgId}`)
     await seedPayrollComponents(org.orgId, actorId, 'CA')
+    await seedOntarioEhtFixture(org.orgId, actorId)
     const scheduleId = randomUUID()
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -211,12 +217,14 @@ test('a retro run settles quantified back pay; a regular run never does', { skip
                                     effective_from, is_active, created_by, updated_by)
       values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2025-06-01', true,
               ${actorId}, ${actorId})`)
+    // Hires carry an HRM employment or stub calculation refuses them.
+    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                             pay_basis, federal_claim_code, provincial_claim_code,
-                                             vacation_percent, vacation_method, is_active,
-                                             created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                             country, province, pay_basis, federal_claim_code,
+                                             provincial_claim_code, vacation_percent, vacation_method,
+                                             is_active, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
               '4', 'accrue', true, ${actorId}, ${actorId})`)
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -305,11 +313,14 @@ test('a salaried employee holding only an hourly rate is refused before calculat
                                     is_active, created_by, updated_by)
       values (${f.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true,
               ${f.actorId}, ${f.actorId})`)
+    // Hires carry an HRM employment or stub calculation refuses them.
+    const employmentId = await seedWorkerEmployment(f.orgId, employeeId, f.subsidiaryId)
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                             pay_basis, federal_claim_code, provincial_claim_code,
-                                             vacation_method, is_active, created_by, updated_by)
-      values (${f.orgId}, ${employeeId}, ${f.scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                             country, province, pay_basis, federal_claim_code,
+                                             provincial_claim_code, vacation_method, is_active,
+                                             created_by, updated_by)
+      values (${f.orgId}, ${employeeId}, ${employmentId}, ${f.scheduleId}, 'CA', 'ON', 'salary', 1, 1,
               'accrue', true, ${f.actorId}, ${f.actorId})`)
     const calculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
     const refusal = calculated.errors.find((e) => e.employee === 'Salaried Sam')
@@ -430,6 +441,7 @@ async function partialRefusalFixture(label: string) {
       },
     })}::jsonb where id = ${org.orgId}`)
   await seedPayrollComponents(org.orgId, actorId, 'CA')
+  await seedOntarioEhtFixture(org.orgId, actorId)
   const scheduleId = randomUUID()
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -448,11 +460,14 @@ async function partialRefusalFixture(label: string) {
         values (${org.orgId}, ${employeeId}, 'CAD', '30', ${rateBasis}, '2026-01-01', true,
                 ${actorId}, ${actorId})`)
     }
+    // Hires carry an HRM employment or stub calculation refuses them.
+    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                             pay_basis, federal_claim_code, provincial_claim_code,
-                                             vacation_method, is_active, created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', ${payBasis}, 1, 1,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                             country, province, pay_basis, federal_claim_code,
+                                             provincial_claim_code, vacation_method, is_active,
+                                             created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', ${payBasis}, 1, 1,
               'accrue', true, ${actorId}, ${actorId})`)
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -716,6 +731,7 @@ test('a run where every in-scope employee refuses is not a success', { skip: !DB
         },
       })}::jsonb where id = ${org.orgId}`)
     await seedPayrollComponents(org.orgId, actorId, 'CA')
+    await seedOntarioEhtFixture(org.orgId, actorId)
     const scheduleId = randomUUID()
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -727,11 +743,14 @@ test('a run where every in-scope employee refuses is not a success', { skip: !DB
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`)
+      // Hires carry an HRM employment or stub calculation refuses them.
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId)
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_method, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_method, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 'accrue', true, ${actorId}, ${actorId})`)
     }
     const run = await createPayRun({
