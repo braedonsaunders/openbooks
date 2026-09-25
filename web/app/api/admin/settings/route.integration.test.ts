@@ -275,6 +275,7 @@ test(
           reportingFramework: "us_gaap",
           taxFramework: "asc740",
           requireVendorBillApproval: false,
+          requireStockCountReview: false,
         },
       });
       assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage"]);

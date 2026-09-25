@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
@@ -37,6 +38,7 @@ const hooks = registerHooks({
       && (parent.includes("/api/admin/users/route.ts") || parent.includes("/admin/users/view.ts"))
     ) {
       return virtual(`
+        export { subsidiaryScopeAllows } from '${pathToFileURL(process.cwd() + "/").href}engine/src/organization/subsidiary-scope.ts';
         const state = globalThis[Symbol.for('openbooks.admin-invite-link-integration')];
         export async function guardPermission() { return state.authz; }
         export async function requirePermission() { return state.authz; }

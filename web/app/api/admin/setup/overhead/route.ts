@@ -20,6 +20,19 @@ import { isCalendarDate } from '../../../../../lib/setup/coerce'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Typed refusal for an apply naming no such project type. A bare Error here
+ * falls through apiErrorResponse as an unexpected 500 with a request id;
+ * the typed status raises the computed refusal as the named 422 instead.
+ */
+class ProjectTypeNotFoundError extends Error {
+  readonly status = 422
+  constructor() {
+    super('project type not found')
+    this.name = 'ProjectTypeNotFoundError'
+  }
+}
+
 /** Keep the handler's full action inventory here so each write's ownership
  * decision stays explicit: only a department-targeted publish is
  * entity-owned; every other supported action writes org-wide policy/state. */
@@ -189,7 +202,7 @@ export async function POST(req: Request) {
              for update of pt
           `))
           const profile = current.rows[0]?.financial_profile
-          if (!profile) throw new Error('project type not found')
+          if (!profile) throw new ProjectTypeNotFoundError()
           const components = profile.totalCost.components.includes('overhead') || overhead.method === 'none'
             ? profile.totalCost.components
             : [...profile.totalCost.components, 'overhead' as const]
