@@ -30,6 +30,7 @@ const sources = {
     };
   `,
   '@openbooks/emails': `
+    export function isEmailAttachmentRef(attachment) { return !('content' in attachment) }
     export async function sendVia() {
       const state = globalThis.__emailTerminalCleanupTest;
       state.sendViaCalls++;
