@@ -67,7 +67,8 @@ test('analytics drill reads the posted statement-book population only', { skip: 
     await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
       values (${postedInvoice},${org.orgId},'customer_invoice','POSTED-INV',${org.date},${org.date},${vendor},${org.subsidiaryId},'CAD','300',0,'300'),
              (${draftInvoice},${org.orgId},'customer_invoice','DRAFT-INV',${org.date},${org.date},${vendor},${org.subsidiaryId},'CAD','400',0,'400')`));
-    const invoiceEntry = await insertEntry(org, { bookId: org.bookId, status: 'posted', amount: '300', number: 'INV-ENTRY', docId: postedInvoice, debit: org.accounts.ar, credit: org.accounts.revenue });
+    await insertEntry(org, { bookId: org.bookId, status: 'reversed', amount: '250', number: 'INV-ORIGINAL', docId: postedInvoice, debit: org.accounts.ar, credit: org.accounts.revenue }); await insertEntry(org, { bookId: org.bookId, status: 'posted', amount: '-250', number: 'INV-REVERSAL', docId: postedInvoice, debit: org.accounts.ar, credit: org.accounts.revenue });
+    const invoiceEntry = await insertEntry(org, { bookId: org.bookId, status: 'posted', amount: '300', number: 'INV-REPLACEMENT', docId: postedInvoice, debit: org.accounts.ar, credit: org.accounts.revenue });
     await withBypassContext(() => db.execute(sql`update documents set status='posted',posted_entry_id=${invoiceEntry},posting_period_id=${org.periodId} where id=${postedInvoice}`));
 
     await withOrgContext(org.orgId, async () => {
@@ -76,16 +77,15 @@ test('analytics drill reads the posted statement-book population only', { skip: 
       );
       assert.equal(accountRes.status, 200);
       const accountBody = await accountRes.json() as { count: number; total: string };
-      assert.equal(accountBody.count, 1, 'draft journal and parallel-book mirror are not activity');
-      assert.equal(accountBody.total, '100');
+      assert.deepEqual([accountBody.count, accountBody.total], [1, '100'], 'draft journal and parallel-book mirror are not activity');
 
       const partyRes = await GET(
         new Request(`http://drillposted.local/api/analytics/drill?party=${vendor}&from=${FROM}&to=${TO}`),
       );
       assert.equal(partyRes.status, 200);
-      const partyBody = await partyRes.json() as { count: number; entries: Array<{ docNumber: string }> };
+      const partyBody = await partyRes.json() as { count: number; entries: Array<{ docNumber: string; entryId: string }> };
       assert.equal(partyBody.count, 1, 'draft invoice is not revenue');
-      assert.equal(partyBody.entries[0]!.docNumber, 'POSTED-INV');
+      assert.deepEqual(partyBody.entries.map(({ docNumber, entryId }) => [docNumber, entryId]), [['POSTED-INV', invoiceEntry]], 'append-only source corrections drill through the authoritative current posting once');
     });
   } finally {
     state.user = null;
