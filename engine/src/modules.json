@@ -494,8 +494,7 @@
         "property",
         "receivables",
         "scripting",
-        "sftp",
-        "worker"
+        "sftp"
       ]
     },
     "scripting": {
@@ -623,7 +622,6 @@
     [
       "agents",
       "allocations",
-      "backup",
       "billing",
       "close",
       "continuous-close",
@@ -637,12 +635,9 @@
       "property",
       "receivables",
       "revenue",
-      "sandbox",
       "scheduling",
       "scripting",
-      "sftp",
-      "sync",
-      "worker"
+      "sftp"
     ],
     [
       "harness",

@@ -14,13 +14,54 @@
  *     lease claims, and idempotency keys; the tick claim is only the coarse
  *     fan-out gate per topology.
  *
- * The primitive itself lives beside the report scheduler (its original author)
- * and is re-exported here so callers have a single import surface. Like every
- * session lock it dies with its connection: released in a finally block on
- * success and error paths, with a broken connection discarded rather than
+ * The primitive itself lives here (moved from the report scheduler in
+ * ARCH-MODULE-CYCLE C07 so the scheduling module no longer depends on the
+ * worker); the report scheduler borrows it like every other topology. Like
+ * every session lock it dies with its connection: released in a finally block
+ * on success and error paths, with a broken connection discarded rather than
  * returned to the pool so a stale claim can never leak back into circulation.
  */
-export { TICK_LOCK_KEY as WORKER_TICK_LOCK_KEY, withTickClaim } from "../worker/scheduler.ts";
+import { pool } from "../platform/db.ts";
+
+/** Cross-replica identity of the report scheduler's tick. */
+export const WORKER_TICK_LOCK_KEY = "openbooks:report-scheduler-tick";
+
+/**
+ * Run `body` under the cross-replica tick claim for `lockKey`. Returns null
+ * when another replica holds the claim (body never runs); otherwise resolves
+ * with body's result after releasing the claim, including when body throws.
+ * Each topology passes its own identity, so two topologies with different
+ * duty sets never suppress each other while the replicas of ONE topology
+ * stay mutually exclusive.
+ */
+export async function withTickClaim<T>(lockKey: string, body: () => Promise<T>): Promise<T | null> {
+  const client = await pool.connect();
+  let held = false;
+  try {
+    const claimed = await client.query<{ locked: boolean }>(
+      "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
+      [lockKey],
+    );
+    if (claimed.rows[0]?.locked !== true) {
+      console.log(`[${lockKey}] tick claim held by another replica; skipping`);
+      return null;
+    }
+    held = true;
+    return await body();
+  } finally {
+    let discard: Error | undefined;
+    if (held) {
+      try {
+        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
+      } catch (e) {
+        // The session may have died while held; destroy this connection so the
+        // lock dies with it instead of being reused while still locked.
+        discard = e as Error;
+      }
+    }
+    client.release(discard);
+  }
+}
 
 /** Cross-replica identity of the web scheduler's full tick (all global scans). */
 export const WEB_TICK_LOCK_KEY = "openbooks:web-scheduler-tick";

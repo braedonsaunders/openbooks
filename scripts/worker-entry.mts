@@ -19,7 +19,7 @@
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { FEATURE_BY_KEY } from "../engine/src/organization/feature-registry.ts";
-import { registerWorkerDuty } from "../engine/src/worker/duties.ts";
+import { registerWorkerDuty } from "../engine/src/scheduling/duties.ts";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "../engine/src/automations/tick.ts";
 import { runQualificationAlertScan } from "../engine/src/hrm/qualifications/alerts.ts";
 import { SYSTEM_ACTOR_ID } from "../engine/src/banking/banking.ts";
