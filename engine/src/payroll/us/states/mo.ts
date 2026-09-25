@@ -33,6 +33,7 @@ import {
   roundUsFinalWithholding,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -167,7 +168,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   // No MO W-4: "withhold at a single tax rate."
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as MoFilingStatus;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    wages = U(requireUsSourceWages(input.wageAllocations, "MO", null));
+    trace("MO_NONRESIDENT_SOURCE_WAGES", wages);
+  }
   const annualWages = wages * BigInt(P);
   trace("MO_ANNUAL_WAGES", annualWages);
 
@@ -200,6 +205,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 export const MO_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MO_EXEMPT: "Exempt from Missouri withholding",
   MO_ANNUAL_WAGES: "Missouri annualized wages",
+  MO_NONRESIDENT_SOURCE_WAGES: "Missouri-source wages this period for a nonresident",
   MO_STANDARD_DEDUCTION: "Missouri standard deduction (Step 1)",
   MO_TAXABLE: "Missouri taxable income",
   MO_ANNUAL_TAX: "Missouri tax (annual)",

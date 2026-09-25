@@ -33,6 +33,7 @@ import {
   roundUsFinalWithholding,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -132,7 +133,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // deduction.
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as MsFilingStatus;
   const exemption = U(certificateAmount(input.certificate, "exemption") ?? "0");
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    wages = U(requireUsSourceWages(input.wageAllocations, "MS", null));
+    trace("MS_NONRESIDENT_SOURCE_WAGES", wages);
+  }
   const annualWages = wages * BigInt(P);
   trace("MS_ANNUAL_WAGES", annualWages);
 
@@ -167,6 +172,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 export const MS_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MS_EXEMPT: "Exempt from Mississippi withholding",
   MS_ANNUAL_WAGES: "Mississippi annualized wages",
+  MS_NONRESIDENT_SOURCE_WAGES: "Mississippi-source wages this period for a nonresident",
   MS_EXEMPTION: "Mississippi exemption amount",
   MS_STANDARD_DEDUCTION: "Mississippi standard deduction",
   MS_TAXABLE: "Mississippi taxable income",
