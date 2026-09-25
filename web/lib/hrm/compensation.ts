@@ -221,6 +221,13 @@ export interface CompHomeData {
    */
   refusal: { title: string; message: string } | null
   /**
+   * Pay-equity header button gate: the equity surface 404s unless
+   * hrmPayTransparency is on (the default is off), so the button renders
+   * only while the feature is on. The read grant is already held by every
+   * home viewer.
+   */
+  canViewEquity: boolean
+  /**
    * The compensation settings form payload (gap threshold, burden rate,
    * FTE rounding, comparison attribute, response days). Present only for
    * unrestricted compensation managers — the PUT endpoint requires
@@ -342,7 +349,10 @@ export async function loadCompensationHome(
   // propagate — never an empty tile.
   let jointFlags: number | null = 0
   let gapRefusal: CompHomeData['refusal'] = null
-  if (await isFeatureEnabled(orgId, 'hrmPayTransparency')) {
+  // The pay-equity surface (header button and gap snapshot) resolves only
+  // while the feature is on — the equity loader 404s without it.
+  const payTransparencyOn = await isFeatureEnabled(orgId, 'hrmPayTransparency')
+  if (payTransparencyOn) {
     try {
       const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
       jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
@@ -514,6 +524,7 @@ export async function loadCompensationHome(
     // drawers from namespaced keys — one URL opens exactly one drawer.
     setupParams: setupSectionParams(sp, ['family', 'level', 'band']),
     refusal: gapRefusal,
+    canViewEquity: payTransparencyOn,
     settings: await loadCompensationSettingsBlock(orgId, canManage && authz.allowedSubsidiaryIds === null, t),
   }
 }
