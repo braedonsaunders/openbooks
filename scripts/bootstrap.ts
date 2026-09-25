@@ -187,9 +187,10 @@ function bypassDatabaseConfig(): RuntimeDatabaseConfig | null {
   if (!/^[a-z_][a-z0-9_]{0,62}$/.test(roleName)) {
     throw new Error("OPENBOOKS_BYPASS_DB_URL contains an invalid PostgreSQL role name");
   }
-  if (password.length < 24) {
-    throw new Error("the bypass database password must contain at least 24 characters");
-  }
+  // The length rule guards a password bootstrap SETS. An aliased URL (the
+  // bypass naming the migration-owner or runtime login) sets nothing and
+  // only verifies, so the rule is enforced where the dedicated login is
+  // created: ensureBypassRoleExists.
   return { connectionString, roleName, password };
 }
 
@@ -2685,6 +2686,9 @@ async function ensureBypassRoleExists(
   if (await bypassRoleIsAliased(config, runtimeRoleName)) {
     await requireBypassLoginRole(config);
     return false;
+  }
+  if (config.password.length < 24) {
+    throw new Error("the bypass database password must contain at least 24 characters");
   }
   const role = await quoted(config.roleName, "identifier");
   const password = await quoted(config.password, "literal");
