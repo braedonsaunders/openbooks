@@ -13,7 +13,7 @@ import {
   toQuantityUnits,
 } from "../order-cycle-math";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, uuidInput } from "./tools-shared";
+import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
 
 /**
  * Quote / sales-order / purchase-order reads. Orders are non-posting
@@ -97,30 +97,40 @@ const searchOrders: AssistantToolDef = {
     if (a.partyQuery) where = sql`${where} and p.display_name ilike ${`%${a.partyQuery}%`}`;
     if (a.fromDate) where = sql`${where} and d.document_date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and d.document_date <= ${a.toDate}`;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
-      select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency,
-             d.total, d.memo, p.display_name as party,
-             coalesce(sum(l.quantity), 0) as ordered,
-             coalesce(sum(l.quantity_fulfilled), 0) as fulfilled,
-             coalesce(sum(l.quantity_billed), 0) as billed
-        from documents d
-        left join parties p on p.id = d.party_id and p.org_id = d.org_id
-        left join document_lines l on l.document_id = d.id and l.org_id = d.org_id
-       where ${where}
-       group by d.id, d.kind, d.document_number, d.document_date, d.status,
-                d.currency, d.total, d.memo, p.display_name
-       order by d.document_date desc, d.document_number desc
-       limit ${limit}
+    let progressFilter = sql`true`;
+    if (a.fulfilment === "unfulfilled") progressFilter = sql`ordered <= 0 or fulfilled <= 0`;
+    if (a.fulfilment === "partially_fulfilled") progressFilter = sql`fulfilled > 0 and fulfilled < ordered`;
+    if (a.fulfilment === "fulfilled") progressFilter = sql`fulfilled >= ordered and ordered > 0`;
+    if (a.billing === "unbilled") progressFilter = sql`(${progressFilter}) and (ordered <= 0 or billed <= 0)`;
+    if (a.billing === "partially_billed") progressFilter = sql`(${progressFilter}) and billed > 0 and billed < ordered`;
+    if (a.billing === "billed") progressFilter = sql`(${progressFilter}) and billed >= ordered and ordered > 0`;
+    const filtered = sql`
+      with grouped as (
+        select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency,
+               d.total, d.memo, p.display_name as party,
+               coalesce(sum(l.quantity), 0) as ordered,
+               coalesce(sum(l.quantity_fulfilled), 0) as fulfilled,
+               coalesce(sum(l.quantity_billed), 0) as billed
+          from documents d
+          left join parties p on p.id = d.party_id and p.org_id = d.org_id
+          left join document_lines l on l.document_id = d.id and l.org_id = d.org_id
+         where ${where}
+         group by d.id, d.kind, d.document_number, d.document_date, d.status,
+                  d.currency, d.total, d.memo, p.display_name
+      ), filtered as (select * from grouped where ${progressFilter})
+    `;
+    const rows = (await db.execute<Record<string, unknown>>(sql`${filtered}
+      select * from filtered
+       order by document_date desc, document_number desc
+       limit ${limit + 1}
     `)).rows;
-    const totals = (await db.execute<{ n: string; sum_total: string; backlog: string }>(sql`
-      select count(*) as n, coalesce(sum(d.total), 0) as sum_total,
-             coalesce(sum(case when d.status = 'approved' then d.total else 0 end), 0) as backlog
-        from documents d
-        left join parties p on p.id = d.party_id and p.org_id = d.org_id
-       where ${where}
+    const totals = (await db.execute<{ n: string; sum_total: string; backlog: string }>(sql`${filtered}
+      select count(*) as n, coalesce(sum(total), 0) as sum_total,
+             coalesce(sum(case when status = 'approved' then total else 0 end), 0) as backlog
+        from filtered
     `)).rows[0];
     const total = Number(totals?.n ?? 0);
-    let items = rows.map((r) => {
+    const mapped = rows.map((r) => {
       const ordered = toQuantityUnits(String(r.ordered ?? "0"));
       const fulfilled = toQuantityUnits(String(r.fulfilled ?? "0"));
       const billed = toQuantityUnits(String(r.billed ?? "0"));
@@ -139,8 +149,7 @@ const searchOrders: AssistantToolDef = {
         href: r.kind === "purchase_order" ? "/purchase-orders" : "/sales-orders",
       };
     });
-    if (a.fulfilment) items = items.filter((i) => i.fulfilment === a.fulfilment);
-    if (a.billing) items = items.filter((i) => i.billing === a.billing);
+    const page = assistantListPage(mapped, limit, total);
     return {
       ok: true,
       data: {
@@ -148,9 +157,10 @@ const searchOrders: AssistantToolDef = {
         sumTotal: money(totals?.sum_total),
         backlogTotal: money(totals?.backlog),
         backlogNote: "Sum of document totals over ALL matches still in approved (committed, not yet invoiced) status.",
-        returned: items.length,
-        truncated: total > rows.length,
-        items,
+        returned: page.returned,
+        dropped: page.dropped,
+        truncated: page.truncated,
+        items: page.items,
       },
     };
   },
