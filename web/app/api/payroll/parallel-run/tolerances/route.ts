@@ -72,6 +72,9 @@ export async function POST(req: Request) {
   if (typeof body.slot !== 'string' || !body.slot.trim()) {
     return NextResponse.json({ error: 'slot is required' }, { status: 422 })
   }
+  if (typeof body.reason !== 'string' || !body.reason.trim()) {
+    return NextResponse.json({ error: 'reason must be a nonblank string' }, { status: 422 })
+  }
 
   const toleranceRaw = canonicalDecimal(body.tolerance ?? '0', 4)
   if (toleranceRaw === null) {
@@ -91,7 +94,7 @@ export async function POST(req: Request) {
       kind: body.kind as ToleranceKind,
       slot: body.slot.trim(),
       tolerance,
-      reason: String(body.reason ?? ''),
+      reason: body.reason.trim(),
     })
   } catch (error) {
     if (error instanceof PayrollError) {
