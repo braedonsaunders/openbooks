@@ -126,6 +126,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                 onChange={(e) => setGroup(gi, { label: e.target.value })}
                 className="max-w-56 font-semibold"
                 aria-label={t('groupLabelAria')}
+                disabled={busy}
               />
               <span className="flex-1" />
               <Button
@@ -133,6 +134,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                 size="icon"
                 aria-label={t('moveGroupUp')}
                 onClick={() => setConfig((c) => ({ ...c, groups: move(c.groups, gi, -1) }))}
+                disabled={busy}
               >
                 <ArrowUp size={14} />
               </Button>
@@ -141,6 +143,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                 size="icon"
                 aria-label={t('moveGroupDown')}
                 onClick={() => setConfig((c) => ({ ...c, groups: move(c.groups, gi, 1) }))}
+                disabled={busy}
               >
                 <ArrowDown size={14} />
               </Button>
@@ -155,6 +158,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                       groups: current.groups.filter((_, index) => index !== gi),
                     }))
                   }
+                  disabled={busy}
                 >
                   <Trash2 size={14} />
                 </Button>
@@ -180,6 +184,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                     }
                     className="min-w-48 max-w-64 flex-1"
                     aria-label={t('itemLabelAria')}
+                    disabled={busy}
                   />
                   {item.kind === 'module' ? (
                     <span className="font-mono text-xs text-slate-400">{item.moduleKey}</span>
@@ -196,6 +201,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                     aria-label={t('moveToGroup')}
                     className="w-44"
                     triggerClassName="h-9 text-xs"
+                    disabled={busy}
                   >
                     {config.groups.map((group) => (
                       <option key={group.id} value={group.id}>
@@ -209,6 +215,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                     aria-label={item.mobile ? t('unpinMobile') : t('pinMobile')}
                     title={item.mobile ? t('unpinMobile') : t('pinMobile')}
                     onClick={() => toggleMobile(gi, ii)}
+                    disabled={busy}
                   >
                     {item.mobile ? <PinOff size={14} /> : <Pin size={14} />}
                   </Button>
@@ -221,6 +228,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                         items: g.items.map((x, k) => (k === ii ? { ...x, hidden: !x.hidden } : x)),
                       })
                     }
+                    disabled={busy}
                   >
                     {item.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                   </Button>
@@ -229,6 +237,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                     size="icon"
                     aria-label={t('moveItemUp')}
                     onClick={() => setGroup(gi, { items: move(g.items, ii, -1) })}
+                    disabled={busy}
                   >
                     <ArrowUp size={14} />
                   </Button>
@@ -237,6 +246,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                     size="icon"
                     aria-label={t('moveItemDown')}
                     onClick={() => setGroup(gi, { items: move(g.items, ii, 1) })}
+                    disabled={busy}
                   >
                     <ArrowDown size={14} />
                   </Button>
@@ -251,6 +261,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                           items: g.items.filter((_, index) => index !== ii),
                         })
                       }
+                      disabled={busy}
                     >
                       <Trash2 size={14} />
                     </Button>
@@ -262,6 +273,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
             <Button
               variant="outline"
               size="sm"
+              disabled={busy}
               onClick={() => {
                 const href = prompt(t('linkUrlPrompt'))
                 if (!href) return
@@ -284,6 +296,7 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                 aria-label={t.has('addApp') ? t('addApp') : 'Add app shortcut'}
                 className="w-52"
                 triggerClassName="h-9 text-xs"
+                disabled={busy}
               >
                 <option value="">{t.has('addApp') ? t('addApp') : 'Add app shortcut…'}</option>
                 {availableApps.map((app) => (
@@ -301,10 +314,10 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
         <Button onClick={save} disabled={busy}>
           {busy ? tCommon('actions.saving') : t('save')}
         </Button>
-        <Button variant="outline" onClick={() => setConfig(defaultNavConfig())}>
+        <Button variant="outline" onClick={() => setConfig(defaultNavConfig())} disabled={busy}>
           <RotateCcw size={14} /> {t('resetDefaults')}
         </Button>
-        <Button variant="outline" onClick={addGroup}>
+        <Button variant="outline" onClick={addGroup} disabled={busy}>
           <FolderPlus size={14} /> {t('addGroup')}
         </Button>
       </div>
