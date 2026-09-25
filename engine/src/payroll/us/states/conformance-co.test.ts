@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ResolvedCertificate } from "../../certificates.ts";
-import { CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CO_RATES_2026, CO_WITHHOLDING } from "./co.ts";
+import { CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CO_RATES_2026, CO_WITHHOLDING, coFamliWithholding } from "./co.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
 const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
@@ -192,4 +192,12 @@ test("CO refuses a year the posted worksheet has not been loaded for", () => {
     }),
     /2027 Colorado income tax withholding tables are not available in this pack version.*update the pack/,
   );
+});
+
+test("CO FAMLI splits 0.88% equally between employee and employer", () => {
+  // CDLE FY 2025-26 Performance Plan + December 2025 employer brief:
+  // $5,000 × 0.44% = $22.00 each way.
+  const famli = coFamliWithholding("2026-03-06", "5000.00");
+  assert.equal(famli.employee, money("22.00"));
+  assert.equal(famli.employer, money("22.00"));
 });
