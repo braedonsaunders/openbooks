@@ -80,6 +80,11 @@ export async function runLocalBackup({
 
   try {
     const completed = pipeline(gzip, hasher, createWriteStream(partial, { mode: 0o600 }));
+    // Attach the sink's rejection BEFORE awaiting the producer (the same
+    // invariant as the stored-backup writer): on export failure the
+    // producer destroys the sink and throws, and an unattached pipeline
+    // rejection escapes this try/catch as unhandled.
+    completed.catch(() => {});
     const stats = await streamBackup(orgId, gzip);
     await completed;
     const sha256 = hash.digest("hex");
