@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
+import { MB_CONSTRUCTION_HOLIDAY } from "./canada/employment-standards.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
@@ -1064,6 +1065,18 @@ export interface StatutoryHolidayPayInput {
   averagingAgreement?: boolean;
   /** Audited complete-evidence assertions by holiday occurrence key. */
   entitledDayAttestations?: Readonly<Record<string, number>>;
+  /**
+   * Manitoba construction class (CCSM c E110, s. 30). The class takes the
+   * construction 4% instead of the general per-holiday rule; an omitted
+   * value runs the general rule, never a guess in either direction.
+   */
+  constructionEmployee?: boolean;
+  /**
+   * The pay's regular wages for the construction 4% base, supplied by the
+   * caller from the period's earning lines. Required when the Manitoba
+   * construction path runs; never inferred from a lookback.
+   */
+  periodRegularEarnings?: string;
 }
 
 /**
@@ -1076,6 +1089,62 @@ export interface StatutoryHolidayEligibilityFacts {
   paidOnCommission?: boolean;
   absentWithoutConsent?: boolean;
   entitledDayAttestations?: Readonly<Record<string, number>>;
+  /**
+   * Manitoba construction class (CCSM c E110, s. 30): the asserted class
+   * takes the construction 4% instead of the general per-holiday rule.
+   * Omitted runs the general rule.
+   */
+  constructionEmployee?: boolean;
+}
+
+/**
+ * Manitoba construction employees (CCSM c E110, s. 30, MB_CONSTRUCTION_HOLIDAY):
+ * 4% of the pay's regular wages on every pay plus 1.5× the regular rate for
+ * approved hours worked on a general holiday — INSTEAD of the general
+ * per-holiday rule, which never runs for this class. No qualifying tests, no
+ * lookback, no commission/absence assertions: the statute asks none. The 4%
+ * is wages like the general holiday pay it replaces. The premium reuses
+ * approved time-on-day so only recorded holiday work is paid; a zero or
+ * unknown hourly rate pays no premium, mirroring the general path.
+ */
+async function resolveMbConstructionHolidayPay(
+  tx: Pick<typeof db, "execute">,
+  input: StatutoryHolidayPayInput,
+  holidays: ObservedHoliday[],
+): Promise<StatutoryHolidayEarningLine[]> {
+  if (input.periodRegularEarnings === undefined) {
+    throw new PayrollHolidayError(
+      `${input.employeeName}: Manitoba construction holiday pay needs the period's regular wages — `
+      + "the caller must supply periodRegularEarnings from the period's earning lines",
+    );
+  }
+  const lines: StatutoryHolidayEarningLine[] = [];
+  const fourPercent = mulPercent(input.periodRegularEarnings, MB_CONSTRUCTION_HOLIDAY.percent, 2);
+  lines.push({
+    componentId: input.holidayComponentId, kind: "earning",
+    description: "Manitoba construction general holiday pay (4% of regular wages, s. 30)",
+    amount: fourPercent, sequence: 45,
+    holidayKey: "mb-construction-holiday-pay", holidayDate: input.periodEnd,
+    basis: `4% of current-period regular wages (${MB_CONSTRUCTION_HOLIDAY.citation})`,
+  });
+  let sequence = 46;
+  for (const holiday of holidays) {
+    const worked = await hoursOn(tx, input, holiday.date);
+    if (cmp(worked, "0") > 0 && cmp(input.hourlyRate, "0") > 0) {
+      const uplift = fromUnits(toUnits(MB_CONSTRUCTION_HOLIDAY.premiumMultiplier) - toUnits("1"));
+      const premium = roundMoney(mulDecimal(mul(input.hourlyRate, worked), uplift), 2);
+      if (cmp(premium, "0") !== 0) {
+        lines.push({
+          componentId: input.premiumComponentId, kind: "earning",
+          description: `${holiday.name} — premium for hours worked (construction)`,
+          amount: premium, sequence: sequence++,
+          holidayKey: holiday.key, holidayDate: holiday.date,
+          basis: `${MB_CONSTRUCTION_HOLIDAY.premiumMultiplier}× the regular rate for hours worked on the holiday (${MB_CONSTRUCTION_HOLIDAY.citation})`,
+        });
+      }
+    }
+  }
+  return lines;
 }
 
 /**
@@ -1109,6 +1178,14 @@ export async function resolveStatutoryHolidayPay(
 
   const holidays = jurisdiction.holidayPay === null ? [] : observedIn(input.periodStart, input.periodEnd)
     .filter((holiday) => holiday.paid);
+  // Manitoba construction (CCSM c E110, s. 30) replaces the whole general
+  // per-holiday rule for the asserted class — including on a pay with no
+  // holiday in it, where the 4% still accrues, so this dispatch precedes
+  // the no-holiday early return. Only the asserted class takes this path;
+  // everyone else runs the general rule below.
+  if (input.jurisdiction === "CA-MB" && input.constructionEmployee === true) {
+    return resolveMbConstructionHolidayPay(tx, input, holidays);
+  }
   if (holidays.length === 0 && workTriggeredHolidays.length === 0) return [];
 
   const hire = (await tx.execute<{ hired_on: string | Date | null }>(sql`

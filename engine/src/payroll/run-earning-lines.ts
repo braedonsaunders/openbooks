@@ -306,6 +306,12 @@ export async function appendStatutoryHolidayEarningLines(
     statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds, holidayEligibility,
   } = args;
   if (!oneOffRun && statHolidayPay) {
+    // Class-based percent-of-pay rules (Manitoba construction s. 30) price
+    // the pay's regular wages: every earning line derived so far, before the
+    // holiday lines themselves land.
+    const periodRegularEarnings = lines
+      .filter((line) => line.kind === "earning")
+      .reduce((total, line) => add(total, line.amount), "0");
     const holidayLines = await statutoryHolidayLinesForStub(tx, {
       orgId,
       documentId,
@@ -321,6 +327,7 @@ export async function appendStatutoryHolidayEarningLines(
       need,
       allowedSubsidiaryIds,
       holidayEligibility,
+      periodRegularEarnings,
     });
     for (const line of holidayLines) {
       lines.push({

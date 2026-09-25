@@ -168,6 +168,8 @@ export async function statutoryHolidayLinesForStub(
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
     /** Authoritative statutory entitlement facts keyed by employee party id. */
     holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
+    /** The pay's regular wages for class-based percent-of-pay rules. */
+    periodRegularEarnings?: string;
   },
 ): Promise<StatutoryHolidayEarningLine[]> {
   const {
@@ -175,6 +177,7 @@ export async function statutoryHolidayLinesForStub(
     emp, country, subsidiaryId, province, periodStart, periodEnd, payRate, need,
     allowedSubsidiaryIds,
     holidayEligibility,
+    periodRegularEarnings,
   } = args;
   if (allowedSubsidiaryIds != null) {
     const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
@@ -236,6 +239,8 @@ export async function statutoryHolidayLinesForStub(
     paidOnCommission: holidayEligibility?.[employeePartyId]?.paidOnCommission,
     absentWithoutConsent: holidayEligibility?.[employeePartyId]?.absentWithoutConsent,
     entitledDayAttestations: holidayEligibility?.[employeePartyId]?.entitledDayAttestations,
+    constructionEmployee: holidayEligibility?.[employeePartyId]?.constructionEmployee,
+    periodRegularEarnings,
   });
 }
 
