@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 
 /**
  * The cycle create form inside the cycle dialog. Fields are the house form
@@ -26,7 +27,6 @@ export interface CycleCreateProps {
 }
 
 export function CycleCreateForm(props: CycleCreateProps) {
-  const { closeHref } = props
   const router = useRouter()
   const [templateId, setTemplateId] = useState(props.templates[0]?.value ?? '')
   const [name, setName] = useState('')
@@ -34,6 +34,10 @@ export function CycleCreateForm(props: CycleCreateProps) {
   const [periodEnd, setPeriodEnd] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const close = useDirtyUrlDrawer(
+    name !== '' || templateId !== (props.templates[0]?.value ?? '') || periodStart !== '' || periodEnd !== '',
+    busy,
+  )
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -113,7 +117,7 @@ export function CycleCreateForm(props: CycleCreateProps) {
         <Button type="submit" disabled={busy}>
           {props.submitLabel}
         </Button>
-        <Button type="button" variant="outline" onClick={() => router.push(closeHref)}>
+        <Button type="button" variant="outline" onClick={() => void close()}>
           {props.cancelLabel}
         </Button>
       </div>

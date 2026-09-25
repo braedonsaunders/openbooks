@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button, Input, Label, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { PerformanceAnswer } from './view'
+import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 
 /**
  * The snapshot answer form in the review drawer: one rating/text input per
@@ -45,6 +46,12 @@ export function ReviewAnswerForm({
   const [overall, setOverall] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const close = useDirtyUrlDrawer(
+    overall !== '' || answers.some((answer) =>
+      (ratings[answer.id] ?? '') !== (answer.rating ?? '') || (texts[answer.id] ?? '') !== (answer.text ?? ''),
+    ),
+    busy,
+  )
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -124,7 +131,7 @@ export function ReviewAnswerForm({
           {submitLabel}
         </Button>
         {draft ? (
-          <Button type="button" variant="outline" disabled={busy} onClick={() => router.push(draft.href)}>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void close(draft.href)}>
             {draft.label}
           </Button>
         ) : null}
