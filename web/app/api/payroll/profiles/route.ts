@@ -8,6 +8,7 @@ import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
 import {
   employmentJurisdictionsOf,
   labourJurisdictionProblem,
+  occupationCapValues,
   PAYROLL_COUNTRY_PACKS,
   payrollPack,
   validatePackEmployeeIdentifier,
@@ -95,6 +96,10 @@ const profileBodySchema = z.looseObject({
   // Standing commission-pay status for statutory-holiday rules that read it.
   // Nullable three-state: true/false answers, null un-answers. Omit to keep.
   paidOnCommission: z.boolean().nullable().optional(),
+  // Standing occupation class for statutes that price by occupation (New
+  // Brunswick's route-salesperson cap). Empty un-answers; anything else must
+  // be pack-declared (validated below, never here).
+  statutoryOccupationClass: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
   sin: z.string().nullable().optional(),
 })
@@ -103,7 +108,7 @@ const profileBodySchema = z.looseObject({
 // sealed taxpayer identifier is sensitive too; retain only presence/last3.
 const PROFILE_AUDIT_COLUMNS = sql`
   id, org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
-  residence_region, labour_jurisdiction, pay_basis,
+  residence_region, labour_jurisdiction, statutory_occupation_class, pay_basis,
   federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
   additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
   authorized_federal_credits, authorized_provincial_credits,
@@ -419,7 +424,8 @@ export async function GET(req: Request) {
                prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
                prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3,
                prof.filing_account_id, fa.account_number as filing_account_number,
-               prof.stub_delivery, prof.payment_method, prof.paid_on_commission
+               prof.stub_delivery, prof.payment_method, prof.paid_on_commission,
+               prof.statutory_occupation_class
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
           left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
@@ -502,7 +508,8 @@ export async function GET(req: Request) {
            prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
            prof.vacation_percent, prof.vacation_method, prof.is_active,
            prof.filing_account_id, fa.account_number as filing_account_number,
-           prof.stub_delivery, prof.payment_method, prof.paid_on_commission
+           prof.stub_delivery, prof.payment_method, prof.paid_on_commission,
+           prof.statutory_occupation_class
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
@@ -579,6 +586,21 @@ export async function POST(req: Request) {
   const labourProblem = labourJurisdictionProblem(country, labourJurisdiction)
   if (labourProblem) {
     return NextResponse.json({ error: labourProblem }, { status: 422 })
+  }
+  // The closed occupation vocabulary comes from the pack's own holiday rule
+  // declarations (see `occupationCapValues`) — never a hardcoded list here.
+  // An answer for an occupation no rule prices is refused rather than stored
+  // where no engine reads it.
+  const statutoryOccupationClass = body.statutoryOccupationClass == null || body.statutoryOccupationClass === ''
+    ? null : String(body.statutoryOccupationClass).trim()
+  if (statutoryOccupationClass !== null) {
+    const allowedOccupations = occupationCapValues(country)
+    if (allowedOccupations.length === 0) {
+      return NextResponse.json({ error: `Statutory occupation class is not declared by the ${country} payroll pack — it cannot be recorded where no rule reads it` }, { status: 422 })
+    }
+    if (!allowedOccupations.includes(statutoryOccupationClass)) {
+      return NextResponse.json({ error: `Statutory occupation class must be one of ${allowedOccupations.join(', ')}` }, { status: 422 })
+    }
   }
 
   // Withholding answers are validated against the pack's declared certificate
@@ -938,7 +960,7 @@ export async function POST(req: Request) {
     }
     const after = (await db.execute<Record<string, unknown>>(sql`
       insert into employee_payroll_profiles
-        (org_id, employee_party_id, pay_schedule_id, country, province, labour_jurisdiction, pay_basis,
+        (org_id, employee_party_id, pay_schedule_id, country, province, labour_jurisdiction, statutory_occupation_class, pay_basis,
          federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
          additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
          authorized_federal_credits, authorized_provincial_credits,
@@ -952,7 +974,7 @@ export async function POST(req: Request) {
          paid_on_commission,
          created_by, updated_by)
       values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province},
-              ${labourJurisdiction}, ${payBasis},
+              ${labourJurisdiction}, ${statutoryOccupationClass}, ${payBasis},
               ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
               ${money.additionalTaxPerPeriod}, ${money.prescribedZoneDeduction}, ${money.authorizedAnnualDeductions},
               ${money.authorizedFederalCredits}, ${money.authorizedProvincialCredits},
@@ -976,6 +998,7 @@ export async function POST(req: Request) {
       do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
                     province = excluded.province,
                     labour_jurisdiction = excluded.labour_jurisdiction,
+                    statutory_occupation_class = excluded.statutory_occupation_class,
                     pay_basis = excluded.pay_basis,
                     federal_claim_code = excluded.federal_claim_code,
                     federal_claim_amount = excluded.federal_claim_amount,

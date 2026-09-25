@@ -173,6 +173,18 @@ export async function statutoryHolidayLinesForStub(
     holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
     /** The pay's regular wages for class-based percent-of-pay rules. */
     periodRegularEarnings?: string;
+    /**
+     * Presented statutory occupation class, straight off the profile row:
+     * undefined (key absent, as in probes) skips occupation caps, null
+     * refuses where a rule demands the class. The run always presents it.
+     */
+    occupationClass?: string | null;
+    /** Stub earning lines so far, for the weekly cap's same-week slice. */
+    currentEarningLines?: readonly {
+      amount: string;
+      kind: string;
+      nonPeriodic?: boolean | null;
+    }[];
   },
 ): Promise<StatutoryHolidayEarningLine[]> {
   const {
@@ -181,6 +193,8 @@ export async function statutoryHolidayLinesForStub(
     allowedSubsidiaryIds,
     holidayEligibility,
     periodRegularEarnings,
+    occupationClass,
+    currentEarningLines,
   } = args;
   if (allowedSubsidiaryIds != null) {
     const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
@@ -244,6 +258,8 @@ export async function statutoryHolidayLinesForStub(
     entitledDayAttestations: holidayEligibility?.[employeePartyId]?.entitledDayAttestations,
     constructionEmployee: holidayEligibility?.[employeePartyId]?.constructionEmployee,
     periodRegularEarnings,
+    occupationClass,
+    currentEarningLines,
   });
 }
 

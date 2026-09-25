@@ -1388,6 +1388,38 @@ export interface PayrollHolidayPayRule {
    * jurisdictions and wrong by up to six days of earnings in the other five.
    */
   lookbackEnds: PayrollHolidayLookbackBoundary;
+  /**
+   * Weekly cap for one occupation's unworked-holiday pay, applied AFTER the
+   * basis prices the day. Absent everywhere the statute states no cap — the
+   * engine never invents one.
+   */
+  weeklyCap?: PayrollOccupationWeeklyCap;
+}
+
+/**
+ * A weekly cap on one occupation's unworked-holiday pay: the shape of New
+ * Brunswick ESA s. 21(2), and deliberately NOT part of the basis. The basis
+ * prices the day; the cap then refuses to let that price push the week's
+ * earnings above the trailing average.
+ *
+ * The occupation arrives as a presented profile value, compared here against
+ * `occupationValue` — never resolved through a registry, because the only
+ * registry that validates closed sets also demands a pack-local read the
+ * generic engine has no honest place to put. The profile boundary validates
+ * the closed set instead (see `occupationCapValues`); the engine refuses an
+ * unrecorded class and skips any other value.
+ */
+export interface PayrollOccupationWeeklyCap {
+  /**
+   * Closed vocabulary for the class column under this rule — the capped
+   * occupation plus the uncapped rest (there must be a storable answer for
+   * an employee the cap does not touch, or every one of them refuses).
+   */
+  values: readonly string[];
+  /** The one value of `values` this cap applies to. */
+  cappedValue: string;
+  /** Weeks of the trailing average ("the preceding four weeks"). */
+  lookbackWeeks: number;
 }
 
 /**

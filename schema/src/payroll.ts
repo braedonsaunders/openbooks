@@ -433,6 +433,19 @@ export const employeePayrollProfiles = pgTable(
      * validated at the API boundary (`labourJurisdictionProblem`).
      */
     labourJurisdiction: text("labour_jurisdiction"),
+    /**
+     * Statutory occupation class (0409), for rules that price by occupation
+     * rather than by hours or earnings — New Brunswick's route-salesperson
+     * weekly cap (ESA s. 21(2)) is the first reader.
+     *
+     * Nullable, and null means "unrecorded" — the demanding rule refuses by
+     * name rather than guess the class. Generic, not a New Brunswick column:
+     * values are the pack's own closed vocabulary (validated at the profile
+     * API boundary against the country pack's employee-fact declaration,
+     * exactly as `province` and `labour_jurisdiction` are), never by a CHECK
+     * naming one country's occupations.
+     */
+    statutoryOccupationClass: text("statutory_occupation_class"),
     payBasis: text("pay_basis", { enum: ["hourly", "salary"] }).notNull().default("hourly"),
     /** TD1 federal claim: code 0–10, or an exact amount which wins over code. */
     federalClaimCode: integer("federal_claim_code"),
