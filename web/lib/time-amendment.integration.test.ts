@@ -141,8 +141,7 @@ test('amending a project-linked entry refuses while Projects is disabled', {skip
         values (${employee}, ${org.orgId}, 'employee', 'Gated worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
       await db.execute(sql`insert into employee_roles (id, org_id, party_id, is_active)
         values (${randomUUID()}, ${org.orgId}, ${employee}, true)`)
-      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
-        values (${randomUUID()}, ${org.orgId}, ${employee}, '2026-07-12', 'draft', ${actor}, ${actor})`)
+      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by) values (${randomUUID()}, ${org.orgId}, ${employee}, '2026-07-12', 'draft', ${actor}, ${actor})`)
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'GATED', 'Gated job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
       await db.execute(sql`insert into time_entries

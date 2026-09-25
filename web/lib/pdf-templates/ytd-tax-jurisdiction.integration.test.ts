@@ -117,7 +117,6 @@ async function caPayrollOrg(): Promise<CaFixture> {
   // The health services fund is an employer contribution the QC employer always
   // owes, so it needs a liability account before any QC employee can calculate.
   await setPackSlotAccount(org.orgId, actorId, 'CA', 'hsf', craPayable)
-  // The CNT contribution prices for the same employer, so map it too.
   await setPackSlotAccount(org.orgId, actorId, 'CA', 'cnt', craPayable)
   // Ontario Employer health tax is a refuse-when-unconfigured slot: a zero
   // rate keeps the accrual at nil while satisfying the readiness gate.
