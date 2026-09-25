@@ -1,5 +1,6 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
+import type { Money } from "../money/brands.ts";
 import { decimalNullCause, decimalNullRefusal, type DecimalNullCause } from "../money/decimal-refusal.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
@@ -152,10 +153,15 @@ function textValue(field: AzureField | undefined): string | null {
 }
 
 /** Canonical numeric(19,4) parser for OCR text. It never uses floating money math. */
-export function normalizeCapturedDecimal(value: unknown): string | null {
+/**
+ * The boundary where captured text becomes a validated amount: every
+ * non-null exit is fromUnits-fixed canonical Money. Null means absent;
+ * refusal throws by name.
+ */
+export function normalizeCapturedDecimal(value: unknown): Money | null {
   if (value === null || value === undefined || value === "") return null;
   let raw = String(value).trim().replace(/[\u00a0\s]/g, "");
-  if (/^[-+]?(\d+(\.\d*)?|\.\d+)[eE][-+]?\d+$/.test(raw)) return fromUnits(toUnits(raw));
+  if (/^[-+]?(\d+(\.\d*)?|\.\d+)[eE][-+]?\d+$/.test(raw)) return fromUnits(toUnits(raw)) as Money;
   const negative = /^\(.*\)$/.test(raw) || raw.startsWith("-");
   raw = raw.replace(/[()]/g, "").replace(/^[+-]/, "").replace(/[^0-9.,]/g, "");
   if (!raw) return null;
@@ -187,7 +193,7 @@ export function normalizeCapturedDecimal(value: unknown): string | null {
     return null;
   }
   const signed = `${negative ? "-" : ""}${raw}`;
-  return fromUnits(toUnits(signed));
+  return fromUnits(toUnits(signed)) as Money;
 }
 
 /**
@@ -196,7 +202,7 @@ export function normalizeCapturedDecimal(value: unknown): string | null {
  * do not carry comma-separator ambiguity; raw supplied text must survive
  * refusal so every boundary can name it.
  */
-function capturedMoney(field: AzureField | undefined): { canonical: string | null; supplied: string | null } {
+function capturedMoney(field: AzureField | undefined): { canonical: Money | null; supplied: string | null } {
   if (!field) return { canonical: null, supplied: null };
   const typed = field.valueCurrency?.amount ?? field.valueNumber;
   if (typeof typed === "number") {
