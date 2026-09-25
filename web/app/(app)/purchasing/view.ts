@@ -59,6 +59,12 @@ type Tabs = Awaited<ReturnType<typeof groupTabs>>
 export interface PurchasingData {
   title: string
   description: string
+  /** False when the caller lacks ap.read: every AP-derived vital below is
+   * omitted from the spec, never zero-shaped. */
+  apAllowed: boolean
+  /** ordersEnabled AND apAllowed: the open-PO tile carries PO money, so it
+   * needs both the feature and the AP grant (`when` takes a single ref). */
+  posAllowed: boolean
   subsidiaryLabel: string
   subsidiaryPicker: SubsidiaryPicker
   subsidiaryValue: string
@@ -152,11 +158,17 @@ export async function loadPurchasing(
       picker: scoped.picker,
     }
   }
+  // The home spans the vendor directory (parties.read) and AP money
+  // (ap.read): either opens the page, but every AP-derived figure keeps only
+  // its own family's grant — a vendor-directory clerk loads no AP rows and
+  // sees no AP vitals.
+  const grants = { ap: can(authz, 'ap.read') }
   const [data, navGroups] = await Promise.all([
     purchasingHome(
       authz.user.orgId,
       subView?.subsidiary?.ids,
       subView?.subsidiary?.includeNullSubsidiary,
+      grants,
     ),
     resolveNav(
       authz.user.orgId,
@@ -183,17 +195,23 @@ export async function loadPurchasing(
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
   const tabs = await groupTabs('purchasing', '/purchasing', { subQs, orgId: authz.user.orgId })
 
+  // Directory links are already permission-filtered by resolveNav; the badge
+  // VALUES need the same per-family grant, or an AP figure leaks beside an
+  // allowed vendor-directory link.
   const badgeFor = (href: string): DirectoryItem['badge'] => {
     switch (href) {
       case '/purchase-orders':
+        if (!grants.ap) return undefined
         return { value: String(data.badges.openPos), hint: t('home.directory.posHint', { value: moneyCompact(data.openPoValue) }) }
       case '/ap/bills':
+        if (!grants.ap) return undefined
         return {
           value: String(data.badges.openBills),
           hint: t('home.directory.billsHint', { overdue: moneyCompact(data.apOverdue) }),
           tone: data.apOverdue > 0 ? 'warning' : 'neutral',
         }
       case '/payments':
+        if (!grants.ap) return undefined
         return { value: String(data.badges.payments7d), hint: t('home.directory.paymentsHint') }
       case '/expenses/reports':
         return {
@@ -222,6 +240,8 @@ export async function loadPurchasing(
   return {
     title: t('home.title'),
     description: t('home.description'),
+    apAllowed: data.apAllowed,
+    posAllowed: data.ordersEnabled && grants.ap,
     subsidiaryLabel: t('home.subsidiary'),
     subsidiaryPicker: subView?.picker ?? [],
     subsidiaryValue: subView?.picker.find((p) => p.id === sp.sub)?.id ?? subView?.picker[0]?.id ?? '',
@@ -348,7 +368,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             label: f('openPosLabel'),
             value: f('openPosValue'),
             sub: f('openPosSub'),
-            when: f('ordersEnabled'),
+            when: f('posAllowed'),
           }),
           statTile({
             iconKey: 'trending-up',
@@ -356,6 +376,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             label: f('spend30dLabel'),
             value: f('spend30dValue'),
             sub: f('spend30dSub'),
+            when: f('apAllowed'),
           }),
           statTile({
             iconKey: 'check-circle',
@@ -364,6 +385,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             value: f('paymentsWeekValue'),
             sub: f('paymentsWeekSub'),
             tone: 'positive',
+            when: f('apAllowed'),
           }),
           statTile({
             iconKey: 'triangle-alert',
@@ -386,6 +408,9 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             // a stretched blank panel pushing the rail's next action down.
             bodyClassName: 'p-0',
             className: 'self-start lg:col-span-2',
+            // The roster carries per-vendor AP money: without ap.read the
+            // whole panel is omitted, never an honest-looking zero hero.
+            when: f('apAllowed'),
             blocks: [
               // The empty state lives inside the section component, not as a
               // negated conditional pair of blocks — see ./sections.
@@ -404,6 +429,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
               iconKey: 'gauge',
               bodyClassName: 'p-0',
               className: 'shrink-0',
+              when: f('apAllowed'),
               blocks: [
                 widgetBlock('ap-pulse', {
                   outstanding: data.apOutstanding,
@@ -420,6 +446,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
               iconKey: 'area-chart',
               hint: f('trendHint'),
               className: 'shrink-0',
+              when: f('apAllowed'),
               blocks: [
                 widgetBlock('trend-chart', {
                   labels: data.trendLabels,

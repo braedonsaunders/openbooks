@@ -51,6 +51,10 @@ export interface PurchasingHome {
   ordersEnabled: boolean
   /** False when Expenses is off — hide unposted-expense vitals rather than show zeros. */
   expensesEnabled: boolean
+  /** False when the caller lacks ap.read — hide every AP-derived figure rather
+   * than show zeros (a parties.read-only vendor-directory clerk must not see
+   * AP money). The vendors count stays readable: it is parties-derived. */
+  apAllowed: boolean
 }
 
 const TREND_WEEKS = 13
@@ -129,6 +133,12 @@ export async function purchasingHome(
    * subsidiary) rows. Restricted callers never receive it.
    */
   includeNullSubsidiary?: boolean,
+  /**
+   * Per-section grant using the family's source permission. Without ap.read
+   * the AP money queries below never run — the figures are omitted, not
+   * zero-shaped — and the loader hides their vitals via `apAllowed`.
+   */
+  grants: { ap: boolean } = { ap: true },
 ): Promise<PurchasingHome> {
   const [ordersOn, expensesOn] = await Promise.all([
     isFeatureEnabled(orgId, 'orders'),
@@ -160,12 +170,23 @@ export async function purchasingHome(
   // The hero roster groups the SAME item set (F-t03-009): its own live
   // aggregate additionally gated on the cached open_balance, so one page
   // showed two different Talent figures.
+  // Without the AP grant every money query below is skipped outright: a
+  // parties.read-only caller loads no open items, trends, payments, spend or
+  // purchase orders. The badges query still runs — its vendors count is
+  // parties-derived and stays visible; the AP badges it also carries are
+  // hidden loader-side via `apAllowed`. Each skipped leg resolves the same
+  // row shape it would have returned, so the shared tail needs no branch.
+  type TrendRow = { wk: string; func: string | null; late: string | null; spend: string | number }
+  type FlowRow = { dt: string; func: string | null; amt: string | number }
+  const noTrend = Promise.resolve({ rows: [] as TrendRow[] })
+  const noFlows = Promise.resolve({ rows: [] as FlowRow[] })
+  const noPos = Promise.resolve({ rows: [] as OpenPoRow[] })
   const [apItems, trendRes, badgeRes, paidRowsRes, spendRowsRes, poRowsRes, orgRes] = (await Promise.all([
-    openItems(orgId, 'ap', today, subIds),
+    grants.ap ? openItems(orgId, 'ap', today, subIds) : Promise.resolve([]),
     // 13-week billed-spend trend (posted vendor bills by week). Documents
     // translate txn→functional at their maintained rate; the second leg to
     // presentation happens per (week, functional) below.
-    db.execute(sql`
+    grants.ap ? db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
              sub.base_currency as func,
              max(coalesce(d.document_date, d.posting_date))::text as late,
@@ -176,7 +197,7 @@ export async function purchasingHome(
          and d.voided_at is null${docScope}
          and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
        group by 1, 2
-    `),
+    `) : noTrend,
     // Directory badges + the remaining vitals (money scalars moved to the
     // per-(date, functional) row queries below so the second translation leg
     // can run in JS).
@@ -194,7 +215,7 @@ export async function purchasingHome(
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as vendors
     `),
     // 7-day payment value per (date, functional) for presentation translation.
-    db.execute(sql`
+    grants.ap ? db.execute(sql`
       select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
              coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
         from documents d
@@ -203,9 +224,9 @@ export async function purchasingHome(
          and d.status = 'posted' and d.voided_at is null${docScope}
          and coalesce(d.document_date, d.posting_date) >= ${ago7}
        group by 1, 2
-    `),
+    `) : noFlows,
     // 30-day billed spend per (date, functional) for presentation translation.
-    db.execute(sql`
+    grants.ap ? db.execute(sql`
       select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
              coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
         from documents d
@@ -214,11 +235,11 @@ export async function purchasingHome(
          and d.status = 'posted' and d.voided_at is null${docScope}
          and coalesce(d.document_date, d.posting_date) >= ${ago30}
        group by 1, 2
-    `),
+    `) : noFlows,
     // Open purchase-order headers translate per-row in JS: POs never post,
     // so they carry no maintained fx_rate and a SQL sum would mix
     // transaction currencies.
-    ordersOn
+    grants.ap && ordersOn
       ? db.execute<OpenPoRow>(sql`
         select d.party_id, coalesce(p.display_name, 'Unspecified') as name,
                abs(d.total) as total, d.currency
@@ -226,7 +247,7 @@ export async function purchasingHome(
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = 'purchase_order'
            and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}`)
-      : Promise.resolve({ rows: [] as OpenPoRow[] }),
+      : noPos,
     db.execute<{ baseCurrency: string }>(sql`
       select base_currency as "baseCurrency" from orgs where id = ${orgId}`),
   ]))
@@ -346,5 +367,6 @@ export async function purchasingHome(
     },
     ordersEnabled: ordersOn,
     expensesEnabled: expensesOn,
+    apAllowed: grants.ap,
   }
 }
