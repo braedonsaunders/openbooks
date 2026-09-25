@@ -316,6 +316,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   // spanning multiple sections can fence its next request with the newest
   // server token instead of the closure's stale ticket snapshot.
   const latestRevisionRef = useRef(props.ticket.revision)
+  // Project-context lookups are sequenced (I4-webui-116): a slow response
+  // for a previously selected project must never overwrite the state
+  // derived from the current selection.
+  const projectContextRequest = useRef(0)
   const initialCanEdit = props.ticket.status === 'draft' && props.canManage
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Permissions and lifecycle state remain authoritative.
@@ -512,6 +516,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
   async function selectProject(nextProjectId: string) {
     setProjectId(nextProjectId)
+    // Every selection invalidates earlier in-flight lookups, including the
+    // empty-selection case below which performs no fetch of its own.
+    const request = ++projectContextRequest.current
     setHeaderDirty(true)
     setLineEquipment('')
     setLineRateUnit('')
@@ -529,6 +536,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       // must toast the translated fallback, never a SyntaxError.
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.lines.projectLoadFailed')))
       const body = (await response.json()) as { customerName?: string; tasks?: unknown; period?: string }
+      // Apply only while this project is still selected: a superseded
+      // response would offer another project's tasks on this ticket.
+      if (request !== projectContextRequest.current) return
       setCustomerName(body.customerName ?? '')
       setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
       if (!gridHasHours && body.period) setPeriod(body.period)
@@ -723,15 +733,19 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     } else if (savedProjectId === props.ticket.projectId) {
       setProjectTasks(props.projectTasks)
     } else {
+      const request = ++projectContextRequest.current
       void fetch(`/api/field-tickets/project-context?projectId=${encodeURIComponent(savedProjectId)}`)
         .then(async (response) => {
           // Status first: a non-JSON error page must not throw out of this
           // best-effort picker refresh.
           if (!response.ok) return
           const body = (await response.json()) as { tasks?: unknown }
+          if (request !== projectContextRequest.current) return
           setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
         })
-        .catch(() => setProjectTasks([]))
+        .catch(() => {
+          if (request === projectContextRequest.current) setProjectTasks([])
+        })
     }
     setMode('view')
   }
