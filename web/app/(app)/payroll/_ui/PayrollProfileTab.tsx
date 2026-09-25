@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import {
   ProfileEditor,
   type FilingAccountOption,
+  type HolidayOccupationClassOption,
   type LabourJurisdictionOption,
   type PackProfileDeclaration,
   type ProfileRow,
@@ -56,6 +57,7 @@ export function PayrollProfileTab({
     schedules: ScheduleOption[]
     filingAccounts: FilingAccountOption[]
     labourJurisdictions: Record<string, LabourJurisdictionOption[]>
+    statutoryOccupationClasses: Record<string, HolidayOccupationClassOption[]>
     countries: string[]
     packProfiles: Record<string, PackProfileDeclaration>
     storedCertificates: StoredCertificateRow[]
@@ -63,7 +65,7 @@ export function PayrollProfileTab({
     defaultCountry: ProfileRow['country']
   }>({
     status: 'loading', profile: null, schedules: [], filingAccounts: [],
-    labourJurisdictions: {}, countries: [], packProfiles: {}, storedCertificates: [],
+    labourJurisdictions: {}, statutoryOccupationClasses: {}, countries: [], packProfiles: {}, storedCertificates: [],
     derivedColumns: {},
     defaultCountry: '',
   })
@@ -100,6 +102,7 @@ export function PayrollProfileTab({
             filingAccounts: j.filingAccounts ?? [],
             // The packs' declared labour jurisdictions, per country pack.
             labourJurisdictions: j.labourJurisdictions ?? {},
+            statutoryOccupationClasses: j.statutoryOccupationClasses ?? {},
             countries,
             packProfiles: j.packProfiles ?? {},
             storedCertificates: Array.isArray(j.storedCertificates) ? j.storedCertificates : [],
@@ -201,6 +204,7 @@ export function PayrollProfileTab({
     payment_method: null,
     // A new employment answers nothing until somebody does.
     paid_on_commission: null,
+    statutory_occupation_class: null,
     is_active: true,
   }
 
@@ -220,6 +224,7 @@ export function PayrollProfileTab({
           schedules={state.schedules}
           filingAccounts={state.filingAccounts}
           labourJurisdictions={state.labourJurisdictions}
+          statutoryOccupationClasses={state.statutoryOccupationClasses}
           countries={state.countries}
           packProfiles={state.packProfiles}
           storedCertificates={state.storedCertificates}

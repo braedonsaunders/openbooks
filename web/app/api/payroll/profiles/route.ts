@@ -7,6 +7,7 @@ import { sealSecret, unsealSecret } from '@openbooks/engine/src/platform/secrets
 import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
 import {
   employmentJurisdictionsOf,
+  holidayOccupationClassesOf,
   labourJurisdictionProblem,
   occupationCapValues,
   PAYROLL_COUNTRY_PACKS,
@@ -155,6 +156,31 @@ function labourJurisdictionOptions(): Record<string, { key: string; name: string
     }))
   }
   return byCountry
+}
+
+/**
+ * The statutory occupation classes the installed packs recognise, per
+ * employment jurisdiction — served the same way as `labourJurisdictions`,
+ * from the same registry, for the same reason: the editor offers whatever
+ * the packs declare, never a hardcoded class list. Jurisdictions with no
+ * declared class arm are absent, and the editor keeps the control out of the
+ * way there.
+ */
+function occupationClassOptions(): Record<string, { classKey: string; label: string; citation: string }[]> {
+  const byJurisdiction: Record<string, { classKey: string; label: string; citation: string }[]> = {}
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    for (const jurisdiction of employmentJurisdictionsOf(country)) {
+      const classes = holidayOccupationClassesOf(jurisdiction.key)
+      if (classes.length > 0) {
+        byJurisdiction[jurisdiction.key] = classes.map((entry) => ({
+          classKey: entry.classKey,
+          label: entry.label,
+          citation: entry.citation,
+        }))
+      }
+    }
+  }
+  return byJurisdiction
 }
 
 /**
@@ -487,6 +513,7 @@ export async function GET(req: Request) {
       defaultCountry,
       countries: Object.keys(PAYROLL_COUNTRY_PACKS),
       packProfiles: packProfileDeclarations(),
+      statutoryOccupationClasses: occupationClassOptions(),
     })
   }
   const profiles = (await db.execute<Record<string, unknown>>(sql`
@@ -534,6 +561,7 @@ export async function GET(req: Request) {
     labourJurisdictions: labourJurisdictionOptions(),
     countries: Object.keys(PAYROLL_COUNTRY_PACKS),
     packProfiles: packProfileDeclarations(),
+    statutoryOccupationClasses: occupationClassOptions(),
   })
 }
 

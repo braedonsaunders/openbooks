@@ -1633,6 +1633,12 @@
     "standingUnanswered": "Sin responder. Este es un dato laboral permanente; respóndelo una vez para que no vuelva a solicitarse en periodos posteriores.",
     "currentlyAnswered": "Respuesta actual: {answer}. Responde de nuevo para corregirla.",
     "paidOnCommission": "Remuneración por comisión",
+    "employmentClassTitle": "situación de clase de empleo",
+    "employmentClass": "Clase de empleo",
+    "employmentClassOptions": {
+      "route_salesperson": "Vendedor de ruta",
+      "elect_to_work": "Contratos de trabajo optativo"
+    },
     "choose": "Elegir…",
     "no": "No",
     "yesWholePart": "Sí, total o parcialmente",

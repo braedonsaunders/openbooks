@@ -24,6 +24,18 @@ export interface LabourJurisdictionOption {
   name: string
 }
 
+/**
+ * One statutory occupation class a pack recognises, as served with
+ * the profiles (`holidayOccupationClassesOf`). Supplied by the API from the
+ * pack declarations, never listed here: this file must not become a second
+ * place employment classes are enumerated.
+ */
+export interface HolidayOccupationClassOption {
+  classKey: string
+  label: string
+  citation: string
+}
+
 /** A payroll program/EIN account the employee can be filed and remitted under. */
 export interface FilingAccountOption {
   id: string
@@ -179,6 +191,12 @@ export type ProfileRow = {
    * defaulted, never inferred (migration 0181).
    */
   paid_on_commission: boolean | null
+  /**
+   * Standing statutory occupation class (migration 0409): the occupation or
+   * contract class the employee answers. Null is UNANSWERED and a declaring
+   * rule fails closed on it — never defaulted, never inferred.
+   */
+  statutory_occupation_class: string | null
   is_active: boolean
 };
 
@@ -207,6 +225,8 @@ export function ProfileEditor(props: {
   filingAccounts?: FilingAccountOption[]
   /** country pack → the labour jurisdictions it declares, from the API. */
   labourJurisdictions?: Record<string, LabourJurisdictionOption[]>
+  /** employment jurisdiction → the occupation classes its rules recognise, from the API. */
+  statutoryOccupationClasses?: Record<string, HolidayOccupationClassOption[]>
   /** Every known pack, in registry order — the country picker offers exactly these. */
   countries?: string[]
   /** country pack → what the editor renders for it: subdivisions, withholding
@@ -292,11 +312,31 @@ export function ProfileEditor(props: {
   const [paidOnCommission, setPaidOnCommission] = useState<string>(
     p.paid_on_commission == null ? '' : String(p.paid_on_commission),
   )
+  // The same three-state shape for the employment class: '' is UNANSWERED.
+  const [occupationClass, setOccupationClass] = useState<string>(
+    p.statutory_occupation_class ?? '',
+  )
   // Accounts file under one country pack, so only the employee's own apply.
   const filingAccounts = (props.filingAccounts ?? []).filter((account) => account.country === country)
   // Same rule for the labour jurisdictions: one pack's declarations, and none
   // at all until a country is chosen.
   const labourOptions = (country && props.labourJurisdictions?.[country]) || []
+  // The employment jurisdiction the class question is asked under: the
+  // labour-jurisdiction override wins, otherwise the work region implies it —
+  // the same derivation the engine's jurisdictionKey makes, so the editor
+  // offers the classes of the calendar that will actually run.
+  const employmentJurisdiction = labourJurisdiction.trim()
+    ? labourJurisdiction.trim().toUpperCase()
+    : province.trim() ? `${country}-${province.trim().toUpperCase()}` : country
+  const classOptions = props.statutoryOccupationClasses?.[employmentJurisdiction] ?? []
+  // A stored answer from a jurisdiction that recognises nothing now (the
+  // employee moved provinces) stays visible and saveable: hiding the control
+  // would strand the answer with no way to clear it.
+  const offeredClasses = occupationClass !== '' && !classOptions.some((option) => option.classKey === occupationClass)
+    ? [...classOptions, { classKey: occupationClass, label: occupationClass, citation: '' }]
+    : classOptions
+  const classLabel = (classKey: string, fallback: string): string =>
+    textOf(`employmentClassOptions.${classKey}`, fallback)
 
   // Everything below renders from the selected pack's declaration — the
   // subdivision list and label, the withholding certificates, the exemption
@@ -400,7 +440,7 @@ export function ProfileEditor(props: {
     dependentCredits, otherIncomeAnnual, deductionsAnnual,
     w4Pre2020, w4Allowances, ficaExempt, futaExempt, suiExempt,
     vacationPercent, vacationMethod, isActive, sin,
-    filingAccountId, stubDelivery, paymentMethod, paidOnCommission,
+    filingAccountId, stubDelivery, paymentMethod, paidOnCommission, occupationClass,
     extraColumns, rowAnswers,
   ])
   const [baseline, setBaseline] = useState<string | null>(null)
@@ -545,6 +585,7 @@ export function ProfileEditor(props: {
           // Always sent: the state round-trips the stored answer, so an
           // untouched control keeps whatever the row holds (including null).
           paidOnCommission: paidOnCommission === '' ? null : paidOnCommission === 'true',
+          statutoryOccupationClass: occupationClass === '' ? null : occupationClass,
           isActive,
           ...extraFactSave,
         }),
@@ -1017,6 +1058,35 @@ export function ProfileEditor(props: {
               <option value="true">{textOf('paidOnCommission.yes', 'Yes, in whole or in part')}</option>
             </Select>
           </div>
+          {/* Standing employment-class answer, beside the commission status.
+              Offered only where the employee's own jurisdiction recognises a
+              class (or an answer is already stored): statutory-holiday rules
+              that read it refuse the calculation rather than guess, so this
+              control defaults to nothing. Labels resolve through the locale
+              where keys exist, else the pack's declared English reads as
+              written — exactly like the pack-driven fields above. */}
+          {offeredClasses.length > 0 && (
+          <div>
+            <Label
+              htmlFor="pp-employment-class"
+              help={textOf('occupationClass.help', 'The occupation or contract class a statutory-holiday rule reads (for example a route salesperson). Some rules pay a different amount — or refuse until this is answered. Leave unanswered until confirmed.')}
+            >
+              {textOf('fields.occupationClass', 'Employment class')}
+            </Label>
+            <Select
+              id="pp-employment-class"
+              value={occupationClass}
+              onChange={(e) => setOccupationClass(e.target.value)}
+            >
+              <option value="">{textOf('occupationClass.unanswered', 'Not answered')}</option>
+              {offeredClasses.map((option) => (
+                <option key={option.classKey} value={option.classKey} title={option.citation}>
+                  {classLabel(option.classKey, option.label)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          )}
         </div>
         )}
         {showTax && (
@@ -1178,6 +1248,18 @@ export function ProfileEditor(props: {
                   ? textOf('paidOnCommission.yes', 'Yes, in whole or in part')
                   : textOf('paidOnCommission.no', 'No'),
             )}
+            {offeredClasses.length > 0
+              ? roRow(
+                'employment-class',
+                textOf('fields.occupationClass', 'Employment class'),
+                occupationClass === ''
+                  ? textOf('occupationClass.unanswered', 'Not answered')
+                  : classLabel(
+                    occupationClass,
+                    offeredClasses.find((option) => option.classKey === occupationClass)?.label ?? occupationClass,
+                  ),
+              )
+              : null}
             {roRow('vacation', t('fields.vacationPercent'), `${vacationPercent || '—'} · ${t(`vacation.${vacationMethod}`)}`)}
             {roRow('active', t('fields.isActive'), isActive ? t('active') : t('inactive'))}
           </div>

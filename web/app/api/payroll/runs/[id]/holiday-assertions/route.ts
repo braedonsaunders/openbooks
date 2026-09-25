@@ -12,6 +12,11 @@ import {
   type DemandingHoliday,
 } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
 import { evidencedEntitledPayDays } from '@openbooks/engine/src/payroll/holidays.ts'
+import {
+  holidayOccupationClassesOf,
+  jurisdictionKey,
+  occupationCapValues,
+} from '@openbooks/engine/src/payroll/packs.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -21,13 +26,14 @@ export const dynamic = 'force-dynamic'
 /**
  * Per-holiday statutory-holiday assertions for one pay run (migration 0181).
  *
- *  GET  → every roster employee's standing commission answer, the run's filed
- *         assertions, demanding holidays, current entitlement-day counts,
- *         and the server-merged `suggested` eligibility map.
- *  POST → file one answer: the standing commission status (stored on the
- *         employee's payroll profile, answered once), an absence assertion,
- *         or a complete entitlement-day assessment scoped to this run and
- *         holiday occurrence.
+ *  GET  → every roster employee's standing commission and occupation-class
+ *         answers, the run's filed assertions, demanding holidays, current
+ *         entitlement-day counts, and the server-merged `suggested`
+ *         eligibility map.
+ *  POST → file one answer: the standing commission status or occupation class
+ *         (stored on the employee's payroll profile, answered once), an
+ *         absence assertion, or a complete entitlement-day assessment scoped
+ *         to this run and holiday occurrence.
  *
  * The wizard's calculate action accepts a per-request `holidayEligibility`
  * map and nothing else, so the client sends `suggested` (plus anything the
@@ -43,6 +49,7 @@ interface RosterEmployee {
   province: string
   labourJurisdiction: string | null
   subsidiaryId: string | null
+  occupationClass: string | null
 }
 
 async function loadRun(orgId: string, id: string) {
@@ -64,6 +71,7 @@ async function loadRoster(orgId: string, payScheduleId: string): Promise<RosterE
     select prof.employee_party_id as "employeePartyId", p.display_name as name,
            prof.country, prof.province,
            prof.labour_jurisdiction as "labourJurisdiction",
+           prof.statutory_occupation_class as "occupationClass",
            p.subsidiary_id as "subsidiaryId"
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
@@ -77,6 +85,7 @@ async function loadRoster(orgId: string, payScheduleId: string): Promise<RosterE
     province: String(row.province),
     labourJurisdiction: row.labourJurisdiction ?? null,
     subsidiaryId: row.subsidiaryId ?? null,
+    occupationClass: row.occupationClass ?? null,
   }))
 }
 
@@ -128,10 +137,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({
         employees: roster.map((employee) => {
           const perEmployee = stored.assertions.get(employee.employeePartyId) ?? new Map<string, boolean>()
+          // The classes the employee's own jurisdiction recognises — the run
+          // answers whatever the packs declare there, never a list in this file.
+          const jurisdiction = jurisdictionKey(employee.country, employee.province, employee.labourJurisdiction)
           return {
             employeePartyId: employee.employeePartyId,
             name: employee.name,
             paidOnCommission: stored.commissions.get(employee.employeePartyId) ?? null,
+            occupationClass: employee.occupationClass,
+            occupationClasses: holidayOccupationClassesOf(jurisdiction).map((entry) => ({
+              classKey: entry.classKey,
+              label: entry.label,
+              citation: entry.citation,
+            })),
             assertions: [...perEmployee.entries()].map(([occurrence, absentWithoutConsent]) => {
               const separator = occurrence.lastIndexOf('|')
               return {
@@ -170,17 +188,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data as {
-    employeePartyId?: unknown; paidOnCommission?: unknown;
+    employeePartyId?: unknown; paidOnCommission?: unknown; occupationClass?: unknown;
     holidayKey?: unknown; holidayDate?: unknown; absentWithoutConsent?: unknown;
     entitlementEvidenceComplete?: unknown;
   }
-  const { employeePartyId, paidOnCommission } = body
+  const { employeePartyId, paidOnCommission, occupationClass } = body
   if (typeof employeePartyId !== 'string' || !isUuid(employeePartyId)) {
     return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
   }
   const answersCommission = paidOnCommission !== undefined
   if (answersCommission && typeof paidOnCommission !== 'boolean') {
     return NextResponse.json({ error: 'invalid commission-pay status' }, { status: 422 })
+  }
+  // The standing occupation-class answer, filed on the profile like the
+  // commission status. The shape is checked here; the pack vocabulary is
+  // checked against the employee's own country once the roster identifies
+  // them below — storing a key no rule reads would answer nothing and the
+  // engine would keep refusing.
+  const answersOccupationClass = occupationClass !== undefined
+  if (answersOccupationClass && typeof occupationClass !== 'string') {
+    return NextResponse.json({ error: 'invalid occupation class' }, { status: 422 })
   }
   const { holidayKey, holidayDate, absentWithoutConsent } = body
   const answersAbsence = absentWithoutConsent !== undefined
@@ -191,10 +218,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (answersEntitlement && body.entitlementEvidenceComplete !== true) {
     return NextResponse.json({ error: 'entitlement evidence must be explicitly confirmed complete' }, { status: 422 })
   }
-  if (answersEntitlement && (answersCommission || answersAbsence)) {
+  if (answersEntitlement && (answersCommission || answersAbsence || answersOccupationClass)) {
     return NextResponse.json({ error: 'file the entitlement-day assessment separately for its holiday' }, { status: 422 })
   }
-  if (!answersCommission && !answersAbsence && !answersEntitlement) {
+  if (!answersCommission && !answersAbsence && !answersEntitlement && !answersOccupationClass) {
     return NextResponse.json({ error: 'nothing to file' }, { status: 422 })
   }
   // An explicit holiday identity must be well-formed; an omitted one is
@@ -215,6 +242,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!employee) return NextResponse.json({ error: 'employee is not on this run' }, { status: 422 })
       const employeeDenied = guardSubsidiaryScope(gate, employee.subsidiaryId)
       if (employeeDenied) return employeeDenied
+      // The pack vocabulary is the employee's own country's — the same closed
+      // set the profiles API validates against, never a list in this file.
+      if (answersOccupationClass) {
+        const allowed = occupationCapValues(employee.country)
+        if (!allowed.includes(occupationClass as string)) {
+          return NextResponse.json({ error: `Statutory occupation class must be one of ${allowed.join(', ')}` }, { status: 422 })
+        }
+      }
 
       if (answersEntitlement) {
         const candidates = (await demandingHolidays(db, {
@@ -269,6 +304,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const updated = await db.execute<{ employee_party_id: string }>(sql`
           update employee_payroll_profiles
              set paid_on_commission = ${paidOnCommission as boolean},
+                 updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+                 updated_by = ${gate.user.id}
+           where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
+           returning employee_party_id`)
+        if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
+      }
+
+      if (answersOccupationClass) {
+        const updated = await db.execute<{ employee_party_id: string }>(sql`
+          update employee_payroll_profiles
+             set statutory_occupation_class = ${occupationClass as string},
                  updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
                  updated_by = ${gate.user.id}
            where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}

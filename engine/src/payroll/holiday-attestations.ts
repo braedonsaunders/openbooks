@@ -5,6 +5,7 @@ import {
   evidencedEntitledPayDays,
   loadHolidayOverrides,
   resolveObservedHolidays,
+  ruleDeclaresOccupationArms,
   statutoryHolidayPayRule,
   type HolidayOverride,
   type StatutoryHolidayEligibilityFacts,
@@ -251,6 +252,7 @@ export interface DemandingHoliday {
   needsCommissionStatus: boolean;
   needsAbsenceAssertion: boolean;
   needsEntitlementDayAssessment: boolean;
+  needsOccupationClass: boolean;
 }
 
 /**
@@ -303,10 +305,12 @@ export function demandingHolidaysForJurisdiction(
     const needsCommissionStatus = basis.kind === "fixed_divisor" && basis.commission !== undefined;
     const needsAbsenceAssertion = rule.qualifying.lastAndFirstScheduledShift === true;
     const needsEntitlementDayAssessment = rule.qualifying.minDaysWorkedInWindow?.counting === "entitled_to_pay";
-    if (needsCommissionStatus || needsAbsenceAssertion || needsEntitlementDayAssessment) {
+    const needsOccupationClass = ruleDeclaresOccupationArms(rule);
+    if (needsCommissionStatus || needsAbsenceAssertion || needsEntitlementDayAssessment || needsOccupationClass) {
       demanding.push({
         key: holiday.key, date: holiday.date, name: holiday.name, jurisdiction,
         needsCommissionStatus, needsAbsenceAssertion, needsEntitlementDayAssessment,
+        needsOccupationClass,
       });
     }
   }

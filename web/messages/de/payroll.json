@@ -1633,6 +1633,12 @@
     "standingUnanswered": "Noch unbeantwortet. Diese Beschäftigungsangabe gilt dauerhaft. Beantworten Sie sie einmal, damit spätere Zeiträume nicht erneut danach fragen.",
     "currentlyAnswered": "Derzeit beantwortet: {answer}. Erneut beantworten, um die Angabe zu korrigieren.",
     "paidOnCommission": "Provisionsbasierte Vergütung",
+    "employmentClassTitle": "Status der Beschäftigungsklasse",
+    "employmentClass": "Beschäftigungsklasse",
+    "employmentClassOptions": {
+      "route_salesperson": "Routenverkäufer",
+      "elect_to_work": "Freiwillige Arbeit auf Abruf"
+    },
     "choose": "Auswählen…",
     "no": "Nein",
     "yesWholePart": "Ja, ganz oder teilweise",
