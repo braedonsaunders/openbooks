@@ -259,15 +259,16 @@ export function computeDeStatutoryWithRates(
   // all transcribed in DE_2026_RATES / DE_2026_CEILINGS with quotes.
   const pensionable = centsOf(ctx.pensionable);
   const insurable = centsOf(ctx.insurable);
-  const kvBase = minBigInt(pensionable, toUnits(String(DE_2026_CEILINGS.kvPbbgMonthly)) / 100n);
-  const rvBase = minBigInt(insurable, toUnits(String(DE_2026_CEILINGS.rvBbgMonthly)) / 100n);
+  const kvBase = minBigInt(insurable, toUnits(String(DE_2026_CEILINGS.kvPbbgMonthly)) / 100n);
+  const rvBase = minBigInt(pensionable, toUnits(String(DE_2026_CEILINGS.rvBbgMonthly)) / 100n);
+  const avBase = minBigInt(insurable, toUnits(String(DE_2026_CEILINGS.rvBbgMonthly)) / 100n);
   const kvzHundredths = BigInt(Math.round(rates.kvz * 100));
   const kvHalfMilli = (BigInt(Math.round(DE_2026_RATES.kv * 100)) + kvzHundredths) * 5n;
   const kvW = shareHalfUp(kvBase, kvHalfMilli);
   const rvHalfMilli = BigInt(Math.round((DE_2026_RATES.rv / 2) * 1000));
   const rvW = shareHalfUp(rvBase, rvHalfMilli);
   const avHalfMilli = BigInt(Math.round((DE_2026_RATES.av / 2) * 1000));
-  const avW = shareHalfUp(rvBase, avHalfMilli);
+  const avW = shareHalfUp(avBase, avHalfMilli);
   const pvBase = kvBase;
   const pvEmployeeMilli = BigInt(Math.round(DE_2026_RATES.pv / 2 * 1000))
     + (ctx.region === "SN" ? BigInt(Math.round(DE_2026_RATES.pvSachsenDifferential * 1000)) : 0n)

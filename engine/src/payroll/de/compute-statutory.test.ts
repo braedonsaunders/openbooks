@@ -95,9 +95,13 @@ const line = (pushed: Pushed[], systemKey: string, kind: string): string | null 
   pushed.find((entry) => entry.systemKey === systemKey && entry.kind === kind)?.amount ?? null;
 
 test("full monthly period computes: PAP wiring + hand-checked SV and adapter names missing employer levies", async () => {
-  // €3,000 taxable, €2,500 pensionable, €2,000 insurable; StKl I, KVZ 2.90, NW.
-  // Hand SV: KV 218.75, RV 186, AV 26, PV-AN 60, PV-AG 45.
-  const { ctx, pushed } = fakeCtx({ pensionable: "2500.00", insurable: "2000.00" });
+  // Taxable €3,000; social bases €3,500 pensionable / €4,000 insurable.
+  // KV/PV/AV price off the insurable leg, RV off the pensionable leg: KV
+  // 4000 × 8.75% = 350.00; RV 3500 × 9.3% = 325.50; AV 4000 × 1.3% = 52.00;
+  // PV-AN 4000 × 2.4% = 96.00; PV-AG 4000 × 1.8% = 72.00. StKl I, KVZ 2.90, NW.
+  // SGB VI/SGB III bases and SFN Zuschläge treatment: https://www.gesetze-im-internet.de/svev/__1.html
+  // Tax exemption distinction: https://www.gesetze-im-internet.de/estg/__3b.html
+  const { ctx, pushed } = fakeCtx({ pensionable: "3500.00", insurable: "4000.00" });
   await assert.rejects(computeDeStatutory(ctx), /refuses.*U1.*U2.*U3.*Berufsgenossenschaft/);
   const result = computeDeStatutoryWithRates(ctx, { kvz: 2.9 });
   const pap = computePapLaufend2026({
@@ -109,14 +113,14 @@ test("full monthly period computes: PAP wiring + hand-checked SV and adapter nam
   assert.equal(result.SOLI, fromUnits(pap.solzlzz * 100n));
   assert.equal(result.BK, fromUnits(pap.bk * 100n));
   assert.equal(line(pushed, "lohnsteuer", "deduction"), result.LST);
-  assert.equal(result.KV_W, "218.7500");
-  assert.equal(result.KV_ER, "218.7500");
-  assert.equal(result.RV_W, "186.0000");
-  assert.equal(result.RV_ER, "186.0000");
-  assert.equal(result.AV_W, "26.0000");
-  assert.equal(result.AV_ER, "26.0000");
-  assert.equal(result.PV_W, "60.0000");
-  assert.equal(result.PV_ER, "45.0000");
+  assert.equal(result.KV_W, "350.0000");
+  assert.equal(result.KV_ER, "350.0000");
+  assert.equal(result.RV_W, "325.5000");
+  assert.equal(result.RV_ER, "325.5000");
+  assert.equal(result.AV_W, "52.0000");
+  assert.equal(result.AV_ER, "52.0000");
+  assert.equal(result.PV_W, "96.0000");
+  assert.equal(result.PV_ER, "72.0000");
   // No confession: no KiSt line at all (zero never becomes a line).
   assert.equal(line(pushed, "kirchenlohnsteuer", "deduction"), null);
   assert.equal(result.KIST, "0.0000");
