@@ -730,10 +730,11 @@ function qualified(table: string) {
 
 /**
  * Kernel-guard bypasses for the teardown transaction: `openbooks.amend` lets
- * posted documents/journal entries be deleted, `openbooks.sandbox_wipe` (with
- * the org flagged env_kind='sandbox') satisfies the append-only evidence
- * guards. The enclosing transaction uses the dedicated database bypass role
- * for direct table deletes.
+ * posted documents be deleted, `openbooks.sandbox_wipe` (with
+ * the org flagged env_kind='sandbox') authorizes the wipe of posted journal
+ * entries — posted journals are append-only with no amend escape — and
+ * satisfies the append-only evidence guards. The enclosing transaction uses
+ * the dedicated database bypass role for direct table deletes.
  */
 async function setTeardownGucs(tx: TeardownTx): Promise<void> {
   await tx.execute(sql`
