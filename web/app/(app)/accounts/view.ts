@@ -140,8 +140,8 @@ export interface AccountsData {
     actions: string
     inactive: string
     viewRegister: string
-    expand: string
-    collapse: string
+    expandAccount: string
+    collapseAccount: string
   }
   drawerOpen: boolean
   /** The entity list renders its own drawer, so the page must not repeat it. */
@@ -435,8 +435,8 @@ export async function loadAccounts(
       actions: tc('labels.actions'),
       inactive: t('list.badges.inactive'),
       viewRegister: t('list.viewRegister'),
-      expand: t('list.expand'),
-      collapse: t('list.collapse'),
+      expandAccount: t('list.expandAccount'),
+      collapseAccount: t('list.collapseAccount'),
     },
     drawerOpen: Boolean(drawer),
     drawerOutsideList: Boolean(drawer) && layout !== 'list',

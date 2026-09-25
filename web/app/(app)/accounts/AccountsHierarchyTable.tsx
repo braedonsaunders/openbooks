@@ -41,6 +41,16 @@ export interface HierarchyAccountGroup {
   rows: HierarchyAccountRow[]
 }
 
+/**
+ * The expand/collapse templates arrive as translated server strings with
+ * {number}/{name} placeholders (functions cannot cross the widget-block
+ * server/client boundary), so fill them at the row. Every toggle names its
+ * own account instead of sharing one generic label.
+ */
+function fillRowLabel(template: string, row: Pick<HierarchyAccountRow, 'number' | 'name'>): string {
+  return template.replace('{number}', row.number).replace('{name}', row.name)
+}
+
 function BalanceDrill({
   target,
   className,
@@ -73,8 +83,8 @@ export function AccountsHierarchyTable({
     actions: string
     inactive: string
     viewRegister: string
-    expand: string
-    collapse: string
+    expandAccount: string
+    collapseAccount: string
   }
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
@@ -158,8 +168,8 @@ function GroupRows({
   labels: {
     inactive: string
     viewRegister: string
-    expand: string
-    collapse: string
+    expandAccount: string
+    collapseAccount: string
   }
 }) {
   return (
@@ -206,7 +216,7 @@ function GroupRows({
                   <button
                     type="button"
                     onClick={() => onToggle(row.id)}
-                    aria-label={isCollapsed ? labels.expand : labels.collapse}
+                    aria-label={fillRowLabel(isCollapsed ? labels.expandAccount : labels.collapseAccount, row)}
                     aria-expanded={!isCollapsed}
                     className="mr-1.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                   >

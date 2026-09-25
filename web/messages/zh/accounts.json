@@ -9,8 +9,8 @@
     },
     "newAccount": "新建科目",
     "viewRegister": "查看明细账",
-    "expand": "展开科目",
-    "collapse": "折叠科目",
+    "expandAccount": "展开科目 {number} {name}",
+    "collapseAccount": "折叠科目 {number} {name}",
     "badges": {
       "inactive": "停用",
       "summary": "汇总"
