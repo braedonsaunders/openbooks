@@ -28,7 +28,8 @@ import { assertVacationPlanResolved } from "./run-setup.ts";
 import { resolveWorkSchedule, scheduledHoursPerWeek } from "./work-schedules.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate } from "./run-calculation-support.ts";
 import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot } from "./run-stub-records.ts";
-import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, settleTerminationBankPayouts, appendCashVacationPay, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
+import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
+import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
 export async function calculateStub(
