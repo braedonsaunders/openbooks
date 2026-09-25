@@ -11,7 +11,7 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 
 /**
  * The NL jaaropgaaf, ON COMMITTED RUNS.
@@ -103,11 +103,15 @@ async function nlEmployee(
     opgaaf: Record<string, string>;
     bsn?: string;
   },
-): Promise<string> {
+): Promise<{ id: string; employmentId: string }> {
   const id = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${id}, ${fx.orgId}, 'person', ${args.name}, ${fx.subsidiaryId}, true, '{}'::jsonb)`);
+  // pay_stubs.employment_id is NOT NULL and the run refuses stubs without
+  // an HRM employment: every stub employee carries one, and the profile
+  // points at it (the run reads emp.employment_id).
+  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   await db.execute(sql`
     insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${fx.orgId}, ${id})`);
   await db.execute(sql`
@@ -116,9 +120,9 @@ async function nlEmployee(
     values (${fx.orgId}, ${id}, 'EUR', ${args.annualSalary}, 'year', 2080, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country,
                                            province, pay_basis, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'NL', 'NL',
+    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'NL', 'NL',
             'salary', true, ${fx.actorId}, ${fx.actorId})`);
   // No plaintext national identifier is ever stored: the sealed column holds
   // ciphertext, rendered only at slip time.
@@ -142,7 +146,7 @@ async function nlEmployee(
               ${JSON.stringify(answers)}::jsonb, '2026-01-01',
               ${fx.actorId}, ${fx.actorId})`);
   }
-  return id;
+  return { id, employmentId };
 }
 
 async function monthlyRun(
@@ -228,7 +232,12 @@ test(
       const truus = await nlEmployee(fx, {
         name: "Truus AOW", annualSalary: "11988",
         opgaaf: { apply_loonheffingskorting: "true", age_class: "aow_1945" },
+        // A verified BSN: without one the engine prices the 52% anonymous
+        // tariff (Rekenvoorschriften §7.5), which would mask her AOW arm.
+        bsn: "234567892",
       });
+      // Statements are per dienstbetrekking (party:employment), not per party.
+      const rowFor = (emp: { id: string; employmentId: string }) => `${emp.id}:${emp.employmentId}`;
       await monthlyRun(fx, "2026-02-01", "2026-02-28", true);
       await monthlyRun(fx, "2026-03-01", "2026-03-31", true);
       // Calculated, never committed: a draft run must not appear on a
@@ -236,11 +245,11 @@ test(
       await monthlyRun(fx, "2026-04-01", "2026-04-30", false);
 
       const data = await filing().population(fx.orgId, 2026);
-      assert.equal(data.rows.length, 3, "one row per employee, not per run");
+      assert.equal(data.rows.length, 3, "one row per dienstbetrekking, not per run");
       const byId = new Map(data.rows.map((row) => [String(row.rowId), row]));
-      const rowOf = (id: string) => {
-        const row = byId.get(id);
-        assert.ok(row, `population carries a row for ${id}`);
+      const rowOf = (emp: { id: string; employmentId: string }) => {
+        const row = byId.get(rowFor(emp));
+        assert.ok(row, `population carries a row for ${rowFor(emp)}`);
         return row;
       };
       const money = (row: Record<string, string | number | null>, key: string) => {
@@ -261,7 +270,9 @@ test(
 
       // The tie-out: every money box equals the independent stub sums.
       for (const [id, row] of byId) {
-        const sums = await independentSums(fx.orgId, id);
+        // The scope stays the employee: a stamped row scopes to the party leg.
+        const partyId = String(id).split(":")[0]!;
+        const sums = await independentSums(fx.orgId, partyId);
         assert.equal(sums.runs, "2", "two committed runs feed each slip");
         assert.equal(cmp(String(row.loon), sums.loon), 0, "kolom 14 ties");
         assert.equal(cmp(String(row.ingehouden), sums.ingehouden), 0, "kolom 15 ties");
@@ -271,7 +282,7 @@ test(
         assert.equal(cmp(String(row.premies), sums.premies), 0, "premies tie");
         // The row grammar round-trips every emitted id and refuses others.
         assert.deepEqual(filing().parseRowId(String(row.rowId)), {
-          employees: [String(row.rowId)], accounts: [],
+          employees: [partyId], accounts: [],
         });
       }
       assert.equal(filing().parseRowId("not-a-row"), null);
@@ -298,7 +309,8 @@ test(
       });
       await monthlyRun(fx, "2026-02-01", "2026-02-28", true);
 
-      const slipOf = (id: string) => filing().slip!.build(fx.orgId, 2026, id);
+      const slipOf = (emp: { id: string; employmentId: string }) =>
+        filing().slip!.build(fx.orgId, 2026, `${emp.id}:${emp.employmentId}`);
       const janSlip = await slipOf(jan);
       const pietSlip = await slipOf(piet);
       assert.equal(janSlip.formNumber, "Jaaropgaaf");
@@ -331,20 +343,23 @@ test(
       // into the mandatory BSN field on an otherwise valid jaaropgaaf.
       await db.execute(sql`
         update employee_payroll_profiles set sin_encrypted = ${sealSecret("123456789")}
-         where org_id = ${fx.orgId} and employee_party_id = ${jan}`);
+         where org_id = ${fx.orgId} and employee_party_id = ${jan.id}`);
       await assert.rejects(
         () => slipOf(jan),
         (error) => error instanceof PayrollError && /employee BSN is invalid.*correct the BSN/.test(error.message),
       );
       await db.execute(sql`
         update employee_payroll_profiles set sin_encrypted = null, sin_last3 = null
-         where org_id = ${fx.orgId} and employee_party_id = ${jan}`);
+         where org_id = ${fx.orgId} and employee_party_id = ${jan.id}`);
       await assert.rejects(
         () => slipOf(jan),
         (error) => error instanceof PayrollError && /employee BSN is missing.*add or correct the BSN/.test(error.message),
       );
 
-      await assert.rejects(() => slipOf(randomUUID()), /no 2026 jaaropgaaf matches/);
+      await assert.rejects(
+        () => filing().slip!.build(fx.orgId, 2026, randomUUID()),
+        /no 2026 jaaropgaaf matches/,
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
