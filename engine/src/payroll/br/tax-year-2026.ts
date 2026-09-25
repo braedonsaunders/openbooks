@@ -116,6 +116,18 @@ export const BR_2026_PATRONAL = "20";
 export const BR_2026_FGTS = "8";
 
 /**
+ * Salário-família quota and eligibility ceiling (Portaria Interministerial
+ * MPS/MF nº 13/2026 art. 4º, effective 2026-01-01): R$ 67,54 per
+ * qualifying child (under 14 or disabled) when monthly remuneration is at
+ * most R$ 1.980,38. Paid by the employer in payroll and compensated
+ * against employer INSS contributions due (eSocial S-1200).
+ */
+export const BR_2026_SALARIO_FAMILIA = {
+  quota: "67.54",
+  limiteRemuneracao: "1980.38",
+} as const;
+
+/**
  * Rounding — truncation, uniformly.
  *
  * The eSocial operational rule for the segurado contribution: calculations
@@ -145,7 +157,7 @@ export const BR_REFUSED_2026: readonly string[] = [
   "13º salário (gratificação natalina, Lei 4.090/1962): exclusive-source withholding with the art. 3º-A reduction (Lei 15.270/2025 §3º) and its own INSS teto accounting — not modelled; monthly pay only",
   "férias + 1/3 constitucional (CF art. 7º, XVII): separate base, accrual and IRRF timing — not modelled",
   "rescisão / termination payments (CLT art. 477; aviso prévio, multa de 40% do FGTS, seguro-desemprego): not modelled",
-  "salário-família (cota R$ 67,54 for remuneration ≤ R$ 1.980,38, Portaria 13/2026): needs children count/ages the pack does not carry — not modelled",
+  "salário-família quota/compensation (Portaria 13/2026): priced from the br_salario_familia_filhos employee fact — which still has no profile-column channel (no migration), so an undeclared count reads as no qualifying children, like br_pensao_mensal",
   "salário-maternidade, auxílio-doença and other benefit offsets compensated through payroll: not modelled",
   "RAT/terceiros/FAP without tenant-declared values (br_rat, br_fap, br_terceiros slots): the CNAE risk class and accident history are unknowable to the pack — refused at lookup, never table-supplied",
   "regimes other than standard monthly CLT (aprendiz with 2% FGTS, doméstico, temporário, intermitente, horista/diarista, obra certa): refused via br_regime",

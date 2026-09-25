@@ -131,6 +131,18 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
         { code: "FGTS", name: "FGTS (8%)", systemKey: "fgts", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "external" },
       ],
     },
+    {
+      key: "salario_familia",
+      components: [
+        // Portaria Interministerial MPS/MF nº 13/2026 art. 4º: the quota is
+        // paid to the worker by the employer and compensated against
+        // employer INSS contributions due (eSocial S-1200) — the IT
+        // refundable-credit shape: a worker credit plus the offsetting
+        // employer line on the tax rail, both earnings-assessed.
+        { code: "SF", name: "Salário-família", systemKey: "salario_familia", kind: "credit", sequence: 121, assessedOn: "earnings", remittance: "tax_authority" },
+        { code: "SF-COMP", name: "Salário-família (compensação)", systemKey: "salario_familia_comp", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "tax_authority" },
+      ],
+    },
   ],
   computeStatutory: computeBrStatutory,
   statutoryEngineLabel: "IRRF/INSS",

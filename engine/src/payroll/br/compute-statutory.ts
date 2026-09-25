@@ -8,9 +8,10 @@
  *
  * Pack-owned emp keys (named refusals when absent, never defaulted into a
  * different withholding): br_dependentes (integer ≥ 0, required),
- * br_pensao_mensal (optional decimal, absent = none ordered) and br_regime
- * (optional; present and not "clt" refuses — aprendiz/doméstico/temporário
- * price differently).
+ * br_pensao_mensal (optional decimal, absent = none ordered),
+ * br_salario_familia_filhos (optional count, absent = no qualifying
+ * children) and br_regime (optional; present and not "clt" refuses —
+ * aprendiz/doméstico/temporário price differently).
  *
  * Money enters as engine 4dp decimals and is truncated to centavos at the
  * boundary — the pack's uniform rule (see BR_2026_ROUNDING).
@@ -30,7 +31,7 @@ import { calculateBrInssFromTables } from "./inss-year.ts";
 import { calculateBrIrrfFromTables } from "./irrf-year.ts";
 import { brTablesForPayDate } from "./year-tables.ts";
 import { BR_PACK_RATES } from "./rates.ts";
-import { BR_2026_FGTS, BR_2026_PATRONAL } from "./tax-year-2026.ts";
+import { BR_2026_FGTS, BR_2026_PATRONAL, BR_2026_SALARIO_FAMILIA } from "./tax-year-2026.ts";
 
 function fail(message: string): never {
   throw new PayrollPackError(`BR payroll 2026: ${message}`);
@@ -194,6 +195,35 @@ export async function computeBrStatutoryWithRates(
       pensaoMensal: pensao,
     });
 
+  // 2b. Salário-família (Portaria Interministerial MPS/MF nº 13/2026
+  // art. 4º): R$ 67,54 per qualifying child (<14 or disabled) when the
+  // month's salário-de-contribuição is at most R$ 1.980,38. The employer
+  // pays the quota in payroll and compensates the total against employer
+  // INSS contributions due — hence the benefit credit plus the offsetting
+  // employer line (eSocial S-1200 reports both sides).
+  const sfRaw = empFact("BR", emp, "br_salario_familia_filhos");
+  let sfFilhos = 0;
+  if (sfRaw !== undefined && sfRaw !== null && sfRaw !== "") {
+    const parsed = Number(sfRaw);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      fail(`employee br_salario_familia_filhos "${sfRaw}" is not a non-negative integer`);
+    }
+    sfFilhos = parsed;
+  }
+  let salarioFamilia = 0n;
+  if (sfFilhos > 0) {
+    if (taxYear !== 2026) {
+      fail(
+        `salário-família for tax year ${taxYear} is not transcribed — only the 2026 quota and ceiling `
+        + "(R$ 67,54 / R$ 1.980,38, Portaria 13/2026) are modelled; transcribe the year's Portaria "
+        + "before calculating",
+      );
+    }
+    if (salarioContribuicao <= cents(BR_2026_SALARIO_FAMILIA.limiteRemuneracao, "salário-família limite")) {
+      salarioFamilia = cents(BR_2026_SALARIO_FAMILIA.quota, "salário-família quota") * BigInt(sfFilhos);
+    }
+  }
+
   // 3. Employer cost: patronal 20% (published) + RAT×FAP + terceiros
   // (tenant-declared, refused by name when the lookup finds nothing) +
   // FGTS 8% (employer obligation, never withheld).
@@ -241,6 +271,16 @@ export async function computeBrStatutoryWithRates(
   pushStatutory("inss_rat", "employer_contribution", "RAT × FAP", brl4(ratEr), 211);
   pushStatutory("inss_terceiros", "employer_contribution", "Terceiros", brl4(terceirosEr), 212);
   pushStatutory("fgts", "employer_contribution", "FGTS (8%)", brl4(fgts), 220);
+  if (salarioFamilia > 0n) {
+    pushStatutory("salario_familia", "credit", "Salário-família", brl4(salarioFamilia), 121);
+    pushStatutory(
+      "salario_familia_comp",
+      "employer_contribution",
+      "Salário-família (compensação)",
+      brl4(-salarioFamilia),
+      213,
+    );
+  }
   return {
     BR_RENDIMENTOS: brl4(rendimentos),
     BR_INSS: brl4(centsOf2dp(inss.contribuicao)),
@@ -253,6 +293,8 @@ export async function computeBrStatutoryWithRates(
     BR_RAT: brl4(ratEr),
     BR_TERCEIROS: brl4(terceirosEr),
     BR_FGTS: brl4(fgts),
+    BR_SALARIO_FAMILIA: brl4(salarioFamilia),
+    BR_SALARIO_FAMILIA_COMP: brl4(-salarioFamilia),
   };
 }
 
@@ -273,6 +315,8 @@ export const BR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   BR_RAT: "RAT × FAP",
   BR_TERCEIROS: "Terceiros",
   BR_FGTS: "FGTS (fundo de garantia do tempo de serviço)",
+  BR_SALARIO_FAMILIA: "Salário-família",
+  BR_SALARIO_FAMILIA_COMP: "Salário-família (compensação)",
 };
 
 /** The establishment scope BR rate lookups resolve at: the employee's region

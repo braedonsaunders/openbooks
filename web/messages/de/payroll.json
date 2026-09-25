@@ -876,7 +876,8 @@
         "slots": {
           "irrf": "Verbindlichkeiten aus IRRF (monatlicher Einbehalt auf die Basis nach INSS, Angehörigen und vereinfachtem Abzug)",
           "inss": "Verbindlichkeiten aus INSS (Arbeitnehmerbeitrag plus Arbeitgeberbeiträge: patronal, RAT und terceiros)",
-          "fgts": "Verbindlichkeiten aus FGTS (8 % Arbeitgeberablagen auf den Arbeitnehmerkonten bei Caixa)"
+          "fgts": "Verbindlichkeiten aus FGTS (8 % Arbeitgeberablagen auf den Arbeitnehmerkonten bei Caixa)",
+          "salario_familia": "Verbindlichkeiten aus Salário-família (an Arbeitnehmer gezahlte Quote, mit dem Arbeitgeber-INSS verrechnet)"
         }
       },
       "SG": {

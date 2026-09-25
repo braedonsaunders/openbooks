@@ -229,6 +229,19 @@ test("BR Good Friday is optional until a municipality elects it (Lei 9.093/1995)
   assert.ok(elected.some((holiday) => holiday.key === "paixao" && holiday.date === "2026-04-03" && holiday.elected));
 });
 
+test("BR salário-família pays the 2026 quota per qualifying child under the ceiling", async () => {
+  // Portaria 13/2026 art. 4: R$ 1.900,00 with one qualifying child earns the R$ 67,54 quota.
+  const qualifying = await computeBrStatutoryWithRates(
+    brContext({
+      emp: { br_dependentes: "0", br_salario_familia_filhos: "1" },
+      income: "1900.00",
+      pensionable: "1900.00",
+      insurable: "1900.00",
+    }),
+    RATES,
+  );
+  assert.equal(qualifying["BR_SALARIO_FAMILIA"], "67.5400");
+});
 test("BR rate lookup carries the region, or no saved rate resolves", () => {
   // Every br_* row carries a region (the schema forbids an account-scoped
   // row without one), so the scope the pack hands the resolution must carry

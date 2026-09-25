@@ -876,7 +876,8 @@
         "slots": {
           "irrf": "IRRF应付（扣除INSS、受扶养人和简易扣除后计税基数的月度代扣）",
           "inss": "INSS应付（雇员缴款加雇主缴款：patronal、RAT和terceiros）",
-          "fgts": "FGTS应付（雇主向Caixa工人账户缴存8%）"
+          "fgts": "FGTS应付（雇主向Caixa工人账户缴存8%）",
+          "salario_familia": "Salário-família应付（支付给工人的配额，与雇主INSS相抵）"
         }
       },
       "SG": {
