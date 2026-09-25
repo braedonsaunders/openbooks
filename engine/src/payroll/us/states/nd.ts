@@ -22,6 +22,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
@@ -182,11 +183,44 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "ND", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  // Guideline p. 2 reservation exception: wages paid to an enrolled tribal
+  // member who lives on a reservation are exempt ONLY for services performed
+  // on that reservation. The exemption is wage-scoped, never pay-period-wide:
+  // off-reservation wages withhold normally.
+  const grossWages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = grossWages;
+  const tribalCertificate = input.supportingCertificates?.[ND_TRIBAL_KEY];
+  if (tribalCertificate?.onFile) {
+    const unmet = ND_TRIBAL_FACTS.filter((fact) => !certificateFlag(tribalCertificate, fact.key));
+    if (unmet.length > 0) {
+      throw new PayrollError(
+        "North Dakota reservation exemption requires proof that "
+        + unmet.map((fact) => fact.description).join("; "),
+      );
+    }
+    const reservationStr = certificateAmount(tribalCertificate, "reservation_source_wages");
+    if (reservationStr == null) {
+      throw new PayrollError(
+        "North Dakota reservation exemption needs the reservation-source wages for this period; "
+        + "record where the services were performed before calculating — refused by name",
+      );
+    }
+    const reservationWages = U(reservationStr);
+    if (reservationWages > grossWages) {
+      throw new PayrollError(
+        `North Dakota reservation-source wages of ${D(reservationWages)} exceed this period's `
+        + `wages of ${D(grossWages)}; correct the work-location record before calculating — refused by name`,
+      );
+    }
+    wages = grossWages - reservationWages;
+    trace("ND_TRIBAL_SOURCE_WAGES", reservationWages);
+  }
+
   const legacyW4 = input.federalLegacyW4;
   if (legacyW4) {
     const legacyRates = ND_LEGACY_PERIOD_RATES[period];
     const allowance = U(legacyRates.allowance) * BigInt(legacyW4.allowances);
-    const taxableWages = U(input.wages) + U(input.supplemental ?? "0");
+    const taxableWages = wages;
     const taxableAfterAllowances = taxableWages > allowance ? taxableWages - allowance : 0n;
     const schedule = legacyW4.status === "married" ? legacyRates.married : legacyRates.single;
     const unroundedTax = taxableAfterAllowances <= U(schedule.firstLimit)
@@ -210,7 +244,6 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   // Newly hired with no W-4: "treat as a single person".
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as NdFilingStatus;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
   const annualWages = wages * BigInt(P);
   trace("ND_ANNUAL_WAGES", annualWages);
 
@@ -241,10 +274,25 @@ export const ND_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ND_W4_ALLOWANCE: "North Dakota pre-2020 W-4 allowance amount",
   ND_W4_TAXABLE: "North Dakota wages after pre-2020 W-4 allowances",
   ND_W4_TAX: "North Dakota tax from pre-2020 W-4 method",
+  ND_TRIBAL_SOURCE_WAGES: "North Dakota reservation-source wages exempt this period",
   ND_ANNUAL_WAGES: "North Dakota annualized wages",
   ND_ANNUAL_TAX: "North Dakota tax (annual)",
   ND_WITHHELD: "North Dakota tax withheld this period",
 };
+
+const ND_TRIBAL_KEY = "us_nd_tribal";
+
+/** Eligibility facts for the reservation-source exemption, Guideline p. 2. */
+const ND_TRIBAL_FACTS: readonly { key: string; description: string }[] = [
+  {
+    key: "enrolled_member",
+    description: "the employee is an enrolled member of a federally recognized Indian tribe",
+  },
+  {
+    key: "lives_on_reservation",
+    description: "the employee lives on an Indian reservation",
+  },
+];
 
 export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   state: "ND",
@@ -253,7 +301,7 @@ export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: ND_TAX_YEAR_EDITIONS,
   printedPeriods: ND_PERIODS,
-  supportingCertificateKeys: ["us_nd_ndwm"],
+  supportingCertificateKeys: ["us_nd_ndwm", ND_TRIBAL_KEY],
   taxableWageBases: {
     income: "state:US:ND:income", nonPeriodic: "state:US:ND:nonPeriodic",
   },
@@ -346,6 +394,43 @@ export const ND_NDWM_CERTIFICATE: PayrollCertificate = {
     { key: "servicemember_stationed_in_nd", label: "Spouse's permanent duty station is in North Dakota", kind: "flag", required: true, help: "NDW-M eligibility statement 3." },
     { key: "employee_present_solely_to_accompany", label: "Employee resides and works in North Dakota solely to be with the servicemember", kind: "flag", required: true, help: "NDW-M eligibility statement 4." },
     { key: "dependent_military_id_attached", label: "Copy of employee's dependent military ID card is attached", kind: "flag", required: true, help: "NDW-M instructions require an attached copy of the dependent military ID card." },
+  ],
+};
+
+/**
+ * North Dakota reservation-source wage exemption attestation. The state
+ * publishes no form for it — the employer keeps the eligibility facts with
+ * its records — so only the reservation-source wages for the period are
+ * exempt and every other wage withholds normally.
+ */
+export const ND_TRIBAL_CERTIFICATE: PayrollCertificate = {
+  key: ND_TRIBAL_KEY,
+  form: "(employer-determined)",
+  label: "North Dakota reservation-source wage exemption attestation",
+  scope: { level: "region", region: "ND" },
+  purpose: "exemption",
+  citation:
+    "North Dakota Office of State Tax Commissioner, Income Tax Withholding & "
+    + "Information Returns Guideline, Section 1 p. 2 — wages paid to an enrolled "
+    + "member of a federally recognized Indian tribe who lives on and performs "
+    + "the services on an Indian reservation",
+  summary:
+    "Attests the employee's reservation-exemption eligibility and records the "
+    + "reservation-source wages for the period. Only those wages are exempt; "
+    + "off-reservation wages are withheld normally.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "enrolled_member", label: "Employee is an enrolled member of a federally recognized Indian tribe", kind: "flag", required: true, help: "Guideline eligibility condition 1." },
+    { key: "lives_on_reservation", label: "Employee lives on an Indian reservation", kind: "flag", required: true, help: "Guideline eligibility condition 2." },
+    {
+      key: "reservation_source_wages",
+      label: "Reservation-source wages this pay period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      required: true,
+      help: "Wages for services the employee performed on the reservation this period (guideline condition 3). Off-reservation wages withhold normally.",
+    },
   ],
 };
 

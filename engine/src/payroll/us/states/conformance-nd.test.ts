@@ -12,7 +12,7 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_WITHHOLDING, ndAnnualTax,
+  ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_TRIBAL_CERTIFICATE, ND_WITHHOLDING, ndAnnualTax,
 } from "./nd.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
@@ -118,6 +118,23 @@ test("ND extra withholding is added, exempt is zero, and an unpublished period i
     }),
     /publishes withholding tables/,
   );
+});
+
+test("ND reservation exemption prices only the off-reservation wages", () => {
+  // Guideline p. 2: $2,000 weekly single is $17 on full wages; with $600 of
+  // reservation-source wages attested, the $1,400 remainder withholds $6.
+  const result = ND_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "2000.00",
+    basis: "nonresident", certificate: cert({ filing_status: "single" }),
+    supportingCertificates: {
+      [ND_TRIBAL_CERTIFICATE.key]: resolvedCertificate(ND_TRIBAL_CERTIFICATE, {
+        enrolled_member: "true",
+        lives_on_reservation: "true",
+        reservation_source_wages: "600.00",
+      }),
+    },
+  });
+  assert.equal(result.tax, money("6"));
 });
 
 test("ND refuses a year it has not transcribed", () => {
