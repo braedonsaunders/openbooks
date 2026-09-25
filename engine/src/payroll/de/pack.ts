@@ -210,7 +210,7 @@ const DE_PV_NACHWEIS: PayrollCertificate = {
       key: "kinderlosenzuschlag",
       label: "Beitragszuschlag für Kinderlose",
       kind: "flag",
-      default: "false",
+      required: true,
       help: "Set when the employee is 23 or older with no eligible children "
         + "(§55 Abs. 3 Satz 1 SGB XI): the 0,6-point surcharge applies.",
     },
@@ -220,7 +220,7 @@ const DE_PV_NACHWEIS: PayrollCertificate = {
       kind: "count",
       min: "0",
       max: "4",
-      default: "0",
+      required: true,
       help: "Number of discount children (second to fifth child), 0–4: each "
         + "lowers the employee PV share by 0,25 points (§55 Abs. 3 SGB XI).",
     },

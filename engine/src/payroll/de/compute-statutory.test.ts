@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cmp } from "../../money/money.ts";
+import { resolveCertificate } from "../certificates.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { buildResolution } from "../statutory-rates.ts";
@@ -19,6 +20,7 @@ import {
 } from "./compute-statutory.ts";
 import { computePapLaufend2026 } from "./pap.ts";
 import { DE_PACK_RATES } from "./rates.ts";
+import { DE_PAYROLL_PACK } from "./pack.ts";
 
 type Pushed = { systemKey: string; kind: string; amount: string; sequence: number };
 
@@ -220,15 +222,13 @@ test("no ELStAM on file refuses; blank Steuerklasse refuses, not Klasse I", () =
   );
 });
 
-test("missing PV Kindernachweis refuses — never silent childlessness", () => {
-  const { ctx } = fakeCtx({ pv: null });
+test("blank PV child facts cannot inherit synthesized childless defaults", () => {
+  const certificate = DE_PAYROLL_PACK.certificates().certificates.find((entry) => entry.key === "de_pv_nachweis")!;
+  const resolved = resolveCertificate({ certificate, stored: [{ certificateKey: certificate.key, answers: {}, effectiveFrom: "2026-01-01" }] });
+  const { ctx } = fakeCtx({ pv: resolved.answers });
   assert.throws(
     () => computeDeStatutoryWithRates(ctx, { kvz: 2.9 }),
-    (error: unknown) => {
-      assert.ok(error instanceof DePayrollRefusal);
-      assert.match((error as Error).message, /de_pv_nachweis/);
-      return true;
-    },
+    /de_pv_nachweis/,
   );
 });
 
