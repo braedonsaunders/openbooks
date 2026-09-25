@@ -116,7 +116,10 @@ test("payroll variance uses primary-book residue and preserves secondary-book va
   }
 });
 
-for (const policy of ["missing", "inactive", "non-posting", "ambiguous"] as const) {
+// No "ambiguous" leg: migration 0345 enforces one primary per org with a
+// partial unique index, so a second primary cannot be represented even in
+// fixture setup — that refusal is pinned by fixed-asset-primary-book.
+for (const policy of ["missing", "inactive", "non-posting"] as const) {
   test(`labor reconciliation and variance reject ${policy} primary-book authority`, { skip: !enabled }, async () => {
     const org = await createScratchOrg();
     try {
@@ -124,8 +127,6 @@ for (const policy of ["missing", "inactive", "non-posting", "ambiguous"] as cons
       if (policy === "missing") await db.execute(sql`update accounting_books set is_primary=false where id=${org.bookId}`);
       if (policy === "inactive") await db.execute(sql`update accounting_books set is_active=false where id=${org.bookId}`);
       if (policy === "non-posting") await db.execute(sql`update accounting_books set posts_gl=false where id=${org.bookId}`);
-      if (policy === "ambiguous") await db.execute(sql`insert into accounting_books (org_id, code, name, is_primary, is_active, posts_gl)
-        values (${org.orgId}, 'OTHER', 'Other primary', true, true, true)`);
       await assert.rejects(() => laborClearingReconciliation(org.orgId, periodStart, periodEnd, org.subsidiaryId), /exactly one active posting primary GL book/);
       await assert.rejects(() => postPayrollVariance({ orgId: org.orgId, actorId, periodStart, periodEnd, subsidiaryId: org.subsidiaryId }), /exactly one active posting primary GL book/);
       const entries = (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0];

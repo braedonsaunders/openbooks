@@ -195,7 +195,10 @@ for (const scenario of ["parallel-book", "secondary-open-book", "other-entity", 
   });
 }
 
-for (const policy of ["missing", "inactive", "non-posting", "ambiguous"] as const) {
+// No "ambiguous" leg: migration 0345 enforces one primary per org with a
+// partial unique index, so a second primary cannot be represented even under
+// the migration flag — that refusal is pinned by fixed-asset-primary-book.
+for (const policy of ["missing", "inactive", "non-posting"] as const) {
   test(`CAM refuses ${policy} primary-book authority before allocating`, { skip: !DB }, async () => {
     const fixture = await seedCamProperty();
     try {
@@ -214,8 +217,6 @@ for (const policy of ["missing", "inactive", "non-posting", "ambiguous"] as cons
         if (policy === "missing") await tx.execute(sql`update accounting_books set is_primary=false where org_id=${fixture.org.orgId}`);
         if (policy === "inactive") await tx.execute(sql`update accounting_books set is_active=false where org_id=${fixture.org.orgId}`);
         if (policy === "non-posting") await tx.execute(sql`update accounting_books set posts_gl=false where org_id=${fixture.org.orgId}`);
-        if (policy === "ambiguous") await tx.execute(sql`insert into accounting_books(org_id,code,name,is_primary,is_active,posts_gl)
-          values(${fixture.org.orgId},'CAM-AMBIGUOUS','Ambiguous primary',true,true,true)`);
       });
       await assert.rejects(() => finalizeCamPool(fixture.org.orgId, actor, null, created.id), /CAM.*exactly one active primary posting book/u);
       const row = (await db.execute<{ status: string; actual: string | null; allocations: number }>(sql`
@@ -235,7 +236,6 @@ for (const policy of ["missing", "inactive", "non-posting", "ambiguous"] as cons
         if (policy === "missing") await tx.execute(sql`update accounting_books set is_primary=true where org_id=${fixture.org.orgId} and id=${fixture.org.bookId}`);
         if (policy === "inactive") await tx.execute(sql`update accounting_books set is_active=true where org_id=${fixture.org.orgId}`);
         if (policy === "non-posting") await tx.execute(sql`update accounting_books set posts_gl=true where org_id=${fixture.org.orgId}`);
-        if (policy === "ambiguous") await tx.execute(sql`delete from accounting_books where org_id=${fixture.org.orgId} and code='CAM-AMBIGUOUS'`);
       }));
       await dropScratchOrg(fixture.org.orgId);
     }
