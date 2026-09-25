@@ -10,6 +10,8 @@ import {
   Textarea,
 } from "@openbooks/ui";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { useDirtyClose } from "@/lib/use-dirty-close";
 type Event = {
   id: string;
   date: string;
@@ -22,6 +24,7 @@ type Event = {
 /** Same native stacked drawer as the asset change workpaper. */
 export function GroupValuationButton({ assetId }: { assetId: string }) {
   const router = useRouter();
+  const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [events, setEvents] = useState<Event[]>([]),
@@ -33,7 +36,23 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
     [plan, setPlan] = useState<{ date: string; amount: string }[]>([]),
     [key, setKey] = useState(() => crypto.randomUUID());
   const event = events.find((e) => e.id === eventId);
-  const changed = () => setKey(crypto.randomUUID());
+  const [dirty, setDirty] = useState(false);
+  const changed = () => { setDirty(true); setKey(crypto.randomUUID()); };
+  const closeDrawer = () => {
+    setOpen(false);
+    setEventId("");
+    setCarrying("");
+    setRate("");
+    setAssessment("");
+    setReason("");
+    setPlan([]);
+    setDirty(false);
+    setKey(crypto.randomUUID());
+  };
+  const closeGuard = useDirtyClose({
+    dirty, busy, onClose: closeDrawer,
+    message: tCommon("feedback.unsavedChanges"), confirmLabel: tCommon("confirm.discardChanges"),
+  });
   async function show() {
     setBusy(true);
     try {
@@ -99,12 +118,12 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
       </Button>
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeGuard.close}
         title="Group asset valuation"
         size="lg"
         stacked
       >
-        <div className="space-y-4 p-4">
+        <fieldset disabled={busy} className="min-w-0 space-y-4 p-4">
           <p>
             Assess group recoverability independently from the receiving
             company&apos;s valuation. Approval preserves prior depreciation and
@@ -214,7 +233,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
           <Button onClick={submit} disabled={busy || !event}>
             Create approval proposal
           </Button>
-        </div>
+        </fieldset>
       </Drawer>
     </>
   );
