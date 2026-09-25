@@ -66,18 +66,21 @@ test("BR pack exists as an installable 2026 pack in reais on a calendar year", (
   assert.equal(BR_PAYROLL_PACK.jurisdictions[0]?.holidayPay, null);
 });
 
-test("BR slots name IRRF, INSS and FGTS; every pushed key declared", () => {
+test("BR slots name IRRF, INSS, FGTS and salário-família; every pushed key declared", () => {
   const keys = BR_PAYROLL_PACK.statutorySlots.map((slot) => slot.key);
-  assert.deepEqual(keys, ["irrf", "inss", "fgts"]);
+  assert.deepEqual(keys, ["irrf", "inss", "fgts", "salario_familia"]);
   const systems = BR_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
     slot.components.map((component) => component.systemKey));
-  // Exactly the six keys compute-statutory.ts pushes. The engine pushes
+  // Exactly the eight keys compute-statutory.ts pushes. The engine pushes
   // inss_patronal, never employer-side inss, hence the distinct key — and
   // FGTS rides its own slot because it settles at the Caixa, not with tax.
+  // Salário-família rides its own slot as the worker credit plus the
+  // employer compensation, both on the tax rail.
   assert.deepEqual(systems, [
     "irrf",
     "inss", "inss_patronal", "inss_rat", "inss_terceiros",
     "fgts",
+    "salario_familia", "salario_familia_comp",
   ]);
   const bySystem = new Map(
     BR_PAYROLL_PACK.statutorySlots.flatMap((slot) => slot.components.map((c) => [c.systemKey, c])),
