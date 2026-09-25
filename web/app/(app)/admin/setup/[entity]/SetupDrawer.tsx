@@ -19,6 +19,7 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { setupFieldOptions, setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
+import { confirmDialog } from '../../../../../lib/confirm'
 import { SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { countryOptions } from '../../../../../lib/countries'
@@ -120,6 +121,9 @@ export function SetupDrawer({
     for (const f of entity.fields) init[f.key] = f.kind === 'multiref' ? members : initialValue(f, row)
     return { ...init, ...initialValues, ...fixedValues }
   })
+  // The pristine form: `set` always replaces the object, so the
+  // first-render value stays a valid dirtiness baseline for the close guard.
+  const [initialForm] = useState(form)
   const [busy, setBusy] = useState(false)
   const [officialBusy, setOfficialBusy] = useState(false)
   // One idempotency key per mounted create session (POST /api/accounts
@@ -301,11 +305,25 @@ export function SetupDrawer({
     return tCommon('feedback.saveFailed')
   }
 
+  // Unsaved setup edits never close silently: every UrlDrawer close path
+  // (Escape, backdrop, X) asks first. An in-flight save or official-PDF
+  // upload cannot be dismissed, even with a discard confirmation.
+  async function confirmDiscard() {
+    if (busy || officialBusy) return false
+    if (JSON.stringify(form) === JSON.stringify(initialForm)) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
   return (
     <UrlDrawer
       open
       closeHref={closeHref}
       size="lg"
+      beforeClose={confirmDiscard}
       stacked={stacked}
       title={creating ? t('drawer.newTitle', { name: entityTitle }) : t('drawer.editTitle', { name: entityTitle })}
       subtabs={!creating && nestedTab ? (
