@@ -139,13 +139,16 @@ export async function loadDocumentsHome(
       : null
   const generating = sp.generate === '1' && authz.canManage
   const documentId = typeof sp.document === 'string' && sp.document.length > 0 ? sp.document : null
+  const unrestrictedStats = authz.session.allowedSubsidiaryIds === null
 
   const [documents, counts, categories, templates] = await Promise.all([
     listDocuments({ orgId: authz.orgId, actorId: authz.userId, ...(status ? { status } : {}) }),
-    db.execute<{ status: string; count: string }>(sql`
-      select status, count(*)::text as count from hrm_documents
-       where org_id = ${authz.orgId}::uuid and status != 'deleted'
-       group by status`),
+    unrestrictedStats
+      ? db.execute<{ status: string; count: string }>(sql`
+          select status, count(*)::text as count from hrm_documents
+           where org_id = ${authz.orgId}::uuid and status != 'deleted'
+           group by status`)
+      : Promise.resolve({ rows: [] as { status: string; count: string }[] }),
     listCategories({ orgId: authz.orgId, actorId: authz.userId }),
     authz.canManage
       ? listTemplates({ orgId: authz.orgId, actorId: authz.userId })
@@ -158,24 +161,24 @@ export async function loadDocumentsHome(
   const statusLabel = (value: string): string => t(`documents.status.${value}`)
   const countBy = new Map(counts.rows.map((r) => [r.status, Number(r.count)]))
   const awaiting = (countBy.get('sent') ?? 0) + (countBy.get('viewed') ?? 0) + (countBy.get('partially_signed') ?? 0)
-  const expiringRows = (await db.execute<{ count: string }>(sql`
+  const expiringRows = unrestrictedStats ? (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_documents
      where org_id = ${authz.orgId}::uuid and status in ('sent', 'viewed', 'partially_signed')
-       and expires_at is not null and expires_at < now() + interval '14 days'`)).rows[0]
-  const retentionRows = (await db.execute<{ count: string }>(sql`
+       and expires_at is not null and expires_at < now() + interval '14 days'`)).rows[0] : undefined
+  const retentionRows = unrestrictedStats ? (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_retention_actions
-     where org_id = ${authz.orgId}::uuid and executed_at is null`)).rows[0]
+     where org_id = ${authz.orgId}::uuid and executed_at is null`)).rows[0] : undefined
   // Queued AND building: a claimed export is still pending from the
   // operator's view — counting queued alone would hide in-flight builds.
-  const exportRows = (await db.execute<{ count: string }>(sql`
+  const exportRows = unrestrictedStats ? (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_data_subject_exports
-     where org_id = ${authz.orgId}::uuid and status in ('queued', 'building')`)).rows[0]
+     where org_id = ${authz.orgId}::uuid and status in ('queued', 'building')`)).rows[0] : undefined
 
   const tiles: DocumentTile[] = [
-    { iconKey: 'pen-line', accent: 'amber', label: t('documents.tiles.awaiting'), value: String(awaiting), tone: awaiting > 0 ? 'warning' : 'default' },
-    { iconKey: 'alarm-clock', accent: 'red', label: t('documents.tiles.expiring'), value: expiringRows?.count ?? '0', tone: Number(expiringRows?.count ?? 0) > 0 ? 'negative' : 'default' },
-    { iconKey: 'archive', accent: 'slate', label: t('documents.tiles.retentionDue'), value: retentionRows?.count ?? '0', tone: 'default' },
-    { iconKey: 'package-open', accent: 'blue', label: t('documents.tiles.exportsPending'), value: exportRows?.count ?? '0', tone: 'default' },
+    { iconKey: 'pen-line', accent: 'amber', label: t('documents.tiles.awaiting'), value: unrestrictedStats ? String(awaiting) : '—', tone: unrestrictedStats && awaiting > 0 ? 'warning' : 'default' },
+    { iconKey: 'alarm-clock', accent: 'red', label: t('documents.tiles.expiring'), value: unrestrictedStats ? (expiringRows?.count ?? '0') : '—', tone: Number(expiringRows?.count ?? 0) > 0 ? 'negative' : 'default' },
+    { iconKey: 'archive', accent: 'slate', label: t('documents.tiles.retentionDue'), value: unrestrictedStats ? (retentionRows?.count ?? '0') : '—', tone: 'default' },
+    { iconKey: 'package-open', accent: 'blue', label: t('documents.tiles.exportsPending'), value: unrestrictedStats ? (exportRows?.count ?? '0') : '—', tone: 'default' },
   ]
 
   const rows: DocumentRow[] = documents.map((doc) => ({
