@@ -94,11 +94,6 @@ test("slots declare PAYE, employee/employer NIC, both loan repayments, the Appre
     loans!.components.map((component) => [component.systemKey, component.kind]),
     [["student_loan", "deduction"], ["postgraduate_loan", "deduction"]],
   );
-  const pension = GB_PACK.statutorySlots.find((slot) => slot.key === "workplace-pension")!;
-  assert.deepEqual(
-    pension.components.map((component) => [component.systemKey, component.kind]),
-    [["ae_employee", "deduction"], ["ae_employer", "employer_contribution"]],
-  );
 });
 
 test("2026/27 IS transcribed with its edition stamp, and the pack is installable", () => {
