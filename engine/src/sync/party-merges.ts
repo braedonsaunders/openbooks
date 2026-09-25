@@ -408,6 +408,20 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     conflict: "s.org_id = d.org_id",
   },
   // HR-20 end
+  {
+    // 0375: separation events carry a partial one-open-per-employee unique
+    // (org, employee) over draft/confirmed rows — the table's constrained
+    // key minus the party being merged, partial predicate restated so only
+    // rows the index actually constrains can conflict. An absorbed open
+    // event moves only when the survivor holds none; the conflicting row
+    // stays on the absorbed party, never folded into the survivor's
+    // separation. Closed (issued/cancelled) events move freely.
+    table: "payroll_roe_separation_events",
+    column: "employee_party_id",
+    conflict:
+      "s.org_id = d.org_id and s.status in ('draft', 'confirmed')" +
+      " and d.status in ('draft', 'confirmed')",
+  },
 ];
 
 type PartyRow = {
