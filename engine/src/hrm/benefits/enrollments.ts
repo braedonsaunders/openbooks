@@ -173,6 +173,23 @@ interface EntryCheck {
   readonly lifeEvent: boolean;
 }
 
+async function lockEnrollmentWindowAdmission(
+  exec: SqlExecutor,
+  orgId: string,
+  windowId: string,
+): Promise<void> {
+  requireOneRow(
+    (
+      await exec.execute<{ id: string }>(sql`
+        select id from hrm_enrollment_windows
+         where org_id = ${orgId} and id = ${windowId}
+         for share
+      `)
+    ).rows,
+    "enrollment window",
+  );
+}
+
 async function liveDepartmentIds(
   exec: SqlExecutor,
   orgId: string,
@@ -211,6 +228,7 @@ async function checkEntry(
                  applies_to as "appliesTo", name
             from hrm_enrollment_windows
            where org_id = ${orgId} and id = ${windowId}
+           for share
         `)
       ).rows,
       "enrollment window",
@@ -390,6 +408,7 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
       : null;
   const coverageLevelKey = query.coverageLevelKey ?? null;
   return withOrgTransaction(orgId, async () => {
+    if (windowId !== null) await lockEnrollmentWindowAdmission(db, orgId, windowId);
     const subject = query.selfRequest
       ? await requireOwnEmploymentForBenefitsSelf(db, orgId, actorId, employmentId)
       : query.selfService
@@ -462,6 +481,7 @@ export async function waiveEnrollment(query: WaiveEnrollmentQuery): Promise<Enro
   }
   const windowId = query.windowId ?? null;
   return withOrgTransaction(orgId, async () => {
+    if (windowId !== null) await lockEnrollmentWindowAdmission(db, orgId, windowId);
     const subject = query.selfService
       ? await requireOwnEmploymentForBenefits(db, orgId, actorId, employmentId)
       : await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
