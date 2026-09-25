@@ -719,8 +719,16 @@ async function addTicketLineUnlocked(
   } catch (error) {
     throw new FieldTicketError(error instanceof Error ? error.message : 'Could not resolve item rate')
   }
-  const costAmount = resolved?.cost.amount ?? mul(quantity, String(item.rows[0].default_cost ?? '0'))
-  const billAmount = resolved?.bill.amount ?? mul(quantity, String(item.rows[0].default_rate ?? item.rows[0].default_cost ?? '0'))
+  // The write boundary repeats the preview's refusal: absent pricing is not
+  // a zero price, and a line that reaches here past a swallowed preview
+  // error must never persist a billable zero. Explicit stored zeros pass.
+  const defaultRate = item.rows[0].default_rate
+  const defaultCost = item.rows[0].default_cost
+  if (!resolved && defaultRate == null && defaultCost == null) {
+    throw new FieldTicketError(`No price for ${item.rows[0].name} on ${doc.fieldTicket.periodEnd}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.`)
+  }
+  const costAmount = resolved?.cost.amount ?? mul(quantity, String(defaultCost ?? '0'))
+  const billAmount = resolved?.bill.amount ?? mul(quantity, String(defaultRate ?? defaultCost ?? '0'))
   // A zero-quantity ticket line has no unit rate to derive; dividing by it
   // raised an FX-rate error for what is really an empty quantity.
   const costRate = isZero(quantity) ? '0.0000' : div(costAmount, quantity)

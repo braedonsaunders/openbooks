@@ -1437,7 +1437,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
               size="sm"
               variant="outline"
               className="mt-2"
-              disabled={busy || lineRateLoading || lineRate === '' || !Number.isInteger(Number(lineQty)) || Number(lineQty) < 1 || (lineRateUnits.length > 0 && !lineRateUnit)}
+              disabled={busy || lineRateLoading || lineRateError !== null || lineRate === '' || !Number.isInteger(Number(lineQty)) || Number(lineQty) < 1 || (lineRateUnits.length > 0 && !lineRateUnit)}
               onClick={() => void addItemLine()}
             >
               <Plus size={14} /> {t('editor.lines.add')}
