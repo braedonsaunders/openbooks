@@ -12,7 +12,8 @@
     "pie": "Circular",
     "empty": {
       "noData": "No hay datos para esta consulta.",
-      "pickFields": "Elija una dimensión y al menos una medida para graficar esto."
+      "pickFields": "Elija una dimensión y al menos una medida para graficar esto.",
+      "unsupportedMoneyPrecision": "Este gráfico no puede conservar la precisión de estos importes. Consulte los resultados en una tabla."
     },
     "noRows": "No hay filas.",
     "values": {
