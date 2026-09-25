@@ -33,11 +33,14 @@ test("AR printed percents, midrange lookup, and dollar rounding", () => {
   // Worked example: $23,054 → midrange of $23,000 and $23,100 = $23,050.
   assert.equal(arMidrangeLookup(U("23054"), AR_RATES_2026), U("23050"));
   assert.equal(arMidrangeLookup(U("23000"), AR_RATES_2026), U("23050"));
-  assert.equal(arMidrangeLookup(U("97801"), AR_RATES_2026), U("97801"));
+  // DFA Step 2: below $100,001 use the $50 midrange; $100,001 and over is exact.
+  assert.equal(arMidrangeLookup(U("100000"), AR_RATES_2026), U("100050"));
+  assert.equal(arMidrangeLookup(U("100001"), AR_RATES_2026), U("100001"));
   // $23,050 × 3.4% − $287.97 = $495.73, rounded to $496.00.
   assert.equal(D(mulRateCents(U("23050"), pctToRate("3.4")) - U("287.97")), money("495.73"));
   assert.equal(arRoundToDollar(U("495.73")), U("496"));
-  assert.equal(arAnnualGrossTax(U("97815.26"), AR_RATES_2026), U("3539"));
+  // $97,815.26 → midrange $97,850 → 3.7% − $79.90 = $3,540.55 → $3,541.
+  assert.equal(arAnnualGrossTax(U("97815.26"), AR_RATES_2026), U("3541"));
   assert.equal(arAnnualGrossTax(U("23054"), AR_RATES_2026), U("496"));
   assert.equal(arAnnualGrossTax(U("50000"), AR_RATES_2026), U("1485"));
   // Act 2 adjustment for $96,001–$96,100 is $160.00.
@@ -75,12 +78,12 @@ test("AR no AR4EC withholds at zero exemptions", () => {
   assert.equal(empty.tax, zero.tax);
   assert.equal(empty.factors.AR_PERSONAL_CREDITS, money("0"));
   assert.equal(empty.tax, money("41.33"));
-  // NFC low-income credit: $16,000 single → gross $173 (13550 × 3.4% − 287.97)
-  // minus $58.72 credit = $114.28 for the year.
+  // NFC low-income credit: $16,000 single → gross $183 (13550 × 3% − 223.97)
+  // minus $58.72 credit = $124.28 for the year (zero exemptions, so no $29 credits).
   assert.equal(AR_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 1, wages: "16000",
     basis: "resident", certificate: cert({ low_income: "true", filing_status: "single" }),
-  }).tax, money("114.28"));
+  }).tax, money("124.28"));
 });
 
 test("AR exempt is zero and a year it has not transcribed is refused", () => {
