@@ -43,7 +43,6 @@ import {
 } from "lucide-react";
 import {
   PERIOD_PRESETS,
-  PERIOD_PRESET_GROUP_LABELS,
 } from "@openbooks/reports";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
@@ -397,10 +396,19 @@ const BREAKOUT_DIMENSIONS = ["none", "department", "location", "class", "project
 
 /** Period presets (~50) plus a leading token that follows whatever period is
  * being closed, and a trailing custom range. */
-function periodOptions(closeLabel: string, customLabel: string): Option[] {
+function periodOptions(
+  closeLabel: string,
+  customLabel: string,
+  presetLabel: (id: string) => string,
+  groupLabel: (group: string) => string,
+): Option[] {
   return [
     { value: "$close", label: closeLabel },
-    ...PERIOD_PRESETS.map((preset) => ({ value: preset.id, label: preset.label, group: PERIOD_PRESET_GROUP_LABELS[preset.group] })),
+    ...PERIOD_PRESETS.map((preset) => ({
+      value: preset.id,
+      label: presetLabel(preset.id),
+      group: groupLabel(preset.group),
+    })),
     { value: "custom", label: customLabel },
   ];
 }
@@ -684,6 +692,7 @@ function ReportDescriptorSummary({ descriptor }: { descriptor: ReportDescriptor 
  * editable date-range / break-out / dimension-filter overrides for delivery. */
 function ReportAttachmentCard({ attachment, meta, props, onChange, onRemove }: { attachment: ReportAttachment; meta?: ReportDefEntry; props: Props; onChange: (patch: Partial<ReportAttachment>) => void; onRemove: () => void }) {
   const t = useTranslations("close.setup");
+  const tPeriods = useTranslations("reports");
   const [open, setOpen] = useState(false);
   const name = meta?.name ?? (((t)).has(`reports.${attachment.slug}`) ? t(`reports.${attachment.slug}`) : attachment.slug);
   const descriptor = meta?.descriptor ?? { dateRange: null, breakouts: [], filters: [], measures: [] };
@@ -702,7 +711,7 @@ function ReportAttachmentCard({ attachment, meta, props, onChange, onRemove }: {
     {open ? <div className="space-y-3 border-t border-slate-200 p-3 dark:border-slate-800">
       <ReportDescriptorSummary descriptor={descriptor} />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t("reportParams.dateRange")}><SearchSelect value={period} onChange={(value) => onChange({ period: value })} options={periodOptions(t("reportParams.closePeriod"), t("reportParams.custom"))} searchable ariaLabel={t("reportParams.dateRange")} /></Field>
+        <Field label={t("reportParams.dateRange")}><SearchSelect value={period} onChange={(value) => onChange({ period: value })} options={periodOptions(t("reportParams.closePeriod"), t("reportParams.custom"), (id) => tPeriods(`periodPresets.${id}` as never), (group) => tPeriods(`periodPresetGroups.${group}` as never))} searchable ariaLabel={t("reportParams.dateRange")} /></Field>
         <Field label={t("reportParams.breakout")}><Select value={attachment.breakout ?? "none"} onChange={(event) => onChange({ breakout: event.target.value })}>{BREAKOUT_DIMENSIONS.map((value) => <option key={value} value={value}>{t(`reportParams.breakouts.${value}`)}</option>)}</Select></Field>
       </div>
       {period === "custom" ? <div className="grid gap-3 sm:grid-cols-2"><Field label={t("reportParams.from")}><Input type="date" value={attachment.from ?? ""} onChange={(event) => onChange({ from: event.target.value })} /></Field><Field label={t("reportParams.to")}><Input type="date" value={attachment.to ?? ""} onChange={(event) => onChange({ to: event.target.value })} /></Field></div> : null}
