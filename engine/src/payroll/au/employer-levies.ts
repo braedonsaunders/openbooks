@@ -1,4 +1,5 @@
 import { fromUnits, roundDiv, sum, toUnits } from "../../money/money.ts";
+import type { Money } from "../../money/brands.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type {
@@ -52,11 +53,12 @@ function rateUnits(rate: string): bigint {
  * then to cents double-rounds products whose fourth decimal sits on a
  * half-cent boundary.
  */
+// Both legs are fromUnits-fixed: canonical Money.
 export function assessAuWorkersComp(
   gross: string,
   rate: string,
   pensionable: string,
-): { amount: string; assessable: string } {
+): { amount: Money; assessable: Money } {
   const units = rateUnits(rate);
   if (units > RATE_SCALE) {
     throw new PayrollPackError(
@@ -76,8 +78,8 @@ export function assessAuWorkersComp(
   const assessableUnits = earnings + superCents * CENTS_PER_UNIT;
   const cents = roundDiv(assessableUnits * units, RATE_SCALE * CENTS_PER_UNIT);
   return {
-    amount: fromUnits(cents * CENTS_PER_UNIT),
-    assessable: fromUnits(assessableUnits),
+    amount: fromUnits(cents * CENTS_PER_UNIT) as Money,
+    assessable: fromUnits(assessableUnits) as Money,
   };
 }
 
