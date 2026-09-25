@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -42,10 +43,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount })
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if (e instanceof InvoiceBackupImmutableError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof InvoiceBackupImmutableError) return apiErrorResponse(e, { safeStatus: 422 })
     const rendererRefusal = rendererUnavailableResponse(e)
     if (rendererRefusal) return rendererRefusal
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    return apiErrorResponse(e)
   }
 }
 
