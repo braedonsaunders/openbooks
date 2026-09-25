@@ -660,6 +660,7 @@
       "timeToFill": "Délai de pourvoi",
       "days": "jours",
       "missing": "Ce dossier n'est plus visible.",
+      "loadFailed": "Cet enregistrement n'a pas pu être chargé. Réessayez.",
       "description": "Description"
     },
     "create": {

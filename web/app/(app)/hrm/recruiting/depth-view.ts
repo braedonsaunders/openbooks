@@ -27,7 +27,21 @@ import {
   scorecardSummary,
 } from '@openbooks/engine/src/hrm/recruiting/scorecards.ts'
 import { listCandidateConsents } from '@openbooks/engine/src/hrm/recruiting/retention.ts'
+import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
+import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+
+/**
+ * Drawer absence vs failure, shared with the openings loader: a typed
+ * NOT_FOUND or a scope refusal means the record is not visible — the
+ * drawer reports the uniform absence (never confirming existence).
+ * Anything else (integrity refusals, outages, corrupt reads) propagates
+ * to the drawer's load error with a retry, never "no longer exists".
+ */
+export function isRecruitingAbsence(error: unknown): boolean {
+  if (error instanceof HrmAuthorizationError) return true
+  return error instanceof RecruitingError && error.code === 'NOT_FOUND'
+}
 import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
 import { sql } from 'drizzle-orm'
 import { can, type Authz } from '../../../../lib/authz'
@@ -393,7 +407,8 @@ export async function loadInterviewDrawer(
         reason: t('recruiting.depth.reason'),
       },
     }
-  } catch {
+  } catch (error) {
+    if (!isRecruitingAbsence(error)) throw error
     return null
   }
 }
@@ -445,7 +460,8 @@ export async function loadOfferDrawerExtra(
         reason: t('recruiting.depth.reason'),
       },
     }
-  } catch {
+  } catch (error) {
+    if (!isRecruitingAbsence(error)) throw error
     return null
   }
 }
@@ -490,7 +506,8 @@ export async function loadPostingDrawerExtra(
         failed: t('recruiting.depth.failed'),
       },
     }
-  } catch {
+  } catch (error) {
+    if (!isRecruitingAbsence(error)) throw error
     return null
   }
 }
@@ -530,7 +547,8 @@ export async function loadPoolDrawer(authz: Authz, t: T, poolId: string): Promis
         remove: t('recruiting.depth.remove'),
       },
     }
-  } catch {
+  } catch (error) {
+    if (!isRecruitingAbsence(error)) throw error
     return null
   }
 }

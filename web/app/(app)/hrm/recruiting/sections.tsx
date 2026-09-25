@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { RecruitingCreateForm } from './RecruitingCreateForm'
 import {
@@ -728,6 +729,18 @@ export function RecruitingDrawer({
         <PostingDrawerBody posting={drawer.postingExtra.posting} extra={drawer.postingExtra} />
       ) : drawer.pool ? (
         <PoolDrawerBody detail={drawer.pool} />
+      ) : drawer.detailError ? (
+        <div className="space-y-3">
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {drawer.detailError.message}
+          </p>
+          <Link
+            href={drawer.detailError.retryHref}
+            className="inline-flex items-center rounded-md bg-teal-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-600"
+          >
+            {drawer.detailError.retryLabel}
+          </Link>
+        </div>
       ) : drawer.missingDetail ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
       ) : null}

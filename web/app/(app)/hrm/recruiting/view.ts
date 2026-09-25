@@ -60,6 +60,8 @@ import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from
 import { drawerTitleKind } from './drawer-title'
 import {
   depthTabOptions,
+  hrefForDepth,
+  isRecruitingAbsence,
   loadInterviewDrawer,
   loadInterviewsTab,
   loadConsentStatus,
@@ -167,6 +169,12 @@ export interface RecruitingPageData {
     pool: PoolDrawer | null
     consents: ConsentStatus | null
     missingDetail: string | null
+    /**
+     * Drawer load failure (anything but a typed absence or scope
+     * refusal): the message with a retry link back to the same drawer —
+     * never the uniform "no longer exists".
+     */
+    detailError: { message: string; retryHref: string; retryLabel: string } | null
     create?: RecruitingCreateProps | null
   } | null
 }
@@ -404,6 +412,12 @@ export async function loadRecruitingPage(
   let candidate: CandidateDrawerData | null = null
   let offer: OfferDrawerData | null = null
   let missingDetail: string | null = null
+  let detailError: NonNullable<NonNullable<RecruitingPageData['drawer']>['detailError']> | null = null
+  const drawerLoadError = (retryHref: string) => ({
+    message: t('recruiting.drawer.loadFailed'),
+    retryHref,
+    retryLabel: tc('actions.retry'),
+  })
   // HR-21: one shared "Draft from evidence" label for both draft hosts;
   // null while hrmDrafting is off hides both buttons.
   const draftLabel = await loadAiDraftButton(authz.user.orgId)
@@ -539,8 +553,16 @@ export async function loadRecruitingPage(
           basisOptions: ['hourly', 'annual'].map((value) => ({ value, label: t(`recruiting.basis.${value}`) })),
           candidateOptions: [],
         }
-    } catch {
-      missingDetail = t('recruiting.drawer.missing')
+    } catch (error) {
+      // A typed absence or scope refusal reads as "no longer visible"
+      // (never confirming existence); anything else — including the
+      // employer-integrity refusal above — is a load failure with a
+      // retry back to the same drawer.
+      if (isRecruitingAbsence(error)) {
+        missingDetail = t('recruiting.drawer.missing')
+      } else {
+        detailError = drawerLoadError(recruitingHref(preservedParams, { requisition: requisitionId }))
+      }
     }
   } else if (candidateId) {
     try {
@@ -572,8 +594,12 @@ export async function loadRecruitingPage(
           failed: t('recruiting.interview.failed'),
         },
       }
-    } catch {
-      missingDetail = t('recruiting.drawer.missing')
+    } catch (error) {
+      if (isRecruitingAbsence(error)) {
+        missingDetail = t('recruiting.drawer.missing')
+      } else {
+        detailError = drawerLoadError(recruitingHref(preservedParams, { candidate: candidateId }))
+      }
     }
   } else if (offerId) {
     try {
@@ -608,8 +634,12 @@ export async function loadRecruitingPage(
           failed: t('recruiting.offerActions.failed'),
         },
       }
-    } catch {
-      missingDetail = t('recruiting.drawer.missing')
+    } catch (error) {
+      if (isRecruitingAbsence(error)) {
+        missingDetail = t('recruiting.drawer.missing')
+      } else {
+        detailError = drawerLoadError(recruitingHref(preservedParams, { offer: offerId }))
+      }
     }
   }
 
@@ -626,19 +656,46 @@ export async function loadRecruitingPage(
   let pool: PoolDrawer | null = null
   let consents: ConsentStatus | null = null
   if (interviewParam && !requisitionId && !candidateId && !offerId) {
-    interview = await loadInterviewDrawer(authz, t, tab, interviewParam)
-    if (!interview) missingDetail = t('recruiting.drawer.missing')
+    try {
+      interview = await loadInterviewDrawer(authz, t, tab, interviewParam)
+    } catch (error) {
+      // The depth loaders return null on typed absence and throw on
+      // anything else: absence reads as "no longer visible", failures
+      // as a load error with a retry back to the same drawer.
+      if (!isRecruitingAbsence(error)) {
+        detailError = drawerLoadError(hrefForDepth(tab, { interview: interviewParam }))
+      }
+    }
+    if (!interview && !detailError) missingDetail = t('recruiting.drawer.missing')
   }
   if (offer && offerId) {
-    offerExtra = await loadOfferDrawerExtra(authz, t, offerId)
+    try {
+      offerExtra = await loadOfferDrawerExtra(authz, t, offerId)
+    } catch (error) {
+      if (!isRecruitingAbsence(error)) {
+        detailError = drawerLoadError(hrefForDepth(tab, { offer: offerId }))
+      }
+    }
   }
   if (postingParam && !requisitionId && !candidateId && !offerId && !interviewParam) {
-    postingExtra = await loadPostingDrawerExtra(authz, t, postingParam)
-    if (!postingExtra) missingDetail = t('recruiting.drawer.missing')
+    try {
+      postingExtra = await loadPostingDrawerExtra(authz, t, postingParam)
+    } catch (error) {
+      if (!isRecruitingAbsence(error)) {
+        detailError = drawerLoadError(hrefForDepth(tab, { posting: postingParam }))
+      }
+    }
+    if (!postingExtra && !detailError) missingDetail = t('recruiting.drawer.missing')
   }
   if (poolParam && !requisitionId && !candidateId && !offerId && !interviewParam && !postingParam) {
-    pool = await loadPoolDrawer(authz, t, poolParam)
-    if (!pool) missingDetail = t('recruiting.drawer.missing')
+    try {
+      pool = await loadPoolDrawer(authz, t, poolParam)
+    } catch (error) {
+      if (!isRecruitingAbsence(error)) {
+        detailError = drawerLoadError(hrefForDepth(tab, { pool: poolParam }))
+      }
+    }
+    if (!pool && !detailError) missingDetail = t('recruiting.drawer.missing')
   }
   if (candidate) {
     consents = await loadConsentStatus(authz, t, candidateId!)
@@ -755,6 +812,7 @@ export async function loadRecruitingPage(
     postingExtra !== null ||
     pool !== null ||
     missingDetail !== null ||
+    detailError !== null ||
     create !== null
   // CK-23b: which record owns the drawer title. Computed once here so the
   // pure drawerTitleKind branch (unit-tested) decides, while the translated
@@ -847,6 +905,7 @@ export async function loadRecruitingPage(
           pool,
           consents,
           missingDetail,
+          detailError,
           ...(create ? { create } : {}),
         }
       : null,

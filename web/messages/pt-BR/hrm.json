@@ -660,6 +660,7 @@
       "timeToFill": "Tempo de preenchimento",
       "days": "dias",
       "missing": "Este registro não está mais visível.",
+      "loadFailed": "Não foi possível carregar este registro. Tente novamente.",
       "description": "Descrição"
     },
     "create": {
