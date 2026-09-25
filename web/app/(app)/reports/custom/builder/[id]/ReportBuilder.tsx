@@ -106,6 +106,68 @@ export function ReportBuilder({
     return revision
   }, [createMode, definition.id])
 
+  // Declared before the autosave effect so its teardown runs first: the
+  // debounce cleanup can then tell a re-run (re-arm the timer) from an
+  // unmount (flush the latest payload, never drop it).
+  const mountedRef = useRef(true)
+  useEffect(() => () => {
+    mountedRef.current = false
+  }, [])
+
+  // The debounced timer only SCHEDULES this; the unmount flush calls it
+  // directly with the latest payload, so an edit followed by "Run &
+  // schedule" saves the new definition instead of running the old one.
+  const enqueueSave = useCallback((payload: {
+    name: string
+    description: string
+    query: ReportCustomQuery
+    layout: ReportLayoutConfig
+  }, generation: number) => {
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        // A newer debounce superseded this payload before the queue reached
+        // it. Skip the stale write entirely and let the latest generation
+        // carry the current state to the server.
+        if (generation !== saveGenerationRef.current) return
+        const expectedUpdatedAt = await ensureRevision()
+        // Editing while the revision GET was in flight supersedes this save.
+        if (generation !== saveGenerationRef.current) return
+        if (!expectedUpdatedAt) {
+          setSaveState('error')
+          toast.error(tc('feedback.saveFailed'))
+          return
+        }
+        setSaveState('saving')
+        try {
+          const res = await fetch(`/api/reports/definitions/${definition.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...payload, expectedUpdatedAt }),
+          })
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string
+            definition?: { updated_at?: unknown }
+          }
+          if (res.ok) {
+            const savedRevision = data.definition?.updated_at
+            if (typeof savedRevision === 'string') revisionRef.current = savedRevision
+            if (generation === saveGenerationRef.current) {
+              setSaveState('saved')
+              router.refresh()
+            }
+          } else if (generation === saveGenerationRef.current) {
+            setSaveState('error')
+            toast.error(data.error ?? tc('feedback.saveFailed'))
+          }
+        } catch {
+          if (generation !== saveGenerationRef.current) return
+          setSaveState('error')
+          toast.error(tc('feedback.saveFailed'))
+        }
+      })
+  }, [definition.id, ensureRevision, router, tc])
+
   const entity = entityMap[query.entity] ?? entityMap.ledger_lines!
   const mode = query.mode ?? 'rows'
 
@@ -182,55 +244,33 @@ export function ReportBuilder({
     }
     const generation = ++saveGenerationRef.current
     setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      const payload = { name, description, query, layout }
-      saveQueueRef.current = saveQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          // A newer debounce superseded this payload before the queue reached
-          // it. Skip the stale write entirely and let the latest generation
-          // carry the current state to the server.
-          if (generation !== saveGenerationRef.current) return
-          const expectedUpdatedAt = await ensureRevision()
-          // Editing while the revision GET was in flight supersedes this save.
-          if (generation !== saveGenerationRef.current) return
-          if (!expectedUpdatedAt) {
-            setSaveState('error')
-            toast.error(tc('feedback.saveFailed'))
-            return
-          }
-          setSaveState('saving')
-          try {
-            const res = await fetch(`/api/reports/definitions/${definition.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ...payload, expectedUpdatedAt }),
-            })
-            const data = (await res.json().catch(() => ({}))) as {
-              error?: string
-              definition?: { updated_at?: unknown }
-            }
-            if (res.ok) {
-              const savedRevision = data.definition?.updated_at
-              if (typeof savedRevision === 'string') revisionRef.current = savedRevision
-              if (generation === saveGenerationRef.current) {
-                setSaveState('saved')
-                router.refresh()
-              }
-            } else if (generation === saveGenerationRef.current) {
-              setSaveState('error')
-              toast.error(data.error ?? tc('feedback.saveFailed'))
-            }
-          } catch {
-            if (generation !== saveGenerationRef.current) return
-            setSaveState('error')
-            toast.error(tc('feedback.saveFailed'))
-          }
-        })
+    const payload = { name, description, query, layout }
+    let sent = false
+    const timer = setTimeout(() => {
+      sent = true
+      enqueueSave(payload, generation)
     }, 700)
-    return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, query, layout, ensureRevision, createMode])
+    return () => {
+      clearTimeout(timer)
+      if (mountedRef.current || createMode) return
+      // Unmount ("Run & schedule", or any navigation) with a debounced edit
+      // that never sent: queue the latest payload and flush instead of
+      // dropping it. An in-flight save is left to finish; the queue
+      // serializes this next write behind it under the same revision guard.
+      if (!sent) enqueueSave(payload, generation)
+    }
+  }, [name, description, query, layout, ensureRevision, createMode, enqueueSave])
+
+  useEffect(() => {
+    if (createMode || saveState === 'saved') return
+    // A full unload (refresh, tab close) would drop a debounced edit the
+    // unmount flush cannot send: warn first, never lose silently.
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [createMode, saveState])
 
   async function createReport() {
     if (!createMode || createInFlightRef.current) return
