@@ -10,7 +10,14 @@
  * bigint helpers — never a JavaScript number.
  */
 
-export type AllocationMode = "entry" | "post" | "period";
+import type { AllocationMode, ContributedLine, Coordinate } from "../journal/contributed-lines.ts";
+export type {
+  AllocationMode,
+  ContributedLine,
+  Coordinate,
+  JournalLineContributorKind,
+  LineageDraft,
+} from "../journal/contributed-lines.ts";
 export type AllocationVersionStatus = "draft" | "published" | "retired";
 export type AllocationBookScope = "primary" | "all_posting" | "books";
 export type AllocationApplyPolicy = "automatic" | "suggest" | "manual";
@@ -31,7 +38,7 @@ export type AllocationDriverSourceKind =
   | "report_definition";
 export type AllocationRunStatus = "previewed" | "pending_approval" | "posted" | "reversed" | "failed" | "superseded";
 export type AllocationRunTrigger = "manual" | "scheduled" | "close_automation" | "rerun";
-export type JournalLineContributorKind = "rule" | "script" | "app" | "intercompany";
+
 
 /** Built-in dimensions plus custom segments (`extra:<segmentKey>`). */
 export type AllocationDimension =
@@ -71,18 +78,6 @@ export interface DynamicTarget {
   minWeight?: string;
   /** null/undefined = keep the source account. */
   targetAccountId?: string | null;
-}
-
-/** A GL coordinate: account × dimensions × subsidiary. */
-export interface Coordinate {
-  accountId: string;
-  subsidiaryId?: string | null;
-  departmentId?: string | null;
-  locationId?: string | null;
-  classId?: string | null;
-  projectId?: string | null;
-  partyId?: string | null;
-  extraDims?: Record<string, string>;
 }
 
 /** What the matcher sees for one document line or kernel line. */
@@ -252,40 +247,6 @@ export interface ApportionResult {
   targets: ApportionedTarget[];
   /** Key of the target that absorbed the residual, if any. */
   residualKey?: string | null;
-}
-
-/** A line a contributor adds to a posting transaction's own journal entry. */
-export interface ContributedLine extends Coordinate {
-  /** Signed transaction-currency amount (debit +). */
-  amount: string;
-  currency?: string;
-  memo?: string | null;
-  contributorKind: JournalLineContributorKind;
-  contributorRef: string;
-  /** Non-primary posting book target; undefined = the primary book. */
-  bookId?: string;
-  lineage?: LineageDraft;
-}
-
-/** Lineage row before ids are known (journal line id is stamped after insert). */
-export interface LineageDraft {
-  mode: AllocationMode;
-  ruleId: string;
-  versionId: string;
-  definitionHash: string;
-  runId?: string | null;
-  documentId?: string | null;
-  sourceJournalLineId?: string | null;
-  sourceDocumentLineId?: string | null;
-  targetDocumentLineId?: string | null;
-  /** Event trigger for event-bound post rules (the overhead net-zero pair): the approved time entry. */
-  sourceTimeEntryId?: string | null;
-  driverId?: string | null;
-  driverValue?: string | null;
-  driverTotal?: string | null;
-  share?: string | null;
-  amount: string;
-  residual?: string;
 }
 
 export interface MatchResult {

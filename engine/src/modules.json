@@ -22,6 +22,7 @@
       "description": "The allocation kernel: rules, drivers, apportionment, period runs and the posting seam.",
       "dependsOn": [
         "flows",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -497,7 +498,6 @@
     "scripting": {
       "description": "User scripts: the QuickJS trigger runtime and its configuration boundary.",
       "dependsOn": [
-        "allocations",
         "journal",
         "ledger",
         "money",
