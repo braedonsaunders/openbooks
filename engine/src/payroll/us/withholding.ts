@@ -1197,6 +1197,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           US_SUPPLEMENTAL_RATE: separateFlatRate,
           US_SUPPLEMENTAL_TAX: D(supplementalTax),
         },
+        // The W-2 box-18 trace, like every other sub-region return below:
+        // a published-engine levy is still a locality levy, and dropping
+        // the trace here makes the slip refuse by name downstream.
+        ...localWageTrace,
       };
     }
     const result = engine.compute({
@@ -1225,7 +1229,11 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       ytd: input.ytd,
       detroitOtherCities,
     });
-    return { code: engine.state, label: engine.label, tax: result.tax, factors: result.factors };
+    // The W-2 box-18 trace, like every other sub-region return in this
+    // function: a published-engine levy (NYC, Yonkers, Philadelphia,
+    // Detroit) is still a locality levy, and dropping the trace here makes
+    // the slip refuse by name downstream.
+    return { code: engine.state, label: engine.label, tax: result.tax, factors: result.factors, ...localWageTrace };
   }
 
   // No published engine. That is not a hole to skip: these are the levies whose
