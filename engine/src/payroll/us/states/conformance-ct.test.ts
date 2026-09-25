@@ -19,8 +19,8 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  CT_CERTIFICATE, CT_REGION, CT_RATES_2026, CT_WITHHOLDING, ctInitialTax, ctPersonalCredit,
-  ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
+  CT_CERTIFICATE, CT_REGION, CT_RATES_2026, CT_WITHHOLDING, ctInitialTax, ctPaidLeaveWithholding,
+  ctPersonalCredit, ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
 } from "./ct.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
@@ -260,4 +260,11 @@ test("CT refuses a year it has not transcribed", () => {
     }),
     /2027 Connecticut income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
+});
+
+test("CT Paid Leave withholds 0.5% of FICA wages to the SS base", () => {
+  // Connecticut Paid Leave 2026: $1,000 × 0.5% = $5.00, capped at the
+  // $184,500 Social Security taxable maximum.
+  assert.equal(ctPaidLeaveWithholding("2026-03-06", "1000.00", "0"), money("5.00"));
+  assert.equal(ctPaidLeaveWithholding("2026-03-06", "1000.00", "184500"), money("0.00"));
 });

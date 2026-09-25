@@ -422,6 +422,16 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "ct_pl_employee",
+      regions: ["CT"],
+      components: [
+        // Connecticut Paid Leave employee contribution (2026: 0.5% of
+        // FICA-taxable wages to the SS base): an EMPLOYEE deduction beside
+        // income tax, never inside it.
+        { code: "CT-PL", name: "Connecticut Paid Leave (employee)", systemKey: "ct_pl_employee", kind: "deduction", sequence: 150, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
       key: "transit_payroll_tax",
       regions: ["OR"],
       components: [
