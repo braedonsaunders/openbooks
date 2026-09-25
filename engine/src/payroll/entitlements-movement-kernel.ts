@@ -1,4 +1,5 @@
 import { add, cmp, mulDecimal, mulPercent, neg, roundMoney } from "../money/money.ts";
+import type { Money } from "../money/brands.ts";
 import { PayrollError } from "./error.ts";
 import {
   type EntitlementMovementKind,
@@ -187,15 +188,16 @@ export function entitlementMoneyValue(args: {
   wage: string | null;
   /** Employee display name, for the refusal. */
   employeeName: string;
-}): string {
-  if (args.plan.unit === "money") return roundMoney(args.amount, 2);
+}): Money {
+  // roundMoney emits fixed 4dp on both exits: the value is canonical Money.
+  if (args.plan.unit === "money") return roundMoney(args.amount, 2) as Money;
   if (args.wage == null || cmp(args.wage, "0") <= 0) {
     throw new PayrollError(
       `entitlement plan ${args.plan.code} banks hours but ${args.employeeName} has no hourly wage `
       + `on the pay date — add a labor cost rate covering the pay date for this employee, then recalculate`,
     );
   }
-  return roundMoney(mulDecimal(args.amount, args.wage), 2);
+  return roundMoney(mulDecimal(args.amount, args.wage), 2) as Money;
 }
 
 function accrualMovement(
