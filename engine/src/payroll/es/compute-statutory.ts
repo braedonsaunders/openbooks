@@ -23,6 +23,8 @@ import { certificateAmount, certificateCount } from "../certificates.ts";
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
 import "./employee-facts.ts";
+import "./employer-facts.ts";
+import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculateEsIrpf2026 } from "./irpf-2026.ts";
@@ -261,12 +263,30 @@ export async function computeEsStatutory(
   if (pensionableNonPeriodicUnits > insurableUnits) {
     fail("pensionableNonPeriodic exceeds the current insurable base");
   }
+  // AT/EP is an establishment tariff, never an employee answer: resolve the
+  // legal employer's filed DA 61ª rate and price the employer premium from
+  // it. A run whose employer has no tariff on file refuses by name instead
+  // of silently omitting the premium. Contexts without a paying-employer
+  // identity keep the pure calculator's omit — production runs always carry
+  // the subsidiary, as the FR adapter requires.
+  let atEpRate: string | undefined;
+  if (ctx.subsidiaryId) {
+    atEpRate = await resolveStoredEmployerFact({
+      tx: ctx.tx,
+      orgId: ctx.orgId,
+      subsidiaryId: ctx.subsidiaryId,
+      country: "ES",
+      factKey: "es_atep_rate",
+      asOf: payDate,
+    }) ?? undefined;
+  }
   const ss = calculateEsSeguridadSocial2026({
     payDate,
     grupo,
     base: D(pensionableUnits),
     retribucionMensual: D(insurableUnits),
     contratoTemporal: temporal === "true",
+    atEpRate,
   });
   const ssRecurrente = pensionableNonPeriodicUnits === 0n
     ? ss
@@ -276,6 +296,7 @@ export async function computeEsStatutory(
       base: D(pensionableUnits - pensionableNonPeriodicUnits),
       retribucionMensual: D(insurableUnits - pensionableNonPeriodicUnits),
       contratoTemporal: temporal === "true",
+      atEpRate,
     });
   const cotizacionesAnual = D(
     U(ssRecurrente.trabajadorTotal) * BigInt(periodosAnuales)
@@ -313,6 +334,9 @@ export async function computeEsStatutory(
   pushStatutory("ss_fogasa_er", "employer_contribution", "FOGASA (employer)", ss.fogasaEmpresa, 212);
   pushStatutory("ss_for_er", "employer_contribution", "Formación profesional (employer)", ss.formacionEmpresa, 213);
   pushStatutory("ss_mei_er", "employer_contribution", "MEI (employer)", ss.meiEmpresa, 214);
+  if (ss.atEpEmpresa != null) {
+    pushStatutory("ss_atep_er", "employer_contribution", "AT/EP (employer)", ss.atEpEmpresa, 215);
+  }
   return {
     ES_TIPO_IRPF: irpf.tipo,
     ES_IMPORTE_ANUAL: irpf.importeAnual,
