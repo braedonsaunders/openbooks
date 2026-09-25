@@ -128,6 +128,7 @@ export async function POST(req: Request) {
     rowIds?: string[]
     note?: string
     reason?: string
+    confirmedAmendment?: boolean
     confirmedCancellation?: boolean
   } | null
   if (!body) return NextResponse.json({ error: 'a JSON body is required' }, { status: 422 })
@@ -140,6 +141,12 @@ export async function POST(req: Request) {
   if (revision !== 'original' && revision !== 'amended' && revision !== 'cancelled') {
     return NextResponse.json(
       { error: 'revision must be original, amended or cancelled' },
+      { status: 422 },
+    )
+  }
+  if (revision === 'amended' && body.confirmedAmendment !== true) {
+    return NextResponse.json(
+      { error: 'amendment must be explicitly confirmed after reviewing its preview' },
       { status: 422 },
     )
   }
