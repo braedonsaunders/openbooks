@@ -389,6 +389,8 @@ export interface UsStateWithholdingInput {
     yearToDate?: string;
   };
   ytd?: UsStateYtd;
+  /** Michigan Form 5469 resident rate after the other work city's nonresident offset. */
+  detroitResidentRateOverride?: string;
 }
 
 export interface UsStateWithholdingResult {

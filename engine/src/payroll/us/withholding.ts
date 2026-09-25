@@ -60,6 +60,7 @@ import {
   type UsStateYtd,
 } from "./states/index.ts";
 import { act32LocalEit } from "./states/pa.ts";
+import { miDetroitResidentRate } from "./states/mi.ts";
 import { inCounty, inCountyWithholding } from "./states/in.ts";
 import { orTransitWithholding } from "./states/or.ts";
 import {
@@ -366,6 +367,8 @@ export interface UsWithholdingInput {
   regularWageTaxWithheldFor?: readonly string[];
   /** Resolved exact work shares used by state and local allocation rules. */
   wageAllocations?: readonly UsWageAllocation[];
+  /** Other Michigan taxing city reached by a Detroit resident's work-location levy. */
+  detroitOtherCity?: { code: string; nonresidentRate: string | null } | null;
   /** Verified out-of-region wage source and current work-region tax amounts. */
   residentWithholdingFacts?: UsResidentWithholdingFacts;
   /** Current paycheck's computed federal income-tax withholding. */
@@ -709,6 +712,21 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         + "in engine/src/payroll/us/states/index.ts",
       );
     }
+    const detroitResidentRateOverride = engineCode === "MI-DETROIT" && levy.reach === "resident"
+      ? (() => {
+        const otherCity = input.detroitOtherCity ?? null;
+        if (otherCity && !otherCity.nonresidentRate) {
+          throw new UsWithholdingError(
+            `Detroit resident withholding needs the ${otherCity.code} nonresident rate under Michigan Form 5469; `
+            + "record that rate in the employer's us_mi_city settings before calculating",
+          );
+        }
+        return miDetroitResidentRate({
+          payDate: input.payDate,
+          otherCityNonresidentRate: otherCity?.nonresidentRate ?? null,
+        });
+      })()
+      : undefined;
     if (separateFlatRate) {
       const regular = engine.compute({
         payDate: input.payDate,
@@ -728,6 +746,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
         ytd: input.ytd,
+        ...(detroitResidentRateOverride ? { detroitResidentRateOverride } : {}),
       });
       const rawSupplementalTax = mulRateCents(supplemental, separateFlatRate);
       const supplementalTax = separateFlatWholeDollar
@@ -767,6 +786,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       residentWithholdingFacts,
       regionTax: input.regionTax,
       ytd: input.ytd,
+      ...(detroitResidentRateOverride ? { detroitResidentRateOverride } : {}),
     });
     return { code: engine.state, label: engine.label, tax: result.tax, factors: result.factors };
   }
