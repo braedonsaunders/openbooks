@@ -296,6 +296,7 @@
     "overridePlaceholder": "Automatisch",
     "overrideHint": "Leer = automatisch Cost-to-Cost. Eine Änderung ist eine Schätzungsänderung: der Nachhol-Betrag (nach oben oder unten) wird beim nächsten Lauf in der aktuellen Periode gebucht.",
     "overrideSaved": "Fertigstellungsgrad aktualisiert",
+    "recognitionWarning": "Wert gespeichert; die Umsatzrealisierung wurde nicht vollständig aktualisiert",
     "clearOverride": "Übersteuerung löschen",
     "mapAccountsHint": "Ordnen Sie die Kontrollkonten Unfakturierte Forderungen und Projekterlöse unter Unternehmen & Buchhaltung zu, um die Projekt-Umsatzrealisierung zu aktivieren."
   },

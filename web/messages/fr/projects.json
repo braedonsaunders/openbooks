@@ -296,6 +296,7 @@
     "overridePlaceholder": "Automatique",
     "overrideHint": "Vide = coût sur coût automatique. Un changement est un changement d'estimation : le rattrapage (à la hausse ou à la baisse) est comptabilisé dans la période en cours à la prochaine exécution.",
     "overrideSaved": "Pourcentage d'avancement mis à jour",
+    "recognitionWarning": "Valeur enregistrée ; la reconnaissance n’a pas été entièrement mise à jour",
     "clearOverride": "Effacer le remplacement",
     "mapAccountsHint": "Associez les comptes de contrôle Produits à facturer et Revenus de projet dans Société et comptabilité pour activer la comptabilisation des revenus de projet."
   },

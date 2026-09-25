@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Label } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 export interface RecognitionStatus {
   contractId: string | null
   contractValue: string
@@ -36,22 +37,37 @@ export function RecognitionCard({ projectId, status, canManage }: {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  const [warning, setWarning] = useState<string | null>(null)
   const [draft, setDraft] = useState(status.overrideValue != null ? String(status.overrideValue) : '')
 
   async function saveOverride(value: number | null) {
     setBusy(true)
-    const res = await fetch(`/api/projects/${projectId}/percent-complete`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ percentComplete: value, expectedPercentComplete: status.overrideValue ?? null }),
-    })
-    const data = await res.json().catch(() => ({}))
-    setBusy(false)
-    if (res.ok) {
+    setWarning(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/percent-complete`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ percentComplete: value, expectedPercentComplete: status.overrideValue ?? null }),
+      })
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res, tCommon('feedback.saveFailed'))
+        setWarning(message)
+        toast.error(message)
+        return
+      }
+      const data = await res.json() as { problems?: unknown }
+      const problems = Array.isArray(data.problems)
+        ? data.problems.filter((problem): problem is string => typeof problem === 'string' && problem.trim() !== '')
+        : []
+      if (problems.length > 0) setWarning(problems.join(' '))
       toast.success(t('overrideSaved'))
       router.refresh()
-    } else {
-      toast.error(data.error ?? tCommon('feedback.saveFailed'))
+    } catch {
+      const message = tCommon('feedback.saveFailed')
+      setWarning(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -90,6 +106,11 @@ export function RecognitionCard({ projectId, status, canManage }: {
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('postingHint')}</p>
+        {warning ? (
+          <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <strong>{t('recognitionWarning')}: </strong>{warning}
+          </p>
+        ) : null}
 
         {canManage ? (
           <div className="flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">

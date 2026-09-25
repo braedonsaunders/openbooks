@@ -296,6 +296,7 @@
     "overridePlaceholder": "Automático",
     "overrideHint": "Vazio = custo sobre custo automático. Uma mudança é uma mudança de estimativa: o ajuste acumulado (para cima ou para baixo) é lançado no período atual na próxima execução.",
     "overrideSaved": "Percentual de avanço atualizado",
+    "recognitionWarning": "Valor salvo; o reconhecimento não foi totalmente atualizado",
     "clearOverride": "Limpar substituição",
     "mapAccountsHint": "Mapeie as contas de controle Recebível não faturado e Receita de projeto em Empresa e Contabilidade para ativar o reconhecimento de receita de projetos."
   },
