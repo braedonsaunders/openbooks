@@ -16,7 +16,7 @@ test('purge serializes against a concurrently committed attachment', { skip: !en
     import { sql } from 'drizzle-orm';
     import { db } from './engine/src/platform/db.ts';
     import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
-    import { purgeFolder } from './web/lib/file-cabinet.ts';
+    import { purgeFolder } from './web/lib/file-cabinet/index.ts';
 
     installTrustedTestDatabaseBypass();
     const orgId = randomUUID();

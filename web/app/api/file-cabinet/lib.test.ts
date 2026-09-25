@@ -97,7 +97,7 @@ test(
         getFolderTree,
         listFolderContents,
         setGrant,
-      } from "./web/lib/file-cabinet.ts";
+      } from "./web/lib/file-cabinet/index.ts";
 
       installTrustedTestDatabaseBypass();
 
