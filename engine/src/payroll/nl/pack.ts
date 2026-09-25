@@ -5,7 +5,7 @@
  * existing `PayrollCountryPack` channels and no other: the combined
  * loonheffing withholding (loonbelasting + premie volksverzekeringen AOW/Anw/Wlz,
  * priced by the Rekenvoorschriften algorithm rather than looked up row by
- * row), the employer-paid premies werknemersverzekeringen (WW/WIA) and the
+ * row), the employer-paid premies werknemersverzekeringen (WW/WIA and Wko) and the
  * werkgeversheffing Zvw, the loonaangifte programme and the jaaropgaaf, and
  * the one employee-filed certificate (see `./certificates.ts`).
  *
@@ -148,14 +148,15 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // maximumpremieloon) and settled through the loonaangifte with the
         // Belastingdienst (administered by UWV): WW via the AWf (hoog/laag by
         // declared contract type, 2026: 2,74%/7,74%), WIA via the Aof
-        // basispremie (declared employer size, 2026: 6,27%/7,63%) together
-        // with the differentiated Whk beschikking (one percentage, declared),
+        // basispremie (declared employer size, 2026: 6,27%/7,63%), the
+        // differentiated Whk beschikking, and Opslag Wko (0.50% of the Aof base),
         // and ZW. No fixed ZW percentage is published (Tarieven Tabel 9
         // carries no ZW row; ZW-flex runs inside the Whk beschikking), so the
         // ZW component posts nothing — see computeNlStatutory.
         { code: "WW", name: "Werkloosheidswet (AWf)", systemKey: "ww", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
         { code: "WIA", name: "Arbeidsongeschiktheid (Aof + Whk)", systemKey: "wia", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "ZW", name: "Ziektewet", systemKey: "zw", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "tax_authority" },
+        { code: "WKO", name: "Opslag Wko", systemKey: "wko", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "tax_authority" },
+        { code: "ZW", name: "Ziektewet", systemKey: "zw", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "tax_authority" },
       ],
     },
     {

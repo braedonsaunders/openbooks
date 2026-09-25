@@ -189,7 +189,7 @@ async function independentSums(orgId: string, employeePartyId: string): Promise<
            (select coalesce(sum(l.amount), 0) from pay_stub_lines l
              join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
             where l.org_id = ${orgId} and l.stub_id in (select id from committed)
-              and l.kind = 'employer_contribution' and pc.system_key in ('ww', 'wia')) as premies,
+              and l.kind = 'employer_contribution' and pc.system_key in ('ww', 'wia', 'wko')) as premies,
            (select count(*)::int from committed) as runs
   `));
   const row = rows.rows[0]!;

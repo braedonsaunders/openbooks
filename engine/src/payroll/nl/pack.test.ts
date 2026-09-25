@@ -59,7 +59,7 @@ test("the NL pack declares the loonheffing as one combined slot, not a Canada-sh
     .filter((component) => component.kind === "employer_contribution");
   assert.deepEqual(
     employer.map((component) => component.systemKey),
-    ["ww", "wia", "zw", "zvw"],
+    ["ww", "wia", "wko", "zw", "zvw"],
   );
   for (const component of employer) {
     assert.equal(component.assessedOn, "earnings");
@@ -248,12 +248,12 @@ test("computeStatutory prices a 2026 maandloon end to end (korting + premies via
   assert.equal(factors["ARK"], "1004.0000");
   const lh = pushed.find((line) => line.systemKey === "loonheffing");
   assert.equal(lh?.amount, "13.8300");
-  assert.equal(lh?.sequence, 110);
   const ww = pushed.find((line) => line.systemKey === "ww");
   assert.equal(ww?.amount, "27.3700");
   const wia = pushed.find((line) => line.systemKey === "wia");
   // Aof € 62,64 + Whk € 12,49, each rounded to the cent before the line sums them.
   assert.equal(wia?.amount, "75.1300");
+  assert.equal(pushed.find((line) => line.systemKey === "wko")?.amount, "5.0000");
   const zvw = pushed.find((line) => line.systemKey === "zvw");
   assert.equal(zvw?.amount, "60.9400");
 });

@@ -60,7 +60,7 @@ export interface JaaropgaafSlip {
   arbeidskorting: string;
   /** Werkgeversheffing Zvw (employer levy, §15.3). */
   zvwWerkgeversheffing: string;
-  /** Totaal premies werknemersverzekeringen (§15.3: WW + WIA, Whk included). */
+  /** Totaal premies werknemersverzekeringen (WW + WIA + Opslag Wko). */
   premiesWerknemersverzekeringen: string;
   /** Premieloon (SV-loon) priced off — additional information, derivation stated. */
   svLoon: string;
@@ -80,7 +80,7 @@ const num = (value: unknown): string => (value == null ? "0" : String(value));
  * §11.2.10) is the withheld loonheffing lines; verrekende arbeidskorting
  * (kolom 18, §11.2.13: offset via the tijdvaktabel) is the summed ARK_T
  * period offsets the engine settled. Employer premiums ride their own lines
- * (WW, WIA with the Whk beschikking amount folded in, Zvw werkgeversheffing).
+ * (WW, WIA with the Whk beschikking amount folded in, Opslag Wko, Zvw).
  */
 export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<JaaropgaafSlip[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
@@ -114,7 +114,7 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'employer_contribution'
-                  and pc.system_key in ('ww', 'wia'))) as premies
+                  and pc.system_key in ('ww', 'wia', 'wko'))) as premies
       from committed c
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name
@@ -335,7 +335,7 @@ async function jaaropgaafSlip(orgId: string, taxYear: number, rowId: string): Pr
       "Totals tie to the year's committed, posted NL pay runs to the cent; draft or uncommitted runs are excluded.",
       "Withholding is reported as withheld under the employee's own tabeltoepassing arm — the age class above prices the schijventarief and the heffingskortingen (Rekenvoorschriften 2026, Tabellen 1–6).",
       "Kolom 16 is € 0,00: no employee-side Zvw is withheld under the standard tables this pack prices — the employee's nominal Zvw premium is paid directly to their insurer, never through the payroll (see the pack declaration).",
-      "The premies total is the WW (AWf) and WIA (Aof basispremie plus the differentiated Whk beschikking) employer premiums settled through the loonaangifte. No WGA premium recovered from the employee is netted: the pack has no employee-recovery mechanism (Handboek 2026, §15.3).",
+      "The premies total includes WW (AWf), WIA (Aof basispremie plus the differentiated Whk beschikking), and Opslag Wko at 0.50% of the Aof base, settled through the loonaangifte. No WGA premium recovered from the employee is netted: the pack has no employee-recovery mechanism (Handboek 2026, §15.3).",
       "Premieloon is the SV-loon base the employer premiums were priced off, capped at the maximumpremieloon — additional information (§15.3 permits it), not a mandatory box.",
     ],
   };

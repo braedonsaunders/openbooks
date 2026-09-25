@@ -172,6 +172,7 @@ export interface NlStatutoryResult {
   svBaseCents: bigint;
   wwCents: bigint;
   aofCents: bigint;
+  wkoCents: bigint;
   whkCents: bigint;
   zvwCents: bigint;
 }
@@ -391,6 +392,7 @@ function finishCalculation(args: {
 
   let wwCents = 0n;
   let aofCents = 0n;
+  let wkoCents = 0n;
   let whkCents = 0n;
   if (svBase > 0n) {
     if (input.awfLow === null || input.awfLow === undefined) {
@@ -424,6 +426,10 @@ function finishCalculation(args: {
     // to the cent and stated as such.
     wwCents = halfUpDiv(svBase * awfRate, 10000n);
     aofCents = halfUpDiv(svBase * aofRate, 10000n);
+    // Opslag Wko (2026: 0.50%) is assessed on the Aof premium base, which is
+    // the same capped SV-loon used for Aof. Keep it separate for posting and
+    // filing while retaining exact cent arithmetic.
+    wkoCents = halfUpDiv(svBase * 50n, 10000n);
     whkCents = halfUpDiv(svBase * whkRate, 10000n);
   }
   const zvwRate = parseRate2(NL_ZVW_2026.employer, "werkgeversheffing Zvw");
@@ -446,6 +452,7 @@ function finishCalculation(args: {
     svBaseCents: svBase,
     wwCents,
     aofCents,
+    wkoCents,
     whkCents,
     zvwCents,
   };
@@ -498,6 +505,7 @@ export const NL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   SV_BASE: "SV-loon base",
   WW: "AWf premium (employer)",
   AOF: "Aof basispremie (employer)",
+  WKO: "Opslag Wko (employer)",
   WHK: "Whk premium (employer)",
   ZW: "ZW premium",
   ZVW: "Werkgeversheffing Zvw (employer)",
@@ -556,10 +564,10 @@ export async function computeNlStatutory(
 
   pushStatutory("loonheffing", "deduction", "Loonbelasting/premie volksverzekeringen", d4(result.withholdingCents), 110);
   pushStatutory("ww", "employer_contribution", "Werkloosheidswet (AWf)", d4(result.wwCents), 210);
-  // The Aof basispremie and the differentiated Whk beschikking are both
-  // WIA-side employer premiums; the beschikking quotes one percentage, so
-  // the Whk amount rides the WIA line (see rates.ts: no ZW row exists).
+  // Aof and the differentiated Whk beschikking share the WIA line; Opslag
+  // Wko is identifiable separately, assessed against the same capped base.
   pushStatutory("wia", "employer_contribution", "Arbeidsongeschiktheid (Aof + Whk)", d4(result.aofCents + result.whkCents), 211);
+  pushStatutory("wko", "employer_contribution", "Opslag Wko", d4(result.wkoCents), 212);
   pushStatutory("zvw", "employer_contribution", "Werkgeversheffing Zorgverzekeringswet", d4(result.zvwCents), 230);
 
   return {
@@ -577,6 +585,7 @@ export async function computeNlStatutory(
     SV_BASE: d4(result.svBaseCents),
     WW: d4(result.wwCents),
     AOF: d4(result.aofCents),
+    WKO: d4(result.wkoCents),
     WHK: d4(result.whkCents),
     ZW: d4(0n),
     ZVW: d4(result.zvwCents),

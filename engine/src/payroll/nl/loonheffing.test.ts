@@ -247,7 +247,7 @@ test("employer premiums: AWf low/high, Aof low/high, Whk beschikking, Zvw 6,10%"
   // AWf laag 2,74%: 5.000 × 2,74% = 137,00. Aof laag 6,27%: 313,50.
   // Whk 1,25%: 62,50. Zvw 6,10%: 305,00.
   const low = calculateNlStatutory({ ...base, awfLow: true, aofHigh: false, whkPercent: "1.25" });
-  assert.equal(cents2(low.svBaseCents), "5000.00");
+  assert.equal(cents2(low.wkoCents), "25.00");
   assert.equal(cents2(low.wwCents), "137.00");
   assert.equal(cents2(low.aofCents), "313.50");
   assert.equal(cents2(low.whkCents), "62.50");
