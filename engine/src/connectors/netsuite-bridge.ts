@@ -283,7 +283,7 @@ export class NetSuiteBridgeClient {
 
   async bulkQuery<T = Record<string, unknown>>(
     partitions: Array<{ id: string; sql: string; params?: Array<string | number | boolean | null> }>,
-    opts: { pollMs?: number; timeoutMs?: number } = {},
+    opts: { pollMs?: number; timeoutMs?: number; drainMs?: number } = {},
   ): Promise<Map<string, T[]>> {
     if (partitions.length === 0) return new Map();
     const duplicate = partitions.find((part, index) => partitions.findIndex((candidate) => candidate.id === part.id) !== index);
@@ -291,6 +291,12 @@ export class NetSuiteBridgeClient {
     const out = new Map(partitions.map((partition) => [partition.id, [] as T[]]));
     const pollMs = opts.pollMs ?? 2_000;
     const timeoutMs = opts.timeoutMs ?? 30 * 60_000;
+    // Bounded wait for the terminal summary AFTER the poll deadline, so
+    // cleanup below removes the whole job. The Map/Reduce task keeps
+    // writing from its input snapshot after the deadline; deleting the
+    // current partial listing then would strand those late writes as
+    // orphans no later call sweeps.
+    const drainMs = opts.drainMs ?? 5 * 60_000;
     const batches = Array.from({ length: Math.ceil(partitions.length / 250) }, (_, index) =>
       partitions.slice(index * 250, (index + 1) * 250),
     );
@@ -306,29 +312,96 @@ export class NetSuiteBridgeClient {
         }
         started = true;
         const deadline = Date.now() + timeoutMs;
-        let state: Awaited<ReturnType<NetSuiteBridgeClient["exportStatus"]>>;
+        let state: Awaited<ReturnType<NetSuiteBridgeClient["exportStatus"]>> | undefined;
+        let pollError: unknown = null;
         for (;;) {
-          state = await this.exportStatus(jobId);
-          if (!Array.isArray(state.files)) {
-            cleanupSafe = false;
-            throw new Error(`NetSuite bulk export ${jobId} returned an invalid file listing`);
-          }
-          if (
-            state.jobId !== jobId
-            || !["running", "complete", "failed"].includes(state.status)
-          ) {
-            cleanupSafe = false;
-            throw new Error(`NetSuite bulk export ${jobId} returned an invalid status response`);
-          }
           try {
-            assertNoForeignExportFiles(state.files, jobId);
+            state = await this.exportStatus(jobId);
+            pollError = null;
           } catch (error) {
-            cleanupSafe = false;
-            throw error;
+            // A lost poll response must not abort into a partial cleanup:
+            // the task keeps writing while the response is lost, so keep
+            // polling until the deadline and let the drain below decide.
+            pollError = error;
+            state = undefined;
           }
-          if (state.status !== "running") break;
-          if (Date.now() >= deadline) throw new Error(`NetSuite bulk export ${jobId} timed out`);
+          if (state !== undefined) {
+            if (!Array.isArray(state.files)) {
+              cleanupSafe = false;
+              throw new Error(`NetSuite bulk export ${jobId} returned an invalid file listing`);
+            }
+            if (
+              state.jobId !== jobId
+              || !["running", "complete", "failed"].includes(state.status)
+            ) {
+              cleanupSafe = false;
+              throw new Error(`NetSuite bulk export ${jobId} returned an invalid status response`);
+            }
+            try {
+              assertNoForeignExportFiles(state.files, jobId);
+            } catch (error) {
+              cleanupSafe = false;
+              throw error;
+            }
+            if (state.status !== "running") break;
+          }
+          if (Date.now() >= deadline) break;
           await new Promise((resolve) => setTimeout(resolve, pollMs));
+        }
+        if (state === undefined || state.status === "running") {
+          // Deadline reached with the task still running (or its status
+          // unreachable): await the terminal summary for a bounded drain so
+          // the `finally` cleanup below removes the whole job instead of
+          // stranding late writes. The timeout still refuses — the drain
+          // only makes that refusal's cleanup complete.
+          const drainDeadline = Date.now() + drainMs;
+          let drained = false;
+          for (;;) {
+            let probe: typeof state = undefined;
+            try {
+              probe = await this.exportStatus(jobId);
+            } catch {
+              probe = undefined;
+            }
+            if (probe !== undefined) {
+              if (
+                !Array.isArray(probe.files)
+                || probe.jobId !== jobId
+                || !["running", "complete", "failed"].includes(probe.status)
+              ) {
+                cleanupSafe = false;
+                throw new Error(`NetSuite bulk export ${jobId} returned an invalid status response`);
+              }
+              try {
+                assertNoForeignExportFiles(probe.files, jobId);
+              } catch (error) {
+                cleanupSafe = false;
+                throw error;
+              }
+              if (probe.status !== "running") {
+                drained = true;
+                break;
+              }
+            }
+            if (Date.now() >= drainDeadline) break;
+            await new Promise((resolve) => setTimeout(resolve, pollMs));
+          }
+          if (!drained) {
+            // Still running: deleting the partial listing now would strand
+            // the task's late writes, so leave the whole job for an
+            // explicit sweep and name it. The File Cabinet path is the
+            // OpenBooks export workspace the bridge's own marker resolves.
+            cleanupSafe = false;
+            throw new Error(
+              `NetSuite bulk export ${jobId} timed out with the export task still running; ` +
+              `cleanup skipped so no partial delete strands late files — delete ob-*-${jobId}-* ` +
+              `from the NetSuite File Cabinet OpenBooks Jobs folder, then re-run the sync`,
+            );
+          }
+          throw new Error(
+            `NetSuite bulk export ${jobId} timed out` +
+            (pollError !== null ? ` with its status response lost (${pollError instanceof Error ? pollError.message : String(pollError)})` : ""),
+          );
         }
         if (state.status === "failed") {
           const errors: string[] = [];
