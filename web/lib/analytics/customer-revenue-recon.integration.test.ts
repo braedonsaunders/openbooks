@@ -11,7 +11,8 @@ const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/p
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { requestDocumentVoid } = await import('@openbooks/engine/src/ledger/document-void.ts')
-const { runRevenueRecognition, cancelRevenueRecognitionForInvoice } = await import('@openbooks/engine/src/revenue/recognition.ts')
+const { runRevenueRecognition } = await import('@openbooks/engine/src/revenue/recognition.ts')
+const { cancelRevenueRecognitionForInvoice } = await import('@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts')
 const { customerData } = await import('./customer-data')
 const { profitAndLoss } = await import('../reports/statements')
 
