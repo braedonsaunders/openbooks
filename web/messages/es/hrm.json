@@ -660,6 +660,7 @@
       "timeToFill": "Tiempo de cobertura",
       "days": "días",
       "missing": "Este registro ya no está visible.",
+      "loadFailed": "No se pudo cargar este registro. Inténtelo de nuevo.",
       "description": "Descripción"
     },
     "create": {

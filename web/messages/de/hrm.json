@@ -660,6 +660,7 @@
       "timeToFill": "Zeit bis Besetzung",
       "days": "Tage",
       "missing": "Dieser Datensatz ist nicht mehr sichtbar.",
+      "loadFailed": "Dieser Datensatz konnte nicht geladen werden. Versuchen Sie es erneut.",
       "description": "Beschreibung"
     },
     "create": {

@@ -660,6 +660,7 @@
       "timeToFill": "填补用时",
       "days": "天",
       "missing": "此记录已不可见。",
+      "loadFailed": "无法加载此记录。请重试。",
       "description": "说明"
     },
     "create": {

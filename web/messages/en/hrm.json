@@ -716,6 +716,7 @@
       "timeToFill": "Time to fill",
       "days": "days",
       "missing": "This record is no longer visible.",
+      "loadFailed": "This record could not be loaded. Try again.",
       "description": "Description"
     },
     "create": {

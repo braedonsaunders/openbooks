@@ -660,6 +660,7 @@
       "timeToFill": "充足日数",
       "days": "日",
       "missing": "このレコードは表示できません。",
+      "loadFailed": "このレコードを読み込めませんでした。もう一度お試しください。",
       "description": "説明"
     },
     "create": {
