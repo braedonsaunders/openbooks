@@ -432,11 +432,17 @@ function finishCalculation(args: {
   if (svBase > periodMax) svBase = periodMax;
   if (svBase > headroom) svBase = headroom;
 
+  // AOW-aged employees (opgaaf age class aow_1945/aow_1946) are not
+  // verzekerd for the werknemersverzekeringen: WW via AWf and WIA via
+  // Aof/Whk stop from the classified period — a mid-year AOW transition
+  // takes effect through the re-filed opgaaf class. The Zvw employer levy
+  // has no age stop and still prices on svBase below.
+  const aowZeroPremies = args.aow === true;
   let wwCents = 0n;
   let aofCents = 0n;
   let wkoCents = 0n;
   let whkCents = 0n;
-  if (svBase > 0n) {
+  if (svBase > 0n && !aowZeroPremies) {
     // Covered government employees (Wet privatisering ABP scope) owe no
     // AWf: the WW leg prices the 0,68% Ufo premie instead (Handboek
     // Loonheffingen 2026, §7.4). An AWf declaration next to the Ufo
