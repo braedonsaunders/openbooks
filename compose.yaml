@@ -5,6 +5,13 @@ x-openbooks-runtime-environment: &openbooks-runtime-environment
   HOSTNAME: 0.0.0.0
   PORT: "3000"
   OPENBOOKS_DB_URL: postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD:?OPENBOOKS_DB_PASSWORD is required}@postgres:5432/openbooks
+  # Cross-tenant work (installation-wide maintenance, sandbox promotion) runs
+  # on this dedicated BYPASSRLS login, never on the runtime login: production
+  # web/worker refuse at import without it (engine/src/platform/db.ts). The
+  # one-shot bootstrap provisions the role automatically (see
+  # docs/operations/communal-postgres.md for the posture it enforces);
+  # password rotation is a re-run of the bootstrap service with the new value.
+  OPENBOOKS_BYPASS_DB_URL: postgres://openbooks_bypass:${OPENBOOKS_BYPASS_DB_PASSWORD:?OPENBOOKS_BYPASS_DB_PASSWORD is required}@postgres:5432/openbooks
   OPENBOOKS_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
   SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
   OPENBOOKS_DATA_KEY: ${OPENBOOKS_DATA_KEY:?OPENBOOKS_DATA_KEY is required}

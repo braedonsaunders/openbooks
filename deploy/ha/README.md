@@ -34,6 +34,7 @@ Create secrets out of band. Do not commit values or leave them in shell history.
 `openbooks-runtime` must provide:
 
 - `OPENBOOKS_DB_URL`
+- `OPENBOOKS_BYPASS_DB_URL`
 - `OPENBOOKS_REDIS_URL`
 - `SESSION_SECRET`
 - `OPENBOOKS_DATA_KEY`
@@ -62,9 +63,20 @@ not share a filesystem.
 `OPENBOOKS_RUNTIME_DB_URL`. The migration URL is exposed only to the one-shot
 Job. For a first installation it must also provide `ORG_CURRENCY` and
 `ORG_COUNTRY`, and may provide `ORG_NAME`, `ADMIN_EMAIL`, `ADMIN_NAME`, and
-`ADMIN_PASSWORD`. The Job
+`ADMIN_PASSWORD`. Also provide `OPENBOOKS_BYPASS_DB_URL` (same value as the
+runtime secret's) so the Job verifies the dedicated cross-tenant login holds
+`BYPASSRLS` before any pod rolls: production web/worker refuse at import
+without a working bypass login. The Job
 references those keys individually; it does not receive the broad runtime
 secret containing session, data, S3, Redis, and internal-service credentials.
+
+Provision all three database logins out of band per
+`docs/operations/communal-postgres.md` (runtime, schema owner, and the
+dedicated `BYPASSRLS` cross-tenant login — never one login for two jobs).
+Whichever bootstrap mode the Job runs, a wired `OPENBOOKS_BYPASS_DB_URL`
+covers the cross-tenant login too: verified with `BYPASSRLS` (refusing by
+name otherwise) under host-managed roles, created and granted under
+automatic provisioning.
 
 ## Deploy or upgrade
 

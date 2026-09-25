@@ -89,8 +89,8 @@ test("migrations run as the owner while the stack serves as a separate runtime l
   );
   assert.match(
     code,
-    /OPENBOOKS_DB_URL=%s\\nOPENBOOKS_RUNTIME_DB_URL=%s\\n' "\$MIGRATION_URL" "\$RUNTIME_URL"/,
-    "the migration container must receive the owner URL as its migration login and the runtime URL as its runtime login",
+    /OPENBOOKS_DB_URL=%s\\nOPENBOOKS_RUNTIME_DB_URL=%s\\nOPENBOOKS_BYPASS_DB_URL=%s\\n' "\$MIGRATION_URL" "\$RUNTIME_URL" "\$BYPASS_URL"/,
+    "the migration container must receive the owner URL as its migration login, the runtime URL as its runtime login, and the cross-tenant URL so the pre-swap run verifies the bypass login",
   );
 });
 

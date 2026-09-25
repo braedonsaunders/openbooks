@@ -168,6 +168,31 @@ function runtimeDatabaseConfig(): RuntimeDatabaseConfig | null {
   return { connectionString, roleName, password };
 }
 
+/**
+ * Parse OPENBOOKS_BYPASS_DB_URL into the dedicated cross-tenant login.
+ * Production web/worker processes refuse at import without this credential
+ * (engine/src/platform/db.ts), so every production deployment path must
+ * provision the login it names; the one-shot installer itself never serves
+ * tenant traffic and works without it. Null when unset.
+ */
+function bypassDatabaseConfig(): RuntimeDatabaseConfig | null {
+  const connectionString = env.OPENBOOKS_BYPASS_DB_URL?.trim();
+  if (!connectionString) return null;
+  const parsed = new URL(connectionString);
+  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
+    throw new Error("OPENBOOKS_BYPASS_DB_URL must be a PostgreSQL URL");
+  }
+  const roleName = decodeURIComponent(parsed.username);
+  const password = decodeURIComponent(parsed.password);
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(roleName)) {
+    throw new Error("OPENBOOKS_BYPASS_DB_URL contains an invalid PostgreSQL role name");
+  }
+  if (password.length < 24) {
+    throw new Error("the bypass database password must contain at least 24 characters");
+  }
+  return { connectionString, roleName, password };
+}
+
 async function quoted(value: string, kind: "identifier" | "literal"): Promise<string> {
   const fn = kind === "identifier" ? "quote_ident" : "quote_literal";
   const result = await pool.query<{ value: string }>(
@@ -250,6 +275,41 @@ async function requireRuntimeLoginRole(config: RuntimeDatabaseConfig): Promise<v
         `ask the database host to provision it per docs/operations/communal-postgres.md ` +
         `(CREATE ROLE ${config.roleName} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION ` +
         `PASSWORD '<at least 24 characters>'; GRANT CONNECT, TEMPORARY ON DATABASE <database> TO ${config.roleName}), ` +
+        `then retry bootstrap`,
+    );
+  }
+}
+
+/**
+ * Verify-only check for the dedicated cross-tenant (BYPASSRLS) login. Used
+ * wherever bootstrap may not create roles (pre-created and constrained
+ * modes) and for a bypass URL that aliases the migration-owner or runtime
+ * login (ephemeral/test posture), which must never be altered. Mirrors the
+ * production startup predicate in engine/src/platform/db.ts: the login must
+ * hold BYPASSRLS, except a superuser stands in only in explicit local
+ * environments. Refusals name the host provisioning step, not a later GRANT
+ * failure.
+ */
+async function requireBypassLoginRole(config: RuntimeDatabaseConfig): Promise<void> {
+  const existing = await pool.query<{ login: boolean; bypassrls: boolean; superuser: boolean }>(
+    "select rolcanlogin as login, rolbypassrls as bypassrls, rolsuper as superuser from pg_roles where rolname = $1",
+    [config.roleName],
+  );
+  const row = existing.rows[0];
+  if (!row?.login) {
+    throw new Error(
+      `[bootstrap] bypass role ${config.roleName} does not exist with LOGIN; ` +
+        `ask the database host to provision the dedicated cross-tenant login per docs/operations/communal-postgres.md ` +
+        `(CREATE ROLE ${config.roleName} LOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION ` +
+        `PASSWORD '<at least 24 characters>'; GRANT CONNECT, TEMPORARY ON DATABASE <database> TO ${config.roleName} ` +
+        `plus the application-object grants in that document), then retry bootstrap`,
+    );
+  }
+  const localSuperuserFallback = env.NODE_ENV === "development" || env.NODE_ENV === "test";
+  if (!row.bypassrls && !(localSuperuserFallback && row.superuser)) {
+    throw new Error(
+      `[bootstrap] bypass role ${config.roleName} lacks BYPASSRLS; the cross-tenant login must hold BYPASSRLS ` +
+        `(NOSUPERUSER, dedicated — never the runtime login); provision it per docs/operations/communal-postgres.md, ` +
         `then retry bootstrap`,
     );
   }
@@ -2598,6 +2658,139 @@ async function ensureRuntimeRoleExists(
   }
 }
 
+// True when the bypass URL aliases the migration-owner login bootstrap runs
+// as, or the runtime login: there is no dedicated cross-tenant role to
+// create or alter, so the ensure path degrades to the verify-only check
+// (which still refuses a login that cannot bypass, by name).
+async function bypassRoleIsAliased(
+  config: RuntimeDatabaseConfig,
+  runtimeRoleName: string | null,
+): Promise<boolean> {
+  if (runtimeRoleName && config.roleName === runtimeRoleName) return true;
+  const me = await pool.query<{ me: string }>("select current_user as me");
+  return config.roleName === me.rows[0]!.me;
+}
+
+// Create the dedicated cross-tenant (BYPASSRLS) login — and reassert its
+// safe posture — when automatic provisioning owns role management. Mirrors
+// ensureRuntimeRoleExists with BYPASSRLS in place of NOBYPASSRLS: the login
+// defeats FORCE RLS by design, so it stays least-privilege everywhere else
+// (NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION) and dedicated
+// (never the runtime login). Idempotent; aliased URLs verify instead of
+// altering the shared login.
+async function ensureBypassRoleExists(
+  config: RuntimeDatabaseConfig,
+  runtimeRoleName: string | null,
+): Promise<boolean> {
+  if (await bypassRoleIsAliased(config, runtimeRoleName)) {
+    await requireBypassLoginRole(config);
+    return false;
+  }
+  const role = await quoted(config.roleName, "identifier");
+  const password = await quoted(config.password, "literal");
+  const existing = await pool.query<{ exists: boolean }>(
+    "select exists(select 1 from pg_roles where rolname = $1)",
+    [config.roleName],
+  );
+  if (!existing.rows[0]!.exists) {
+    await pool.query(`create role ${role} login password ${password}`);
+  }
+  // Reassert every prohibited cluster privilege on every deployment, keeping
+  // BYPASSRLS as the single deliberate grant. Same privilege-escalation
+  // discipline as the runtime role: without role privileges (42501) converge
+  // instead of enforcing, but a drifted posture still fails loudly.
+  try {
+    await pool.query(
+      `alter role ${role} login inherit nosuperuser bypassrls nocreatedb nocreaterole noreplication password ${password}`,
+    );
+  } catch (err) {
+    if ((err as { code?: string }).code !== "42501") throw err;
+    const posture = await pool.query<{ safe: boolean }>(
+      `select (rolcanlogin and rolinherit and not rolsuper and rolbypassrls
+                 and not rolcreatedb and not rolcreaterole and not rolreplication) as safe
+         from pg_roles where rolname = $1`,
+      [config.roleName],
+    );
+    if (!posture.rows[0]?.safe) {
+      throw new Error(
+        `[bootstrap] cannot enforce safe posture on role ${config.roleName} without privilege; re-run as a superuser`,
+      );
+    }
+    console.log(
+      `[bootstrap] bypass role ${config.roleName} posture already safe; not re-enforced without privilege (password rotation needs a privileged run)`,
+    );
+  }
+  return true;
+}
+
+// Converge the dedicated cross-tenant login's application-object rights to
+// the runtime login's: BYPASSRLS changes which rows RLS hides, not which
+// objects the login may touch, so it needs no more and no less. Never runs
+// on an aliased URL (bypass naming the owner or runtime login): revoking
+// function EXECUTE from a shared login could strip rights the installer
+// itself needs. Callers verify aliased logins with requireBypassLoginRole.
+async function ensureBypassObjectGrants(
+  config: RuntimeDatabaseConfig,
+  runtimeRoleName: string | null,
+): Promise<void> {
+  if (await bypassRoleIsAliased(config, runtimeRoleName)) return;
+  const role = await quoted(config.roleName, "identifier");
+  await pool.query(`grant usage on schema public to ${role}`);
+  await pool.query(
+    `grant select, insert, update, delete on all tables in schema public to ${role}`,
+  );
+  await pool.query(
+    `grant usage, select, update on all sequences in schema public to ${role}`,
+  );
+  // Same SECURITY DEFINER discipline as the runtime login: the public schema
+  // holds tightly controlled maintenance functions the cross-tenant login
+  // must not execute. The governed-query surface stays out: the bypass pool
+  // never SET ROLEs to openbooks_read and never runs the query-catalog
+  // maintenance function.
+  await revokeRuntimeFunctionExecute(pool, config.roleName);
+  await pool.query(
+    `alter default privileges in schema public grant select, insert, update, delete on tables to ${role}`,
+  );
+  await pool.query(
+    `alter default privileges in schema public grant usage, select, update on sequences to ${role}`,
+  );
+}
+
+// Automatic mode: create the dedicated cross-tenant login when absent,
+// connect it to the database, converge its object grants, and grant the
+// tenant-identity plumbing. Aliased URLs verify instead of writing.
+async function ensureBypassDatabaseRole(
+  config: RuntimeDatabaseConfig,
+  runtimeRoleName: string | null,
+): Promise<void> {
+  const dedicated = await ensureBypassRoleExists(config, runtimeRoleName);
+  if (!dedicated) return;
+  const role = await quoted(config.roleName, "identifier");
+  const databaseResult = await pool.query<{ database_name: string }>(
+    "select current_database() as database_name",
+  );
+  const database = await quoted(databaseResult.rows[0]!.database_name, "identifier");
+  await pool.query(`grant connect, temporary on database ${database} to ${role}`);
+  await ensureBypassObjectGrants(config, runtimeRoleName);
+  // Bypass sessions establish tenant identity through the same set_config
+  // plumbing. A transferred test owner may only verify the existing grant.
+  try {
+    await pool.query(
+      `grant execute on function pg_catalog.set_config(text, text, boolean) to ${role}`,
+    );
+  } catch (err) {
+    if ((err as { code?: string }).code !== "42501") throw err;
+    const granted = await pool.query<{ ok: boolean }>(
+      `select has_function_privilege($1, 'pg_catalog.set_config(text, text, boolean)', 'EXECUTE') as ok`,
+      [config.roleName],
+    );
+    if (!granted.rows[0]?.ok) throw err;
+  }
+  console.log(
+    `[bootstrap] bypass database role ${config.roleName} constrained and granted application privileges`,
+  );
+}
+
 async function ensureRuntimeDatabaseRole(
   config: RuntimeDatabaseConfig,
   precreated = false,
@@ -3282,6 +3475,7 @@ async function main(): Promise<void> {
   }
   const precreated = precreatedRolesEnabled(env);
   const runtimeConfig = runtimeDatabaseConfig();
+  const bypassConfig = bypassDatabaseConfig();
   const constrainedSchemaOwnerMigration =
     env.OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1";
   const restoreTarget = env.OPENBOOKS_RESTORE_TARGET === "1";
@@ -3324,10 +3518,20 @@ async function main(): Promise<void> {
         // The runtime login must already exist (this login cannot create
         // roles); grants for tables this run creates are applied after the
         // migration chain, then the runtime login is verified non-owner and
-        // RLS-proved before anything serves it.
+        // RLS-proved before anything serves it. The cross-tenant login is
+        // verified the same way when the release wires it: this gates the
+        // digest swap on a bypass role the new web/worker can actually boot
+        // with (they refuse at import without one).
         await requireRuntimeLoginRole(runtimeConfig);
+        if (bypassConfig) await requireBypassLoginRole(bypassConfig);
         await migrate();
         await ensureRuntimeDatabaseRole(runtimeConfig, true);
+        // The constrained login owns the schema, so it can converge the
+        // host-created bypass login's object grants for tables this run
+        // created — same treatment as the runtime login above.
+        if (bypassConfig) {
+          await ensureBypassObjectGrants(bypassConfig, runtimeConfig.roleName);
+        }
         await verifyRuntimeOwnership(pool, runtimeConfig.roleName);
         const firstOrg = await pool.query<{ id: string }>(
           "select id from orgs order by created_at limit 1",
@@ -3346,6 +3550,11 @@ async function main(): Promise<void> {
       // routine again afterward to grant access to the newly created tables.
       if (precreated) {
         await verifyPrecreatedRoles(pool, runtimeConfig!);
+        // The host owns the cross-tenant login too: verify it exists with
+        // BYPASSRLS rather than creating it. Absent stays skipped — the
+        // installer never serves tenant traffic, so it needs no bypass
+        // credential of its own.
+        if (bypassConfig) await requireBypassLoginRole(bypassConfig);
         console.log("[bootstrap] pre-created roles verified; host owns role provisioning");
       } else {
         await ensureReadRole();
@@ -3353,10 +3562,21 @@ async function main(): Promise<void> {
       // Runtime roles the migrations may reference (e.g. RLS policies targeted
       // `TO openbooks_app`) must also exist before the migration chain runs;
       // the post-migrate ensureRuntimeDatabaseRole still grants the now-created
-      // relations their privileges.
+      // relations their privileges. The cross-tenant login is ensured on the
+      // same schedule so the stock Compose stack boots its first web/worker
+      // with a provisioned bypass role.
       if (runtimeConfig && !precreated) await ensureRuntimeRoleExists(runtimeConfig);
+      if (bypassConfig && !precreated) {
+        await ensureBypassRoleExists(bypassConfig, runtimeConfig?.roleName ?? null);
+      }
       await migrate();
       if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig, precreated);
+      if (bypassConfig && !precreated) {
+        await ensureBypassDatabaseRole(bypassConfig, runtimeConfig?.roleName ?? null);
+      }
+      if (bypassConfig && precreated) {
+        await ensureBypassObjectGrants(bypassConfig, runtimeConfig?.roleName ?? null);
+      }
       if (precreated) {
         await verifyPrecreatedObjectAccess(pool, runtimeConfig!);
       } else {
