@@ -146,12 +146,12 @@ export interface NlStatutoryInput {
 
 export interface NlStatutoryResult {
   /** Jaarloon L in whole euros (multiple of € 54 at or below Lmax). */
-  annualWage: number;
+  annualWage: bigint | null;
   /** X1: schijventarief amount before kortingen, whole euros. */
-  grossAnnual: number;
-  applied: { ahk: number; ouk: number; ark: number; aok: number };
+  grossAnnual: bigint;
+  applied: { ahk: bigint; ouk: bigint; ark: bigint; aok: bigint };
   /** X: annual withholding, whole euros. */
-  netAnnual: number;
+  netAnnual: bigint | null;
   /** x: per-period loonheffing before JGK, cents. */
   periodicCents: bigint;
   /** ark: verrekende arbeidskorting per period, cents. */
@@ -183,77 +183,77 @@ export interface NlStatutoryResult {
 
 const AGE_CLASSES: readonly string[] = ["under_aow", "aow_1945", "aow_1946"];
 
-function ahkAnnual(L: number, aow: boolean): number {
+function ahkAnnual(L: bigint, aow: boolean): bigint {
   const p = aow ? NL_AHK_2026.aow : NL_AHK_2026.under_aow;
-  if (L <= p.phaseFrom) return p.base;
-  if (L > p.phaseTo) return 0;
+  if (L <= BigInt(p.phaseFrom)) return BigInt(p.base);
+  if (L > BigInt(p.phaseTo)) return 0n;
   // "AHK = ahkm1 - (L - ahkg1) * ahka1, waarbij u AHK (jaarbedrag) naar
   // boven afrondt op hele euro's" and "AHK niet kleiner is dan € 0".
-  const remainder5 = BigInt(p.base) * 100000n - BigInt(L - p.phaseFrom) * parseRate5(p.phaseOut, "AHK afbouwfactor");
+  const remainder5 = BigInt(p.base) * 100000n - (L - BigInt(p.phaseFrom)) * parseRate5(p.phaseOut, "AHK afbouwfactor");
   const capped = remainder5 < 0n ? 0n : remainder5;
-  return Number(ceilDiv(capped, 100000n));
+  return ceilDiv(capped, 100000n);
 }
 
-function oukAnnual(L: number, aow: boolean): number {
-  if (!aow) return 0;
+function oukAnnual(L: bigint, aow: boolean): bigint {
+  if (!aow) return 0n;
   const p = NL_OUK_2026;
-  if (L <= p.phaseFrom) return p.base;
-  if (L > p.phaseTo) return 0;
+  if (L <= BigInt(p.phaseFrom)) return BigInt(p.base);
+  if (L > BigInt(p.phaseTo)) return 0n;
   // "u OUK (jaarbedrag) naar boven afrondt op hele euro's" / "niet kleiner dan € 0".
-  const remainder5 = BigInt(p.base) * 100000n - BigInt(L - p.phaseFrom) * parseRate5(p.phaseOut, "OUK afbouwfactor");
+  const remainder5 = BigInt(p.base) * 100000n - (L - BigInt(p.phaseFrom)) * parseRate5(p.phaseOut, "OUK afbouwfactor");
   const capped = remainder5 < 0n ? 0n : remainder5;
-  return Number(ceilDiv(capped, 100000n));
+  return ceilDiv(capped, 100000n);
 }
 
-function arkAnnual(L: number, aow: boolean): number {
+function arkAnnual(L: bigint, aow: boolean): bigint {
   const p = aow ? NL_ARK_2026.aow : NL_ARK_2026.under_aow;
-  if (L > p.taperEnd) return 0;
+  if (L > BigInt(p.taperEnd)) return 0n;
   // "ARK = arko1 * L + arko2 * (L - arkg1) + arko3 * (L - arkg2)
   //        - arka1 * (L - arkg3)", each product "rekenkundig afrondt op
   // 5 decimalen" (exact at 5dp from whole-euro L), running sums "maximeert
   // op arkm1/arkm2/arkm3", "u ARK (jaarbedrag) naar boven afrondt op hele euro's".
-  const over1 = Math.max(L - p.band1, 0);
-  const over2 = Math.max(L - p.band2, 0);
-  const over3 = Math.max(L - p.band3, 0);
-  const t1 = BigInt(L) * parseRate5(p.build1, "ARK opbouwfactor 1");
+  const over1 = L > BigInt(p.band1) ? L - BigInt(p.band1) : 0n;
+  const over2 = L > BigInt(p.band2) ? L - BigInt(p.band2) : 0n;
+  const over3 = L > BigInt(p.band3) ? L - BigInt(p.band3) : 0n;
+  const t1 = L * parseRate5(p.build1, "ARK opbouwfactor 1");
   const capped1 = t1 > BigInt(p.max1) * 100000n ? BigInt(p.max1) * 100000n : t1;
   const s2 = capped1 + BigInt(over1) * parseRate5(p.build2, "ARK opbouwfactor 2");
   const capped2 = s2 > BigInt(p.max2) * 100000n ? BigInt(p.max2) * 100000n : s2;
   const s3 = capped2 + BigInt(over2) * parseRate5(p.build3, "ARK opbouwfactor 3");
   const capped3 = s3 > BigInt(p.max3) * 100000n ? BigInt(p.max3) * 100000n : s3;
   const tapered = capped3 - BigInt(over3) * parseRate5(p.taper, "ARK afbouwfactor");
-  return Number(ceilDiv(tapered < 0n ? 0n : tapered, 100000n));
+  return ceilDiv(tapered < 0n ? 0n : tapered, 100000n);
 }
 
-function x1Annual(L: number, ageClass: NlAgeClass): number {
+function x1Annual(L: bigint, ageClass: NlAgeClass): bigint {
   const bands = NL_BRACKETS_2026[ageClass];
-  let lower = 0;
+  let lower = 0n;
   for (const band of bands) {
-    if (band.upTo === null || L <= band.upTo) {
+    if (band.upTo === null || L <= BigInt(band.upTo)) {
       // "X1 = (L - a) * b / 100 + c, waarbij u X1 naar beneden afrondt op hele euro's".
       const rate100 = parseRate2(band.ratePct, "schijventarief");
-      return Number((BigInt(L - lower) * rate100) / 10000n) + band.cumulative;
+      return ((L - lower) * rate100) / 10000n + BigInt(band.cumulative);
     }
-    lower = band.upTo;
+    lower = BigInt(band.upTo);
   }
   throw new PayrollError("the NL payroll pack cannot price the schijventarief: no top band");
 }
 
 /** Price one annual withholding at or below Lmax (L whole euros, multiple of € 54). */
-function priceAnnual(L: number, ageClass: NlAgeClass, applyKorting: boolean, aokApply: boolean): {
-  x1: number; ahk: number; ouk: number; ark: number; aok: number; x: number;
+function priceAnnual(L: bigint, ageClass: NlAgeClass, applyKorting: boolean, aokApply: boolean): {
+  x1: bigint; ahk: bigint; ouk: bigint; ark: bigint; aok: bigint; x: bigint;
 } {
   const x1 = x1Annual(L, ageClass);
   const aow = ageClass !== "under_aow";
-  let ahk = 0;
-  let ouk = 0;
-  let ark = 0;
-  let aok = 0;
+  let ahk = 0n;
+  let ouk = 0n;
+  let ark = 0n;
+  let aok = 0n;
   if (applyKorting) {
     ahk = ahkAnnual(L, aow);
     ouk = oukAnnual(L, aow);
     ark = arkAnnual(L, aow);
-    if (aokApply) aok = NL_AOK_2026;
+    if (aokApply) aok = BigInt(NL_AOK_2026);
   }
   // "X = X1 - (AHK + OUK + ARK + AOK)", "u X naar beneden afrondt op hele
   // euro's als L ≤ Lmax", "anders X = € 0 (nul), en topt u het theoretische
@@ -262,16 +262,16 @@ function priceAnnual(L: number, ageClass: NlAgeClass, applyKorting: boolean, aok
   // the witte maandtabel pins this (tabelloon € 729: verrekende ARK € 1,00,
   // only the AHK-first keep leaves ARK € 12).
   let x = x1 - (ahk + ouk + ark + aok);
-  if (x < 0) {
-    x = 0;
+  if (x < 0n) {
+    x = 0n;
     let room = x1;
-    ahk = Math.min(ahk, room);
+    ahk = ahk < room ? ahk : room;
     room -= ahk;
-    ouk = Math.min(ouk, room);
+    ouk = ouk < room ? ouk : room;
     room -= ouk;
-    ark = Math.min(ark, room);
+    ark = ark < room ? ark : room;
     room -= ark;
-    aok = Math.min(aok, room);
+    aok = aok < room ? aok : room;
   }
   return { x1, ahk, ouk, ark, aok, x };
 }
@@ -316,7 +316,7 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
 
   if (!aboveMax) {
     // "L = {(tvl * F) / Lv} * Lv, waarbij u (tvl * F) / Lv naar beneden afrondt op 0 decimalen".
-    const L = Number(scaledCents / BigInt(NL_LV_2026 * 100)) * NL_LV_2026;
+    const L = (scaledCents / BigInt(NL_LV_2026 * 100)) * BigInt(NL_LV_2026);
     const priced = priceAnnual(L, ageClass, input.applyKorting, input.aokApply === true);
     const periodicCents = halfUpDiv(BigInt(priced.x) * 100n, BigInt(F));
     return finishCalculation({
@@ -326,7 +326,7 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
   }
   // Above Lmax there is no tabelloon: systematiek 1 prices the period wage
   // directly ("x = y + xboven").
-  const atMax = priceAnnual(NL_LMAX_2026, ageClass, input.applyKorting, input.aokApply === true);
+  const atMax = priceAnnual(BigInt(NL_LMAX_2026), ageClass, input.applyKorting, input.aokApply === true);
   const yCents = halfUpDiv(BigInt(atMax.x) * 100n, BigInt(F));
   // "xboven = (L / F - Lmax / F) * (bmax / 100)", "u xboven naar beneden afrondt op 2 decimalen".
   const topRate = parseRate2(NL_BRACKETS_2026[ageClass][2]!.ratePct, "hoogste schijf");
@@ -342,8 +342,8 @@ function finishCalculation(args: {
   F: number;
   aow: boolean;
   /** Null above Lmax (no tabelloon there). */
-  annualWage: number | null;
-  priced: { x1: number; ahk: number; ouk: number; ark: number; aok: number; x: number };
+  annualWage: bigint | null;
+  priced: { x1: bigint; ahk: bigint; ouk: bigint; ark: bigint; aok: bigint; x: bigint };
   periodicCents: bigint;
   aboveMaxCents: bigint;
   aboveMax: boolean;
@@ -360,7 +360,7 @@ function finishCalculation(args: {
   // period wage itself is the tabelloon.
   const tableWageCents = args.annualWage === null
     ? parseCents(input.income, "period wage")
-    : ceilDiv(BigInt(args.annualWage) * 100n, bigF);
+    : ceilDiv(args.annualWage * 100n, bigF);
 
   // Jonggehandicaptenkorting: "het tijdvakbedrag van deze korting in
   // mindering brengen op het bedrag dat u volgens de loonbelastingtijdvaktabel
@@ -436,10 +436,10 @@ function finishCalculation(args: {
   const zvwCents = halfUpDiv(svBase * zvwRate, 10000n);
 
   return {
-    annualWage: args.annualWage ?? -1,
+    annualWage: args.annualWage,
     grossAnnual: priced.x1,
     applied: { ahk: priced.ahk, ouk: priced.ouk, ark: priced.ark, aok: priced.aok },
-    netAnnual: aboveMax ? -1 : priced.x,
+    netAnnual: aboveMax ? null : priced.x,
     periodicCents,
     arkPeriodicCents,
     ahkPeriodicCents,
@@ -571,13 +571,13 @@ export async function computeNlStatutory(
   pushStatutory("zvw", "employer_contribution", "Werkgeversheffing Zorgverzekeringswet", d4(result.zvwCents), 230);
 
   return {
-    L: result.annualWage < 0 ? "above_max" : `${result.annualWage}.0000`,
+    L: result.annualWage === null ? "above_max" : `${result.annualWage}.0000`,
     X1: `${result.grossAnnual}.0000`,
     AHK: `${result.applied.ahk}.0000`,
     ARK: `${result.applied.ark}.0000`,
     OUK: `${result.applied.ouk}.0000`,
     AOK: `${result.applied.aok}.0000`,
-    X: result.netAnnual < 0 ? "above_max" : `${result.netAnnual}.0000`,
+    X: result.netAnnual === null ? "above_max" : `${result.netAnnual}.0000`,
     LH: d4(result.withholdingCents),
     ARK_T: d4(result.arkPeriodicCents),
     AHK_T: d4(result.ahkPeriodicCents),
