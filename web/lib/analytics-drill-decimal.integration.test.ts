@@ -27,6 +27,8 @@ registerHooks({
         format: 'module',
         shortCircuit: true,
         source: `const key = Symbol.for('openbooks.analytics-drill-gate')
+          import { permissionSetCovers } from '${'file://' + process.cwd() + '/engine/src/organization/permissions.ts'}'
+          export function can(gate, perm) { return permissionSetCovers(gate.permissions, perm) }
           export async function guardPermission() {
             const gate = globalThis[key]
             if (!gate) throw new Error('drill gate org is not set for this test')
