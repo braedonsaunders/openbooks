@@ -9,7 +9,7 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 
 /**
  * The NL pack, ON A REAL PAY RUN.
@@ -103,6 +103,10 @@ async function nlEmployee(
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${id}, ${fx.orgId}, 'person', ${name}, ${fx.subsidiaryId}, true, '{}'::jsonb)`);
+  // pay_stubs.employment_id is NOT NULL and the run refuses stubs without
+  // an HRM employment: every stub employee carries one, and the profile
+  // points at it (the run reads emp.employment_id).
+  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   await db.execute(sql`
     insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${fx.orgId}, ${id})`);
   await db.execute(sql`
@@ -114,10 +118,10 @@ async function nlEmployee(
   // engine reads is a pack-declared certificate answer, entered through the
   // certificates surface (web/app/api/payroll/certificates).
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country,
                                            province, pay_basis, is_active, created_by, updated_by,
                                            sin_encrypted, sin_last3)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'NL', 'NL',
+    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'NL', 'NL',
             'salary', true, ${fx.actorId}, ${fx.actorId},
             ${sealSecret(bsn)}, ${bsn.slice(-3)})`);
   for (const certificate of certificates) {
