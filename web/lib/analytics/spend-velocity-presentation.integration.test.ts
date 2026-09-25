@@ -103,7 +103,7 @@ test('spend velocity translates every spend functional to presentation', { skip:
       assert.equal(data.summary.totalSpend, 235)
       assert.equal(data.summary.billsTotal, 235)
       assert.equal(data.monthlyTrends.find((m) => m.month === '2026-07')?.totalAmount, 235)
-      assert.equal(data.commitmentCliff.summary.totalPO, 235)
+      assert.equal(data.commitmentCliff.summary.totalPO, '235.0000')
       // Revenue arrives as an exact decimal string since I5-platform-189.
       assert.equal(data.revenue.totalRevenue, '470.0000')
       // P&L operating expenses are the 100 CAD bill plus the 50 CAD manual

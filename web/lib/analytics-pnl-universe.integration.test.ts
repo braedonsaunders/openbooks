@@ -68,17 +68,17 @@ test('expense_other with segment + project tags reaches every P&L slice', { skip
       assert.equal(Number(headline.expenses), 100, 'headline control: expenses include expense_other');
 
       const profit = await customerProfitability(period, org.scoped.orgId, null);
-      assert.equal(profit.summary.totalRevenue, 200);
-      assert.equal(profit.summary.totalCost, 100, 'project costs include expense_other legs');
-      assert.equal(profit.summary.totalGrossProfit, 100, 'project slice ties to the headline P&L');
+      assert.equal(profit.summary.totalRevenue, '200.0000');
+      assert.equal(profit.summary.totalCost, '100.0000', 'project costs include expense_other legs');
+      assert.equal(profit.summary.totalGrossProfit, '100.0000', 'project slice ties to the headline P&L');
 
       const health = await healthData(period, org.scoped.orgId, null);
       const segA = health.segments.department.find((row) => row.id === org.deptA);
       assert.ok(segA, 'segment with revenue is present');
-      assert.equal(segA.revenue, 200);
+      assert.equal(segA.revenue, '200.0000');
       const segB = health.segments.department.find((row) => row.id === org.deptB);
       assert.ok(segB, 'segment whose only cost is expense_other is present');
-      assert.equal(segB.revenue, 0);
+      assert.equal(segB.revenue, '0.0000');
     });
   } finally { await withBypassContext(() => dropScratchOrg(org.scoped.orgId)); }
 });
