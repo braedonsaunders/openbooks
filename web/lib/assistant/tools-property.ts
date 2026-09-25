@@ -150,7 +150,7 @@ const listLeases: AssistantToolDef = {
           .some((v) => String(v ?? "").toLowerCase().includes(q))),
     );
     const byStatus = new Map<string, number>();
-    for (const l of workspace.leases) {
+    for (const l of rows) {
       const key = String(l.status);
       byStatus.set(key, (byStatus.get(key) ?? 0) + 1);
     }
