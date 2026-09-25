@@ -186,6 +186,20 @@ const mockDb = `
       if (state.orgMissing) return { rows: [] }
       return { rows: [{ base_currency: 'CAD' }] }
     }
+    // Subsidiary-scoped reference lists (listScoped*Options): unlike the
+    // per-id active probes below, these list every visible row with no
+    // any-membership param, so answer them from the same state pools. Fake
+    // references are org-wide and therefore visible under both lenses.
+    for (const [marker, pool] of [
+      ['from accounts a', state.accounts],
+      ['from parties p', state.parties],
+      ['from departments d', state.departments],
+      ['from projects p', state.projects],
+    ]) {
+      if (text.includes(marker)) {
+        return { rows: pool.filter((row) => row.active).map((row) => ({ id: row.id })) }
+      }
+    }
     // Explicit same-org active-reference checks. drizzle inlines
     // sql.identifier(...) unquoted, and the id set arrives as one '{a,b}'
     // any-param, so match the table plus the any-membership (which the
