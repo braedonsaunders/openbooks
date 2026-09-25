@@ -165,6 +165,8 @@ test("payroll bank-file release records valid evidence at the storage boundary",
       firstReleasedAt: row.firstReleasedAt,
       lastReleasedAt: row.lastReleasedAt,
     });
+    await db.execute(sql`update pay_run_bank_files set status = 'superseded', superseded_at = now(), superseded_by = ${fixture.actorId}, supersede_reason = 'bank replacement' where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`);
+    await assert.rejects(releasePayRunBankFile(fixture.org.orgId, fixture.artifactId, fixture.actorId), /superseded.*replacement/i);
   } finally {
     await dropScratchOrgReporting(fixture.org.orgId);
   }
