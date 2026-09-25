@@ -87,7 +87,7 @@ test('stored home resolution prefers personal, then role, then system dashboards
 })
 
 test('live PostgreSQL partial indexes enforce their predicates', { skip: !databaseUrl }, async () => {
-  const client = new pg.Client({ connectionString: databaseUrl })
+  const client = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? databaseUrl })
   await client.connect()
   await client.query("select set_config('app.bypass_rls','on',false)")
   const ids: string[] = []
@@ -120,7 +120,7 @@ test('live PostgreSQL partial indexes enforce their predicates', { skip: !databa
 })
 
 test('live PostgreSQL migration repairs duplicate pointers and replays without changing the result', { skip: !databaseUrl }, async () => {
-  const client = new pg.Client({ connectionString: databaseUrl })
+  const client = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? databaseUrl })
   await client.connect()
   await client.query("select set_config('app.bypass_rls','on',false)")
   const idPrefix = randomUUID().slice(0, 24)
