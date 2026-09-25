@@ -581,11 +581,15 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       iconKey: 'timer',
     })
   }
-  actions.push({
-    href: '/admin/setup/departments',
-    label: t('overview.actions.manageDepartments'),
-    iconKey: 'building',
-  })
+  // Company setup lives behind the Setup workspace gate — readers without
+  // admin.setup.manage get no link to a surface that would refuse them.
+  if (can(authz, 'admin.setup.manage')) {
+    actions.push({
+      href: '/admin/setup/departments',
+      label: t('overview.actions.manageDepartments'),
+      iconKey: 'building',
+    })
+  }
   if (can(authz, 'reports.read')) {
     actions.push({
       href: '/reports',

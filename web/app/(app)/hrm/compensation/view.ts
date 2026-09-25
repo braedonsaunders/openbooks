@@ -45,7 +45,7 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
         actions: [
           widget('link-button', { href: f('newCycleHref'), label: f('newCycleLabel'), iconKey: 'plus' }, f('canRunCycles')),
           widget('link-button', { href: f('newPlanHref'), label: f('newPlanLabel'), iconKey: 'plus', variant: 'outline' }, f('canManage')),
-          widget('link-button', { href: f('equityHref'), label: f('equityLabel'), iconKey: 'scale', variant: 'outline' }),
+          widget('link-button', { href: f('equityHref'), label: f('equityLabel'), iconKey: 'scale', variant: 'outline' }, f('canViewEquity')),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
