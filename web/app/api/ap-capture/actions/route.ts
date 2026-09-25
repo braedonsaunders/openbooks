@@ -145,7 +145,12 @@ export async function POST(request: Request) {
         })
         if (queued === null) continue
         try {
-          await enqueueApCapture({ orgId: gate.user.orgId, captureItemId: id, actorId: gate.user.id }, { jobId: apCaptureReprocessJobId(id, queued.generation) })
+          // Freeze the operator's subsidiary scope at enqueue time. The
+          // worker re-derives scope from the actor when the job carries
+          // none, so an omitted field would let a later scope expansion
+          // widen what this reprocess may auto-materialize. The materialize
+          // path below already freezes it; reprocess must do the same.
+          await enqueueApCapture({ orgId: gate.user.orgId, captureItemId: id, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds] }, { jobId: apCaptureReprocessJobId(id, queued.generation) })
         } catch (error) {
           const message = error instanceof Error ? error.message.slice(0, 300) : 'queue_unavailable'
           await db.transaction(async (tx) => {
