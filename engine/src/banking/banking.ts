@@ -4,7 +4,7 @@ import { db, inDbTransaction, schema, type SqlExecutor, withOrgTransaction, with
 import { utcDateFromParts } from "../platform/business-date.ts";
 import { fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { lockScopeRows, ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 /**
  * Banking: statement parsing (OFX / CSV) → import with dedupe → auto/manual
@@ -2410,16 +2410,23 @@ async function createMatchInTransaction(
  * to orphan.
  */
 export async function createMatchWithJournal(
-  opts: MatchOptions & { createJournal: () => Promise<string>; matchedBy?: MatchOrigin },
+  opts: MatchOptions & { createJournal: () => Promise<string>; matchedBy?: MatchOrigin; additionalAccountIds?: readonly string[] },
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
-  return withOrgTransaction(ctx.orgId, () =>
-    inDbTransaction((tx) =>
-      withTransactionSavepoint(tx, () =>
-        createMatchInTransaction(tx, opts, ctx, opts.createJournal, opts.matchedBy ?? "rule"),
-      ),
-    ),
-  );
+  return withOrgTransaction(ctx.orgId, () => inDbTransaction((tx) => withTransactionSavepoint(tx, async () => {
+    const reconciliation = (await tx.execute<{ account_id: string }>(sql`
+      select account_id from reconciliations where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!reconciliation) throw new ScopeNotFoundError();
+    // Lock every account touched by the posting in one global order before
+    // the reconciliation and statement-line locks. In particular, a manual
+    // contra account cannot be rehomed after its preflight scope read.
+    await lockScopeRows(tx, ctx.orgId, [
+      { kind: "account", id: reconciliation.account_id },
+      ...(opts.additionalAccountIds ?? []).map((id) => ({ kind: "account" as const, id })),
+    ], ctx.allowedSubsidiaryIds, "update");
+    return createMatchInTransaction(tx, opts, ctx, opts.createJournal, opts.matchedBy ?? "rule");
+  })));
 }
 
 /** Manually pair one statement line with one or more journal lines. */

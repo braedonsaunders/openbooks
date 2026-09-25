@@ -296,6 +296,7 @@ async function postCategorizeForLine(
       reconciliationId,
       statementLineId: line.id,
       matchedBy: 'rule',
+      additionalAccountIds: splits.map((split) => split.accountId),
       createJournal: () => createCategorizingJournal(orgId, userId, {
         bankAccountId,
         splits,
@@ -586,6 +587,7 @@ export async function addJournalMatchFromLine(
       reconciliationId: opts.reconciliationId,
       statementLineId: opts.statementLineId,
       matchedBy: 'manual',
+      additionalAccountIds: [opts.offsetAccountId],
       createJournal: () => createCategorizingJournal(orgId, userId, {
         bankAccountId: line.account_id,
         splits: [{ accountId: opts.offsetAccountId, portion: { kind: 'remainder' } }],
