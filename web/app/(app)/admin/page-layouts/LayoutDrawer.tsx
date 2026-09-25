@@ -296,13 +296,19 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   }
 
   const restore = async (versionId: string) => {
+    const version = versions?.find((candidate) => candidate.id === versionId)
+    if (!version) return
     setBusy(true)
     try {
-      const response = await fetch(`/api/page-specs?restore=${encodeURIComponent(versionId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ route: drawer.route }),
-      })
+      const response = await fetch(
+        `/api/page-specs?restore=${encodeURIComponent(versionId)}` +
+          (version.scope === 'user' ? '&scope=user' : ''),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ route: drawer.route }),
+        },
+      )
       const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
       if (!response.ok) {
         setErrors(body.errors ?? [body.error ?? tCommon('feedback.somethingWentWrong')])
