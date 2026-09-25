@@ -92,7 +92,7 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
   const field = 'space-y-1.5'
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-6" inert={saving}>
       {/* enable */}
       <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <input type="checkbox" checked={!!v.enabled} onChange={(e) => set({ enabled: e.target.checked })} className="h-4 w-4" />

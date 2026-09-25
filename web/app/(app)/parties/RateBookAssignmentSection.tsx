@@ -199,7 +199,7 @@ export function RateBookAssignmentSection({
           <p className="text-xs text-slate-500 dark:text-slate-400">{t(`hint.${scope}`)}</p>
         </div>
         {!form && canEditAssignments ? (
-          <Button variant="outline" size="sm" onClick={startNew} disabled={rateBooks.length === 0}>
+          <Button variant="outline" size="sm" onClick={startNew} disabled={busy || rateBooks.length === 0}>
             {t('new')}
           </Button>
         ) : null}
@@ -232,7 +232,7 @@ export function RateBookAssignmentSection({
 
       {form ? (
         <Card>
-          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5" inert={busy}>
             <div className={`${field} lg:col-span-2`}>
               <Label>{t('rateBook')}</Label>
               <Select value={form.rateBookId} onChange={(e) => setForm({ ...form, rateBookId: e.target.value })}>
@@ -263,7 +263,7 @@ export function RateBookAssignmentSection({
             </label>
             <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
               <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
-              <Button variant="outline" onClick={() => setForm(null)}>{common('actions.cancel')}</Button>
+              <Button variant="outline" disabled={busy} onClick={() => setForm(null)}>{common('actions.cancel')}</Button>
             </div>
           </CardContent>
         </Card>
@@ -296,7 +296,7 @@ export function RateBookAssignmentSection({
                   </td>
                   <td className="px-3 py-2 text-right">
                     {a.rate_version_id && canOpenPricing ? <Link href={pricingHref(a.rate_version_id) as never} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('openPricing')}</Link> : null}
-                    {canEditAssignments ? <button type="button" onClick={() => startEdit(a)} className="ml-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{common('actions.edit')}</button> : null}
+                    {canEditAssignments ? <button type="button" onClick={() => startEdit(a)} disabled={busy} className="ml-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{common('actions.edit')}</button> : null}
                     {canEditAssignments ? <button type="button" onClick={() => remove(a.id)} disabled={busy} className="ml-3 text-xs font-medium text-red-600 hover:underline dark:text-red-400">{common('actions.delete')}</button> : null}
                   </td>
                 </tr>

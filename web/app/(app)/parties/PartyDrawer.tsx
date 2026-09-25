@@ -1246,7 +1246,7 @@ export function PartyDrawer({
     >
       <ActionAlert error={refusal} fallbackMessage={t('autosaveFailed')} title={t('saveFailedRetry')} className="mb-4" />
       <TabContent tabKey={tab}>
-      <div className="space-y-7 p-1">
+      <div className="space-y-7 p-1" inert={busy}>
         {tab === 'overview' ? (
           effectiveLayout && role ? (
             <>

@@ -181,7 +181,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/60">
+      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/60" inert={busy}>
         <div>
           <Label htmlFor="employee-wage-rate">{t('rate')}</Label>
           <Input
