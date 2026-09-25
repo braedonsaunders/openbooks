@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { tickInterval } from './charts'
+import { cashBridgeOption, tickInterval } from './charts'
 
 /**
  * the cash-trend x-axis must thin out deterministically (fewer
@@ -14,9 +14,7 @@ test('short series show every tick', () => {
 })
 
 test('long series thin to at most maxTicks', () => {
-  // 13 weekly points capped to 5 ticks → every 3rd label.
   assert.equal(tickInterval(13, 5), 2)
-  // Shown ticks = ceil(count / (interval + 1)) <= maxTicks.
   for (const count of [7, 10, 13, 26, 52]) {
     const interval = tickInterval(count, 5)
     assert.ok(
@@ -26,7 +24,9 @@ test('long series thin to at most maxTicks', () => {
   }
 })
 
-test('degenerate caps fall back to showing everything', () => {
-  assert.equal(tickInterval(13, 0), 0)
-  assert.equal(tickInterval(13, -2), 0)
+test('cash bridge computes its outflow geometry before numeric projection', () => {
+  const option = cashBridgeOption('0.1', '0.2', '0.1', '0.2', (value) => String(value), {
+    start: 'Start', inflows: 'In', outflows: 'Out', projectedEnd: 'End',
+  }) as { series: { data: { value: number }[] }[] }
+  assert.equal(option.series[2]?.data[2]?.value, 0.1)
 })

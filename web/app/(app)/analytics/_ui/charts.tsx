@@ -3,8 +3,8 @@
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { InsightChart } from '@openbooks/analytics/viz'
-import { neg as moneyNeg } from '@openbooks/engine/src/money/money.ts'
-import { boundChartNumber, toChartNumber, useAnalyticsMoney } from './format'
+import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, neg as moneyNeg } from '@openbooks/engine/src/money/money.ts'
+import { toChartNumber, useAnalyticsMoney } from './format'
 
 /** Loose ECharts option shape — mirrors the analytics package's own alias. */
 type EChartsOption = Record<string, unknown>
@@ -315,20 +315,17 @@ export interface CashBridgeLabels {
  * cashflow dashboard's signature chart, shared by analytics and the Cash
  * cockpit — moved verbatim from CashflowView). */
 export function cashBridgeOption(startCash: string, inflows: string, outflows: string, end: string, money: MoneyLabel, labels: CashBridgeLabels): EChartsOption {
-  // Keep exact strings for labels/tooltips; only the chart geometry crosses the
-  // bounded numeric projection boundary.
-  const startValue = toChartNumber(startCash)
-  const inflowValue = toChartNumber(inflows)
-  const endValue = toChartNumber(end)
-  const afterIn = boundChartNumber(startValue + inflowValue)
+  // Calculate every bridge position and delta exactly before projecting the
+  // completed coordinates into the chart library's bounded numeric domain.
+  const afterIn = moneyAdd(startCash, inflows)
   const steps = [
-    { label: labels.start, from: 0, to: startValue, color: '#94a3b8' },
-    { label: labels.inflows, from: startValue, to: afterIn, color: '#10b981' },
-    { label: labels.outflows, from: afterIn, to: endValue, color: '#ef4444' },
-    { label: labels.projectedEnd, from: 0, to: endValue, color: '#0d9488' },
+    { label: labels.start, from: '0', to: startCash, color: '#94a3b8' },
+    { label: labels.inflows, from: startCash, to: afterIn, color: '#10b981' },
+    { label: labels.outflows, from: afterIn, to: end, color: '#ef4444' },
+    { label: labels.projectedEnd, from: '0', to: end, color: '#0d9488' },
   ]
-  const base = steps.map((s) => Math.min(s.from, s.to))
-  const bar = steps.map((s) => boundChartNumber(Math.abs(s.to - s.from)))
+  const base = steps.map((s) => toChartNumber(moneyCmp(s.from, s.to) <= 0 ? s.from : s.to))
+  const bar = steps.map((s) => toChartNumber(moneyAbs(moneyAdd(s.to, moneyNeg(s.from)))))
   const exactValues = [startCash, inflows, moneyNeg(outflows), end]
   return {
     grid: baseGrid,
