@@ -13,7 +13,7 @@ function mockFetch(handler: (url: string) => Response) {
 test("a completed run resolves its finding count", async () => {
   const restore = mockFetch(() => Response.json({ status: "completed", detected: 7 }));
   try {
-    assert.deepEqual(await postAgentScan("collections"), { ok: true, detected: 7 });
+    assert.deepEqual(await postAgentScan("collections", "scan failed"), { ok: true, detected: 7 });
   } finally {
     restore();
   }
@@ -22,7 +22,7 @@ test("a completed run resolves its finding count", async () => {
 test("a completed run without a count resolves zero", async () => {
   const restore = mockFetch(() => Response.json({ status: "completed" }));
   try {
-    assert.deepEqual(await postAgentScan("collections"), { ok: true, detected: 0 });
+    assert.deepEqual(await postAgentScan("collections", "scan failed"), { ok: true, detected: 0 });
   } finally {
     restore();
   }
@@ -35,7 +35,9 @@ test("a 409 claim loss resolves already-running", async () => {
     return Response.json({ status: "claimed_elsewhere", agentKey: "collections" }, { status: 409 });
   });
   try {
-    assert.deepEqual(await postAgentScan("collections"), { ok: false, alreadyRunning: true });
+    assert.deepEqual(await postAgentScan("collections", "scan failed"), {
+      ok: false, alreadyRunning: true, code: null, error: "scan failed (status 409)",
+    });
     assert.ok(seen[0]!.endsWith("/api/admin/setup/agents/collections/run"));
   } finally {
     restore();
@@ -45,7 +47,9 @@ test("a 409 claim loss resolves already-running", async () => {
 test("other rejections resolve generic failure", async () => {
   const restore = mockFetch(() => Response.json({ status: "skipped", detected: 0 }, { status: 409 }));
   try {
-    assert.deepEqual(await postAgentScan("collections"), { ok: false, alreadyRunning: false });
+    assert.deepEqual(await postAgentScan("collections", "scan failed"), {
+      ok: false, alreadyRunning: false, code: null, error: "scan failed (status 409)",
+    });
   } finally {
     restore();
   }
@@ -57,7 +61,7 @@ test("a transport failure propagates to the caller's catch", async () => {
     throw new Error("down");
   }) as typeof fetch;
   try {
-    await assert.rejects(() => postAgentScan("collections"), /down/);
+    await assert.rejects(() => postAgentScan("collections", "scan failed"), /down/);
   } finally {
     globalThis.fetch = prior;
   }

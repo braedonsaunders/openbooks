@@ -77,7 +77,7 @@ export function AgentsPackActions({
     if (pending || running) return
     setRunning(true)
     try {
-      const outcome = await postAgentScan(agentKey)
+      const outcome = await postAgentScan(agentKey, t('setup.agents.overview.scanFailed'))
       if (!outcome.ok) {
         if (outcome.alreadyRunning) {
           // Another run owns the scan: say so and converge the row onto
@@ -86,7 +86,9 @@ export function AgentsPackActions({
           router.refresh()
           return
         }
-        throw new Error(t('setup.agents.overview.scanFailed'))
+        throw new Error(outcome.code === 'feature_disabled'
+          ? t('setup.agents.overview.featureOffError')
+          : outcome.error ?? t('setup.agents.overview.scanFailed'))
       }
       toast.success(t('setup.agents.overview.scanComplete', { count: outcome.detected }))
       router.refresh()
