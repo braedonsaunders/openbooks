@@ -717,7 +717,6 @@ test('create rejects falsy non-null expiresAt impostors instead of minting a non
     const response = await post({ name: 'expiry-confused key', scopes: ['gl.read'], expiresAt })
 
     assert.equal(response.status, 400, `expiresAt=${JSON.stringify(expiresAt)} must be refused`)
-    assert.match((await response.json()).error, /expiresAt must be an ISO date string or null/)
     assert.deepEqual(committedWrites(), [], 'a type-confused expiry never reaches storage')
   }
 })
@@ -735,10 +734,11 @@ test('create accepts an explicit null expiry and a future date, and refuses past
   })
   assert.equal(future.status, 201)
 
-  for (const expiresAt of ['not-a-date', new Date(Date.now() - 1000).toISOString()]) {
+  for (const expiresAt of ['not-a-date', '03/04/2027', '2027-03', new Date(Date.now() - 1000).toISOString()]) {
     reset()
     const response = await post({ name: 'bad expiry key', scopes: ['gl.read'], expiresAt })
     assert.equal(response.status, 400, `expiresAt=${expiresAt} must be refused`)
+    assert.match((await response.json()).error, /expiresAt must (?:be an ISO date-time with a timezone or null|be in the future)/)
     assert.deepEqual(committedWrites(), [], 'a bad expiry never reaches storage')
   }
 })

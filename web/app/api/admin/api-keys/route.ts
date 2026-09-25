@@ -18,6 +18,7 @@ import {
   subsidiaryScopeWithinCeiling,
 } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
 import { isUuid } from "../../../../lib/list-params";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 
@@ -250,7 +251,7 @@ export async function POST(req: Request) {
   // Default to 120/min when unspecified; null = unlimited.
   const rateValue = rate === undefined ? 120 : rate;
 
-  // Strict type validation: only an ISO date string or an explicit null
+  // Strict validation: only a complete, timezone-qualified ISO date-time or null
   // yields a value. Falsy impostors (0, false, "") must not coerce to a
   // non-expiring (NULL) key — non-expiring is only via explicit null
   // (omitted is kept as non-expiring for backward compatibility; new
@@ -260,19 +261,16 @@ export async function POST(req: Request) {
   if (body.expiresAt === undefined || body.expiresAt === null) {
     expiresAt = null;
   } else if (typeof body.expiresAt === "string") {
-    if (!body.expiresAt) {
-      return NextResponse.json({ error: "expiresAt must be an ISO date string or null" }, { status: 400 });
+    if (!z.string().datetime({ offset: true }).safeParse(body.expiresAt).success) {
+      return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
     }
     const d = new Date(body.expiresAt);
-    if (isNaN(d.getTime())) {
-      return NextResponse.json({ error: "invalid expiresAt" }, { status: 400 });
-    }
     if (d.getTime() <= Date.now()) {
       return NextResponse.json({ error: "expiresAt must be in the future" }, { status: 400 });
     }
     expiresAt = d.toISOString();
   } else {
-    return NextResponse.json({ error: "expiresAt must be an ISO date string or null" }, { status: 400 });
+    return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
   }
 
   const gen = generateApiKey();
