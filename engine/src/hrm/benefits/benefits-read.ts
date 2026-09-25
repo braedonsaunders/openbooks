@@ -86,29 +86,53 @@ export async function listEnrollmentWindows(
     scope === null
       ? sql`true`
       : sql`emp.employer_subsidiary_id = any (${`{${[...scope].join(",")}}`}::uuid[])`;
+  const employerTarget = sql`(w.applies_to ->> 'employer_subsidiary_id')`;
+  const departmentTarget = sql`(w.applies_to ->> 'department_id')`;
+  const coversEmployment = sql`
+    (${employerTarget} is null or ${employerTarget}::uuid = emp.employer_subsidiary_id)
+    and (${departmentTarget} is null or exists (
+      select 1
+        from employment_assignment_versions av
+        join employment_assignments aa on aa.org_id = av.org_id and aa.id = av.assignment_id
+       where av.org_id = e.org_id and aa.employment_id = e.employment_id
+         and av.recorded_until is null and av.department_id = ${departmentTarget}::uuid
+    ))`;
   const rows = (
     await exec.execute<Record<string, unknown>>(sql`
       select w.id, w.name, w.kind,
              w.opens_on::text as "opensOn", w.closes_on::text as "closesOn", w.status,
              w.applies_to as "appliesTo",
-             count(distinct case when ${inScope} then e.id end)::int as elections,
-             count(distinct case when e.status = 'pending_approval' and ${inScope} then e.id end)::int as "pendingApprovals"
+             d.subsidiary_id as "departmentSubsidiaryId",
+             d.id is not null as "departmentExists",
+             count(distinct case when ${inScope} and ${coversEmployment} then e.id end)::int as elections,
+             count(distinct case when e.status = 'pending_approval' and ${inScope} and ${coversEmployment} then e.id end)::int as "pendingApprovals"
         from hrm_enrollment_windows w
         left join hrm_benefit_enrollments e
           on e.org_id = w.org_id and e.window_id = w.id
         left join worker_employments emp
           on emp.org_id = e.org_id and emp.id = e.employment_id
+        left join departments d
+          on d.org_id = w.org_id and d.id = (w.applies_to ->> 'department_id')::uuid
        where w.org_id = ${orgId} ${status !== undefined ? sql`and w.status = ${status}` : sql``}
-       group by w.id
+       group by w.id, d.id, d.subsidiary_id
        order by w.opens_on desc
     `)
   ).rows;
   return rows
     .filter((row) => {
-      if (scope === null) return true;
-      const applies = (row.appliesTo ?? {}) as { employer_subsidiary_id?: unknown };
+      const applies = (row.appliesTo ?? {}) as { employer_subsidiary_id?: unknown; department_id?: unknown };
       const employer = applies.employer_subsidiary_id;
-      return employer == null || (typeof employer === "string" && scope.has(employer));
+      const department = applies.department_id;
+      const departmentSubsidiary = row.departmentSubsidiaryId == null ? null : String(row.departmentSubsidiaryId);
+      if (department != null && row.departmentExists !== true) return false;
+      if (
+        employer != null && departmentSubsidiary !== null &&
+        typeof employer === "string" && employer !== departmentSubsidiary
+      ) return false;
+      if (scope === null) return true;
+      return (employer == null || (typeof employer === "string" && scope.has(employer))) &&
+        (departmentSubsidiary === null || scope.has(departmentSubsidiary)) &&
+        !(department != null && departmentSubsidiary === null && employer == null);
     })
     .map((row) => ({
       id: String(row.id),
