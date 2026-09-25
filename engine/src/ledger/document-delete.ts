@@ -31,6 +31,29 @@ export async function deleteDocument(
   },
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
+    const kind = (await tx.execute<{ kind: string }>(sql`
+      select kind from documents where id = ${documentId} and org_id = ${orgId}
+    `)).rows[0]?.kind
+    if (kind === "vendor_payment" || kind === "customer_payment") {
+      // Match payment edits/posting: run → instruction → document. Locking the
+      // document first would deadlock against a run transition and miss a
+      // live instruction added while delete waits on its deferred FK.
+      const candidates = (await tx.execute<{ run_id: string; instruction_id: string }>(sql`
+        select run.id as run_id, instruction.id as instruction_id
+          from payment_instructions instruction
+          join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
+         where instruction.payment_document_id = ${documentId} and instruction.org_id = ${orgId}
+           and instruction.status in ('pending', 'approved', 'generated')
+           and run.status in ('draft', 'pending_approval', 'approved', 'processing',
+                              'generated', 'delivered', 'partially_failed')
+         order by run.id, instruction.id
+      `)).rows
+      const runIds = [...new Set(candidates.map((row) => row.run_id))].sort()
+      if (runIds.length > 0) {
+        await tx.execute(sql`select id from payment_runs where org_id = ${orgId} and id in ${runIds} order by id for update`)
+        await tx.execute(sql`select id from payment_instructions where org_id = ${orgId} and id in ${candidates.map((row) => row.instruction_id)} order by id for update`)
+      }
+    }
     const [doc] = await tx
       .select({ ...getTableColumns(schema.documents), revision: documentRevisionCounterSql(sql`revision_seq`) })
       .from(schema.documents)
@@ -42,6 +65,24 @@ export async function deleteDocument(
     // before this delete commits. Missing, cross-org, and out-of-scope
     // answer alike.
     if (!subsidiaryScopeAllows(audit.allowedSubsidiaryIds, doc.subsidiaryId)) throw new ScopeNotFoundError();
+    if (doc.kind === "vendor_payment" || doc.kind === "customer_payment") {
+      const claim = (await tx.execute<{ runNumber: string; status: string }>(sql`
+        select run.run_number as "runNumber", run.status
+          from payment_instructions instruction
+          join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
+         where instruction.payment_document_id = ${documentId} and instruction.org_id = ${orgId}
+           and instruction.status in ('pending', 'approved', 'generated')
+           and run.status in ('draft', 'pending_approval', 'approved', 'processing',
+                              'generated', 'delivered', 'partially_failed')
+         order by run.id, instruction.id limit 1
+      `)).rows[0]
+      if (claim) {
+        throw new DeleteError(
+          `payment is claimed by open payment run ${claim.runNumber} (${claim.status}) — ` +
+            "reject, roll back, or cancel the run and re-plan the payment before deleting it",
+        )
+      }
+    }
     if (audit.expectedUpdatedAt !== undefined &&
         (!isDocumentRevisionToken(audit.expectedUpdatedAt) || audit.expectedUpdatedAt !== doc.revision)) {
       throw new DeleteError("this document changed after you opened it; reload and review the latest revision", 409);
