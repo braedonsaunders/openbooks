@@ -295,9 +295,10 @@ export async function loadDirectory(query: {
   limit?: number;
   page?: number;
 }): Promise<DirectoryPage> {
-  // Directory rows are live (current_date windows), so the team boundary
-  // resolves against the org's business today, like team-read.ts.
-  const scope = await resolveOrgChartScope(query.orgId, query.actorId, await businessToday(query.orgId));
+  // Use one organization business date for both visibility and effective
+  // dating; SQL current_date follows the database session timezone instead.
+  const today = await businessToday(query.orgId);
+  const scope = await resolveOrgChartScope(query.orgId, query.actorId, today);
   const selfFilter = scope.kind === "self"
     ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
     : sql``;
@@ -316,15 +317,15 @@ export async function loadDirectory(query: {
       from worker_employments e
       join worker_employment_versions v
         on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
-           and v.effective_from <= current_date
-           and (v.effective_to is null or v.effective_to > current_date)
+           and v.effective_from <= ${today}::date
+           and (v.effective_to is null or v.effective_to > ${today}::date)
            and v.status in ('active', 'on_leave', 'suspended')
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
       left join employment_assignment_versions a
         on a.org_id = e.org_id and a.employment_id = e.id and a.is_primary
            and a.recorded_until is null
-           and a.effective_from <= current_date
-           and (a.effective_to is null or a.effective_to > current_date)
+           and a.effective_from <= ${today}::date
+           and (a.effective_to is null or a.effective_to > ${today}::date)
       left join departments d on d.org_id = a.org_id and d.id = a.department_id
   `;
   const totalCount = Number((await db.execute<{ n: string }>(sql`
@@ -349,8 +350,8 @@ export async function loadDirectory(query: {
               join parties mp on mp.org_id = r.org_id and mp.id = me.worker_party_id
              where r.org_id = ${query.orgId} and r.employment_id = e.id
                and r.kind = 'line' and r.recorded_until is null
-               and r.effective_from <= current_date
-               and (r.effective_to is null or r.effective_to > current_date)
+               and r.effective_from <= ${today}::date
+               and (r.effective_to is null or r.effective_to > ${today}::date)
              order by r.effective_from desc
              limit 1) as manager_name
       ${from}
