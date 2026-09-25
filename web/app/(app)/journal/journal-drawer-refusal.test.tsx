@@ -375,7 +375,8 @@ test("a posted journal keeps uploads available and explains why its evidence sta
   t.after(restoreFetch);
   const drawer = await mountJournal(doc);
   t.after(drawer.unmount);
-  const attachments = [...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.trim() === "Attachments");
+  // I4-webui-377: drawer panels are pressed buttons, never role=tab.
+  const attachments = buttonsNamed("Attachments")[0];
   assert.ok(attachments, "a persisted journal has an Attachments tab");
   await click(attachments as HTMLButtonElement);
   await tick();
