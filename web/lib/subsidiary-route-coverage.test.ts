@@ -141,7 +141,9 @@ test('documents/actions resolves the full document row including its subsidiary'
 test('expense reports are kind-pinned fail-closed on read, autosave, delete and lifecycle', () => {
   const detail = source('app/api/expenses/[id]/route.ts')
   assert.match(detail, /select subsidiary_id as "subsidiaryId" from documents where id = \$\{id\} and kind = 'expense_report'/)
-  assert.match(detail, /select status, document_date, subsidiary_id as "subsidiaryId"(?:, custom)? from documents where id = \$\{id\} and kind = 'expense_report'/)
+  assert.match(detail, /select status, document_date, subsidiary_id as "subsidiaryId"[^;]*?from documents where id = \$\{id\} and kind = 'expense_report'/)
+  assert.match(detail, /loadExpenseReport/)
+  assert.match(source('lib/expenses.ts'), /d\.kind = 'expense_report'/)
   const actions = source('app/api/expenses/actions/route.ts')
   assert.match(actions, /select id, status, subsidiary_id as "subsidiaryId" from documents where id = \$\{id\} and kind = 'expense_report'/)
   // Both submit and post resolve through the helper: an out-of-scope report
@@ -253,7 +255,8 @@ test('every run-scoped verb inherits the source-bill scope gate', () => {
   ]) {
     const src = source(route)
     assert.ok(src.includes('guardPaymentRunPermission'), `${route} must authorize through the shared run gate`)
-    assert.doesNotMatch(src, /allowedSubsidiaryIds/, `${route} must not re-implement scope ad hoc`)
+    // Only the gate's own allowlist threaded into shared helpers (I1-refix-120); any other source is ad hoc.
+    assert.doesNotMatch(src.replace(/gate\.allowedSubsidiaryIds/g, '').replace(/allowedSubsidiaryIds:/g, ''), /allowedSubsidiaryIds/, `${route} must not re-implement scope ad hoc`)
   }
 })
 

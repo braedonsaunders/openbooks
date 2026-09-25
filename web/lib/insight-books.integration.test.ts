@@ -57,17 +57,17 @@ test("insight book scope defaults to the single active primary and never falls b
       [scratch.bookId],
     );
 
-    // Zero or several active primaries throw: the basis is ambiguous and no
-    // first-row fallback may silently pick one.
+    // A second primary is refused at the write boundary (0345), so the
+    // ambiguous several-primaries state cannot be stored; zero active
+    // primaries below still must throw rather than silently fall back.
     const extraPrimary = randomUUID();
-    await withBypass(() => db.execute(sql`
-      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-      values (${extraPrimary}, ${scratch.orgId}, 'ALT', 'Alternate', true, true, true)`));
     await assert.rejects(
-      withBypass(() => resolveInsightBookScope(scratch.orgId, unscopedLedgerPlan)),
-      /exactly one active primary/,
+      withBypass(() => db.execute(sql`
+      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+      values (${extraPrimary}, ${scratch.orgId}, 'ALT', 'Alternate', true, true, true)`)),
+      (error: unknown) => String((error as { cause?: { detail?: string } }).cause?.detail ?? '').includes('already exists'),
+      'a second primary book is refused at the write boundary',
     );
-    await withBypass(() => db.execute(sql`delete from accounting_books where id = ${extraPrimary}`));
     await withBypass(() => db.execute(sql`
       update accounting_books set is_primary = false where org_id = ${scratch.orgId}`));
     await assert.rejects(
