@@ -66,6 +66,7 @@ export interface DrawerLabels {
   interviewPanel: string
   interviewSubmit: string
   interviewFailed: string
+  interviewInvalidTime: string
   completeTitle: string
   completeOutcome: string
   completeFeedback: string
@@ -146,6 +147,10 @@ export interface RequisitionDrawerData {
   }
   candidateOptions: Option[]
   employeeOptions: Option[]
+  /** The org's business time zone: the schedule island resolves the
+   *  wall-clock datetime-local against it to the ISO instant the
+   *  schedule endpoint requires. */
+  timeZone: string
   kindOptions: Option[]
   outcomeOptions: Option[]
   basisOptions: Option[]
@@ -296,6 +301,7 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
                         applicationId={application.id}
                         kinds={detail.kindOptions}
                         employees={detail.employeeOptions}
+                        timeZone={detail.timeZone}
                         labels={{
                           kind: labels.interviewKind,
                           when: labels.interviewWhen,
@@ -304,6 +310,7 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
                           panel: labels.interviewPanel,
                           submit: labels.interviewSubmit,
                           failed: labels.interviewFailed,
+                          invalidTime: labels.interviewInvalidTime,
                         }}
                       />
                     </div>

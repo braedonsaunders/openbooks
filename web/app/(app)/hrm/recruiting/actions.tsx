@@ -329,12 +329,14 @@ export function InterviewScheduleIsland({
   applicationId,
   kinds,
   employees,
+  timeZone,
   labels,
 }: {
   applicationId: string
   kinds: Option[]
   employees: Option[]
-  labels: { kind: string; when: string; duration: string; location: string; panel: string; submit: string; failed: string }
+  timeZone: string
+  labels: { kind: string; when: string; duration: string; location: string; panel: string; submit: string; failed: string; invalidTime: string }
 }) {
   const fieldPrefix = useId()
   const refresh = useRefresh()
@@ -352,13 +354,24 @@ export function InterviewScheduleIsland({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    // The input is a wall-clock datetime-local: resolve it in the org's
+    // business time zone to the ISO instant the schedule endpoint
+    // requires, exactly as the slot proposer does. A skipped or repeated
+    // civil time (clock change) refuses with its remedy, never a 400.
+    let scheduledAt: string
+    try {
+      scheduledAt = civilDateTimeToInstant(when, timeZone).toISOString()
+    } catch {
+      setError(labels.invalidTime)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       const res = await postJson('/api/hrm/recruiting/interviews', 'POST', {
         applicationId,
         kind,
-        scheduledAt: when,
+        scheduledAt,
         durationMinutes: duration === '' ? null : Number.parseInt(duration, 10),
         location: location.trim() || null,
         panelPartyIds: panel,
