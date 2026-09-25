@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, CardContent, Input, Label, Select } from "@openbooks/ui";
+import { fetchAction, type ActionError } from "@braedonsaunders/appkit-errors";
+import { useAppAction } from "../../../../../lib/use-app-action";
 import { useBusinessToday } from "../../../../../components/business-date-provider";
 
 type ProviderKey = "stripe" | "adyen" | "gocardless";
@@ -52,51 +54,62 @@ const PROVIDERS: { key: ProviderKey; label: string; merchantAccount?: boolean }[
 
 export function PaymentProvidersClient() {
   const t = useTranslations("admin.setup.paymentProviders");
+  const tc = useTranslations("common");
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { busy, execute } = useAppAction();
 
-  const localizedFailure = useCallback(async (res: Response, fallback: string) => {
-    const body = (await res.json().catch(() => ({}))) as { code?: unknown; error?: unknown };
+  // The unrestricted-scope remedy survives the lifecycle conversion: the
+  // failure keeps the server's machine-readable code, so map it to the
+  // localized copy instead of rendering the raw server string.
+  const actionFailureMessage = useCallback((failure: ActionError, fallback: string) => {
     if (
-      body.code === "unrestricted_scope_required" ||
-      body.error === "requires unrestricted subsidiary access"
+      failure.code === "unrestricted_scope_required" ||
+      failure.serverMessage === "requires unrestricted subsidiary access"
     ) {
       return t("errors.unrestrictedScope");
     }
-    return fallback;
+    return failure.displayMessage(fallback);
   }, [t]);
 
-  // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body.
-  const load = useCallback(() => {
-    return fetch("/api/admin/setup/payment-providers").then((res) => {
-      if (res.ok) return res.json().then((body) => setData(body as Data));
-      return localizedFailure(res, t("errors.loadFailed")).then(setError);
-    });
-  }, [localizedFailure, t]);
+  const load = useCallback(async () => {
+    const result = await fetchAction<Data>("/api/admin/setup/payment-providers");
+    if (result.ok) {
+      setData(result.data);
+      setError(null);
+    } else {
+      setError(actionFailureMessage(result.error, t("errors.loadFailed")));
+    }
+    setLoading(false);
+  }, [actionFailureMessage, t]);
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   async function post(body: Record<string, unknown>) {
     setError(null);
     setNotice(null);
-    const res = await fetch("/api/admin/setup/payment-providers", {
+    let saved = false;
+    const fallbackMessage = tc("somethingWentWrong");
+    await execute(() => fetchAction("/api/admin/setup/payment-providers", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+    }), {
+      fallbackMessage,
+      onOk: () => { saved = true; setNotice(t("saved")); },
+      onRefused: (failure) => setError(actionFailureMessage(failure, fallbackMessage)),
     });
-    if (!res.ok) {
-      setError(await localizedFailure(res, t("errors.saveFailed")));
-      return false;
-    }
-    setNotice(t("saved"));
-    await load();
-    return true;
+    if (saved) await load();
+    return saved;
   }
 
-  if (!data) return <p className="text-sm text-slate-500">{error ?? "…"}</p>;
+  if (!data) return loading
+    ? <p className="text-sm text-slate-500">…</p>
+    : <div className="space-y-2" role="alert"><p className="text-sm text-red-600">{error ?? tc("somethingWentWrong")}</p><Button variant="outline" onClick={() => { setLoading(true); void load(); }}>{tc("actions.retry")}</Button></div>;
 
   return (
     <div className="space-y-6">
@@ -115,7 +128,7 @@ export function PaymentProvidersClient() {
           bankAccounts={data.bankAccounts}
           rules={data.surchargeRules.filter((r) => r.isActive)}
           onSave={post}
-          failureMessage={localizedFailure}
+          busy={busy}
           t={t}
         />
       ))}
@@ -124,6 +137,7 @@ export function PaymentProvidersClient() {
         rules={data.surchargeRules}
         incomeAccounts={data.incomeAccounts}
         onSave={post}
+        busy={busy}
         t={t}
       />
     </div>
@@ -136,7 +150,7 @@ function ProviderCard({
   bankAccounts,
   rules,
   onSave,
-  failureMessage,
+  busy,
   t,
 }: {
   provider: { key: ProviderKey; label: string; merchantAccount?: boolean };
@@ -144,7 +158,7 @@ function ProviderCard({
   bankAccounts: Account[];
   rules: Rule[];
   onSave: (body: Record<string, unknown>) => Promise<boolean>;
-  failureMessage: (res: Response, fallback: string) => Promise<string>;
+  busy: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
   const [enabled, setEnabled] = useState(config?.acceptanceEnabled ?? false);
@@ -156,30 +170,24 @@ function ProviderCard({
   );
   const [bankAccountId, setBankAccountId] = useState(config?.defaultBankAccountId ?? "");
   const [surchargeRuleId, setSurchargeRuleId] = useState(config?.surchargeRuleId ?? "");
-  const [testing, setTesting] = useState(false);
+  const tc = useTranslations("common");
+  const { busy: testing, execute } = useAppAction();
   const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/payments/webhooks/${provider.key}` : `/api/payments/webhooks/${provider.key}`;
 
   async function test() {
-    setTesting(true);
     setTestResult(null);
-    try {
-      const res = await fetch("/api/admin/setup/payment-providers", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "test", provider: provider.key }),
-      });
-      if (!res.ok) {
-        setTestResult({ ok: false, detail: await failureMessage(res, t("errors.testFailed")) });
-        return;
-      }
-      setTestResult((await res.json()) as { ok: boolean; detail: string });
-    } catch {
-      setTestResult({ ok: false, detail: t("errors.testFailed") });
-    } finally {
-      setTesting(false);
-    }
+    const fallbackMessage = tc("somethingWentWrong");
+    await execute(() => fetchAction<{ ok: boolean; detail: string }>("/api/admin/setup/payment-providers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "test", provider: provider.key }),
+    }), {
+      fallbackMessage,
+      onOk: setTestResult,
+      onRefused: (failure) => setTestResult({ ok: false, detail: failure.displayMessage(fallbackMessage) }),
+    });
   }
 
   return (
@@ -280,6 +288,7 @@ function ProviderCard({
             ) : null}
           </div>
           <Button
+            disabled={busy}
             onClick={() =>
               void onSave({
                 provider: provider.key,
@@ -306,11 +315,13 @@ function SurchargeRules({
   rules,
   incomeAccounts,
   onSave,
+  busy,
   t,
 }: {
   rules: Rule[];
   incomeAccounts: Account[];
   onSave: (body: Record<string, unknown>) => Promise<boolean>;
+  busy: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
   const [name, setName] = useState("");
@@ -380,6 +391,7 @@ function SurchargeRules({
                     <button
                       type="button"
                       className="text-xs text-red-600 hover:underline"
+                      disabled={busy}
                       onClick={() => void onSave({ action: "deleteRule", id: r.id })}
                     >
                       {t("deactivate")}
@@ -456,7 +468,7 @@ function SurchargeRules({
           </div>
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => void add()} disabled={!name || !feeIncomeAccountId}>
+          <Button onClick={() => void add()} disabled={busy || !name || !feeIncomeAccountId}>
             {t("addRule")}
           </Button>
         </div>

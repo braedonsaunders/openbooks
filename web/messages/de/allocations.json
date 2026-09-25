@@ -481,6 +481,7 @@
     "untitled": "Unbenannte Umlage",
     "loadFailed": "Abteilungen und Schlüssel für die Einrichtungsanleitung konnten nicht geladen werden.",
     "createFailed": "Umlageregel konnte nicht angelegt werden.",
+    "createOutcomeUnknown": "Es konnte nicht bestätigt werden, ob die Regel \"{key}\" angelegt wurde. Prüfen Sie die Regelliste, bevor Sie es erneut versuchen.",
     "publishFailed": "Die Regel wurde als Entwurf gespeichert — veröffentlichen Sie sie, sobald Sie die Definition fertig haben.",
     "created": "Umlageregel als Entwurf gespeichert. Veröffentlichen Sie sie unter Versionen, sobald Sie bereit sind.",
     "published": "Umlageregel ist veröffentlicht und in Kraft.",

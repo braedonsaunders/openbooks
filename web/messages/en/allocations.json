@@ -481,6 +481,7 @@
     "untitled": "Untitled allocation",
     "loadFailed": "Could not load departments and drivers for the setup guide.",
     "createFailed": "Could not create the allocation rule.",
+    "createOutcomeUnknown": "Could not confirm whether rule \"{key}\" was created. Check the rules list before trying again.",
     "publishFailed": "The rule was saved as a draft — publish it after you finish the definition.",
     "created": "Allocation rule saved as a draft. Publish it from Versions when you are ready.",
     "published": "Allocation rule is published and in force.",

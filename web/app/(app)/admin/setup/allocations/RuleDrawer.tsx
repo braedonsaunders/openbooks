@@ -83,14 +83,20 @@ interface Option {
 }
 
 async function fetchJson(url: string, init?: RequestInit): Promise<{ status: number; body: unknown }> {
-  const res = await fetch(url, { ...init, headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) } })
-  let body: unknown = null
   try {
-    body = await res.json()
+    const res = await fetch(url, { ...init, headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) } })
+    let body: unknown = null
+    try {
+      body = await res.json()
+    } catch {
+      body = null
+    }
+    return { status: res.status, body }
   } catch {
-    body = null
+    // Resolve transport failures through the same status branch as refusals so
+    // every action renders its localized fallback and releases its busy flag.
+    return { status: 0, body: null }
   }
-  return { status: res.status, body }
 }
 
 /** Checkbox list for id-array fields (books, accounts, dimension filters). */

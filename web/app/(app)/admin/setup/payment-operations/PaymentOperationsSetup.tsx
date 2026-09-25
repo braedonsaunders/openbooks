@@ -7,6 +7,8 @@ import { useLocale, useTranslations } from 'next-intl'
 import { useViewerFormat } from '../../../../../lib/viewer-format'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import {
   Badge,
   Button,
@@ -27,6 +29,7 @@ import {
 import { SearchInput } from '../../../../../components/search-input'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { Pagination } from '../../../../../components/pagination'
+import { useAppAction } from '../../../../../lib/use-app-action'
 import { countryOptions } from '../../../../../lib/countries'
 
 export type PaymentSetupView = 'profiles' | 'formats' | 'schedules' | 'mandates'
@@ -254,28 +257,27 @@ function Active({ active, t }: { active: boolean; t: Translator }) {
 export function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = false }: { view: PaymentSetupView; row: Record<string, unknown> | null; creating: boolean; options: Options; closeHref: string; multiCurrency?: boolean }) {
   const t = useTranslations('admin.setup.paymentOperations')
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const { busy, refusal, execute } = useAppAction()
   const initial = useMemo(() => row ?? {}, [row])
   const [form, setForm] = useState<SetupForm>(() => ({ ...initial } as SetupForm))
   const set = (key: string, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }))
   const title = creating ? t(`drawer.new.${view}`) : t(`drawer.edit.${view}`)
 
   async function save() {
-    setBusy(true)
-    try {
-      const resource = view
-      const payload = normalizePayload(view, form, creating, multiCurrency)
-      const res = await fetch(`/api/admin/payment-operations/${resource}${creating ? '' : `/${row!.id}`}`, {
+    const resource = view
+    const payload = normalizePayload(view, form, creating, multiCurrency)
+    await execute(() => fetchAction(`/api/admin/payment-operations/${resource}${creating ? '' : `/${row!.id}`}`, {
         method: creating ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) { toast.error(data.error ?? t('saveFailed')); return }
-      toast.success(t('saved'))
-      router.push((closeHref))
-      router.refresh()
-    } finally { setBusy(false) }
+      }), {
+      fallbackMessage: t('saveFailed'),
+      onOk: () => {
+        toast.success(t('saved'))
+        router.push(closeHref)
+        router.refresh()
+      },
+    })
   }
 
   return (
@@ -283,6 +285,7 @@ export function SetupEditor({ view, row, creating, options, closeHref, multiCurr
       <div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push((closeHref))}>{t('cancel')}</Button><Button disabled={busy} onClick={save}>{busy ? t('saving') : t('save')}</Button></div>
     }>
       <div className="space-y-5 p-1">
+        <ActionAlert error={refusal} fallbackMessage={t('saveFailed')} />
         {view === 'profiles' ? <ProfileFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
         {view === 'formats' ? <FormatFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
         {view === 'schedules' ? <ScheduleFields form={form} set={set} options={options} t={t} /> : null}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import {
   ArrowLeft,
   ArrowRight,
@@ -73,6 +74,34 @@ interface PickerOptions {
   segments: SegmentOption[]
 }
 
+async function loadWizardOptions(signal: AbortSignal): Promise<{ options: PickerOptions; drivers: WizardDriver[]; driversFailed: boolean } | null> {
+  const [optionsResult, driversResult] = await Promise.all([
+    fetchAction<Record<string, unknown>>('/api/allocations/options', { signal }),
+    fetchAction<{ drivers?: WizardDriver[] }>('/api/allocations/drivers', { signal }),
+  ])
+  if (!optionsResult.ok) return null
+  const payload = optionsResult.data
+  const rawSegments = Array.isArray(payload['segments']) ? (payload['segments'] as SegmentOption[]) : []
+  return {
+    options: {
+      departments: asOptions(payload['departments']),
+      locations: asOptions(payload['locations']),
+      classes: asOptions(payload['classes']),
+      projects: asOptions(payload['projects']),
+      subsidiaries: asOptions(payload['subsidiaries']),
+      parties: asOptions(payload['parties']),
+      items: asOptions(payload['items']),
+      segments: rawSegments
+        .filter((segment) => typeof segment?.key === 'string' && typeof segment.label === 'string')
+        .map((segment) => ({ key: segment.key, label: segment.label, values: asOptions(segment.values) })),
+    },
+    drivers: driversResult.ok
+      ? (driversResult.data.drivers ?? []).filter((driver) => driver.isActive && knownDriverDimension(driver.dimension))
+      : [],
+    driversFailed: !driversResult.ok,
+  }
+}
+
 /**
  * Guided create — the house WizardShell (payroll onboarding / org setup).
  * Answers map onto the same rule version + targets the Definition tab edits,
@@ -95,6 +124,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   // split step shows "no drivers yet" and the driver path stays disabled.
   const [driversError, setDriversError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [uncertainCreateKey, setUncertainCreateKey] = useState<string | null>(null)
   const [requestKey, setRequestKey] = useState(0)
 
   const step = WIZARD_STEPS[stepIdx] ?? 'when'
@@ -105,35 +135,15 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
     const load = async () => {
       setLoadError(null)
       setDriversError(null)
-      const [optionsRes, driversRes] = await Promise.all([
-        fetch('/api/allocations/options', { signal: controller.signal }),
-        fetch('/api/allocations/drivers', { signal: controller.signal }),
-      ])
+      const result = await loadWizardOptions(controller.signal)
       if (!live) return
-      if (!optionsRes.ok) {
+      if (!result) {
         setLoadError(t('wizard.loadFailed'))
         return
       }
-      const payload = (await optionsRes.json()) as Record<string, unknown>
-      const rawSegments = Array.isArray(payload['segments']) ? (payload['segments'] as SegmentOption[]) : []
-      setOptions({
-        departments: asOptions(payload['departments']),
-        locations: asOptions(payload['locations']),
-        classes: asOptions(payload['classes']),
-        projects: asOptions(payload['projects']),
-        subsidiaries: asOptions(payload['subsidiaries']),
-        parties: asOptions(payload['parties']),
-        items: asOptions(payload['items']),
-        segments: rawSegments
-          .filter((segment) => typeof segment?.key === 'string' && typeof segment.label === 'string')
-          .map((segment) => ({ key: segment.key, label: segment.label, values: asOptions(segment.values) })),
-      })
-      if (driversRes.ok) {
-        const body = (await driversRes.json()) as { drivers?: WizardDriver[] }
-        setDrivers((body.drivers ?? []).filter((driver) => driver.isActive && knownDriverDimension(driver.dimension)))
-      } else {
-        setDriversError(t('drivers.loadFailed'))
-      }
+      setOptions(result.options)
+      setDrivers(result.drivers)
+      if (result.driversFailed) setDriversError(t('drivers.loadFailed'))
     }
     void load().catch((error: unknown) => {
       if (live && !(error instanceof DOMException && error.name === 'AbortError')) {
@@ -252,7 +262,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   }
 
   const skipGuide = async () => {
-    if (busy) return
+    if (busy || uncertainCreateKey !== null) return
     setBusy(true)
     try {
       const key = draft.key !== '' && keyFromName(draft.name) ? draft.key : keyFromName(draft.name || 'allocation')
@@ -264,7 +274,12 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         description: draft.description === '' ? null : draft.description,
       })
       if (status !== 201) {
-        toast.error(apiError(status, body, t('wizard.createFailed')).message)
+        if (status >= 500) {
+          setUncertainCreateKey(key)
+          toast.error(t('wizard.createOutcomeUnknown', { key }))
+        } else {
+          toast.error(apiError(status, body, t('wizard.createFailed')).message)
+        }
         return
       }
       const id = (body as { rule?: { id?: string } })?.rule?.id
@@ -272,16 +287,23 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         router.push(hrefWithRule(closeHref, id) as never)
         return
       }
-      close()
+      setUncertainCreateKey(key)
+      toast.error(t('wizard.createOutcomeUnknown', { key }))
+    } catch {
+      const key = draft.key !== '' && keyFromName(draft.name) ? draft.key : keyFromName(draft.name || 'allocation')
+      setUncertainCreateKey(key)
+      toast.error(t('wizard.createOutcomeUnknown', { key }))
     } finally {
       setBusy(false)
     }
   }
 
   const finish = async () => {
-    if (busy || !wizardStepComplete('review', draft)) return
+    if (busy || uncertainCreateKey !== null || !wizardStepComplete('review', draft)) return
     setBusy(true)
+    let createdRuleId: string | null = null
     try {
+      const key = draft.key
       const created = await postJson('/api/allocations/rules', {
         key: draft.key,
         name: draft.name.trim(),
@@ -289,14 +311,26 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         description: draft.description === '' ? null : draft.description,
       })
       if (created.status !== 201) {
-        toast.error(apiError(created.status, created.body, t('wizard.createFailed')).message)
+        if (created.status >= 500) {
+          setUncertainCreateKey(key)
+          toast.error(t('wizard.createOutcomeUnknown', { key }))
+        } else {
+          toast.error(apiError(created.status, created.body, t('wizard.createFailed')).message)
+        }
         return
       }
       const ruleId = (created.body as { rule?: { id?: string } })?.rule?.id
       const versionId = (created.body as { version?: { id?: string } })?.version?.id
       let revision = (created.body as { version?: { revision?: string } })?.version?.revision
+      if (typeof ruleId === 'string' && ruleId !== '') createdRuleId = ruleId
       if (typeof ruleId !== 'string' || typeof versionId !== 'string' || typeof revision !== 'string') {
-        toast.error(t('wizard.createFailed'))
+        if (createdRuleId) {
+          toast.error(t('wizard.createFailed'))
+          router.push(hrefWithRule(closeHref, createdRuleId) as never)
+        } else {
+          setUncertainCreateKey(key)
+          toast.error(t('wizard.createOutcomeUnknown', { key }))
+        }
         return
       }
       const versionUrl = `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions/${encodeURIComponent(versionId)}`
@@ -334,6 +368,14 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         toast.success(t('wizard.created'))
       }
       router.push(hrefWithRule(closeHref, ruleId) as never)
+    } catch {
+      if (createdRuleId) {
+        toast.error(t('wizard.createFailed'))
+        router.push(hrefWithRule(closeHref, createdRuleId) as never)
+      } else {
+        setUncertainCreateKey(draft.key)
+        toast.error(t('wizard.createOutcomeUnknown', { key: draft.key }))
+      }
     } finally {
       setBusy(false)
     }
@@ -397,7 +439,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
                         </>
                       ),
                       onClick: () => void finish(),
-                      disabled: busy || !canNext,
+                      disabled: busy || uncertainCreateKey !== null || !canNext,
                     }
                   : {
                       label: (
@@ -456,10 +498,15 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
             badge={t('wizard.when.advanced')}
             onClick={() => chooseMode('post')}
           />
-          <button type="button" className="text-xs font-medium text-slate-500 underline hover:text-slate-700 dark:hover:text-slate-300" onClick={() => void skipGuide()}>
+          <button type="button" disabled={busy || uncertainCreateKey !== null} className="text-xs font-medium text-slate-500 underline hover:text-slate-700 dark:hover:text-slate-300 disabled:opacity-50" onClick={() => void skipGuide()}>
             {t('wizard.skipGuide')}
           </button>
         </StepFrame>
+      ) : null}
+      {uncertainCreateKey !== null ? (
+        <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          {t('wizard.createOutcomeUnknown', { key: uncertainCreateKey })}
+        </div>
       ) : null}
       {options && step === 'source' ? (
         <StepFrame title={t('wizard.source.title')} description={t('wizard.source.description')}>

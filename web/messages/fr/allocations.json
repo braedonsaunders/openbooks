@@ -481,6 +481,7 @@
     "untitled": "Répartition sans titre",
     "loadFailed": "Impossible de charger les départements et les clés pour le guide de configuration.",
     "createFailed": "Impossible de créer la règle de répartition.",
+    "createOutcomeUnknown": "Impossible de confirmer si la règle \"{key}\" a été créée. Vérifiez la liste des règles avant de réessayer.",
     "publishFailed": "La règle a été enregistrée en brouillon — publiez-la après avoir terminé la définition.",
     "created": "Règle de répartition enregistrée en brouillon. Publiez-la depuis Versions quand vous êtes prêt.",
     "published": "La règle de répartition est publiée et en vigueur.",

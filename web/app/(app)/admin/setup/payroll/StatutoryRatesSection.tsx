@@ -8,7 +8,6 @@ import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/u
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
 import { countryName } from '../../../../../lib/countries'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { useAppAction } from '../../../../../lib/use-app-action'
 import { formatRateFieldValue } from './statutory-rates-format'
 import { useDirtyClose } from '../../../../../lib/use-dirty-close'
@@ -131,7 +130,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
   const [data, setData] = useState<Payload | null>(null)
   const [year, setYear] = useState<number | null>(initialYear ?? null)
   const [draft, setDraft] = useState<DraftRate | null>(null)
-  const [busy, setBusy] = useState(false)
+  const { busy, execute } = useAppAction()
   const tc = useTranslations('common')
   const [baseline, setBaseline] = useState<string | null>(null)
   const dirty = draft !== null && JSON.stringify(draft) !== baseline
@@ -199,61 +198,42 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
 
   async function save() {
     if (!draft) return
-    setBusy(true)
     setSaveError(null)
-    try {
-      const res = await fetch('/api/payroll/settings/rates', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          country: draft.country,
-          rateKey: draft.rateKey,
-          region: draft.region || null,
-          subRegion: draft.subRegion || null,
-          filingAccountId: draft.filingAccountId || null,
-          taxYear: draft.taxYear,
-          values: draft.values,
-        }),
-      })
-      // The status is checked before the body is parsed (see load above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      toast.success(label('saved', 'Saved'))
-      discardDraft()
-      await load(year)
-    } catch (error) {
-      const message = (error as Error).message
-      setSaveError(message)
-      toast.error(message)
-    } finally {
-      setBusy(false)
-    }
+    const fallbackMessage = label('failed', 'Failed')
+    const saved = await execute(() => fetchAction('/api/payroll/settings/rates', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        country: draft.country,
+        rateKey: draft.rateKey,
+        region: draft.region || null,
+        subRegion: draft.subRegion || null,
+        filingAccountId: draft.filingAccountId || null,
+        taxYear: draft.taxYear,
+        values: draft.values,
+      }),
+    }), {
+      fallbackMessage,
+      onOk: () => {
+        toast.success(label('saved', 'Saved'))
+        discardDraft()
+      },
+      onRefused: (error) => setSaveError(error.displayMessage(fallbackMessage)),
+    })
+    if (saved) await load(year)
   }
 
   async function remove(id: string) {
-    setBusy(true)
-    try {
-      const res = await fetch(`/api/payroll/settings/rates?id=${id}`, { method: 'DELETE' })
-      // Status BEFORE parsing: a non-JSON error body (a 500 page, a proxy
-      // refusal) makes res.json() throw a SyntaxError, and the operator reads
-      // a JSON parse error instead of the server's message.
-      if (!res.ok) {
-        let message = 'failed'
-        try {
-          const payload = await res.json()
-          if (payload && typeof payload.error === 'string') message = payload.error
-        } catch {
-          // Non-JSON error body — keep the fallback above.
-        }
-        throw new Error(message)
-      }
-      toast.success(label('saved', 'Saved'))
-      discardDraft()
-      await load(year)
-    } catch (error) {
-      toast.error((error as Error).message)
-    } finally {
-      setBusy(false)
-    }
+    const fallbackMessage = label('failed', 'Failed')
+    const removed = await execute(() => fetchAction(`/api/payroll/settings/rates?id=${id}`, { method: 'DELETE' }), {
+      fallbackMessage,
+      onOk: () => {
+        toast.success(label('saved', 'Saved'))
+        discardDraft()
+      },
+      onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
+    })
+    if (removed) await load(year)
   }
 
   // Decimal-rate fields read as percents in the table (0.0060 renders

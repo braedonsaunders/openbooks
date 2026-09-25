@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useViewerFormat } from "../../../../../lib/viewer-format";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
-import { readApiErrorMessage } from "../../../../../lib/api-error";
+import { useAppAction } from "../../../../../lib/use-app-action";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
 import {
   BANK_COUNTRIES,
   BANK_DIRECTORY,
@@ -129,7 +130,7 @@ export function BankFeedsClient({
   const t = useTranslations("banking.bankFeeds.client");
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, execute, refuse } = useAppAction();
 
   const schedulesByServer = useMemo(() => {
     const m = new Map<string, SftpSchedule[]>();
@@ -141,85 +142,76 @@ export function BankFeedsClient({
 
   const refresh = () => router.refresh();
 
-  const remove = async (url: string) => {
-    setMsg(null);
-    try {
-      const response = await fetch(url, { method: "DELETE" });
-      if (!response.ok) {
-        setMsg(await readApiErrorMessage(response, t("feedMessages.requestFailed", { status: response.status })));
-        return;
-      }
-      refresh();
-    } catch {
-      setMsg(t("feedMessages.networkFailure"));
-    }
-  };
-
   const feedAction = async (id: string, action: "test" | "sync") => {
-    setBusy(true);
     setMsg(null);
-    try {
-      const r = await fetch(`/api/banking/bank-feeds/${id}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      // The status is checked before the body is parsed: a non-JSON error
-      // body (an empty 500, a proxy page) must surface the failure, never a
-      // SyntaxError from r.json() — and never a phantom "imported" toast
-      // with undefined counts for work the server never did.
-      if (!r.ok) throw new Error(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
-      const b = (await r.json().catch(() => null)) as {
+    const fallbackMessage = t("feedMessages.unknownError");
+    await execute(
+      () => fetchAction<{
         ok?: unknown;
         detail?: unknown;
         error?: unknown;
         imported?: unknown;
         duplicates?: unknown;
-      } | null;
-      if (!b || typeof b !== "object") {
-        throw new Error(t("feedMessages.requestFailed", { status: r.status }));
-      }
-      if (action === "test") {
-        if (b.ok) {
-          setMsg(t("feedMessages.verified"));
-        } else {
-          setMsg(
-            t("feedMessages.testFailed", {
-              detail:
-                typeof b.detail === "string" && b.detail.trim()
-                  ? b.detail.trim()
+      }>(`/api/banking/bank-feeds/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action }),
+      }),
+      {
+        fallbackMessage,
+        onOk: (body) => {
+          if (action === "test") {
+            setMsg(body.ok
+              ? t("feedMessages.verified")
+              : t("feedMessages.testFailed", {
+                detail: typeof body.detail === "string" && body.detail.trim()
+                  ? body.detail.trim()
                   : t("feedMessages.unknownError"),
-            }),
-          );
-        }
-      } else if (typeof b.error === "string" && b.error.trim()) {
-        setMsg(t("feedMessages.syncFailed", { error: b.error.trim() }));
-      } else if (typeof b.imported === "number" && typeof b.duplicates === "number") {
-        setMsg(
-          t("feedMessages.imported", {
-            imported: b.imported,
-            duplicates: b.duplicates,
-          }),
-        );
-      } else {
-        // A 200 without counts or a refusal is unusable: fail closed rather
-        // than toasting an import that cannot be observed.
-        throw new Error(t("feedMessages.requestFailed", { status: r.status }));
-      }
-    } catch (e) {
-      // Protocol failures (non-2xx, unusable bodies, network drops) land
-      // here with the named refusal or the request fallback — wrapped in the
-      // action's own template so a sync failure never reads as a probe note.
-      const detail = (e as Error)?.message ?? t("feedMessages.unknownError");
-      setMsg(
-        action === "test"
-          ? t("feedMessages.testFailed", { detail })
-          : t("feedMessages.syncFailed", { error: detail }),
-      );
-    } finally {
-      setBusy(false);
-    }
+              }));
+          } else if (typeof body.error === "string" && body.error.trim()) {
+            setMsg(t("feedMessages.syncFailed", { error: body.error.trim() }));
+          } else if (typeof body.imported === "number" && typeof body.duplicates === "number") {
+            setMsg(t("feedMessages.imported", { imported: body.imported, duplicates: body.duplicates }));
+          } else {
+            const message = t("feedMessages.requestFailed", { status: 200 });
+            setMsg(t("feedMessages.syncFailed", { error: message }));
+            refuse(message, fallbackMessage);
+          }
+        },
+        onRefused: (error) => {
+          const detail = error.displayMessage(fallbackMessage);
+          setMsg(action === "test"
+            ? t("feedMessages.testFailed", { detail })
+            : t("feedMessages.syncFailed", { error: detail }));
+        },
+      },
+    );
     refresh();
+  };
+
+  const toggleFeed = async (connection: Connection) => {
+    const fallbackMessage = t("feedMessages.unknownError");
+    setMsg(null);
+    await execute(() => fetchAction(`/api/banking/bank-feeds/${connection.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isActive: !connection.isActive }),
+    }), {
+      fallbackMessage,
+      onOk: refresh,
+      onRefused: (error) => setMsg(error.displayMessage(fallbackMessage)),
+    });
+  };
+
+  const removeFeed = async (connection: Connection) => {
+    if (!confirm(t("connection.removeConfirm"))) return;
+    const fallbackMessage = t("feedMessages.unknownError");
+    setMsg(null);
+    await execute(() => fetchAction(`/api/banking/bank-feeds/${connection.id}`, { method: "DELETE" }), {
+      fallbackMessage,
+      onOk: refresh,
+      onRefused: (error) => setMsg(error.displayMessage(fallbackMessage)),
+    });
   };
 
   return (
@@ -288,17 +280,10 @@ export function BankFeedsClient({
                       <Button size="sm" variant="ghost" disabled={busy} onClick={() => feedAction(c.id, "sync")}>{t("connection.sync")}</Button>
                     </>
                   )}
-                  <Button size="sm" variant="ghost" onClick={async () => {
-                    const r = await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ isActive: !c.isActive }) });
-                    // Like every mutation here, the status is checked before
-                    // refresh: a refused toggle must surface, never silently
-                    // re-render the old state (F4T2-13).
-                    if (!r.ok) setMsg(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
-                    refresh();
-                  }}>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void toggleFeed(c)}>
                     {c.isActive ? t("connection.pause") : t("connection.resume")}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => { if (!confirm(t("connection.removeConfirm"))) return; void remove(`/api/banking/bank-feeds/${c.id}`); }}>{t("connection.remove")}</Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void removeFeed(c)}>{t("connection.remove")}</Button>
                 </div>
               </Card>
             );
@@ -311,7 +296,6 @@ export function BankFeedsClient({
               schedules={schedulesByServer.get(s.id) ?? []}
               accounts={accounts}
               onChange={refresh}
-              onDelete={remove}
             />
           ))}
         </div>
@@ -334,6 +318,7 @@ function ScheduleBinding({ sc, onChange }: { sc: SftpSchedule; onChange: () => v
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(sc.expectedExternalAccountId ?? "");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const { busy, execute } = useAppAction();
   if (!editing) {
     return (
       <button
@@ -352,21 +337,18 @@ function ScheduleBinding({ sc, onChange }: { sc: SftpSchedule; onChange: () => v
       <Button
         size="sm"
         variant="ghost"
-        onClick={async () => {
-          const r = await fetch(`/api/banking/sftp/schedules/${sc.id}`, {
+        disabled={busy}
+        onClick={() => {
+          const fallbackMessage = t("feedMessages.unknownError");
+          void execute(() => fetchAction(`/api/banking/sftp/schedules/${sc.id}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ expectedExternalAccountId: value.trim() === "" ? null : value }),
+          }), {
+            fallbackMessage,
+            onOk: () => { setSaveError(null); setEditing(false); onChange(); },
+            onRefused: (error) => setSaveError(error.displayMessage(fallbackMessage)),
           });
-          // A refused binding save must surface (F4T2-13) — closing the
-          // editor on failure would pretend the binding held.
-          if (!r.ok) {
-            setSaveError(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
-            return;
-          }
-          setSaveError(null);
-          setEditing(false);
-          onChange();
         }}
       >{t("sftpCard.bindingSave")}</Button>
       {saveError && <span className="text-xs text-red-600">{saveError}</span>}
@@ -381,13 +363,11 @@ function SftpConnectionCard({
   schedules,
   accounts,
   onChange,
-  onDelete,
 }: {
   server: SftpServer;
   schedules: SftpSchedule[];
   accounts: Account[];
   onChange: () => void;
-  onDelete: (url: string) => Promise<void>;
 }) {
   const [routing, setRouting] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
@@ -395,6 +375,7 @@ function SftpConnectionCard({
   const [expectedAccount, setExpectedAccount] = useState("");
   const [routeError, setRouteError] = useState<string | null>(null);
   const t = useTranslations("banking.bankFeeds.client");
+  const { busy, execute } = useAppAction();
   // Deep link from the scheduler's unbound-schedule notice
   // (/admin/setup/bank-feeds?schedule=<id>): ring the named schedule so the
   // operator lands on the exact setting the notice names. Read lazily as
@@ -407,6 +388,39 @@ function SftpConnectionCard({
     // that can never match.
     return raw && isUuid(raw) ? raw : null;
   });
+  const removeServer = () => {
+    if (!confirm(t("sftpCard.removeServerConfirm"))) return;
+    const fallbackMessage = t("feedMessages.unknownError");
+    setRouteError(null);
+    void execute(() => fetchAction(`/api/banking/sftp/${server.id}`, { method: "DELETE" }), {
+      fallbackMessage,
+      onOk: onChange,
+      onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
+    });
+  };
+  const removeSchedule = (schedule: SftpSchedule) => {
+    if (!confirm(t("sftpCard.removeScheduleConfirm"))) return;
+    const fallbackMessage = t("feedMessages.unknownError");
+    setRouteError(null);
+    void execute(() => fetchAction(`/api/banking/sftp/schedules/${schedule.id}`, { method: "DELETE" }), {
+      fallbackMessage,
+      onOk: onChange,
+      onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
+    });
+  };
+  const addRoute = () => {
+    const fallbackMessage = t("feedMessages.unknownError");
+    setRouteError(null);
+    void execute(() => fetchAction("/api/banking/sftp/schedules", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto", expectedExternalAccountId: expectedAccount.trim() === "" ? null : expectedAccount }),
+    }), {
+      fallbackMessage,
+      onOk: onChange,
+      onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
+    });
+  };
   useEffect(() => {
     if (!highlightedScheduleId) return;
     document.getElementById(`sftp-schedule-${highlightedScheduleId}`)?.scrollIntoView?.({ block: "nearest" });
@@ -429,9 +443,10 @@ function SftpConnectionCard({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => setRouting(!routing)}>{routing ? t("sftpCard.done") : t("sftpCard.routing")}</Button>
-          <Button size="sm" variant="ghost" onClick={() => { if (!confirm(t("sftpCard.removeServerConfirm"))) return; void onDelete(`/api/banking/sftp/${server.id}`); }}>{t("sftpCard.remove")}</Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={removeServer}>{t("sftpCard.remove")}</Button>
         </div>
       </div>
+      {routeError && <p className="mt-2 text-xs text-red-600" role="alert">{routeError}</p>}
 
       {(routing || schedules.length > 0) && (
         <div className="mt-3 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
@@ -462,7 +477,7 @@ function SftpConnectionCard({
                   </span>
                 )}
                 <ScheduleBinding sc={sc} onChange={onChange} />
-                <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { if (!confirm(t("sftpCard.removeScheduleConfirm"))) return; void onDelete(`/api/banking/sftp/schedules/${sc.id}`); }}>{t("sftpCard.remove")}</Button>
+                <Button size="sm" variant="ghost" className="ml-auto" disabled={busy} onClick={() => removeSchedule(sc)}>{t("sftpCard.remove")}</Button>
               </li>
             ))}
             {schedules.length === 0 && <li className="text-xs text-slate-400">{t("sftpCard.noRouting")}</li>}
@@ -474,17 +489,7 @@ function SftpConnectionCard({
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
               </Select>
               <Input value={expectedAccount} onChange={(e) => setExpectedAccount(e.target.value)} placeholder={t("sftpCard.bindingPlaceholder")} className="h-8 w-36" />
-              <Button size="sm" disabled={!accountId} onClick={async () => {
-                const r = await fetch("/api/banking/sftp/schedules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto", expectedExternalAccountId: expectedAccount.trim() === "" ? null : expectedAccount }) });
-                // A refused add-route must surface (F4T2-13), never refresh
-                // into a list that silently lacks the route.
-                if (!r.ok) {
-                  setRouteError(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
-                  return;
-                }
-                setRouteError(null);
-                onChange();
-              }}>{t("sftpCard.addRoute")}</Button>
+              <Button size="sm" disabled={!accountId || busy} onClick={addRoute}>{t("sftpCard.addRoute")}</Button>
               {routeError && <p className="mt-1 w-full text-xs text-red-600">{routeError}</p>}
             </div>
           )}

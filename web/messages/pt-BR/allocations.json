@@ -481,6 +481,7 @@
     "untitled": "Rateio sem título",
     "loadFailed": "Não foi possível carregar departamentos e critérios para o guia de configuração.",
     "createFailed": "Não foi possível criar a regra de rateio.",
+    "createOutcomeUnknown": "Não foi possível confirmar se a regra \"{key}\" foi criada. Confira a lista de regras antes de tentar novamente.",
     "publishFailed": "A regra foi salva como rascunho — publique-a quando terminar a definição.",
     "created": "Regra de rateio salva como rascunho. Publique-a em Versões quando estiver pronta.",
     "published": "A regra de rateio está publicada e vigente.",

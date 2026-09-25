@@ -335,7 +335,7 @@ for (const [name, respond, present, phantomMessage, checkBusy] of [
   [
     'a non-JSON 500 on sync is a named failure, never a phantom import (F4T2-14)',
     () => new Response('', { status: 500 }),
-    /Request failed \(HTTP 500\)/,
+    /Sync failed: unknown error/,
     'no phantom import toast for work the server never did',
     true,
   ],
@@ -483,7 +483,7 @@ for (const [name, mountRow, clicks, checkOpen] of [
     for (const label of clicks) {
       await clickAndSettle(actionButton(host, label))
     }
-    assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
+    assert.match(host.textContent ?? '', /unknown error/)
     if (checkOpen) {
       assert.ok(
         [...host.querySelectorAll('button')].some((b) => (b.textContent ?? '').trim() === 'Save'),
