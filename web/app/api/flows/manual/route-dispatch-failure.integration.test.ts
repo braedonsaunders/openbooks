@@ -83,7 +83,7 @@ async function seedFailingManualFlow(orgId: string): Promise<void> {
   }
   await withBypassContext(() =>
     db.execute(sql`
-      insert into flows (id, org_id, name, subject_kind, graph)
+      insert into flows (id, org_id, name, subject_kind, enabled, graph)
       values (${randomUUID()}, ${orgId}, 'Manual probe flow', 'vendor_bill', true,
               ${JSON.stringify(graph)}::jsonb)`),
   )

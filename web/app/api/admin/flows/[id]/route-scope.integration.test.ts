@@ -65,7 +65,7 @@ async function makeBill(orgId: string, subsidiaryId: string): Promise<string> {
 async function seedFlow(orgId: string): Promise<string> {
   const id = randomUUID()
   await withBypassContext(() => db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, graph)
+    insert into flows (id, org_id, name, subject_kind, enabled, graph)
     values (${id}, ${orgId}, 'Scoped flow', 'vendor_bill', true, '{"schemaVersion":1,"nodes":[],"edges":[]}'::jsonb)`))
   return id
 }
