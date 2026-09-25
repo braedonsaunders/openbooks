@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { isFeatureEnabled } from "../features";
 import { loadBudgetWorkspace, type BudgetDimensions } from "../budgets";
+import { subsidiaryScopeAllows } from "../authz";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { uuidInput } from "./tools-shared";
 
@@ -54,12 +55,16 @@ const getBudgetWorkspace: AssistantToolDef = {
       locationId: a.locationId ?? null,
       classId: a.classId ?? null,
     };
+    if (dims.subsidiaryId !== null && !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, dims.subsidiaryId)) {
+      return { ok: false, error: "budget_not_found" };
+    }
     const perPage = Math.min(a.perPage ?? 25, 100);
     const workspace = await loadBudgetWorkspace(a.scenarioId, authz.user.orgId, {
       q: a.q,
       page: a.page ?? 1,
       perPage,
       dims,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     });
     if (!workspace) return { ok: false, error: "budget_not_found" };
     return {
