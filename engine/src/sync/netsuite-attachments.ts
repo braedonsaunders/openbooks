@@ -502,13 +502,18 @@ async function persistFile(input: {
   bytes: Buffer;
   contentType: string;
   sourceModifiedAt: Date | null;
-}): Promise<{ fileId: string; created: boolean; versioned: boolean; unchanged: boolean; createdLinks: number }> {
+}): Promise<{ fileId: string; created: boolean; versioned: boolean; unchanged: boolean; stale: boolean; createdLinks: number }> {
   const hash = createHash("sha256").update(input.bytes).digest("hex");
   const filename = safeFilename(input.source.name, input.source.id);
   const sourceModifiedAtIso = input.sourceModifiedAt?.toISOString() ?? null;
   return db.transaction(async (tx) => {
-    const existing = (await tx.execute<{ id: string; contentHash: string | null; maxVersion: number }>(sql`
-      select id, content_hash as "contentHash",
+    const existing = (await tx.execute<{
+      id: string;
+      contentHash: string | null;
+      sourceModifiedAt: Date | string | null;
+      maxVersion: number;
+    }>(sql`
+      select id, content_hash as "contentHash", source_modified_at as "sourceModifiedAt",
              (select coalesce(max(fv.version_number), 0)
                 from file_versions fv
                 join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
@@ -522,6 +527,16 @@ async function persistFile(input: {
     let created = false;
     let versioned = false;
     const unchanged = existing.rows[0]?.contentHash === hash;
+    const storedModifiedAt = existing.rows[0]?.sourceModifiedAt == null
+      ? null
+      : new Date(existing.rows[0].sourceModifiedAt).getTime();
+    const incomingModifiedAt = input.sourceModifiedAt?.getTime() ?? null;
+    // The file row lock fences this comparison with every concurrent import.
+    // A slower attempt may finish downloading an older source snapshot after a
+    // newer attempt has already committed; it must not replace that version or
+    // move the source watermark backwards.
+    const stale = storedModifiedAt != null && incomingModifiedAt != null
+      && incomingModifiedAt < storedModifiedAt;
     if (!fileId) {
       fileId = randomUUID();
       const folderId = await ensureRecordFolder(tx, input.orgId, input.targetDocumentIds[0]!);
@@ -536,7 +551,10 @@ async function persistFile(input: {
       created = true;
     }
 
-    if (created || !unchanged) {
+    if (stale) {
+      // Keep the current blob and source marker. The source link graph is still
+      // reconciled below because those links are independent of file version.
+    } else if (created || !unchanged) {
       const versionId = randomUUID();
       const versionNumber = created ? 1 : Number(existing.rows[0]!.maxVersion) + 1;
       await tx.execute(sql`
@@ -550,7 +568,7 @@ async function persistFile(input: {
         update files set current_version_id = ${versionId}, name = ${filename}, extension = ${extension(filename)},
                          file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
                          size_bytes = ${input.bytes.length}, storage_kind = 's3', content_hash = ${hash},
-                         source_modified_at = ${sourceModifiedAtIso},
+                         source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
                          updated_by = ${input.actorId}, updated_at = now()
          where id = ${fileId} and org_id = ${input.orgId}
       `);
@@ -559,7 +577,8 @@ async function persistFile(input: {
       await tx.execute(sql`
         update files set name = ${filename}, extension = ${extension(filename)},
                          file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
-                         size_bytes = ${input.bytes.length}, source_modified_at = ${sourceModifiedAtIso},
+                         size_bytes = ${input.bytes.length},
+                         source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
                          updated_by = ${input.actorId}, updated_at = now()
          where id = ${fileId} and org_id = ${input.orgId}
       `);
@@ -575,7 +594,7 @@ async function persistFile(input: {
       `));
       createdLinks += linked.rows.length;
     }
-    return { fileId, created, versioned, unchanged: !created && unchanged, createdLinks };
+    return { fileId, created, versioned, unchanged: !created && unchanged, stale, createdLinks };
   });
 }
 
@@ -879,6 +898,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       if (persisted.created) summary.createdFiles++;
       if (persisted.versioned) summary.newVersions++;
       if (persisted.unchanged) summary.unchangedFiles++;
+      if (persisted.stale) summary.skippedUnchanged++;
       summary.createdLinks += persisted.createdLinks;
     } catch (error) {
       summary.failures++;
