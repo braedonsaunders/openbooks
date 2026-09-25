@@ -481,6 +481,7 @@
     "untitled": "Distribución sin título",
     "loadFailed": "No se pudieron cargar los departamentos y las claves para la guía de configuración.",
     "createFailed": "No se pudo crear la regla de distribución.",
+    "createOutcomeUnknown": "No se pudo confirmar si se creó la regla \"{key}\". Compruebe la lista de reglas antes de volver a intentarlo.",
     "publishFailed": "La regla se guardó como borrador — publíquela cuando termine la definición.",
     "created": "Regla de distribución guardada como borrador. Publíquela desde Versiones cuando esté lista.",
     "published": "La regla de distribución está publicada y vigente.",

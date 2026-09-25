@@ -481,6 +481,7 @@
     "untitled": "未命名分摊",
     "loadFailed": "无法为设置向导加载部门与动因。",
     "createFailed": "无法创建分摊规则。",
+    "createOutcomeUnknown": "无法确认规则“{key}”是否已创建。请先检查规则列表，再决定是否重试。",
     "publishFailed": "规则已保存为草稿 — 完成定义后再发布。",
     "created": "分摊规则已保存为草稿。准备就绪后请从版本发布。",
     "published": "分摊规则已发布并生效。",
