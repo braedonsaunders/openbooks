@@ -56,6 +56,33 @@ export async function listScopedAccountOptions(
   return rows.rows
 }
 
+/**
+ * Scoped party options for a document drawer, plus the open document's
+ * current party when set: the drawer resolves the selected party's
+ * subsidiary from this list, so dropping a grandfathered out-of-scope
+ * party would break editing a document the caller is allowed to see.
+ * The current party id is already on the visible document — including
+ * that single row discloses no catalog beyond it.
+ */
+export async function listScopedPartyOptionsWithCurrent(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  role: 'vendor' | 'customer',
+  currentPartyId?: string | null,
+): Promise<ScopedPartyOption[]> {
+  const options = await listScopedPartyOptions(orgId, allowedSubsidiaryIds, { role, activeOnly: true })
+  if (currentPartyId && !options.some((option) => option.id === currentPartyId)) {
+    const current = await db.execute<ScopedPartyOption>(sql`
+      select p.id, p.display_name, p.subsidiary_id from parties p
+       where p.id = ${currentPartyId} and p.org_id = ${orgId} and p.is_active`)
+    if (current.rows[0]) {
+      options.push(current.rows[0])
+      options.sort((a, b) => a.display_name.localeCompare(b.display_name))
+    }
+  }
+  return options
+}
+
 /** Party references visible to one caller, including intentionally shared parties with a null subsidiary. */
 export async function listScopedPartyOptions(
   orgId: string,

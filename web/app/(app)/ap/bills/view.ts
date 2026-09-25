@@ -13,7 +13,8 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { AP_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
-import { accountOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -138,7 +139,12 @@ export async function loadApBills(
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
-          partyOptions('vendor'),
+          listScopedPartyOptionsWithCurrent(
+            authz.user.orgId,
+            authz.allowedSubsidiaryIds,
+            'vendor',
+            (openDoc?.doc as Record<string, unknown> | undefined)?.party_id as string | undefined,
+          ),
           accountOptions(DOC_KINDS[drawerKind as 'vendor_bill']!),
           taxCodeOptions(),
           taxGroupOptions(),
