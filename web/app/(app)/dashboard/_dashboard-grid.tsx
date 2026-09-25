@@ -236,6 +236,10 @@ export function DashboardGrid({
       } else {
         toast.error(res.error ?? t('grid.saveFailed'))
       }
+    } catch {
+      // A rejected transport leaves the layout unsaved with no message:
+      // name the failure so the operator knows to retry.
+      toast.error(t('grid.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -252,6 +256,10 @@ export function DashboardGrid({
       } else {
         toast.error(res.error ?? t('grid.resetFailed'))
       }
+    } catch {
+      // A rejected transport leaves the reset unconfirmed with no message:
+      // name the failure so the operator knows to retry.
+      toast.error(t('grid.resetFailed'))
     } finally {
       setResetting(false)
     }
