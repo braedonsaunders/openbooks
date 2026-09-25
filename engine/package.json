@@ -28,7 +28,8 @@
     "ioredis": "^5.11.1",
     "pdf-lib": "^1.17.1",
     "pg": "^8",
-    "quickjs-emscripten": "^0.31"
+    "quickjs-emscripten": "^0.31",
+    "xmllint-wasm": "5.3.0"
   },
   "devDependencies": {
     "@types/pg": "^8",

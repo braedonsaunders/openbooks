@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { businessToday } from "../../platform/business-date.ts";
 import { db } from "../../platform/db.ts";
 import { formatMoney } from "../../money/money.ts";
@@ -7,6 +9,15 @@ import { PayrollError } from "../error.ts";
 import {
   ROE_REASON_CODES, roeRecord, type RoeRecord, type RoeReasonCode,
 } from "../yearend.ts";
+import { validateXML } from "xmllint-wasm";
+
+// This is the schema linked from Service Canada's current ROE Web Appendix D.
+// Keep it local and validate offline; no employee payroll data is sent to a
+// third-party validation service and schema availability is not a runtime risk.
+const PAYROLL_EXTRACT_V2_XSD = readFileSync(
+  fileURLToPath(new URL("./schemas/PayrollExtractXmlV2.xsd", import.meta.url)),
+  "utf8",
+);
 
 /**
  * Service Canada ROE Web bulk-upload XML — the same shape as the CRA T4 file
@@ -14,18 +25,16 @@ import {
  * record per employee, built from the SAME committed-stub data the year-end
  * worksheets show, so the file always reconciles to the on-screen blocks.
  *
- * Blocks covered: 4 (payroll reference), 5 (CRA payroll account), 6 (pay
+ * Blocks covered: 3 (payroll reference), 5 (CRA payroll account), 6 (pay
  * period type), 8 (SIN), 9 (employee name), 10/11/12 (first day worked, last
  * day paid, final pay-period end), 13 (occupation), 15A/15B/15C (insurable
- * hours, insurable earnings, earnings by pay period), 16 (reason for issue and
- * contact), 17 (separation payments), 18 (comment).
+ * hours and earnings by pay period), 16 (reason for issue and contact), 17
+ * (separation payments), 18 (comment). Every generated file is validated
+ * against Service Canada's published Payroll Extract v2 schema before return.
  *
  * Fails closed with every problem named: missing SINs, missing reason codes,
- * missing employer account, missing transmitter configuration. IMPORTANT: like
- * the T4 file, the element names follow Service Canada's published ROE Web
- * conventions but MUST be validated against the ROE Web schema for the filing
- * period before transmitting — the Service Canada validator is the authority
- * (the UI repeats this note).
+ * missing employer account, missing transmitter configuration, or fields that
+ * cannot fit the published Payroll Extract v2 schema.
  *
  * Config: orgs.settings.payroll.t4Transmitter supplies the employer business
  * number and contact — the same employer identity the T4 return files under,
@@ -65,8 +74,6 @@ const esc = (value: string): string =>
  * bigint-exact and rounds half-up, and is a drop-in for both.
  */
 const amt = (value: string): string => formatMoney(value || "0", 2);
-
-const hrs = (value: string): string => formatMoney(value || "0", 2);
 
 /**
  * A Canadian SIN, checksum included.
@@ -171,9 +178,22 @@ export async function buildRoeXml(
 
   return {
     filename: `ROE-${await businessToday(orgId)}.xml`,
-    xml: renderRoeXml({ employer, records }),
+    xml: await validateRoeXml(renderRoeXml({ employer, records })),
     roeCount: records.length,
   };
+}
+
+/** Validate the bytes against Service Canada's published Payroll Extract v2 XSD. */
+export async function validateRoeXml(xml: string): Promise<string> {
+  const result = await validateXML({
+    xml: [{ fileName: "roe-payroll-extract.xml", contents: xml }],
+    schema: [{ fileName: "PayrollExtractXmlV2.xsd", contents: PAYROLL_EXTRACT_V2_XSD }],
+  });
+  if (!result.valid) {
+    const detail = result.errors.map((error) => error.message).join("; ");
+    throw new PayrollError(`generated ROE Payroll Extract v2 XML failed Service Canada's schema validation: ${detail}`);
+  }
+  return xml;
 }
 
 /** One ROE ready to serialize: the payroll data, the employer's declaration, the SIN. */
@@ -212,76 +232,93 @@ export function renderRoeXml(input: {
       + `Canadian employee — not: ${foreign.join(", ")}`,
     );
   }
+  const phone = employer.contactPhone.replace(/\D/g, "");
+  if (phone.length !== 10) {
+    throw new PayrollError("the ROE transmitter contact phone must contain a 3-digit area code and 7-digit number — correct Payroll setup");
+  }
+  const contact = personName(employer.contactName);
+  if (!contact.first || !contact.last || contact.first.length > 20 || contact.last.length > 28) {
+    throw new PayrollError("the ROE transmitter contact needs a first and last name within Service Canada's field limits — correct Payroll setup");
+  }
   const roeXml: string[] = [];
   for (const { record, issue, sin } of records) {
-    const names = splitName(record.employeeName);
-    const surname = names[0]!;
-    const given = names.slice(1);
+    const names = personName(record.employeeName);
+    const { mailingAddress: address } = record;
+    if (!address) throw new PayrollError(`${record.employeeName} has no ROE mailing address — add an employee address before issuing the ROE`);
+    const addressLines = [address.line1, `${address.city} ${address.region}`, address.line2 ?? ""];
+    if (addressLines.some((line) => line.length > 35)
+      || !address.line1.trim() || !address.city.trim() || !address.region.trim()
+      || !address.postalCode.trim() || address.postalCode.length > 10
+      || !["CA", "US"].includes(address.country)) {
+      throw new PayrollError(`${record.employeeName}'s ROE mailing address is incomplete or exceeds Service Canada's fields — correct the employee address`);
+    }
+    if (names.first.length > 20 || names.middle.length > 4 || names.last.length > 28) {
+      throw new PayrollError(`${record.employeeName}'s name exceeds Service Canada's ROE name fields — correct the employee name`);
+    }
     // Block 5: the employee's own payroll program account files the ROE;
     // employees on no account fall back to the employer business number.
     const bn = record.filingAccount.accountNumber ?? employer.bn;
-
     const periodXml = record.periods.map((period, index) =>
-      `    <PayPeriod>` +
-      `<PayPeriodNumber>${index + 1}</PayPeriodNumber>` +
-      `<PayPeriodEndDate>${esc(period.periodEnd)}</PayPeriodEndDate>` +
-      `<InsurableEarnings>${amt(period.insurableEarnings)}</InsurableEarnings>` +
-      `<InsurableHours>${hrs(period.insurableHours)}</InsurableHours>` +
-      `</PayPeriod>`).join("\n");
+      `     <PP nbr="${index + 1}"><AMT>${amt(period.insurableEarnings)}</AMT></PP>`).join("\n");
+    const vacationXml = record.separationAmounts.filter((amount) => amount.block === "17A")
+      .map((amount) => `    <VP nbr="1"><CD>${esc(amount.code)}</CD><AMT>${amt(amount.amount)}</AMT></VP>`).join("");
+    const otherXml = record.separationAmounts.filter((amount) => amount.block === "17C")
+      .map((amount, index) => `    <OM nbr="${index + 1}"><CD>${esc(amount.code)}</CD><AMT>${amt(amount.amount)}</AMT></OM>`).join("");
+    const recall = issue.expectedRecallDate ? "Y" : "U";
+    const comment = issue.comment?.trim() ?? "";
+    if (comment.length > 160) throw new PayrollError(`${record.employeeName}'s ROE comment exceeds Service Canada's 160-character limit`);
 
     roeXml.push(
-      `  <ROE>\n` +
-      `   <PayrollReferenceNumber>${esc(record.payrollReference ?? "")}</PayrollReferenceNumber>\n` +
-      `   <BusinessNumber>${esc(bn)}</BusinessNumber>\n` +
-      `   <PayPeriodType>${esc(record.payPeriodType)}</PayPeriodType>\n` +
-      `   <Employee>` +
-      `<SIN>${sin}</SIN>` +
-      `<Surname>${esc(surname)}</Surname>` +
-      `<GivenName>${esc(given.join(" ") || surname)}</GivenName>` +
-      `${tag("Occupation", record.occupation)}` +
-      `</Employee>\n` +
-      `   ${tag("FirstDayWorked", record.firstDayWorked)}\n` +
-      `   ${tag("LastDayPaid", record.lastDayPaid)}\n` +
-      `   ${tag("FinalPayPeriodEndDate", record.finalPayPeriodEnd)}\n` +
-      `   <TotalInsurableHours>${hrs(record.totalInsurableHours)}</TotalInsurableHours>\n` +
-      `   <TotalInsurableEarnings>${amt(record.totalInsurableEarnings)}</TotalInsurableEarnings>\n` +
-      `   <PayPeriods>\n${periodXml}\n   </PayPeriods>\n` +
-      `   <ReasonForIssue>${esc(issue.reasonCode)}</ReasonForIssue>\n` +
-      `   ${tag("ExpectedRecallDate", issue.expectedRecallDate ?? null)}\n` +
-      `   <SeparationPayments>` +
-      `<VacationPay>${amt(record.vacationPayOnSeparation)}</VacationPay>` +
-      `<OtherMonies>${amt(record.otherMoniesOnSeparation)}</OtherMonies>` +
-      `</SeparationPayments>\n` +
-      `   ${tag("Comment", issue.comment ?? null)}\n` +
-      `   <Contact><ContactName>${esc(employer.contactName)}</ContactName>` +
-      `<ContactPhone>${esc(employer.contactPhone)}</ContactPhone></Contact>\n` +
+      `  <ROE PrintingLanguage="E" Issue="S">\n` +
+      `   ${tag("B3", record.payrollReference)}\n` +
+      `   <B5>${esc(bn)}</B5><B6>${esc(record.payPeriodType)}</B6><B8>${esc(sin)}</B8>\n` +
+      `   <B9><FN>${esc(names.first)}</FN>${names.middle ? `<MN>${esc(names.middle)}</MN>` : ""}` +
+      `<LN>${esc(names.last)}</LN><A1>${esc(address.line1)}</A1>` +
+      `<A2>${esc(`${address.city} ${address.region}`)}</A2>${tag("A3", address.line2)}` +
+      `<PC>${esc(address.postalCode.replace(/[ -]/g, "").toUpperCase())}</PC></B9>\n` +
+      `   <B10>${esc(record.firstDayWorked ?? "")}</B10><B11>${esc(record.lastDayPaid ?? "")}</B11>` +
+      `<B12>${esc(record.finalPayPeriodEnd ?? "")}</B12>${tag("B13", record.occupation)}\n` +
+      `   <B14><CD>${recall}</CD>${tag("DT", issue.expectedRecallDate ?? null)}</B14>\n` +
+      `   <B15A>${ceilWhole(record.totalInsurableHours)}</B15A><B15C>\n${periodXml}\n   </B15C>\n` +
+      `   <B16><CD>${esc(reasonCode(issue.reasonCode))}</CD><FN>${esc(contact.first)}</FN>` +
+      `<LN>${esc(contact.last)}</LN><AC>${phone.slice(0, 3)}</AC><TEL>${phone.slice(3)}</TEL></B16>\n` +
+      `${vacationXml ? `   <B17A>${vacationXml}</B17A>\n` : ""}` +
+      `${otherXml ? `   <B17C>\n${otherXml}\n   </B17C>\n` : ""}` +
+      `${tag("B18", comment || null)}\n` +
+      `   <B20>E</B20>\n` +
       `  </ROE>`,
     );
   }
 
   const xml =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<ROEWebSubmission xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n` +
-    ` <Employer>\n` +
-    `  <BusinessNumber>${esc(employer.bn)}</BusinessNumber>\n` +
-    `  <EmployerName>${esc(employer.name)}</EmployerName>\n` +
-    `  <Contact><ContactName>${esc(employer.contactName)}</ContactName>` +
-    `<ContactPhone>${esc(employer.contactPhone)}</ContactPhone></Contact>\n` +
-    ` </Employer>\n` +
-    ` <ROEs count="${roeXml.length}">\n` +
+    `<ROEHEADER FileVersion="W-2.0" SoftwareVendor="OpenBooks" ProductName="OpenBooks">\n` +
     roeXml.join("\n") + "\n" +
-    ` </ROEs>\n` +
-    `</ROEWebSubmission>\n`;
+    `</ROEHEADER>\n`;
 
   return xml;
 }
 
 /** "First Last" → [surname, ...given]; single token = both. Drops any
  *  parenthesized suffix the sim data carries ("Jane Doe (Manager)"). */
-function splitName(displayName: string): string[] {
+function personName(displayName: string): { first: string; middle: string; last: string } {
   const clean = displayName.replace(/\s*\(.*\)\s*$/, "").trim();
-  const parts = clean.split(/\s+/);
-  if (parts.length === 1) return [parts[0]!];
-  const surname = parts[parts.length - 1]!;
-  return [surname, ...parts.slice(0, -1)];
+  const parts = clean.split(/\s+/).filter(Boolean);
+  return {
+    first: parts[0] ?? "",
+    middle: parts.slice(1, -1).join(" "),
+    last: parts.length > 1 ? parts.at(-1)! : (parts[0] ?? ""),
+  };
+}
+
+const reasonCode = (code: RoeReasonCode): string => ({
+  A: "A00", B: "B00", D: "D00", E: "E00", F: "F00", G: "G00", H: "H00",
+  J: "J00", K: "K00", M: "M00", N: "N00", P: "P00", Z: "Z00",
+})[code];
+
+function ceilWhole(decimal: string): string {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(decimal);
+  if (!match) throw new PayrollError("ROE Block 15A hours are not a nonnegative decimal");
+  const fraction = match[2] ?? "";
+  return (BigInt(match[1]!) + (/[1-9]/.test(fraction) ? 1n : 0n)).toString();
 }

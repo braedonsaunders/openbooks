@@ -34,6 +34,7 @@ const config = {
   transpilePackages: ["@openbooks/engine", "@openbooks/schema"],
   serverExternalPackages: [
     "quickjs-emscripten",
+    "xmllint-wasm",
     "pg",
     "pdfkit",
     "exceljs",

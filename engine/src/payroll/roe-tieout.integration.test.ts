@@ -25,6 +25,8 @@ test(
     try {
       // No EHT insert here: seedAdoption already carries the decided ON EHT
       // rate, and a second row for the same key conflicts.
+      await db.execute(sql`insert into addresses (org_id, party_id, line1, city, region, postal_code, country)
+        values (${fx.orgId}, ${fx.employeeId}, '10 Main Street', 'Toronto', 'ON', 'M5V 2T6', 'CA')`);
       await db.execute(sql`
         update employee_roles set terminated_on = '2026-08-10'
          where org_id = ${fx.orgId} and party_id = ${fx.employeeId}`);

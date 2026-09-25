@@ -791,6 +791,10 @@ const CA_ROE: RoeRecord = {
   lastDayPaid: "2026-05-29",
   finalPayPeriodEnd: "2026-05-29",
   occupation: "Site supervisor",
+  mailingAddress: {
+    line1: "10 Main Street", line2: null, city: "Toronto", region: "ON",
+    postalCode: "M5V 2T6", country: "CA",
+  },
   totalInsurableHours: "86.6150",
   totalInsurableEarnings: "2000.0000",
   periods: [{
@@ -825,7 +829,7 @@ test("the ROE XML builder refuses a non-Canadian employee", () => {
       error instanceof Error && /can only be filed for a Canadian employee/.test(error.message),
   );
   // The Canadian record still files.
-  assert.match(renderRoeXml({ employer: EMPLOYER, records: [roeFile()] }), /<SIN>046454286<\/SIN>/);
+  assert.match(renderRoeXml({ employer: EMPLOYER, records: [roeFile()] }), /<B8>046454286<\/B8>/);
 });
 
 test("a nine-digit number is not a SIN", () => {
@@ -838,11 +842,13 @@ test("a nine-digit number is not a SIN", () => {
 
 test("insurable hours are rounded exactly, not through a double", () => {
   // 86.615 has no exact double: Number("86.6150").toFixed(2) gives "86.61",
-  // where half-up gives 86.62. Insurable hours drive an EI claim.
+  // where half-up gives 86.62. Insurable hours drive an EI claim — and the
+  // Payroll Extract v2 schema takes whole hours, so the file carries the
+  // exact ceiling, never a double-rounded fraction.
   assert.equal(Number("86.6150").toFixed(2), "86.61"); // the defect, pinned
   const xml = renderRoeXml({ employer: EMPLOYER, records: [roeFile()] });
-  assert.match(xml, /<InsurableHours>86\.62<\/InsurableHours>/);
-  assert.match(xml, /<TotalInsurableHours>86\.62<\/TotalInsurableHours>/);
+  assert.match(xml, /<B15A>87<\/B15A>/);
+  assert.ok(!xml.includes("86.61") && !xml.includes("86.62"));
 });
 
 test(

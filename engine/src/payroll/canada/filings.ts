@@ -265,7 +265,7 @@ export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
     } catch {
       throw new PayrollError("invalid employee selection");
     }
-    if (text.length > 500) throw new PayrollError("comment too long");
+    if (text.length > 160) throw new PayrollError("comment too long");
     issues.push({
       employeePartyId: employeePartyId!,
       reasonCode: reasonCode as RoeReasonCode,
@@ -527,12 +527,12 @@ function buildCaPackFilings(): PayrollPackFilings {
           label: ROE_REASON_LABELS[code],
           commentRequired: code === "K",
         })),
-        commentMaxLength: 500,
+        commentMaxLength: 160,
         maxSelection: 500,
       },
       download: {
-        label: "Download ROE XML",
-        note: "Validate against the ROE Web schema before transmitting.",
+        label: "Download Service Canada ROE v2 XML",
+        note: "This Payroll Extract v2 file is validated against Service Canada's published XSD before download.",
         build: async (orgId, _taxYear, params) => {
           const issues = parseRoeIssueParam(params.employees ?? "");
           const file = await buildRoeXml(orgId, issues);
