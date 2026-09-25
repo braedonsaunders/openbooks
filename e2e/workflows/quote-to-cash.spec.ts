@@ -12,12 +12,12 @@ import { withIdempotencyKey } from "./idempotency";
  * minor-unit math — against the rendered lists, drawers, reports, and audit
  * trail.
  *
- * Determinism: fixed 2026 document dates on every write, fixed per-scenario
- * tags and account numbers (E2E_RUN suffix only for local re-runs against a
- * dirty dev database; CI always runs a pristine org), one scenario per
- * calendar month so period-filtered reports isolate each scenario, and custom
- * report periods throughout. The suite completes first-run org setup through
- * the product's setup-wizard API (industry template: chart of accounts,
+ * Determinism: 2026 document dates, shifted three months per retry by qm()
+ * so a retry never shares a period with the failed attempt; fixed tags and
+ * account numbers per scenario (E2E_RUN suffix for local re-runs; CI keeps a
+ * pristine org), one scenario per calendar month isolating each scenario, and
+ * custom report periods throughout. The suite completes first-run org setup
+ * through the product's setup-wizard API (industry template: chart of accounts,
  * control accounts, features) exactly as a new tenant would.
  *
  * Core flow per scenario: customer → item with tax → quote → issue (UI) →
@@ -49,6 +49,8 @@ function runCode(): string {
   const base = m ? Number(m[1]) : 0;
   return String((base + test.info().retry * 17) % 100).padStart(2, '0');
 }
+
+const qm = (month: number): string => String(month + test.info().retry * 3).padStart(2, '0');
 
 /** Minor-unit money: '420.00' -> 42000n. */
 function toCents(amount: string): bigint {
@@ -410,7 +412,7 @@ test.describe('quote-to-cash workflows', () => {
       const t = tag('Q2CA');
       const rc = runCode();
       const seed = await seedScenario(page, t, { incomeNumber: `4491${rc}`, bankNumber: `1491${rc}`, withTax: true });
-      const quote = await seedQuote(page, seed, { documentDate: '2026-03-02', dueDate: '2026-03-16', quantity: '2', unitPrice: '200.00' });
+      const quote = await seedQuote(page, seed, { documentDate: `2026-${qm(3)}-02`, dueDate: `2026-${qm(3)}-16`, quantity: '2', unitPrice: '200.00' });
       // Exact bigint-computed expectations: 2 x 200.00 = 400.00, GST 5% = 20.00, total 420.00.
       const subtotal = toCents('400.00');
       const tax = toCents('20.00');
@@ -445,8 +447,8 @@ test.describe('quote-to-cash workflows', () => {
       const invRow = page.locator('tr', { hasText: inv.documentNumber }).first();
       await expect(invRow.getByText(fmtCAD(total)).first()).toBeVisible();
 
-      // AR aging as of 2026-03-31: the invoice is 15 days past due (due 03-16).
-      await page.goto('/reports/aging?period=custom&from=2026-03-01&to=2026-03-31&side=ar');
+      // AR aging as of month-end: the invoice is 15 days past due.
+      await page.goto(`/reports/aging?period=custom&from=2026-${qm(3)}-01&to=2026-${qm(3)}-31&side=ar`);
       await page.waitForTimeout(2000);
       let rows = await reportRows(page);
       {
@@ -456,12 +458,12 @@ test.describe('quote-to-cash workflows', () => {
         expect(agingRow[agingRow.length - 1]).toBe(fmtCAD(total));
       }
 
-      // Receipt 1 (partial 200.00 on 03-10): seed, post through the UI.
-      const receipt1 = await seedReceipt(page, seed, '200.00', '2026-03-10');
+      // Receipt 1 (partial 200.00, early in the month): seed, post through the UI.
+      const receipt1 = await seedReceipt(page, seed, '200.00', `2026-${qm(3)}-10`);
       await uiPostReceipt(page, receipt1.payId);
 
-      // Receipt 2 (remainder 220.00 on 03-20): seed, post through the UI.
-      const receipt2 = await seedReceipt(page, seed, '220.00', '2026-03-20');
+      // Receipt 2 (remainder 220.00, later in the month): seed, post through the UI.
+      const receipt2 = await seedReceipt(page, seed, '220.00', `2026-${qm(3)}-20`);
       await uiPostReceipt(page, receipt2.payId);
 
       // Invoice open balance is exactly 0 in the list and the drawer.
@@ -471,16 +473,16 @@ test.describe('quote-to-cash workflows', () => {
       await openDrawer(page, `/ar/invoices?doc=${inv.id}`);
       await expect(page.locator('[role="dialog"]').first().getByText(fmtCAD(0n)).first()).toBeVisible();
 
-      // AR aging as of 03-31 carries nothing for this customer.
-      await page.goto('/reports/aging?period=custom&from=2026-03-01&to=2026-03-31&side=ar');
+      // AR aging as of month-end carries nothing for this customer.
+      await page.goto(`/reports/aging?period=custom&from=2026-${qm(3)}-01&to=2026-${qm(3)}-31&side=ar`);
       await expect(page.locator('tr', { hasText: `${t} Customer` })).toHaveCount(0);
 
       // Bank: open a reconciliation, import the statement, match + sign off in the UI.
       const rec = await apiOk(page, 'POST', '/api/banking/reconciliations', {
-        accountId: seed.bankId, throughDate: '2026-03-31', statementBalance: '420.00',
+        accountId: seed.bankId, throughDate: `2026-${qm(3)}-31`, statementBalance: '420.00',
       });
       const recId = str(rec.id, 'reconciliation id');
-      const csv = 'date,amount,description\n2026-03-10,200.00,Receipt one\n2026-03-20,220.00,Receipt two';
+      const csv = `date,amount,description\n2026-${qm(3)}-10,200.00,Receipt one\n2026-${qm(3)}-20,220.00,Receipt two`;
       const imp = await apiOk(page, 'POST', '/api/banking/import', {
         accountId: seed.bankId, source: 'csv', text: csv,
         mapping: { date: 0, amount: 1, description: 2 }, mode: 'import',
@@ -512,8 +514,8 @@ test.describe('quote-to-cash workflows', () => {
         expect(res.status(), await res.text()).toBe(200);
       }
 
-      // Reports tie to the posted journal (period-filtered to March).
-      const period = 'period=custom&from=2026-03-01&to=2026-03-31';
+      // Reports tie to the posted journal (period-filtered to the scenario month).
+      const period = `period=custom&from=2026-${qm(3)}-01&to=2026-${qm(3)}-31`;
       await page.goto(`/reports/pnl?${period}`);
       rows = await reportRows(page);
       expect(findRow(rows, `${t} Service Revenue`)).toContain(fmtCAD(subtotal));
@@ -571,7 +573,7 @@ test.describe('quote-to-cash workflows', () => {
       const t = tag('Q2CB');
       const rc = runCode();
       const seed = await seedScenario(page, t, { incomeNumber: `4492${rc}`, bankNumber: `1492${rc}`, withTax: true });
-      const quote = await seedQuote(page, seed, { documentDate: '2026-04-02', dueDate: '2026-04-16', quantity: '2', unitPrice: '200.00' });
+      const quote = await seedQuote(page, seed, { documentDate: `2026-${qm(4)}-02`, dueDate: `2026-${qm(4)}-16`, quantity: '2', unitPrice: '200.00' });
       // 2 x 200.00 = 400.00, GST 5% = 20.00, total 420.00.
       const subtotal = toCents('400.00');
       const tax = toCents('20.00');
@@ -600,7 +602,7 @@ test.describe('quote-to-cash workflows', () => {
       const cg = await apiOk(page, 'GET', `/api/documents/${creditId}`);
       const cp = await api(page, 'PATCH', `/api/documents/${creditId}`, {
         expectedUpdatedAt: str(docOf(cg).updated_at, 'credit revision'),
-        partyId: seed.partyId, documentDate: '2026-04-08',
+        partyId: seed.partyId, documentDate: `2026-${qm(4)}-08`,
         lines: [{ accountId: seed.incomeId, description: `${t} credit`, quantity: '1', unitPrice: '200.00', amount: '200.00', taxCodeId: seed.taxCodeId }],
       });
       expect(cp.status, JSON.stringify(cp.body).slice(0, 300)).toBe(200);
@@ -620,7 +622,7 @@ test.describe('quote-to-cash workflows', () => {
       const payId = str(pd.id, 'payment id');
       const pg = await apiOk(page, 'GET', `/api/payments/${payId}`);
       const pp = await api(page, 'PATCH', `/api/payments/${payId}`, {
-        partyId: seed.partyId, bankAccountId: seed.bankId, documentDate: '2026-04-15',
+        partyId: seed.partyId, bankAccountId: seed.bankId, documentDate: `2026-${qm(4)}-15`,
         expectedUpdatedAt: str(docOf(pg).updated_at, 'payment revision'),
         allocations: [{
           openLineId: str(invLine.lineId), sourceTransactionAmount: '210.00', targetTransactionAmount: '210.00',
@@ -641,16 +643,16 @@ test.describe('quote-to-cash workflows', () => {
       await expect(paidRow.getByText(fmtCAD(0n)).first()).toBeVisible();
       const ciAfter = await apiOk(page, 'GET', `/api/payments/credit-items?partyId=${seed.partyId}&side=ar`);
       expect((ciAfter.items as Json[]).length).toBe(0);
-      await page.goto('/reports/aging?period=custom&from=2026-04-01&to=2026-04-30&side=ar');
+      await page.goto(`/reports/aging?period=custom&from=2026-${qm(4)}-01&to=2026-${qm(4)}-30&side=ar`);
       await expect(page.locator('tr', { hasText: `${t} Customer` })).toHaveCount(0);
 
       // Bank: statement 210.00, match the cash receipt, sign off.
       const rec = await apiOk(page, 'POST', '/api/banking/reconciliations', {
-        accountId: seed.bankId, throughDate: '2026-04-30', statementBalance: '210.00',
+        accountId: seed.bankId, throughDate: `2026-${qm(4)}-30`, statementBalance: '210.00',
       });
       const recId = str(rec.id, 'reconciliation id');
       const imp = await apiOk(page, 'POST', '/api/banking/import', {
-        accountId: seed.bankId, source: 'csv', text: 'date,amount,description\n2026-04-15,210.00,Cash receipt',
+        accountId: seed.bankId, source: 'csv', text: `date,amount,description\n2026-${qm(4)}-15,210.00,Cash receipt`,
         mapping: { date: 0, amount: 1, description: 2 }, mode: 'import',
       });
       expect(imp.imported).toBe(1);
@@ -676,14 +678,14 @@ test.describe('quote-to-cash workflows', () => {
         expect(res.status(), await res.text()).toBe(200);
       }
 
-      // Reports tie (April, cumulative as-of 04-30 across both scenarios:
+      // Reports tie (scenario month, cumulative as-of month-end across both scenarios:
       // bank 420+210, revenue 400+400-200, tax 20+20-10, AR cleared).
-      // P&L is period movement: April only.
+      // P&L is period movement: scenario month only.
       const netRevenue = subtotal - toCents('200.00');
       const netTax = tax - toCents('10.00');
       expect(netRevenue).toBe(toCents('200.00'));
       expect(netTax).toBe(toCents('10.00'));
-      const period = 'period=custom&from=2026-04-01&to=2026-04-30';
+      const period = `period=custom&from=2026-${qm(4)}-01&to=2026-${qm(4)}-30`;
       await page.goto(`/reports/pnl?${period}`);
       let rows = await reportRows(page);
       expect(findRow(rows, `${t} Service Revenue`)).toContain(fmtCAD(netRevenue));
@@ -699,8 +701,8 @@ test.describe('quote-to-cash workflows', () => {
         expect(arRow[2]).toBe(arRow[3]);
         expect(arRow[4]).toBe(fmtCAD(0n));
         const taxRow = findRow(rows, 'Sales Tax Payable');
-        // Gross columns are cumulative: March invoice credits 20.00, April
-        // invoice credits 20.00, April credit-memo debits 10.00.
+        // Gross columns are cumulative: prior invoice credits 20.00, current
+        // invoice credits 20.00, current credit-memo debits 10.00.
         expect(taxRow[2]).toBe(fmtCAD(toCents('10.00')));
         expect(taxRow[3]).toBe(fmtCAD(toCents('40.00')));
         expect(taxRow[4]).toBe(fmtCAD(-netTax - toCents('20.00')));
@@ -740,7 +742,7 @@ test.describe('quote-to-cash workflows', () => {
       // Orders are base-currency-only, so the USD invoice is raised directly
       // as a customer invoice (same drawer, same post lifecycle).
       const fx = await apiOk(page, 'POST', '/api/admin/setup/fx-rates', {
-        asOf: '2026-03-01', fromCurrency: 'USD', toCurrency: 'CAD', rateType: 'spot', rate: '1.3600',
+        asOf: `2026-${qm(3)}-01`, fromCurrency: 'USD', toCurrency: 'CAD', rateType: 'spot', rate: '1.3600',
       });
       expect(str(fx.id, 'fx rate id').length > 0).toBe(true);
       const fxAcct = await api(page, 'POST', '/api/accounts',
@@ -766,7 +768,7 @@ test.describe('quote-to-cash workflows', () => {
       const dg = await apiOk(page, 'GET', `/api/documents/${invId}`);
       const dp = await api(page, 'PATCH', `/api/documents/${invId}`, {
         expectedUpdatedAt: str(docOf(dg).updated_at, 'invoice revision'),
-        partyId: seed.partyId, currency: 'USD', documentDate: '2026-05-05', dueDate: '2026-05-19',
+        partyId: seed.partyId, currency: 'USD', documentDate: `2026-${qm(5)}-05`, dueDate: `2026-${qm(5)}-19`,
         lines: [{ accountId: seed.incomeId, description: `${t} export`, quantity: '1', unitPrice: '1000.00', amount: '1000.00' }],
       });
       expect(dp.status, JSON.stringify(dp.body).slice(0, 300)).toBe(200);
@@ -782,7 +784,7 @@ test.describe('quote-to-cash workflows', () => {
       const payId = str(pd.id, 'payment id');
       const pg = await apiOk(page, 'GET', `/api/payments/${payId}`);
       const pp = await api(page, 'PATCH', `/api/payments/${payId}`, {
-        partyId: seed.partyId, bankAccountId: seed.bankId, documentDate: '2026-05-12',
+        partyId: seed.partyId, bankAccountId: seed.bankId, documentDate: `2026-${qm(5)}-12`,
         expectedUpdatedAt: str(docOf(pg).updated_at, 'payment revision'),
         allocations: [{
           openLineId: str(invLine.lineId), sourceTransactionAmount: '1250.00', targetTransactionAmount: '1000.00',
@@ -797,16 +799,16 @@ test.describe('quote-to-cash workflows', () => {
       await page.goto('/ar/invoices');
       const paidRow = page.locator('tr', { hasText: invNumber }).first();
       await expect(paidRow.getByText(fmtUSD(0n)).first()).toBeVisible();
-      await page.goto('/reports/aging?period=custom&from=2026-05-01&to=2026-05-31&side=ar');
+      await page.goto(`/reports/aging?period=custom&from=2026-${qm(5)}-01&to=2026-${qm(5)}-31&side=ar`);
       await expect(page.locator('tr', { hasText: `${t} Customer` })).toHaveCount(0);
 
       // Bank: statement CAD 1,250.00, match the receipt, sign off.
       const rec = await apiOk(page, 'POST', '/api/banking/reconciliations', {
-        accountId: seed.bankId, throughDate: '2026-05-31', statementBalance: '1250.00',
+        accountId: seed.bankId, throughDate: `2026-${qm(5)}-31`, statementBalance: '1250.00',
       });
       const recId = str(rec.id, 'reconciliation id');
       const imp = await apiOk(page, 'POST', '/api/banking/import', {
-        accountId: seed.bankId, source: 'csv', text: 'date,amount,description\n2026-05-12,1250.00,FX receipt',
+        accountId: seed.bankId, source: 'csv', text: `date,amount,description\n2026-${qm(5)}-12,1250.00,FX receipt`,
         mapping: { date: 0, amount: 1, description: 2 }, mode: 'import',
       });
       expect(imp.imported).toBe(1);
@@ -832,9 +834,9 @@ test.describe('quote-to-cash workflows', () => {
         expect(res.status(), await res.text()).toBe(200);
       }
 
-      // Reports tie (May movement for P&L; cumulative as-of 05-31 for TB/BS:
+      // Reports tie (scenario-month movement for P&L; cumulative as-of month-end for TB/BS:
       // bank 420+210+1250, revenue 400+200net+1360, tax 20+10net, FX loss 110).
-      const period = 'period=custom&from=2026-05-01&to=2026-05-31';
+      const period = `period=custom&from=2026-${qm(5)}-01&to=2026-${qm(5)}-31`;
       await page.goto(`/reports/pnl?${period}`);
       let rows = await reportRows(page);
       expect(findRow(rows, `${t} Service Revenue`)).toContain(fmtCAD(invoiceBase));
