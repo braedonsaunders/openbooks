@@ -193,28 +193,44 @@ export function ReportBuilder({
   }
 
   // -- live preview (debounced) ----------------------------------------------
+  // Each run carries a request id and aborts its predecessor: without both,
+  // a slow earlier preview resolves last and overwrites the newer one.
+  const previewRequestRef = useRef(0)
+  const previewAbortRef = useRef<AbortController | null>(null)
   const runPreview = useCallback(
     async (plan: ReportCustomQuery) => {
+      const requestId = ++previewRequestRef.current
+      previewAbortRef.current?.abort()
+      const controller = new AbortController()
+      previewAbortRef.current = controller
       setPreviewing(true)
       try {
         const res = await fetch('/api/reports/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: plan }),
+          signal: controller.signal,
         })
+        // A newer run superseded this one while it was in flight: its result
+        // is stale by construction, never the preview.
+        if (requestId !== previewRequestRef.current) return
         if (!res.ok) {
           setPreview(null)
           setPreviewError(await readApiErrorMessage(res, t('previewFailed')))
           return
         }
         const data = (await res.json()) as { result: ReportRunResult }
+        if (requestId !== previewRequestRef.current) return
         setPreview(data.result)
         setPreviewError(null)
-      } catch {
+      } catch (err) {
+        // Aborts are supersession, not failure: the newer run owns the UI.
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        if (requestId !== previewRequestRef.current) return
         setPreview(null)
         setPreviewError(t('previewFailed'))
       } finally {
-        setPreviewing(false)
+        if (requestId === previewRequestRef.current) setPreviewing(false)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
