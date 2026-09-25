@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { authedContext } from './auth'
+import { authedContext, dismissSetupWizard } from './auth'
 
 for (const { route, kind } of [
   { route: '/ar/invoices', kind: 'customer_invoice' },
@@ -23,9 +23,8 @@ test(`${route} drawer discards the reviewed draft with a JSON revision token`, a
     await page.goto(`${route}?doc=${id}`)
     const wizard = page.getByTestId('setup-wizard')
     if (await wizard.isVisible()) {
-      await wizard.getByRole('button', { name: 'Skip for now', exact: true }).click()
-      await expect(wizard).toBeHidden()
-      await page.waitForURL('**/admin/setup/readiness')
+      await dismissSetupWizard(page)
+      await page.waitForURL('**/dashboard')
       await page.goto(`${route}?doc=${id}`)
     }
     await page.getByRole('button', { name: 'Actions', exact: true }).last().click()
