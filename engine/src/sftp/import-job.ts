@@ -420,7 +420,7 @@ async function runClaimedSchedule(
     const claimToken = randomUUID();
     type ClaimResult =
       | { kind: "claimed"; expectedExternalAccountId: string | null; server_name: string; backend: string; bucket: string | null; root_prefix: string }
-      | { kind: "inactive" }
+      | { kind: "inactive"; reason: string }
       | { kind: "account-scope" }
       | { kind: "conflict"; error: string };
     const claim = await withOrgContext(s.org_id, () => db.transaction(async (tx): Promise<ClaimResult> => {
@@ -452,9 +452,16 @@ async function runClaimedSchedule(
          where sv.id = ${s.sftp_server_id} and sv.org_id = ${s.org_id}
          for share of sv, o, a
       `)).rows[0];
-      if (!eligibility?.server_active || !eligibility.production_org || !eligibility.bank_feeds_on ||
-          !eligibility.account_active || !eligibility.account_reconcilable || eligibility.account_summary) {
-        return { kind: "inactive" };
+      // Each ineligibility names its own remedy (I1-refix-159): a single
+      // "no longer active" message sends the operator to reactivate a
+      // schedule that is already active when the server or switch is the
+      // actual cause.
+      if (!eligibility) return { kind: "inactive", reason: `SFTP server for schedule '${s.id}' no longer exists; assign an active server before importing` };
+      if (!eligibility.server_active) return { kind: "inactive", reason: `SFTP server for schedule '${s.id}' is inactive; reactivate it before importing` };
+      if (!eligibility.production_org) return { kind: "inactive", reason: `SFTP schedule '${s.id}' can import only in a production organization` };
+      if (!eligibility.bank_feeds_on) return { kind: "inactive", reason: `Bank Feeds is disabled for schedule '${s.id}'; enable it in Company Settings → Features before importing` };
+      if (!eligibility.account_active || !eligibility.account_reconcilable || eligibility.account_summary) {
+        return { kind: "inactive", reason: `the bank account bound to SFTP schedule '${s.id}' is not eligible for import (it must be active, reconcilable, and non-summary); rebind the schedule before running` };
       }
       if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null &&
           !allowedSubsidiaryIds.includes(eligibility.account_subsidiary_id ?? "")) {
@@ -498,7 +505,7 @@ async function runClaimedSchedule(
          where id = ${s.id} and org_id = ${s.org_id} and is_active
          returning id
       `);
-      if (!claimed.rows[0]) return { kind: "inactive" };
+      if (!claimed.rows[0]) return { kind: "inactive", reason: `SFTP schedule '${s.id}' is inactive or no longer exists; reactivate it before running` };
       // Keep this read in the same transaction: UPDATE still holds the row
       // lock, so a concurrent API rebind cannot slip between claim and config
       // capture. SELECT is used instead of RETURNING because this runtime's
@@ -518,7 +525,7 @@ async function runClaimedSchedule(
             bucket: current.bucket,
             root_prefix: current.root_prefix,
           }
-        : { kind: "inactive" };
+        : { kind: "inactive", reason: `SFTP schedule '${s.id}' disappeared before its configuration could be read` };
     }));
     if (claim.kind === "conflict") {
       const refused: ScheduleRun = {
@@ -535,7 +542,7 @@ async function runClaimedSchedule(
     if (claim.kind === "inactive") {
       return {
         scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0,
-        errors: ["this SFTP import schedule is no longer active; activate it before running"],
+        errors: [claim.reason],
         files: [],
         notRun: "inactive",
       };
