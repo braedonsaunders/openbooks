@@ -154,6 +154,49 @@ export interface LintIssue {
   message: string
 }
 
+/** Shared lock lookup for every customization surface that edits a built-in entry. */
+export function isLockedCustomizationEntry(
+  entries: readonly { key: string; locked?: boolean }[] | undefined,
+  key: string,
+): boolean {
+  return entries?.find((entry) => entry.key === key)?.locked === true
+}
+
+function sameLockedPlacements<T extends { key: string }>(
+  before: readonly T[],
+  after: readonly T[],
+  isLocked: (key: string) => boolean,
+): boolean {
+  const beforeLocked = before.filter((entry) => isLocked(entry.key))
+  const afterLocked = after.filter((entry) => isLocked(entry.key))
+  return JSON.stringify(beforeLocked) === JSON.stringify(afterLocked)
+}
+
+/** Whether a proposed form edit changes any locked built-in field placement. */
+export function lockedFormEntriesUnchanged(before: FormLayoutConfig, after: FormLayoutConfig): boolean {
+  if (before.recordType !== after.recordType) return false
+  const meta = RECORD_TYPE_BY_KEY[before.recordType]
+  // Compare locked fields as (group, field) pairs, not per-group arrays: adding
+  // or removing a group that holds no locked fields must stay allowed, while a
+  // locked field changing groups (including via group removal, which folds the
+  // removed group's fields into the first group) is still refused.
+  const lockedHeader = (config: FormLayoutConfig) =>
+    config.header.groups.flatMap((group) =>
+      group.fields
+        .filter((field) => isLockedCustomizationEntry(meta?.headerFields, field.key))
+        .map((field) => ({ group: group.id, field })),
+    )
+  return JSON.stringify(lockedHeader(before)) === JSON.stringify(lockedHeader(after))
+    && sameLockedPlacements(before.lines.columns, after.lines.columns, (key) => isLockedCustomizationEntry(meta?.lineFields, key))
+}
+
+/** Whether a proposed list edit changes any locked built-in column placement. */
+export function lockedListEntriesUnchanged(before: ListViewConfig, after: ListViewConfig): boolean {
+  if (before.recordType !== after.recordType) return false
+  const meta = RECORD_TYPE_BY_KEY[before.recordType]
+  return sameLockedPlacements(before.columns, after.columns, (key) => isLockedCustomizationEntry(meta?.listColumns, key))
+}
+
 /**
  * Validate a parsed FormLayoutConfig against the registry: every referenced
  * field must be a known built-in for that record type or a `cf_<key>`; no

@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission } from "../../../../../lib/authz";
-import { parseFormLayout } from "@openbooks/customization";
+import { lockedFormEntriesUnchanged, parseFormLayout, type FormLayoutConfig } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
 
@@ -60,6 +60,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     isDefault?: boolean;
     isActive?: boolean;
   };
+  let proposedLayout: FormLayoutConfig | undefined;
   const sets: ReturnType<typeof sql>[] = [];
   if (body.name !== undefined && typeof body.name !== "string") {
     return NextResponse.json({ error: "name must be a string" }, { status: 400 });
@@ -112,6 +113,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "invalid layout", issues: parsed.issues }, { status: 400 });
     if (parsed.data!.recordType !== existing.recordType)
       return NextResponse.json({ error: "layout.recordType does not match this form's record type" }, { status: 400 });
+    proposedLayout = parsed.data!;
     sets.push(sql`layout = ${parsed.data}`);
   }
   if (body.isDefault !== undefined) {
@@ -140,14 +142,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         isDefault: boolean;
         isActive: boolean;
         snapshot: Record<string, unknown>;
+        layout: unknown;
       }>(sql`
         select id, record_type as "recordType",
                is_default as "isDefault", is_active as "isActive",
-               to_jsonb(form_layouts) as snapshot
+               to_jsonb(form_layouts) as snapshot, layout
           from form_layouts
          where id = ${id} and org_id = ${user.orgId}
          for update`)).rows[0];
       if (!locked) return { kind: "not_found" as const };
+      if (proposedLayout) {
+        const currentLayout = parseFormLayout(locked.layout);
+        if (!currentLayout.success || !lockedFormEntriesUnchanged(currentLayout.data!, proposedLayout))
+          return { kind: "locked_entries" as const };
+      }
       const nextFlags = nextDefaultFlags(locked, { isDefault: body.isDefault, isActive: body.isActive });
       const inactiveDefault = refuseInactiveDefault({ kind: "form", ...nextFlags });
       if (!inactiveDefault.ok) return { kind: "inactive_default" as const, error: inactiveDefault.error };
@@ -176,6 +184,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return { kind: "ok" as const };
     });
     if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "locked_entries") return NextResponse.json({ error: "locked built-in fields cannot be changed" }, { status: 400 });
     if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {

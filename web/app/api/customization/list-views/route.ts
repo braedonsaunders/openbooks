@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, can } from "../../../../lib/authz";
-import { parseListView, RECORD_TYPE_BY_KEY, stripSeededDefaultMark, type ListViewConfig } from "@openbooks/customization";
+import { defaultListView, lockedListEntriesUnchanged, parseListView, RECORD_TYPE_BY_KEY, stripSeededDefaultMark, type ListViewConfig } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 import {
   AmbiguousListViewDefaultError,
@@ -72,6 +72,8 @@ export async function POST(req: Request) {
   const config = stripSeededDefaultMark(parsed.data as ListViewConfig);
   if (config.recordType !== body.recordType)
     return NextResponse.json({ error: "config.recordType does not match recordType" }, { status: 400 });
+  if (!lockedListEntriesUnchanged(defaultListView(body.recordType as keyof typeof RECORD_TYPE_BY_KEY), config))
+    return NextResponse.json({ error: "locked built-in columns cannot be changed" }, { status: 400 });
   const ownerId = scope === "user" ? user.id : null;
 
   try {
