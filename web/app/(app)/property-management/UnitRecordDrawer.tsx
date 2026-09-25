@@ -34,6 +34,14 @@ export function UnitRecordDrawer({
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [actionsOpen, setActionsOpen] = useState(false);
   const [form, setForm] = useState(() => unitForm(unit ?? {}));
+  // A reload delivers a new unit object under the same drawer key (no
+  // remount): reseed while viewing, or a later Edit+Save sends the
+  // mount-time values. An in-progress edit keeps its values.
+  const [prevUnit, setPrevUnit] = useState(unit);
+  if (prevUnit !== unit) {
+    setPrevUnit(unit);
+    if (mode === 'view') setForm(unitForm(unit ?? {}));
+  }
   if (!unit) return null;
   const reset = () => {
     setForm(unitForm(unit));
