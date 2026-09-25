@@ -1151,8 +1151,10 @@ export async function claimSyncRun(opts: {
   kind: "incremental" | "full_migration" | "targeted_repair" | "project_financials" | "attachments";
   sourceName: string;
   triggeredBy: string;
-}): Promise<{ id: string }[]> {
-  return db.transaction(async (tx) => {
+}): Promise<[{ id: string }]> {
+  // The insert below has no conflict clause, so success always yields exactly
+  // one row; the tuple type carries that invariant to the three claim sites.
+  const [row] = await db.transaction(async (tx) => {
     // QuickBooks Desktop captures are connection-scoped, not run-kind-scoped:
     // a mirror and a full migration would otherwise supersede each other's
     // live Web Connector capture in prepareCapture.
@@ -1181,6 +1183,9 @@ export async function claimSyncRun(opts: {
       })
       .returning();
   });
+  // Fail closed: hand no caller an undefined claim.
+  if (!row) throw new Error("sync run claim inserted no row");
+  return [row];
 }
 
 /**
