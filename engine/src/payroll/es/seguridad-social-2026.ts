@@ -13,9 +13,8 @@
  * never floats. Each cuota rounds half-up to the cent — ENGINE-STATED, not
  * agency-quoted (the Orden states no rounding rule; AU precedent).
  *
- * Named refusals: diaria-regime solidaridad (art. 17.2 states the daily
- * threshold but no daily tranches — monthly tranches are never stretched
- * onto it); grupo outside 1–11; diaria without días de alta.
+ * Daily solidarity tranche thresholds are prorated by days in alta per art.
+ * 17.2; grupo outside 1–11 and diaria without días de alta are refused.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
@@ -149,18 +148,16 @@ export function calculateEsSeguridadSocial2026(
     fail(`retribucionMensual is not a decimal amount: "${input.retribucionMensual}"`);
   }
   if (retrib < 0n) fail("retribucionMensual must be non-negative");
-  if (diaria && retrib > U(grupo!.maxima) * BigInt(dias)) {
-    fail(
-      "diaria-regime solidaridad is refused: art. 17.2 states a daily threshold "
-      + "but no daily tranches — monthly tranches are never stretched onto it",
-    );
-  }
   let solEe = 0n;
   let solEr = 0n;
   for (const tramo of ES_SOLIDARIDAD_2026) {
-    const desde = U(tramo.desde);
+    // Art. 17.2: daily-group thresholds are the monthly amounts prorated to
+    // the days in alta (30-day month basis); preserve 4-decimal precision.
+    const desde = diaria ? roundDiv(U(tramo.desde) * BigInt(dias), 30n) : U(tramo.desde);
     if (retrib <= desde) break;
-    const hasta = tramo.hasta === null ? retrib : U(tramo.hasta);
+    const hasta = tramo.hasta === null
+      ? retrib
+      : diaria ? roundDiv(U(tramo.hasta) * BigInt(dias), 30n) : U(tramo.hasta);
     const slice = (retrib < hasta ? retrib : hasta) - desde;
     if (slice <= 0n) continue;
     solEe += cuota(slice, tramo.tipos.trabajador);
