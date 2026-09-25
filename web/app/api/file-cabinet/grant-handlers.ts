@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   cabinetResourceExists,
+  GrantScopeRefusal,
   isAccessLevel,
   listGrants,
   removeGrant,
@@ -94,16 +95,21 @@ export async function postGrant(
     return NextResponse.json({ error: 'principal not found' }, { status: 404 })
   }
 
-  await setGrant({
-    orgId: authz.user.orgId,
-    resourceType,
-    resourceId,
-    principalType,
-    principalId,
-    access,
-    actorId: authz.user.id,
-    audit: { actorId: authz.user.id, viewer: fileViewer(authz) },
-  })
+  try {
+    await setGrant({
+      orgId: authz.user.orgId,
+      resourceType,
+      resourceId,
+      principalType,
+      principalId,
+      access,
+      actorId: authz.user.id,
+      audit: { actorId: authz.user.id, viewer: fileViewer(authz) },
+    })
+  } catch (error) {
+    if (error instanceof GrantScopeRefusal) return NextResponse.json({ error: error.message }, { status: 403 })
+    throw error
+  }
   return NextResponse.json({ ok: true }, { status: 201 })
 }
 
