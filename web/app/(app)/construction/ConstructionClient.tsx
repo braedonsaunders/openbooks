@@ -18,6 +18,7 @@ import {
   cn,
 } from "@openbooks/ui";
 import { Field } from "@/components/field";
+import { useDirtyClose } from "@/lib/use-dirty-close";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -344,11 +345,19 @@ function ScheduleSection({
   });
   const editingLocked = editing != null && (editing.changeOrderId != null || editing.usedByApplication === true);
 
-  function closeForm() {
+  function resetForm() {
     setForm({ itemNo: "", description: "", scheduledValue: "", retainagePercent: "", incomeAccountId: "" });
     setEditing(null);
     setFormOpen(false);
   }
+  const originalForm = editing ? {
+    itemNo: editing.itemNo ?? "", description: editing.description, scheduledValue: editing.scheduledValue,
+    retainagePercent: editing.retainagePercent ?? "", incomeAccountId: editing.incomeAccountId ?? "",
+  } : { itemNo: "", description: "", scheduledValue: "", retainagePercent: "", incomeAccountId: "" };
+  const closeGuard = useDirtyClose({
+    dirty: editing !== null ? JSON.stringify(form) !== JSON.stringify(originalForm) : Object.values(form).some(Boolean),
+    busy, onClose: resetForm, message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+  });
 
   async function addLine() {
     const result = await onChange({
@@ -360,7 +369,7 @@ function ScheduleSection({
       sortOrder: lines.length + 1,
     });
     if (result) {
-      closeForm();
+      resetForm();
     }
   }
 
@@ -376,7 +385,7 @@ function ScheduleSection({
       incomeAccountId: form.incomeAccountId || null,
     });
     if (result) {
-      closeForm();
+      resetForm();
     }
   }
 
@@ -464,12 +473,12 @@ function ScheduleSection({
         open={formOpen}
         stacked
         size="md"
-        onClose={closeForm}
+        onClose={closeGuard.close}
         title={editing ? t("editLine") : t("addLine")}
         description={editing ? (editingLocked ? t("lockedValuesHint") : t("formHint")) : t("formHint")}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={closeForm}>{t("cancel")}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
             {editing ? (
               <Button disabled={busy || !form.description || !form.scheduledValue} onClick={saveEdit}>{tc("actions.save")}</Button>
             ) : (
@@ -479,13 +488,13 @@ function ScheduleSection({
         }
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("item")}><Input value={form.itemNo} disabled={editingLocked} onChange={(event) => setForm({ ...form, itemNo: event.target.value })} /></Field>
-          <Field label={t("description")}><Input value={form.description} disabled={editingLocked} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
-          <Field label={t("scheduledValue")}><Input type="number" inputMode="decimal" value={form.scheduledValue} disabled={editingLocked} onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })} /></Field>
-          <Field label={t("retainagePercent")}><Input type="number" inputMode="decimal" value={form.retainagePercent} disabled={editingLocked} onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })} /></Field>
+          <Field label={t("item")}><Input value={form.itemNo} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, itemNo: event.target.value })} /></Field>
+          <Field label={t("description")}><Input value={form.description} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
+          <Field label={t("scheduledValue")}><Input type="number" inputMode="decimal" value={form.scheduledValue} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })} /></Field>
+          <Field label={t("retainagePercent")}><Input type="number" inputMode="decimal" value={form.retainagePercent} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })} /></Field>
           <div className="sm:col-span-2">
             <Field label={t("incomeAccount")}>
-              <Select value={form.incomeAccountId} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
+              <Select value={form.incomeAccountId} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
                 <option value="">{t("defaultIncomeAccount")}</option>
                 {incomeAccounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
               </Select>
@@ -523,6 +532,7 @@ function ChangeOrdersSection({
 }) {
   const { money } = useMoney();
   const t = useTranslations("applications.changeOrders");
+  const tc = useTranslations("common");
   const [formOpen, setFormOpen] = useState(false);
   // Unallocated COs bill through the carried income account: preselect the
   // org project-revenue default so the created SOV line needs no manual edit
@@ -531,6 +541,11 @@ function ChangeOrdersSection({
   const freshForm = (accountId: string | null) => ({ number: "", description: "", amount: "", targetSovLineId: "", incomeAccountId: accountId ?? "" });
   const [form, setForm] = useState(() => freshForm(defaultIncomeAccountId));
   const deductive = form.amount.trim().startsWith("-");
+  function closeForm() { setForm(freshForm(defaultIncomeAccountId)); setFormOpen(false); }
+  const closeGuard = useDirtyClose({
+    dirty: JSON.stringify(form) !== JSON.stringify(freshForm(defaultIncomeAccountId)),
+    busy, onClose: closeForm, message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+  });
 
   async function addOrder() {
     const result = await onChange({
@@ -542,8 +557,7 @@ function ChangeOrdersSection({
       incomeAccountId: form.targetSovLineId ? null : (form.incomeAccountId || null),
     });
     if (result) {
-      setForm(freshForm(defaultIncomeAccountId));
-      setFormOpen(false);
+      closeForm();
     }
   }
 
@@ -613,31 +627,31 @@ function ChangeOrdersSection({
         open={formOpen}
         stacked
         size="md"
-        onClose={() => setFormOpen(false)}
+        onClose={closeGuard.close}
         title={t("add")}
         description={t("formHint")}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={() => setFormOpen(false)}>{t("cancel")}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
             <Button disabled={busy || !form.number || !form.amount || (deductive && !form.targetSovLineId)} onClick={addOrder}>{t("add")}</Button>
           </div>
         }
       >
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t("number")}><Input value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></Field>
-            <Field label={t("amount")}><Input type="number" inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></Field>
+            <Field label={t("number")}><Input disabled={busy} value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></Field>
+            <Field label={t("amount")}><Input disabled={busy} type="number" inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></Field>
           </div>
-          <Field label={t("description")}><Input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
+          <Field label={t("description")}><Input disabled={busy} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
           <Field label={t("applyTo")}>
-            <Select value={form.targetSovLineId} onChange={(event) => setForm({ ...form, targetSovLineId: event.target.value })}>
+            <Select value={form.targetSovLineId} disabled={busy} onChange={(event) => setForm({ ...form, targetSovLineId: event.target.value })}>
               <option value="">{t("newScheduleLine")}</option>
               {sov.map((line) => <option key={line.id} value={line.id}>{line.itemNo ? `${line.itemNo} · ` : ""}{line.description}</option>)}
             </Select>
           </Field>
           {form.targetSovLineId ? null : (
             <Field label={t("incomeAccount")}>
-              <Select value={form.incomeAccountId} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
+              <Select value={form.incomeAccountId} disabled={busy} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
                 <option value="">{t("defaultIncomeAccount")}</option>
                 {incomeAccounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
               </Select>
@@ -710,15 +724,20 @@ function PayApplicationsSection({
 }) {
   const { money } = useMoney();
   const t = useTranslations("applications.payApplications");
+  const tc = useTranslations("common");
   const [newOpen, setNewOpen] = useState(false);
   const [periodEnd, setPeriodEnd] = useState("");
   const [drawApp, setDrawApp] = useState<PayApp | null>(null);
+  function closeNewApplication() { setPeriodEnd(""); setNewOpen(false); }
+  const newCloseGuard = useDirtyClose({
+    dirty: periodEnd !== "", busy, onClose: closeNewApplication,
+    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+  });
 
   async function createApplication() {
     const result = await onChange({ action: "createPayApp", projectId, periodEnd });
     if (result) {
-      setPeriodEnd("");
-      setNewOpen(false);
+      closeNewApplication();
     }
   }
 
@@ -805,17 +824,17 @@ function PayApplicationsSection({
         open={newOpen}
         stacked
         size="sm"
-        onClose={() => setNewOpen(false)}
+        onClose={newCloseGuard.close}
         title={t("newApplication")}
         description={t("newHint")}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={() => setNewOpen(false)}>{t("cancel")}</Button>
+            <Button variant="outline" disabled={busy} onClick={newCloseGuard.close}>{t("cancel")}</Button>
             <Button disabled={busy || !periodEnd || sov.length === 0} onClick={createApplication}>{t("create")}</Button>
           </div>
         }
       >
-        <Field label={t("periodEnding")}><Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></Field>
+        <Field label={t("periodEnding")}><Input type="date" disabled={busy} value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></Field>
       </Drawer>
 
       {drawApp ? (
@@ -851,21 +870,26 @@ function DrawEntryDrawer({
   onSubmit: (lines: { sovLineId: string; thisPeriodCompleted: string; materialsStored: string }[]) => Promise<void>;
 }) {
   const t = useTranslations("applications.payApplications");
+  const tc = useTranslations("common");
   const [lines, setLines] = useState<Record<string, { thisPeriodCompleted: string; materialsStored: string }>>({});
   const submitLines = Object.entries(lines).map(([sovLineId, value]) => ({ sovLineId, ...value }));
+  const closeGuard = useDirtyClose({
+    dirty: Object.keys(lines).length > 0, busy, onClose,
+    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+  });
 
   return (
     <Drawer
       open
       stacked
       size="xl"
-      onClose={onClose}
+      onClose={closeGuard.close}
       title={t("applicationNumber", { number: app.applicationNumber })}
       description={t("drawHint", { periodEnd: app.periodEnd })}
       bodyClassName="overflow-auto p-4"
       footer={
         <div className="flex w-full justify-end gap-2">
-          <Button variant="outline" disabled={busy} onClick={onClose}>{t("cancel")}</Button>
+          <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
           <Button disabled={busy} onClick={() => onSubmit(submitLines)}>{t("submit")}</Button>
         </div>
       }
@@ -887,6 +911,7 @@ function DrawEntryDrawer({
                 <TableCell className="font-medium">{line.description}</TableCell>
                 <TableCell>
                   <Input
+                    disabled={busy}
                     type="number"
                     inputMode="decimal"
                     className="ml-auto w-36 text-right tabular-nums"
@@ -902,6 +927,7 @@ function DrawEntryDrawer({
                 </TableCell>
                 <TableCell>
                   <Input
+                    disabled={busy}
                     type="number"
                     inputMode="decimal"
                     className="ml-auto w-36 text-right tabular-nums"
@@ -941,17 +967,21 @@ function RetainageSection({
 }) {
   const { money } = useMoney();
   const t = useTranslations("applications.retainage");
+  const tc = useTranslations("common");
   const [formOpen, setFormOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
+  function closeForm() { setAmount(""); setPeriodEnd(""); setFormOpen(false); }
+  const closeGuard = useDirtyClose({
+    dirty: amount !== "" || periodEnd !== "", busy, onClose: closeForm,
+    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+  });
 
   async function release() {
     const result = asActionResult(await onChange({ action: "releaseRetainage", projectId, amount, periodEnd }));
     if (result.invoiceId) {
       setMsg(t("createdMessage", { number: result.documentNumber ?? "", amount: money(result.amount) }));
-      setAmount("");
-      setPeriodEnd("");
-      setFormOpen(false);
+      closeForm();
     }
   }
 
@@ -972,19 +1002,19 @@ function RetainageSection({
         open={formOpen}
         stacked
         size="sm"
-        onClose={() => setFormOpen(false)}
+        onClose={closeGuard.close}
         title={t("title")}
         description={t("description", { held: money(held) })}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={() => setFormOpen(false)}>{t("cancel")}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
             <Button disabled={busy || !amount || !periodEnd} onClick={release}>{t("release")}</Button>
           </div>
         }
       >
         <div className="space-y-4">
-          <Field label={t("amount")}><Input type="number" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
-          <Field label={t("periodEnding")}><Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></Field>
+          <Field label={t("amount")}><Input type="number" inputMode="decimal" disabled={busy} value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
+          <Field label={t("periodEnding")}><Input type="date" disabled={busy} value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></Field>
         </div>
       </Drawer>
     </>
