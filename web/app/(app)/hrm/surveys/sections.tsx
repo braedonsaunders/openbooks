@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
@@ -37,11 +37,20 @@ function questionKindLabel(kind: string, kinds: { value: string; label: string }
 }
 
 async function post(url: string, body: unknown, failed: string): Promise<boolean> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  // A transport failure rejects instead of resolving: without the catch
+  // the submitter's await throws past its reset and the operator gets an
+  // unhandled rejection instead of the failure copy.
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    toast.error(failed)
+    return false
+  }
   if (!res.ok) {
     toast.error(await readApiErrorMessage(res, failed))
     return false
@@ -255,6 +264,11 @@ export function SurveysAuthorDialog({ author }: { author: Home['author'] }) {
   const [minGroup, setMinGroup] = useState('5')
   const [questions, setQuestions] = useState<QuestionCard[]>([{ kind: 'scale', prompt: '', options: '', driverKey: '' }])
   const [failed, setFailed] = useState<string | null>(null)
+  // A second click while the first POST is in flight files a second
+  // draft: the ref drops re-entrant submits in the same tick as the
+  // click (state alone cannot), and the button disables while it is set.
+  const submittingRef = useRef(false)
+  const [submitting, setSubmitting] = useState(false)
   if (!author) return null
   const labels = author.labels
 
@@ -263,6 +277,7 @@ export function SurveysAuthorDialog({ author }: { author: Home['author'] }) {
   }
 
   async function submit() {
+    if (submittingRef.current) return
     setFailed(null)
     // The group size is the anonymity threshold: an unparseable value
     // refuses by name instead of silently falling back to 5.
@@ -271,13 +286,20 @@ export function SurveysAuthorDialog({ author }: { author: Home['author'] }) {
       setFailed(msg(labels, built.error))
       return
     }
-    const ok = await post('/api/hrm/surveys', built.body, msg(labels, 'failed'))
-    if (!ok) {
-      setFailed(msg(labels, 'failed'))
-      return
+    submittingRef.current = true
+    setSubmitting(true)
+    try {
+      const ok = await post('/api/hrm/surveys', built.body, msg(labels, 'failed'))
+      if (!ok) {
+        setFailed(msg(labels, 'failed'))
+        return
+      }
+      router.push('/hrm/surveys')
+      router.refresh()
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
     }
-    router.push('/hrm/surveys')
-    router.refresh()
   }
 
   return (
@@ -355,7 +377,7 @@ export function SurveysAuthorDialog({ author }: { author: Home['author'] }) {
           {msg(labels, 'addQuestion')}
         </Button>
         {failed && <p className="text-sm text-red-600">{failed}</p>}
-        <Button onClick={submit} disabled={!name.trim() || questions.some((q) => !q.prompt.trim())}>
+        <Button onClick={submit} disabled={submitting || !name.trim() || questions.some((q) => !q.prompt.trim())}>
           {msg(labels, 'submit')}
         </Button>
       </div>
