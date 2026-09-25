@@ -28,6 +28,7 @@
     "convertCreated": "{target} {number} creada",
     "convertFailed": "La conversión falló",
     "actionFailed": "La acción falló",
+    "invalidLineSave": "Línea {row}, {field}: introduzca un valor válido o elimine esta línea antes de guardar.",
     "autosaveFailed": "Falló el guardado automático",
     "toastIssued": "Emitida",
     "toastVoided": "Anulada",

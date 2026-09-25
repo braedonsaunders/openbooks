@@ -28,6 +28,7 @@
     "convertCreated": "已创建 {target} {number}",
     "convertFailed": "转换失败",
     "actionFailed": "操作失败",
+    "invalidLineSave": "第 {row} 行的{field}无效。请输入有效值，或在保存前删除此行。",
     "autosaveFailed": "自动保存失败",
     "toastIssued": "已开出",
     "toastVoided": "已作废",

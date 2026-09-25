@@ -28,6 +28,7 @@
     "convertCreated": "{target} {number} created",
     "convertFailed": "Conversion failed",
     "actionFailed": "Action failed",
+    "invalidLineSave": "Line {row}, {field}: enter a valid value or remove this line before saving.",
     "autosaveFailed": "Autosave failed",
     "toastIssued": "Issued",
     "toastVoided": "Voided",
