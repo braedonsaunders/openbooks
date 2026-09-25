@@ -70,6 +70,12 @@ const mockImportJob = `
     if (state.runAlreadyRunning) return [{ scheduleId, filesSeen: 0, imported: 0, duplicates: 0, errors: ['this SFTP import schedule is already running; wait for the active scan to finish'], files: [], alreadyRunning: true }]
     return [{ scheduleId, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] }]
   }
+  // Mirrors sftpImportScheduleRunLockKey in engine/src/sftp/import-job.ts
+  // (the route hashes it into an advisory-lock key; tests assert refusal
+  // behavior, never the key bytes).
+  export function sftpImportScheduleRunLockKey(orgId, scheduleId) {
+    return 'sftp-import-schedule:' + orgId + ':' + scheduleId
+  }
 `;
 
 const hooks = registerHooks({
