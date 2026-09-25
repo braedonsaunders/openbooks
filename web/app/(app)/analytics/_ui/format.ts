@@ -5,6 +5,7 @@
 import { useCallback } from 'react'
 import { useMoney } from '@/components/money-provider'
 import { formatMoney as formatExactMoney, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 
 /** Format canonical ledger strings without coercing them through Number. */
@@ -30,7 +31,13 @@ export function boundChartNumber(value: number): number {
 }
 
 export function toChartNumber(value: string): number {
-  return boundChartNumber(Number(value))
+  const exact = canonicalDecimal(value, 100)
+  if (exact === null) throw new Error('chart values must be exact decimal strings')
+  const limit = String(Number.MAX_SAFE_INTEGER)
+  const comparison = compareDecimal(exact, limit)
+  if (comparison > 0) return Number.MAX_SAFE_INTEGER
+  if (compareDecimal(exact, `-${limit}`) < 0) return -Number.MAX_SAFE_INTEGER
+  return boundChartNumber(Number(exact))
 }
 
 /** Presentation-only formatting for exact ratios. The ratio stays a string
