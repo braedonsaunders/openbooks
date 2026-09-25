@@ -60,7 +60,7 @@ export async function listScopedAccountOptions(
 export async function listScopedPartyOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  options: { role?: 'vendor' | 'customer' | 'employee'; activeOnly?: boolean } = {},
+  options: { role?: 'vendor' | 'customer' | 'employee'; activeOnly?: boolean; kind?: 'person' } = {},
 ): Promise<ScopedPartyOption[]> {
   const roleFilter = options.role === 'vendor'
     ? sql`and exists (select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
@@ -75,6 +75,7 @@ export async function listScopedPartyOptions(
      where p.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${options.activeOnly ? sql`and p.is_active` : sql``}
+       ${options.kind ? sql`and p.kind = ${options.kind}` : sql``}
        ${roleFilter}
      order by p.display_name, p.id
      limit 2000

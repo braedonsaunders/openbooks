@@ -14,6 +14,7 @@ import { requireFeatureEnabled } from '../feature-gates'
 import { setupSectionParams } from '../list-params'
 import { resolveTimeZone } from '../locale'
 import { viewerDateTime } from '../format'
+import { listScopedPartyOptions } from '../scoped-options'
 
 /**
  * HR documents home loader (0230, HR-19).
@@ -289,10 +290,7 @@ export async function loadDocumentsHome(
     labels: Record<string, string>
   } | null = null
   if (generating) {
-    const people = (await db.execute<{ id: string; name: string }>(sql`
-      select id::text as id, display_name as name from parties
-       where org_id = ${authz.orgId}::uuid and kind = 'person' and is_active
-       order by display_name limit 200`)).rows
+    const people = await listScopedPartyOptions(authz.orgId, authz.session.allowedSubsidiaryIds, { activeOnly: true, kind: 'person' })
     generate = {
       closeHref: hrefFor(status, null, false),
       templates: templates
@@ -303,7 +301,7 @@ export async function loadDocumentsHome(
           category: categories.find((c) => c.key === tpl.categoryKey)?.label ?? tpl.categoryKey,
           mergeFields: tpl.mergeFields,
         })),
-      people: people.map((p) => ({ value: p.id, label: p.name })),
+      people: people.map((p) => ({ value: p.id, label: p.display_name })),
       labels: {
         title: t('documents.generate.title'),
         template: t('documents.generate.template'),
