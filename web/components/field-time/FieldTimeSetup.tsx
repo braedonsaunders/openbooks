@@ -227,14 +227,20 @@ export function FieldTimeSetup({
           </div>
         ) : null}
         <div className="flex gap-2">
-          <Input value={kioskName} onChange={(event) => setKioskName(event.target.value)} placeholder={t('field.kioskNamePlaceholder')} className="max-w-xs" />
+          <Field label={t('field.kioskNamePlaceholder')}>
+            <Input value={kioskName} onChange={(event) => setKioskName(event.target.value)} placeholder={t('field.kioskNamePlaceholder')} className="max-w-xs" />
+          </Field>
           <Button variant="outline" disabled={busy || !kioskName.trim()} onClick={registerKiosk}>
             {t('field.registerKiosk')}
           </Button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Input value={pinWorker} onChange={(event) => setPinWorker(event.target.value)} placeholder={t('field.pinWorkerPlaceholder')} className="max-w-xs" />
-          <Input value={pin} onChange={(event) => setPin(event.target.value)} placeholder={t('field.pinPlaceholder')} inputMode="numeric" autoComplete="off" className="max-w-40" />
+          <Field label={t('field.pinWorkerPlaceholder')}>
+            <Input value={pinWorker} onChange={(event) => setPinWorker(event.target.value)} placeholder={t('field.pinWorkerPlaceholder')} className="max-w-xs" />
+          </Field>
+          <Field label={t('field.pinPlaceholder')}>
+            <Input value={pin} onChange={(event) => setPin(event.target.value)} placeholder={t('field.pinPlaceholder')} inputMode="numeric" autoComplete="off" className="max-w-40" />
+          </Field>
           <Button variant="outline" disabled={busy || !pinWorker.trim() || !pin.trim()} onClick={setPinFor}>
             {t('field.setPin')}
           </Button>
