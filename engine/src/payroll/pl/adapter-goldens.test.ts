@@ -140,6 +140,22 @@ test("adapter refuses a missing ZUS wypadkowe rate instead of omitting WYP-ER", 
   );
 });
 
+test("adapter refuses a December bonus instead of annualising it into YTD", async () => {
+  const { ctx, lines } = plAdapterContext("2026-12-15");
+  const withBonus = {
+    ...ctx,
+    nonPeriodic: "20000.00",
+  } as unknown as PayrollStatutoryComputeContext;
+  // Prior months are priced as (month − 1) × this month — a bonus implies
+  // every prior month paid it too, collapsing the ZUS room and pushing PIT
+  // to 32 % on fabricated YTD (I6-payroll-25).
+  await assert.rejects(
+    () => computePlStatutory(withBonus),
+    /PL refuses a bonus\/uneven versement.*no pack channel carries YTD/,
+  );
+  assert.deepEqual(lines, [], "a refused bonus run pushes nothing");
+});
+
 test("adapter refuses an undeclared certificate answer instead of guessing", async () => {
   const { ctx } = plAdapterContext("2026-06-15");
   const noCert = {
