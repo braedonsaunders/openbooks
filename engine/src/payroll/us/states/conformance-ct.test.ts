@@ -19,7 +19,7 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  CT_CERTIFICATE, CT_REGION, CT_RATES_2026, CT_WITHHOLDING, ctInitialTax, ctPaidLeaveWithholding,
+  CT_CERTIFICATE, CT_REGION, CT_RATES_2026, CT_W4NA_CERTIFICATE, CT_WITHHOLDING, ctInitialTax, ctPaidLeaveWithholding,
   ctPersonalCredit, ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
 } from "./ct.ts";
 import { pctToRate } from "./transcription.ts";
@@ -150,8 +150,18 @@ test("CT Circular CT Example 8 — weekly $700 Code F is the calculation rules, 
   assert.equal(result.factors.CT_AFTER_CREDIT, money("925.20"));
   assert.equal(result.tax, money("17.79"));
   assert.notEqual(result.tax, money("17.65"));
-  // The 60% CT-W4NA step is refused — no silent 60% of either figure.
+  // Without a filed CT-W4NA the 60% step is refused — no silent 60% of either figure.
   assert.notEqual(result.tax, money("10.59"));
+  // With a filed 60% CT-W4NA, only the $420 Connecticut share is priced:
+  // $420 × 52 annualizes to $21,840 instead of $36,400.
+  const allocated = CT_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "700.00", basis: "nonresident",
+    certificate: cert({ withholding_code: "F" }),
+    supportingCertificates: {
+      us_ct_ctw4na: resolvedCertificate(CT_W4NA_CERTIFICATE, { allocation_percentage: "60" }),
+    },
+  });
+  assert.equal(allocated.factors.CT_ANNUAL_WAGES, money("21840"));
 });
 
 test("CT Circular CT Example 9 — weekly $1,000 Code A is the calculation rules, not $39.97", () => {
