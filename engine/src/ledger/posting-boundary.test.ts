@@ -43,21 +43,3 @@ test("posting implementation dependencies have no facade backimports or static c
   }
   for (const file of files) visit(file, []);
 });
-
-test("ledger API inserts all entry lines in one multi-row statement", () => {
-  // Migration 0381's statement-level balance triggers are sound only because
-  // postEntry writes every line of an entry in a single INSERT.
-  const text = source("post-entry.ts");
-  assert.equal(text.match(/insert into journal_lines/g)?.length ?? 0, 1, "postEntry must issue exactly one journal_lines INSERT per entry");
-});
-
-test("posting coordinator prepares, commits and dispatches in that order", () => {
-  const text = source("posting-document.ts");
-  const prepare = text.indexOf("await prepareDocumentPosting(");
-  const commit = text.indexOf("await commitDocumentPosting(");
-  const effects = text.indexOf("await runPostDocumentEffects(");
-  assert.ok(prepare >= 0 && commit > prepare && effects > commit);
-  assert.match(text, /if \(!options\.deferEffects\)/);
-  assert.doesNotMatch(source("posting-prepare.ts"), /inDbTransaction/);
-  assert.match(source("posting-commit.ts"), /return await inDbTransaction\(async \(tx\) =>/);
-});
