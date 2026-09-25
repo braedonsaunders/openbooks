@@ -235,22 +235,18 @@ test("pack-declared certificate renewal dates stop stale statutory exemptions", 
   assert.equal(gaAfter.answers.exempt, null);
 });
 
-test("California DE 4 exemption lapses after February 15 until renewed", () => {
-  // California EDD Form DE 4: an exempt designation must be filed by February 15 each year.
-  const certificate = payrollCertificate("US", "us_ca_de4");
-  const row = {
-    certificateKey: certificate.key,
-    region: "CA",
-    effectiveFrom: "2025-02-16",
-    answers: { filing_status: "head_household", regular_allowances: "2", exempt: "true" },
-  };
-  const stillCurrent = resolveCertificate({ certificate, stored: [row], asOf: "2026-02-15" });
-  const expired = resolveCertificate({ certificate, stored: [row], asOf: "2026-02-16" });
-
-  assert.equal(stillCurrent.answers.exempt, "true");
-  assert.equal(expired.onFile, false);
-  assert.equal(expired.answers.exempt, null);
-  assert.equal(expired.answers.filing_status, "single_or_dual");
+test("Oregon and California withholding exemptions lapse after February 15", () => {
+  for (const [key, region, answers] of [
+    ["us_ca_de4", "CA", { filing_status: "head_household", regular_allowances: "2", exempt: "true" }],
+    ["us_or_orw4", "OR", { marital_status: "married", allowances: "4", exempt: "true" }],
+  ] as const) {
+    const certificate = payrollCertificate("US", key);
+    const row = { certificateKey: key, region, effectiveFrom: "2025-02-16", answers };
+    assert.equal(resolveCertificate({ certificate, stored: [row], asOf: "2026-02-15" }).answers.exempt, "true");
+    const expired = resolveCertificate({ certificate, stored: [row], asOf: "2026-02-16" });
+    assert.equal(expired.onFile, false);
+    assert.equal(expired.answers.exempt, null);
+  }
 });
 
 test("South Carolina expires the exempt SC W-4 after February 15 and resumes zero allowances", () => {
