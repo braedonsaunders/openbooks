@@ -47,6 +47,7 @@ import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -214,11 +215,17 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("VA_ANNUAL_TAX", annualTax);
 
   const periodTax = divIntCents(annualTax, annualP);
-  trace("VA_TAX", periodTax);
+  let assessedTax = periodTax;
+  if (input.basis === "nonresident") {
+    const allocation = requireUsWageAllocation(input.wageAllocations, "VA", null);
+    assessedTax = mulRateCents(periodTax, allocation.workShare);
+    trace("VA_WORK_SHARE", U(allocation.workShare));
+  }
+  trace("VA_TAX", assessedTax);
 
   // VA-4 line 2 — additional withholding, added AFTER the rate.
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  const total = assessedTax + extra;
   trace("VA_WITHHELD", total);
 
   return {
@@ -244,6 +251,7 @@ export const VA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   VA_BAND_OVER: "Virginia band excess",
   VA_ANNUAL_TAX: "Virginia tax (annual)",
   VA_TAX: "Virginia tax this period",
+  VA_WORK_SHARE: "Virginia duty-day or hours share",
   VA_WITHHELD: "Virginia tax withheld this period",
 };
 

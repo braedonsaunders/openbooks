@@ -59,6 +59,18 @@ test("VA p. 21 John example — semi-monthly $2,649, five personal exemptions", 
   assert.equal(D(U("720") + U("1908")), money("2628"));
 });
 
+test("VA nonresident withholding uses the verified 260-day or hours allocation", () => {
+  // PD 14-192: John's full-period tax apportioned to a 40% Virginia share is $43.79.
+  const result = VA_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "2649.00", basis: "nonresident",
+    certificate: cert({ personal_exemptions: "5" }),
+    wageAllocations: [{
+      region: "VA", subRegion: null, workShare: "0.4", source: "adequate_records",
+    }],
+  });
+  assert.equal(result.tax, money("43.79"));
+});
+
 test("VA $8,750 / $930 / $800 / 5.75% are the publication's own figures", () => {
   assert.equal(VA_RATES_2026.standardDeduction, "8750");
   assert.equal(VA_RATES_2026.personalExemption, "930");
