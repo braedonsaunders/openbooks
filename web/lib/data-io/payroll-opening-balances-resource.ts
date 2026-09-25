@@ -27,6 +27,7 @@ import {
 import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
 import {
+  duplicateImportRowIndexes,
   enforceExportRowLimit,
   MAX_EXPORT_ROWS,
   subsidiaryReadFilterWithUnassigned,
@@ -587,9 +588,33 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
       const planByCode = new Map(plans.map((plan) => [plan.code.trim().toLowerCase(), plan]))
       const locks = await entitlementOpeningLocks(ctx.orgId)
 
+      // Resolve the natural keys before saving any row. This resource calls
+      // saveEntitlementOpenings once per row, so that function's per-call
+      // duplicate guard cannot see a repeated employee/plan pair in this file.
+      const resolvedKeys: (string | null)[] = []
+      for (const src of rows) {
+        const employee = await resolveEmployee(ctx.orgId, src.employee)
+        if ('error' in employee || await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)) {
+          resolvedKeys.push(null)
+          continue
+        }
+        const plan = planByCode.get(String(src.plan ?? '').trim().toLowerCase())
+        resolvedKeys.push(plan ? `${employee.id}:${plan.id}` : null)
+      }
+      const duplicateRows = duplicateImportRowIndexes(resolvedKeys)
+
       for (let index = 0; index < rows.length; index++) {
         const rowNo = index + 1
         const src = rows[index]!
+        if (duplicateRows.has(index)) {
+          outcome.failed++
+          outcome.errors.push({
+            row: rowNo,
+            field: 'employee',
+            message: 'this employee and entitlement plan appear more than once in this load — keep one row per employee and plan',
+          })
+          continue
+        }
         try {
           const employee = await resolveEmployee(ctx.orgId, src.employee)
           if ('error' in employee) {
