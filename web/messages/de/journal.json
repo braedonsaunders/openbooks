@@ -5,6 +5,7 @@
     "searchPlaceholder": "Buchungsnummer oder Notiz durchsuchen…",
     "originFilter": "Herkunft",
     "draftsHeading": "Buchungsentwürfe — noch nicht gebucht",
+    "noAvailableSubsidiary": "Ihrer Rolle steht keine aktive Tochtergesellschaft zum Erstellen eines Journals zur Verfügung. Bitten Sie einen Administrator um Zugriff.",
     "columns": {
       "entry": "Buchung",
       "origin": "Herkunft",

@@ -5,6 +5,7 @@
     "searchPlaceholder": "Search entry number or memo…",
     "originFilter": "Origin",
     "draftsHeading": "Draft journals — not yet posted",
+    "noAvailableSubsidiary": "Your role has no active subsidiary available for creating a journal. Ask an administrator for subsidiary access.",
     "columns": {
       "entry": "Entry",
       "origin": "Origin",

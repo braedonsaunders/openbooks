@@ -5,6 +5,7 @@
     "searchPlaceholder": "仕訳番号またはメモを検索…",
     "originFilter": "オリジン",
     "draftsHeading": "下書き仕訳 — まだ記帳されていません",
+    "noAvailableSubsidiary": "仕訳を作成できる有効な子会社がこのロールにありません。管理者にアクセス権を依頼してください。",
     "columns": {
       "entry": "仕訳",
       "origin": "オリジン",

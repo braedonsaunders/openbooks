@@ -5,6 +5,7 @@
     "searchPlaceholder": "Buscar por número de asiento o memo…",
     "originFilter": "Origen",
     "draftsHeading": "Asientos en borrador — aún sin contabilizar",
+    "noAvailableSubsidiary": "Tu rol no tiene una filial activa disponible para crear un diario. Solicita acceso a un administrador.",
     "columns": {
       "entry": "Asiento",
       "origin": "Origen",
