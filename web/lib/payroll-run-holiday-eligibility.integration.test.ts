@@ -30,7 +30,7 @@ const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test
 const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
 const { demandingHolidays, recordHolidayAssertion } = await import("@openbooks/engine/src/payroll/holiday-attestations.ts");
 const { payRunStaleness } = await import("@openbooks/engine/src/payroll/readiness.ts");
-const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { dropScratchOrgReporting, seedWorkerEmployment } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("../app/api/payroll/runs/[id]/route");
 const assertionsRoute = await import("../app/api/payroll/runs/[id]/holiday-assertions/route");
 const profilesRoute = await import("../app/api/payroll/profiles/route");
@@ -168,12 +168,13 @@ async function addEmployee(
                                     is_active, created_by, updated_by)
       values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', '2020-01-01', true,
               ${fx.actorId}, ${fx.actorId})`);
+    const addedEmploymentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                             pay_basis, country, federal_claim_code,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                             province, pay_basis, country, federal_claim_code,
                                              provincial_claim_code, vacation_percent, vacation_method,
                                              is_active, created_by, updated_by)
-      values (${fx.orgId}, ${id}, ${fx.scheduleId}, ${province}, 'hourly', 'CA', 1, 1,
+      values (${fx.orgId}, ${id}, ${addedEmploymentId}, ${fx.scheduleId}, ${province}, 'hourly', 'CA', 1, 1,
               '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
     return id;
   });
@@ -217,7 +218,7 @@ test("filed absence assertions persist across recalculations; the unfiled still 
   const fx = await withBypassContext(() => seedAdoption());
   try {
     state.gate = runGate(fx);
-    const secondId = await addEmployee(fx, "Second Worker", "ON");
+    await addEmployee(fx, "Second Worker", "ON");
     const { documentId } = await christmasRun(fx);
     // Refusal before: both employees, by name, with the same message.
     let refusals = await absenceRefusals(documentId);
@@ -233,7 +234,6 @@ test("filed absence assertions persist across recalculations; the unfiled still 
     refusals = await absenceRefusals(documentId);
     assert.ok(!refusals.some((e) => e.employee === "Terry Worker"), JSON.stringify(refusals));
     assert.ok(refusals.some((e) => e.employee === "Second Worker"), JSON.stringify(refusals));
-    void secondId;
     // Recalculate bare a second time: the assertion survived, Terry holds.
     refusals = await absenceRefusals(documentId);
     assert.ok(!refusals.some((e) => e.employee === "Terry Worker"), JSON.stringify(refusals));

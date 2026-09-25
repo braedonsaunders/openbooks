@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment } from '@openbooks/engine/src/testing/fixtures.ts';
 
 const state: {gate: {user: {orgId: string; id: string}} | null} = {gate: null};
 Object.assign(globalThis, {__payrollPolicySetup: state});
@@ -34,14 +34,15 @@ for (const channel of ['PATCH', 'DELETE', 'import', 'preview'] as const) {
         const stubId = randomUUID(), componentId = randomUUID();
         await db.execute(sql`insert into parties(id,org_id,kind,display_name) values
           (${employeeId},${org.orgId},'person','Historical employee')`);
+        const historyEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
         await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end)
           values(${scheduleId},${org.orgId},'Historical schedule','biweekly',26,'2026-07-18')`);
         await db.execute(sql`insert into documents(id,org_id,kind,document_number,subsidiary_id,document_date,currency)
           values(${documentId},${org.orgId},'pay_run','HISTORICAL',${org.subsidiaryId},'2026-07-21','CAD')`);
         await db.execute(sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status)
           values(${documentId},${org.orgId},${scheduleId},'2026-07-05','2026-07-18','2026-07-21',2026,'committed')`);
-        await db.execute(sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,province,periods_per_year,pay_date,tax_year,currency_code)
-          values(${stubId},${org.orgId},${documentId},${employeeId},'ON',26,'2026-07-21',2026,'CAD')`);
+        await db.execute(sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,currency_code)
+          values(${stubId},${org.orgId},${documentId},${employeeId},${historyEmploymentId},'ON',26,'2026-07-21',2026,'CAD')`);
         await db.execute(sql`insert into pay_components(id,org_id,code,name,kind)
           values(${componentId},${org.orgId},'HISTORY','Historical earning','earning')`);
         await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount)

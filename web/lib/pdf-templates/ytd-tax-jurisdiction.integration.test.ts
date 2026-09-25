@@ -15,6 +15,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts"), { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts"), { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
 const { setPackSlotAccount, incomeTaxWithholdingSystemKeys } = await import('@openbooks/engine/src/payroll/packs.ts')
+const { upsertPayrollEmployerFact } = await import('@openbooks/engine/src/payroll/employer-fact-store.ts')
 const { completeRequestedDocumentVoid, requestDocumentVoid } = await import('@openbooks/engine/src/ledger/document-void.ts')
 const { loadPdfRecordValues } = await import('./values')
 
@@ -116,6 +117,8 @@ async function caPayrollOrg(): Promise<CaFixture> {
   // The health services fund is an employer contribution the QC employer always
   // owes, so it needs a liability account before any QC employee can calculate.
   await setPackSlotAccount(org.orgId, actorId, 'CA', 'hsf', craPayable)
+  // The CNT contribution prices for the same employer, so map it too.
+  await setPackSlotAccount(org.orgId, actorId, 'CA', 'cnt', craPayable)
   // Ontario Employer health tax is a refuse-when-unconfigured slot: a zero
   // rate keeps the accrual at nil while satisfying the readiness gate.
   await db.execute(sql`
@@ -194,6 +197,7 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
                                            rate_values, created_by, updated_by)
       values (${fx.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
               ${fx.actorId}, ${fx.actorId})`))
+    await withBypassContext(() => upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: fx.subsidiaryId, country: "CA", factKey: "cnt_exemption", effectiveFrom: "2026-01-01", value: "none", changeReason: "ordinary employer subject to the CNT contribution" }))
     const run = await withOrgContext(fx.orgId, () => createPayRun({
       orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-05', periodEnd: '2026-07-18',

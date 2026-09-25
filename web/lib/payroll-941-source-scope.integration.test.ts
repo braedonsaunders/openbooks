@@ -43,7 +43,7 @@ test(
         sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,run_type) values(${doc},${fx.orgId},${fx.scheduleId},'2026-07-15','2026-07-15','2026-07-15',2026,'committed','bonus')`,
       ));
       await withBypassContext(() => db.execute(
-        sql`insert into pay_stubs(org_id,pay_run_document_id,employee_party_id,country,country_source,filing_account_id,filing_account_source,province,periods_per_year,pay_date,tax_year,currency_code,pensionable_earnings) values(${fx.orgId},${doc},${fx.employeeId},'US','calculation',${account},'calculation','NY',26,'2026-07-15',2026,'USD',100)`,
+        sql`insert into pay_stubs(org_id,pay_run_document_id,employee_party_id,employment_id,country,country_source,filing_account_id,filing_account_source,province,periods_per_year,pay_date,tax_year,currency_code,pensionable_earnings) values(${fx.orgId},${doc},${fx.employeeId},${fx.employmentId},'US','calculation',${account},'calculation','NY',26,'2026-07-15',2026,'USD',100)`,
       ));
       const quarters = await withOrgContext(fx.orgId, () => form941Worksheet(fx.orgId, 2026));
       assert.equal(quarters.length, 1);
@@ -114,7 +114,7 @@ test(
         sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,run_type) values(${unassignedDoc},${fx.orgId},${fx.scheduleId},'2026-07-16','2026-07-16','2026-07-16',2026,'committed','bonus')`,
       ));
       await withBypassContext(() => db.execute(
-        sql`insert into pay_stubs(org_id,pay_run_document_id,employee_party_id,country,country_source,filing_account_id,filing_account_source,province,periods_per_year,pay_date,tax_year,currency_code,pensionable_earnings) values(${fx.orgId},${unassignedDoc},${fx.employeeId},'US','calculation',null,'calculation','NY',26,'2026-07-16',2026,'USD',50)`,
+        sql`insert into pay_stubs(org_id,pay_run_document_id,employee_party_id,employment_id,country,country_source,filing_account_id,filing_account_source,province,periods_per_year,pay_date,tax_year,currency_code,pensionable_earnings) values(${fx.orgId},${unassignedDoc},${fx.employeeId},${fx.employmentId},'US','calculation',null,'calculation','NY',26,'2026-07-16',2026,'USD',50)`,
       ));
       const all = await withOrgContext(fx.orgId, () => form941Worksheet(fx.orgId, 2026));
       assert.equal(all.length, 2);
