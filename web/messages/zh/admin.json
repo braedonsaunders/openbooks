@@ -5624,6 +5624,18 @@
         "record": "记录",
         "change": "更改"
       },
+      "tables": {
+        "user_scripts": "脚本",
+        "custom_field_defs": "自定义字段",
+        "form_layouts": "表单布局",
+        "list_views": "列表视图",
+        "saved_reports": "已保存的报告",
+        "saved_views": "已保存的视图",
+        "statement_layouts": "对账单布局",
+        "report_definitions": "报告定义",
+        "account_groups": "科目组",
+        "app_roles": "应用角色"
+      },
       "capturedFrom": "捕获自{name}",
       "retained": "保留的配置更改集",
       "listTitle": "更改集",

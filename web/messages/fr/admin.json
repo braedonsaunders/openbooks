@@ -5624,6 +5624,18 @@
         "record": "Enregistrement",
         "change": "Modification"
       },
+      "tables": {
+        "user_scripts": "Scripts",
+        "custom_field_defs": "Champs personnalisés",
+        "form_layouts": "Mises en page des formulaires",
+        "list_views": "Vues de liste",
+        "saved_reports": "Rapports enregistrés",
+        "saved_views": "Vues enregistrées",
+        "statement_layouts": "Mises en page des relevés",
+        "report_definitions": "Définitions de rapports",
+        "account_groups": "Groupes de comptes",
+        "app_roles": "Rôles des applications"
+      },
       "capturedFrom": "Capturé depuis {name}",
       "retained": "Jeu de modifications de configuration conservé",
       "listTitle": "Jeux de modifications",

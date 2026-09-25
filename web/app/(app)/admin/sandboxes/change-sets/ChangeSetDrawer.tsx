@@ -27,6 +27,7 @@ export function ChangeSetDrawer({ detail, actorId }: { detail: ChangeSetDetail; 
   const { dateTime } = useViewerFormat();
   const t = useTranslations("admin");
   const cs = "sandboxes.changeSets";
+  const tableLabels = useTranslations("admin.sandboxes.changeSets.tables");
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export function ChangeSetDrawer({ detail, actorId }: { detail: ChangeSetDetail; 
   const item = detail.items.find(row => row.id === itemId);
   const next = promotionNextStep(detail, actorId);
   const columns: PagedColumn<ChangeSetItem>[] = [
-    { key: "type", header: t(`${cs}.columns.type`), cell: row => row.tableName.replaceAll("_", " "), search: row => row.tableName },
+    { key: "type", header: t(`${cs}.columns.type`), cell: row => tableLabels.has(row.tableName as never) ? tableLabels(row.tableName as never) : row.tableName, search: row => row.tableName },
     { key: "record", header: t(`${cs}.columns.record`), cell: row => <Button variant="link" onClick={() => setItemId(row.id)}>{String(row.payload?.name ?? row.expectedBefore?.name ?? row.targetId)}</Button>,
       search: row => `${row.targetId} ${row.payload?.name ?? row.expectedBefore?.name ?? ""}` },
     { key: "operation", header: t(`${cs}.columns.change`), cell: row => <Badge variant={row.op === "delete" ? "destructive" : "secondary"}>{t(`${cs}.op.${row.op}`)}</Badge>, search: row => row.op },

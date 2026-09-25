@@ -5624,6 +5624,18 @@
         "record": "Datensatz",
         "change": "Änderung"
       },
+      "tables": {
+        "user_scripts": "Skripte",
+        "custom_field_defs": "Benutzerdefinierte Felder",
+        "form_layouts": "Formularlayouts",
+        "list_views": "Listenansichten",
+        "saved_reports": "Gespeicherte Berichte",
+        "saved_views": "Gespeicherte Ansichten",
+        "statement_layouts": "Kontoauszuglayouts",
+        "report_definitions": "Berichtsdefinitionen",
+        "account_groups": "Kontengruppen",
+        "app_roles": "App-Rollen"
+      },
       "capturedFrom": "Erfasst aus {name}",
       "retained": "Aufbewahrter Konfigurations-Änderungssatz",
       "listTitle": "Änderungssätze",
