@@ -432,3 +432,23 @@ test("a refused auto-apply pins instead of toasting into the void", async (t) =>
   assert.ok(alert, "the auto-apply refusal must pin as an alert, not vanish with the toast");
   assert.match(alert.textContent ?? "", /No open items in USD/, "the alert must carry the server reason");
 });
+
+test("changing the payment date hides prior-date FX evidence while new rates load", async (t) => {
+  const doc = { ...DRAFT_DOC(), document_date: "2026-09-17" };
+  const item = { lineId: "bill-fx", entryNumber: "BILL-FX", postingDate: "2026-09-01", dueDate: null, documentNumber: "BILL-FX", documentKind: "vendor_bill", referenceNumber: null, amount: "100.00", applied: "0.00", open: "100.00", currency: "EUR", transactionAmount: "100.00", transactionApplied: "0.00", transactionOpen: "100.00" };
+  const restoreFetch = scriptFetch((url) => url.includes("/settlement-rates") ? Response.json({ rates: [{ id: "fx-old", toCurrency: "EUR", rate: "0.80", asOf: "2026-09-17", source: "daily" }] }) : null);
+  t.after(restoreFetch);
+  const { unmount } = await mountPayment(doc, [item], "edit", null, [{ openLineId: "bill-fx", sourceTransactionAmount: "125.00", targetTransactionAmount: "100.00", settlementRate: "0.80", settlementRateSource: "provider", settlementRateReference: "daily · 2026-09-17", settlementFxRateId: "fx-old" }]);
+  t.after(unmount);
+  const date = document.querySelector('input[type="date"]') as HTMLInputElement;
+  const evidence = [...document.querySelectorAll("select")].find((select) => [...select.options].some((option) => option.textContent?.includes("2026-09-17")));
+  assert.ok(evidence, "the initially fetched FX evidence renders");
+  globalThis.fetch = (async () => new Promise<Response>(() => {})) as typeof fetch;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(date, "2026-09-18");
+    date.dispatchEvent(new window.Event("input", { bubbles: true }));
+    date.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  assert.equal([...evidence.options].some((option) => option.textContent?.includes("2026-09-17")), false);
+});

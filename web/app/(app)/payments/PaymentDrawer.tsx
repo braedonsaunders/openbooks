@@ -293,7 +293,12 @@ export function PaymentDrawer({
   const [allocs, setAllocs] = useState<Record<string, AllocationClient>>(() =>
     Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])),
   )
-  const [settlementRates, setSettlementRates] = useState<SettlementRateOption[]>([])
+  const settlementRateKey = `${doc.currency}:${documentDate}:${side}:${openItems.map((item) => item.currency).join(',')}`
+  const [settlementRateResult, setSettlementRateResult] = useState<{
+    key: string
+    rates: SettlementRateOption[]
+  }>({ key: '', rates: [] })
+  const settlementRates = settlementRateResult.key === settlementRateKey ? settlementRateResult.rates : []
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // A refused save/post must stay visible past its toast (F-t02-006): the
   // typed refusal pins as a record-level alert until the next action, and
@@ -346,22 +351,11 @@ export function PaymentDrawer({
     }
   }, [partyId, side, isDraft, t])
 
-  // Clear stale settlement rates while their inputs change, during render
-  // (same committed values, no extra render). Keyed on the fetch inputs
-  // below.
-  const [prevSettlementKeys, setPrevSettlementKeys] = useState(() => ({
-    currency: doc.currency, documentDate, openItems, side,
-  }))
-  if (
-    prevSettlementKeys.currency !== doc.currency || prevSettlementKeys.documentDate !== documentDate ||
-    prevSettlementKeys.openItems !== openItems || prevSettlementKeys.side !== side
-  ) {
-    setPrevSettlementKeys({ currency: doc.currency, documentDate, openItems, side })
-    const staleTargets = [...new Set(openItems.filter((item) => item.currency !== doc.currency).map((item) => item.currency))]
-    if (!staleTargets.length || !documentDate) setSettlementRates([])
-  }
-
+  // Results are scoped to the submitted inputs, so old evidence disappears
+  // immediately on a date/currency/party-side change. Effect cleanup prevents
+  // superseded requests from publishing their response.
   useEffect(() => {
+    const key = settlementRateKey
     const targets = [...new Set(openItems.filter((item) => item.currency !== doc.currency).map((item) => item.currency))]
     if (!targets.length || !documentDate) return
     let cancelled = false
@@ -375,13 +369,13 @@ export function PaymentDrawer({
       .then(async (response) => {
         if (cancelled || !response.ok) return
         const data = await response.json()
-        if (!cancelled) setSettlementRates(data.rates ?? [])
+        if (!cancelled) setSettlementRateResult({ key, rates: data.rates ?? [] })
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
-  }, [doc.currency, documentDate, openItems, side])
+  }, [doc.currency, documentDate, openItems, side, settlementRateKey])
 
   // useCallback: validAllocations below depends on this; a bare closure would be
   // a fresh identity every render and defeat that memo.
