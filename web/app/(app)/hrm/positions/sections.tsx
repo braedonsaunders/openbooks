@@ -1,5 +1,5 @@
 import { UrlDrawer } from '@openbooks/ui'
-import { PositionCreateForm } from './PositionCreateForm'
+import { PositionCreateDrawer } from './PositionCreateForm'
 import { PositionManageForm } from './PositionManageForm'
 import type { PositionsPageData } from './view'
 import type { PositionManageProps } from './PositionManageForm'
@@ -107,6 +107,18 @@ export function PositionDrawer({
   } | null
 }) {
   if (!drawer) return null
+  // The create draft guards itself: its client shell owns the UrlDrawer and
+  // its close confirmation, which a server component cannot hold.
+  if (drawer.create) {
+    return (
+      <PositionCreateDrawer
+        closeHref={drawer.closeHref}
+        title={drawer.title}
+        description={drawer.description}
+        create={drawer.create}
+      />
+    )
+  }
   return (
     <UrlDrawer
       open
@@ -114,9 +126,7 @@ export function PositionDrawer({
       title={drawer.title}
       description={drawer.description ?? undefined}
     >
-      {drawer.create ? (
-        <PositionCreateForm {...drawer.create} />
-      ) : drawer.detail ? (
+      {drawer.detail ? (
         <PositionDrawerBody detail={drawer.detail} />
       ) : drawer.missingDetail ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>

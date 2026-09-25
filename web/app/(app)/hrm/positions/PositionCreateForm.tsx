@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { confirmDialog } from '../../../../lib/confirm'
 
 export interface PositionCreateOption {
   value: string
@@ -38,6 +39,9 @@ export interface PositionCreateProps {
     submit: string
     failed: string
   }
+  /** Dirty/busy reports for the drawer shell's close guard (server shells
+   *  cannot hold the state, so the client form reports it upward). */
+  onGuardChange?: (guard: { dirty: boolean; busy: boolean }) => void
 }
 
 /**
@@ -47,7 +51,7 @@ export interface PositionCreateProps {
  * use — with its refusals rendered as the error, never swallowed. On
  * success the URL moves to the new position's own drawer.
  */
-export function PositionCreateForm({ basePath, effectiveDate, employers, employerRefusal, departments, statuses, labels }: PositionCreateProps) {
+export function PositionCreateForm({ basePath, effectiveDate, employers, employerRefusal, departments, statuses, labels, onGuardChange }: PositionCreateProps) {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [code, setCode] = useState('')
@@ -60,6 +64,21 @@ export function PositionCreateForm({ basePath, effectiveDate, employers, employe
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // A half-filled create draft is unsaved work. The URL drawer lives in the
+  // server shell, so dirtiness is reported up for its close guard.
+  const dirty =
+    code !== '' ||
+    title !== '' ||
+    employer !== (employers[0]?.value ?? '') ||
+    department !== '' ||
+    plannedFte !== '1.0000' ||
+    status !== (statuses[0]?.value ?? 'planned') ||
+    effectiveFrom !== effectiveDate ||
+    reason !== ''
+  useEffect(() => {
+    onGuardChange?.({ dirty, busy })
+  }, [dirty, busy, onGuardChange])
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -171,5 +190,49 @@ export function PositionCreateForm({ basePath, effectiveDate, employers, employe
         </Button>
       </div>
     </form>
+  )
+}
+
+/**
+ * Client shell for the `?position=new` URL drawer. The server sections
+ * cannot hold form state, so this shell owns the close guard and the form
+ * reports its dirtiness upward — closing with a half-filled draft asks
+ * first, and an in-flight create cannot be dismissed.
+ */
+export function PositionCreateDrawer({
+  closeHref,
+  title,
+  description,
+  create,
+}: {
+  closeHref: string
+  title: string
+  description: string | null
+  create: PositionCreateProps
+}) {
+  const tCommon = useTranslations('common')
+  const [guard, setGuard] = useState({ dirty: false, busy: false })
+  const onGuardChange = useCallback((next: { dirty: boolean; busy: boolean }) => setGuard(next), [])
+
+  async function confirmDiscard() {
+    if (guard.busy) return false
+    if (!guard.dirty) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  return (
+    <UrlDrawer
+      open
+      closeHref={closeHref}
+      title={title}
+      description={description ?? undefined}
+      beforeClose={confirmDiscard}
+    >
+      <PositionCreateForm {...create} onGuardChange={onGuardChange} />
+    </UrlDrawer>
   )
 }
