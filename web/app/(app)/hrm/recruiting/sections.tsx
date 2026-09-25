@@ -619,7 +619,8 @@ export function PostingDrawerBody({
       {extra.canManage ? (
         <PostingActionsIsland
           postingId={posting.id}
-          status={posting.status}
+          status={posting.statusCode}
+          requisitionId={posting.requisitionId}
           labels={{ publish: extra.labels.publish ?? 'Publish', pause: extra.labels.pause ?? 'Pause', close: extra.labels.close ?? 'Close', failed: extra.labels.failed ?? 'Save failed.' }}
         />
       ) : null}
