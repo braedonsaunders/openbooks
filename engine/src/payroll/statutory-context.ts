@@ -4,6 +4,7 @@ import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
 import type { PayrollAssessedOn, PayrollTaxBases } from "./packs.ts";
 import type { StatutoryRateResolution } from "./statutory-rates.ts";
 import type { UsSupplementalWageAmount } from "./supplemental-wages.ts";
+import type { UsStatutoryExemptionAmount } from "./statutory-exemptions.ts";
 
 /**
  * One line in the stub set `calculateStub` builds before the statutory pass.
@@ -180,6 +181,8 @@ export interface PayrollStatutoryComputeContext {
   nonPeriodic: string;
   /** Classified taxable US supplemental wages; unclassified entries remain null for named refusal. */
   supplementalWageAmounts?: readonly UsSupplementalWageAmount[];
+  /** US earning amounts by federally exempt compensation class; states requiring a class refuse nulls by name. */
+  statutoryExemptionAmounts?: readonly UsStatutoryExemptionAmount[];
   pensionable: string;
   insurable: string;
   /**

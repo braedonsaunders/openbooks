@@ -36,6 +36,7 @@ import { PayrollError } from "../../error.ts";
 import { D, rate6, U } from "../../canada/decimal.ts";
 import { fromUnits, roundDiv, toUnits } from "../../../money/money.ts";
 import type { ResolvedCertificate } from "../../certificates.ts";
+import type { UsStatutoryExemptionAmount } from "../../statutory-exemptions.ts";
 import type { PayrollWorkAllocation } from "../../statutory-context.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import type { PayrollStateTaxBaseKey } from "../../packs.ts";
@@ -468,6 +469,13 @@ export interface UsStateWithholdingInput {
   stateCertificateOnFile?: boolean;
   /** Supplemental wages this period (bonus, commission, severance). */
   supplemental?: string;
+  /**
+   * Period earning amounts by federally exempt compensation class, sourced
+   * from classified earning components. States whose publications exempt a
+   * class subtract its amount from taxable wages; a state that requires a
+   * classification refuses null-category dollars by name instead of guessing.
+   */
+  statutoryExemptionAmounts?: readonly UsStatutoryExemptionAmount[];
   /** Required by the pack dispatcher whenever supplemental wages are present. */
   supplementalPaymentTiming?: UsSupplementalPaymentTiming;
   /**
