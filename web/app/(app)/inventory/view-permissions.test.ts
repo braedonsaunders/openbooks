@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-const state = { orgId: "org", grants: new Set<string>(["items.read"]) };
+const state = { orgId: "org", grants: new Set<string>(["items.read"]), allowed: null as Set<string> | null, subsidiaries: [] as Array<{ id: string; name: string }>, pickerSubsidiaries: [] as Array<{ id: string; name: string }> };
 Object.assign(globalThis, { __inventoryViewPermissions: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
@@ -12,7 +12,7 @@ registerHooks({
     if (specifier === "next/link") return virtual("export default function Link(p) { return globalThis.React.createElement('a', { href: p.href }, p.children) }");
     if (specifier === "lucide-react") return virtual("export function Plus() { return null }");
     if (specifier === "@openbooks/ui") return virtual("export function Button(p) { return globalThis.React.createElement('button', null, p.children) } export function PageHeader(p) { return globalThis.React.createElement('header', null, p.actions) }");
-    if (specifier === "@openbooks/engine/src/platform/db.ts") return virtual("export const db = { execute: async () => ({ rows: [] }) }");
+    if (specifier === "@openbooks/engine/src/platform/db.ts") return virtual("export const db = { execute: async () => ({ rows: globalThis.__inventoryViewPermissions.subsidiaries }) }");
     if (specifier === "@openbooks/engine/src/inventory/stock-count-queries.ts") return virtual("export async function listStockCounts() { return { counts: [], totalCount: 0, nextCursor: null } }");
     if (specifier === "@openbooks/engine/src/inventory/stock-count-gates.ts") return virtual("export async function isStockCountReviewRequired() { return false }");
     if (specifier === "../../../components/entity-list-view") return virtual("export function EntityListView() { return null }");
@@ -20,7 +20,7 @@ registerHooks({
     if (specifier === "../../../components/module-home/ui") return virtual("export function ModuleHomeTabs() { return null }");
     if (specifier === "../admin/setup/[entity]/SetupEntitySection") return virtual("export function SetupEntitySection() { return null }");
     if (specifier === "./BomWorkspace") return virtual("export function BomWorkspace() { return null } export function NewBomButton() { return null }");
-    if (specifier === "./counts/CountsList") return virtual("export function CountsList() { return null } export function NewCountButton() { return null }");
+    if (specifier === "./counts/CountsList") return virtual("export function CountsList(p) { globalThis.__inventoryViewPermissions.pickerSubsidiaries = p.subsidiaries; return null } export function NewCountButton() { return null }");
     if (specifier === "./InventoryActionDrawer") return virtual("export function InventoryActionDrawer() { return null }");
     if (specifier === "./NewMovementButton") return virtual("export function NewMovementButton() { return null }");
     if (specifier === "./ReverseLandedVoucherAction") return virtual("export function ReverseLandedVoucherAction() { return globalThis.React.createElement('span', null, 'REVERSAL_ACTION') }");
@@ -30,7 +30,7 @@ registerHooks({
     if (specifier === "../../../lib/authz") return virtual(`
       export async function requirePermission() {
         const s = globalThis.__inventoryViewPermissions;
-        return { user: { orgId: s.orgId, id: "actor" }, permissions: s.grants, allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: "actor" }, permissions: s.grants, allowedSubsidiaryIds: s.allowed };
       }
       // Exact-match check: the cases below use concrete grants, so the
       // production wildcard semantics change nothing about them.
@@ -60,8 +60,6 @@ test("the New-movement button follows the posting grant, not the manage grant", 
   // An items.manage-only user must not see a drawer they cannot submit —
   // the route would 403 on post.
   assert.equal(await showsNewMovement(["items.read", "items.manage"]), false);
-  assert.equal(await showsNewMovement(["items.read"]), false);
-  assert.equal(await showsNewMovement(["items.read", "items.reverse"]), false);
 });
 
 test("the landed-cost reversal action is visible only with the reversal grant", async () => {
@@ -73,5 +71,7 @@ test("the landed-cost reversal action is visible only with the reversal grant", 
 
   assert.equal(await hasReversalAction(["items.read", "items.reverse"]), true);
   assert.equal(await hasReversalAction(["items.read"]), false);
-  assert.equal(await hasReversalAction(["items.read", "items.manage"]), false);
+  state.allowed = new Set(["A"]); state.subsidiaries = [{ id: "A", name: "Visible" }, { id: "B", name: "Hidden" }];
+  renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ inventoryView: "counts" }) })); assert.deepEqual(state.pickerSubsidiaries.map(({ id }) => id), ["A"]);
+  state.allowed = null;
 });

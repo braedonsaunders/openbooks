@@ -203,7 +203,9 @@ export default async function Inventory({
           totalCount={countData[0].totalCount}
           nextCursor={countData[0].nextCursor}
           locations={countData[1].rows}
-          subsidiaries={countData[2].rows}
+          subsidiaries={countData[2].rows.filter(
+            (subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id),
+          )}
           items={countData[3].rows}
           stockLocations={countData[4].rows}
           lots={countData[5].rows}
