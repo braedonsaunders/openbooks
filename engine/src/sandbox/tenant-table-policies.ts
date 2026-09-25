@@ -354,6 +354,7 @@ export const TENANT_TABLE_POLICIES = {
   "party_subsidiaries": "clone:catalog-uuid-rebase",
   "pay_application_lines": "clone:catalog-uuid-rebase",
   "pay_applications": "clone:catalog-uuid-rebase",
+  "pay_component_earning_classifications": "clone:catalog-uuid-rebase",
   "pay_components": "clone:catalog-uuid-rebase",
   "pay_derived_rules": "clone:catalog-uuid-rebase",
   "pay_run_adjustments": "clone:catalog-uuid-rebase",

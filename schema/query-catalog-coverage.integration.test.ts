@@ -1,15 +1,10 @@
-// Derived governed-catalog coverage: every org_id table is either queryable
-// through the governed console (safe_relations or a curated
-// openbooks_query view) or covered by a reviewed exclusion below. An org_id
-// table missing from both fails closed (invisible, never a leak), but
-// reports built on it silently omit rows — so a new table that lands in
-// neither set fails this test until a reviewer catalogs it or excludes it
-// with a reason. Exclusions are structural (name prefixes), never a hand
-// list, plus named entries only where a table differs from its category.
+// Every org_id table must be governed through safe_relations/openbooks_query or have a reviewed exclusion; unclassified tables silently disappear from reports.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../engine/src/platform/db.ts";
+import { loadCatalog } from "../engine/src/sandbox/catalog.ts";
+import { TENANT_TABLE_POLICIES } from "../engine/src/sandbox/tenant-table-policies.ts";
 
 type Category = { prefixes: string[]; reason: string };
 
@@ -159,6 +154,9 @@ const EXCLUDED_TABLES: Record<string, string> = {
   time_approval_stages: "time approval workflow configuration.",
   source_deletion_resolutions: "sync conflict-resolution runtime.",
   posting_effects: "posting pipeline internals.",
+  payroll_employer_facts: "employee statutory facts that drive payroll calculations, not a generic reporting surface.",
+  payroll_opening_program_bases: "employee opening YTD bases for statutory wage limits, not a generic reporting surface.",
+  pay_component_earning_classifications: "payroll earning policy inputs are controlled setup data, not a generic reporting surface.",
   project_geofences: "project operations config.",
   recurring_occurrence_documents: "recurring scheduler runtime.",
   reporting_relationships: "reporting graph config.",
@@ -210,9 +208,10 @@ async function uncoveredTables(): Promise<string[]> {
 
 test("every org_id table is governed or reviewed", async () => {
   const uncovered = await uncoveredTables();
+  const cloneable = (await loadCatalog()).rebaseSet.has("pay_component_earning_classifications");
   assert.deepEqual(
-    uncovered,
-    [],
+    [uncovered, cloneable, TENANT_TABLE_POLICIES.pay_component_earning_classifications],
+    [[], true, "clone:catalog-uuid-rebase"],
     `org_id tables outside the governed console and the reviewed exclusions: ${uncovered.join(", ")}`,
   );
 });
