@@ -27,6 +27,7 @@ import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -163,6 +164,30 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "AL", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  // Act 2025-334 30-day safe harbor (2026 ALDOR booklet, p. 3): an
+  // out-of-state worker at 30 or fewer Alabama days is exempt, and until
+  // the 31st day keeps withholding to the state of residence. The day
+  // count rides the approved work allocation for the period, so a
+  // nonresident run refuses by name only when the employee has no
+  // approved Alabama location data — never merely for being a
+  // nonresident. Residents never reach this branch.
+  if (input.basis === "nonresident") {
+    const allocation = requireUsWageAllocation(input.wageAllocations, "AL", null);
+    const days = allocation.serviceDaysYearToDate;
+    if (days == null || !Number.isInteger(days) || days < 0) {
+      throw new PayrollError(
+        "Alabama withholding for a nonresident needs the approved year-to-date count of Alabama "
+        + "service days (Act 2025-334: 30 or fewer days is exempt from Alabama withholding). "
+        + "Record approved dated Alabama work before calculating — refused by name",
+      );
+    }
+    trace("AL_NONRESIDENT_DAYS", BigInt(days));
+    if (days <= 30) {
+      factors.AL_SAFE_HARBOR_EXEMPT = "1";
+      return { state: "AL", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    }
+  }
+
   const code = (certificateChoice(input.certificate, "exemption") ?? "0") as AlExemption;
   if (code !== "0" && code !== "S" && code !== "MS" && code !== "M" && code !== "H") {
     throw new PayrollError(`Alabama exemption "${code}" is not 0, S, MS, M, or H`);
@@ -217,6 +242,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const AL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AL_MILITARY_SPOUSE_EXEMPT: "Alabama military-spouse wages exempt from withholding",
+  AL_NONRESIDENT_DAYS: "Alabama services calendar-day count this year",
+  AL_SAFE_HARBOR_EXEMPT: "Alabama 30-day safe-harbor wages exempt from withholding",
   AL_GI: "Alabama gross income (annualized)",
   AL_STANDARD_DEDUCTION: "Alabama standard deduction",
   AL_FEDERAL_ANNUAL: "Alabama federal-tax deduction (annualized)",
