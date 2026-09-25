@@ -17,35 +17,33 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { GET } = await import('./route.ts')
+const { GET, POST } = await import('./route.ts')
+const { PATCH } = await import('./[id]/route.ts')
 
 test('payment mandate list hides mandates for parties outside the caller scope', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
-    const hiddenSubsidiary = randomUUID()
-    const hiddenParty = randomUUID()
+    const hiddenSubsidiary = randomUUID(), hiddenParty = randomUUID()
+    let hiddenBankId = '', hiddenMandateId = ''
     await withBypassContext(async () => {
-      await db.execute(sql`insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
-        values (${hiddenSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Restricted subsidiary', 'CAD', 'CA')`)
-      await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id, is_active)
-        values (${hiddenParty}, ${org.orgId}, 'organization', 'Restricted customer', ${hiddenSubsidiary}, true)`)
+      await db.execute(sql`insert into subsidiaries(id, org_id, parent_id, name, base_currency, country) values (${hiddenSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Restricted subsidiary', 'CAD', 'CA')`)
+      await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id, is_active) values (${hiddenParty}, ${org.orgId}, 'organization', 'Restricted customer', ${hiddenSubsidiary}, true)`)
       for (const [partyId, suffix] of [[org.customerId, 'visible'], [hiddenParty, 'hidden']] as const) {
-        const bankId = randomUUID()
-        const mandateId = randomUUID()
-        await db.execute(sql`insert into party_bank_accounts
-          (id, org_id, party_id, bank_name, country, currency, routing, account_last_four, approved_at, approved_by, created_by, updated_by)
-          values (${bankId}, ${org.orgId}, ${partyId}, ${suffix}, 'CA', 'CAD', '{}'::jsonb, ${suffix === 'visible' ? '1111' : '2222'}, ${org.date}, ${actorId}, ${actorId}, ${actorId})`)
-        await db.execute(sql`insert into payment_mandates
-          (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference, status, signed_on, valid_from, created_by, updated_by)
-          values (${mandateId}, ${org.orgId}, ${partyId}, ${bankId}, 'nacha', ${`MANDATE-${suffix}`}, 'active', ${org.date}, ${org.date}, ${actorId}, ${actorId})`)
+        const bankId = randomUUID(), mandateId = randomUUID()
+        if (suffix === 'hidden') { hiddenBankId = bankId; hiddenMandateId = mandateId }
+        await db.execute(sql`insert into party_bank_accounts (id, org_id, party_id, bank_name, country, currency, routing, account_last_four, approved_at, approved_by, created_by, updated_by) values (${bankId}, ${org.orgId}, ${partyId}, ${suffix}, 'CA', 'CAD', '{}'::jsonb, ${suffix === 'visible' ? '1111' : '2222'}, ${org.date}, ${actorId}, ${actorId}, ${actorId})`)
+        await db.execute(sql`insert into payment_mandates (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference, status, signed_on, valid_from, created_by, updated_by) values (${mandateId}, ${org.orgId}, ${partyId}, ${bankId}, 'nacha', ${`MANDATE-${suffix}`}, 'active', ${org.date}, ${org.date}, ${actorId}, ${actorId})`)
       }
     })
     state.gate = { user: { id: actorId, orgId: org.orgId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }
     const response = await withOrgContext(org.orgId, () => GET(new Request('http://openbooks.test/api/admin/payment-operations/mandates'), { params: Promise.resolve({ resource: 'mandates' }) }))
-    assert.equal(response.status, 200)
-    const result = await response.json() as { rows: Array<{ mandate_reference: string }> }
-    assert.deepEqual(result.rows.map((row) => row.mandate_reference), ['MANDATE-visible'])
+    assert.deepEqual([response.status, ((await response.json()) as { rows: Array<{ mandate_reference: string }> }).rows.map((row) => row.mandate_reference)], [200, ['MANDATE-visible']])
+    const results = await Promise.all([
+      withOrgContext(org.orgId, () => POST(new Request('http://openbooks.test/api/admin/payment-operations/mandates', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ partyId: hiddenParty, partyBankAccountId: hiddenBankId, mandateReference: 'MANDATE-HIDDEN-NEW' }) }), { params: Promise.resolve({ resource: 'mandates' }) })),
+      withOrgContext(org.orgId, () => PATCH(new Request(`http://openbooks.test/api/admin/payment-operations/mandates/${hiddenMandateId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'revoked' }) }), { params: Promise.resolve({ resource: 'mandates', id: hiddenMandateId }) })),
+    ])
+    assert.deepEqual(results.map((result) => result.status), [404, 404])
   } finally {
     state.gate = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
