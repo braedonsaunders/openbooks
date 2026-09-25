@@ -102,7 +102,39 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
       default: "false",
       help: "Whether the jonggehandicaptenkorting (€ 923 in 2026, € 462 above the AOW age) is set "
         + "against the period withholding (Rekenvoorschriften 2026, §5). Only with the employee's "
-        + "election on file.",
+        + "election on file AND a declared jgk_basis below — the engine refuses the reduction "
+        + "without an established Wajong entitlement (Handboek Loonheffingen 2026, §24.1.5).",
+    },
+    {
+      key: "jgk_basis",
+      label: "Jonggehandicaptenkorting grondslag",
+      kind: "choice",
+      choices: [
+        {
+          value: "wajong_benefit",
+          label: "Wajong-uitkering wordt ontvangen",
+          help: "The employee receives a Wajong benefit, directly or through employer payment.",
+        },
+        {
+          value: "uwv_entitlement",
+          label: "Wajong-gerechtigd zonder uitkering (UWV-brief aanwezig)",
+          help: "The employee is eligible for a Wajong benefit but does not receive one — the "
+            + "employer retains the UWV entitlement letter and records its reference in "
+            + "jgk_evidence.",
+        },
+      ],
+      help: "The Wajong entitlement grounding the jonggehandicaptenkorting (Handboek "
+        + "Loonheffingen 2026, §24.1.5: only people receiving a Wajong benefit, or eligible "
+        + "for one but not receiving it). Absent until declared — without it the korting "
+        + "is refused.",
+    },
+    {
+      key: "jgk_evidence",
+      label: "Jonggehandicaptenkorting bewijsstuk",
+      kind: "code",
+      help: "Reference to the retained UWV entitlement letter (beschikking), required when "
+        + "jgk_basis is Wajong-eligible-without-benefit. The employer must keep the letter; "
+        + "this reference is the audit link to it.",
     },
   ],
 };

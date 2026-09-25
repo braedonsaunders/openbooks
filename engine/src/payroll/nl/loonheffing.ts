@@ -3,6 +3,7 @@ import { PayrollError } from "../error.ts";
 import {
   certificateAmount,
   certificateChoice,
+  certificateCode,
   certificateFlag,
   type ResolvedCertificate,
 } from "../certificates.ts";
@@ -140,6 +141,18 @@ export interface NlStatutoryInput {
   aokApply?: boolean;
   /** Jonggehandicaptenkorting applies (€ 923, AOW+ herleid € 462). */
   jgkApply?: boolean;
+  /**
+   * Wajong entitlement grounding the JGK: "wajong_benefit" (benefit received,
+   * directly or through employer payment) or "uwv_entitlement" (eligible but
+   * not receiving — UWV letter on file). Required when jgkApply is true
+   * (Handboek Loonheffingen 2026, §24.1.5); anything else refuses by name.
+   */
+  jgkBasis?: string | null;
+  /**
+   * Reference to the retained UWV entitlement letter. Required when jgkBasis
+   * is "uwv_entitlement" — the audit link to the employer's proof.
+   */
+  jgkEvidence?: string | null;
   /** Non-periodic (bonus) pay: always refused — the bijzondere tarieven are not transcribed. */
   nonPeriodic?: string | null;
 }
@@ -368,6 +381,23 @@ function finishCalculation(args: {
   // "het jaarbedrag ... delen door F en rekenkundig afronden op 2 decimalen".
   let jgkReductionCents = 0n;
   if (input.jgkApply === true) {
+    // §24.1.5 gates the korting on Wajong entitlement: a bare election is not
+    // enough, so an ungrounded flag refuses instead of pricing zero or € 923.
+    if (input.jgkBasis !== "wajong_benefit" && input.jgkBasis !== "uwv_entitlement") {
+      throw new PayrollError(
+        "the NL payroll pack cannot apply the jonggehandicaptenkorting without an established "
+        + "Wajong entitlement — declare jgk_basis \"wajong_benefit\" (benefit received, directly or "
+        + "through employer payment) or \"uwv_entitlement\" (eligible but not receiving; Handboek "
+        + "Loonheffingen 2026, §24.1.5)",
+      );
+    }
+    if (input.jgkBasis === "uwv_entitlement" && (input.jgkEvidence ?? "").trim() === "") {
+      throw new PayrollError(
+        "the NL payroll pack cannot apply the jonggehandicaptenkorting for a Wajong-eligible "
+        + "employee without the retained UWV entitlement letter — record its reference in "
+        + "jgk_evidence (Handboek Loonheffingen 2026, §24.1.5)",
+      );
+    }
     const annual = args.aow ? NL_JGK_2026_AOW : NL_JGK_2026;
     const slice = halfUpDiv(BigInt(annual) * 100n, bigF);
     jgkReductionCents = slice > periodicCents ? periodicCents : slice;
@@ -474,7 +504,8 @@ function finishCalculation(args: {
  *
  * - `nl_loonheffingen` (the opgaaf): `apply_loonheffingskorting` (absent form
  *   means not applied), `age_class` ("under_aow" default, "aow_1945" or
- *   "aow_1946"), `aok_apply` / `jgk_apply` (elected kortingen);
+ *   "aow_1946"), `aok_apply` / `jgk_apply` (elected kortingen) with `jgk_basis`
+ *   (the Wajong entitlement) and `jgk_evidence` (the UWV letter reference);
  * - `nl_premies` (the employer's SV administration): `awf_laag` /
  *   `aof_hoog` (no defaults — required when the SV base prices above zero),
  *   `whk_percent` (the beschikking percentage, no lawful default — required
@@ -528,6 +559,8 @@ export async function computeNlStatutory(
     : (certificateChoice(opgaaf, "age_class") ?? "under_aow") as NlAgeClass;
   const aokApply = opgaaf === null ? false : certificateFlag(opgaaf, "aok_apply");
   const jgkApply = opgaaf === null ? false : certificateFlag(opgaaf, "jgk_apply");
+  const jgkBasis = opgaaf === null ? null : certificateChoice(opgaaf, "jgk_basis");
+  const jgkEvidence = opgaaf === null ? null : certificateCode(opgaaf, "jgk_evidence");
 
   const premies = certificateFor("nl_premies");
   // A flag answer is only meaningful when actually answered: the SV legs
@@ -559,6 +592,8 @@ export async function computeNlStatutory(
       : premies === null ? null : certificateAmount(premies, "whk_percent"),
     aokApply,
     jgkApply,
+    jgkBasis,
+    jgkEvidence,
     nonPeriodic,
   });
 
