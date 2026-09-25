@@ -1724,6 +1724,21 @@ export async function requireBankAccountInScope(
   }
 }
 
+/** Lock the account before mutating account-owned statement/reconciliation rows. */
+async function lockBankAccountInScope(
+  executor: BankingSqlExecutor,
+  orgId: string,
+  accountId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<void> {
+  const row = (await executor.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from accounts
+     where id = ${accountId} and org_id = ${orgId}
+     for update
+  `)).rows[0];
+  requireSessionRowInScope(row, scope);
+}
+
 /**
  * Gate a statement line by its bank account's owning subsidiary. Statement
  * lines carry no subsidiary of their own; their account does.
@@ -2118,12 +2133,17 @@ export interface AutoMatchResult {
  */
 export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
   return db.transaction(async (tx) => {
+    const account = (await tx.execute<{ account_id: string }>(sql`
+      select account_id from reconciliations where id = ${reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!account) throw new ScopeNotFoundError();
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
     const bookId = await reconciliationBookId(tx, ctx.orgId);
     const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
       select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
-       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
        for update of r
     `));
     const recon = reconResult.rows[0];
@@ -2261,12 +2281,18 @@ async function createMatchInTransaction(
   journalLineIdsOrFactory: string[] | (() => Promise<string>),
   matchedBy: MatchOrigin,
 ): Promise<ReconciliationTotals> {
+  const account = (await tx.execute<{ account_id: string }>(sql`
+    select account_id from reconciliations
+     where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
+  `)).rows[0];
+  if (!account) throw new ScopeNotFoundError();
+  await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
   const bookId = await reconciliationBookId(tx, ctx.orgId);
   const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
     select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
-     where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId}
+     where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
      for update of r
   `));
   const recon = reconResult.rows[0];
@@ -2414,11 +2440,17 @@ export async function unmatchStatementLine(
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
   return db.transaction(async (tx) => {
+    const account = (await tx.execute<{ account_id: string }>(sql`
+      select account_id from reconciliations
+       where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!account) throw new ScopeNotFoundError();
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
     const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
       select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
-       where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId}
+       where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
        for update of r
     `));
     const recon = reconResult.rows[0];
@@ -2475,8 +2507,9 @@ export async function excludeStatementLine(
   if (reason.length < 5 || reason.length > 500) {
     throw new BankingError("Exclusion reason must be between 5 and 500 characters");
   }
-  await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
+  const account = await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
   await db.transaction(async (tx) => {
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
     const res = (await tx.execute<{ id: string }>(sql`
       update bank_statement_lines l
          set match_status = 'excluded',
@@ -2487,6 +2520,7 @@ export async function excludeStatementLine(
              updated_by = ${ctx.userId}
        where l.id = ${statementLineId}
          and l.org_id = ${ctx.orgId}
+         and l.account_id = ${account.account_id}
          and l.match_status = 'unmatched'
       returning l.id
     `));
@@ -2520,8 +2554,9 @@ export async function clearPossibleDuplicateFlag(
 ): Promise<void> {
   // Clearing the flag mutates another entity's evidence when out of scope:
   // uniform not-found before any read or write, like exclude/restore.
-  await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
+  const account = await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
   await db.transaction(async (tx) => {
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
     // Read the evidence first: UPDATE ... RETURNING would hand back the NEW
     // (nulled) flag, not the before-image the audit row must record.
     const before = (await tx.execute<{ id: string; possible_duplicate_of: string }>(sql`
@@ -2529,6 +2564,7 @@ export async function clearPossibleDuplicateFlag(
         from bank_statement_lines l
        where l.id = ${statementLineId}
          and l.org_id = ${ctx.orgId}
+         and l.account_id = ${account.account_id}
          and l.match_status = 'unmatched'
          and l.possible_duplicate_of is not null
        for update
@@ -2540,6 +2576,7 @@ export async function clearPossibleDuplicateFlag(
              updated_at = now(),
              updated_by = ${ctx.userId}
        where l.id = ${statementLineId} and l.org_id = ${ctx.orgId}
+         and l.account_id = ${account.account_id}
     `);
     await tx.execute(sql`
       insert into audit_log
@@ -2577,6 +2614,7 @@ export async function excludePossibleDuplicates(
   // out-of-scope account refuses before any line is touched.
   await requireBankAccountInScope(db, ctx.orgId, accountId, ctx.allowedSubsidiaryIds);
   return db.transaction(async (tx) => {
+    await lockBankAccountInScope(tx, ctx.orgId, accountId, ctx.allowedSubsidiaryIds);
     const rows = (await tx.execute<{ id: string; possible_duplicate_of: string }>(sql`
       update bank_statement_lines l
          set match_status = 'excluded',
@@ -2614,8 +2652,10 @@ export async function excludePossibleDuplicates(
 
 /** Restore an excluded statement line back to the unmatched queue. */
 export async function restoreStatementLine(statementLineId: string, ctx: BankingContext): Promise<void> {
-  await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
+  const account = await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
   await db.transaction(async (tx) => {
+    await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
     const candidateResult = (await tx.execute<{
         id: string;
         account_id: string;
@@ -2626,6 +2666,7 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
         from bank_statement_lines l
        where l.id = ${statementLineId}
          and l.org_id = ${ctx.orgId}
+         and l.account_id = ${account.account_id}
          and l.match_status = 'excluded'
     `));
     const candidate = candidateResult.rows[0];
@@ -2633,7 +2674,6 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
     // Cover sessions that do not exist yet or whose cutoff does not overlap
     // yet. Header locks alone cannot serialize their creation/extension and
     // sign-off with an exclusion restore that has not committed.
-    await lockReconciliationAccount(tx, ctx.orgId, candidate.account_id);
     // Reconciliation sessions lock their header before touching statement
     // lines. Acquire the same locks first so restore cannot deadlock with a
     // concurrent match/unmatch/sign-off transaction.
@@ -2661,6 +2701,7 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
         from bank_statement_lines l
        where l.id = ${statementLineId}
          and l.org_id = ${ctx.orgId}
+         and l.account_id = ${account.account_id}
          and l.match_status = 'excluded'
        for update
     `));

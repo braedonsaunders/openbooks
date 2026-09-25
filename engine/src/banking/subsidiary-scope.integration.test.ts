@@ -220,32 +220,32 @@ test("start refuses an out-of-scope bank account and writes nothing", { skip: !D
   }
 });
 
-test("import and reconciliation recheck account scope after a concurrent rehome", { skip: !DB }, async () => {
+test("statement-line edits and matching serialize against account rehome", { skip: !DB }, async () => {
   const fx = await seedTwoEntity();
-  const { Client } = await import("pg");
-  const scope = new Set([fx.subA]);
-  const ctx = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scope };
-  const holder: Client = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  const { lineIds } = await importLines(fx, fx.bankA, "scope-line-rehome", ["10", "20"], OPEN);
+  const journalLineId = await postBankLine(fx, { account: fx.bankA, sub: fx.subA, amount: "20", tag: "rehome-match" });
+  const session = await startReconciliation(
+    { accountId: fx.bankA, throughDate: fx.date, statementBalance: "30" },
+    { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN },
+  );
+  const ctx = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
+  const holder: Client = new (await import("pg")).Client({ connectionString: process.env.OPENBOOKS_DB_URL });
   await holder.connect();
   try {
-    for (const action of ["import", "reconciliation"] as const) {
+    const attempts = [
+      { id: lineIds[0]!, run: () => excludeStatementLine(lineIds[0]!, "reviewed duplicate", ctx) },
+      { id: lineIds[1]!, run: () => createMatch({ reconciliationId: session.id, statementLineId: lineIds[1]!, journalLineIds: [journalLineId] }, ctx) },
+    ];
+    for (const attempt of attempts) {
       await db.execute(sql`update accounts set subsidiary_id=${fx.subA} where id=${fx.bankA} and org_id=${fx.orgId}`);
-      await holder.query("begin");
-      await holder.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)", [fx.orgId]);
-      const fence = action === "import" ? `bank-statement-import:${fx.orgId}:${fx.bankA}` : `bank-reconciliation:${fx.orgId}:${fx.bankA}`;
-      await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [fence]);
+      await holder.query("begin").then(() => holder.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)", [fx.orgId]));
+      await holder.query("select id from accounts where id=$1 and org_id=$2 for update", [fx.bankA, fx.orgId]);
       await holder.query("update accounts set subsidiary_id=$1 where id=$2 and org_id=$3", [fx.subB, fx.bankA, fx.orgId]);
-      const pending = action === "import"
-        ? importStatement({ accountId: fx.bankA, source: "manual", currency: "CAD", statementDate: fx.date,
-            lines: [{ postedOn: fx.date, amount: "1", description: "Rehome race" }] }, ctx)
-        : startReconciliation({ accountId: fx.bankA, throughDate: fx.date, statementBalance: "0" }, ctx);
-      let settled = false;
-      let settledError: unknown;
-      void pending.then(() => { settled = true; }, (error) => { settledError = error; settled = true; });
+      let settled = false; const pending = attempt.run().finally(() => { settled = true; });
       await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(settled, false, `${action} must reach the account advisory fence after its scope preflight: ${String(settledError)}`);
-      await holder.query("commit");
-      await assert.rejects(pending, /not found/i, `${action} must refuse after the account moves out of caller scope`);
+      assert.equal(settled, false, "statement work waits for the account ownership lock");
+      await holder.query("commit"); await assertNotFound(pending);
+      assert.equal(await matchStatus(fx, attempt.id), "unmatched");
     }
   } finally {
     await holder.query("rollback").catch(() => undefined);
