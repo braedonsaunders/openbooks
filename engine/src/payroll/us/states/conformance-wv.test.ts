@@ -48,6 +48,15 @@ test("WV IT-100.2A two-earner weekly substitute — $800, 0 exemptions: $25", ()
   assert.equal(result.tax, money("25"));
 });
 
+test("WV nonresident withholding uses only verified West Virginia source wages", () => {
+  // TSD 437: https://tax.wv.gov/Documents/TSD/tsd437.pdf
+  const input = { payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident" as const, certificate: cert({ exemptions: "0" }) };
+  const result = WV_WITHHOLDING.compute({ ...input, wageAllocations: [{ region: "WV", subRegion: null, workShare: "0.4", source: "adequate_records", sourceWagesCurrentPeriod: "320.00" }] });
+  assert.equal(result.factors.WV_SOURCE_WAGES, money("320"));
+  assert.equal(result.tax, money("8")); // $3.04 + 2.81% × ($320 − $144), rounded to dollars.
+  assert.throws(() => WV_WITHHOLDING.compute(input), /WV\/null needs exactly one current-period work allocation.*refused by name/s);
+});
+
 test("WV printed percents and the $2,000 exemption are the publication's own figures", () => {
   assert.equal(WV_RATES_2026.exemptionPerYear, "2000.00");
   assert.equal(WV_RATES_2026.schedules.two_earner.weekly.exemption, "38.46");
