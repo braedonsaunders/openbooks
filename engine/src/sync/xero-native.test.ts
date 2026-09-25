@@ -90,7 +90,7 @@ test("Xero invoices still aggregate repeated lines for one tax type", () => {
   );
 });
 
-test("Xero bank transactions propagate the header reconciled marker", () => {
+test("Xero bank documents preserve transfer valuation safety and reconciliation evidence", () => {
   const codes = new Map([
     ["4000", "sales"],
     ["200", "bank"],
@@ -115,7 +115,7 @@ test("Xero bank transactions propagate the header reconciled marker", () => {
     },
     { accountIdByCode: codes },
   );
-  assert.ok(!("skip" in built));
+  assert.ok(!("skip" in built) && "skip" in buildNativeFromXero({ ...context(), accountByRef: new Map([["from", { id: "from", number: null, name: "CAD", type: "asset_bank" }], ["to", { id: "to", number: null, name: "USD", type: "asset_bank" }]]) }, "BankTransfer", { BankTransferID: "transfer-1", DateString: "2026-08-28", Amount: 100, CurrencyRate: 0.75, FromBankAccount: { AccountID: "from" }, ToBankAccount: { AccountID: "to" } }, { accountIdByCode, accountCurrencyById: new Map([["from", "CAD"], ["to", "USD"]]) }));
   // Xero states reconciliation per bank transaction, not per line: every leg
   // shares the header state (the engine stamps only reconcilable accounts),
   // dated at the bank transaction date (Xero states no clear date).

@@ -13,7 +13,9 @@ import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
  *
  * Line items carry AccountCode (not id) — the adapter provides a code→id map.
  * Tax rides per-line TaxAmount at Xero's ACTUAL amounts, keyed by TaxType →
- * ref-keyed tax code. Amounts convert to base via CurrencyRate when present.
+ * ref-keyed tax code. Document CurrencyRate values convert supported amounts
+ * to base; bank transfers require base-currency accounts because their rate
+ * is between the source and destination accounts, not to organization base.
  * VOIDED / DELETED sources signal "cancelled" (report-only divergence flag).
  */
 
@@ -78,6 +80,8 @@ export interface XeroDoc {
 export interface XeroBuildOpts {
   /** Account Code → AccountID (line items reference codes). */
   accountIdByCode: Map<string, string>;
+  /** Xero account currencies, keyed by AccountID; needed to value transfers safely. */
+  accountCurrencyById?: Map<string, string | undefined>;
   /** The GST/tax system account (RECEIVE-deposit tax source line). */
   gstAccountRef?: string;
 }
@@ -428,12 +432,19 @@ export function buildNativeFromXero(
       const to = byId(t.ToBankAccount?.AccountID);
       const from = byId(t.FromBankAccount?.AccountID);
       if (!to || !from) return { skip: "unmapped transfer account" };
+      const fromCurrency = opts.accountCurrencyById?.get(t.FromBankAccount?.AccountID ?? "");
+      const toCurrency = opts.accountCurrencyById?.get(t.ToBankAccount?.AccountID ?? "");
+      if (fromCurrency !== ctx.baseCurrency || toCurrency !== ctx.baseCurrency || rate !== 1) {
+        return {
+          skip: `BankTransfer ${id} cannot be valued safely from ${fromCurrency ?? "unknown"} to ${toCurrency ?? "unknown"} at rate ${rate}; post it manually with explicit FX valuation`,
+        };
+      }
       return {
         ...base,
         kind: "transfer",
         partyId: null,
         controlAccountId: null,
-        lines: [mk(to, home(t.Amount)), mk(from, 0n)],
+        lines: [mk(to, toUnits(String(t.Amount ?? 0))), mk(from, 0n)],
       };
     }
     default:
