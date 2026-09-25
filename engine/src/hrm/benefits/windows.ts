@@ -110,9 +110,34 @@ async function assertWindowVisible(
   window: EnrollmentWindowDTO,
 ): Promise<void> {
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
-  if (allowed === null) return;
   const employer = window.appliesTo.employer_subsidiary_id;
-  if (employer !== null && !allowed.has(employer)) {
+  const departmentId = window.appliesTo.department_id;
+  let departmentSubsidiaryId: string | null = null;
+  if (departmentId !== null) {
+    const department = (await exec.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from departments
+       where org_id = ${orgId} and id = ${departmentId}
+    `)).rows[0];
+    if (!department) {
+      throw new BenefitsError(
+        "NOT_FOUND",
+        "enrollment window is not visible in this organization and legal-entity scope — reload and retry",
+      );
+    }
+    departmentSubsidiaryId = department.subsidiaryId;
+  }
+  if (employer !== null && departmentSubsidiaryId !== null && employer !== departmentSubsidiaryId) {
+    throw new BenefitsError(
+      "NOT_FOUND",
+      "enrollment window is not visible in this organization and legal-entity scope — reload and retry",
+    );
+  }
+  if (
+    allowed !== null &&
+    ((employer !== null && !allowed.has(employer)) ||
+      (departmentSubsidiaryId !== null && !allowed.has(departmentSubsidiaryId)) ||
+      (departmentId !== null && departmentSubsidiaryId === null && employer === null))
+  ) {
     throw new BenefitsError(
       "NOT_FOUND",
       "enrollment window is not visible in this organization and legal-entity scope — reload and retry",
@@ -134,11 +159,10 @@ async function assertWindowWriteScope(
   window: EnrollmentWindowDTO,
 ): Promise<void> {
   const employer = window.appliesTo.employer_subsidiary_id;
+  await assertWindowVisible(exec, orgId, actorId, window);
   if (employer === null) {
     await requireUnrestrictedHrmScope(exec, orgId, actorId);
-    return;
   }
-  await assertWindowVisible(exec, orgId, actorId, window);
 }
 
 /** Windows are Setup-shaped configuration: create rides the generic Setup CRUD. */
@@ -361,13 +385,33 @@ export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery)
       }
     }
     if (departmentId !== null) {
-      const dept = (
-        await db.execute(sql`select id from departments where org_id = ${orgId} and id = ${departmentId}`)
-      ).rows;
-      if (dept.length !== 1) {
+      const dept = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from departments
+         where org_id = ${orgId} and id = ${departmentId}
+      `)).rows[0];
+      if (!dept) {
+        throw new BenefitsError(
+          "NOT_FOUND",
+          "the window names a department outside this organization and legal-entity scope — choose a visible department",
+        );
+      }
+      const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+      if (
+        (allowed !== null && dept.subsidiaryId !== null && !allowed.has(dept.subsidiaryId)) ||
+        (allowed !== null && dept.subsidiaryId === null && employerSubsidiaryId === null)
+      ) {
+        throw new BenefitsError(
+          "NOT_FOUND",
+          "the window names a department outside this organization and legal-entity scope — choose a visible department",
+        );
+      }
+      if (
+        employerSubsidiaryId !== null && dept.subsidiaryId !== null &&
+        employerSubsidiaryId !== dept.subsidiaryId
+      ) {
         throw new BenefitsError(
           "REFUSED",
-          "the window names a department outside this organization — scope it to a department of this org, or leave it org-wide",
+          "the window's department belongs to a different employer subsidiary — choose a department owned by the anchored employer or clear the department",
         );
       }
     }
