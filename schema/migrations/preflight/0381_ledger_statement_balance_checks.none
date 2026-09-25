@@ -1,0 +1,1 @@
+Statement-level balance triggers validate writes going forward and assume nothing about existing rows; posted-history balance is already covered by migration 0380's preflight. No operator data repair is needed for this migration.

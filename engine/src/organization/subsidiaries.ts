@@ -7,8 +7,8 @@ import { add, fromUnits, isZero, mulRate, neg, normalizeDecimal, roundDiv, toUni
  * one tenant). Loads the org's subsidiary tree once per posting, resolves
  * every kernel line to a legal entity, validates restrictions, and — when an
  * entry spans subsidiaries — injects the due-to/due-from legs that make each
- * subsidiary's books balance on their own (the kernel trigger
- * jl_balanced_by_subsidiary is the final authority).
+ * subsidiary's books balance on their own (the statement-level per-
+ * subsidiary balance trigger is the final authority).
  */
 
 type Runner = Pick<typeof db, "execute">;

@@ -14,8 +14,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
  * Anti-false-green for the harness's kernel mirrors. `global-balance` and
- * `per-entry-balance` restate in SQL what PostgreSQL enforces on every write
- * (`jl_check_balanced`, exact, no tolerance) — so through every legitimate
+ * `per-entry-balance` restate in SQL what PostgreSQL enforces on posting
+ * (the statement-level balance triggers, exact, no tolerance) — so through
+ * every legitimate
  * write path they cannot fail, and a test that only posts legally can never
  * prove they bite. This file simulates the one scenario they exist for, a
  * kernel that stopped enforcing balance, by inserting an unbalanced posted

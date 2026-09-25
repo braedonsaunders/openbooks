@@ -1092,9 +1092,9 @@ async function postFixtureDoc(
        ${docNumber}, ${org.date}, ${org.periodId}, ${`Fixture ${docNumber}`},
        'draft', ${documentId}, 'document')
   `);
-  // One multi-row statement: the jl_balanced / jl_balanced_by_subsidiary
-  // constraint triggers fire at commit, so every line of the entry must land
-  // in the same statement — per-line inserts trip the guard mid-entry.
+  // One multi-row statement: the statement-level balance triggers validate
+  // each touched entry at the statement, so every line of the entry must
+  // land in the same statement — per-line inserts trip the guard mid-entry.
   const lineValues = lines.map((line, i) => sql`(${lineIds[i]}, ${org.orgId}, ${entryId}, ${i + 1}, ${line.accountId},
          ${org.subsidiaryId}, ${line.amount}, ${line.currency ?? "CAD"},
          ${line.txnAmount ?? line.amount}, ${line.fxRate ?? "1"},
