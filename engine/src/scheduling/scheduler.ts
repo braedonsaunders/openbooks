@@ -165,8 +165,15 @@ async function finalizeOccurrence(
  * skip every tick between the cursor and the outage end with no ledger row.
  * Each missed tick is therefore claimed (and run) in turn until the cursor
  * lands on the next future tick.
+ *
+ * The ledger row's `at` is the CLAIM time, not the scheduled tick: recovery
+ * treats rows older than OCCURRENCE_STALE_MS as orphaned, so stamping a
+ * catch-up claim with its (already stale) scheduled tick would make recovery
+ * re-dispatch live occurrences and then mark them "lost" although they ran.
+ * The scheduled tick stays on the row as the occurrence identity
+ * (occurrenceKey) and the `scheduledFor` claim event.
  */
-export async function claimDueScriptOccurrence(s: DueScript): Promise<ClaimedOccurrence | null> {
+export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): Promise<ClaimedOccurrence | null> {
   let next: Date;
   try {
     next = computeScheduledScriptNextRunAt(s.cron, asDbDate(s.nextRunAt));
@@ -211,7 +218,7 @@ export async function claimDueScriptOccurrence(s: DueScript): Promise<ClaimedOcc
                'occurrence', ${occurrenceKey}::text,
                'scheduledFor', ${scheduledForIso}::text,
                'attempt', 1)),
-             ${s.nextRunAt}
+             ${now}
       from advanced
       returning id
     `));
@@ -358,7 +365,7 @@ export async function runDueScripts(now = new Date()): Promise<void> {
     let cursor: DueScript = s;
     for (let n = 0; n < MAX_CATCHUP_OCCURRENCES_PER_PASS; n++) {
       if (asDbDate(cursor.nextRunAt).getTime() > now.getTime()) break;
-      const occ = await claimDueScriptOccurrence(cursor);
+      const occ = await claimDueScriptOccurrence(cursor, now);
       if (!occ) break; // someone else claimed it (or it changed)
       await dispatchScriptOccurrence(occ, 1);
       cursor = { ...cursor, nextRunAt: occ.nextRunAt };
@@ -468,9 +475,14 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
 
   // 3) Retry orphaned first attempts exactly once. The CAS on status keeps a
   //    concurrent completion (step 1 of a parallel tick) from being overwritten.
+  //    The retry reuses the occurrence identity from the row's claim event —
+  //    never re-derived from `at`, which is the claim time since the catch-up
+  //    fix. Re-deriving from `at` would mint a fresh journal namespace and
+  //    double-post (SCHED1). Rows predating the fix stamped `at` with the
+  //    scheduled tick, so the legacy derivation still resolves them.
   const stale = await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string; scriptId: string; at: Date | string }>(sql`
-      select id, org_id as "orgId", script_id as "scriptId", at
+    db.execute<{ id: string; orgId: string; scriptId: string; at: Date | string; logs: unknown }>(sql`
+      select id, org_id as "orgId", script_id as "scriptId", at, logs
         from script_runs
        where target_kind = 'scheduled_occurrence'
          and status = 'queued'
@@ -487,13 +499,27 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
          where id = ${row.id} and status = 'queued'
       `));
     if (!transitioned.rowCount) continue; // evidence landed concurrently
+    const claimedEvent = (Array.isArray(row.logs) ? row.logs : []).find(
+      (event): event is { event: unknown; occurrence: unknown; scheduledFor: unknown } =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { event?: unknown }).event === "claimed",
+    );
+    const occurrenceKey =
+      typeof claimedEvent?.occurrence === "string" && claimedEvent.occurrence.length > 0
+        ? claimedEvent.occurrence
+        : scriptOccurrenceKey(row.scriptId, row.at);
+    const scheduledFor =
+      typeof claimedEvent?.scheduledFor === "string" && !Number.isNaN(Date.parse(claimedEvent.scheduledFor))
+        ? new Date(claimedEvent.scheduledFor)
+        : asDbDate(row.at);
     await dispatchScriptOccurrence(
       {
         id: row.id,
         orgId: row.orgId,
         scriptId: row.scriptId,
-        occurrenceKey: scriptOccurrenceKey(row.scriptId, row.at),
-        nextRunAt: asDbDate(row.at),
+        occurrenceKey,
+        nextRunAt: scheduledFor,
       },
       MAX_OCCURRENCE_ATTEMPTS,
     );
