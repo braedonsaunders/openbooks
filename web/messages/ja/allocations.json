@@ -234,6 +234,11 @@
       "label": "ラベル",
       "labelPlaceholder": "配賦先ラベル",
       "portion": "割合",
+      "portionKinds": {
+        "remainder": "残り",
+        "percent": "パーセント",
+        "weight": "重み"
+      },
       "save": "配賦先を保存",
       "saved": "配賦先を保存しました。"
     },

@@ -234,6 +234,11 @@
       "label": "Libellé",
       "labelPlaceholder": "Libellé du destinataire",
       "portion": "Quote-part",
+      "portionKinds": {
+        "remainder": "Reste",
+        "percent": "Pourcentage",
+        "weight": "Poids"
+      },
       "save": "Enregistrer les destinataires",
       "saved": "Destinataires enregistrés."
     },
