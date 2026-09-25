@@ -117,6 +117,10 @@ export async function loadClockPageData(
         code: 'field_time_not_configured',
         ...(opts.canManageSetup ? { action: { href: '/time/setup', label: t('field.openSetup') } } : {}),
       },
+      // The photo folder helper names its own remedy (open the File
+      // Cabinet once); the message already says where to go, so no
+      // action link is needed.
+      { error: FieldTimeError, code: 'clock_photo_unavailable' },
     ],
     title: t('field.title'),
   })
@@ -161,8 +165,12 @@ async function clockBody(orgId: string, userId: string, t: ClockText) {
   if (photoRequired) {
     try {
       photoFolderId = await ensureClockPhotoFolder(orgId, userId)
-    } catch {
-      photoFolderId = null
+    } catch (e) {
+      // A missing File Cabinet root never heals by reopening the clock
+      // page: the helper's own remedy ("open the File Cabinet once")
+      // refuses here instead of nulling the folder into guidance that
+      // cannot work.
+      throw new FieldTimeError('clock_photo_unavailable', e instanceof Error ? e.message : String(e))
     }
   }
   // Legal-entity isolation, mirroring the weekly timesheet PUT: the picker
