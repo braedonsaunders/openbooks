@@ -21,6 +21,8 @@ export type ReportDrillTarget =
       bookId?: string
       basis?: StatementBasis
       partyIds?: string[]
+      /** Ledger lines with no party, kept separate from an unfiltered total. */
+      unassignedParty?: boolean
       projectCustomerId?: string
       unassignedProjectCustomer?: boolean
       projectSearch?: string
@@ -44,6 +46,8 @@ export type ReportDrillTarget =
       /** Subsidiary context node the report was viewed under (scoped server-side). */
       subsidiaryId?: string
       partyId?: string
+      /** Open documents with no party, kept separate from an unfiltered total. */
+      unassignedParty?: boolean
       bucket?: AgingBucket
       /** Currency basis the report was viewed under; absent reads base. */
       currencyBasis?: AgingCurrencyBasis
@@ -206,6 +210,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     if (!to || !ISO_DATE.test(to) || (from && !ISO_DATE.test(from))) return null
     if (input.accountIds !== undefined && !accountIds) return null
     if (input.partyIds !== undefined && !partyIds) return null
+    if (partyIds && input.unassignedParty === true) return null
     if (input.projectCustomerId !== undefined && !projectCustomerId) return null
     if (input.bookId !== undefined && !bookId) return null
     if (input.projectSearch !== undefined && !projectSearch) return null
@@ -225,6 +230,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       bookId,
       basis: input.basis === 'cash' ? 'cash' : 'accrual',
       partyIds,
+      unassignedParty: input.unassignedParty === true,
       projectCustomerId,
       unassignedProjectCustomer: input.unassignedProjectCustomer === true,
       projectSearch,
@@ -250,7 +256,10 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     const currency = typeof input.currency === 'string' && /^[A-Z]{3}$/.test(input.currency)
       ? input.currency
       : undefined
+    const partyId = uuidValue(input.partyId)
     if (!asOf || !ISO_DATE.test(asOf) || !side) return null
+    if (input.partyId !== undefined && !partyId) return null
+    if (partyId && input.unassignedParty === true) return null
     return {
       kind: 'aging',
       label,
@@ -258,7 +267,8 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       asOf,
       dims: dimsValue(input.dims),
       subsidiaryId: uuidValue(input.subsidiaryId),
-      partyId: uuidValue(input.partyId),
+      partyId,
+      unassignedParty: input.unassignedParty === true,
       bucket,
       currencyBasis,
       currency,
