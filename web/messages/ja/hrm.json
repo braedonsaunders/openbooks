@@ -1845,7 +1845,13 @@
       "issuedOn": "発行日",
       "expiresOn": "有効期限",
       "identifier": "免許番号",
-      "notes": "備考"
+      "notes": "備考",
+      "evidence": "証拠ファイル",
+      "evidencePlaceholder": "ファイルキャビネットを検索",
+      "evidenceSearchPlaceholder": "ファイルを検索…",
+      "evidenceSearchHint": "検索するには2文字以上入力してください。",
+      "evidenceRequired": "この資格種別の証拠を選択してください。",
+      "evidenceSearchFailed": "ファイルを検索できませんでした。"
     },
     "tiles": {
       "expiring": "まもなく失効",

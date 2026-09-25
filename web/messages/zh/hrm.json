@@ -1845,7 +1845,13 @@
       "issuedOn": "签发日期",
       "expiresOn": "到期日期",
       "identifier": "执照编号",
-      "notes": "备注"
+      "notes": "备注",
+      "evidence": "证明文件",
+      "evidencePlaceholder": "搜索文件柜",
+      "evidenceSearchPlaceholder": "搜索文件…",
+      "evidenceSearchHint": "请输入至少两个字符进行搜索。",
+      "evidenceRequired": "请为此资格类型选择证明文件。",
+      "evidenceSearchFailed": "无法搜索文件。"
     },
     "tiles": {
       "expiring": "即将到期",
