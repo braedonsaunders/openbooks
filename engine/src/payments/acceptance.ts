@@ -1,10 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "../money/money.ts";
 import { sealJson, sealSecret, unsealJson, unsealSecret } from "../platform/secrets.ts";
 import { paymentLinkTokenHash } from "./payment-link-seal.ts";
+import { loadPaymentProviderConfig } from "./payment-link-session-expiry.ts";
 import {
   ATTR_KIND,
   ATTR_ORG_ID,
@@ -303,7 +304,6 @@ function safeEqual(a: string, b: string): boolean {
 export interface PaymentProviderAdapter {
   key: AcceptanceProvider;
   createCheckout(secrets: ProviderSecrets, req: CheckoutRequest, fetchFn?: FetchFn): Promise<CheckoutSession>;
-  expireCheckout?(secrets: ProviderSecrets, externalRef: string, fetchFn?: FetchFn): Promise<boolean>;
   /** Verify and normalize a complete delivery without conflating authentication
    *  with whether this service handles any of its event types. A signature-
    *  valid item whose fields cannot be normalized exactly is isolated — logged
@@ -480,16 +480,6 @@ const stripeAdapter: PaymentProviderAdapter = {
       throw new PaymentAcceptanceError("stripe checkout returned no session url");
     }
     return { redirectUrl: json.url, externalRef: json.id };
-  },
-  async expireCheckout(secrets, externalRef, fetchFn = defaultFetch) {
-    if (!secrets.apiKey) return false;
-    const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
-    const res = await fetchFn(`${base}/v1/checkout/sessions/${encodeURIComponent(externalRef)}/expire`, {
-      method: "POST",
-      redirect: "error",
-      headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}` },
-    });
-    return res.status < 400;
   },
   verifyWebhookDelivery: verifyStripeWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
@@ -786,21 +776,6 @@ type ProviderConfigRow = {
   secrets: string | null;
 };
 
-async function loadProviderConfig(
-  orgId: string,
-  provider: AcceptanceProvider,
-  runner: SqlExecutor = db,
-): Promise<ProviderConfigRow | null> {
-  const r = (await runner.execute<ProviderConfigRow>(sql`
-    select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
-           publishable_key, settings, surcharge_rule_id, secrets
-      from psp_provider_configs
-     where org_id = ${orgId} and provider = ${provider}
-     limit 1
-  `));
-  return r.rows[0] ?? null;
-}
-
 export function configSecrets(config: ProviderConfigRow): ProviderSecrets {
   const sealed = unsealJson<{ apiKey?: string; webhookSecret?: string }>(config.secrets);
   const settings = normalizeAcceptanceProviderSettings(config.provider, config.settings ?? {});
@@ -811,62 +786,6 @@ export function configSecrets(config: ProviderConfigRow): ProviderSecrets {
     merchantAccount: typeof settings.merchantAccount === "string" ? settings.merchantAccount : undefined,
     apiBase: typeof settings.apiBase === "string" ? settings.apiBase : undefined,
   };
-}
-
-/** Expire stale Stripe sessions after an invoice payment changes the balance.
- * Other adapters have no supported session-expiry endpoint here; settlement
- * still checks the locked invoice and routes any completed stale collection
- * to discrepancy review. Provider failures are audited and never roll back an
- * already-posted payment. */
-export async function expireStalePaymentLinkSessions(
-  orgId: string,
-  invoiceIds: readonly string[],
-): Promise<void> {
-  if (invoiceIds.length === 0) return;
-  const attempts = await withBypassContext(() => db.execute<{
-    id: string; linkId: string; provider: AcceptanceProvider; externalRef: string; invoiceId: string;
-  }>(sql`
-    select attempt.id, link.id as "linkId", attempt.provider, attempt.external_ref as "externalRef",
-           link.document_id as "invoiceId"
-      from payment_attempts attempt
-      join payment_links link on link.id = attempt.link_id and link.org_id = attempt.org_id
-      join documents invoice on invoice.id = link.document_id and invoice.org_id = link.org_id
-     where attempt.org_id = ${orgId} and link.document_id in ${invoiceIds}
-       and attempt.status = 'initiated' and link.amount is not null
-       and link.amount > invoice.open_balance
-  `));
-  for (const attempt of attempts.rows) {
-    const config = await withBypassContext(() => loadProviderConfig(orgId, attempt.provider));
-    const adapter = ACCEPTANCE_ADAPTERS[attempt.provider];
-    if (!config || !adapter.expireCheckout) continue;
-    let expired = false;
-    try {
-      expired = await adapter.expireCheckout(configSecrets(config), attempt.externalRef);
-    } catch {
-      expired = false;
-    }
-    await withOrg(orgId, async () => {
-      const evidence = {
-        reason: "invoice_balance_changed",
-        outcome: expired ? "provider_session_expired" : "provider_session_expiry_failed",
-        invoiceId: attempt.invoiceId,
-      };
-      const updated = await db.execute<{ id: string }>(sql`
-        update payment_attempts
-           set status = ${expired ? "cancelled" : "initiated"},
-               event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify({ sessionInvalidation: evidence })}::jsonb,
-               updated_at = now()
-         where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
-         returning id
-      `);
-      if (!updated.rows[0]) return;
-      await db.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'payment_attempts', ${attempt.id}, 'update',
-                ${JSON.stringify({ after: { sessionInvalidation: evidence } })}::jsonb, null)
-      `);
-    });
-  }
 }
 
 export interface SurchargeResolution {
@@ -1223,7 +1142,7 @@ export async function createPaymentLink(
     if (!doc.party_id) throw new PaymentAcceptanceError("invoice has no customer");
     if (cmp(doc.open_balance, "0") <= 0) throw new PaymentAcceptanceError("invoice has no open balance");
 
-    const config = await loadProviderConfig(orgId, input.provider);
+    const config = await loadPaymentProviderConfig<ProviderConfigRow>(orgId, input.provider);
     if (!config?.is_enabled || !config.acceptance_enabled) {
       throw new PaymentAcceptanceError(`${input.provider} payment acceptance is not configured`);
     }
@@ -1429,7 +1348,7 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
     `));
     const row = ctx.rows[0];
     if (!row) return null;
-    const config = await loadProviderConfig(link.orgId, link.provider);
+    const config = await loadPaymentProviderConfig<ProviderConfigRow>(link.orgId, link.provider);
     if (cmp(row.openBalance, "0") > 0 && link.amount !== null && cmp(link.amount, row.openBalance) !== 0) {
       return {
         orgName: row.orgName,
@@ -1560,7 +1479,7 @@ export async function createCheckoutSession(
     }
     const invoiceAmount = link.amount ?? openBalance;
 
-    const config = await loadProviderConfig(link.orgId, link.provider);
+    const config = await loadPaymentProviderConfig<ProviderConfigRow>(link.orgId, link.provider);
     if (!config?.is_enabled || !config.acceptance_enabled) throw new PaymentAcceptanceError("provider is not configured");
     // A link with a frozen surcharge is independent of the provider's current
     // surcharge-rule reference. Do not reject a valid quoted checkout merely
@@ -2547,10 +2466,10 @@ export async function saveAcceptanceConfig(
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${`payment-acceptance-config:${orgId}:${input.provider}`}, 0))
     `);
-    type ConfigRow = NonNullable<Awaited<ReturnType<typeof loadProviderConfig>>>;
+    type ConfigRow = ProviderConfigRow;
     // Snapshot the stored config first so the audit row carries the real
     // before/after state; sealed secrets appear only as presence flags.
-    const existing = await loadProviderConfig(orgId, input.provider, tx);
+    const existing = await loadPaymentProviderConfig<ProviderConfigRow>(orgId, input.provider, tx);
     // Omitted keys survive UI saves (the setup form posts only the fields it
     // renders); supplied values overwrite, and the merged result passes the
     // canonical endpoint normalizer.
