@@ -54,6 +54,8 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
       ehtEarnings: "0",
       hsfAmount: "0",
       hsfEarnings: "0",
+      cntAmount: "0",
+      cntEarnings: "0",
     },
   };
 }

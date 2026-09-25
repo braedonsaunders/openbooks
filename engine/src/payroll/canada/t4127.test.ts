@@ -34,7 +34,7 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
     certificateFor: (key: string) => key === certificate.key ? resolved : null,
     bool: () => false, assertRegionSupported: () => undefined,
     employerLevies: { wcbAmount: "0", wcbAssessable: "0", ehtAmount: "0", ehtEarnings: "0",
-      hsfAmount: "0", hsfEarnings: "0" },
+      hsfAmount: "0", hsfEarnings: "0", cntAmount: "0", cntEarnings: "0" },
     } as never);
     return taxes;
   };

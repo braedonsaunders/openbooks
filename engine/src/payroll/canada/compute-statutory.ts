@@ -50,6 +50,8 @@ export const CA_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   EHT_EARN: "EHT remuneration (Ontario)",
   HSF: "Health Services Fund (employer)",
   HSF_EARN: "HSF remuneration subject",
+  CNT: "Contribution related to labour standards (employer)",
+  CNT_EARN: "CNT remuneration subject",
 };
 
 export type CanadaYtdRow = {
@@ -135,7 +137,7 @@ export async function computeCaStatutory(
   // math, bit-identical); the engine always provides it via the pack's
   // declared contribution program.
   const qpipInsurable = ctx.programBases?.["qpip"] ?? insurable;
-  const { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings } = employerLevies;
+  const { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings, cntAmount, cntEarnings } = employerLevies;
 
   assertRegionSupported(region);
 
@@ -237,5 +239,6 @@ export async function computeCaStatutory(
     ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
     ...(cmp(ehtEarnings, "0") > 0 ? { EHT: ehtAmount, EHT_EARN: ehtEarnings } : {}),
     ...(cmp(hsfEarnings, "0") > 0 ? { HSF: hsfAmount, HSF_EARN: hsfEarnings } : {}),
+    ...(cmp(cntEarnings, "0") > 0 ? { CNT: cntAmount, CNT_EARN: cntEarnings } : {}),
   };
 }

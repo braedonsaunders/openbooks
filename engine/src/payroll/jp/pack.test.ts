@@ -256,6 +256,8 @@ function fakeCtx(overrides: {
       ehtEarnings: "0",
       hsfAmount: "0",
       hsfEarnings: "0",
+      cntAmount: "0",
+      cntEarnings: "0",
     },
     tx: {} as PayrollStatutoryComputeContext["tx"],
   } as PayrollStatutoryComputeContext;

@@ -42,7 +42,7 @@ export async function listPayrollEmployerFacts(
 export async function resolveStoredEmployerFact(input: {
   tx: Pick<typeof db, "execute">;
   orgId: string;
-  subsidiaryId: string;
+  subsidiaryId: string | null;
   country: string;
   factKey: string;
   asOf: string;

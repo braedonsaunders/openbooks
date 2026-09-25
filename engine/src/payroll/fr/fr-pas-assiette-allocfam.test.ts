@@ -97,6 +97,8 @@ function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): 
       ehtEarnings: "0",
       hsfAmount: "0",
       hsfEarnings: "0",
+      cntAmount: "0",
+      cntEarnings: "0",
     },
   };
 }

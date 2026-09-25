@@ -410,8 +410,10 @@ export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[
  * `gaps` names the RLZ-1.S lines this product does NOT produce, rather than
  * printing zeros an employer might file: the health services fund annual
  * total (per-stub HSF accrues at the tenant-entered QC rate, but the RLZ-1.S
- * annual reconciliation is not produced), the CNT labour-standards
- * levy, the WSDRF training levy, and the year's remittances made to Revenu
+ * annual reconciliation is not produced), the CNT labour-standards levy
+ * annual reconciliation (per-stub CNT accrues at the statutory 2026 rate,
+ * but the RLZ-1.S annual reconciliation is not produced), the WSDRF
+ * training levy, and the year's remittances made to Revenu
  * Québec. The last is a reporting boundary, not a tracking gap: RQ
  * remittance bills are dated and tracked per destination from the RQ schedule
  * (see Payroll → Remittances), but this summary does not reconcile
@@ -436,7 +438,9 @@ export interface Rl1SummaryTotals {
 export const RLZ1S_GAPS = [
   "health services fund annual total is not reconciled on this summary — per-stub HSF accrues "
   + "at the tenant-entered QC rate (TP-1015.F-V s. 5)",
-  "labour standards (CNT) and WSDRF training contributions are not computed",
+  "labour standards (CNT) annual total is not reconciled on this summary — per-stub CNT accrues "
+  + "at the statutory 2026 rate (0.06% to $103,000 per employee)",
+  "WSDRF training contributions are not computed",
   "remittances made to Revenu Québec during the year are not reconciled on this summary — " +
     "Payroll → Remittances dates and tracks each RQ bill from the RQ schedule",
 ];
