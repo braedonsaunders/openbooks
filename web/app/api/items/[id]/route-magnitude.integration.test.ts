@@ -19,9 +19,7 @@ registerHooks({
         const s = globalThis.__itemPatchMagnitudeState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-      // Catalog policy writes require unrestricted scope (1cb07bf7b); the
-      // scripted actor is unrestricted (allowedSubsidiaryIds: null), so the
-      // gate passes like the real guard would.
+      // Catalog writes need unrestricted scope (1cb07bf7b); the scripted actor is unrestricted, so this passes.
       export function guardUnrestrictedScope() { return null; }
     `)
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)

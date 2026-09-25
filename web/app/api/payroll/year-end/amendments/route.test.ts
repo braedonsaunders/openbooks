@@ -311,8 +311,7 @@ test('a restricted original naming one in-scope row is still refused: the servic
 test('a restricted correction naming in-scope rows is allowed: it persists exactly those rows', async () => {
   reset()
   restrict()
-  // Amendments require explicit confirmation (2ddfd6895); the scope under
-  // test is reached past that orthogonal boundary, like confirmedCancellation.
+  // Amendments need explicit confirmation (2ddfd6895); this posts past it like the cancellation posts do.
   const response = await post({ revision: 'amended', confirmedAmendment: true, rowIds: ['row-a'] })
 
   assert.equal(response.status, 200)

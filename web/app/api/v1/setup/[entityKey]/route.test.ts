@@ -120,8 +120,7 @@ test("POST /api/v1/setup/[entityKey] creates through the Setup command", async (
   assert.deepEqual(await response.json(), { id: "row-1" });
   assert.equal(response.headers.get("idempotency-replayed"), "false");
   assert.deepEqual(routeState.created, {
-    // I1-refix-09: the route threads the actor scope into the Setup command;
-    // null is the unrestricted setup admin this double models.
+    // I1-refix-09 threads actor scope into the Setup command; null is the unrestricted admin modeled here.
     actor: { orgId: "org-1", id: "user-1", permissions: ["admin.setup.manage"], allowedSubsidiaryIds: null },
     entityKey: "tax-codes",
     body: { code: "GST", rate: "5" },
