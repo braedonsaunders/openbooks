@@ -335,9 +335,39 @@ export function moduleExports(src) {
  */
 export function starReexports(body, fromFile, root = ROOT) {
   const names = new Set();
+  // Interpolated re-exports (`export * from '${dbUrl}'`) name the real
+  // module through a binding in the TEST file rather than a literal, so the
+  // quoted-candidate scan below cannot see them. Resolve the small set of URL
+  // bindings tests use to name real modules (`new URL('./x',
+  // import.meta.url).href` and `import.meta.resolve('spec')`).
+  let bindings = null;
+  const bindingTarget = (name) => {
+    if (bindings === null) {
+      bindings = new Map();
+      const testSrc = readCached(fromFile) ?? "";
+      for (const m of testSrc.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+URL\(\s*(['"`])([^'"`]+)\2\s*,\s*import\.meta\.url\s*\)\.href/g)) {
+        const target = cachedResolve(m[3], fromFile, root);
+        if (target) bindings.set(m[1], target);
+      }
+      for (const m of testSrc.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*import\.meta\.resolve\(\s*(['"`])([^'"`]+)\2\s*\)/g)) {
+        const target = cachedResolve(m[3], fromFile, root);
+        if (target) bindings.set(m[1], target);
+      }
+    }
+    return bindings.get(name) ?? null;
+  };
   for (const line of stripComments(body).split("\n")) {
     const star = line.match(/export\s*\*\s*from\s*(.+)$/);
     if (!star) continue;
+    let interpolated = false;
+    for (const m of star[1].matchAll(/\$\{([A-Za-z_$][\w$]*)\}/g)) {
+      const target = bindingTarget(m[1]);
+      if (!target) continue;
+      for (const name of cachedExports(target)) names.add(name);
+      interpolated = true;
+      break;
+    }
+    if (interpolated) continue;
     // In the `new URL('./x.ts', import.meta.url).href` form the outer quote
     // pairs with the interpolation's OWN quote, so a general quoted-run match
     // captures `${new URL(` and never sees the path between them. A specifier
@@ -668,6 +698,47 @@ export function parseWiring(src) {
   }
   for (const match of src.matchAll(/\.set\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]mock:([^'"`]+)['"`]\s*\)/g)) {
     rules.push({ spec: { kind: "exact", value: match[1] }, parent: { kind: "any" }, mock: match[2] });
+  }
+  // Specs a same-file `if` explicitly passes through to the real module
+  // (`return nextResolve(...)` with no mock in the consequence): parent-scoped
+  // wiring where only one importer's edge is doubled and every other importer
+  // stays real. A blanket pair rule would over-mock those real edges into
+  // false gaps, so pair-shaped rules below skip these specs.
+  const passthroughSpecs = new Set();
+  for (const match of src.matchAll(/if\s*\(/g)) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let end = open;
+    let closed = false;
+    for (; end < src.length; end++) {
+      if (src[end] === "(") depth++;
+      else if (src[end] === ")") {
+        depth--;
+        if (depth === 0) { closed = true; break; }
+      }
+    }
+    if (!closed) continue;
+    const block = consequence(src, end + 1);
+    if (!block || !block.includes("nextResolve") || block.includes("mock:")) continue;
+    for (const test of src.slice(match.index, end + 1).matchAll(/specifier\s*===\s*['"`]([^'"`]+)['"`]/g)) {
+      passthroughSpecs.add(test[1]);
+    }
+  }
+  // Ternary wiring: `specifier === 'X' ? 'mock:Y' : ...` chains hold no `if`,
+  // so the condition scanner never sees them. Each alternative maps one real
+  // specifier to its double unconditionally, exactly like a literal pair.
+  for (const match of src.matchAll(/specifier\s*===\s*(['"`])([^'"`]+)\1\s*\?\s*(['"`])mock:([^'"`]+)\3/g)) {
+    if (!passthroughSpecs.has(match[2])) {
+      rules.push({ spec: { kind: "exact", value: match[2] }, parent: { kind: "any" }, mock: match[4] });
+    }
+  }
+  // Helper indirection: `['real', mockUrl('name')]` resolves to a computed
+  // self-URL whose query the load hook maps back to `mock:name`, so the net
+  // effect is the same real → double edge a literal pair declares.
+  for (const match of src.matchAll(/\[\s*(['"`])([^'"`]+)\1\s*,\s*mockUrl\(\s*(['"`])([^'"`]+)\3\s*\)/g)) {
+    if (!passthroughSpecs.has(match[2])) {
+      rules.push({ spec: { kind: "exact", value: match[2] }, parent: { kind: "any" }, mock: match[4] });
+    }
   }
   // Object-literal wiring: const mocks = { 'real': 'mock:X', ... }; mocks[specifier].
   for (const match of src.matchAll(/['"`]([^'"`]+)['"`]\s*:\s*['"`]mock:([^'"`]+)['"`]/g)) {
