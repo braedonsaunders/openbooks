@@ -219,6 +219,12 @@ export function CardStudio({
   const first = useRef(true)
   const saveSeq = useRef(0)
   const saveAbort = useRef<AbortController | null>(null)
+  // Declared before the autosave effect so its teardown runs first: effect
+  // cleanups can then tell a re-run (cancel and re-arm) from an unmount.
+  const mountedRef = useRef(true)
+  useEffect(() => () => {
+    mountedRef.current = false
+  }, [])
 
   /** One save attempt for an already-fenced sequence number. */
   async function runSave(seq: number, draft: CardSaveDraft) {
@@ -272,16 +278,47 @@ export function CardStudio({
     saveAbort.current?.abort()
     saveAbort.current = null
     dispatchSave({ type: 'edit', draft: savePayload })
+    let sent = false
     const timer = setTimeout(() => {
+      sent = true
       void runSave(seq, savePayload)
     }, 600)
     return () => {
       clearTimeout(timer)
-      saveAbort.current?.abort()
-      saveAbort.current = null
+      if (mountedRef.current) {
+        saveAbort.current?.abort()
+        saveAbort.current = null
+        return
+      }
+      // Unmount with a debounced edit that never sent: flush the latest
+      // draft instead of dropping it. Drawer close navigates client-side,
+      // so the JS context outlives the studio and the PATCH still completes;
+      // an in-flight save is likewise left to finish, never aborted. This
+      // render's sequence is reused rather than minting a fresh one: no
+      // newer save can be scheduled after unmount, and its response adopts
+      // exactly like the timer's save would have.
+      if (!sent) {
+        void runSave(seq, savePayload)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload, ro])
+
+  // Create mode is local-only until explicit Save: the pristine payload is
+  // the dirtiness baseline for the drawer close guard.
+  const [initialPayload] = useState(savePayload)
+  const createDirty = createMode && JSON.stringify(savePayload) !== JSON.stringify(initialPayload)
+  const unsaved = createDirty || (!createMode && !ro && save.status !== 'saved')
+  useEffect(() => {
+    if (!unsaved) return
+    // A full unload (refresh, tab close) would drop a debounced edit the
+    // unmount flush cannot send: warn first, never lose silently.
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [unsaved])
 
   /** Retry a failed autosave with the kept edit and the current token. */
   async function retrySave() {
@@ -426,10 +463,28 @@ export function CardStudio({
   const dimensionCols = outputColumns.filter((c) => c.role === 'dimension')
   const measureCols = outputColumns.filter((c) => c.role === 'measure')
 
+  // Drawer close never drops work silently. An unflushed debounced edit is
+  // sent by the unmount flush, so the guard only fires for a create draft
+  // (local-only, nothing to flush) or a dirty/errored save machine whose
+  // flush could still fail. An in-flight save completes in the background —
+  // teardown no longer aborts it — so pure `saving` closes freely.
+  async function confirmDiscard() {
+    if (busy) return false
+    const discardable =
+      createDirty || (!createMode && !ro && (save.status === 'dirty' || save.status === 'error'))
+    if (!discardable) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
   return (
     <UrlDrawer
       open
       closeHref="/insights"
+      beforeClose={confirmDiscard}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
