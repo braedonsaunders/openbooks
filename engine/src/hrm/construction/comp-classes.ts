@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
+import { resolveEffectiveEmployment } from "../effective-employment.ts";
 import {
   requireConstructionScope,
   requireHrmConstructionRead,
@@ -305,33 +306,38 @@ export async function dailySplit(
   await assertProjectInScope(exec, orgId, projectId, allowed);
   const hours = (
     await exec.execute<{
-      employmentId: string | null;
       partyId: string;
       departmentId: string | null;
       hours: string;
     }>(sql`
-      select w.id::text as "employmentId", te.employee_party_id::text as "partyId",
+      select te.employee_party_id::text as "partyId",
              te.department_id::text as "departmentId", sum(te.hours)::text as hours
         from time_entries te
-        left join worker_employments w
-          on w.org_id = te.org_id and w.worker_party_id = te.employee_party_id
        where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
          and te.worked_on = ${workedOn}::date and te.status = 'approved'
-       group by w.id, te.employee_party_id, te.department_id
+       group by te.employee_party_id, te.department_id
     `)
   ).rows;
   const out: Array<{ employmentId: string; compClassId: string; compCode: string; hours: string }> = [];
   for (const row of hours) {
+    const employment = await resolveEffectiveEmployment(exec, {
+      orgId, partyId: row.partyId, workedOn, projectId,
+    });
+    if (!employment) {
+      throw new HrmConstructionError(
+        `Worker ${row.partyId} has no employment effective ${workedOn} for project ${projectId} — correct the employment dates and legal-entity assignment before splitting labor costs.`,
+      );
+    }
     const compClass = await classify(exec, {
       orgId,
       actorId,
       projectId,
       departmentId: row.departmentId,
       workedOn,
-      employmentId: row.employmentId,
+      employmentId: employment.id,
     });
     out.push({
-      employmentId: row.employmentId ?? row.partyId,
+      employmentId: employment.id,
       compClassId: compClass.id,
       compCode: compClass.code,
       hours: row.hours,

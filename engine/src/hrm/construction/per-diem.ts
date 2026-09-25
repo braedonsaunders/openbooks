@@ -23,6 +23,7 @@ import {
   withOrgTransaction,
   type SqlExecutor,
 } from "./shared.ts";
+import { resolveEffectiveEmployment } from "../effective-employment.ts";
 
 /**
  * Per-diem and travel pay (HR-13, migration 0223). computeForWeek reads
@@ -225,9 +226,10 @@ async function approvedWeekHours(
   exec: SqlExecutor,
   orgId: string,
   partyId: string,
+  employmentId: string,
   weekStart: string,
 ): Promise<ReadonlyArray<{ workedOn: string; projectId: string | null; hours: string }>> {
-  const rows = (
+  const raw = (
     await exec.execute<{ workedOn: string; projectId: string | null; hours: string }>(sql`
       select worked_on::text as "workedOn", project_id::text as "projectId",
              sum(hours)::text as hours
@@ -236,9 +238,21 @@ async function approvedWeekHours(
          and status = 'approved'
          and worked_on >= ${weekStart}::date and worked_on < (${weekStart}::date + interval '7 days')
        group by worked_on, project_id
-       order by worked_on
+       order by worked_on, project_id nulls first
     `)
   ).rows;
+  const rows: Array<{ workedOn: string; projectId: string | null; hours: string }> = [];
+  for (const day of raw) {
+    const effective = await resolveEffectiveEmployment(exec, {
+      orgId, partyId, workedOn: day.workedOn, projectId: day.projectId,
+    });
+    if (!effective) {
+      throw new HrmConstructionError(
+        `Worker ${partyId} has no active employment effective ${day.workedOn} for project ${day.projectId ?? "(no project)"} — correct the employment coverage before computing allowance pay.`,
+      );
+    }
+    if (effective.id === employmentId) rows.push(day);
+  }
   return rows;
 }
 
@@ -407,7 +421,7 @@ export async function computeForWeek(
     await assertEmploymentInScope(exec, orgId, employmentId, allowed, true);
     const partyId = await employmentParty(exec, orgId, employmentId);
     const policy = await policyForWeek(exec, orgId, actorId, weekStart);
-    const days = await approvedWeekHours(exec, orgId, partyId, weekStart);
+    const days = await approvedWeekHours(exec, orgId, partyId, employmentId, weekStart);
     if (days.length === 0) {
       throw new HrmConstructionError(
         `Employment ${employmentId} has no approved time in the week of ${weekStart} — approve the timesheet before computing per-diem.`,
@@ -837,7 +851,7 @@ export async function computeTravelForWeek(
     await assertEmploymentInScope(exec, orgId, employmentId, allowed, true);
     const partyId = await employmentParty(exec, orgId, employmentId);
     const policy = await policyForWeek(exec, orgId, actorId, weekStart);
-    const days = await approvedWeekHours(exec, orgId, partyId, weekStart);
+    const days = await approvedWeekHours(exec, orgId, partyId, employmentId, weekStart);
     if (days.length === 0) {
       throw new HrmConstructionError(
         `Employment ${employmentId} has no approved time in the week of ${weekStart} — approve the timesheet before computing travel pay.`,
