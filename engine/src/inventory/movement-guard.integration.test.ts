@@ -4,26 +4,13 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { InventoryError } from "./contracts.ts";
 import { receiveInventory } from "./movements.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-/** Drizzle wraps Postgres errors (message holds the query text, the guard
- * text rides `cause`), so match across the whole chain like close.test.ts. */
-function errorChainMatches(error: unknown, pattern: RegExp): boolean {
-  const messages: string[] = [];
-  for (
-    let current: unknown = error;
-    current && typeof current === "object";
-    current = (current as { cause?: unknown }).cause
-  ) {
-    messages.push(String((current as { message?: unknown }).message ?? ""));
-  }
-  return pattern.test(messages.join(" "));
-}
 
 /**
  * The `inv_move_guard` trigger is E6's enforcement (posted movements cannot
