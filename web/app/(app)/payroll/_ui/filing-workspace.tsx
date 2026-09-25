@@ -82,6 +82,9 @@ const fileHref = (section: YearEndFilingSection, year: number) =>
  * form-faithful facsimile pathway. One composition, three homes.
  */
 export function useFilingIssues(year: number) {
+  // The selection-limit callout renders through the filing catalog like the
+  // rest of this surface — never an embedded English string (I4-webui-213).
+  const t = useTranslations('payroll.filings')
   // Issue declarations (the ROE's reason for issue) are the employer's own
   // statement: nothing is preselected, and a row without one stays out of
   // the file.
@@ -117,7 +120,7 @@ export function useFilingIssues(year: number) {
     if (section.issue && selectedCount > section.issue.maxSelection) {
       setDownloadError((prev) => ({
         ...prev,
-        [key]: `Select no more than ${section.issue!.maxSelection} employees for this filing`,
+        [key]: t('issue.selectionLimit', { maxSelection: section.issue!.maxSelection }),
       }))
       return
     }

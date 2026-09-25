@@ -1161,7 +1161,8 @@
       "comment": "Commentaire",
       "notIncluded": "Non inclus dans le fichier",
       "included": "Inclus dans le fichier — motif {code}",
-      "commentRequired": "Un commentaire est exigé pour ce code de motif."
+      "commentRequired": "Un commentaire est exigé pour ce code de motif.",
+      "selectionLimit": "Ne sélectionnez pas plus de {maxSelection} employés pour cette déclaration"
     },
     "lifecycle": {
       "title": "État de la déclaration",

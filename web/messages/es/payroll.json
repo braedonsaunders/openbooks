@@ -1161,7 +1161,8 @@
       "comment": "Comentario",
       "notIncluded": "No incluido en el archivo",
       "included": "Incluido en el archivo — motivo {code}",
-      "commentRequired": "Se requiere un comentario para este código de motivo."
+      "commentRequired": "Se requiere un comentario para este código de motivo.",
+      "selectionLimit": "No seleccione más de {maxSelection} empleados para esta declaración"
     },
     "lifecycle": {
       "title": "Estado de la declaración",

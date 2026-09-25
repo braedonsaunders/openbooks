@@ -1161,7 +1161,8 @@
       "comment": "备注",
       "notIncluded": "未纳入文件",
       "included": "已纳入文件——原因 {code}",
-      "commentRequired": "该原因代码必须填写备注。"
+      "commentRequired": "该原因代码必须填写备注。",
+      "selectionLimit": "此申报选择的员工不得超过 {maxSelection} 名"
     },
     "lifecycle": {
       "title": "申报状态",

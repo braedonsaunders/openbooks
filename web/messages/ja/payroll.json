@@ -1161,7 +1161,8 @@
       "comment": "コメント",
       "notIncluded": "ファイルに含まれていません",
       "included": "ファイルに含まれています — 理由{code}",
-      "commentRequired": "この理由コードにはコメントが必要です。"
+      "commentRequired": "この理由コードにはコメントが必要です。",
+      "selectionLimit": "この申告では{maxSelection}名を超える従業員を選択しないでください"
     },
     "lifecycle": {
       "title": "申告ステータス",
