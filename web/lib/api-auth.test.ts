@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
-import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, env, pool, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { resolveKeyScopeAuthority } from "@openbooks/engine/src/organization/permissions.ts";
@@ -81,8 +80,13 @@ const hooks = registerHooks({
 
 const routeUrl = "../app/api/admin/api-keys/route.ts?api-key-scopes-test";
 const { PATCH, POST } = (await import(routeUrl)) as typeof import("../app/api/admin/api-keys/route.ts");
+// A query-suffixed literal is unresolvable to tsc (TS2307, which then leaves
+// every use untyped): hoist it into a URL constant like the route above so
+// the mock loader still isolates the module while tsc sees the real shape.
+const openApiRouteUrl = "../app/api/v1/openapi/route.ts?api-key-audit-test";
+const { GET: openApiGET } = (await import(openApiRouteUrl)) as typeof import("../app/api/v1/openapi/route.ts");
 // api-auth.ts is server-only too; it loads under the same stubbed boundary.
-const { canApi, generateApiKey, guardApiKey, resolveApiKeyAuth } = await import("./api-auth");
+const { canApi, generateApiKey, resolveApiKeyAuth } = await import("./api-auth");
 const { validateSessionToken } = await import("./auth");
 const { sessionSigningInput } = await import("./auth-token-format.ts");
 hooks.deregister();
@@ -303,17 +307,17 @@ test(
       assert.equal(canApi(auth, "gl.post"), false);
       assert.equal(canApi(auth, "ap.pay"), false);
 
-      // Through the guarded v1 transport: the narrow permission passes, a
-      // sibling the owner holds is still refused — the key never inherits.
+      // An authenticated endpoint refusal must still leave execution evidence.
       await withBypassContext(() => db.execute(sql`
         update orgs
            set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,apiAccess}', 'true'::jsonb)
          where id = ${org.orgId}`));
-      const allowed = await withOrgContext(org.orgId, () => guardApiKey("gl.read", bearer(key.plaintext)));
-      assert.ok(!(allowed instanceof NextResponse), "gl.read must pass the guarded transport");
-      const denied = await withOrgContext(org.orgId, () => guardApiKey("ap.pay", bearer(key.plaintext)));
-      assert.ok(denied instanceof NextResponse, "ap.pay must be refused by the guarded transport");
-      assert.equal((denied as NextResponse).status, 403);
+      const denied = await withOrgContext(org.orgId, () => openApiGET(new Request("http://openbooks.test/api/v1/openapi", { headers: { authorization: `Bearer ${key.plaintext}` } })));
+      assert.equal(denied.status, 403);
+      const evidence = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+        select count(*)::text as count from api_key_events where org_id = ${org.orgId} and key_id = ${key.id}
+          and path = '/api/v1/openapi' and status_code = 403`));
+      assert.equal(Number(evidence.rows[0]?.count), 1);
     } finally { await dropScratchOrg(org.orgId); }
   },
 );

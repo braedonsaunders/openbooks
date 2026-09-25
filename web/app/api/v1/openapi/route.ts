@@ -1,23 +1,24 @@
-import { NextResponse } from "next/server";
-import { guardApiKey } from "../../../../lib/api-auth";
+import { canApi } from "../../../../lib/api-auth";
 import { generateOpenApiSpec } from "../../../../lib/api/openapi-server";
-import { emitV1ExecutionEvent } from "../../../../lib/api/v1-request";
+import { withV1Request } from "../../../../lib/api/v1-request";
 
 export const runtime = "nodejs";
 
 /** GET /api/v1/openapi — the tenant-specific OpenAPI 3.0 spec. */
 export async function GET(req: Request) {
-  const gate = await guardApiKey("api.keys.manage", req);
-  if (gate instanceof NextResponse) return gate;
-
-  const proto = req.headers.get("x-forwarded-proto") ?? "http";
-  const host = req.headers.get("host") ?? "localhost";
-  const spec = await generateOpenApiSpec(
-    gate.user.orgId,
-    `${proto}://${host}`,
-    gate.user.roles.map(({ key }) => key),
-  );
-  const auditFailure = await emitV1ExecutionEvent("v1.openapi", 200, gate);
-  if (auditFailure) return auditFailure;
-  return NextResponse.json(spec);
+  return withV1Request(req, "api/v1/openapi", async (auth) => {
+    if (!canApi(auth, "api.keys.manage")) {
+      return { status: 403, body: { error: "missing permission: api.keys.manage" } };
+    }
+    const proto = req.headers.get("x-forwarded-proto") ?? "http";
+    const host = req.headers.get("host") ?? "localhost";
+    return {
+      status: 200,
+      body: await generateOpenApiSpec(
+        auth.user.orgId,
+        `${proto}://${host}`,
+        auth.user.roles.map(({ key }) => key),
+      ),
+    };
+  });
 }
