@@ -508,7 +508,7 @@ export async function createSuccessionPlan(args: {
         returning id
       `)).rows[0];
       if (!inserted) throw new HrmPerformanceError("REFUSED", "the succession plan was not stored — no row was written; retry the action");
-      const plan = await readSuccessionPlan(db, orgId, inserted.id);
+      const plan = await readSuccessionPlan(db, orgId, inserted.id, allowed);
       if (!plan) throw new HrmPerformanceError("REFUSED", "the succession plan was not stored — no row can be read back; retry the action");
       return plan;
     } catch (e) {
@@ -577,7 +577,12 @@ export async function setSuccessionPlanNotes(args: {
   });
 }
 
-async function readSuccessionPlan(db: SqlExecutor, orgId: string, id: string): Promise<SuccessionPlanDTO | null> {
+async function readSuccessionPlan(
+  db: SqlExecutor,
+  orgId: string,
+  id: string,
+  allowed: Set<string> | null,
+): Promise<SuccessionPlanDTO | null> {
   const plans = (await db.execute<{
     id: string; position_id: string; incumbent_employment_id: string | null; status: SuccessionPlanStatus; notes: string | null;
   }>(sql`
@@ -591,10 +596,11 @@ async function readSuccessionPlan(db: SqlExecutor, orgId: string, id: string): P
   }>(sql`
     select c.id, c.employment_id, coalesce(p.display_name, '—') as employee_name,
            c.readiness, c.candidate_order, c.notes
-      from hrm_succession_candidates c
+     from hrm_succession_candidates c
       join worker_employments e on e.org_id = c.org_id and e.id = c.employment_id
       left join parties p on p.org_id = c.org_id and p.id = e.worker_party_id
      where c.org_id = ${orgId} and c.plan_id = ${id}
+       ${employmentScopeFilter(allowed, "e")}
      order by c.candidate_order, c.created_at
   `)).rows;
   const position = (await db.execute<{ position_code: string; title: string | null }>(sql`
@@ -650,7 +656,7 @@ export async function listSuccessionPlans(args: { orgId: string; actorId: string
     `)).rows;
     const out: SuccessionPlanDTO[] = [];
     for (const row of rows) {
-      const plan = await readSuccessionPlan(db, orgId, row.id);
+      const plan = await readSuccessionPlan(db, orgId, row.id, allowed);
       if (plan) out.push(plan);
     }
     return out;
@@ -702,6 +708,13 @@ export async function addSuccessionCandidate(args: {
       allowed,
       "employment was not found — name a directory employment as the candidate",
     );
+    const planSubsidiary = await loadPositionSubsidiary(db, orgId, plan.positionId);
+    if (employment.employerSubsidiaryId !== planSubsidiary) {
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "employment was not found — name a candidate employed in the position's subsidiary",
+      );
+    }
     const maxOrder = (await db.execute<{ max: number }>(sql`
       select coalesce(max(candidate_order), -1) as max from hrm_succession_candidates where org_id = ${orgId} and plan_id = ${planId}
     `)).rows[0]?.max ?? -1;
