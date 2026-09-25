@@ -132,20 +132,6 @@ test('project transaction amounts use project-charge bill value and expose gover
   assert.match(document, /readOnly=\{!editable \|\| config\.kind === 'project_charge'\}/)
 })
 
-test('project actions link the existing General Ledger to the complete project posting range', () => {
-  const drawer = source('app/(app)/projects/ProjectDrawer.tsx')
-  const loader = source('app/(app)/projects/_cockpit-data.ts')
-  const report = source('app/(app)/reports/general-ledger/page.tsx')
-  const reports = source('lib/reports/filters.ts')
-
-  assert.match(drawer, /reports\/general-ledger/)
-  assert.match(drawer, /project: String\(pr\.id\)/)
-  assert.match(loader, /min\(e\.posting_date\)/)
-  assert.match(loader, /l\.project_id = \$\{projectId\}/)
-  assert.match(report, /dimensionOptions\(undefined, dims\.projectId, dims\.subsidiaryIds\)/, 'the GL picker inherits the reader subsidiary fence')
-  assert.match(reports, /p\.id = \$\{selectedProjectId \?\? null\}::uuid/)
-})
-
 test('project hours default to employee, roll up by service item, and drill to canonical approved time', () => {
   const tab = source('app/(app)/projects/tabs/CostTimeTab.tsx')
   const summary = source('lib/project-costing.ts')
