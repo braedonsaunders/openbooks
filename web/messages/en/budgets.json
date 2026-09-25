@@ -123,7 +123,8 @@
     "actionFailed": "The budget action failed.",
     "revisionConflict": "This budget changed elsewhere. Reload to continue.",
     "selfApprovalForbidden": "You cannot approve a budget you submitted. Ask another approver to decide.",
-    "created": "Budget draft created."
+    "created": "Budget draft created.",
+    "savedWithLineFailure": "The budget draft was created, but saving its lines failed ({reason}). It is open now; review its lines before retrying."
   },
   "import": {
     "button": "Import",

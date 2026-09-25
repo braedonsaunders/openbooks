@@ -362,8 +362,8 @@ test("saving a nameless budget pins the remedy instead of persisting", async (t)
   assert.deepEqual(mounted.calls, [], "a refused Save must not write anything");
 });
 
-/** OM-05: the explicit Save creates the scenario plus its lines, then opens it. */
-test("Save persists the named budget with its lines and opens the saved record", async (t) => {
+/** A refused line save must open the already-created draft for recovery. */
+test("Save opens the created draft when saving its lines is refused", async (t) => {
   const scenarioId = randomUUID();
   const mounted = await mountCreateDrawer({
     params: { budgetView: "monthly" },
@@ -372,7 +372,7 @@ test("Save persists the named budget with its lines and opens the saved record",
         return Response.json({ id: scenarioId, revision: 1 });
       }
       if (String(input).includes(`/api/budgets/${scenarioId}/lines`)) {
-        return Response.json({ revision: 2 });
+        return Response.json({ error: "budget_is_locked" }, { status: 409 });
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     },
@@ -411,11 +411,11 @@ test("Save persists the named budget with its lines and opens the saved record",
   assert.equal(cells.length, 1, "only the entered non-zero cell is committed");
   // Income accounts display credit-normal: the typed 100.00 stores negative.
   assert.equal(cells[0]!.amount, "-100.0000");
-  assert.equal(mounted.pushes.length, 1, "Save navigates exactly once");
-  assert.match(mounted.pushes[0]!, new RegExp(`budget=${scenarioId}`), "Save opens the saved record");
+  assert.equal(mounted.pushes.length, 1, "Save navigates to the created draft after line refusal");
+  assert.match(mounted.pushes[0]!, new RegExp(`budget=${scenarioId}`), "recovery opens the saved record");
   assert.doesNotMatch(mounted.pushes[0]!, /budgetNew/, "the saved record is no longer a create view");
   assert.ok(
-    (globalThis.__budgetTestToasts ?? []).some((toast) => /created/i.test(toast.message)),
-    "Save confirms creation",
+    (globalThis.__budgetTestToasts ?? []).some((toast) => /saving its lines failed/i.test(toast.message) && /budget_is_locked/.test(toast.message)),
+    "Save explains the persisted draft and the line refusal",
   );
 });

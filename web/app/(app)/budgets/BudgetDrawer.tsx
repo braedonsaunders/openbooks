@@ -446,6 +446,7 @@ export function BudgetDrawer({
     }
     setBusy(true)
     setCreateError(null)
+    let createdDraftId: string | null = null
     try {
       const draftBody: Record<string, unknown> = {
         name: trimmedName,
@@ -462,6 +463,7 @@ export function BudgetDrawer({
       })
       if (!draftResponse.ok) throw new Error(await readApiErrorMessage(draftResponse, t('create.failed')))
       const draft = await draftResponse.json() as { id: string; revision: number }
+      createdDraftId = draft.id
       if (cells.length > 0) {
         const linesResponse = await fetch(`/api/budgets/${draft.id}/lines`, {
           method: 'PATCH',
@@ -486,6 +488,26 @@ export function BudgetDrawer({
       })))
       router.refresh()
     } catch (error) {
+      if (createdDraftId) {
+        toast.error(t('feedback.savedWithLineFailure', {
+          reason: error instanceof Error ? error.message : t('create.failed'),
+        }))
+        router.push(mergeHref('/budgets', currentParams, {
+          budget: createdDraftId,
+          budgetNew: null,
+          budgetQ: null,
+          budgetPage: null,
+          budgetSubsidiary: null,
+          budgetDepartment: null,
+          budgetProject: null,
+          budgetLocation: null,
+          budgetClass: null,
+          budgetImport: null,
+          budgetView: null,
+        }))
+        router.refresh()
+        return
+      }
       setCreateError(error instanceof Error ? error.message : t('create.failed'))
     } finally {
       setBusy(false)

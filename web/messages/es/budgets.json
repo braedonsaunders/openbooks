@@ -123,7 +123,8 @@
     "actionFailed": "La acción del presupuesto falló.",
     "revisionConflict": "Este presupuesto se modificó en otro lugar. Recargue para continuar.",
     "selfApprovalForbidden": "No puede aprobar un presupuesto que usted ha enviado. Pida a otra persona aprobadora que lo revise.",
-    "created": "Borrador de presupuesto creado."
+    "created": "Borrador de presupuesto creado.",
+    "savedWithLineFailure": "Se creó el borrador del presupuesto, pero no se pudieron guardar sus líneas ({reason}). Ya está abierto; revise las líneas antes de volver a intentarlo."
   },
   "import": {
     "button": "Importar",

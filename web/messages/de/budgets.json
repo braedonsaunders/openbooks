@@ -123,7 +123,8 @@
     "actionFailed": "Die Budgetaktion ist fehlgeschlagen.",
     "revisionConflict": "Dieses Budget wurde anderweitig geändert. Laden Sie neu, um fortzufahren.",
     "selfApprovalForbidden": "Sie können ein von Ihnen eingereichtes Budget nicht genehmigen. Bitten Sie eine andere approbierende Person um eine Entscheidung.",
-    "created": "Budgetentwurf erstellt."
+    "created": "Budgetentwurf erstellt.",
+    "savedWithLineFailure": "Der Budgetentwurf wurde erstellt, aber seine Zeilen konnten nicht gespeichert werden ({reason}). Er ist jetzt geöffnet. Prüfen Sie die Zeilen, bevor Sie es erneut versuchen."
   },
   "import": {
     "button": "Importieren",

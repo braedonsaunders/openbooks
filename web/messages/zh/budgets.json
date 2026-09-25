@@ -123,7 +123,8 @@
     "actionFailed": "预算操作失败。",
     "revisionConflict": "此预算已在别处更改。请重新加载以继续。",
     "selfApprovalForbidden": "您不能批准自己提交的预算。请让其他审批人进行裁决。",
-    "created": "预算草稿已创建。"
+    "created": "预算草稿已创建。",
+    "savedWithLineFailure": "预算草稿已创建，但保存明细失败（{reason}）。现已打开草稿；重试前请检查明细。"
   },
   "import": {
     "button": "导入",

@@ -123,7 +123,8 @@
     "actionFailed": "L’action budgétaire a échoué.",
     "revisionConflict": "Ce budget a été modifié ailleurs. Rechargez la page pour continuer.",
     "selfApprovalForbidden": "Vous ne pouvez pas approuver un budget que vous avez soumis. Demandez à un autre approbateur de statuer.",
-    "created": "Brouillon budgétaire créé."
+    "created": "Brouillon budgétaire créé.",
+    "savedWithLineFailure": "Le brouillon budgétaire a été créé, mais ses lignes n’ont pas été enregistrées ({reason}). Il est ouvert ; vérifiez les lignes avant de réessayer."
   },
   "import": {
     "button": "Importer",
