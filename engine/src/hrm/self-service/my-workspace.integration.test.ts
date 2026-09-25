@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { listInbox } from "../../inbox/index.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -127,13 +128,13 @@ async function seedPlan(orgId: string): Promise<string> {
             'full_month', 0, false, true, '2020-01-01') returning id`)).rows[0]!.id;
 }
 
-async function seedWindow(orgId: string, status: string): Promise<string> {
+async function seedWindow(orgId: string, status: string, appliesTo: unknown = {}): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into hrm_enrollment_windows
       (org_id, name, kind, opens_on, closes_on, plan_year_start_on, applies_to, status)
     values (${orgId}, ${`Window ${randomUUID().slice(0, 6)}`}, 'open_enrollment',
             '2020-01-01'::date, '2030-12-31'::date, '2026-01-01'::date,
-            '{}'::jsonb, ${status}) returning id`)).rows[0]!.id;
+            ${JSON.stringify(appliesTo)}::jsonb, ${status}) returning id`)).rows[0]!.id;
 }
 
 type Harness = {
@@ -396,6 +397,7 @@ test("self-service elects inside an open window on the self keys alone, with sto
   try {
     const planId = await seedPlan(h.org.orgId);
     const windowId = await seedWindow(h.org.orgId, "open");
+    const outOfScopeWindowId = await seedWindow(h.org.orgId, "open", { employer_subsidiary_id: randomUUID() });
     await db.execute(sql`
       insert into hrm_benefit_dependents (org_id, employment_id, relationship, display_name, is_active)
       values (${h.org.orgId}, ${h.workerEmployment}, 'spouse', 'Alex Worker', true)`);
@@ -408,12 +410,10 @@ test("self-service elects inside an open window on the self keys alone, with sto
       select employee_amount_per_period::text as employee,
              employer_amount_per_period::text as employer, currency
         from hrm_benefit_enrollments where id = ${elected.id}`)).rows[0]!;
-    assert.equal(stored.employee, "250.0000", "the stored plan amount is what payroll deducts");
-    assert.equal(stored.employer, "500.0000");
-    assert.equal(stored.currency, "USD");
+    assert.deepEqual([stored.employee, stored.employer, stored.currency], ["250.0000", "500.0000", "USD"]);
     const workspace = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
-    assert.equal(workspace.elections.length, 1);
-    assert.equal(workspace.elections[0]!.employeeAmountPerPeriod, "250.0000");
+    assert.ok(!(await listInbox({ orgId: h.org.orgId, actorId: h.workerId, asOf: new Date().toISOString() }, { kinds: ["hrm_benefit_enrollment_window"] })).some((item) => item.source.id === outOfScopeWindowId));
+    assert.deepEqual([workspace.elections.length, workspace.elections[0]!.employeeAmountPerPeriod], [1, "250.0000"]);
     assert.equal(workspace.openWindows.length, 1);
     assert.equal(workspace.dependents.length, 1);
     assert.equal(workspace.dependents[0]!.displayName, "Alex Worker");
