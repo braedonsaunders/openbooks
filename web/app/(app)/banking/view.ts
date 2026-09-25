@@ -18,7 +18,8 @@ import { requirePermission, can } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryScope, reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
+import { bankingHome, boundedChartCoordinates, type BankingAccountRow } from '../../../lib/module-home/banking'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { userPageLayout } from '../../../lib/page-layout'
 import { groupTabs } from '../../../components/module-home/group-tabs'
@@ -105,8 +106,8 @@ export interface BankingData {
   netFlowTone: 'positive' | 'negative'
   rosterTitle: string
   rosterAccounts: BankingAccountRow[]
-  totalCash: number
-  totalCards: number
+  totalCash: string
+  totalCards: string
   trendTitle: string
   trendHint: string
   trendSeriesName: string
@@ -256,7 +257,7 @@ export async function loadBanking(
     cashLabel: t('home.vitals.cash'),
     cashValue: moneyCompact(data.totalCash),
     cashSub: t('home.vitals.accountCount', { count: banks.length }),
-    cashTone: data.totalCash < 0 ? 'negative' : 'neutral',
+    cashTone: cmp(data.totalCash, '0') < 0 ? 'negative' : 'neutral',
     unmatchedTone: data.unmatchedLines > 0 ? 'warning' : 'positive',
     cardsLabel: t('home.vitals.cards'),
     cardsValue: moneyCompact(data.totalCards),
@@ -270,8 +271,8 @@ export async function loadBanking(
     openReconsSub: data.openRecons > 0 ? t('home.vitals.openReconsSub') : t('home.vitals.noneOpen'),
     netFlowLabel: t('home.vitals.netFlow'),
     netFlowValue: moneyCompact(data.netFlow7d),
-    netFlowAccent: data.netFlow7d >= 0 ? 'emerald' : 'red',
-    netFlowTone: data.netFlow7d >= 0 ? 'positive' : 'negative',
+    netFlowAccent: cmp(data.netFlow7d, '0') >= 0 ? 'emerald' : 'red',
+    netFlowTone: cmp(data.netFlow7d, '0') >= 0 ? 'positive' : 'negative',
     rosterTitle: t('home.roster.title'),
     rosterAccounts: data.accounts,
     totalCash: data.totalCash,
@@ -280,7 +281,7 @@ export async function loadBanking(
     trendHint: t('home.trend.hint'),
     trendSeriesName: t('home.trend.series'),
     trendLabels: data.trend.map((w) => trendWeekLabel(w.weekStart, locale)),
-    trendData: data.trend.map((w) => w.balance),
+    trendData: boundedChartCoordinates(data.trend.map((w) => w.balance)),
     directoryTitle: t('home.directory.title'),
     directory,
     attentionTitle: t('home.attention.title'),
@@ -294,7 +295,7 @@ type T = Awaited<ReturnType<typeof getTranslations<'banking'>>>
 export function needsAttention(accounts: BankingAccountRow[], t: T): BankingAttentionItem[] {
   const items: BankingAttentionItem[] = []
   for (const a of accounts) {
-    if (a.type === 'asset_bank' && a.balance < 0) {
+    if (a.type === 'asset_bank' && cmp(a.balance, '0') < 0) {
       items.push({ tone: 'negative', text: t('home.attention.negativeBalance', { account: a.name }), href: `/banking/${a.id}` })
     }
   }

@@ -32,8 +32,8 @@ async function seedTwoCurrencyCash() {
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`)
     const legs = [
-      [org.subsidiaryId, org.accounts.bank, '40', 'CAD'],
-      [usSub, usdBank, '100', 'USD'],
+      [org.subsidiaryId, org.accounts.bank, '0.02', 'CAD'],
+      [usSub, usdBank, '90071992547409.93', 'USD'],
     ] as const
     for (const [sub, acct, amt, cur] of legs) {
       const entryId = randomUUID()
@@ -60,11 +60,11 @@ test('banking cockpit translates every cash functional at the tile spot', { skip
       await withOrgContext(org.orgId, async () => {
         const home = await bankingHome(org.orgId)
         const byName = new Map(home.accounts.map((a) => [a.name, a.balance]))
-        assert.equal(byName.get('USD Cash'), 135)
-        assert.equal(byName.get('Cash'), 40)
-        assert.equal(home.totalCash, 175)
+        assert.equal(byName.get('USD Cash'), '121597189939003.4055')
+        assert.equal(byName.get('Cash'), '0.0200')
+        assert.equal(home.totalCash, '121597189939003.4255')
         const last = home.trend[home.trend.length - 1]!
-        assert.equal(last.balance, 175)
+        assert.equal(last.balance, '121597189939003.4255')
       })
     })
   } finally {

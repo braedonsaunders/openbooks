@@ -24,6 +24,18 @@ import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDr
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { num, str, type WidgetRenderer } from './widget-props'
+import { toUnits } from '@openbooks/engine/src/money/money.ts'
+
+function moneyString(props: Record<string, unknown>, key: string): string {
+  const value = str(props, key)
+  if (value === undefined) return '0'
+  try {
+    toUnits(value)
+    return value
+  } catch {
+    return '0'
+  }
+}
 
 /** Banking adapters. Compose native components without changing their props or boundaries. */
 export const BANKING_WIDGETS = {
@@ -35,8 +47,8 @@ export const BANKING_WIDGETS = {
   'banking-roster': (props) => (
     <AccountsRosterPanel
       accounts={props.accounts as ComponentProps<typeof AccountsRosterPanel>['accounts']}
-      totalCash={num(props, 'totalCash') ?? 0}
-      totalCards={num(props, 'totalCards') ?? 0}
+      totalCash={moneyString(props, 'totalCash')}
+      totalCards={moneyString(props, 'totalCards')}
       layoutPrefs={props.layoutPrefs as ComponentProps<typeof AccountsRosterPanel>['layoutPrefs']}
     />
   ),

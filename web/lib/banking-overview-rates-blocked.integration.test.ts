@@ -94,12 +94,12 @@ test('rates-blocked banking overview agrees with the match picker (F-t06-001)', 
       const loaded = (await loadBanking({})) as {
         ratesBlocked: unknown
         rosterAccounts: { id: string }[]
-        totalCash: number
+        totalCash: string
       }
       assert.ok(loaded.ratesBlocked, 'the missing derivation still pins its banner')
       assert.equal(loaded.rosterAccounts.length, 1, 'the roster lists the reconcilable account even while rates are blocked')
       assert.equal(loaded.rosterAccounts[0]?.id, org.accounts.bank)
-      assert.equal(loaded.totalCash, 250, 'the cash total reads the ledger, not the blocked fallback')
+      assert.equal(loaded.totalCash, '250.0000', 'the cash total reads the ledger, not the blocked fallback')
       const match = (await loadMatch({})) as { accounts: { id: string }[] }
       assert.deepEqual(
         match.accounts.map((a) => a.id),
