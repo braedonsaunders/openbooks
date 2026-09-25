@@ -264,12 +264,17 @@ function EmployerLevyOpeningsYearView({
             {levies.map((levy) => {
               const stored = storedFor(levy)
               // An org levy is one row; a region levy is one row per stored
-              // region. Either renders a blank row when nothing is stored, so
-              // the levy is enterable, not just editable.
+              // region. An org levy renders a blank row when nothing is
+              // stored so it stays enterable. A region levy needs an
+              // explicit region code, so its empty state is entered through
+              // the Add a region row below rather than a null-region cell
+              // whose save the service always refuses.
               const editable =
                 stored.length > 0
                   ? stored
-                  : [{ country: levy.country, levyKey: levy.levyKey, region: null as string | null, baseYtd: '0' }]
+                  : levy.scope === 'region'
+                    ? []
+                    : [{ country: levy.country, levyKey: levy.levyKey, region: null as string | null, baseYtd: '0' }]
               const levyAdded = added.filter(
                 (row) => row.country === levy.country && row.levyKey === levy.levyKey,
               )
