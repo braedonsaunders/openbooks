@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// IN8: inventory action retries posted twice. The drawer minted a fresh
-// crypto.randomUUID() on EVERY submit, so a committed-but-lost response
-// followed by Post again sent a NEW key the idempotency boundary could not
-// replay — a second movement and journal. The drawer must keep ONE key per
-// intended action across transport uncertainty (reused on retry, rotated
-// only after success or an input change) and must freeze the posting date in
-// the first payload (the server hashes the date into the request, so a retry
-// after a midnight rollover with a fresh date would 409).
+// IN8: retry identity and posting date stay fixed after a lost response.
 
 const { JSDOM } = await import('jsdom')
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
@@ -100,6 +93,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 const ITEM = '11111111-1111-4111-8111-111111111111'
 const BIN = '22222222-2222-4222-8222-222222222222'
 const ACCT = '33333333-3333-4333-8333-333333333333'
+const SUB = '44444444-4444-4444-8444-444444444444'
 
 async function mountDrawer(t: TestContext): Promise<void> {
   const prior = globalThis.fetch
@@ -132,6 +126,7 @@ async function mountDrawer(t: TestContext): Promise<void> {
             items={[{ id: ITEM, code: 'W-1', name: 'Widget' }]}
             stockLocations={[{ id: BIN, code: 'BIN-1' }]}
             accounts={[{ id: ACCT, number: '1400', name: 'Clearing' }]}
+            subsidiaries={[{ id: SUB, name: 'Leaf entity' }]}
           />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
@@ -175,7 +170,7 @@ function setInputValue(input: HTMLInputElement, value: string) {
 
 async function fillReceive(): Promise<void> {
   await pickOption('Item', 'W-1')
-  await pickOption('Location', 'BIN-1')
+  await pickOption('Location', 'BIN-1'); await pickOption('Owning subsidiary', 'Leaf entity')
   const decimalInputs = [...document.querySelectorAll('input[inputmode="decimal"]')] as HTMLInputElement[]
   assert.ok(decimalInputs.length >= 2, 'quantity and unit-cost inputs must render for a receipt')
   await act(async () => {
@@ -216,10 +211,11 @@ test('a lost Post response retried with unchanged fields reuses one key and the 
   // committed posting instead of minting a second movement and journal.
   await clickPost()
   assert.equal(script.fetchBodies.length, 2, 'the retry must fire exactly one more request')
-  const [first, retry] = script.fetchBodies as Array<{ idempotencyKey: string; date: string }>
+  const [first, retry] = script.fetchBodies as Array<{ idempotencyKey: string; date: string; subsidiaryId: string }>
   assert.ok(first!.idempotencyKey, 'the first Post must carry a retry identity')
   assert.equal(retry!.idempotencyKey, first!.idempotencyKey, 'the retry must reuse the action key, not mint a new one')
   assert.equal(first!.date, '2026-09-23', 'the first Post must freeze the server business day, not omit it')
+  assert.equal(first!.subsidiaryId, SUB, 'the selected authorized subsidiary must reach the server action')
   assert.equal(retry!.date, '2026-09-23', 'the retry must replay the frozen date even after a midnight rollover')
 })
 

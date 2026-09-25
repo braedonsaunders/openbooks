@@ -20,6 +20,7 @@ import { InventoryActionDrawer } from './InventoryActionDrawer'
 import { NewMovementButton } from './NewMovementButton'
 import { canPostInventoryMovement } from './movement-permissions'
 import { ReverseLandedVoucherAction } from './ReverseLandedVoucherAction'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,6 +82,11 @@ export default async function Inventory({
           select id, number, name from accounts
            where org_id = ${orgId} and is_active and not is_summary
            order by number nulls last`),
+        db.execute<{ id: string; name: string }>(sql`
+          select s.id, s.name from subsidiaries s
+           where s.org_id = ${orgId} and s.is_active and not s.is_elimination
+             ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
+           order by s.name`),
       ])
     : null
 
@@ -190,6 +196,7 @@ export default async function Inventory({
               items={movementPickers[0].rows}
               stockLocations={movementPickers[1].rows}
               accounts={movementPickers[2].rows}
+              subsidiaries={movementPickers[3].rows}
               closeHref={closeMovementHref}
             />
           ) : undefined}

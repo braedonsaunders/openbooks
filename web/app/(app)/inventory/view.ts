@@ -16,6 +16,7 @@ import { canPostInventoryMovement } from './movement-permissions'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { pickString } from '../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
  * Inventory, split into a loader and a spec.
@@ -54,6 +55,7 @@ export interface InventoryData {
     items: { id: string; code: string | null; name: string | null }[]
     stockLocations: { id: string; code: string | null }[]
     accounts: { id: string; number: string | null; name: string | null }[]
+    subsidiaries: { id: string; name: string }[]
   } | null
 }
 
@@ -96,6 +98,11 @@ export async function loadInventory(
           db.execute<{ id: string; number: string | null; name: string | null }>(
             sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`,
           ),
+          db.execute<{ id: string; name: string }>(sql`
+            select s.id, s.name from subsidiaries s
+             where s.org_id = ${orgId} and s.is_active and not s.is_elimination
+               ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
+             order by s.name`),
         ])
       : null
 
@@ -145,6 +152,7 @@ export async function loadInventory(
             items: pickers[0].rows,
             stockLocations: pickers[1].rows,
             accounts: pickers[2].rows,
+            subsidiaries: pickers[3].rows,
           }
         : null,
   }
@@ -185,6 +193,7 @@ export function inventorySpec(data: InventoryData): PageSpec {
                   items: data.drawer.items,
                   stockLocations: data.drawer.stockLocations,
                   accounts: data.drawer.accounts,
+                  subsidiaries: data.drawer.subsidiaries,
                 },
               }
             : null,
@@ -202,6 +211,7 @@ export function inventorySpec(data: InventoryData): PageSpec {
                   items: data.drawer.items,
                   stockLocations: data.drawer.stockLocations,
                   accounts: data.drawer.accounts,
+                  subsidiaries: data.drawer.subsidiaries,
                 },
               }
             : null,
