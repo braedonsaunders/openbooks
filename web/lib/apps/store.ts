@@ -39,7 +39,8 @@ import { lockCustomFieldKeys } from '../custom-field-write-lock'
 import { validateCustomFieldDefinition, type ExistingFieldDef } from '../custom-field-definition'
 import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
-import { featureGateLockKey, isFeatureEnabled } from '../features'
+import { acquireFeatureGateLock, featureGateLockKey, isFeatureEnabled } from '../features'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql, type RecordTypeRow } from '@/lib/records'
 import { lintRecordFields } from '../record-schema'
@@ -507,6 +508,10 @@ export async function setAppStatus(
 ): Promise<{ affectedRows: number }> {
   return await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
+    if (status === 'installed') {
+      await acquireFeatureGateLock(orgId, tx)
+      if (!(await lockAndCheckOrgFeature(tx, orgId, 'apps'))) throw new AppError('Apps feature is disabled', 409)
+    }
     const existing = await tx.execute<{
       id: string
       key: string
