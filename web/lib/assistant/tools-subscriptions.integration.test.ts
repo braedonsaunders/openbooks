@@ -120,15 +120,15 @@ test('subscription assistant reads: plans, list, detail, MRR, upcoming', { skip:
         { status: 'active', count: 1 },
         { status: 'paused', count: 1 },
       ]);
-      assert.deepEqual(listData.mrrByCurrency, [{ currency: 'CAD', mrr: 100 }]);
-      assert.equal(listData.mrrOrgTotal, 100);
+      assert.deepEqual(listData.mrrByCurrency, [{ currency: 'CAD', mrr: '100' }]);
+      assert.equal(listData.mrrOrgTotal, '100');
 
       const detail = await executeAssistantTool(restricted, 'get_subscription', { subscriptionId: seed.activeSub });
       assert.equal(detail.ok, true, JSON.stringify(detail));
       assert.ok(detail.ok);
-      const sub = (detail.data as { subscription: { planName: string; mrr: number; dunningState: string } }).subscription;
+      const sub = (detail.data as { subscription: { planName: string; mrr: string; dunningState: string } }).subscription;
       assert.equal(sub.planName, 'Harbour Support');
-      assert.equal(sub.mrr, 100);
+      assert.equal(sub.mrr, '100');
       assert.equal(sub.dunningState, 'current');
 
       const hidden = await executeAssistantTool(restricted, 'get_subscription', { subscriptionId: seed.hiddenSub });
@@ -138,23 +138,23 @@ test('subscription assistant reads: plans, list, detail, MRR, upcoming', { skip:
       assert.equal(mrr.ok, true, JSON.stringify(mrr));
       assert.ok(mrr.ok);
       const mrrData = mrr.data as {
-        activeCount: number; mrrOrgTotal: number;
+        activeCount: number; mrrOrgTotal: string;
         byDunningState: { dunningState: string; count: number }[];
         churnTrailing30Days: { canceledCount: number };
       };
       assert.equal(mrrData.activeCount, 1);
-      assert.equal(mrrData.mrrOrgTotal, 100);
+      assert.equal(mrrData.mrrOrgTotal, '100');
       assert.deepEqual(mrrData.byDunningState, [{ dunningState: 'current', count: 1 }]);
 
       const upcoming = await executeAssistantTool(restricted, 'subscription_upcoming_invoices', { withinDays: 365 });
       assert.equal(upcoming.ok, true, JSON.stringify(upcoming));
       assert.ok(upcoming.ok);
       const upcomingData = upcoming.data as {
-        total: number; totalsByCurrency: { currency: string; count: number; expectedAmount: number }[];
+        total: number; totalsByCurrency: { currency: string; count: number; expectedAmount: string }[];
       };
       // Only the visible active subscription bills inside the window.
       assert.equal(upcomingData.total, 1);
-      assert.deepEqual(upcomingData.totalsByCurrency, [{ currency: 'CAD', count: 1, expectedAmount: 100 }]);
+      assert.deepEqual(upcomingData.totalsByCurrency, [{ currency: 'CAD', count: 1, expectedAmount: '100' }]);
 
       const schedules = await executeAssistantTool(
         { ...restricted, permissions: new Set(RECUR_PERMS) },

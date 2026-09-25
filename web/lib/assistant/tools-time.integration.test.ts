@@ -154,8 +154,8 @@ test('time assistant reads: week, search, project time, unbilled, tickets', { sk
       // One approved 8h line at bill 100 / cost 50 is available to bill.
       assert.deepEqual(unbilled.data, {
         projectId: seed.project,
-        revenue: 800,
-        cost: 400,
+        revenue: '800',
+        cost: '400',
         hours: 8,
         timeEntryCount: 1,
         costLineCount: 0,
