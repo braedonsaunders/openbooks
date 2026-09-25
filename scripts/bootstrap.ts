@@ -1771,30 +1771,6 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   },
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
-    from: "ce10d0cc376ea645c0c7cb9bd79d3b02b590abd794d9836d8cea77aa03811de0",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
-    strategy: "reapply",
-    reason:
-      "the published G10 revision (20427818) recomputed open balances after "
-      + "posted journal-line edits. The current body retains that trigger and "
-      + "adds G11-G13. Existing functions are replaced; trigger, constraint, "
-      + "and catalog operations tolerate replay, and backfills are NULL-guarded. "
-      + "Reapply to converge the G10 state to the published migration.",
-  },
-  {
-    filename: "generated/0338_posting_guards_and_summary_heals.sql",
-    from: "af2dc7d1d643f28ddb3289a7431f4e7b78bad6ff98ad7a9ce5a93c4d81c04334",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
-    strategy: "reapply",
-    reason:
-      "the published G6 revision (99f7962a) made monthly activity follow a "
-      + "posted entry's book rehome. The current body retains G6 and adds G8-G13. "
-      + "Functions are replaced, triggers and constraints are guarded, and "
-      + "backfills are NULL-only, so replay converges safely from the G6 state. "
-      + "Reapply to reach the published digest.",
-  },
-  {
-    filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "b3738d09a836ba824febc892bac3a081cb162b9a4fafe1561edbc28a17f9a1f0",
     to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
     strategy: "reapply",
@@ -1850,31 +1826,6 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   },
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
-    from: "ac792d496c8880c51694beb05cb90899d355cfad3aec53e95d9cf3335aedd6b2",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
-    strategy: "reapply",
-    reason:
-      "same growth as the entries above, for shard databases that applied "
-      + "the branch G4+G5+G6+G8 body: the delta is the wipe-fix, the G9 "
-      + "remedy message, the G10 line-edit recompute trigger, the G11 "
-      + "payment-stats date-move trigger, the G12 catalog additions, and the "
-      + "G13 promotion of the queued tables, all idempotent on replay. "
-      + "Reapply, not restamp.",
-  },
-  {
-    filename: "generated/0338_posting_guards_and_summary_heals.sql",
-    from: "2d6d2fa331c3a6ffc138f1a30fb1eb6b8f183609ae3a055931aa25acc132ac7b",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
-    strategy: "reapply",
-    reason:
-      "same growth as the entries above, for shard databases that applied "
-      + "the branch G4+G5+G6+G8+G9 body: the delta is the wipe-fix and the "
-      + "G10 line-edit recompute trigger, the G11 payment-stats date-move "
-      + "trigger, the G12 catalog additions, and the G13 promotion of the "
-      + "queued tables, all idempotent on replay. Reapply, not restamp.",
-  },
-  {
-    filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "65ec1f847284c54e4ff51d8cfad926a89cfdeecc94c467d2ae83f1c9d8f1bd31",
     to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
     strategy: "reapply",
@@ -1907,6 +1858,25 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "G12 body: the delta is only the G13 promotion of the queued "
       + "tables into safe_relations plus refresh, all idempotent on "
       + "replay. Reapply, not restamp.",
+  },
+  {
+    filename: "generated/0374_pay_stub_employment_required.sql",
+    from: "957f3a84dd6145b5689f69ed1ec184697f5a5d2b387916de5e3e3630f7e94b75",
+    to: "89cd4e08d445e962a52ac9cb2d4dbf284c67c97c9ccd16c624994b9875e485c1",
+    strategy: "reapply",
+    reason:
+      "the published I3-people-61 revision (ec1e01df0) reconstructed "
+      + "employment_id from existing HR history and left unresolvable legacy "
+      + "nulls to the preflight refusal. The current revision retains that "
+      + "reconstruction and first backfills one open employment per (worker, "
+      + "pay-run legal entity) key that holds no employments at all, "
+      + "effective from the earliest stub pay date. The runner records a "
+      + "digest with its body's transaction, so a ledger recorded at the old "
+      + "digest completed the old body: no NULL employment_id remains, the "
+      + "backfill selects no keys, the provenance inserts select from empty "
+      + "sets, the reconstruction updates zero rows, and SET NOT NULL on an "
+      + "already-constrained column is a no-op. Reapply, not restamp: the "
+      + "body changed.",
   },
   {
     filename: "generated/0257_provisional_cost_subsidiary.sql",
