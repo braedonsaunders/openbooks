@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -19,7 +19,7 @@ type Line = {
   recapture: string
   terminalLoss: string
 }
-type RunResult = { taxYear: number; lines: Line[]; totals: { allowance: string; recapture: string; terminalLoss: string } }
+type RunResult = { regime: string; taxYear: number; lines: Line[]; totals: { allowance: string; recapture: string; terminalLoss: string } }
 
 export function formatTaxPoolAmount(value: string, locale: string): string {
   return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value as never)
@@ -44,26 +44,46 @@ export function TaxPoolsView({
   const [regime, setRegime] = useState(regimes.find((r) => r.code === 'ca_cca')?.code ?? regimes[0]?.code ?? 'ca_cca')
   const [result, setResult] = useState<RunResult | null>(null)
   const [busy, setBusy] = useState(false)
+  const runId = useRef(0)
 
   const fmt = (v: string) => formatTaxPoolAmount(v, locale)
 
   async function run() {
+    const id = ++runId.current
+    const submittedRegime = regime
+    const submittedTaxYear = taxYear
     setBusy(true)
     try {
       const res = await fetch('/api/assets/tax-pools', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regime, taxYear }),
+        body: JSON.stringify({ regime: submittedRegime, taxYear: submittedTaxYear }),
       })
       const d = (await res.json().catch(() => ({}))) as RunResult & { error?: string }
       if (!res.ok) throw new Error(d.error)
-      setResult(d)
+      if (id !== runId.current) return
+      setResult({ ...d, regime: submittedRegime, taxYear: submittedTaxYear })
       toast.success(t('taxPools.done', { count: d.lines.length }))
     } catch (e) {
+      if (id !== runId.current) return
       toast.error(e instanceof Error && e.message ? e.message : tCommon('feedback.saveFailed'))
     } finally {
-      setBusy(false)
+      if (id === runId.current) setBusy(false)
     }
+  }
+
+  function changeRegime(value: string) {
+    runId.current += 1
+    setBusy(false)
+    setResult(null)
+    setRegime(value)
+  }
+
+  function changeTaxYear(value: number) {
+    runId.current += 1
+    setBusy(false)
+    setResult(null)
+    setTaxYear(value)
   }
 
   const col = 'px-3 py-2 text-right tabular-nums'
@@ -82,7 +102,7 @@ export function TaxPoolsView({
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div className="space-y-1.5">
             <Label htmlFor="regime">{t('taxPools.regime')}</Label>
-            <Select id="regime" className="w-64" value={regime} onChange={(e) => setRegime(e.target.value)}>
+            <Select id="regime" className="w-64" value={regime} onChange={(e) => changeRegime(e.target.value)}>
               {regimes.map((r) => (
                 <option key={r.code} value={r.code}>{r.name}</option>
               ))}
@@ -91,7 +111,7 @@ export function TaxPoolsView({
           <div className="space-y-1.5">
             <Label htmlFor="tax-year">{t('taxPools.taxYear')}</Label>
             <Input id="tax-year" type="number" className="w-32" value={taxYear}
-              onChange={(e) => setTaxYear(Number(e.target.value))} />
+              onChange={(e) => changeTaxYear(Number(e.target.value))} />
           </div>
           {canRun ? (
             <Button onClick={run} disabled={busy}>
@@ -108,6 +128,9 @@ export function TaxPoolsView({
         ) : (
           <Card>
             <CardContent className="overflow-x-auto pt-6">
+              <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+                {regimes.find((item) => item.code === result.regime)?.name ?? result.regime} · {result.taxYear}
+              </p>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-800">
