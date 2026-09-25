@@ -31,11 +31,21 @@ function msg(labels: Record<string, string>, key: string): string {
 }
 
 async function post(url: string, body: unknown, failed: string, onRefusal?: (message: string) => void, headers?: Record<string, string>): Promise<boolean> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  })
+  // A transport failure rejects instead of resolving: without the catch
+  // the caller's await throws past its reset and the operator gets an
+  // unhandled rejection instead of the failure copy.
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    toast.error(failed)
+    onRefusal?.(failed)
+    return false
+  }
   if (!res.ok) {
     const message = await readApiErrorMessage(res, failed)
     toast.error(message)

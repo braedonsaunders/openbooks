@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
@@ -105,19 +105,30 @@ export function LeaveDrawer({
     }
   }, [requestId, t])
 
+  // A second click while the first action POST is in flight would
+  // submit, withdraw or cancel twice: the ref drops re-entrant runs in
+  // the same tick as the click.
+  const actingRef = useRef(false)
   const runAction = async (action: 'submit' | 'withdraw' | 'cancel', reason?: string): Promise<void> => {
-    if (!requestId) return
-    const res = await fetch(`/api/hrm/leave-requests/${requestId}/${action}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(action === 'submit' ? {} : { reason }),
-    })
-    if (!res.ok) {
-      setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
-      return
+    if (!requestId || actingRef.current) return
+    actingRef.current = true
+    try {
+      const res = await fetch(`/api/hrm/leave-requests/${requestId}/${action}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(action === 'submit' ? {} : { reason }),
+      })
+      if (!res.ok) {
+        setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
+        return
+      }
+      router.refresh()
+      onClose()
+    } catch {
+      setStatus(t('leave.actionFailed'))
+    } finally {
+      actingRef.current = false
     }
-    router.refresh()
-    onClose()
   }
 
   // An empty reason never posts: the routes refuse it (reason required),
@@ -197,19 +208,26 @@ export function LeaveDrawer({
                     <LeaveAttachmentPicker
                       value={detail.request.attachmentId ?? ''}
                       onChange={async (attachmentId) => {
-                        if (!attachmentId) return
-                        const res = await fetch(`/api/hrm/leave-requests/${requestId}/attachment`, {
-                          method: 'POST',
-                          headers: { 'content-type': 'application/json' },
-                          body: JSON.stringify({ attachmentId }),
-                        })
-                        if (!res.ok) {
-                          setStatus(await readApiErrorMessage(res, t('leave.attachmentFailed')))
-                          return
+                        if (!attachmentId || actingRef.current) return
+                        actingRef.current = true
+                        try {
+                          const res = await fetch(`/api/hrm/leave-requests/${requestId}/attachment`, {
+                            method: 'POST',
+                            headers: { 'content-type': 'application/json' },
+                            body: JSON.stringify({ attachmentId }),
+                          })
+                          if (!res.ok) {
+                            setStatus(await readApiErrorMessage(res, t('leave.attachmentFailed')))
+                            return
+                          }
+                          const payload = (await res.json().catch(() => null)) as { request?: Detail['request'] } | null
+                          if (payload?.request) setDetail((current) => current ? { ...current, request: { ...current.request, ...payload.request } } : current)
+                          setStatus(undefined)
+                        } catch {
+                          setStatus(t('leave.attachmentFailed'))
+                        } finally {
+                          actingRef.current = false
                         }
-                        const payload = (await res.json().catch(() => null)) as { request?: Detail['request'] } | null
-                        if (payload?.request) setDetail((current) => current ? { ...current, request: { ...current.request, ...payload.request } } : current)
-                        setStatus(undefined)
                       }}
                       label={t('leave.evidenceLabel')}
                       disabled={false}
