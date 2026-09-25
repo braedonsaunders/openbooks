@@ -54,16 +54,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        try { return { ok: true, data: await request.json() } }
-        catch { return { ok: false, response: Response.json({ errorCode: 'INVALID_JSON' }, { status: 400 }) } }
-      }
-    `,
-  ],
-  [
     "mock:authz",
     `
       export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
@@ -84,6 +74,14 @@ const mockSources = new Map<string, string>([
       export function sql(strings, ...values) {
         return { queryChunks: strings.flatMap((part, index) => index < values.length ? [part, values[index]] : [part]) }
       }
+      export function and() { return {} }
+      export function asc() { return {} }
+      export function desc() { return {} }
+      export function eq() { return {} }
+      export function getTableColumns() { return {} }
+      export function inArray() { return {} }
+      export function isNull() { return {} }
+      export function or() { return {} }
     `,
   ],
   [
@@ -192,9 +190,7 @@ const hooks = registerHooks({
     const mock =
       specifier === "next/server"
         ? "mock:next-server"
-        : specifier === "@/lib/api/json"
-          ? "mock:json"
-          : specifier === "../../../../../../lib/authz"
+        : specifier === "../../../../../../lib/authz"
             ? "mock:authz"
             : specifier === "@openbooks/engine/src/connection.ts"
               ? "mock:connection"

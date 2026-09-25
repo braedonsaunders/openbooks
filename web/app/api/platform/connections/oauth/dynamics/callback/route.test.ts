@@ -62,6 +62,11 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       const state = globalThis[Symbol.for("openbooks.dynamics-oauth-callback-test")]
+      export const ambientTenantOrgId = () => "org-1"
+      export const currentRequestOrgResolver = () => undefined
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (fn) => fn()
+      export const withBypassContext = (fn) => fn()
       export const schema = { connections: { id: "id", orgId: "orgId" }, auditLog: {} }
       export const db = {
         async transaction(fn) {

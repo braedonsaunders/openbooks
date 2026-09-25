@@ -39,15 +39,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     "mock:db",
     `
       const state = globalThis[Symbol.for("openbooks.connection-patch-route-test")]
@@ -165,9 +156,7 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked =
-      specifier === "@/lib/api/json"
-        ? "mock:json"
-        : specifier === "../../../../../lib/authz"
+      specifier === "../../../../../lib/authz"
           ? "mock:authz"
           : specifier === "@openbooks/engine/src/platform/db.ts"
             ? "mock:db"

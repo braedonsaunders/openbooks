@@ -51,15 +51,6 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.report-definition-route-test')]
@@ -121,7 +112,6 @@ const mockSources = new Map<string, string>([
 const selfUrl = new URL(import.meta.url).href;
 const mockUrl = (name: string) => `${selfUrl}?report-definition-mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", mockUrl("json")],
   ["@/lib/custom-record-report-catalog", mockUrl("catalog")],
   ["@openbooks/engine/src/platform/db.ts", mockUrl("db")],
   ["../../../../../lib/authz", mockUrl("authz")],

@@ -46,6 +46,7 @@ const mockSources = new Map<string, string>([
         return { rows: [] }
       } }
       export async function withOrgContext(_orgId, fn) { return fn() }
+      export async function withOrgTransaction(_orgId, fn) { return fn() }
     `,
   ],
   [
@@ -83,9 +84,16 @@ const mockSources = new Map<string, string>([
   [
     "mock:lib",
     `
+      import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
       export async function requireFlowsSession() { return state.authz }
       export async function loadFlowSubjectSubsidiary() { return state.subjectSubsidiaryId }
+      export async function lockFlowSubjectScope(_subjectKind, _subjectId, _orgId, allowedSubsidiaryIds) {
+        if (allowedSubsidiaryIds !== null &&
+            (state.subjectSubsidiaryId === null || !allowedSubsidiaryIds.has(state.subjectSubsidiaryId))) {
+          throw new ScopeNotFoundError()
+        }
+      }
     `,
   ],
   [
@@ -115,14 +123,19 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/flow-subject-authz", "mock:subject-authz"],
 ]);
 
+const selfUrl = new URL(import.meta.url).href;
+
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = mockUrls.get(specifier);
+    // Serve the _lib double under a file URL: its lock stub imports the real
+    // ScopeNotFoundError, which cannot resolve from an opaque mock: URL.
+    if (mocked === "mock:lib") return { url: `${selfUrl}?mock=lib`, shortCircuit: true };
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url);
+    const source = mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`);
     if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },

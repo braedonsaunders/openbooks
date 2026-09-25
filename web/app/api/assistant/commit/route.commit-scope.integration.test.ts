@@ -28,6 +28,11 @@ const mockSources = new Map<string, string>([
       export function can(authz, perm) {
         return authz.permissions.has(perm)
       }
+      export function subsidiaryScopeAllows(scope, subsidiaryId, opts = {}) {
+        if (scope === null) return true
+        if (subsidiaryId == null || subsidiaryId === '') return opts.orgWideNull === true
+        return scope.has(subsidiaryId)
+      }
     `,
   ],
   [

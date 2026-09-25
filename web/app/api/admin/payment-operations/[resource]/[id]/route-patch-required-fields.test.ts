@@ -46,6 +46,8 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.payment-format-blank-test')]
       const sqlText = globalThis.openbooksSqlTextPaymentBlank
+      export const ambientTenantOrgId = () => 'org-1'
+      export const withBypassContext = (fn) => fn()
       const executor = {
         async execute(query) {
           const text = sqlText(query)

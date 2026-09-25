@@ -71,6 +71,13 @@ const mockSources = new Map<string, string>([
       export async function getAuthz() {
         return state.identity
       }
+      export async function resolveUserAuthz(user) {
+        if (state.identity && state.identity.user.id === user.id) return state.identity
+        return { user, permissions: new Set(), allowedSubsidiaryIds: null }
+      }
+      export function can(authz, perm) {
+        return authz.permissions.has(perm) || authz.permissions.has('*')
+      }
     `,
   ],
   [
