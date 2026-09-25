@@ -2055,7 +2055,14 @@
       "preview": "Vista previa de campos",
       "submit": "Generar",
       "failed": "No se pudo generar.",
-      "noTemplates": "Sin plantillas activas — declare plantillas en Configuración primero."
+      "noTemplates": "Sin plantillas activas — declare plantillas en Configuración primero.",
+      "modeGenerate": "Generar desde una plantilla",
+      "modeUpload": "Subir un archivo existente",
+      "uploadCategory": "Categoría del documento",
+      "uploadFile": "Archivo de origen",
+      "uploadSubmit": "Registrar documento subido",
+      "noCategories": "No hay categorías activas — declare una en Configuración primero.",
+      "uploadTooLarge": "Elija un archivo de 10 MB o menos."
     }
   },
   "surveys": {

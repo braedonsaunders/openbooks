@@ -2055,7 +2055,14 @@
       "preview": "Pré-visualizar campos",
       "submit": "Gerar",
       "failed": "Falha ao gerar.",
-      "noTemplates": "Sem modelos ativos — declare modelos em Configuração primeiro."
+      "noTemplates": "Sem modelos ativos — declare modelos em Configuração primeiro.",
+      "modeGenerate": "Gerar a partir de um modelo",
+      "modeUpload": "Enviar arquivo existente",
+      "uploadCategory": "Categoria do documento",
+      "uploadFile": "Arquivo de origem",
+      "uploadSubmit": "Registrar documento enviado",
+      "noCategories": "Sem categorias de documento ativas — declare uma em Configuração primeiro.",
+      "uploadTooLarge": "Escolha um arquivo de até 10 MB."
     }
   },
   "surveys": {

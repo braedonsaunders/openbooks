@@ -294,6 +294,7 @@ export async function loadDocumentsHome(
     closeHref: string
     templates: { value: string; label: string; category: string; mergeFields: string[] }[]
     people: { value: string; label: string }[]
+    categories: { value: string; label: string }[]
     labels: Record<string, string>
   } | null = null
   if (generating) {
@@ -309,6 +310,7 @@ export async function loadDocumentsHome(
           mergeFields: tpl.mergeFields,
         })),
       people: people.map((p) => ({ value: p.id, label: p.display_name })),
+      categories: categories.map((category) => ({ value: category.key, label: category.label })),
       labels: {
         title: t('documents.generate.title'),
         template: t('documents.generate.template'),
@@ -318,6 +320,13 @@ export async function loadDocumentsHome(
         submit: t('documents.generate.submit'),
         failed: t('documents.generate.failed'),
         noTemplates: t('documents.generate.noTemplates'),
+        modeGenerate: t('documents.generate.modeGenerate'),
+        modeUpload: t('documents.generate.modeUpload'),
+        uploadCategory: t('documents.generate.uploadCategory'),
+        uploadFile: t('documents.generate.uploadFile'),
+        uploadSubmit: t('documents.generate.uploadSubmit'),
+        noCategories: t('documents.generate.noCategories'),
+        uploadTooLarge: t('documents.generate.uploadTooLarge'),
       },
     }
   }

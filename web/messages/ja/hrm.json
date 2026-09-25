@@ -2055,7 +2055,14 @@
       "preview": "差し込みプレビュー",
       "submit": "生成",
       "failed": "生成に失敗しました。",
-      "noTemplates": "有効なテンプレートがありません — 先に設定で宣言してください。"
+      "noTemplates": "有効なテンプレートがありません — 先に設定で宣言してください。",
+      "modeGenerate": "テンプレートから生成",
+      "modeUpload": "既存ファイルをアップロード",
+      "uploadCategory": "文書カテゴリ",
+      "uploadFile": "元ファイル",
+      "uploadSubmit": "アップロードした文書を登録",
+      "noCategories": "有効な文書カテゴリがありません — 先に設定で宣言してください。",
+      "uploadTooLarge": "10 MB 以下のファイルを選択してください。"
     }
   },
   "surveys": {

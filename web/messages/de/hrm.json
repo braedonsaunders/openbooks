@@ -2055,7 +2055,14 @@
       "preview": "Serienfelder-Vorschau",
       "submit": "Erstellen",
       "failed": "Erstellung fehlgeschlagen.",
-      "noTemplates": "Keine aktiven Vorlagen — legen Sie zuerst Vorlagen unter Setup an."
+      "noTemplates": "Keine aktiven Vorlagen — legen Sie zuerst Vorlagen unter Setup an.",
+      "modeGenerate": "Aus Vorlage erstellen",
+      "modeUpload": "Vorhandene Datei hochladen",
+      "uploadCategory": "Dokumentkategorie",
+      "uploadFile": "Quelldatei",
+      "uploadSubmit": "Hochgeladenes Dokument registrieren",
+      "noCategories": "Keine aktiven Dokumentkategorien — legen Sie zuerst eine unter Setup an.",
+      "uploadTooLarge": "Wählen Sie eine Datei mit höchstens 10 MB."
     }
   },
   "surveys": {
