@@ -36,6 +36,11 @@ export function DocsSidebar({
   articles: DocNavArticle[]
 }) {
   const t = useTranslations('docs')
+  // Registry metadata resolves through the docs catalog so headings and
+  // accessible names follow the viewer locale; the English literals stay on
+  // the registry as the authoring fallback.
+  const categoryTitle = (category: DocCategory) => t(category.titleKey)
+  const sectionTitle = (section: DocSection) => t(section.titleKey)
   const pathname = usePathname()
   const [q, setQ] = useState('')
   const activeSlug = pathname?.startsWith('/docs/') ? pathname.slice('/docs/'.length) : ''
@@ -169,14 +174,14 @@ export function DocsSidebar({
           type="button"
           onClick={() => toggle(setExpandedSections, section.key)}
           aria-expanded={expanded}
-          aria-label={t(expanded ? 'collapseSection' : 'expandSection', { title: section.title })}
+          aria-label={t(expanded ? 'collapseSection' : 'expandSection', { title: sectionTitle(section) })}
           className="flex w-full items-center gap-1.5 rounded py-1.5 pl-3 pr-2 text-left text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
         >
           <ChevronRight
             className={cn('h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform', expanded && 'rotate-90')}
             aria-hidden
           />
-          <span className="min-w-0 flex-1 truncate">{section.title}</span>
+          <span className="min-w-0 flex-1 truncate">{sectionTitle(section)}</span>
           <span className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">{count}</span>
         </button>
         {expanded ? (
@@ -204,14 +209,14 @@ export function DocsSidebar({
                 type="button"
                 onClick={() => toggle(setExpandedCategories, category.key)}
                 aria-expanded={expanded}
-                aria-label={t(expanded ? 'collapseSection' : 'expandSection', { title: category.title })}
+                aria-label={t(expanded ? 'collapseSection' : 'expandSection', { title: categoryTitle(category) })}
                 className="flex w-full items-center gap-1.5 rounded px-1 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               >
                 <ChevronRight
                   className={cn('h-3.5 w-3.5 shrink-0 transition-transform', expanded && 'rotate-90')}
                   aria-hidden
                 />
-                <span className="min-w-0 flex-1 truncate">{category.title}</span>
+                <span className="min-w-0 flex-1 truncate">{categoryTitle(category)}</span>
                 <span className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500">{items.length}</span>
               </button>
               {expanded ? (

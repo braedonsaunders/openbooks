@@ -24,5 +24,103 @@
     "browseTitle": "浏览全部文档",
     "browseSubtitle": "按主题浏览完整指南，或从侧边栏搜索。",
     "articleCount": "{count} 篇文章"
+  },
+  "categories": {
+    "getting-started": {
+      "title": "入门指南",
+      "description": "OpenBooks 的方向指引与核心概念。"
+    },
+    "switching": {
+      "title": "切换到 OpenBooks",
+      "description": "帮助来自其他会计系统的团队快速熟悉的指南。"
+    },
+    "accounting": {
+      "title": "会计基础",
+      "description": "总账模型、交易生命周期、科目、维度与主数据。"
+    },
+    "transactions": {
+      "title": "销售与采购",
+      "description": "客户与供应商交易流程、付款、贷记与核销。"
+    },
+    "banking-close": {
+      "title": "银行与结账",
+      "description": "对账单核对、对账、凭证与受控的期间结账。"
+    },
+    "projects": {
+      "title": "项目与开票",
+      "description": "项目类型、盈利能力、开票与发票附件。"
+    },
+    "reporting": {
+      "title": "报表与分析",
+      "description": "财务报表、总账明细、仪表板、分析与可复用视图。"
+    },
+    "integrations": {
+      "title": "集成与迁移",
+      "description": "规划切换、验证迁移账簿，并按实体运营源连接。"
+    },
+    "apps": {
+      "title": "应用与扩展",
+      "description": "安装、使用、更新和管理组织扩展。"
+    },
+    "administration": {
+      "title": "系统管理",
+      "description": "配置、权限、导入、文件、安全与不可变证据。"
+    }
+  },
+  "sections": {
+    "getting-started-first-steps": {
+      "title": "第一步"
+    },
+    "getting-started-using-openbooks": {
+      "title": "使用 OpenBooks"
+    },
+    "switching-small-business": {
+      "title": "小企业系统"
+    },
+    "switching-erp": {
+      "title": "ERP 系统"
+    },
+    "accounting-ledger": {
+      "title": "总账基础"
+    },
+    "accounting-master-data": {
+      "title": "主数据"
+    },
+    "accounting-advanced": {
+      "title": "高级会计"
+    },
+    "transactions-daily": {
+      "title": "日常工作流"
+    },
+    "reporting-guides": {
+      "title": "报表与洞察"
+    },
+    "integrations-migration": {
+      "title": "迁移与切换"
+    },
+    "integrations-connections": {
+      "title": "源连接"
+    },
+    "apps-build": {
+      "title": "应用与脚本"
+    },
+    "apps-automation": {
+      "title": "自动化与集成"
+    },
+    "administration-organization": {
+      "title": "组织与访问"
+    },
+    "administration-company-setup": {
+      "title": "公司设置"
+    },
+    "administration-customize": {
+      "title": "自定义"
+    },
+    "administration-taxes": {
+      "title": "税务"
+    },
+    "administration-data": {
+      "title": "数据与证据"
+    }
   }
 }

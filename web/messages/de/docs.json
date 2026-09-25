@@ -24,5 +24,103 @@
     "browseTitle": "Gesamte Dokumentation durchsuchen",
     "browseSubtitle": "Entdecken Sie den vollständigen Leitfaden nach Thema oder suchen Sie über die Seitenleiste.",
     "articleCount": "{count, plural, one {# Artikel} other {# Artikel}}"
+  },
+  "categories": {
+    "getting-started": {
+      "title": "Erste Schritte",
+      "description": "Orientierung und die Kernkonzepte von OpenBooks."
+    },
+    "switching": {
+      "title": "Zu OpenBooks wechseln",
+      "description": "Einführungsleitfäden für Teams, die von einem anderen Buchhaltungssystem kommen."
+    },
+    "accounting": {
+      "title": "Grundlagen der Buchhaltung",
+      "description": "Kontenmodell, Buchungslebenszyklus, Konten, Dimensionen und Stammdaten."
+    },
+    "transactions": {
+      "title": "Verkauf & Einkauf",
+      "description": "Kunden- und Lieferantenprozesse, Zahlungen, Gutschriften und Verrechnungen."
+    },
+    "banking-close": {
+      "title": "Bank & Abschluss",
+      "description": "Kontoauszugsabgleich, Abstimmung, Nachweise und der geregelte Periodenabschluss."
+    },
+    "projects": {
+      "title": "Projekte & Abrechnung",
+      "description": "Projektarten, Rentabilität, Rechnungsstellung und Rechnungsbelege."
+    },
+    "reporting": {
+      "title": "Berichte & Analysen",
+      "description": "Abschlüsse, Kontodetails, Dashboards, Analysen und wiederverwendbare Ansichten."
+    },
+    "integrations": {
+      "title": "Integrationen & Migration",
+      "description": "Umstellung planen, migrierte Bücher nachweisen und mandantenbezogene Quellverbindungen betreiben."
+    },
+    "apps": {
+      "title": "Apps & Erweiterungen",
+      "description": "Organisationserweiterungen installieren, verwenden, aktualisieren und verwalten."
+    },
+    "administration": {
+      "title": "Administration",
+      "description": "Konfiguration, Berechtigungen, Importe, Dateien, Sicherheit und unveränderliche Nachweise."
+    }
+  },
+  "sections": {
+    "getting-started-first-steps": {
+      "title": "Erste Schritte"
+    },
+    "getting-started-using-openbooks": {
+      "title": "OpenBooks verwenden"
+    },
+    "switching-small-business": {
+      "title": "Systeme für kleine Unternehmen"
+    },
+    "switching-erp": {
+      "title": "ERP-Systeme"
+    },
+    "accounting-ledger": {
+      "title": "Grundlagen des Hauptbuchs"
+    },
+    "accounting-master-data": {
+      "title": "Stammdaten"
+    },
+    "accounting-advanced": {
+      "title": "Erweiterte Buchhaltung"
+    },
+    "transactions-daily": {
+      "title": "Tägliche Abläufe"
+    },
+    "reporting-guides": {
+      "title": "Berichte & Einblicke"
+    },
+    "integrations-migration": {
+      "title": "Migration & Umstellung"
+    },
+    "integrations-connections": {
+      "title": "Quellverbindungen"
+    },
+    "apps-build": {
+      "title": "Apps & Skripte"
+    },
+    "apps-automation": {
+      "title": "Automatisierung & Integration"
+    },
+    "administration-organization": {
+      "title": "Organisation & Zugriff"
+    },
+    "administration-company-setup": {
+      "title": "Unternehmenseinrichtung"
+    },
+    "administration-customize": {
+      "title": "Anpassung"
+    },
+    "administration-taxes": {
+      "title": "Steuern"
+    },
+    "administration-data": {
+      "title": "Daten & Nachweise"
+    }
   }
 }

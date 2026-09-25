@@ -24,5 +24,103 @@
     "browseTitle": "Browse all documentation",
     "browseSubtitle": "Explore the complete guide by topic or search from the sidebar.",
     "articleCount": "{count, plural, one {# article} other {# articles}}"
+  },
+  "categories": {
+    "getting-started": {
+      "title": "Getting Started",
+      "description": "Orientation and the core concepts behind OpenBooks."
+    },
+    "switching": {
+      "title": "Switching to OpenBooks",
+      "description": "Familiarization guides for teams moving from another accounting system."
+    },
+    "accounting": {
+      "title": "Accounting Foundations",
+      "description": "The ledger model, transaction lifecycle, accounts, dimensions, and master data."
+    },
+    "transactions": {
+      "title": "Sales & Purchases",
+      "description": "Customer and vendor transaction lifecycles, payments, credits, and applications."
+    },
+    "banking-close": {
+      "title": "Banking & Close",
+      "description": "Statement matching, reconciliation, evidence, and the governed period close."
+    },
+    "projects": {
+      "title": "Projects & Billing",
+      "description": "Project types, profitability, invoicing, and invoice backup."
+    },
+    "reporting": {
+      "title": "Reporting & Analytics",
+      "description": "Financial statements, ledger detail, dashboards, analytics, and reusable views."
+    },
+    "integrations": {
+      "title": "Integrations & Migration",
+      "description": "Plan cutover, prove migrated books, and operate tenant-scoped source connections."
+    },
+    "apps": {
+      "title": "Apps & Extensions",
+      "description": "Install, use, update, and administer organization extensions."
+    },
+    "administration": {
+      "title": "Administration",
+      "description": "Configuration, permissions, imports, files, security, and immutable evidence."
+    }
+  },
+  "sections": {
+    "getting-started-first-steps": {
+      "title": "First Steps"
+    },
+    "getting-started-using-openbooks": {
+      "title": "Using OpenBooks"
+    },
+    "switching-small-business": {
+      "title": "Small Business Systems"
+    },
+    "switching-erp": {
+      "title": "ERP Systems"
+    },
+    "accounting-ledger": {
+      "title": "Ledger Foundations"
+    },
+    "accounting-master-data": {
+      "title": "Master Data"
+    },
+    "accounting-advanced": {
+      "title": "Advanced Accounting"
+    },
+    "transactions-daily": {
+      "title": "Daily Workflows"
+    },
+    "reporting-guides": {
+      "title": "Reports & Insights"
+    },
+    "integrations-migration": {
+      "title": "Migration & Cutover"
+    },
+    "integrations-connections": {
+      "title": "Source Connections"
+    },
+    "apps-build": {
+      "title": "Apps & Scripts"
+    },
+    "apps-automation": {
+      "title": "Automation & Integration"
+    },
+    "administration-organization": {
+      "title": "Organization & Access"
+    },
+    "administration-company-setup": {
+      "title": "Company Setup"
+    },
+    "administration-customize": {
+      "title": "Customization"
+    },
+    "administration-taxes": {
+      "title": "Taxes"
+    },
+    "administration-data": {
+      "title": "Data & Evidence"
+    }
   }
 }
