@@ -232,6 +232,11 @@ test("reversed entry accepts no further transition", { skip: !DB }, async () =>
  * future rewrite can silently drop one. The draft-post block interior
  * belongs to f2/0168 (source-module recheck) and is pinned only by its
  * marker and its period fence, not by contents this shard does not own.
+ *
+ * Append-only (0380) deliberately removed the same-status-amend branch, so
+ * it is pinned by ABSENCE below rather than by name: a reintroduced amend
+ * escape fails this test. That absence pin is load-bearing in the same way
+ * the name pins are — it is the only evidence that the escape is gone.
  */
 test("je_guard source contract pins every branch by name", { skip: !DB }, async () =>
   fixture(async () => {
@@ -240,7 +245,6 @@ test("je_guard source contract pins every branch by name", { skip: !DB }, async 
     );
     const body = r.rows[0]!.definition;
     assert.match(body, /Branch: journal-entry-delete/, "delete fence branch");
-    assert.match(body, /Branch: same-status-amend/, "amend branch");
     assert.match(body, /Branch: posted-immutability/, "posted-immutability branch");
     assert.match(body, /Branch: reversal-evidence/, "reversal-evidence branch");
     assert.match(body, /Branch: reversed-immutable/, "reversed-immutability branch");
@@ -248,6 +252,11 @@ test("je_guard source contract pins every branch by name", { skip: !DB }, async 
     assert.match(body, /openbooks_reversal_mirrors/, "mirror predicate");
     assert.match(body, /without other changes/, "header-freeze rule");
     assert.match(body, /period_posting_fence/, "period fence");
+    assert.doesNotMatch(
+      body,
+      /current_setting\('openbooks\.amend'/,
+      "no amend escape may return to the entry guard",
+    );
   }));
 
 test("draft lifecycle still works: header edit then post", { skip: !DB }, async () =>
@@ -265,37 +274,47 @@ test("draft lifecycle still works: header edit then post", { skip: !DB }, async 
     assert.equal(await statusOf(entry), "posted");
   }));
 
-test("amend-delete in a soft_closed period is refused like an amend-update", { skip: !DB }, async () => {
+test("delete in a soft_closed period is refused like an update", { skip: !DB }, async () => {
   // G5: the DELETE branch fenced with period_module_is_closed (true only
-  // for state = 'closed') while the sibling amend-UPDATE branch uses the
-  // soft-close-aware period_module_blocks_write, so an amend-delete in a
+  // for state = 'closed') while the sibling UPDATE branches use the
+  // soft-close-aware period_module_blocks_write, so a delete in a
   // soft_closed period went through. Both branches must refuse.
+  //
+  // Append-only (0380) retired the original amend-delete-of-posted shape:
+  // posted entries are never deletable, so the living property is a DRAFT
+  // delete in a soft_closed period — attempted with no session flag, with
+  // its lines still attached so the BEFORE-trigger fence must fire before
+  // the line back-reference is ever consulted.
   await fixture(async (org) => {
-    const entry = await postBalanced(org, "GUARD-DEL-SOFT");
+    const entry = randomUUID();
+    const num = `GUARD-DEL-SOFT-${entry.slice(0, 6)}`;
+    await db.execute(sql`insert into journal_entries
+      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${num}, ${org.date}, ${org.periodId}, ${num}, 'draft', 'manual')`);
+    await db.execute(sql`insert into journal_lines
+      (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
+      values (${org.orgId}, ${entry}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, '10.0000', 'CAD', '10.0000', '1', 'x'),
+             (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-10.0000', 'CAD', '-10.0000', '1', 'x')`);
     await db.execute(sql`insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, reason)
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', 'soft_closed', 'G5 regression probe')`);
-    // The entry delete is attempted with its lines still attached: the
-    // BEFORE-trigger fence must fire before the line back-reference is
-    // ever consulted. Pre-fix the fence let it through and the delete died
-    // on the foreign key instead.
     await assert.rejects(
-      withOrgTransaction(org.orgId, async () => {
-        await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-        await db.execute(sql`delete from journal_entries where id = ${entry}`);
-      }),
+      db.execute(sql`delete from journal_entries where id = ${entry}`),
       (error: unknown) => errorChainMatches(error, /period is closed for GL posting/),
     );
-    assert.equal(await statusOf(entry), "posted");
+    assert.equal(await statusOf(entry), "draft");
   });
 });
 
-test("amend-path book rehome moves GL monthly activity between buckets", { skip: !DB }, async () => {
+test("posted book rehome is refused instead of stranding activity", { skip: !DB }, async () => {
   // G6: the entry trigger watched status and posting_date only, so a
-  // book_id rehome under amend left the old book holding the amounts and
-  // the new book empty. After the rehome, both book buckets must equal a
-  // from-scratch rebuild — asserted through the sanctioned verifier, which
-  // compares the live aggregate against the ledger (ignoring the zeroed
-  // rows trigger maintenance legitimately leaves behind).
+  // book_id rehome left the old book holding the amounts and the new book
+  // empty. Append-only (0380) answers that class of in-place rewrite by
+  // refusing it: a posted entry's book is part of its immutable economics,
+  // and the refusal names the remedy (append a reversal through the ledger
+  // API). Moving books now means reverse + repost into the other book.
+  // The verifier asserts both buckets still equal a from-scratch rebuild
+  // after the refused rehome — the activity cannot strand, because it
+  // cannot move in place at all.
   await fixture(async (org) => {
     const secondBook = randomUUID();
     await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
@@ -304,10 +323,19 @@ test("amend-path book rehome moves GL monthly activity between buckets", { skip:
     const drift = async () =>
       (await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`)).rows;
     assert.deepEqual(await drift(), [], "a fresh posting must verify clean");
-    await withOrgTransaction(org.orgId, async () => {
-      await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-      await db.execute(sql`update journal_entries set book_id = ${secondBook} where id = ${entry}`);
-    });
-    assert.deepEqual(await drift(), [], "the rehome must move activity between book buckets");
+    await assert.rejects(
+      withOrgTransaction(org.orgId, async () => {
+        await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+        await db.execute(sql`update journal_entries set book_id = ${secondBook} where id = ${entry}`);
+      }),
+      (error: unknown) =>
+        errorChainMatches(error, /posted and immutable: corrections append a reversal/),
+      "a posted book rehome must raise naming the reversal remedy",
+    );
+    assert.deepEqual(await drift(), [], "the refused rehome must leave both book buckets clean");
+    const bookOf = async () =>
+      (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where id = ${entry}`))
+        .rows[0]!.book_id;
+    assert.equal(await bookOf(), org.bookId);
   });
 });
