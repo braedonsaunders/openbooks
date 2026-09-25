@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Label, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import type { WindowDrawerData } from '../../../../lib/hrm/benefits'
 
 /**
@@ -17,6 +18,7 @@ import type { WindowDrawerData } from '../../../../lib/hrm/benefits'
  */
 export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; closeHref: string }) {
   const t = useTranslations('hrm')
+  const tCommon = useTranslations('common')
   const reasonId = useId()
   const router = useRouter()
   const [closing, setClosing] = useState(false)
@@ -28,6 +30,18 @@ export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; 
     router.push(closeHref as never)
     router.refresh()
   }
+
+  // A typed close reason is unsaved work: drawer-level dismiss (Escape,
+  // backdrop, X) asks before abandoning it. The inline Cancel only hides
+  // the reason form — the drawer stays open and the text is kept — so it
+  // needs no confirmation.
+  const reasonClose = useDirtyClose({
+    dirty: reason.trim().length > 0,
+    busy: working,
+    onClose: close,
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   async function transition(path: 'open' | 'close', body: Record<string, string>) {
     setWorking(true)
@@ -46,7 +60,7 @@ export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; 
   }
 
   return (
-    <Drawer open onClose={close} title={window.name} description={window.rangeLabel} size="lg">
+    <Drawer open onClose={() => void reasonClose.close()} title={window.name} description={window.rangeLabel} size="lg">
       <div className="flex flex-col gap-5 p-4">
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{drawer.progressLabel}</h3>
