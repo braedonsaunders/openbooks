@@ -984,6 +984,7 @@ export async function runBridgeMethod(opts: {
             : {}),
         }),
         requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
+        authorize: () => lockInstalledAppForInvocation(opts.orgId, app.id, app.activeVersionId),
         run: attemptDispatch,
         audit: insertAppRun,
       })
