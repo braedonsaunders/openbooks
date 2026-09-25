@@ -3,7 +3,7 @@ import { Button, UrlDrawer } from '@openbooks/ui'
 import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 import { CycleActions } from './CycleActions'
 import { CycleCreateForm } from './CycleCreateForm'
-import { GoalForm } from './GoalForm'
+import { GoalForm, GoalProgressForm } from './GoalForm'
 import { ReviewActions } from './ReviewActions'
 import { ReviewAnswerForm } from './ReviewAnswerForm'
 import { ExitRecordForm } from './ExitRecordForm'
@@ -144,17 +144,23 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
       )}
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{review.goalsTitle}</h4>
-        {review.goals.length === 0 ? (
+        {review.goals.length === 0 && !review.canWriteGoals ? (
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{review.goalsEmpty}</p>
         ) : (
           <ul className="mt-1 space-y-1.5">
             {review.goals.map((goal) => (
               <li key={goal.id} className="text-sm text-slate-600 dark:text-slate-300">
                 <span className="font-medium">{goal.title}</span> · {goal.statusLabel} · {goal.progress}%
+                {review.canWriteGoals ? (
+                  <GoalProgressForm goalId={goal.id} failed={review.failed} />
+                ) : null}
               </li>
             ))}
           </ul>
         )}
+        {review.canWriteGoals ? (
+          <GoalSection employmentId={review.employmentId} cycleId={review.cycleId} />
+        ) : null}
       </div>
       <ReviewActions
         reviewId={review.id}
