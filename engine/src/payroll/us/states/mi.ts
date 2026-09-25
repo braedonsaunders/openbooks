@@ -413,8 +413,16 @@ function computeDetroit(input: UsStateWithholdingInput): UsStateWithholdingResul
   // taxed at 2.4% minus THAT city's nonresident rate — one credit per work
   // city, priced off that city's own allocation, never first-match. Wages
   // outside the credited allocations price at the full resident rate. The
-  // period allowance offsets the highest-taxed slice first, so an exemption
-  // never shelters low-taxed dollars while full-rate dollars go untaxed.
+  // period allowance offsets the highest-taxed slice first: the City's own
+  // instructions price the tax as a straight percentage of compensation
+  // AFTER the exemption adjustment (Form DW-4 count times the printed
+  // value), and the other-city paragraph prices Detroit's share as the
+  // 2.4% rate reduced by the amount withheld for the other city — the
+  // resident still pays a total of 2.4% — which is the MCL 141.665 credit
+  // (taxes paid to another city, capped at the nonresident equivalent)
+  // taken against full-rate Detroit tax. Sheltering the full-rate remainder
+  // first reproduces that exactly; sheltering a reduced slice first would
+  // over-withhold by the other city's rate on every sheltered dollar.
   let allowance = totalAllowance;
   let otherWages = 0n;
   const slices: { wages: bigint; rate: string }[] = [];

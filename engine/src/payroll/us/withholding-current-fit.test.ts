@@ -145,6 +145,9 @@ test('Detroit resident withholding offsets the other city rate and refuses an un
   }
   // Two other cities price each city's credit separately: $1,200 at 2.4% − 0.75% plus $800 at 2.4% − 0.50% = 19.80 + 15.20.
   assert.equal(computeUsWithholding({ ...input, detroitOtherCities: [{ code: 'GRAND_RAPIDS', nonresidentRate: '0.0075' }, { code: 'HIGHLAND_PARK', nonresidentRate: '0.005' }] })?.tax, '35.0000')
+  // One $23.08 biweekly exemption shelters the highest-taxed slice first: ($800 − $23.08) at 1.90% plus $1,200 at 1.65% = 14.76 + 19.80.
+  const withExemption = { ...input, certificateFor: () => certificate('us_mi_5527', { exemptions: '1' }) }
+  assert.equal(computeUsWithholding({ ...withExemption, detroitOtherCities: [{ code: 'GRAND_RAPIDS', nonresidentRate: '0.0075' }, { code: 'HIGHLAND_PARK', nonresidentRate: '0.005' }] })?.tax, '34.5600')
   assert.throws(() => computeUsWithholding({ ...input, detroitOtherCities: [{ code: 'GRAND_RAPIDS', nonresidentRate: null }] }), /GRAND_RAPIDS nonresident rate.*us_mi_city settings/)
 })
 
