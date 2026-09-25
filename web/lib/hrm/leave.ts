@@ -22,6 +22,7 @@ import { LeaveError } from '@openbooks/engine/src/hrm/leave-errors.ts'
 import { can, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { loadQueueLabels } from './change-requests'
+import { listScopedDepartmentOptions } from '../scoped-options'
 
 /**
  * Leave workspace loaders — one read per surface behind the Leave tab, the
@@ -304,9 +305,7 @@ export async function loadLeaveQueue(
     }
   })
 
-  const departments = (await db.execute<{ id: string; name: string }>(sql`
-    select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name
-  `)).rows
+  const departments = await listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)
 
   // Department calendar: absence days in the window, grouped by date. The
   // engine scopes every member row; an empty window reads empty, never all.

@@ -120,7 +120,7 @@ registerHooks({
     // database client: with no labelled rows it resolves to the
     // not-available fallback, which these tests never assert on.
     if (
-      (owned || parent.endsWith("/web/lib/hrm/change-requests.ts")) &&
+      (owned || parent.endsWith("/web/lib/hrm/change-requests.ts") || parent.endsWith("/web/lib/scoped-options.ts")) &&
       specifier === "@openbooks/engine/src/platform/db.ts"
     ) {
       return {
