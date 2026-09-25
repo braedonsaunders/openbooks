@@ -38,7 +38,7 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../..
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const PREMIES = { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25" };
+const PREMIES = { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25", sv_loon_ytd: "0" };
 
 interface Fixture {
   orgId: string;

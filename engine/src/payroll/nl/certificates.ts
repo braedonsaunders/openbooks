@@ -213,14 +213,16 @@ const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
     },
     {
       key: "sv_loon_ytd",
-      label: "Premieloon year-to-date",
+      label: "Premieloon year-to-date (opening balance)",
       kind: "amount",
       decimals: 2,
       min: "0",
-      default: "0",
-      help: "Declared cumulative premieloon (SV wage) this year, for the € 79.409 annual "
-        + "maximumpremieloon. Zero for an employee employed all year; copied from the prior "
-        + "provider's report for a mid-year hire.",
+      help: "Verified premieloon (SV wage) already paid this year BEFORE this employer — the "
+        + "opening balance for the € 79.409 annual maximumpremieloon. Enter an explicit 0 for "
+        + "an employee employed all year by this employer; copied from the prior provider's "
+        + "report for a mid-year hire. No default exists: the engine adds this employer's own "
+        + "committed current-year SV base on top, and refuses without a recorded opening "
+        + "rather than assuming zero.",
     },
   ],
 };
