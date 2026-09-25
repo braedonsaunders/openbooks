@@ -12,13 +12,13 @@
  * The live guide still prints the January 1, 2025 table. 2026 pay dates use
  * that published table; they do not invent a 2026 reprint.
  *
- * Wilmington city wage tax and Form W-4NR nonresident proration are refused
- * rather than invented.
+ * Wilmington city wage tax is refused rather than invented; the Form W-4NR
+ * nonresident day-count proration is implemented below.
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, max0, mulRateCents, mulRatioCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
   type PayrollCertificate,
@@ -34,6 +34,7 @@ import {
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/de.ts";
+const DE_W4NR_KEY = "us_de_w4nr";
 
 export type DeFilingStatus = "single" | "married_joint" | "married_separate";
 
@@ -116,14 +117,23 @@ export function deAnnualTax(taxable: bigint): bigint {
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = deRatesForPayDate(input.payDate);
-  // Delaware's Employer's Guide describes the Form W-4NR proration as
-  // Delaware-source AGI divided by federal AGI. We do not yet collect that
-  // allocation, so a nonresident result cannot be computed safely.
+  // Employer's Guide Section 16 (Form W-4NR): a nonresident's withholding is
+  // the annualized-method tax on total wages prorated to the Delaware share
+  // of work days. Without the filed day count there is nothing to prorate.
   // Official source: https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
+  let proration: { deDays: number; totalDays: number } | null = null;
   if (input.basis === "nonresident") {
-    throw new PayrollError(
-      "Delaware nonresident withholding requires Form W-4NR source-allocation facts to compute DE-source AGI as a share of federal AGI; capture the Form W-4NR inputs before calculating — refused by name",
-    );
+    const w4nr = input.supportingCertificates?.[DE_W4NR_KEY];
+    const deDays = w4nr?.onFile ? certificateCount(w4nr, "delaware_work_days") : null;
+    const totalDays = w4nr?.onFile ? certificateCount(w4nr, "total_work_days") : null;
+    if (deDays == null || totalDays == null || totalDays < 1 || deDays < 0 || deDays > totalDays) {
+      throw new PayrollError(
+        "Delaware nonresident withholding requires Form W-4NR source-allocation facts — Delaware "
+        + "work days and total work days for the period — to prorate the annualized-method tax; "
+        + "capture the Form W-4NR inputs before calculating — refused by name",
+      );
+    }
+    proration = { deDays, totalDays };
   }
 
   const P = input.periodsPerYear;
@@ -167,7 +177,17 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("DE_PERIOD_TAX", periodTax);
 
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  // The W-4NR day share prorates the computed tax, never the wage base: the
+  // annualized method must price total wages first. The ratio stays exact
+  // (no four-place decimal) and rounds once, to the cent.
+  const deTax = proration == null
+    ? periodTax
+    : mulRatioCents(periodTax, BigInt(proration.deDays), BigInt(proration.totalDays));
+  if (proration != null) {
+    factors.DE_PRORATION = `${proration.deDays}/${proration.totalDays}`;
+    trace("DE_PRORATED_TAX", deTax);
+  }
+  const total = deTax + extra;
   trace("DE_WITHHELD", total);
 
   return {
@@ -194,6 +214,8 @@ export const DE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   DE_AFTER_CREDIT: "Delaware tax after exemption credit",
   DE_PERIOD_TAX: "Delaware tax this period",
   DE_WITHHELD: "Delaware tax withheld this period",
+  DE_PRORATION: "Delaware nonresident W-4NR day share",
+  DE_PRORATED_TAX: "Delaware tax apportioned to Delaware work days",
 };
 
 export const DE_WITHHOLDING: UsStateWithholdingEngine = {
@@ -203,6 +225,7 @@ export const DE_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: DE_TAX_YEAR_EDITIONS,
   printedPeriods: null,
+  supportingCertificateKeys: [DE_W4NR_KEY],
   compute,
 };
 
@@ -289,14 +312,57 @@ export const DE_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/**
+ * Form W-4NR, Delaware nonresident work-day proration. Filed by a
+ * nonresident working in and outside Delaware; records the Delaware work
+ * days and total work days so the annualized-method tax on total wages can
+ * be prorated to the Delaware share (Employer's Guide Section 16).
+ */
+export const DE_W4NR_CERTIFICATE: PayrollCertificate = {
+  key: DE_W4NR_KEY,
+  form: "W-4NR",
+  label: "Delaware Nonresident Work-Day Proration (W-4NR)",
+  scope: { level: "region", region: "DE" },
+  purpose: "withholding",
+  citation:
+    "Delaware Division of Revenue, Employer's Guide (Withholding Regulations and "
+    + "Employer's Duties), Section 16; Form W-4NR",
+  summary:
+    "Records a nonresident's Delaware work days and total work days for the "
+    + "period. The engine prices the annualized method on total wages first, "
+    + "then prorates the computed tax to the Delaware day share. Without the "
+    + "filed day count the nonresident levy refuses by name.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "delaware_work_days",
+      label: "Delaware work days this period",
+      kind: "count",
+      min: "0",
+      max: "366",
+      required: true,
+      help: "Days in the period the employee performed services in Delaware.",
+    },
+    {
+      key: "total_work_days",
+      label: "Total work days this period",
+      kind: "count",
+      min: "1",
+      max: "366",
+      required: true,
+      help: "Days in the period the employee performed services anywhere; must be at least the Delaware days.",
+    },
+  ],
+};
+
 export const DE_REGION: PayrollRegionWithholding = {
   region: "DE",
   label: "Delaware income tax",
   implemented: true,
   // Section 1: withhold from residents or non-residents whose wages are
-  // taxable in Delaware. Section 16's W-4NR proration is not implemented —
-  // a Delaware-source wage is withheld under the resident annualized method
-  // rather than guessed at a source fraction.
+  // taxable in Delaware. Section 16's W-4NR day-count proration prices the
+  // resident annualized method on total wages, then apportions the computed
+  // tax to the Delaware work-day share.
   taxesNonresidentWages: true,
   // Section 1 reaches residents. A resident working entirely outside Delaware
   // is not given a credit-offset formula in Section 17. Declared unknown.
