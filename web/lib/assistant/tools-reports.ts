@@ -19,6 +19,7 @@ import { budgetScenarioOptions } from "../budget-report";
 import { loadBudgetScenario } from "../budgets";
 import { isFeatureEnabled } from "../features";
 import type { AssistantToolDef, ToolResult } from "./types";
+import { closeScopeDenied } from "./tools-close";
 import {
   dateInput,
   uuidInput,
@@ -424,6 +425,8 @@ const listReportingPackages: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["close.read"] },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
+    const denied = closeScopeDenied(authz);
+    if (denied) return denied;
     const rows = (await db.execute<{
         id: string; name: string; description: string | null;
         reports: unknown; recipients: unknown; delivery: unknown;
