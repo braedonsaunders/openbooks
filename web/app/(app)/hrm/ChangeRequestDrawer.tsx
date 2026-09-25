@@ -141,12 +141,12 @@ export function ChangeRequestDrawer({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  // HR-16 begin: action/reason classification (0227). reasonsOn false = the
-  // hrmActionReasons feature is off: the selects hide and submit ignores
-  // classification entirely.
+  // 404 is the confirmed feature-off response. A failed fetch must keep
+  // submission closed because the submit API may require classification.
+  const [reasonLoadState, setReasonLoadState] = useState<'loading' | 'disabled' | 'loaded' | 'failed'>('loading')
+  const reasonsOn = reasonLoadState === 'loaded'
   const [action, setAction] = useState('')
   const [reasonCode, setReasonCode] = useState('')
-  const [reasonsOn, setReasonsOn] = useState(false)
   const [reasonOptions, setReasonOptions] = useState<{ action: string; reasonCode: string; label: string }[]>([])
   const managerRequestId = useRef(0)
   const locationRequestId = useRef(0)
@@ -284,24 +284,35 @@ export function ChangeRequestDrawer({
   }, [positionQuery, positionId, t])
 
   useEffect(() => {
+    let active = true
     fetch('/api/hrm/action-reasons', { method: 'GET' })
       .then(async (res) => {
-        if (!res.ok) return
-        const payload = (await res.json().catch(() => ({}))) as {
-          reasons?: { action?: unknown; reasonCode?: unknown; label?: unknown }[]
+        if (!active) return
+        if (res.status === 404) {
+          setReasonLoadState('disabled')
+          return
         }
-        const list = Array.isArray(payload.reasons) ? payload.reasons : []
+        if (!res.ok) {
+          setError(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
+          setReasonLoadState('failed')
+          return
+        }
+        const payload = (await res.json()) as { reasons?: unknown }
+        if (!Array.isArray(payload.reasons)) throw new Error('invalid action-reason response')
+        const list = payload.reasons as { action?: unknown; reasonCode?: unknown; label?: unknown }[]
         const valid = list.filter(
           (r) => typeof r.action === 'string' && typeof r.reasonCode === 'string' && typeof r.label === 'string',
         ) as { action: string; reasonCode: string; label: string }[]
         setReasonOptions(valid)
-        setReasonsOn(true)
+        setReasonLoadState('loaded')
       })
       .catch(() => {
-        // Unreachable route or network failure: classification stays off
-        // and submit ignores it, never a refusal for a hidden control.
+        if (!active) return
+        setError(t('employment.changeRequests.requestFailed'))
+        setReasonLoadState('failed')
       })
-  }, [])
+    return () => { active = false }
+  }, [t])
 
   const kindLabel = (value: ChangeRequestKind): string =>
     value === 'hire'
@@ -468,6 +479,7 @@ export function ChangeRequestDrawer({
   }
 
   async function submitForApproval() {
+    if (reasonLoadState === 'loading' || reasonLoadState === 'failed') return
     if (!requireAssignmentKey()) return
     if (!requirePositionLink()) return
     const submitReason = requireReason()
@@ -508,7 +520,7 @@ export function ChangeRequestDrawer({
           <Button variant="outline" disabled={busy} onClick={saveDraft}>
             {t(editing ? 'employment.changeRequests.saveChanges' : 'employment.changeRequests.saveDraft')}
           </Button>
-          <Button disabled={busy} onClick={submitForApproval}>
+          <Button disabled={busy || reasonLoadState === 'loading' || reasonLoadState === 'failed'} onClick={submitForApproval}>
             {t('employment.changeRequests.submitForApproval')}
           </Button>
         </>
