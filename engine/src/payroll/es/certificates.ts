@@ -161,7 +161,44 @@ const ES_DATOS_PERCEPTOR: PayrollCertificate = {
   ],
 };
 
+const ES_ZONA_IRPF: PayrollCertificate = {
+  key: "es_zona_irpf",
+  form: "Declaración de residencia y rendimientos en zona especial",
+  label: "Datos de zona para el cálculo de retenciones IRPF",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "AEAT ALGORITMO de cálculo del tipo de retención 2026, RESICEME y RENCEME; "
+    + "LIRPF art. 68.4 and D.A. 57ª; Real Decreto-ley 23/2026, effective 10 September 2026",
+  summary:
+    "The employee declares habitual and effective residence in Ceuta/Melilla or La Palma, and "
+    + "whether the employment income was obtained there. Both conditions control the reduced IRPF type.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "zona_residencia",
+      label: "Zona de residencia habitual y efectiva",
+      kind: "choice",
+      choices: [
+        { value: "ninguna", label: "No reside en Ceuta, Melilla ni La Palma" },
+        { value: "ceuta-melilla", label: "Ceuta o Melilla" },
+        { value: "la-palma", label: "La Palma" },
+      ],
+      required: true,
+      help: "La residencia y la obtención de los rendimientos en la zona se declaran por separado. "
+        + "La Palma solo da acceso al régimen excepcional desde el 10 de septiembre de 2026.",
+    },
+    {
+      key: "rendimientos_en_zona",
+      label: "Rendimientos del trabajo obtenidos en esa zona",
+      kind: "flag",
+      required: true,
+      help: "El tipo reducido exige residencia habitual y efectiva en la zona y rendimientos obtenidos allí.",
+    },
+  ],
+};
+
 export const ES_CERTIFICATES: PayrollPackCertificates = {
   country: "ES",
-  certificates: [MODELO_145, ES_DATOS_PERCEPTOR],
+  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF],
 };

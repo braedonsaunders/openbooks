@@ -147,15 +147,14 @@ test("ES foral territories are refused by name, never covered by AEAT", () => {
   }
 });
 
-test("ES certificate is the real Modelo 145, not a W-4/TD1 clone", () => {
+test("ES certificates keep Modelo 145 distinct from payer-held facts", () => {
   assert.equal(ES_CERTIFICATES.country, "ES");
-  // Since 0191 a second, column-backed declaration carries the payer-held
-  // SITUPER/grupo/año facts (`es_datos_perceptor`) — the Modelo 145 itself
-  // is unchanged, still first, still the only row-backed (fileable) form,
-  // and its situación familiar stays a different fact from SITUPER.
+  // Profile columns supply SITUPER/grupo/año; a separate certificate row
+  // carries the zone facts. Modelo 145 remains the government form, and its
+  // situación familiar is distinct from SITUPER.
   assert.deepEqual(
     ES_CERTIFICATES.certificates.map((entry) => [entry.key, entry.storage]),
-    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"]],
+    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"]],
   );
   const certificate = ES_CERTIFICATES.certificates[0]!;
   assert.equal(certificate.form, "145");
@@ -250,7 +249,9 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
     pushStatutory: (key: string, _kind: string, _label: string, amount: string) => {
       pushed.push({ key, amount });
     },
-    certificateFor: () => null,
+    certificateFor: (key: string) => key === "es_zona_irpf"
+      ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
+      : null,
     assertRegionSupported: (region: string) => {
       if (!ES_PAYROLL_PACK.regions.supported.includes(region)) {
         throw new PayrollPackError(`unsupported region ${region}`);
@@ -299,7 +300,9 @@ test("ES employee facts refuse absence as missing and bad values as out-of-band"
     pushStatutory: (key: string, _kind: string, _label: string, amount: string) => {
       pushed.push({ key, amount });
     },
-    certificateFor: () => null,
+    certificateFor: (key: string) => key === "es_zona_irpf"
+      ? { answers: { zona_residencia: "ninguna", rendimientos_en_zona: "false" } }
+      : null,
     assertRegionSupported: () => {},
   } as unknown as Parameters<typeof computeEsStatutory>[0];
   const factCases = [

@@ -163,6 +163,22 @@ export async function computeEsStatutory(
     );
   }
 
+  const zoneAnswers = certificateFor("es_zona_irpf")?.answers;
+  const zona = zoneAnswers?.["zona_residencia"];
+  if (zona !== "ninguna" && zona !== "ceuta-melilla" && zona !== "la-palma") {
+    fail("es_zona_irpf zona_residencia is missing or invalid; certify the employee's residence zone");
+  }
+  const rendimientosEnZonaRaw = zoneAnswers?.["rendimientos_en_zona"];
+  const rendimientosEnZona = rendimientosEnZonaRaw === "true" || rendimientosEnZonaRaw === "1"
+    || rendimientosEnZonaRaw === "yes";
+  if (!rendimientosEnZona && rendimientosEnZonaRaw !== "false" && rendimientosEnZonaRaw !== "0"
+    && rendimientosEnZonaRaw !== "no") {
+    fail("es_zona_irpf rendimientos_en_zona is missing or invalid; certify where the income was obtained");
+  }
+  if (zona === "ninguna" && rendimientosEnZona) {
+    fail("es_zona_irpf declares income in Ceuta/Melilla/La Palma without residence in a qualifying zone");
+  }
+
   // Resolved through the pack's employeeFacts declaration (see the PL
   // adapter): raw values untouched, undeclared keys refused at authoring.
   // An empty value is not out of range, it is MISSING: now that operators
@@ -257,6 +273,8 @@ export async function computeEsStatutory(
     birthYear: ano,
     pensionista: situacionLaboral === "pensionista",
     desempleado: situacionLaboral === "desempleado",
+    zona,
+    rendimientosZona: rendimientosEnZona,
   });
 
   // The annual tipo hits the month's pay, rounded half-up to the cent.
