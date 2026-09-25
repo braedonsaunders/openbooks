@@ -89,6 +89,9 @@ async function loadCatalogs(): Promise<LocaleCatalog[]> {
   const catalogs: LocaleCatalog[] = []
   for (const code of SHIPPED_LOCALES) {
     const assembled = (await import(`./${code}/index.ts`)).default as Record<string, unknown>
+    // index.ts is hand-listed: a catalog file it forgets to import renders every key as a raw path.
+    const files = readdirSync(join(MESSAGES_DIR, code)).filter((name) => name.endsWith('.json'))
+    if (files.length !== Object.keys(assembled).length) throw new Error(`${code}/index.ts merges ${Object.keys(assembled).length} namespaces but the directory holds ${files.length} catalog files`)
     const { leaves, dotted } = flattenNamespaces(assembled)
     catalogs.push({ code, leaves, dotted })
   }
