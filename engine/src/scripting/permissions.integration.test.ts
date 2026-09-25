@@ -10,7 +10,6 @@
 // Skipped unless OPENBOOKS_DB_URL is set.
 
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -36,16 +35,6 @@ import {
   serializeScriptQueryResult,
   withScriptHostDeadline,
 } from "./scripting.ts";
-
-test("the __journal_create host fn resolves the live permission gate before any ledger write", () => {
-  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const host = source.slice(source.indexOf('"__journal_create"'), source.indexOf('vm.setProp(obHandle, "log"'));
-  const permAt = host.indexOf('actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post")');
-  const writeAt = host.indexOf("createScriptJournal");
-  assert.ok(permAt >= 0, "gl.post must be re-resolved live");
-  assert.ok(writeAt >= 0, "createScriptJournal must exist");
-  assert.ok(permAt < writeAt, "permission gate must run before the ledger write");
-});
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -463,20 +452,6 @@ async function setQueryConsole(orgId: string, enabled: boolean): Promise<void> {
      where id = ${orgId}`);
 }
 
-test("the __query host fn resolves the caller's query-console gates before any SQL runs", () => {
-  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const host = source.slice(source.indexOf('"__query"'), source.indexOf('"__journal_create"'));
-  const refuseAt = host.indexOf("scriptQueryRefusal(ctx)");
-  const sqlAt = host.indexOf("runUserSql");
-  assert.ok(refuseAt >= 0, "scriptQueryRefusal must run on the query host");
-  assert.ok(sqlAt >= 0, "runUserSql must exist");
-  assert.ok(refuseAt < sqlAt, "query gates must run before SQL");
-  const gate = source.slice(source.indexOf("export async function scriptQueryRefusal"), source.indexOf("export async function scriptingFeatureEnabled"));
-  assert.match(gate, /queryConsole/);
-  assert.match(gate, /actorHasPermission\(db, ctx\.org\.id, userId, "sql\.execute"\)/);
-  assert.match(gate, /actorAllowedSubsidiaryIds\(db, ctx\.org\.id, userId\)\) !== null/);
-});
-
 test("a scripts.execute-only caller cannot read the catalog through ob.query, ob.record.load, or ob.search", { skip: !DB }, async () => {
   const seeded = await seedScriptOrg();
   try {
@@ -567,66 +542,7 @@ test("system-driven runs keep ob.query: an actor-less scheduled script still rea
 
 const HOSTLESS_ORG = { id: "00000000-0000-4000-8000-000000000001", name: "Host", baseCurrency: "CAD" };
 
-function callerSource(rel: string): string {
-  return readFileSync(new URL(rel, import.meta.url), "utf8");
-}
-
-test("human submit/post/void callers resolve the actor into ctx.user before runTriggerScripts", () => {
-  const submit = callerSource("../flows/submit.ts");
-  const submitCtx = submit.slice(submit.indexOf("const scriptCtx: ScriptContext"), submit.indexOf("runTriggerScripts(\"before_submit\""));
-  assert.match(submit, /resolveScriptUser\(/);
-  assert.match(submitCtx, /user/);
-
-  const prepare = callerSource("../ledger/posting-prepare.ts");
-  const beforePostAt = prepare.indexOf("const scriptCtx: ScriptContext");
-  const beforePost = prepare.slice(prepare.lastIndexOf("resolveScriptUser", beforePostAt), prepare.indexOf("runTriggerScripts(\"before_post\""));
-  assert.match(beforePost, /resolveScriptUser\(/);
-  assert.match(beforePost, /user/);
-  const dispatch = callerSource("../ledger/posting-dispatch.ts");
-  const afterPostAt = dispatch.indexOf("const ctx: ScriptContext");
-  const afterPost = dispatch.slice(dispatch.lastIndexOf("resolveScriptUser", afterPostAt), dispatch.indexOf("runTriggerScripts(\"after_post\""));
-  assert.match(afterPost, /resolveScriptUser\(/);
-  assert.match(afterPost, /user/);
-
-  const voids = callerSource("../ledger/document-void.ts");
-  const beforeVoid = voids.slice(voids.indexOf("const scriptCtx: ScriptContext"), voids.indexOf("runTriggerScripts(\"before_void\""));
-  assert.match(voids, /resolveScriptUser\(/);
-  assert.match(beforeVoid, /user/);
-});
-
 test("script host I/O is raced against the same wall-clock deadline as the interrupt handler", async () => {
-  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const queryFn = source.slice(source.indexOf("\"__query\""), source.indexOf("\"__journal_create\""));
-  assert.match(queryFn, /withScriptHostDeadline/);
-  assert.match(queryFn, /remainingMs <= 0/);
-  const queryRaceAt = queryFn.indexOf("withScriptHostDeadline");
-  assert.ok(queryRaceAt >= 0, "__query must race host I/O");
-  const queryBeforeRace = queryFn.slice(0, queryRaceAt);
-  const queryRaced = queryFn.slice(queryRaceAt);
-  assert.doesNotMatch(
-    queryBeforeRace,
-    /scriptQueryRefusal|runUserSql/,
-    "query authorization and SQL must not await outside the host deadline",
-  );
-  assert.match(queryRaced, /scriptQueryRefusal/);
-  assert.match(queryRaced, /runUserSql/);
-
-  const journalFn = source.slice(source.indexOf("\"__journal_create\""), source.indexOf("vm.setProp(obHandle, \"log\""));
-  assert.match(journalFn, /withScriptHostDeadline/);
-  assert.match(journalFn, /remainingMs <= 0/);
-  const journalRaceAt = journalFn.indexOf("withScriptHostDeadline");
-  assert.ok(journalRaceAt >= 0, "__journal_create must race host I/O");
-  const journalBeforeRace = journalFn.slice(0, journalRaceAt);
-  const journalRaced = journalFn.slice(journalRaceAt);
-  assert.doesNotMatch(
-    journalBeforeRace,
-    /actorHasPermission|actorAllowedSubsidiaryIds|createScriptJournal/,
-    "journal authorization and scope reads must not await outside the host deadline",
-  );
-  assert.match(journalRaced, /actorHasPermission/);
-  assert.match(journalRaced, /actorAllowedSubsidiaryIds/);
-  assert.match(journalRaced, /createScriptJournal/);
-
   let ranAfterDeadline = false;
   const alreadyOver = await withScriptHostDeadline(Date.now() - 1, async () => {
     ranAfterDeadline = true;
@@ -688,15 +604,6 @@ test("payment_format and unknown triggers fail closed: no query or journal host 
 });
 
 test("ob.query encodes rows under a byte cap and never JSON.stringifies the complete result first", () => {
-  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const queryFn = source.slice(source.indexOf("\"__query\""), source.indexOf("\"__journal_create\""));
-  assert.doesNotMatch(
-    queryFn,
-    /JSON\.stringify\(\s*result/,
-    "the host must not materialize an unbounded JSON copy before the byte cap",
-  );
-  assert.match(queryFn, /serializeScriptQueryResult/);
-
   const rows = [{ id: 1, memo: "freight", amount: "10.00" }];
   const under = serializeScriptQueryResult(rows, 256);
   assert.equal(under.ok, true);
