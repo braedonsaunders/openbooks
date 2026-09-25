@@ -29,7 +29,12 @@ interface RunLines {
   lines: StubLine[];
 }
 
-function esAdapterContext(payDate: string, priorChanged = false): RunLines {
+function esAdapterContext(
+  payDate: string,
+  priorChanged = false,
+  zone: "ninguna" | "ceuta-melilla" | "la-palma" = "ninguna",
+  incomeInZone = false,
+): RunLines {
   const lines: StubLine[] = [];
   const pushStatutory = createPushStatutory({
     country: "ES",
@@ -61,7 +66,9 @@ function esAdapterContext(payDate: string, priorChanged = false): RunLines {
     insurable: "2000.00",
     periodsPerYear: 12,
     pushStatutory,
-    certificateFor: () => null,
+    certificateFor: (key: string) => key === "es_zona_irpf"
+      ? { answers: { zona_residencia: zone, rendimientos_en_zona: String(incomeInZone) } }
+      : null,
     assertRegionSupported: () => {},
   } as unknown as PayrollStatutoryComputeContext;
   return { ctx, lines };
