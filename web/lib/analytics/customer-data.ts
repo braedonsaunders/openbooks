@@ -12,7 +12,8 @@ import { englishCustomerStrings, type CustomerStrings } from "./customer-strings
 import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
-import { add, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { exactMarginPercent, exactProfit } from "./customer-profitability-money";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 
 /**
@@ -198,7 +199,7 @@ export interface CustomerRow {
   sharePct: number; // 0–100
   concentrationRisk: RiskLevel;
   // profitability merge
-  grossProfit: number | null;
+  grossProfit: string | null;
   marginPct: number | null; // percentage points
   isFakeChampion: boolean;
   jobs: number;
@@ -321,9 +322,9 @@ export type ProfitTier = "high" | "medium" | "low" | "marginal" | "loss";
 export interface ProfitJob {
   jobId: string;
   jobName: string;
-  revenue: number;
-  costs: number;
-  profit: number;
+  revenue: string;
+  costs: string;
+  profit: string;
   marginPct: number; // percentage points (24.7 not 0.247)
   transactionCount: number;
 }
@@ -331,9 +332,9 @@ export interface ProfitJob {
 export interface ProfitCustomer {
   customerId: string;
   customerName: string;
-  totalRevenue: number;
-  totalCost: number;
-  grossProfit: number;
+  totalRevenue: string;
+  totalCost: string;
+  grossProfit: string;
   marginPct: number;
   profitTier: ProfitTier;
   isFakeChampion: boolean;
@@ -341,9 +342,9 @@ export interface ProfitCustomer {
 }
 
 export interface ProfitabilitySummary {
-  totalRevenue: number;
-  totalCost: number;
-  totalGrossProfit: number;
+  totalRevenue: string;
+  totalCost: string;
+  totalGrossProfit: string;
   avgMarginPct: number;
   customerCount: number;
   totalJobs: number;
@@ -418,9 +419,9 @@ function emptyProfitability(): Profitability {
   return {
     customers: [],
     summary: {
-      totalRevenue: 0,
-      totalCost: 0,
-      totalGrossProfit: 0,
+      totalRevenue: "0",
+      totalCost: "0",
+      totalGrossProfit: "0",
       avgMarginPct: 0,
       customerCount: 0,
       totalJobs: 0,
@@ -497,45 +498,45 @@ export async function customerProfitability(
     byJob.set(key, cur);
   }
   for (const merged of byJob.values()) {
-    const revenue = Number(merged.revenue);
-    const costs = Number(merged.costs);
-    const profit = revenue - costs;
+    const revenue = merged.revenue;
+    const costs = merged.costs;
+    const profit = exactProfit(revenue, costs);
     // Skip empty projects (no revenue and no cost).
-    if (revenue === 0 && costs === 0) continue;
+    if (cmp(revenue, "0") === 0 && cmp(costs, "0") === 0) continue;
     const job: ProfitJob = {
       jobId: merged.job_id,
       jobName: strings.displayJobName(merged.job_name),
       revenue,
       costs,
       profit,
-      marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
+      marginPct: exactMarginPercent(profit, revenue),
       transactionCount: merged.txns,
     };
     let c = byCustomer.get(merged.customer_id);
     if (!c) {
-      c = { customerId: merged.customer_id, customerName: strings.displayCustomerName(merged.customer_name), totalRevenue: 0, totalCost: 0, grossProfit: 0, marginPct: 0, profitTier: "marginal", isFakeChampion: false, jobs: [] };
+      c = { customerId: merged.customer_id, customerName: strings.displayCustomerName(merged.customer_name), totalRevenue: "0", totalCost: "0", grossProfit: "0", marginPct: 0, profitTier: "marginal", isFakeChampion: false, jobs: [] };
       byCustomer.set(merged.customer_id, c);
     }
     c.jobs.push(job);
-    c.totalRevenue += revenue;
-    c.totalCost += costs;
+    c.totalRevenue = add(c.totalRevenue, revenue);
+    c.totalCost = add(c.totalCost, costs);
   }
 
   const tierBreakdown: Record<ProfitTier, number> = { high: 0, medium: 0, low: 0, marginal: 0, loss: 0 };
   const customers = [...byCustomer.values()].map((c) => {
-    c.grossProfit = c.totalRevenue - c.totalCost;
-    c.marginPct = c.totalRevenue > 0 ? (c.grossProfit / c.totalRevenue) * 100 : 0;
+    c.grossProfit = exactProfit(c.totalRevenue, c.totalCost);
+    c.marginPct = exactMarginPercent(c.grossProfit, c.totalRevenue);
     c.profitTier = profitTierOf(c.marginPct);
-    c.isFakeChampion = c.totalRevenue > 100_000 && c.marginPct < 15;
-    c.jobs.sort((a, b) => b.revenue - a.revenue);
+    c.isFakeChampion = cmp(c.totalRevenue, "100000") > 0 && c.marginPct < 15;
+    c.jobs.sort((a, b) => cmp(b.revenue, a.revenue));
     tierBreakdown[c.profitTier]++;
     return c;
   });
-  customers.sort((a, b) => b.totalRevenue - a.totalRevenue);
+  customers.sort((a, b) => cmp(b.totalRevenue, a.totalRevenue));
 
-  const totalRevenue = customers.reduce((a, c) => a + c.totalRevenue, 0);
-  const totalCost = customers.reduce((a, c) => a + c.totalCost, 0);
-  const totalGrossProfit = totalRevenue - totalCost;
+  const totalRevenue = sum(customers.map((c) => c.totalRevenue));
+  const totalCost = sum(customers.map((c) => c.totalCost));
+  const totalGrossProfit = exactProfit(totalRevenue, totalCost);
 
   return {
     customers,
@@ -543,7 +544,7 @@ export async function customerProfitability(
       totalRevenue,
       totalCost,
       totalGrossProfit,
-      avgMarginPct: totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0,
+      avgMarginPct: exactMarginPercent(totalGrossProfit, totalRevenue),
       customerCount: customers.length,
       totalJobs: customers.reduce((a, c) => a + c.jobs.length, 0),
       fakeChampions: customers.filter((c) => c.isFakeChampion).length,
