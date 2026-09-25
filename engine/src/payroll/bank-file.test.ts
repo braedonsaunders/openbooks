@@ -31,7 +31,7 @@ import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
-import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Payroll direct deposit.
@@ -717,8 +717,12 @@ async function payrollOrg(
         wagesTo: "expense",
         // Presence-only TX SUI: a live-but-unconfigured SUI refuses by name
         // at calculate, and these tests assert bank rails, never SUI amounts.
+        // Presence-only FUTA the same way: the 2026 Schedule A is not
+        // transcribed, so an unconfigured FUTA refuses by name; the ordinary
+        // 0.6% full-credit figure is the TEST entering a number as an
+        // employer would, and no expectation below asserts a FUTA amount.
         ...(country === "US"
-          ? { us: { sui: { TX: { rate: "0.03", wageBase: "7000" } } } }
+          ? { us: { futaRate: "0.006", sui: { TX: { rate: "0.03", wageBase: "7000" } } } }
           : {}),
       },
     })}::jsonb where id = ${org.orgId}`);
@@ -778,18 +782,32 @@ async function employee(fx: Fixture, name: string, opts: {
   await db.execute(sql`
     insert into employee_roles (id, org_id, party_id, employee_number)
     values (${randomUUID()}, ${fx.orgId}, ${id}, ${opts.employeeNumber ?? null})`);
+  // Stub calculation refuses employees without an HRM employment, so the hire
+  // carries one and the profile points at it.
+  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
+  if (fx.country === "US") {
+    // The federal calculation refuses payroll without a tax-residency status,
+    // so every synthetic US employee states one — U.S. person.
+    await db.execute(sql`
+      insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                             region, sub_region, answers, effective_from,
+                                             created_by, updated_by)
+      values (${fx.orgId}, ${id}, 'US', 'us_w4_tax_residency', null, null,
+              '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+              ${fx.actorId}, ${fx.actorId})`);
+  }
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                   effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, ${fx.currency}, '30', 'hour', '2080', '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_percent, vacation_method, payment_method, filing_status,
-                                           is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, ${fx.country}, ${fx.region}, 'hourly', 1, 1,
-            ${fx.country === "US" ? null : "4"}, 'accrue',
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, federal_claim_code,
+                                           provincial_claim_code, vacation_percent, vacation_method,
+                                           payment_method, filing_status, is_active, created_by, updated_by)
+    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, ${fx.country}, ${fx.region},
+            'hourly', 1, 1, ${fx.country === "US" ? null : "4"}, 'accrue',
             ${opts.profileMethod ?? null}, ${fx.country === "US" ? "single" : null}, true,
             ${fx.actorId}, ${fx.actorId})`);
   if (opts.bank) {
