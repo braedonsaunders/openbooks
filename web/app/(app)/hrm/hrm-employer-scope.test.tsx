@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 import { isUuid } from '@/lib/list-params'
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
 /**
  * F3: ?requisition=new showed a raw UUID in the Employer field — the loader
@@ -44,7 +45,6 @@ const { RecruitingCreateForm } = await import('./recruiting/RecruitingCreateForm
 const { PositionCreateForm } = await import('./positions/PositionCreateForm')
 
 const MESSAGES = join(process.cwd(), 'web', 'messages')
-const LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
 
 const ENTITY_ID = 'd726d187-0000-0000-0000-000000000001'
 const REFUSAL = 'No legal entity is visible to you — ask an administrator for access.'

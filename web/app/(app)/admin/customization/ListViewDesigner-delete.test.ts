@@ -189,7 +189,7 @@ test('column move buttons expose translated names with their column context', as
   assert.ok(moveDown.every((button) => button.getAttribute('aria-label')!.length > 'Next: '.length))
 })
 
-// F-t05-011 history: the delete confirmation names the fallback consequence,
+// history: the delete confirmation names the fallback consequence,
 // so it must exist in every shipped locale.
 for (const locale of ['en', 'fr', 'es']) {
   test(`view delete confirmation is translated in ${locale}`, () => {

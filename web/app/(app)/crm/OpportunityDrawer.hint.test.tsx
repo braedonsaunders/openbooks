@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// OM-02b: the opportunity drawer's disabled "Create estimate" gave its
+// the opportunity drawer's disabled "Create estimate" gave its
 // save-first reason ONLY as the button's title tooltip — invisible at rest,
 // undescribed to assistive tech, and unfocusable while disabled. While the
 // drawer is dirty the reason must be a persistent visible hint next to the
@@ -135,7 +135,7 @@ function estimateButton(): HTMLButtonElement {
 
 async function editTitle() {
   // The title field is the drawer's first text input; a harmless unsaved edit
-  // makes the drawer dirty, which is the OM-02b precondition.
+  // makes the drawer dirty, which is the precondition.
   const input = document.querySelector('input:not([type="number"]):not([type="date"]):not([type="hidden"])') as HTMLInputElement | null
   assert.ok(input, 'the title input must render')
   await act(async () => {

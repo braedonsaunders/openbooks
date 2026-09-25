@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 
 // Budget CSVs must carry exact money values, and a revenue shortfall must
-// read "Under", never "Over" (F-t09-004) — with the tolerance disclosed.
+// read "Under", never "Over" — with the tolerance disclosed.
 
 const { JSDOM } = await import('jsdom')
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {

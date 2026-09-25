@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import '../../../dashboard/_dashboard-render-harness'
 import { mountDashboard } from '../../../dashboard/_dashboard-render-harness'
 import type { FilingDetail } from '../../../../../lib/compliance'
+import { LOCALE_CODES as LOCALES } from "../../../../../i18n/config"
 
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see
@@ -14,7 +15,6 @@ const { FilingWorksheet } = await import('./FilingWorksheet')
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const MESSAGES = join(dir, '..', '..', '..', '..', '..', 'messages');
-const LOCALES = ['en', 'es', 'fr', 'de', 'ja', 'pt-BR', 'zh'] as const;
 
 const loadCompliance = (locale: string): Record<string, unknown> =>
   JSON.parse(readFileSync(join(MESSAGES, locale, 'compliance.json'), 'utf8')) as Record<
@@ -37,7 +37,7 @@ function label(locale: string, key: EmptyStateKey): string {
 // pre-compute "Nothing computed yet" empty state under the Computed banner.
 // The empty state must distinguish never-computed (draft) from
 // computed-with-no-recipients — in every locale, never pasted English.
-// (Was F-t04-009.)
+// (Was .)
 for (const locale of LOCALES) {
   test(`${locale} labels the computed-with-no-recipients empty state translated`, () => {
     for (const key of ['computedNoRecipients', 'noRecipients'] as const) {

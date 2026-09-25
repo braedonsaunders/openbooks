@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
 // A deal due today is not overdue. `new Date('YYYY-MM-DD')` is UTC midnight,
-// so comparing it against `new Date()` flagged every same-day close as
+// so comparing it against `new Date` flagged every same-day close as
 // overdue for the whole day. The board compares calendar days against the
 // org's business day instead. Real component coverage (only the network is
 // untouched — the board takes loader props): mount with a fixed business
@@ -229,7 +229,7 @@ test("the win/loss reason dialog uses translated copy", async (t) => {
   });
 });
 
-// UX-03: the forecast exclusion note links to the board with `undated=1`.
+// the forecast exclusion note links to the board with `undated=1`.
 // The filtered board must name the filter and offer the way back; the
 // unfiltered board must not carry the chip.
 test("undated-only board names the filter with a show-all route", async (t) => {
@@ -392,7 +392,7 @@ test("a missing currency throws instead of defaulting to USD", async (t) => {
     }
     host.remove();
   });
-  // React rethrows the render refusal out of act(): assert on that path,
+  // React rethrows the render refusal out of act: assert on that path,
   // not on an inner catch the reconciler bypasses.
   await assert.rejects(
     async () => {

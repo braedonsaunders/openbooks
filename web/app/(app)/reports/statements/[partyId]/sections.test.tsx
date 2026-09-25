@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
+import { LOCALE_CODES as LOCALES } from "../../../../../i18n/config"
 
 const { registerHooks } = await import('node:module')
 registerHooks({
@@ -21,8 +22,6 @@ const React = await import('react')
 Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { AgingStrip } = await import('./sections.tsx')
-
-const LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
 
 function stripProps(asOfLabel: string) {
   const drill = (bucket?: 'current' | 'b1' | 'b2' | 'b3' | 'b4') => ({
@@ -46,7 +45,7 @@ function stripProps(asOfLabel: string) {
 }
 
 /**
- * UX-02: statement aging buckets omit their as-of date, making two correctly
+ * statement aging buckets omit their as-of date, making two correctly
  * different bucket views appear inconsistent. The strip must show the
  * selected period-end date beside the buckets, without changing any amount.
  */

@@ -29,7 +29,7 @@ const keys = [
   'setup.wizard.skipped',
 ] as const
 
-// Every top-level await settles BEFORE the first test() registers (see
+// Every top-level await settles BEFORE the first test registers (see
 // scripts/test-registration-order.test.mjs): the notice renders the movedFrom
 // source's sentence and nothing otherwise — real component, scripted search
 // params, real en catalog.
@@ -57,7 +57,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { SetupRedirectNotice } = await import('./RedirectNotice')
 
-// UX-17: the redirect notice and the Skip toast must read natively
+// the redirect notice and the Skip toast must read natively
 // everywhere — a missing key renders the raw path mid-navigation.
 for (const locale of locales) {
   test(`setup redirect copy exists in ${locale}`, () => {

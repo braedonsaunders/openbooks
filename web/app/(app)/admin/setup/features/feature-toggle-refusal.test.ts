@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { featureToggleRefusalMessage } from './feature-tree'
 
-// F-t01-015: the toggle refusal must resolve to a localized message for
+// the toggle refusal must resolve to a localized message for
 // every typed body the route can send — and to the generic blocked message
 // (never a raw code, never silence) for anything else.
 const t = (key: string, params?: Record<string, string>) =>

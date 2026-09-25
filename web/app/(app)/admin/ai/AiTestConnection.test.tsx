@@ -129,7 +129,7 @@ function typeInto(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
-test("F-t11-003: Test connection verifies the typed (unsaved) key", async () => {
+test("Test connection verifies the typed (unsaved) key", async () => {
   document.body.innerHTML = "";
   calls.length = 0;
   const host = document.createElement("div");

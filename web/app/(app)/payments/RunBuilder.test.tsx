@@ -168,7 +168,7 @@ async function clickCreate() {
   await tick();
 }
 
-/** F-t04-005: a bill already in a draft run must explain the 422 in a persistent alert. */
+/** : a bill already in a draft run must explain the 422 in a persistent alert. */
 test("a duplicate-in-draft rejection persists as a form-level alert", async (t) => {
   const calls: string[] = [];
   const prior = globalThis.fetch;

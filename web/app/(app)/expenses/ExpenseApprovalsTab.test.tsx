@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F-t04-002: the expense-report drawer Approvals tab rendered a completely
+// the expense-report drawer Approvals tab rendered a completely
 // blank panel (tab bar → totals footer, nothing between). The tab mounts the
 // element below — the exact JSX ExpenseDrawer.tsx uses as its Approvals
 // detailTab content. These tests render it under jsdom with a scripted
@@ -68,7 +68,7 @@ const REPORT_ID = '019f0000-0000-4000-8000-000000000001'
 
 // The exact JSX ExpenseDrawer.tsx mounts as its Approvals detailTab content
 // (pinned by approval-history.test.ts). The pre-fix variant without
-// showEmptyState renders a literal blank panel — the F-t04-002 mechanism,
+// showEmptyState renders a literal blank panel — the mechanism,
 // reproduced red below before this file required content.
 const tabElement = (
   <ApprovalHistory subjectKind="expense_report" subjectId={REPORT_ID} showEmptyState />
@@ -163,7 +163,7 @@ test('expense Approvals tab renders the submitted/requested/approved chain', asy
   assert.match(text, /Manager approval/, 'the gate title must render')
 })
 
-// The F-t04-002 mechanism, pinned: the pre-fix tab JSX (no showEmptyState)
+// The mechanism, pinned: the pre-fix tab JSX (no showEmptyState)
 // renders a literal blank panel on empty history. If the drawer ever drops
 // the opt-in, this documents exactly which blank returns.
 test('pre-fix tab JSX without showEmptyState renders the reported blank panel', async (t) => {

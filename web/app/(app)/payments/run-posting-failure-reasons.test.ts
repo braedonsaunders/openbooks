@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F-t03-005: a partially failed posting toasted per-instruction reasons but
+// a partially failed posting toasted per-instruction reasons but
 // persisted only counts, so the activity feed showed "0 sent · N failed"
 // with no reason anywhere. The engine now stores the failures list on the
 // run_posting_failed event; the feed must render it.

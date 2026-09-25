@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F-t05-012 (statement-import Preview on junk CSV): the preview POST 422s
+// (statement-import Preview on junk CSV): the preview POST 422s
 // with a typed { error } body, but the dialog neither toasts usefully nor
 // persists anything — the click reads as dead. The dialog must persist the
 // typed refusal as a role=alert (cleared on the next edit) and toast it,
-// mirroring the RunBuilder F-t04-005 pattern; an unreadable error body must
+// mirroring the RunBuilder pattern; an unreadable error body must
 // fall back to the generic request-failed copy instead of a SyntaxError.
 const { JSDOM } = await import('jsdom')
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
@@ -187,7 +187,7 @@ async function mapJunkCsv() {
   })
 }
 
-test('a refused import preview persists the typed server reason as a dialog alert (F-t05-012)', async (t) => {
+test('a refused import preview persists the typed server reason as a dialog alert', async (t) => {
   script.previewStatus = 422
   script.previewBody = { error: 'CSV has a header but no data rows' }
   const { host, root } = await mount()
@@ -211,7 +211,7 @@ test('a refused import preview persists the typed server reason as a dialog aler
   assert.match(errors[0]!.message, /header but no data rows/)
 })
 
-test('an unreadable preview refusal falls back to the generic copy (F-t05-012)', async (t) => {
+test('an unreadable preview refusal falls back to the generic copy', async (t) => {
   script.previewStatus = 500
   script.previewBody = '<html>proxy boom</html>'
   const { host, root } = await mount()

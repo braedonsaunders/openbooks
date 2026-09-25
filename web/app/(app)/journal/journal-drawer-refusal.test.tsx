@@ -12,7 +12,7 @@ declare global {
 // pinning; a stale-revision void toasted translated copy without pinning.
 // Both now pin as a record-level alert until the next action AND toast, with
 // busy always releasing. The stale-revision recovery (reload the canonical
-// revision, say so in translated copy — F-t06-021) is preserved inside the
+// revision, say so in translated copy — ) is preserved inside the
 // task: the server sentence leaks the revision-token mechanism, and the
 // reload already happened, so the message must describe what happened.
 
@@ -251,7 +251,7 @@ test("a refused save pins the reason instead of toasting into the void", async (
   assert.equal(save.disabled, false, "busy must release after the refusal");
 });
 
-test("a stale-revision void reloads and pins translated copy (F-t06-021)", async (t) => {
+test("a stale-revision void reloads and pins translated copy", async (t) => {
   freshGlobals();
   const doc = { ...DRAFT_DOC(), status: "posted" };
   let voidPayload: Record<string, unknown> | null = null;
@@ -414,7 +414,7 @@ test("a post warning names partyless control accounts in a persistent alert", as
   assert.match(warning.textContent ?? "", /outside any customer or vendor subledger/);
 });
 
-test("a refused post still pins the server reason (F-t06-006 preservation)", async (t) => {
+test("a refused post still pins the server reason ( preservation)", async (t) => {
   freshGlobals();
   const doc = DRAFT_DOC();
   const restoreFetch = scriptFetch((url, init) => {
@@ -470,7 +470,7 @@ test("only a truly blank journal row is blank", () => {
   assert.equal(isBlankJournalLine({ ...blankJournalRow(), credit: "0" }), true);
 });
 
-test("any journal content makes the row non-blank — even without an account (OM-09b)", () => {
+test("any journal content makes the row non-blank — even without an account", () => {
   for (const content of [
     { accountId: "a1", debit: "100" },
     { debit: "100" },
@@ -495,7 +495,7 @@ test("the missing-account probe names the first contentful account-less journal 
   );
 });
 
-test("a contentful account-less journal leg survives to the save payload (OM-09b guard)", () => {
+test("a contentful account-less journal leg survives to the save payload ( guard)", () => {
   const rows = [
     { ...blankJournalRow(), accountId: "a1", debit: "100" },
     { ...blankJournalRow(), description: "mystery leg", debit: "100" },
@@ -516,7 +516,7 @@ const ACCOUNTLESS_LINES = [
   { account_id: "a2", amount: "-200.00", description: "leg three", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
 ];
 
-test("OM-09b journal: saving with a contentful account-less leg refuses by line name and keeps the row", async (t) => {
+test(" journal: saving with a contentful account-less leg refuses by line name and keeps the row", async (t) => {
   freshGlobals();
   const doc = DRAFT_DOC();
   const writes: string[] = [];

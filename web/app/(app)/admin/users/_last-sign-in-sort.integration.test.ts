@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// F-t01-012 — the column is labeled "Last sign-in", so sort=last_sign_in
+// the column is labeled "Last sign-in", so sort=last_sign_in
 // must order by recency with nulls last in both directions. The whitelist
 // only knew last_login, so the finding's URL silently fell back to name
 // ordering (the two observed orders are exact reverses of each other)

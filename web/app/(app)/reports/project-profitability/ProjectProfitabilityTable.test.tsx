@@ -116,7 +116,7 @@ test('margin ratios scale to percent units exactly once through the shared helpe
   assert.equal(marginRatioToPercent('0.0000'), '0.0000')
 })
 
-// UX-20: an empty project report must explain its zero — what would have to
+// an empty project report must explain its zero — what would have to
 // be posted, or to widen the period — naming the selected period.
 test('the empty report explains its zero with the period and the remedy', () => {
   const hint = 'Nothing was posted to projects in FY 2026 — post a bill or widen the period.'

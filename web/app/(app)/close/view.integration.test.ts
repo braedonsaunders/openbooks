@@ -97,7 +97,7 @@ test('close list falls back to the current fiscal year for a malformed fy filter
   }
 })
 
-test('close list names the locked modules and book for a period locked outside any run (F-t02-005)', { skip: !DB }, async () => {
+test('close list names the locked modules and book for a period locked outside any run', { skip: !DB }, async () => {
   // t02/Summit Ridge: autopilot period_locks closed AR for October while the
   // /close list read only close_runs — every period showed "Not started" and
   // the 422 had no visible basis. The list must name exactly which

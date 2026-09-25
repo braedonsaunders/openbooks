@@ -56,7 +56,7 @@ function entriesData() {
 // count under fr/es while the whole surrounding dashboard was translated. The
 // status and the line count must come from the catalog — with the singular
 // proving the plural rule runs (a hardcoded "{n} lines" reads "1 lines").
-// Unknown statuses render raw rather than guessing a translation. (Was F-t01-009.)
+// Unknown statuses render raw rather than guessing a translation. (Was .)
 test('recent journal rows render the status and line count from the catalog', async () => {
   const { host, unmount } = await mountDashboard(
     <WidgetCard widgetId="list-recent-entries" data={entriesData()} />,

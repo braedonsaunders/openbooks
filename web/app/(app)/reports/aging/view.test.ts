@@ -19,7 +19,7 @@ registerHooks({
 
 const { agingSpec } = await import('./view')
 
-// F-t07-011: the Export button built its URL from the raw page params, so
+// the Export button built its URL from the raw page params, so
 // the screen's resolved as-of never reached the endpoint — the CSV aged as
 // of the fiscal year end while the screen showed today. The loader carries
 // its resolved as-of into the export params; this test pins the spec half:

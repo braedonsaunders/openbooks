@@ -52,6 +52,7 @@ const { isFieldRef } = await import("@braedonsaunders/appkit-viewspec");
 const { NAV_MODULES } = await import("../../../../engine/src/navigation/nav-registry.ts");
 const { FEATURE_BY_KEY } = await import("../../../../engine/src/organization/feature-registry.ts");
 import type { HrmHomeData } from "../../../lib/hrm/home.ts";
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
 type Tree = Record<string, unknown>;
 
@@ -347,7 +348,7 @@ test("hrm is registered as a default-off feature with ONE nav module", () => {
 // Every home.* key the spec binds must resolve in all 7 catalogs — a
 // missing key renders the raw path exactly when the cockpit has nothing
 // else to say.
-const LOCALES = ["en", "de", "es", "fr", "ja", "pt-BR", "zh"] as const;
+
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 for (const locale of LOCALES) {

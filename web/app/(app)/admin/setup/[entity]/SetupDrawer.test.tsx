@@ -190,7 +190,7 @@ async function fillValidCreate() {
   await tick()
 }
 
-test('required setup fields are visibly marked, and only those validate() enforces', async () => {
+test('required setup fields are visibly marked, and only those validate enforces', async () => {
   const { unmount } = await mountDrawer(null, () => Response.json({ ok: true }))
   try {
     const labels = [...document.querySelectorAll('label')].map((el) => el.textContent ?? '')

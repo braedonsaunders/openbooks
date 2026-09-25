@@ -19,7 +19,7 @@ function leafPaths(node: unknown, prefix: string, out: Map<string, unknown>): Ma
   return out
 }
 
-/** F-t04-010: "{count} bills · {pct}%% of open" — the message adds a literal
+/** : "{count} bills · {pct}%% of open" — the message adds a literal
  * % on top of the value's own % (formatExactPercent returns '0%'). The
  * message must not carry its own percent sign. */
 test('the overdue share message carries no literal percent sign', () => {
@@ -28,7 +28,7 @@ test('the overdue share message carries no literal percent sign', () => {
   assert.ok(!overdueSub.includes('%'), `the value already carries %: ${overdueSub}`)
 })
 
-/** F-t04-010: the /ap cockpit renders in English under fr/es because the
+/** : the /ap cockpit renders in English under fr/es because the
  * whole cockpit block is missing from those catalogs. Both locales must
  * carry the same key tree as en, with no empty leaves. */
 for (const locale of ['fr', 'es']) {

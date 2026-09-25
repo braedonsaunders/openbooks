@@ -6,7 +6,7 @@ declare global {
   var __paySetupToasts: { kind: string; message: string }[] | undefined
 }
 
-// F-t11-007: the bank-profile drawer checkboxes ignored clicks in both
+// the bank-profile drawer checkboxes ignored clicks in both
 // directions. The edit row arrives as raw snake_case (`select *`), every
 // Toggle/Select reads the snake key first
 // (`form.require_run_approval ?? form.requireRunApproval`), but onChange

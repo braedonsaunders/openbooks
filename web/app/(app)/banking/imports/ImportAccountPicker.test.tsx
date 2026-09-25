@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// UX-08: the cross-account /banking/imports history page had no way to
+// the cross-account /banking/imports history page had no way to
 // import — no header CTA, no empty-state action. The picker carries the bank
 // account context beside the canonical per-account import dialog, and serves
 // both slots from one implementation.

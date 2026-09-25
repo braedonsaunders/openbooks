@@ -7,7 +7,7 @@ import messages from '../../../messages/en/index.ts'
 import { MoneyProvider } from '../../../components/money-provider.tsx'
 import { CollectionsShell } from './sections.tsx'
 
-// UX-01: the /collections page is recurring/subscription/dunning
+// the /collections page is recurring/subscription/dunning
 // configuration, while the overdue chase list lives on /ar. The shell must
 // link to that worklist for readers who may open it — and offer nothing to
 // readers who may not. Static markup is enough: the link is server-rendered,

@@ -151,7 +151,7 @@ function saveButton(): HTMLButtonElement {
   return button
 }
 
-// F-t01-010: clearing Display name and saving gave zero feedback — Save
+// clearing Display name and saving gave zero feedback — Save
 // stays enabled, the input carries no invalid state, and the empty value is
 // silently rejected server-side. The field itself must carry the required
 // error where the tester can still read it.

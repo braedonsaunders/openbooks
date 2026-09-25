@@ -3,7 +3,7 @@
 // executing an extracted copy of its submit closure.
 //
 // Defects covered: exact-decimal persistence (valid numeric(19,4) text must
-// reach the API as canonical strings, never through Number), F-t05-001 (a
+// reach the API as canonical strings, never through Number), (a
 // refused save must pin the server's reason on the record until the next
 // attempt, not toast-and-vanish).
 import assert from "node:assert/strict";
@@ -281,7 +281,7 @@ test("exponent, NaN, and infinite input never posts", async (t) => {
   }
 });
 
-// F-t05-001 read as a silent no-op: the refused save toasted a generic
+// read as a silent no-op: the refused save toasted a generic
 // failure for 4 seconds and left nothing on the record. The refusal must
 // render as a persistent alert carrying the server's reason, and clear only
 // when the next mutation starts.

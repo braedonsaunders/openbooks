@@ -5,7 +5,7 @@ declare global {
   var __shareToasts: { kind: string; message: string }[] | undefined;
 }
 
-// Sharing-grant refusals must pin, not just toast: post()/remove() today
+// Sharing-grant refusals must pin, not just toast: post/remove today
 // toast documents.toasts.shareFailed and leave no on-screen reason once the
 // toast dismisses. Through useAppAction the refusal pins as a record-level
 // role="alert" until the next action AND toasts, and busy always releases.

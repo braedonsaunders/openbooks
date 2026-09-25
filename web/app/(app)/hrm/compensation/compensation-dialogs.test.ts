@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// OM-15: /hrm/compensation's "New plan" and "New cycle" buttons navigated
+// /hrm/compensation's "New plan" and "New cycle" buttons navigated
 // to ?plan=new / ?cycle=new and nothing opened — the loader never read the
 // params, the spec never emitted the hrm-comp-plan-dialog /
 // hrm-comp-cycle-dialog widgets the registry already implements, and the

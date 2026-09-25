@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F-t05-021 (bank feed Remove destroys the connection with no confirmation):
+// (bank feed Remove destroys the connection with no confirmation):
 // one click fires DELETE immediately. Removing feed wiring must confirm
 // first, mirroring the bank-rule Delete native confirm.
 const { JSDOM } = await import('jsdom')
@@ -130,7 +130,7 @@ function clickRemove() {
   return btn
 }
 
-test('removing a feed connection confirms first (F-t05-021)', async (t) => {
+test('removing a feed connection confirms first', async (t) => {
   globalThis.__feedConfirmAnswer = true
   const { host, root } = await mount()
   t.after(async () => {
@@ -149,7 +149,7 @@ test('removing a feed connection confirms first (F-t05-021)', async (t) => {
   assert.deepEqual(globalThis.__feedDeletes, ['/api/banking/bank-feeds/conn-1'])
 })
 
-test('cancelling the confirm leaves the connection alone (F-t05-021)', async (t) => {
+test('cancelling the confirm leaves the connection alone', async (t) => {
   globalThis.__feedConfirmAnswer = false
   const { host, root } = await mount()
   t.after(async () => {
@@ -215,7 +215,7 @@ async function mountSftpSchedules(
 }
 
 // F4T2-14 (feedAction read the body before the status: a 500 with an empty
-// body gave r.json().catch -> {}, b.error is falsy, and the operator got an
+// body gave r.json.catch -> {}, b.error is falsy, and the operator got an
 // 'imported' toast with undefined counts though nothing was imported). The
 // status is checked before the body is parsed; a body that carries no counts
 // is a named failure, never a phantom success; busy always releases.
@@ -248,7 +248,7 @@ async function mountFeed(fetchImpl: typeof fetch) {
   return { host, root }
 }
 
-// F-t11-005: the empty picker gave no path to the Chart of Accounts.
+// the empty picker gave no path to the Chart of Accounts.
 test('an empty GL picker explains the precondition and links the Chart of Accounts', async (t) => {
   const catalog = (await import('../../../../../messages/en/banking.json', { with: { type: 'json' } })).default
   const note = catalog.bankFeeds.client.configure.noEligibleAccounts as string
@@ -412,7 +412,7 @@ test('an unbound identifying schedule reads paused, bound and CSV routes do not'
 })
 
 // F4T2-12 (the SFTP server and schedule Removes DELETE with no confirm,
-// while the sibling connection Remove got one for F-t05-021): both must
+// while the sibling connection Remove got one for ): both must
 // confirm first, and a cancelled confirm must not delete.
 async function mountSftpRemoves() {
   ;(globalThis as Record<string, unknown>).__feedConfirmCalls = []

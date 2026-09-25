@@ -352,7 +352,7 @@ test("the ?party=new deep link swaps to the unsaved drawer with zero writes", as
   assert.equal(globalThis.__partyCreateFetches!.length, 0, "the redirect writes nothing — no draft POST");
 });
 
-// OM-16: /parties → New party → Kind Vendor → name → Save was refused with
+// /parties → New party → Kind Vendor → name → Save was refused with
 // 'kind "vendor" needs the vendor role', and the overview tab offers no role
 // control to satisfy it. An explicit kind choice in createMode now enables
 // its role in the POST body, so the server writes kind+role atomically

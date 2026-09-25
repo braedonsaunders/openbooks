@@ -20,7 +20,7 @@ function jobStatus(messages: Record<string, unknown>): Record<string, unknown> {
   return (history.jobStatus ?? {}) as Record<string, unknown>;
 }
 
-test("F-t10-009: import-history job statuses are localized in en/fr/es", () => {
+test("import-history job statuses are localized in en/fr/es", () => {
   for (const [locale, messages] of Object.entries({ en, fr, es })) {
     const statuses = jobStatus(messages);
     assert.equal(typeof statuses.committed, "string", `${locale} jobStatus.committed must exist`);
@@ -37,7 +37,7 @@ test("F-t10-009: import-history job statuses are localized in en/fr/es", () => {
   assert.notEqual(jobStatus(es).failed, jobStatus(en).failed);
 });
 
-test("F-t10-009: import-history timestamps follow the request locale", () => {
+test("import-history timestamps follow the request locale", () => {
   const stamp = "2026-03-15T14:30:00.000Z";
   const fallback = dateTime(stamp);
   assert.notEqual(dateTime(stamp, "fr"), fallback, "fr timestamps must differ from the en-CA default");

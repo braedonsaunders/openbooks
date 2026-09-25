@@ -40,7 +40,7 @@ Object.assign(globalThis, { React })
 const { act } = await import('react')
 const { createRoot } = await import('react-dom/client')
 
-// F-t09-002: the costing form must refuse — inline, before any submit — an
+// the costing form must refuse — inline, before any submit — an
 // account combination the PUT route is known to reject with 422 (any offset
 // account equal to the inventory asset account). A transient toast after a
 // failed save is not a substitute for inline validation.

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// OM-08: /me/compensation collapsed two states into one refusal — a viewer
+// /me/compensation collapsed two states into one refusal — a viewer
 // whose person IS linked but has NO employment saw "no person is linked".
 // The seams below stub I/O only (the database transport, feature switches,
 // navigation, the server-only marker); translations ride the REAL en

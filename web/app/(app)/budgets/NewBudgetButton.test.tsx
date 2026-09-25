@@ -49,7 +49,7 @@ const { NewBudgetButton } = await import("./NewBudgetButton");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 /**
- * OM-05: opening New must persist nothing. The old button POSTed
+ * opening New must persist nothing. The old button POSTed
  * /api/budgets/draft before the drawer opened, so abandoning it left a junk
  * "New budget" row. The button is now URL-only (?budgetNew=1); the drawer's
  * explicit Save is the first write.

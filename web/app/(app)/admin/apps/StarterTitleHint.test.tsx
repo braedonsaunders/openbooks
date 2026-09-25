@@ -13,7 +13,7 @@ import { createAppStarter } from '../../../../lib/apps/starter'
 import { StarterTitleHint } from './StarterTitleHint'
 
 /**
- * UX-04: the package editor guides the author from the General name field to
+ * the package editor guides the author from the General name field to
  * the separate screen-title surface. The hint names which heading renaming
  * will move (or that the heading is custom), per renderer.
  */
@@ -48,19 +48,19 @@ function render(
   )
 }
 
-test('UX-04: a fresh native starter hints that the heading follows the app name', () => {
+test('a fresh native starter hints that the heading follows the app name', () => {
   const html = render('native')
   assert.match(html, /follows the app name/)
   assert.match(html, /under Screens/)
 })
 
-test('UX-04: a fresh sandbox starter hints at the marker binding', () => {
+test('a fresh sandbox starter hints at the marker binding', () => {
   const html = render('sandbox')
   assert.match(html, /follows the app name/)
   assert.match(html, /data-app-title/)
 })
 
-test('UX-04: a customized title hints that renaming leaves it unchanged', () => {
+test('a customized title hints that renaming leaves it unchanged', () => {
   const html = render('native', (files) => {
     const ui = files.find((file) => file.path === 'frontend/ui.json')!
     const parsed = JSON.parse(ui.content) as {
@@ -73,7 +73,7 @@ test('UX-04: a customized title hints that renaming leaves it unchanged', () => 
   assert.match(html, /leaves the heading unchanged/)
 })
 
-test('UX-04: no hint renders when the entry cannot be recognized', () => {
+test('no hint renders when the entry cannot be recognized', () => {
   const html = render('native', (files) => {
     const index = files.findIndex(
       (file) => file.path === 'frontend/ui.json',

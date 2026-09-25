@@ -24,7 +24,7 @@ const dashboardEn = JSON.parse(
 // /journal?entry=<ENTRY id>, but ?entry= drives the manual-journal drawer
 // over DOCUMENT ids of kind 'journal' only (loadJournalDoc), so subledger
 // postings opened nothing (dead links) and even manual-journal rows missed
-// (entry id never equals the doc id). (Was F-t06-005.)
+// (entry id never equals the doc id). (Was .)
 test('recent journal entries link through the posted-entry route, not the manual-journal drawer param', async () => {
   const data = {
     recentEntries: [

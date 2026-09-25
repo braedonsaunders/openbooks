@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
 const { JSDOM } = await import('jsdom')
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/projects' })
@@ -40,7 +41,6 @@ const en = (await import('../../../../messages/en/index.ts')).default as Record<
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { FinancialsTab } = await import('./FinancialsTab')
 
-const LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 const methods = [
   {

@@ -4,7 +4,7 @@ import test from 'node:test'
 import React from 'react'
 
 // All module setup — including every top-level await — completes before the
-// first test() registration below (canonical registration order).
+// first test registration below (canonical registration order).
 const { registerHooks } = await import('node:module')
 registerHooks({
   resolve(specifier, context, next) {

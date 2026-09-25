@@ -19,7 +19,7 @@ registerHooks({
 
 const { agingSpec } = await import('./view')
 
-// F-t06-027: enabling Multi-subsidiary crashed the AR/AP aging report with
+// enabling Multi-subsidiary crashed the AR/AP aging report with
 // React error 441 — the loader converts the typed rates refusal into a
 // banner with a derive link instead of throwing it out of SSR. These tests
 // pin the spec half of that contract: given blocked data, the page shows

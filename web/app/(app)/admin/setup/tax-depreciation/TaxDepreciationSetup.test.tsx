@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 // C-73 (a PATCH assignments 422 — regime not installed, invalid class —
-// became throw new Error() with an empty message; the optimistic Select
+// became throw new Error with an empty message; the optimistic Select
 // rolled back and the toast was the generic assignmentFailed): the toast
 // carries the server's named refusal, and the rollback is kept.
 const { JSDOM } = await import('jsdom')

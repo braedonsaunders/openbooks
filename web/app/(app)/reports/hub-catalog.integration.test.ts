@@ -5,14 +5,14 @@ import test from 'node:test'
 // The hub materialises the built-in report catalog before it reads it, and
 // reads it without truncation. Two silent failures this guards:
 //
-//  1. The hub read `report_definitions` rows without seeding them. Those rows
-//     appear only once something calls `ensureReportDefinitions`, so on an org
-//     where none of those had run the hub rendered with no built-in reports
-//     at all: no Payroll group, no Human-resources group, nothing to say they
-//     were missing.
-//  2. The catalog read was capped at twelve rows ordered by `updated_at` desc,
-//     so a module's entire group could drop off because twelve unrelated
-//     reports had been touched more recently — and the page looked complete.
+// 1. The hub read `report_definitions` rows without seeding them. Those rows
+// appear only once something calls `ensureReportDefinitions`, so on an org
+// where none of those had run the hub rendered with no built-in reports
+// at all: no Payroll group, no Human-resources group, nothing to say they
+// were missing.
+// 2. The catalog read was capped at twelve rows ordered by `updated_at` desc,
+// so a module's entire group could drop off because twelve unrelated
+// reports had been touched more recently — and the page looked complete.
 //
 // Postgres is live; auth and translations are scripted. Feature probes run
 // for real, so the org enables Payroll and HRM the way an adopting org would.

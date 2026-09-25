@@ -4,9 +4,9 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
 const messagesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'messages')
-const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'zh', 'pt-BR'] as const
 
 function payloadShapeHint(locale: string): string {
   const catalog = JSON.parse(readFileSync(join(messagesDir, locale, 'banking.json'), 'utf8')) as {

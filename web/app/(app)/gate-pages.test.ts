@@ -122,7 +122,7 @@ async function render(
   return renderToStaticMarkup(element);
 }
 
-// --- /feature-required -------------------------------------------------------
+// -- /feature-required -------------------------------------------------------
 
 test("disabled scripts names the feature and links to Features", async () => {
   globalThis.__pageAuthz = authz();
@@ -161,7 +161,7 @@ test("a crafted feature key is honestly nonexistent", async () => {
   await assert.rejects(render(FeatureRequiredPage, {}), /NOT_FOUND/);
 });
 
-// --- /access-denied ----------------------------------------------------------
+// -- /access-denied ----------------------------------------------------------
 
 test("a refused permission is named with its remedy", async () => {
   globalThis.__pageAuthz = authz();

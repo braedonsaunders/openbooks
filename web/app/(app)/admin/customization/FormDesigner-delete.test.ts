@@ -129,7 +129,7 @@ function deleteButton(): HTMLButtonElement {
 }
 
 /**
- * F-t10-004 — deleting the org-default form fired on one click with no
+ * deleting the org-default form fired on one click with no
  * confirmation and left the record type with no default (falling back to
  * the standard layout silently). Deleting the default confirms first, and
  * nothing is sent until the operator accepts.

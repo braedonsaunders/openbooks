@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// F-t05-004: the rules Status filter showed "Active" / "inactive" — the
+// the rules Status filter showed "Active" / "inactive" — the
 // BANK_RULE record type pairs common.labels.active with
 // banking.rules.inactive, whose English value was lowercase.
 const registrySource = readFileSync(

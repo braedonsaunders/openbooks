@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// OM-14: a failed sample-company create must leave a persistent inline error
+// a failed sample-company create must leave a persistent inline error
 // beside the company picker (not just a transient toast), keep the
 // operator's chosen company and profile, and clear the error on the next
 // attempt — retry is safe because nothing was created.

@@ -22,7 +22,7 @@ const { renderToString } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { ReportFilterBar } = await import('./ReportFilterBar')
 
-// F-t12-015 contract: the report toolbar (AS OF / period / Scheduled
+// contract: the report toolbar (AS OF / period / Scheduled
 // delivery / save / export) is ONE scrollable row — the actions render
 // INSIDE the overflow-x-auto container, so a clipped action on a 390px
 // viewport is reachable by horizontal scroll, never stranded. If the

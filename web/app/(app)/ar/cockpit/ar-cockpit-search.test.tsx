@@ -6,7 +6,7 @@ declare global {
   var __arSearch: string | undefined;
 }
 
-// F-t02-006: the receivables-by-customer search filters the as-of customer
+// the receivables-by-customer search filters the as-of customer
 // list client-side. A search that matches nobody must say so — it must not
 // reuse the "No open receivables. Everything is collected." empty state,
 // which states as fact that nothing is owed.

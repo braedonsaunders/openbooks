@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F-t04-015: "New expense report" flips to "Creating…" and stays there
+// "New expense report" flips to "Creating…" and stays there
 // forever when the draft create throws — NewExpenseButton has no
 // try/catch/finally, so a thrown fetch/json leaves busy=true with zero
 // feedback. A failed create must reset the button and surface the error.

@@ -71,7 +71,7 @@ const { createRoot } = await import('react-dom/client')
 const { default: PdfBuilder } = await import('./PdfBuilder')
 
 /**
- * F-t10-005: grapesjs injects its cssIcons default (font-awesome 4.7.0 on
+ * grapesjs injects its cssIcons default (font-awesome 4.7.0 on
  * cdnjs) unless disabled, and the app CSP blocks it on every editor load.
  * No template or block uses fa-* classes, so the builder pins cssIcons off
  * rather than vendoring a stylesheet nothing renders.

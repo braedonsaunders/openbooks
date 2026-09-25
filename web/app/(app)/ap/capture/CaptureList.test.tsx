@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// UX-20 (capture): the empty capture queue carries the upload action for
+// (capture): the empty capture queue carries the upload action for
 // creators who can upload; while capture is not operational the amber setup
 // banner (not this state) owns the remedy; readers without creation access
 // hear the grant instead of an action they cannot take.

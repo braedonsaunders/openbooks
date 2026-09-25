@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// UX-05: a required fixed-asset Category picker with no categories must name
+// a required fixed-asset Category picker with no categories must name
 // the prerequisite and link Asset Categories setup (setup managers only);
 // readers without setup access must hear the grant instead of silence. A
 // configured tenant must see no prerequisite at all.

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
 // F3-89: the provision run list built its year/version cells with hardcoded
 // English template literals (`FY${year}` / `v${version}`), so every locale
@@ -16,7 +17,6 @@ import test from 'node:test'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const MESSAGES = join(dir, '..', '..', '..', '..', 'messages')
-const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'zh', 'pt-BR'] as const
 
 const stateKey = Symbol.for('openbooks.tax-provisions-labels-test')
 interface LabelState {

@@ -113,7 +113,7 @@ test("re-publication requires a restatement note before enabling publish", () =>
   );
 });
 
-// F-t01-001: reporting packages store reports as { slug } objects. The
+// reporting packages store reports as { slug } objects. The
 // publish list must resolve each slug to its report name — never
 // interpolate the object into a translation key.
 test("publish package resolves report slugs to human-readable names", () => {

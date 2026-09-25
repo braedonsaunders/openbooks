@@ -11,7 +11,7 @@ const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { UtilizationView } = await import('./UtilizationView')
 
-// UX-20: a 0% utilization with no tracked hours is a data prerequisite, not
+// a 0% utilization with no tracked hours is a data prerequisite, not
 // a failing team. The overview names the missing time data and links the
 // timesheets that change it — only when the range is actually empty.
 

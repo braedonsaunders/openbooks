@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// The save read `result.error` unguarded into `new Error()`: an object error
+// The save read `result.error` unguarded into `new Error`: an object error
 // payload toasted "[object Object]", which names nothing the operator can
 // act on. A non-string refusal must fall back to the named save failure.
 

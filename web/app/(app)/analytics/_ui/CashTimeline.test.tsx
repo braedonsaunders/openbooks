@@ -14,7 +14,7 @@ const { MoneyProvider } = await import("../../../../components/money-provider");
 const { CashTimeline } = await import("./CashTimeline");
 
 // The cash timeline must render its chrome from the banking.cash catalog:
-// hardcoded English headers read as untranslated copy under fr/es (F-t05-016).
+// hardcoded English headers read as untranslated copy under fr/es .
 
 function week(overrides: Partial<WeekRow> = {}): WeekRow {
   return {

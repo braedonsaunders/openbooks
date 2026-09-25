@@ -35,7 +35,7 @@ for (const locale of ["en", "fr", "es"]) {
   ) as Record<string, unknown>;
 }
 
-test("F-t11-002: every emitted evidence kind has a label in en/fr/es", () => {
+test("every emitted evidence kind has a label in en/fr/es", () => {
   const missing: string[] = [];
   for (const kind of [...kinds].sort()) {
     for (const locale of ["en", "fr", "es"]) {
@@ -47,7 +47,7 @@ test("F-t11-002: every emitted evidence kind has a label in en/fr/es", () => {
   assert.deepEqual(missing, [], "evidence labels must exist for every emitted kind");
 });
 
-test("F-t11-002: fr/es evidence labels are translated, not English echoes", () => {
+test("fr/es evidence labels are translated, not English echoes", () => {
   const en = (catalogs.en!.evidence ?? {}) as Record<string, string>;
   for (const locale of ["fr", "es"]) {
     const evidence = (catalogs[locale]!.evidence ?? {}) as Record<string, string>;

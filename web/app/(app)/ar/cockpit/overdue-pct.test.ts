@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { overdueOpenPct } from './overdue-pct'
 
-// F-t12-003: the AR header rendered "100%% of open". The overdueSub message
+// the AR header rendered "100%% of open". The overdueSub message
 // template already carries the % sign ("{pct}% of open"), so the value fed
 // as {pct} must be a bare number — never a pre-suffixed "100%".
 test('overdue share is a bare whole-number percent with no sign attached', () => {

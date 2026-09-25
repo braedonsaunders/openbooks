@@ -22,7 +22,7 @@ test('financial profiles hide decimal-string zero lines', () => {
 })
 
 /**
- * F-t03-008: the work breakdown promises its estimates roll up to the cost
+ * the work breakdown promises its estimates roll up to the cost
  * budget, but uncapped project types hid the cost-budget line entirely — so
  * $140,000 of estimates showed nowhere and gross profit read as the full
  * contract value. A positive budget now stays visible even when the ceiling

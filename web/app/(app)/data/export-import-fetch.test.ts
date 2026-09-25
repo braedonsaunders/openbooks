@@ -20,7 +20,7 @@ function assertGuardedFetch(source: string, urlNeedle: string) {
   assert.match(after.slice(0, 500), /readApiErrorMessage/)
 }
 
-test('export, import, and custom-field option lists check status before json()', () => {
+test('export, import, and custom-field option lists check status before json', () => {
   assertGuardedFetch(exportClient, "'/api/data/resources'")
   assertGuardedFetch(exportClient, '`/api/data/resources?key=')
   assertGuardedFetch(importWizard, "'/api/data/resources'")

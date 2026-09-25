@@ -152,7 +152,7 @@ test("empty schedule list renders the hint", async (t) => {
   assert.ok((host.textContent ?? "").length > 0, "the empty state must render text");
 });
 
-/** F-t07-006: a failed delete must name the failure even when the error body is not JSON. */
+/** : a failed delete must name the failure even when the error body is not JSON. */
 test("a non-JSON delete failure still surfaces the delete-failed toast", async (t) => {
   const prior = globalThis.fetch;
   globalThis.fetch = (async () => new Response("<html>proxy boom</html>", { status: 500 })) as typeof fetch;

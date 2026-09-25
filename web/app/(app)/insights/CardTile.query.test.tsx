@@ -3,7 +3,7 @@ import test from 'node:test'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 
 // CardTile F4T2-1: the tile fetched POST /api/insights/query and called
-// res.json() before checking res.ok, so a non-JSON error body escaped the
+// res.json before checking res.ok, so a non-JSON error body escaped the
 // effect as a SyntaxError instead of failing the tile with the server's
 // named refusal. The status is checked first through the shared helper.
 await bootJsdomEnvironment({ url: 'http://localhost:4800/insights/dashboards/d-1' })

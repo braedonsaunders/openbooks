@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
 /**
  * F5 + follow-up: /admin/setup rendered raw keys for entities the registry
@@ -22,7 +23,6 @@ import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
  */
 
 const ROOT = process.cwd()
-const LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

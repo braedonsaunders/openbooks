@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { isProjectPlaceholderName, shouldAutoActivateProject } from './project-activation'
 
-// F-t03-001: a project created with Status Active stayed flagged Inactive and
+// a project created with Status Active stayed flagged Inactive and
 // hidden from the default list, because nothing ever flipped is_active after
 // the draft placeholder gained a real name. Saving the creation-completing
 // name must activate; anything else must not.

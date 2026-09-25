@@ -15,7 +15,7 @@ function actionSource(name: string, nextName: string): string {
   assert.ok(start >= 0, `${name} action must exist`);
   assert.ok(end > start, `${name} action boundary must exist`);
   // Code only: a comment that explains the rule ("never a SyntaxError from
-  // res.json()") must not read as a parse.
+  // res.json") must not read as a parse.
   return client.slice(start, end).replace(/\/\/.*$/gm, "");
 }
 

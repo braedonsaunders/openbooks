@@ -6,7 +6,7 @@ declare global {
   var __taxRouter: { push(url: string): void; refresh(): void } | undefined;
 }
 
-// TaxFilingsView used to throw bare Error() on a !ok compute/save response,
+// TaxFilingsView used to throw bare Error on a !ok compute/save response,
 // so the server's named refusal (e.g. the two-registrations choose-one) was
 // dropped and the operator read a generic saveFailed. Both paths now surface
 // the server's message through readApiErrorMessage. Render-proved: a 422

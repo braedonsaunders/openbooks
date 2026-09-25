@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// F-t08-013: recalculation deletes every pay_stubs row and inserts fresh ones
+// recalculation deletes every pay_stubs row and inserts fresh ones
 // with new ids, so the open stub drawer kept rendering its opening snapshot
 // (stale amounts) and its PDF link pointed at a deleted row (404) until
 // reopen. The open stub must re-resolve against the live stubs on every

@@ -122,7 +122,7 @@ const initial: AiFormInitial = {
   },
 };
 
-test("F-t11-004: provider auth failures classify without the raw body", () => {
+test("provider auth failures classify without the raw body", () => {
   const raw = new Error(
     '401 Unauthorized — {"type":"error","error":{"type":"authentication_error","message":"API key is invalid."},"request_id":null}',
   );
@@ -130,7 +130,7 @@ test("F-t11-004: provider auth failures classify without the raw body", () => {
   assert.deepEqual(classifyModelsError(new Error("fetch failed")), { code: "failed", status: null });
 });
 
-test("F-t11-004: load-models renders a human error, never the upstream blob", async () => {
+test("load-models renders a human error, never the upstream blob", async () => {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);

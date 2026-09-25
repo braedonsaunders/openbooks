@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// UX-06: a new View Studio card must open in an honest unsaved/draft state —
+// a new View Studio card must open in an honest unsaved/draft state —
 // "All changes saved" may only appear after a real save reads back its id.
 // An existing view loaded from the database still opens as saved.
 

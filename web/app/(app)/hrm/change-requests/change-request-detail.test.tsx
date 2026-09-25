@@ -8,7 +8,7 @@ declare global {
   var __detailRouter: { push(url: string): void; refresh(): void; pushes: string[] } | undefined
 }
 
-// OM-12: the ?request=<id> drawer actually opens. These tests RENDER the
+// the ?request=<id> drawer actually opens. These tests RENDER the
 // dialog island with a stubbed fetch: a permitted id shows subject,
 // proposed change, reason, history, and decision context with the existing
 // lifecycle actions; an out-of-scope id shows the API's named refusal and

@@ -19,7 +19,7 @@ registerHooks({
 
 const { cashFlowIndirectSpec } = await import('./view')
 
-// F-t06-025: enabling Multi-subsidiary crashed the indirect cash flow
+// enabling Multi-subsidiary crashed the indirect cash flow
 // statement with React error 441 — the loader converts the typed rates
 // refusal into a banner with a derive link instead of throwing it out of
 // SSR. These tests pin the spec half of that contract: given blocked data,

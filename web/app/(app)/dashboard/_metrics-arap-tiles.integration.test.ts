@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// F-t07-010 (and F-t01-002) — the dashboard AR/AP tiles summed the cached
+// (and ) — the dashboard AR/AP tiles summed the cached
 // documents.open_balance (invoices/bills only) while the /ar and /ap hubs,
 // the aging report, and the GL reconstruct remaining from the open-item
 // lines with live application netting and credit memos netted in. Same
@@ -124,7 +124,7 @@ test("dashboard AR/AP tiles read the shared open-item reader, not the cached bal
     await withBypass(() => postedDoc(org, { kind: "customer_invoice", amount: "1000", staleOpenBalance: "1000", dueDate: "2027-12-31", applications: ["400"] }));
     // Fully applied invoice: hub excludes it (remaining 0), cache stale at 500.
     await withBypass(() => postedDoc(org, { kind: "customer_invoice", amount: "500", staleOpenBalance: "500", dueDate: "2027-12-31", applications: ["500"] }));
-    // Unapplied credit memo (F-t07-010 class): nets -200 like the hub/aging.
+    // Unapplied credit memo ( class): nets -200 like the hub/aging.
     await withBypass(() => postedDoc(org, { kind: "customer_credit", amount: "200", staleOpenBalance: "0", dueDate: "2027-12-31" }));
     // Past-due invoice pins the overdue split.
     await withBypass(() => postedDoc(org, { kind: "customer_invoice", amount: "300", staleOpenBalance: "300", dueDate: "2020-01-01" }));
@@ -133,7 +133,7 @@ test("dashboard AR/AP tiles read the shared open-item reader, not the cached bal
 
     const actor = await withBypass(() => createScratchUser(org.orgId, "Tile Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string)));
-    // 600 (net of receipt) + 0 (fully applied) - 200 (credit) + 300 (overdue).
+    // 600 (net of receipt) + 0 (fully applied) — 200 (credit) + 300 (overdue).
     assert.equal(toUnits(metrics.openReceivables), toUnits("700"), "AR tile nets receipts and credits instead of the stale cache");
     assert.equal(toUnits(metrics.overdueReceivables), toUnits("300"), "only the past-due invoice counts as overdue");
     assert.equal(toUnits(metrics.openPayables), toUnits("500"), "AP tile nets the partial payment instead of the stale cache");
