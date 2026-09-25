@@ -872,6 +872,7 @@ export async function generateTemplate(
       startDate: window.startDate,
       endDate: window.endDate,
       runsRoot,
+      sampleTemplateAttempt: { profileId, seed: SAMPLE_TEMPLATE_SEED },
     });
     await stampTemplateAttempt(provisioned.orgId, profileId);
     try {

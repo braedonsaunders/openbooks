@@ -89,9 +89,14 @@ export async function provisionRun(opts: {
   startDate: string;
   endDate: string;
   runsRoot: string;
+  sampleTemplateAttempt?: { profileId: string; seed: string };
 }): Promise<ProvisionResult> {
   const profile = getProfile(opts.profileId);
-  const world = await provisionOrg(profile, { startDate: opts.startDate, endDate: opts.endDate });
+  const world = await provisionOrg(
+    profile,
+    { startDate: opts.startDate, endDate: opts.endDate },
+    opts.sampleTemplateAttempt,
+  );
   const runId = `${opts.profileId}-${opts.seed}-${world.orgId.slice(0, 8)}`;
   const runDir = runDirFor(opts.runsRoot, runId);
   const rng = Rng.fromSeed(`${opts.profileId}:${opts.seed}`);
