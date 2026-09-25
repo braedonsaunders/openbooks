@@ -82,7 +82,9 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
     certificateFor: ((key: string) =>
       key === "au_tfn_declaration"
         ? { answers: TFN_ANSWERS, onFile: true }
-        : null) as never,
+        : key === "au_sg_administration"
+          ? { answers: { qualifying_ytd: "0" }, onFile: true }
+          : null) as never,
     bool: (value) => value === "true",
     assertRegionSupported: () => {},
     employerLevies: EMPTY_EMPLOYER_LEVY_FACTORS,

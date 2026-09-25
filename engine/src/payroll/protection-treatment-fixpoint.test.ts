@@ -42,6 +42,7 @@ function paygFor(sacrifice: string): string {
     tfnQuoted: true,
     stslDebt: false,
     pensionable: GROSS,
+    ytdQualifying: "0",
     periodsPerYear: 26,
   }).payg;
 }

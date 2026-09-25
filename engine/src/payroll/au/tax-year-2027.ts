@@ -134,15 +134,20 @@ export const AU_MEDICARE_2027 = {
  * (within the meaning of the Income Tax Assessment Act 1997) for the
  * financial year in which the payment is made."
  *
- * The 2026–27 concessional-cap dollar figure is REFUSED by name: ITAA 1997
- * s292-20 states the mechanism ($25,000 for 2017–18, indexed annually under
- * Subdivision 960-M) but the indexed 2026–27 figure is not stated in the Act
- * and the ATO page that publishes it 403s. The formula above is transcribed;
- * the engine accrues 12% without the annual cap and names the gap.
+ * The 2026–27 maximum contributions base is $270,830: the indexed
+ * concessional cap is $32,500, so $32,500 × 100 / 12 = $270,833.33, rounded
+ * down to the nearest $10 per section 10A(5). The $270,830 annual base is
+ * published by the Department of Finance
+ * (superannuation arrangements for Australian Government employees and
+ * statutory office holders, 2026–27) and follows the SGAA amendment's annual
+ * base formula, which excludes payment amounts above the base from
+ * qualifying earnings for SG purposes.
  */
 export const AU_SUPER_2027 = {
   chargeRate: "0.12",
   maxBaseNumerator: "100",
+  /** 2026–27 annual maximum contributions base, whole dollars. */
+  maxBase: "270830",
 } as const;
 
 /**
@@ -219,7 +224,7 @@ export const AU_REFUSED_2027: readonly string[] = [
   "Medicare levy surcharge tiers 1–3 (thresholds live in the Private Health Insurance Act 2007 and liability turns on daily private patient hospital cover the pack cannot see)",
   "Medicare levy family reduction s8 (needs spouse income and dependant counts not on the TFN declaration)",
   "Medicare levy section-160AAAA rebate thresholds (no such question on the TFN declaration)",
-  "Superannuation maximum contributions base dollar figure (2026–27 concessional-cap input unquotable; formula transcribed)",
+  "Superannuation Guarantee YTD qualifying-earnings history (the $270,830 annual maximum base prices only the remaining headroom, so the engine refuses SG when verified year-to-date qualifying earnings are undeclared rather than posting uncapped SG)",
   "HELP repayable-debt cap (the employee's accumulated HELP debt is not visible to the pack)",
   "53-week / 27-fortnight additional withholding (voluntary shortfall top-ups the pack does not apply)",
   "State payroll tax (employer-aggregate state levy, not PAYG — out of scope, not a region of this pack)",
