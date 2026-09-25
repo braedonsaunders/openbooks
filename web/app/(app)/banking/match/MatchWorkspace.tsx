@@ -87,6 +87,11 @@ interface MatchActionResult {
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
 const NO_SUGGESTIONS: ReadonlyMap<string, { ruleId: string; ruleName: string }> = new Map()
+const NO_SELECTED_GL: ReadonlySet<string> = new Set()
+
+export function matchSelectionMatchesScope(selectionScope: string, currentScope: string): boolean {
+  return selectionScope === currentScope
+}
 
 export function MatchWorkspace({
   accounts, offsetAccounts, account, session, data, totals, currentParams, tab,
@@ -109,8 +114,7 @@ export function MatchWorkspace({
   const router = useRouter()
   const accountPickerId = useId()
   const [busy, setBusy] = useState(false)
-  const [selectedStmt, setSelectedStmt] = useState<string | null>(null)
-  const [selectedGl, setSelectedGl] = useState<Set<string>>(new Set())
+  const [selection, setSelection] = useState<{ scope: string; stmt: string | null; gl: Set<string> }>({ scope: '', stmt: null, gl: new Set() })
   const [addLine, setAddLine] = useState<{ id: string; label: string } | null>(null)
   const [offsetId, setOffsetId] = useState('')
   // A refused add-journal that only fires a transient toast reads as
@@ -122,6 +126,25 @@ export function MatchWorkspace({
   // keyed by statement line id. Computed live via the rules preview (no post).
   const accountId = account?.id
   const sessionId = session?.id
+  const matchScope = JSON.stringify([
+    accountId,
+    sessionId,
+    tab,
+    currentParams.stmtQ ?? null,
+    currentParams.stmtPage ?? null,
+    currentParams.glQ ?? null,
+    currentParams.glPage ?? null,
+  ])
+  const selectionIsCurrent = matchSelectionMatchesScope(selection.scope, matchScope)
+  const visibleStmtIds = new Set((data?.stmtRows ?? []).map((row) => row.id))
+  const selectedStmt = selectionIsCurrent && selection.stmt && visibleStmtIds.has(selection.stmt)
+    ? selection.stmt
+    : null
+  const selectedGl = useMemo<ReadonlySet<string>>(() => {
+    if (!matchSelectionMatchesScope(selection.scope, matchScope)) return NO_SELECTED_GL
+    const visibleIds = new Set((data?.glRows ?? []).map((row) => row.id))
+    return new Set([...selection.gl].filter((id) => visibleIds.has(id)))
+  }, [selection.scope, selection.gl, matchScope, data?.glRows])
   const [suggestionResult, setSuggestionResult] = useState<{
     accountId: string; sessionId: string; rows: Map<string, { ruleId: string; ruleName: string }>
   } | null>(null)
@@ -183,6 +206,10 @@ export function MatchWorkspace({
     [data, selectedGl],
   )
 
+  function clearSelection() {
+    setSelection((current) => current.scope === matchScope ? { scope: matchScope, stmt: null, gl: new Set() } : current)
+  }
+
   async function call(method: string, url: string, body?: unknown, onError?: (message: string) => void): Promise<MatchActionResult | null> {
     setBusy(true)
     try {
@@ -240,7 +267,7 @@ export function MatchWorkspace({
     if (!session || !selectedStmt || selectedGl.size === 0) return
     const d = await call('POST', `/api/banking/reconciliations/${session.id}/matches`, { statementLineId: selectedStmt, journalLineIds: [...selectedGl] })
     if (!d) return
-    toast.success(tW('matchedToast')); setSelectedStmt(null); setSelectedGl(new Set()); router.refresh()
+    toast.success(tW('matchedToast')); clearSelection(); router.refresh()
   }
 
   async function exclude(id: string) {
@@ -253,7 +280,7 @@ export function MatchWorkspace({
     if (!reason) return
     const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'exclude', reason })
     if (!d) return
-    toast.success(t('excludedToast')); if (selectedStmt === id) setSelectedStmt(null); router.refresh()
+    toast.success(t('excludedToast')); if (selectedStmt === id) setSelection((current) => current.scope === matchScope ? { ...current, stmt: null } : current); router.refresh()
   }
   async function restore(id: string) {
     const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'restore' })
@@ -265,7 +292,7 @@ export function MatchWorkspace({
     if (!ok) return
     const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'clear-duplicate' })
     if (!d) return
-    toast.success(t('clearedDuplicateToast')); if (selectedStmt === id) setSelectedStmt(null); router.refresh()
+    toast.success(t('clearedDuplicateToast')); if (selectedStmt === id) setSelection((current) => current.scope === matchScope ? { ...current, stmt: null } : current); router.refresh()
   }
   async function excludeFlaggedDuplicates() {
     if (!account || (data?.flaggedTotal ?? 0) === 0) return
@@ -278,7 +305,7 @@ export function MatchWorkspace({
     })
     if (!d) return
     toast.success(t('excludedFlaggedToast', { count: d.excluded ?? 0 }))
-    setSelectedStmt(null); router.refresh()
+    clearSelection(); router.refresh()
   }
   async function unmatch(statementLineId: string) {
     if (!session) return
@@ -426,8 +453,8 @@ export function MatchWorkspace({
                 ) : data.stmtRows.map((l) => {
                   const sel = selectedStmt === l.id
                   return (
-                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={() => setSelectedStmt(sel ? null : l.id)}>
-                      <TableCell className="w-8"><input type="radio" name="stmt" checked={sel} onChange={() => setSelectedStmt(sel ? null : l.id)} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })} /></TableCell>
+                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={() => setSelection({ scope: matchScope, stmt: sel ? null : l.id, gl: new Set(selectedGl) })}>
+                      <TableCell className="w-8"><input type="radio" name="stmt" checked={sel} onChange={() => setSelection({ scope: matchScope, stmt: sel ? null : l.id, gl: new Set(selectedGl) })} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })} /></TableCell>
                       <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
                       <TableCell className="max-w-[14rem]">
                         <div className="truncate">{l.description ?? '—'}{l.counterparty_ref ? <span className="ml-1.5 text-xs text-slate-400">{l.counterparty_ref}</span> : null}</div>
@@ -493,7 +520,11 @@ export function MatchWorkspace({
                   <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.glParams.q ? tW('noGlLinesSearch') : tW('allGlLinesReconciled')}</TableCell></TableRow>
                 ) : data.glRows.map((l) => {
                   const sel = selectedGl.has(l.id)
-                  const toggle = () => setSelectedGl((p) => { const n = new Set(p); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n })
+                  const toggle = () => setSelection((current) => {
+                    const next = new Set(current.scope === matchScope ? selectedGl : NO_SELECTED_GL)
+                    if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
+                    return { scope: matchScope, stmt: current.scope === matchScope ? selectedStmt : null, gl: next }
+                  })
                   return (
                     <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggle}>
                       <TableCell className="w-8"><input type="checkbox" checked={sel} onChange={toggle} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })} /></TableCell>

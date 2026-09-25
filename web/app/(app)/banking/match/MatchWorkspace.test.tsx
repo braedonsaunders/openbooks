@@ -90,7 +90,7 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
-const { MatchWorkspace } = await import('./MatchWorkspace')
+const { MatchWorkspace, matchSelectionMatchesScope } = await import('./MatchWorkspace')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 const STMT_ID = 'stmt-1'
@@ -167,6 +167,7 @@ const previewOk = () => Response.json({
 })
 
 test('the account SearchSelect is associated with its translated label', async (t) => {
+  assert.equal(matchSelectionMatchesScope('account-1:page-1', 'account-2:page-1'), false)
   await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }))
   const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === 'Account')
   assert.ok(label, 'account label renders')
