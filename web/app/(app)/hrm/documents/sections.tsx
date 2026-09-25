@@ -105,6 +105,7 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
     </div>
   }
   const actionable = ['draft', 'sent', 'viewed', 'partially_signed'].includes(document.status)
+  const canRemind = ['sent', 'viewed', 'partially_signed'].includes(document.status)
   const base = `/api/hrm/documents/${document.id}`
   const held = document.legalHold
 
@@ -133,10 +134,10 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap gap-2">
-        {canAct && actionable && (
+        {canAct && document.status === 'draft' && (
           <Button onClick={send}>{msg(labels, 'send')}</Button>
         )}
-        {canAct && document.status !== 'draft' && <Button variant="outline" onClick={remind}>{msg(labels, 'remind')}</Button>}
+        {canAct && canRemind && <Button variant="outline" onClick={remind}>{msg(labels, 'remind')}</Button>}
         {canAct && (
           <Button variant="outline" onClick={toggleHold}>
             {document.legalHold ? msg(labels, 'releaseHold') : msg(labels, 'hold')}
