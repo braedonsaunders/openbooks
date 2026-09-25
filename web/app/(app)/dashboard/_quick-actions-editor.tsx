@@ -21,6 +21,7 @@ import {
 } from './_quick-actions-shared'
 import { FALLBACK_ICON, ICON_PICKER_KEYS, QUICK_ACTION_ICONS } from './_quick-actions-icons'
 import { listQuickActionOptions, saveQuickActions } from './actions'
+import { useDirtyClose } from '../../../lib/use-dirty-close'
 
 type View = 'list' | 'picker' | 'edit'
 type PickerTab = 'common' | 'custom'
@@ -49,6 +50,7 @@ export function QuickActionsEditor({
   saveAction?: SaveQuickActionsAction
 }) {
   const t = useTranslations('dashboard')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [items, setItems] = useState<QuickAction[]>(value)
   const [view, setView] = useState<View>('list')
@@ -70,10 +72,23 @@ export function QuickActionsEditor({
     setCustomHref('')
   }
 
-  function close() {
+  // Explicit Cancel discards; overlay/Escape goes through the dirty guard.
+  function discard() {
     reset(value)
     onClose()
   }
+
+  const dirty = JSON.stringify(items) !== JSON.stringify(value)
+  const { close: guardedClose } = useDirtyClose({
+    dirty,
+    busy: saving,
+    onClose: () => {
+      reset(value)
+      onClose()
+    },
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   useEffect(() => {
     if (!open || options) return
@@ -187,13 +202,13 @@ export function QuickActionsEditor({
   return (
     <Drawer
       open={open}
-      onClose={close}
+      onClose={() => void guardedClose()}
       size="md"
       title={title}
       description={view === 'list' ? t('quickActions.editor.description') : undefined}
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={close} disabled={saving}>
+          <Button type="button" variant="ghost" onClick={discard} disabled={saving}>
             {t('quickActions.editor.cancel')}
           </Button>
           <Button type="button" onClick={handleSave} disabled={saving}>
