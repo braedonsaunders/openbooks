@@ -102,7 +102,7 @@ function workspace() {
   };
 }
 
-async function mountDrawer(overrides?: { status?: string; canApprove?: boolean }) {
+async function mountDrawer(overrides?: { status?: string; canApprove?: boolean; budgetImport?: boolean }) {
   globalThis.__budgetTestRouter = { push() {}, refresh() {} };
   globalThis.__budgetTestToasts = [];
   (window as unknown as Record<string, unknown>).confirm = () => true;
@@ -117,7 +117,7 @@ async function mountDrawer(overrides?: { status?: string; canApprove?: boolean }
         <MoneyProvider currency="CAD">
           <BudgetDrawer
             initial={initial as never}
-            currentParams={{}}
+            currentParams={overrides?.budgetImport ? { budgetImport: '1' } : {}}
             dims={{ subsidiaryId: null, departmentId: null, projectId: null, locationId: null, classId: null }}
             closeHref="/budgets"
             books={[]}
@@ -136,6 +136,10 @@ async function mountDrawer(overrides?: { status?: string; canApprove?: boolean }
   return { host, root };
 }
 
+async function cleanupDrawer(host: HTMLDivElement, root: ReturnType<typeof createRoot>, priorFetch: typeof fetch) {
+  await act(async () => root.unmount()); host.remove(); globalThis.fetch = priorFetch;
+}
+
 /** F-t13-006: a refused submit must pin its typed reason on the record, not
  * vanish behind a transient toast. */
 test("a line-less submit pins the typed refusal on the drawer", async (t) => {
@@ -146,13 +150,7 @@ test("a line-less submit pins the typed refusal on the drawer", async (t) => {
     return Response.json({ error: "budget_requires_lines" }, { status: 422 });
   }) as typeof fetch;
   const { host, root } = await mountDrawer();
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-    globalThis.fetch = priorFetch;
-  });
+  t.after(() => cleanupDrawer(host, root, priorFetch));
   // UrlDrawer portals to document.body, so query the document, not the host.
   const submit = [...document.querySelectorAll("button")].find((el) =>
     el.textContent?.trim().startsWith("Submit for approval"),
@@ -190,13 +188,7 @@ test("a refused self-approval pins the typed refusal on the drawer", async (t) =
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
   const { host, root } = await mountDrawer({ status: "pending_approval", canApprove: true });
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-    globalThis.fetch = priorFetch;
-  });
+  t.after(() => cleanupDrawer(host, root, priorFetch));
   const approve = [...document.querySelectorAll("button")].find((el) =>
     el.textContent?.trim().startsWith("Approve"),
   ) as HTMLButtonElement;
@@ -418,4 +410,14 @@ test("Save opens the created draft when saving its lines is refused", async (t) 
     (globalThis.__budgetTestToasts ?? []).some((toast) => /saving its lines failed/i.test(toast.message) && /budget_is_locked/.test(toast.message)),
     "Save explains the persisted draft and the line refusal",
   );
+});
+
+test("a late preview cannot enable applying the previously selected budget file", async (t) => {
+  const pending: ((r: Response) => void)[] = [], commits: Record<string, unknown>[] = [], priorFetch = globalThis.fetch;
+  globalThis.fetch = (async (input, init) => { if (!String(input).includes('/import')) return Response.json({}, { status: 404 }); const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>; if (body.commit) { commits.push(body); return Response.json({ imported: 1 }); } return new Promise<Response>((resolve) => pending.push(resolve)); }) as typeof fetch;
+  const { host, root } = await mountDrawer({ budgetImport: true }); t.after(() => cleanupDrawer(host, root, priorFetch));
+  const choose = async (name: string, text: string) => act(async () => { const input = document.querySelector('input[type="file"]')!; Object.defineProperty(input, "files", { configurable: true, value: [Object.assign(new Blob([text]), { name })] }); input.dispatchEvent(new window.Event("change", { bubbles: true })); await tick(); }); const click = async (label: string) => act(async () => { [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === label)!.click(); await tick(); });
+  await choose("a.csv", "account,period,amount\n4000,1,10"); await click("Validate file"); await choose("b.csv", "account,period,amount\n4000,1,20");
+  await act(async () => { pending[0]!(Response.json({ valid: true, rows: 1, errors: [] })); await tick(); }); assert.equal([...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Apply import"), false);
+  await click("Validate file"); await act(async () => { pending[1]!(Response.json({ valid: true, rows: 1, errors: [] })); await tick(); }); await click("Apply import"); assert.equal(commits[0]?.text, "account,period,amount\n4000,1,20");
 });
