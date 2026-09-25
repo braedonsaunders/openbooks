@@ -3475,6 +3475,10 @@ async function main(): Promise<void> {
       await pool.end().catch(() => {});
       await longPool.end().catch(() => {});
     }
+    // Drain stdout before exiting: process.exit() right after a large write to
+    // a pipe cut the JSON report at 146,176 bytes in the perf-1m rehearsal
+    // (one row per offending pay stub), and the caller could not parse it.
+    await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
     process.exit(code);
   }
   const precreated = precreatedRolesEnabled(env);
