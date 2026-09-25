@@ -89,7 +89,7 @@ export interface PreparedExpenseEdit {
  */
 export async function prepareExpenseEdit(
   body: ExpenseEditBody,
-  ctx: { orgId: string; existingCustom: unknown; existingDocumentDate: string },
+  ctx: { orgId: string; existingCustom: unknown; existingDocumentDate: string; existingPaymentCardId?: string | null },
 ): Promise<PreparedExpenseEdit> {
   const { orgId } = ctx
   // The document date reaches coalesce(document_date) uncast: a malformed
@@ -114,18 +114,20 @@ export async function prepareExpenseEdit(
   }
   // The funding card backs every company-paid and personal line (0171). The
   // documents FK is global, so prove org ownership here like the party above;
-  // submit and post re-check before money moves. The picker offers active
-  // cards only, and so does this gate — posting stays booking-agnostic so a
-  // later deactivation cannot brick an in-flight report. A null body value
-  // keeps the current card, mirroring the party contract.
+  // submit and post re-check before money moves. Require an active card only
+  // when selecting a different card: unrelated edits remain possible after
+  // the currently associated card is deactivated.
   if (body.paymentCardId !== undefined && body.paymentCardId !== null) {
     if (!isUuid(body.paymentCardId)) {
       throw new DocumentEditError(404, 'corporate card not found in this organization')
     }
-    const card = (await db.execute<{ id: string }>(
-      sql`select id from payment_cards where id = ${body.paymentCardId} and org_id = ${orgId} and is_active`,
+    const card = (await db.execute<{ id: string; is_active: boolean }>(
+      sql`select id, is_active from payment_cards where id = ${body.paymentCardId} and org_id = ${orgId}`,
     ))
     if (!card.rows[0]) throw new DocumentEditError(404, 'corporate card not found in this organization')
+    if (body.paymentCardId !== ctx.existingPaymentCardId && !card.rows[0].is_active) {
+      throw new DocumentEditError(404, 'corporate card not found in this organization')
+    }
   }
   // Line accounts are the tenant's chart of accounts. The lines FK is
   // tenant-coherent, so a foreign account dies at the insert as a 500;
@@ -492,6 +494,7 @@ export async function createExpenseCorrectionDraft(
         orgId: ctx.orgId,
         existingCustom: source.custom,
         existingDocumentDate: source.documentDate,
+        existingPaymentCardId: source.paymentCardId,
       })
       const documentNumber = await nextDocumentNumber(ctx.orgId, 'expense_report', 'EXP-')
       const created = (await tx.execute<{ id: string }>(sql`

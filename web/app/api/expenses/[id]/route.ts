@@ -58,8 +58,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const malformedPatch = malformedId(id)
   if (malformedPatch) return malformedPatch
 
-  const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; custom: Record<string, unknown> | null }>(
-    sql`select status, document_date, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
+  const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; custom: Record<string, unknown> | null; payment_card_id: string | null }>(
+    sql`select status, document_date, subsidiary_id as "subsidiaryId", custom, payment_card_id from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
   ))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
@@ -93,6 +93,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       orgId: user.orgId,
       existingCustom: existing.rows[0].custom,
       existingDocumentDate: existing.rows[0].document_date,
+      existingPaymentCardId: existing.rows[0].payment_card_id,
     })
   } catch (e) {
     if (e instanceof DocumentEditError) {
