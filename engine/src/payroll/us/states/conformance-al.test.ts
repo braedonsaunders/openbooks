@@ -14,17 +14,17 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  AL_A4_MS_CERTIFICATE, AL_CERTIFICATE, AL_REGION, AL_RATES_2026, AL_WITHHOLDING, alAnnualTax, alDependentAllowance,
+  AL_A4_MS_CERTIFICATE, AL_CERTIFICATE, AL_REGION, AL_RATES_2026, AL_SEVERANCE_APPROVAL_CERTIFICATE, AL_WITHHOLDING, alAnnualTax, alDependentAllowance,
   alPersonalExemption, alStandardDeduction, alSupplementalFlat,
 } from "./al.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
-  resolvedCertificate(AL_CERTIFICATE, answers);
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate => resolvedCertificate(AL_CERTIFICATE, answers);
 
 test("AL certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(AL_CERTIFICATE), null);
+  assert.equal(certificateDeclarationProblem(AL_SEVERANCE_APPROVAL_CERTIFICATE), null);
   assert.equal(AL_REGION.implemented, true);
   assert.equal(AL_REGION.certificateKey, "us_al_a4");
 });
@@ -78,20 +78,11 @@ test("AL official example — M-2, $850 weekly, FIT $35.19: $29.59", () => {
 
 test("AL no A-4 withholds as zero exemptions", () => {
   const empty = AL_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00",
-    basis: "resident", federalIncomeTax: "35.19",
-    certificate: resolveCertificate({
-      certificate: AL_CERTIFICATE,
-      stored: [{
-        certificateKey: AL_CERTIFICATE.key,
-        answers: {},
-        effectiveFrom: null,
-      }],
-    }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "resident", federalIncomeTax: "35.19",
+    certificate: resolveCertificate({ certificate: AL_CERTIFICATE, stored: [{ certificateKey: AL_CERTIFICATE.key, answers: {}, effectiveFrom: null }] }),
   });
   const zero = AL_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00",
-    basis: "resident", federalIncomeTax: "35.19",
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "resident", federalIncomeTax: "35.19",
     certificate: cert({ exemption: "0", dependents: "0" }),
   });
   assert.equal(empty.tax, zero.tax);
@@ -113,26 +104,19 @@ test("AL refuses without this period's federal income tax withheld", () => {
 // https://www.revenue.alabama.gov/faqs/i-am-in-the-military-and-not-a-legal-resident-of-alabama-if-my-spouse-and-or-i-also-have-civilian-jobs-in-alabama-should-we-report-that-income/
 test("AL A4-MS is separate from A-4 and requires every attestation and supporting record", () => {
   assert.equal(certificateDeclarationProblem(AL_A4_MS_CERTIFICATE), null);
-  const incomplete = resolvedCertificate(AL_A4_MS_CERTIFICATE, {
-    spouse_is_active_duty_member: "true",
-  });
+  const incomplete = resolvedCertificate(AL_A4_MS_CERTIFICATE, { spouse_is_active_duty_member: "true" });
   assert.throws(
     () => AL_WITHHOLDING.compute({
-      payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "nonresident",
-      certificate: cert({ exemption: "0", dependents: "0" }),
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "nonresident", certificate: cert({ exemption: "0", dependents: "0" }),
       supportingCertificates: { us_al_a4_ms: incomplete },
     }),
     /Alabama military-spouse withholding exemption requires proof that the employee is not a military servicemember; current military orders assign the servicemember to Alabama; the employee is in Alabama solely to be with the servicemember; the employee and servicemember live at the same address; the employee's domicile is outside Alabama; the employee and servicemember share the same domicile; a current military spouse identification is on file; the servicemember's DD Form 2058 is on file; a recent Leave and Earnings Statement is on file/,
   );
 
-  const eligible = resolvedCertificate(AL_A4_MS_CERTIFICATE, Object.fromEntries([
-    "spouse_is_active_duty_member", "employee_is_not_servicemember", "current_orders_assign_al",
-    "employee_here_to_accompany", "same_current_address", "employee_domicile_outside_al",
-    "same_domicile", "military_id_on_file", "dd2058_on_file", "recent_les_on_file",
-  ].map((key) => [key, "true"])));
+  const eligible = resolvedCertificate(AL_A4_MS_CERTIFICATE, Object.fromEntries(
+    ["spouse_is_active_duty_member", "employee_is_not_servicemember", "current_orders_assign_al", "employee_here_to_accompany", "same_current_address", "employee_domicile_outside_al", "same_domicile", "military_id_on_file", "dd2058_on_file", "recent_les_on_file"].map((key) => [key, "true"])));
   const result = AL_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "nonresident",
-    certificate: cert({ exemption: "0", dependents: "0" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "nonresident", certificate: cert({ exemption: "0", dependents: "0" }),
     supportingCertificates: { us_al_a4_ms: eligible },
   });
   assert.equal(result.tax, money("0"));
@@ -178,11 +162,19 @@ test("AL supplemental paid with regular wages is aggregated, not a silent 5%", (
 
 test("AL refuses a year it has not transcribed", () => {
   assert.throws(
-    () => AL_WITHHOLDING.compute({
-      payDate: "2027-01-15", periodsPerYear: 52, wages: "850",
-      basis: "resident",
-      certificate: cert({ exemption: "M" }),
-    }),
+    () => AL_WITHHOLDING.compute({ payDate: "2027-01-15", periodsPerYear: 52, wages: "850", basis: "resident", certificate: cert({ exemption: "M" }) }),
     /2027 Alabama income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
+});
+
+test("AL carves ALDOR-approved severance from the formula base; the separate-flat gate shares the gate", () => {
+  // 2024 booklet p. 14: employer-requested, ALDOR-written-approval
+  // severance up to $50,000 is excluded and priced as separate wages.
+  const approval = resolvedCertificate(AL_SEVERANCE_APPROVAL_CERTIFICATE, { aldor_approval_on_file: "true", approved_amount: "5000", period_severance: "1000" });
+  const base = { payDate: "2026-03-15", periodsPerYear: 52, wages: "1850.00", basis: "resident" as const, federalIncomeTax: "35.19", certificate: cert({ exemption: "M", dependents: "2" }) };
+  const carved = AL_WITHHOLDING.compute({ ...base, supportingCertificates: { us_al_severance_approval: approval } });
+  assert.notEqual(carved.tax, AL_WITHHOLDING.compute({ ...base }).tax);
+  assert.equal(carved.factors.AL_EXEMPT_SEVERANCE, money("1000"));
+  assert.equal(AL_WITHHOLDING.separateFlatExclusion!({ us_al_severance_approval: approval }), money("1000"));
+  assert.throws(() => AL_WITHHOLDING.compute({ ...base, wages: "500.00", supportingCertificates: { us_al_severance_approval: approval } }), /attested severance exceeds this period's pay/);
 });

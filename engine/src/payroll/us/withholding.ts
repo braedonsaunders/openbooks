@@ -53,7 +53,7 @@ import {
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
 import type { PayrollTaxBases } from "../pack-types.ts";
-import { D, mulRateCents, rate6, U } from "../canada/decimal.ts";
+import { D, max0, mulRateCents, rate6, U } from "../canada/decimal.ts";
 import type { UsSupplementalWageAmount, UsSupplementalWageCategory } from "../supplemental-wages.ts";
 import type { UsStatutoryExemptionAmount } from "../statutory-exemptions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES, ratesForPayDate } from "./rates.ts";
@@ -983,12 +983,16 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         statutoryExemptionAmounts: input.statutoryExemptionAmounts,
         ytd: input.ytd,
       });
+      // Approved exclusions (Alabama ALDOR severance) leave the flat base
+      // through the state engine's gate — the same gate its formula
+      // carve-out shares, so an invalid attestation refuses by name here too.
+      const flatExclusion = U(engine.separateFlatExclusion?.(supportingCertificates(engine.supportingCertificateKeys)) ?? "0");
       const rawSupplementalTax = separateCategoryAmounts
         ? separateCategoryAmounts.reduce(
           (total, item) => total + mulRateCents(U(item.amount), item.rate),
           0n,
         )
-        : mulRateCents(toUnits(residentSupplemental), separateFlatRate!);
+        : mulRateCents(max0(toUnits(residentSupplemental) - flatExclusion), separateFlatRate!);
       const supplementalTax = separateFlatWholeDollar
         ? roundDiv(rawSupplementalTax, 10_000n) * 10_000n
         : rawSupplementalTax;

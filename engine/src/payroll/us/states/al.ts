@@ -19,7 +19,7 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, type PayrollCertificate,
+  certificateAmount, certificateChoice, certificateCount, type PayrollCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -137,6 +137,54 @@ export function alSupplementalFlat(supplemental: string, rates: AlYearRates = AL
   return D(mulRateCents(U(supplemental), rates.supplementalRate));
 }
 
+/**
+ * This period's ALDOR-approved exempt severance, or zero when no approval
+ * attestation is on file. Validates the approval gate ($50,000 cap, written
+ * approval, period amount within the approved total) and refuses by name —
+ * shared by the formula carve-out and the separate-flat gate so both paths
+ * enforce the identical gate.
+ */
+export function alApprovedSeverance(
+  approval: ResolvedCertificate | null | undefined,
+): bigint {
+  if (!approval?.onFile) return 0n;
+  if (approval.answers["aldor_approval_on_file"] !== "true") {
+    throw new PayrollError(
+      "Alabama severance attestation does not certify ALDOR written approval — "
+      + "the exemption needs an employer-requested, ALDOR-approved plan; refused by name",
+    );
+  }
+  const rawApproved = approval.answers["approved_amount"];
+  if (rawApproved == null || rawApproved === "") {
+    throw new PayrollError(
+      "Alabama severance attestation is missing the approved exempt total — "
+      + "attest the ALDOR-approved amount before calculating; refused by name",
+    );
+  }
+  const approved = U(rawApproved);
+  if (approved > U("50000")) {
+    throw new PayrollError(
+      `Alabama approved severance ${D(approved)} exceeds the $50,000 program cap — `
+      + "only the first $50,000 is excludable; correct the attestation",
+    );
+  }
+  const rawPeriod = approval.answers["period_severance"];
+  if (rawPeriod == null || rawPeriod === "") {
+    throw new PayrollError(
+      "Alabama severance attestation is missing this period's severance — "
+      + "attest the period amount before calculating; refused by name",
+    );
+  }
+  const period = U(rawPeriod);
+  if (period > approved) {
+    throw new PayrollError(
+      "Alabama attested period severance exceeds the approved exempt total — "
+      + "correct the attestation before calculating; refused by name",
+    );
+  }
+  return period;
+}
+
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = alRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
@@ -201,7 +249,25 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     );
   }
 
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  // Approved exempt severance (2024 booklet p. 14: employer-requested,
+  // ALDOR-written-approval severance up to $50,000) is carved out of the
+  // formula base — regular and supplemental alike — and traced as separate
+  // wages. When this computation prices a separately paid supplemental
+  // stream the dispatcher, not the formula, removes it (see
+  // separateFlatExclusion below): the formula only ever carves the combined
+  // stream it actually prices.
+  const periodSeverance = alApprovedSeverance(input.supportingCertificates?.us_al_severance_approval);
+  const wagesTotal = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.supplementalPaymentTiming !== "separate" && periodSeverance > 0n) {
+    if (periodSeverance > wagesTotal) {
+      throw new PayrollError(
+        "Alabama attested severance exceeds this period's pay — "
+        + "correct the attestation before calculating; refused by name",
+      );
+    }
+    trace("AL_EXEMPT_SEVERANCE", periodSeverance);
+  }
+  const wages = wagesTotal - (input.supplementalPaymentTiming !== "separate" ? periodSeverance : 0n);
   const gi = wages * BigInt(P);
   trace("AL_GI", gi);
 
@@ -242,6 +308,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const AL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AL_MILITARY_SPOUSE_EXEMPT: "Alabama military-spouse wages exempt from withholding",
+  AL_EXEMPT_SEVERANCE: "Alabama ALDOR-approved exempt severance, priced as separate wages",
   AL_NONRESIDENT_DAYS: "Alabama services calendar-day count this year",
   AL_SAFE_HARBOR_EXEMPT: "Alabama 30-day safe-harbor wages exempt from withholding",
   AL_GI: "Alabama gross income (annualized)",
@@ -259,7 +326,8 @@ export const AL_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AL",
   label: "Alabama income tax",
   certificateKey: "us_al_a4",
-  supportingCertificateKeys: ["us_al_a4_ms"],
+  supportingCertificateKeys: ["us_al_a4_ms", "us_al_severance_approval"],
+  separateFlatExclusion: (supporting) => D(alApprovedSeverance(supporting.us_al_severance_approval)),
   ratesModule: RATES_MODULE,
   editions: AL_TAX_YEAR_EDITIONS,
   printedPeriods: null,
@@ -357,6 +425,46 @@ export const AL_A4_MS_CERTIFICATE: PayrollCertificate = {
     { key: "military_id_on_file", label: "Current military spouse identification is on file", kind: "flag", help: "ALDOR requires the employer to retain a clear copy of the current military spouse ID." },
     { key: "dd2058_on_file", label: "DD Form 2058 is on file", kind: "flag", help: "ALDOR requires the servicemember's state-of-legal-residence certificate." },
     { key: "recent_les_on_file", label: "Recent Leave and Earnings Statement is on file", kind: "flag", help: "ALDOR requires a recent servicemember LES." },
+  ],
+};
+
+/**
+ * Payer-held approved-severance attestation (no state form exists — the
+ * 2024 booklet describes an employer-requested, ALDOR-written-approval
+ * program covering the first $50,000 of severance).
+ */
+export const AL_SEVERANCE_APPROVAL_CERTIFICATE: PayrollCertificate = {
+  key: "us_al_severance_approval",
+  form: "Severance approval attestation",
+  label: "Alabama approved severance attestation",
+  scope: { level: "region", region: "AL" },
+  purpose: "withholding",
+  citation:
+    "Alabama Department of Revenue, Withholding Tax Tables and Instructions for "
+    + "Employers and Withholding Agents, Revised August 2024, p. 14",
+  summary:
+    "The employer attests the ALDOR written approval and the approved and "
+    + "period severance amounts so only the first $50,000 of approved severance is excluded.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "aldor_approval_on_file",
+      label: "ALDOR written approval of the severance plan is on file",
+      kind: "flag", required: true,
+      help: "The exemption needs an employer-requested plan with ALDOR written approval.",
+    },
+    {
+      key: "approved_amount",
+      label: "ALDOR-approved exempt severance total",
+      kind: "amount", decimals: 4, min: "0.01", required: true,
+      help: "Only the first $50,000 of approved severance is excludable.",
+    },
+    {
+      key: "period_severance",
+      label: "This period's severance in the approved program",
+      kind: "amount", decimals: 4, min: "0", required: true,
+      help: "Must not exceed the approved total, nor this period's pay on the combined path.",
+    },
   ],
 };
 
