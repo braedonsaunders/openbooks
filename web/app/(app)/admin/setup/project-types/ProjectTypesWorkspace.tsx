@@ -221,7 +221,7 @@ export function ProjectTypesWorkspace({
       })
       // The status is checked before the body is parsed: a non-JSON error
       // body must surface the failure, never a SyntaxError from res.json().
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('saveFailed')))
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
       const data = (await res.json().catch(() => null)) as { id?: unknown } | null
       toast.success(t('saved'))
       if (!isNew) {
@@ -250,7 +250,7 @@ export function ProjectTypesWorkspace({
         setSelId(createdId)
       }
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : t('saveFailed'))
+      toast.error(error instanceof Error && error.message ? error.message : tCommon('feedback.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -265,13 +265,13 @@ export function ProjectTypesWorkspace({
     setBusy(true)
     try {
       const res = await fetch(`/api/admin/setup/project-types?id=${draft.id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('deleteFailed')))
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.deleteFailed')))
       const nextList = list.filter((x) => x.id !== draft.id)
       setList(nextList)
       setSelId(nextList[0]?.id ?? 'new')
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : t('deleteFailed'))
+      toast.error(error instanceof Error && error.message ? error.message : tCommon('feedback.deleteFailed'))
     } finally {
       setBusy(false)
     }
