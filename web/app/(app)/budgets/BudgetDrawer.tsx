@@ -163,6 +163,7 @@ export function BudgetDrawer({
   const [annualDrafts, setAnnualDrafts] = useState<Record<string, string>>({})
 
   function queueCell(cell: Omit<Cell, 'subsidiaryId'>) {
+    if (!editable) return
     const full: Cell = { ...cell, subsidiaryId: sliceSubsidiaryId }
     const key = cellKey(full.accountId, full.periodId, full.subsidiaryId)
     setValues((current) => ({ ...current, [key]: full.amount }))
@@ -271,6 +272,7 @@ export function BudgetDrawer({
   }
 
   function spreadRow(accountId: string, total: string) {
+    if (!editable) return
     try {
       const amounts = spreadBudgetTotal(total || '0', initial.periods.length)
       initial.periods.forEach((period, index) => queueCell({ accountId, periodId: period.id, amount: amounts[index]! }))
@@ -290,6 +292,7 @@ export function BudgetDrawer({
   }
 
   function copyMonth(accountId: string, periodId: string, forwardOnly: boolean) {
+    if (!editable) return
     const sourceIndex = initial.periods.findIndex((period) => period.id === periodId)
     if (sourceIndex < 0) return
     const amount = values[cellKey(accountId, periodId, sliceSubsidiaryId)] ?? '0'
@@ -299,21 +302,24 @@ export function BudgetDrawer({
   }
 
   function clearRow(accountId: string) {
+    if (!editable) return
     if (!window.confirm(t('confirm.clearYear'))) return
     initial.periods.forEach((period) => queueCell({ accountId, periodId: period.id, amount: '0.0000' }))
   }
 
   function openCellMenu(event: React.MouseEvent, accountId: string, periodId?: string) {
+    if (!editable) return
     setMenuTarget({ accountId, periodId })
     cellMenu.onContextMenu(event)
   }
 
   function openRowMenu(element: HTMLElement, accountId: string) {
+    if (!editable) return
     setMenuTarget({ accountId })
     cellMenu.openBelow(element)
   }
 
-  const menuItems: ContextMenuEntry[] = menuTarget ? [
+  const menuItems: ContextMenuEntry[] = editable && menuTarget ? [
     ...(menuTarget.periodId ? [
       { key: 'copy-year', label: t('workspace.copyMonthAcrossYear'), icon: Copy, onSelect: () => copyMonth(menuTarget.accountId, menuTarget.periodId!, false) },
       { key: 'copy-forward', label: t('workspace.copyMonthForward'), icon: Rows3, onSelect: () => copyMonth(menuTarget.accountId, menuTarget.periodId!, true) },
@@ -624,7 +630,7 @@ export function BudgetDrawer({
       </Card>
     </div>
   </UrlDrawer>
-  <ContextMenu open={cellMenu.open} position={cellMenu.position} items={menuItems} onClose={cellMenu.close} />
+  <ContextMenu open={editable && cellMenu.open} position={cellMenu.position} items={menuItems} onClose={cellMenu.close} />
   {editable && !unsaved && currentParams.budgetImport === '1' ? <BudgetImport scenarioId={scenario.id} closeHref={importCloseHref} revisionRef={revisionRef} execute={execute} onCommitted={() => { router.push((importCloseHref)); router.refresh() }} /> : null}
   </>
 }
