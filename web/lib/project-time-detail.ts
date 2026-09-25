@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockScopeRows, subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 
 export type ProjectTimeDimension = 'employee' | 'item' | 'task'
@@ -90,6 +91,31 @@ export async function loadProjectTimeEntryPage(args: {
     `)
     if (!project.rows[0]) throw new ProjectTimeDetailError('Project not found')
 
+    const employeeIds = (await db.execute<{ id: string }>(sql`
+      select distinct employee_party_id as id from time_entries
+       where org_id = ${args.orgId} and project_id = ${args.projectId}
+         and status = 'approved' and employee_party_id is not null
+       order by employee_party_id
+    `)).rows.map((row) => row.id)
+    const employees = await lockScopeRows(
+      db,
+      args.orgId,
+      employeeIds.map((id) => ({ kind: 'party' as const, id })),
+      null,
+      'share',
+      { orgWideNull: true },
+    )
+    const visibleEmployeeIds = employees
+      .filter((employee) => subsidiaryScopeAllows(
+        args.allowedSubsidiaryIds,
+        employee.subsidiaryId,
+        { orgWideNull: true },
+      ))
+      .map((employee) => employee.id)
+    const employeeScopeFilter = args.allowedSubsidiaryIds === null
+      ? sql``
+      : sql`and (te.employee_party_id is null or te.employee_party_id = any(${`{${visibleEmployeeIds.join(',')}}`}::uuid[]))`
+
     const dimensionFilter = args.dimension === 'employee'
       ? (args.dimensionId ? sql`te.employee_party_id = ${args.dimensionId}` : sql`te.employee_party_id is null`)
       : args.dimension === 'item'
@@ -105,6 +131,7 @@ export async function loadProjectTimeEntryPage(args: {
        where te.org_id = ${args.orgId}
          and te.project_id = ${args.projectId}
          and te.status = 'approved'
+         ${employeeScopeFilter}
          and ${dimensionFilter}
     `)
     const entries = await db.execute(sql`
@@ -138,6 +165,7 @@ export async function loadProjectTimeEntryPage(args: {
        where te.org_id = ${args.orgId}
          and te.project_id = ${args.projectId}
          and te.status = 'approved'
+         ${employeeScopeFilter}
          and ${dimensionFilter}
        order by te.worked_on desc, te.id
        limit ${pageSize} offset ${offset}
