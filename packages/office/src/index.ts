@@ -590,10 +590,16 @@ function statementCellValue(value: number | string | null | undefined): number |
   const signedUnits = match[1] === '-' ? -units : units
   if (signedUnits < -MAX_SAFE_STATEMENT_UNITS || signedUnits > MAX_SAFE_STATEMENT_UNITS) return value
 
-  // The scaled integer is safe, so this conversion cannot round the ledger
-  // value at its four-decimal precision. Keep the numeric cell behaviour for
-  // values that fit within that bound.
-  return Number(signedUnits) / Number(STATEMENT_SCALE)
+  // A safe scaled integer is not enough: Excel stores numeric cells as
+  // doubles, and past double resolution two distinct ledger amounts share
+  // one cell value (adjacent 4dp amounts above ~5e11 do). Verify the round
+  // trip preserves all four decimals — the scaled difference of nearby
+  // doubles is exact (Sterbenz), so a gap of half a unit or more proves the
+  // cell would not read back as this amount — and keep text, which
+  // round-trips exactly, instead of collapsing it into its neighbour.
+  const numeric = Number(signedUnits) / Number(STATEMENT_SCALE)
+  if (Math.abs(numeric * Number(STATEMENT_SCALE) - Number(signedUnits)) >= 0.5) return value
+  return numeric
 }
 
 /**
