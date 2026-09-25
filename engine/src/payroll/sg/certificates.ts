@@ -92,14 +92,48 @@ const SG_CPF_STATUS: PayrollCertificate = {
           value: "foreigner",
           label: "Neither citizen nor PR",
           help: "No CPF is payable (\"Persons who are not Singapore Citizens or Singapore Permanent "
-            + "Residents\" are exempt); a MOM foreign-worker levy applies instead. Refused by name — "
-            + "not transcribed.",
+            + "Residents\" are exempt); SDL still prices. A MOM foreign-worker levy may apply on top — "
+            + "declare the work-permit type below so the engine can route it: Work Permit holders refuse "
+            + "by name (levy schedule not transcribed), other passes price SDL-only.",
         },
       ],
       required: true,
       help: "The employee's CPF status, which selects the contribution-rate table. Citizens and 3rd-year "
         + "SPRs price under Table 1; 1st/2nd-year SPRs price under the graduated Tables 2–5; foreigners "
         + "pay no CPF. Nothing is assumed when this is unanswered.",
+    },
+    {
+      key: "permit_type",
+      label: "Work-pass type (foreigners)",
+      kind: "choice",
+      choices: [
+        {
+          value: "work_permit",
+          label: "Work Permit",
+          help: "Holder attracts the MOM foreign-worker levy, whose sector/tier schedule is not "
+            + "transcribed: the run refuses by name so the levy is arranged, never silently unpaid.",
+        },
+        {
+          value: "s_pass",
+          label: "S Pass",
+          help: "No foreign-worker levy applies: SDL-only pricing, nothing further owed.",
+        },
+        {
+          value: "employment_pass",
+          label: "Employment Pass",
+          help: "No foreign-worker levy applies: SDL-only pricing, nothing further owed.",
+        },
+        {
+          value: "other",
+          label: "Other / unknown pass",
+          help: "The levy position cannot be determined from this answer: SDL prices and the stub "
+            + "trace carries the uncomputed-levy marker until the pass is identified.",
+        },
+      ],
+      help: "The foreign employee's MOM work-pass type, which routes the foreign-worker levy: Work "
+        + "Permit holders refuse by name, S Pass and Employment Pass holders price SDL-only, anything "
+        + "else prices SDL with the levy marked uncomputed on the stub trace. Leave unanswered only for "
+        + "citizens and PRs.",
     },
     {
       key: "age_band",

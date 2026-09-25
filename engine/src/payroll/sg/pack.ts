@@ -38,8 +38,12 @@
  * citizens (and 3rd-year SPRs, same table) at 55 and below, plus SDL, for
  * the single national region, and populates Form IR8A from committed pay
  * runs under the Auto-Inclusion Scheme (see `./filings.ts`) — installable
- * even while IR21, the foreign-worker levy, the AIS submission file and
- * the OA/SA/MA split are refused by name.
+ * even while IR21, the AIS submission file and the OA/SA/MA split are
+ * refused by name. Foreigners price SDL-only (no CPF); the MOM
+ * foreign-worker levy is not computed — Work Permit holders refuse by
+ * name (schedule not transcribed), S Pass and Employment Pass holders owe
+ * none, and any other pass prices with the levy marked uncomputed on the
+ * stub trace (see `./cpf.ts`).
  */
 import { PayrollError } from "../error.ts";
 import type { PayrollFilingData, PayrollPackFilings } from "../filing-registry.ts";
