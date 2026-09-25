@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -5,7 +6,7 @@ import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../../../../lib/list-params'
-import { holdPrebillLine, updatePrebillLine, WipBillingError } from '../../../../../../lib/wip-billing'
+import { holdPrebillLine, updatePrebillLine } from '../../../../../../lib/wip-billing'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { guardWipBillingFeature } from '../../../../../../lib/wip-billing-gate'
 
@@ -67,7 +68,6 @@ export async function PATCH(
     }, gate.allowedSubsidiaryIds, { expectedRevision: body.expectedUpdatedAt })
     return NextResponse.json(result)
   } catch (error) {
-    const status = error instanceof WipBillingError ? error.status : 500
-    return NextResponse.json({ error: (error as Error).message }, { status })
+    return apiErrorResponse(error)
   }
 }

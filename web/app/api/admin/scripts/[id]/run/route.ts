@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -23,10 +24,10 @@ import { isUuid } from '../../../../../../lib/list-params'
 export const runtime = 'nodejs'
 
 function invalidCronResponse(error: InvalidScheduledScriptCronError): NextResponse {
-  return NextResponse.json(
-    { error: error.message, code: INVALID_SCHEDULED_SCRIPT_CRON_CODE, field: 'cron' },
-    { status: 422 },
-  )
+  return apiErrorResponse(error, {
+    safeStatus: 422,
+    details: { code: INVALID_SCHEDULED_SCRIPT_CRON_CODE, field: 'cron' },
+  })
 }
 
 /**

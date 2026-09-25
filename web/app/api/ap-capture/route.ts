@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
 import { NextResponse } from 'next/server'
@@ -31,10 +32,7 @@ export async function POST(request: Request) {
   try {
     captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId)
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'capture_config_failed' },
-      { status: 500 },
-    )
+    return apiErrorResponse(error)
   }
   if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 })
   const form = await request.formData()

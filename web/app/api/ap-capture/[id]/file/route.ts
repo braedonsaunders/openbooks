@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -50,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   } catch (err) {
     // Masked-clone tombstone: refuse by name, never as an anonymous 500.
     if (isMaskedFileContentError(err)) {
-      return NextResponse.json({ error: (err as Error).message }, { status: 403 })
+      return apiErrorResponse(err, { safeStatus: 403 })
     }
     throw err
   }

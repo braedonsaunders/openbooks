@@ -385,10 +385,7 @@ export async function POST(req: Request) {
       // than leaking a constraint name or converting the loser into a 500.
       const code = postgresErrorCode(e);
       if (code === "23P01" || code === "23505") {
-        return NextResponse.json(
-          { error: new SurchargeRuleDatingConflict(values.effectiveFrom).message },
-          { status: 409 },
-        );
+        return apiErrorResponse(new SurchargeRuleDatingConflict(values.effectiveFrom), { safeStatus: 409 });
       }
       throw e;
     }

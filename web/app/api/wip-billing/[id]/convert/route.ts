@@ -1,7 +1,8 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { convertPrebill, WipBillingError } from '../../../../../lib/wip-billing'
+import { convertPrebill } from '../../../../../lib/wip-billing'
 import { guardWipBillingFeature } from '../../../../../lib/wip-billing-gate'
 
 export const runtime = 'nodejs'
@@ -16,7 +17,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   try {
     return NextResponse.json(await convertPrebill(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds))
   } catch (error) {
-    const status = error instanceof WipBillingError ? error.status : 500
-    return NextResponse.json({ error: (error as Error).message }, { status })
+    return apiErrorResponse(error)
   }
 }

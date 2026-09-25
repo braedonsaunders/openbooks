@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -20,17 +21,34 @@ export const runtime = 'nodejs'
 
 /** The schedule would never fire outside production — refuse by name, nothing written. */
 function nonProductionResponse(error: ScheduledScriptNonProductionError): NextResponse {
-  return NextResponse.json(
-    { error: error.message, code: SCHEDULED_SCRIPT_NON_PRODUCTION_CODE, envKind: error.envKind },
-    { status: 409 },
-  )
+  return apiErrorResponse(error, {
+    safeStatus: 409,
+    details: { code: SCHEDULED_SCRIPT_NON_PRODUCTION_CODE, envKind: error.envKind },
+  })
+}
+
+/**
+ * Script configuration validation travels as data, not a thrown error, so
+ * the sanitizer cannot type-refuse it: carry it in a named refusal with the
+ * status the code selects, keeping the machine-readable code and field.
+ */
+class ScriptValidationRefusal extends Error {
+  readonly code?: string
+  readonly field?: string
+  constructor(failure: ValidationError, readonly status: number) {
+    super(failure.message)
+    this.name = 'ScriptValidationRefusal'
+    this.code = failure.code
+    this.field = failure.field
+  }
 }
 
 function validationResponse(error: ValidationError): NextResponse {
-  return NextResponse.json(
-    { error: error.message, code: error.code, field: error.field },
-    { status: error.code === INVALID_SCHEDULED_SCRIPT_CRON_CODE ? 422 : 400 },
+  const refusal = new ScriptValidationRefusal(
+    error,
+    error.code === INVALID_SCHEDULED_SCRIPT_CRON_CODE ? 422 : 400,
   )
+  return apiErrorResponse(refusal, { details: { code: refusal.code, field: refusal.field } })
 }
 
 export async function POST(req: Request) {
