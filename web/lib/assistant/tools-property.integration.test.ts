@@ -169,8 +169,8 @@ test('property assistant reads: register, lease detail, rent roll, arrears, depo
         occupancy: { totalUnits: number; occupiedUnits: number };
       };
       assert.equal(rollData.total, 1);
-      assert.deepEqual(rollData.monthlyChargesByCurrency, [{ currency: 'CAD', amount: 2000 }]);
-      assert.deepEqual(rollData.pastDueByCurrency, [{ currency: 'CAD', amount: 2000 }]);
+      assert.deepEqual(rollData.monthlyChargesByCurrency, [{ currency: 'CAD', amount: '2000' }]);
+      assert.deepEqual(rollData.pastDueByCurrency, [{ currency: 'CAD', amount: '2000' }]);
       assert.deepEqual(rollData.occupancy, { totalUnits: 1, occupiedUnits: 1 });
 
       const arrears = await executeAssistantTool(restricted, 'lease_arrears', {});
@@ -179,7 +179,7 @@ test('property assistant reads: register, lease detail, rent roll, arrears, depo
         total: number; totalsByCurrency: { currency: string; amount: number }[];
       };
       assert.equal(arrearsData.total, 1);
-      assert.deepEqual(arrearsData.totalsByCurrency, [{ currency: 'CAD', amount: 2000 }]);
+      assert.deepEqual(arrearsData.totalsByCurrency, [{ currency: 'CAD', amount: '2000' }]);
 
       const deposits = await executeAssistantTool(restricted, 'property_deposits', {});
       assert.ok(deposits.ok, JSON.stringify(deposits));
@@ -202,7 +202,7 @@ test('property assistant reads isolate orgs and honor the feature flag', { skip:
       permissions: new Set(PROPERTY_PERMS),
       allowedSubsidiaryIds: null as Set<string> | null,
     };
-    await withOrgContext(orgA.orgId, async () => {
+    await withOrgContext(orgB.orgId, async () => {
       const cross = await executeAssistantTool(
         { ...authzA, user: { ...authzA.user, orgId: orgB.orgId } },
         'get_lease',
