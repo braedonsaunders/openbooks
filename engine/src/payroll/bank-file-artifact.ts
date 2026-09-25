@@ -6,6 +6,7 @@ import { add, cmp, sum } from "../money/money.ts";
 import { assertPayRunApprovalReleased, payRunApprovalState } from "./approval.ts";
 import {
   PAYROLL_BANK_FILE_FORMATS,
+  lockPayRunBankFileAccounts,
   payrollOriginatorConfig,
   preparePayRunBankFile,
   renderPayRunBankFile,
@@ -791,6 +792,7 @@ export async function generatePayRunBankFile(
     // file. Fail closed while the locks are held, before any number is
     // allocated or any byte is stored.
     await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds);
+    await lockPayRunBankFileAccounts(tx, orgId, inputs.credits);
     const live = (await tx.execute<{ id: string; file_number: string }>(sql`
       select id, file_number, coalesce(max(sequence_number) over (), 0) as _ignored
         from pay_run_bank_files

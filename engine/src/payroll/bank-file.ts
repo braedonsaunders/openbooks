@@ -884,6 +884,10 @@ export async function payrollOriginatorConfig(
 // ---------------------------------------------------------------------------
 
 export interface PayRunBankFileCredit extends PayRunBankFileEntry {
+  /** Approved bank-detail row selected while preparing the artifact. */
+  bankAccountId?: string;
+  /** Exact database revision text, rechecked under lock before rendering. */
+  bankAccountUpdatedAt?: string;
   /** employee_roles.employee_number, or a stable fallback. */
   employeeNumber: string;
   /** CA: { institution, transit }. US: 9-digit ABA. SEPA: { iban, bic }. Cemtex: { bsb }. Bacs: { sortCode }. */
@@ -1198,13 +1202,16 @@ export async function loadCredits(
       employee_number: string | null;
       routing: Record<string, string> | null;
       account_number_encrypted: string | null;
+      bank_account_id: string | null;
+      bank_account_updated_at: string | null;
     }>(sql`
     select p.id as party_id, er.employee_number,
-           b.routing, b.account_number_encrypted
+           b.routing, b.account_number_encrypted,
+           b.id as bank_account_id, b.updated_at::text as bank_account_updated_at
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
       left join lateral (
-        select b.routing, b.account_number_encrypted
+        select b.id, b.routing, b.account_number_encrypted, b.updated_at
           from party_bank_accounts b
          where b.org_id = p.org_id and b.party_id = p.id
            and b.is_active and b.approval_status = 'approved'
@@ -1217,13 +1224,18 @@ export async function loadCredits(
 
   const problems: string[] = [];
   const credits: PayRunBankFileCredit[] = [];
+  const bankEvidenceByParty = new Map<string, { bankAccountId: string; bankAccountUpdatedAt: string }>();
   for (const entry of population.entries) {
     const row = byParty.get(entry.employeePartyId);
     const routing = row?.routing ?? {};
-    if (!row?.account_number_encrypted) {
+    if (!row?.account_number_encrypted || !row.bank_account_id || !row.bank_account_updated_at) {
       problems.push(`${entry.employeeName}: no approved bank account number`);
       continue;
     }
+    bankEvidenceByParty.set(entry.employeePartyId, {
+      bankAccountId: row.bank_account_id,
+      bankAccountUpdatedAt: row.bank_account_updated_at,
+    });
     const accountNumber = decryptAccountNumber(row.account_number_encrypted);
     // Exhaustive over the union: each format states how its credits are
     // addressed, and a format with no case fails tsc at the never-binding
@@ -1377,7 +1389,7 @@ export async function loadCredits(
   if (problems.length > 0) {
     throw new PayrollError(`cannot build the payroll bank file: ${problems.join("; ")}`);
   }
-  return credits;
+  return credits.map((credit) => ({ ...credit, ...bankEvidenceByParty.get(credit.employeePartyId)! }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1685,6 +1697,41 @@ export async function preparePayRunBankFile(
   const population = await payRunBankFilePopulation(orgId, documentId);
   const credits = await loadCredits(orgId, population, format);
   return { format, population, credits };
+}
+
+/** Lock the exact approved bank rows used for rendering and reject stale evidence. */
+export async function lockPayRunBankFileAccounts(
+  runner: import("../platform/db.ts").SqlExecutor,
+  orgId: string,
+  credits: readonly PayRunBankFileCredit[],
+): Promise<void> {
+  if (credits.some((credit) => !credit.bankAccountId || !credit.bankAccountUpdatedAt)) {
+    throw new PayrollError("payroll bank file is missing approved bank-account revision evidence");
+  }
+  const expected = new Map(credits.map((credit) => [credit.bankAccountId!, credit]));
+  if (expected.size !== credits.length) {
+    throw new PayrollError("payroll bank file has duplicate employee bank-account evidence");
+  }
+  const ids = [...expected.keys()];
+  const rows = (await runner.execute<{
+    id: string;
+    party_id: string;
+    updated_at: string;
+    is_active: boolean;
+    approval_status: string;
+  }>(sql`
+    select id, party_id, updated_at::text as updated_at, is_active, approval_status
+      from party_bank_accounts
+     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])
+     order by id for update
+  `)).rows;
+  if (rows.length !== expected.size || rows.some((row) => {
+    const credit = expected.get(row.id);
+    return !credit || row.party_id !== credit.employeePartyId || !row.is_active ||
+      row.approval_status !== "approved" || row.updated_at !== credit.bankAccountUpdatedAt;
+  })) {
+    throw new PayrollError("an employee's approved bank details changed; review the bank file and generate it again");
+  }
 }
 
 export interface PayRunBankFileResult {
