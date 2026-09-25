@@ -40,6 +40,7 @@ import { ItemPriceMatrixEditor } from './ItemPriceMatrixEditor'
 import { ItemCostingEditor } from './ItemCostingEditor'
 import { FairValuePricesEditor } from './FairValuePricesEditor'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 
 interface AccountOpt {
@@ -255,7 +256,7 @@ export function ItemDrawer({
   const [tab, setTab] = useState<string>('overview')
   const [pricingView, setPricingView] = useState<PricingView>(initialPricingView)
   const [actionsOpen, setActionsOpen] = useState(false)
-  const editable = mode === 'edit' && canManage
+  const editable = mode === 'edit' && canManage && !busy
   // Choosing how an item is priced is a change to the item, so the chooser is
   // inert outside edit mode. A mode that already holds data stays reachable
   // read-only — the sub-editors take `canManage={editable}` and refuse writes.
@@ -326,6 +327,10 @@ export function ItemDrawer({
     setPrevSavePayload(savePayload)
     if (editable) setDirty(true)
   }
+  const closeGuard = useDirtyClose({
+    dirty, busy, onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   /** Reset every field back to the loaded item (used by Cancel). */
   function resetForm() {
@@ -356,39 +361,43 @@ export function ItemDrawer({
     setBusy(true)
     setSaveState('saving')
     if (createMode && !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-    const res = await fetch(createMode ? '/api/items' : `/api/items/${it.id}`, {
-      method: createMode ? 'POST' : 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
-      },
-      body: JSON.stringify(savePayload),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => null) as { error?: string } | null
-      setSaveState('error')
-      toast.error(data?.error ?? tCommon('feedback.saveFailed'))
-      setBusy(false)
-      return
-    }
-    const data = await res.json().catch(() => null) as ItemPayload | null
-    const savedId = data?.item?.id
-    setSaveState('saved')
-    setDirty(false)
-    if (createMode) {
-      if (!savedId) {
+    try {
+      const res = await fetch(createMode ? '/api/items' : `/api/items/${it.id}`, {
+        method: createMode ? 'POST' : 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
+        },
+        body: JSON.stringify(savePayload),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null
         setSaveState('error')
-        toast.error(tCommon('feedback.saveFailed'))
-        setBusy(false)
+        toast.error(data?.error ?? tCommon('feedback.saveFailed'))
         return
       }
-      const separator = basePath.includes('?') ? '&' : '?'
-      router.replace(`${basePath}${separator}item=${savedId}` as never)
-    } else {
-      setMode('view')
+      const data = await res.json().catch(() => null) as ItemPayload | null
+      const savedId = data?.item?.id
+      if (createMode && !savedId) {
+        setSaveState('error')
+        toast.error(tCommon('feedback.saveFailed'))
+        return
+      }
+      setSaveState('saved')
+      setDirty(false)
+      if (createMode) {
+        const separator = basePath.includes('?') ? '&' : '?'
+        router.replace(`${basePath}${separator}item=${savedId}` as never)
+      } else {
+        setMode('view')
+      }
+      router.refresh()
+    } catch {
+      setSaveState('error')
+      toast.error(tCommon('feedback.saveFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    router.refresh()
   }
 
   function cancel() {
@@ -569,6 +578,7 @@ export function ItemDrawer({
       open
       closeHref={basePath}
       syncUrlOnClose
+      beforeClose={closeGuard.beforeClose}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
