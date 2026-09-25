@@ -82,6 +82,24 @@ export function DeliveryPanel({
     router.refresh()
   }
 
+  async function downloadArtifact(url: string) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('runFailed')))
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = res.headers.get('Content-Disposition')?.match(/filename="?([^";]+)"?/i)?.[1] ?? 'report'
+      document.body.append(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('runFailed'))
+    }
+  }
+
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -145,19 +163,21 @@ export function DeliveryPanel({
                     </td>
                     <td className="px-3 py-2">
                       {run.artifact_available ? (
-                        <a
-                          href={`/api/reports/runs/${run.id}/artifact`}
+                        <button
+                          type="button"
+                          onClick={() => void downloadArtifact(`/api/reports/runs/${run.id}/artifact`)}
                           className="text-teal-700 hover:underline dark:text-teal-300"
                         >
                           {t('pdf')}
-                        </a>
+                        </button>
                       ) : run.status === 'succeeded' && run.row_count != null ? (
-                        <a
-                          href={`/api/reports/runs/${run.id}/csv`}
+                        <button
+                          type="button"
+                          onClick={() => void downloadArtifact(`/api/reports/runs/${run.id}/csv`)}
                           className="text-teal-700 hover:underline dark:text-teal-300"
                         >
                           {t('csv')}
-                        </a>
+                        </button>
                       ) : (
                         '—'
                       )}
