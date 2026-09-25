@@ -236,6 +236,15 @@ test(
       domicilio_comune: COMUNE,
       tempo_determinato: "false",
     });
+    // Zero assessed saldo for 2025 (no 2024 settlement on file): the
+    // installment channel resolves and prices nothing, so the tie-out below
+    // pins advances alone.
+    for (const employee of [empA, empB]) {
+      await db.execute(sql`
+        insert into it_addizionali_opening_balances
+          (org_id, employee_party_id, tax_year, regionale_saldo, comunale_saldo, created_by, updated_by)
+        values (${orgId}, ${employee}, ${TAX_YEAR}, '0.0000', '0.0000', ${actorId}, ${actorId})`);
+    }
     await payAndCommit(orgId, actorId, scheduleId, "2025-01-01", "2025-01-31", "2025-02-03");
     await payAndCommit(orgId, actorId, scheduleId, "2025-02-01", "2025-02-28", "2025-03-03");
     // A third run, calculated but never committed: statutory money exists on

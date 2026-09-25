@@ -17,6 +17,21 @@ import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
 import { isUuid } from '../../../../lib/list-params'
+import {
+  saveItSurtaxSaldoCarryIns,
+  SurtaxSaldoSaveError,
+} from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
+
+/**
+ * The carry-in grid's two IT-only assessed-saldo columns (migration 0393):
+ * grid keys routed to it_addizionali_opening_balances, never to the generic
+ * save (which would refuse the unknown keys). All-blank means "untouched":
+ * the grid replays full rows, so an absent value must keep what is stored —
+ * especially never conjure a zero row that would silence the installment
+ * channel's refusal. Explicit values, including explicit zeros, persist
+ * (presence is the declaration).
+ */
+const IT_SALDO_KEYS = ['itRegionaleSaldo', 'itComunaleSaldo'] as const
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -126,6 +141,7 @@ export async function POST(req: Request) {
   }
 
   const rows: OpeningBalanceWrite[] = []
+  const saldoRows: { employeePartyId: string; regionaleSaldo: unknown; comunaleSaldo: unknown }[] = []
   for (const raw of body.rows) {
     const row = raw as {
       employeePartyId?: unknown
@@ -176,6 +192,24 @@ export async function POST(req: Request) {
       }
       programs = persisted.map
     }
+    const saldoRaw = {
+      regionaleSaldo: amounts.map[IT_SALDO_KEYS[0]] ?? null,
+      comunaleSaldo: amounts.map[IT_SALDO_KEYS[1]] ?? null,
+    }
+    delete amounts.map[IT_SALDO_KEYS[0]]
+    delete amounts.map[IT_SALDO_KEYS[1]]
+    // All-blank saldo is an untouched row, not a clearing: keep what is
+    // stored (a conjured zero would silence the installment refusal).
+    if (
+      (saldoRaw.regionaleSaldo != null && String(saldoRaw.regionaleSaldo) !== '') ||
+      (saldoRaw.comunaleSaldo != null && String(saldoRaw.comunaleSaldo) !== '')
+    ) {
+      saldoRows.push({
+        employeePartyId: row.employeePartyId,
+        regionaleSaldo: saldoRaw.regionaleSaldo,
+        comunaleSaldo: saldoRaw.comunaleSaldo,
+      })
+    }
     rows.push({
       employeePartyId: row.employeePartyId,
       amounts: amounts.map,
@@ -190,6 +224,15 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (saldoRows.length > 0) {
+      await saveItSurtaxSaldoCarryIns({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        taxYear: assertTaxYear(body.taxYear),
+        rows: saldoRows,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+    }
     const result = await saveOpeningBalances({
       orgId: gate.user.orgId,
       actorId: gate.user.id,
@@ -204,6 +247,12 @@ export async function POST(req: Request) {
     // whole-workforce load rejected for one transposed column must say which
     // employee, and nothing was written.
     if (error instanceof OpeningBalanceSaveError) {
+      return NextResponse.json(
+        { error: error.message, errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
+        { status: 409 },
+      )
+    }
+    if (error instanceof SurtaxSaldoSaveError) {
       return NextResponse.json(
         { error: error.message, errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
         { status: 409 },

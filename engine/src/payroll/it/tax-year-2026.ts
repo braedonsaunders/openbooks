@@ -396,7 +396,7 @@ export const IT_REFUSED_2026: readonly string[] = [
   "addizionale regionale/comunale scaglioni schedules (bracketed deliberations cannot be entered in the flat rate slots)",
   "addizionale regionale detrazioni/casi particolari (Veneto/Marche CU cod. 1 and regional family relief: per-region tables not transcribed)",
   "addizionale comunale casi particolari tipizzazioni (Elenco colonne A–Z1) and fusioni handling",
-  "addizionale comunale acconto 30% vs saldo timing and regionale ratei (the engine computes the annual surtax; declaration instalments are out of scope)",
+  "addizionale comunale acconto 30% instalment schedule (the prior-year saldo withholds as priced instalments from the assessed channel; the monthly advances pace the full current-year liability instead of ninths of 30%, and the December conguaglio settles the combined position — the timing difference is absorbed, not refused)",
   "art. 16-ter TUIR oneri detrazioni incl. the 75.000+ cap and the 2026 c. 5-bis 440 euro reduction above 200.000 (no oneri inputs in the engine: the sterilizzazione applies to a detrazione amount that is always zero here)",
   "impatriati/ricercatori exempt quotas and cedolare/mance extras in reddito complessivo (L. 207/2024 c. 9: needs CU data the pack does not carry)",
   "multi-employer conguaglio and prior-CU income (Circ. 4/E: the sostituto verifies on previsionale + worker-delivered CUs)",

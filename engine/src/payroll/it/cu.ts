@@ -31,10 +31,15 @@
  *   F24 payments, and a "correct" liability nobody withheld would be the
  *   false figure.
  * - Punto 22 — "l'addizionale regionale all'IRPEF dovuta ... sul totale dei
- *   redditi di lavoro dipendente e assimilati certificati": the summed
- *   regional_surtax lines. Tenant-deliberated rates, so the figure reports
- *   what was withheld from entered rates; an unconfigured scope refuses at
- *   computation, never accrues zero (see compute-statutory.ts).
+ *   redditi di lavoro dipendente e assimilati certificati": the December
+ *   conguaglio's assessed annual (CONG_ADDREG_ANNUAL), which IS the dovuta —
+ *   the summed regional_surtax lines now carry prior-year saldo installments
+ *   beside the current-year advances (see ./surtax-balances.ts), so their sum
+ *   overstates the year's dovuta by the assessment. Without a December
+ *   settlement stub the slip falls back to the withheld sum and says so on
+ *   its face. Tenant-deliberated rates, so either figure reports entered
+ *   rates; an unconfigured scope refuses at computation, never accrues zero
+ *   (see compute-statutory.ts).
  * - Punto 391 — "l'importo del trattamento integrativo che il sostituto
  *   d'imposta ha erogato al lavoratore": the summed ti_payout credits.
  * - INPS Sezione 1 punto 4 — "Imponibile previdenziale ... l'importo
@@ -128,6 +133,12 @@ export interface CuSlip {
   ritenuteIrpef: string;
   /** Punto 22: addizionale regionale dovuta. */
   addizionaleRegionale: string;
+  /**
+   * Whether punto 22 certifies the December assessment (true) or falls back
+   * to the withheld sum (false: no December settlement stub). Optional so
+   * hand-built slips stay valid; absent reads as assessed.
+   */
+  regionaleAssessed?: boolean;
   /** INPS Sezione 1 punto 4: imponibile previdenziale. */
   imponibileInps: string;
   /** INPS Sezione 1 punto 6: contributi a carico del lavoratore. */
@@ -184,7 +195,7 @@ export function cuSlipBoxes(slip: CuSlip): PayrollSlipBox[] {
 function cuSlipNotes(slip: CuSlip): string[] {
   const notes = [
     "Punti 1/2 report the year's committed pay runs; the L. 207/2024 c. 4 somma does not form reddito and is excluded.",
-    "Addizionale comunale (CU punti 26/27/29) not shown: the engine computes the annual surtax as one figure and the acconto/saldo split is not modelled — settle it from the F24 payments.",
+    "Addizionale comunale (CU punti 26/27/29) not shown: the prior-year saldo withholds in-year as priced installments but the 30% acconto keeps its own unmodelled schedule, so the split cannot be certified — settle it from the F24 payments.",
     "Punti 23/24/25/28 (prior years and cessations) not shown: they belong to other years or to cessation-time withholding, not to this year's committed runs.",
     "Imposta lorda and detrazioni (punti 361/367/368/374/375) not shown: an annual conguaglio computation, not a sum of stub lines — the certificate reports what was withheld (punto 21).",
     "Punto 21 is the IRPEF withheld on the committed runs, conguaglio included only if settled in pay: the art. 23 DPR 600/1973 year-end conguaglio is not computed by this product — verify it before transmitting and, if it moves the withholding, settle it in pay and re-certify.",
@@ -195,6 +206,11 @@ function cuSlipNotes(slip: CuSlip): string[] {
   if (slip.isFixedTerm) {
     notes.push(
       "Tempo determinato follows the it_detrazioni declaration on file: verify the punti 1/2 split when the contract changed mid-year.",
+    );
+  }
+  if (slip.regionaleAssessed === false) {
+    notes.push(
+      "Punto 22 falls back to the withheld regional_surtax sum: no December settlement stub exists for this employee, so no assessed dovuta is on file — settle December in pay and re-certify before transmitting.",
     );
   }
   return notes;
@@ -268,6 +284,27 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
       + "so an empty slip would be a wrong slip. Calculate and commit the year's IT pay runs first.",
     );
   }
+  // December-assessed regionale per employee: the dovuta punto 22 certifies.
+  // Only December stubs carry CONG_ keys, so factor presence is the
+  // settlement's existence proof; the latest December stub wins when several
+  // committed Decembers exist. Employees without one fall back to the
+  // withheld sum below, disclosed on the slip.
+  const assessedRows = (await db.execute<{ employee_party_id: string; assessed: string }>(sql`
+    select distinct on (s.employee_party_id) s.employee_party_id,
+           (s.factors->>'CONG_ADDREG_ANNUAL')::numeric::text as assessed
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+                    and r.run_status = 'committed'
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+                     and d.status <> 'voided'
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear}
+       and s.country = 'IT'
+       and s.factors ? 'CONG_ADDREG_ANNUAL'
+     order by s.employee_party_id, s.pay_date desc, s.created_at desc
+  `));
+  const assessedByEmployee = new Map(
+    assessedRows.rows.map((row) => [String(row.employee_party_id), String(row.assessed)]),
+  );
   const declaration = itDetrazioniDeclaration();
   const certRows = (await db.execute<{ employee_party_id: string; answers: Record<string, string | null> }>(sql`
     select distinct on (c.employee_party_id) c.employee_party_id, c.answers
@@ -301,7 +338,8 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
       domicilioComune: comune == null || comune === "" ? null : comune,
       redditi: num(row.redditi),
       ritenuteIrpef: num(row.irpef),
-      addizionaleRegionale: num(row.addreg),
+      addizionaleRegionale: assessedByEmployee.get(employeePartyId) ?? num(row.addreg),
+      regionaleAssessed: assessedByEmployee.has(employeePartyId),
       imponibileInps: num(row.imponibile),
       contributiInpsWorker: num(row.inps_worker),
       trattamentoIntegrativo: num(row.ti),

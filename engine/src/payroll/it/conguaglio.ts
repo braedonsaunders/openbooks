@@ -34,8 +34,11 @@
  * the L. 207/2024 c. 6 ulteriore detrazione (whose spettanza c. 7 says to
  * verify in sede di conguaglio), INPS IVS for the lavoro-netto base, the
  * tenant-declared addizionali (D.Lgs. 446/1997 regionale; D.Lgs. 360/1998
- * comunale — acconto/saldo instalment timing stays out of scope per the
- * refused lists; the annual total settles in one line), the trattamento
+ * comunale — the annual liability recomputed here; the prior-year saldo the
+ * year withheld in instalments nets out of the paid side so the delta
+ * settles the combined position, see itAnnualSettlement below; the 30%
+ * comunale acconto keeps its own unmodelled schedule per the refused lists),
+ * the trattamento
  * integrativo (D.L. 3/2020 art. 1 c. 1) and the c. 4 somma (L. 207/2024
  * art. 1 c. 4–5) for the credit guard below. Fed with actuals
  * (periodsPerYear 1: the period figures ARE the annual figures) instead of
@@ -97,6 +100,7 @@ import {
   type ItYearTables,
 } from "./compute-statutory.ts";
 import { IT_PACK_RATES } from "./rates.ts";
+import { resolveItSurtaxAssessed } from "./surtax-balances.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
 
 export { ItPayrollRefusal };
@@ -223,6 +227,9 @@ const diffUnits = (annual: string, paid: string): bigint => toUnits(annual) - to
 
 /** Signed 4dp delta, canonical. */
 const diffOf = (annual: string, paid: string): string => fromUnits(diffUnits(annual, paid));
+
+/** Exact signed money subtraction (the paid side nets the assessment). */
+const subMoney = (a: string, b: string): string => fromUnits(toUnits(a) - toUnits(b));
 
 function withinDust(annual: string, paid: string): boolean {
   const gap = diffUnits(annual, paid);
@@ -430,8 +437,12 @@ function readSettlementDeclaration(
  * The pack-side declaration: one edition per transcribed year, null
  * otherwise (untranscribed years settle nothing — the monthly path
  * untouched). The `compute` closure resolves tenant rates the way the
- * monthly pass does, then runs the DB-free core and pushes through the
- * contract's sign-refusing push.
+ * monthly pass does, nets the assessed prior-year saldo out of the
+ * surtax paid side (the committed lines carry advances AND installments),
+ * then runs the DB-free core and pushes through the contract's
+ * sign-refusing push. The CONG_ADDREG_YTD / CONG_ADDCOM_YTD factors therefore
+ * carry the year's N-position paid (withheld less assessed), not the cash
+ * total — the CU sums cash lines itself and reads the dovuta below.
  */
 export function itAnnualSettlement(taxYear: number): PayrollAnnualSettlement | null {
   if (taxYear !== 2025 && taxYear !== 2026) return null;
@@ -460,12 +471,29 @@ export function itAnnualSettlement(taxYear: number): PayrollAnnualSettlement | n
         : null;
       const push = createSettlementPush(ctx.pushSettlement);
       try {
+        // Combined-position settlement: the stub lines the paid side sums
+        // carry BOTH the current-year advances and the prior-year saldo
+        // installments (same systemKeys — see ./surtax-balances.ts), while
+        // the annual recomputation prices this year's liability alone. Net
+        // the assessment out of the paid side so the delta settles
+        // [liability(N) + assessed(N-1)] against [advances + installments]:
+        // every euro attributed to exactly one year's assessment, dust only
+        // when the year ran whole. The channel refusal propagates — December
+        // cannot settle a year whose saldo source is unknown either.
+        const assessed = await resolveItSurtaxAssessed(ctx.tx, {
+          orgId: ctx.orgId,
+          employeePartyId: ctx.employeePartyId,
+          taxYear,
+        });
+        const paid = { ...ctx.priors.ytdWithheldBySystemKey };
+        paid["regional_surtax"] = subMoney(paid["regional_surtax"] ?? "0", assessed.regionale);
+        paid["municipal_surtax"] = subMoney(paid["municipal_surtax"] ?? "0", assessed.comunale);
         return calculateItConguaglio(
           {
             taxYear,
             regionCode: ctx.region,
             ytdGross: ctx.priors.ytdGross,
-            ytdBySystemKey: ctx.priors.ytdWithheldBySystemKey,
+            ytdBySystemKey: paid,
             declaration,
             rates: {
               regionalRate: regionale?.rate ?? null,

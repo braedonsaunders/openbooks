@@ -10,6 +10,8 @@ import {
   type OpeningBalanceYear,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements-openings.ts'
+import { itSurtaxSaldoCarryIns } from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
@@ -50,6 +52,28 @@ import type { OpeningBalancesView } from './OpeningBalancesView'
 
 type BalancesProps = Parameters<typeof OpeningBalancesView>[0]
 
+/**
+ * The carry-in grid's two IT-only assessed-saldo columns (migration 0393,
+ * I6-payroll-50): the prior-year regional/municipal assessment the year's
+ * installments withhold. Shown for IT employees only via the packs filter;
+ * the save routes these keys to it_addizionali_opening_balances, never to
+ * the generic opening-balances save.
+ */
+const IT_SALDO_FIELDS = [
+  {
+    key: 'itRegionaleSaldo',
+    label: "Addizionale regionale a saldo (anno precedente)",
+    help: "Prior-year regionale assessment the year's installments withhold (D.Lgs. 446/1997 art. 50) — from the prior provider's final report or the year N-1 CU. Enter 0.00 when the worker had no prior-year Italian employment; the installment run refuses until this is recorded.",
+    packs: ['IT'],
+  },
+  {
+    key: 'itComunaleSaldo',
+    label: "Addizionale comunale a saldo (anno precedente)",
+    help: "Prior-year comunale assessment the year's installments withhold (D.Lgs. 360/1998 art. 1) — from the prior provider's final report or the year N-1 CU. Enter 0.00 when the worker had no prior-year Italian employment; the installment run refuses until this is recorded.",
+    packs: ['IT'],
+  },
+] as const
+
 export interface PayrollOpeningBalancesData {
   title: string
   description: string
@@ -89,6 +113,22 @@ export async function loadPayrollOpeningBalances(
     Number.isInteger(requested) && requested >= 2000 && requested <= 2100 ? requested : currentYear
 
   const data = await scopedOpeningBalances(authz, year)
+  // IT assessed-saldo carry-ins (migration 0393) ride the same grid as two
+  // IT-only columns backed by their own table — the generic layer never names
+  // it. Rows merge here; the save splits them back out before the generic
+  // save, which would refuse the unknown keys.
+  const saldoByEmployee = new Map(
+    (await itSurtaxSaldoCarryIns(db, orgId, year)).map((row) => [row.employeePartyId, row]),
+  )
+  for (const row of data.rows) {
+    const saldo = saldoByEmployee.get(row.employeePartyId)
+    if (!saldo) continue
+    row.amounts = {
+      ...(row.amounts ?? {}),
+      [IT_SALDO_FIELDS[0].key]: saldo.regionaleSaldo,
+      [IT_SALDO_FIELDS[1].key]: saldo.comunaleSaldo,
+    }
+  }
   // Bank carry-ins are NOT year-scoped (a bank has one lifetime balance), so
   // this load deliberately ignores `year`. See EntitlementOpeningsView.
   const banks = await scopedEntitlementOpenings(authz)
@@ -106,12 +146,20 @@ export async function loadPayrollOpeningBalances(
       year,
       currentYear,
       initial: data,
-      fields: OPENING_BALANCE_FIELDS.map((field) => ({
-        key: field.key,
-        label: field.label,
-        help: field.help,
-        packs: [...field.packs],
-      })),
+      fields: [
+        ...OPENING_BALANCE_FIELDS.map((field) => ({
+          key: field.key,
+          label: field.label,
+          help: field.help,
+          packs: [...field.packs],
+        })),
+        ...IT_SALDO_FIELDS.map((field) => ({
+          key: field.key,
+          label: field.label,
+          help: field.help,
+          packs: [...field.packs],
+        })),
+      ],
       programs: (await declaredProgramBaseFields()).map((program) => ({
         key: program.programKey,
         label: program.label,
