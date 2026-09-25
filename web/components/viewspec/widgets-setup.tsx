@@ -66,7 +66,7 @@ export const SETUP_WIDGETS = {
   'page-layout-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof LayoutDrawer>['drawer'] | null
     if (!drawer) return null
-    return <LayoutDrawer drawer={drawer} />
+    return <LayoutDrawer key={`${drawer.route}:${JSON.stringify(drawer.segments)}:${drawer.overrideScope ?? 'org'}`} drawer={drawer} />
   },
   /** The "N of M routes customized" line under the list. */
   'page-layout-summary': (props) => (
