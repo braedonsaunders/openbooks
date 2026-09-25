@@ -44,7 +44,7 @@
  *
  * What this pass does NOT do (stated): APEC (cadres only, no channel),
  * a conventionally modified 60/40 split, the Alsace-Moselle salary
- * supplement, the AGS interim variant, and PAS reduced-rate modulation.
+ * supplement, and PAS reduced-rate modulation.
  * The brut/net-imposable bridge IS modelled: the stub's earnings figure
  * is the brut, and the PAS assiette is derived by
  * calculateFrNetImposable2026 (see ./cotisations.ts) — the rate never
@@ -319,6 +319,14 @@ export async function computeFrStatutory(
     asOf: payDate,
   });
   const base = D(U(income) + U(nonPeriodic === "" ? "0" : nonPeriodic));
+  const agsEmployerType = U(base) > 0n ? await resolveStoredEmployerFact({
+    tx: ctx.tx,
+    orgId: ctx.orgId,
+    subsidiaryId: ctx.subsidiaryId,
+    country: "FR",
+    factKey: "fr_ags_employer_type",
+    asOf: payDate,
+  }) : null;
   // The stub's earnings figure is the brut. PAS prices on the net imposable
   // derived from it (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10) —
   // never on the brut. Cotisations price on the brut below.
@@ -363,6 +371,7 @@ export async function computeFrStatutory(
     payDate,
     periodsPerYear,
     employerEffectif,
+    agsInterim: agsEmployerType === "temporary_work_agency",
     atmpRatePct: atmpRate,
     versementMobilitePct: versementMobiliteRate,
   });

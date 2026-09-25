@@ -219,7 +219,7 @@ test("eligible French payroll refuses missing contractual hours by name", async 
   const ctx = {
     tx: { execute: async () => ++query === 1
       ? ({ rows: [{ fact_value: "12.00" }] })
-      : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) },
+      : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] }) },
     orgId: "org",
     subsidiaryId: "legal-employer",
     resolveStatutoryRates: async () => ({
