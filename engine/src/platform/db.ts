@@ -39,7 +39,16 @@ const bypassDatabaseUrl = env.OPENBOOKS_BYPASS_DB_URL?.trim()
   || ((env.NODE_ENV === "development" || env.NODE_ENV === "test")
     ? (env.OPENBOOKS_BYPASS_DB_URL || env.OPENBOOKS_TEST_ADMIN_DB_URL || env.OPENBOOKS_MIGRATION_DB_URL || env.OPENBOOKS_DB_URL)
     : undefined);
-if (env.NODE_ENV === "production" && !bypassDatabaseUrl) {
+// The one-shot installer (scripts/bootstrap.ts, esbuilt as scripts/bootstrap.mjs
+// in the image) has its own credential contract — migration-owner + runtime
+// URLs only, per docs/operations/communal-postgres.md and compose.yaml — and
+// never serves tenant traffic, so it is exempt from the long-lived server's
+// dedicated-bypass requirement. Its installation-wide unit runs on the
+// installer connection (see rawBypassConnect). Every other production process
+// still refuses here, and any bypass use without a bypass pool still refuses
+// by name at use time.
+const isInstaller = env.OPENBOOKS_BOOTSTRAP === "1";
+if (env.NODE_ENV === "production" && !bypassDatabaseUrl && !isInstaller) {
   throw new Error("[database-security] refusing production startup: OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login");
 }
 function requireBypassDatabaseUrl(): string {
@@ -204,8 +213,14 @@ export { longPool };
 // Tenant isolation via Postgres RLS.
 //
 // Policies key off the tenant GUC and deny by default. Cross-tenant work uses
-// a separate BYPASSRLS database credential, never an application-settable GUC.
+// a separate BYPASSRLS database credential, never an application-settable GUC —
+// with one exception: the one-shot installer (OPENBOOKS_BOOTSTRAP=1), which has
+// no BYPASSRLS credential by contract and runs no tenant traffic, sets
+// app.bypass_rls explicitly on its own installer-pool checkout (see
+// rawBypassConnect) and restores deny-by-default on release. Request traffic
+// can never reach that fallback, so no user input can set the bypass GUC.
 //
+
 // Tenant scope is applied per checked-out runtime connection from an
 // AsyncLocalStorage context (withOrg) or, when none is active, from a host-registered
 // per-request resolver (see registerRequestOrgResolver). Code that runs with
@@ -292,8 +307,39 @@ const rawConnect = async (): Promise<pg.PoolClient> =>
   );
 const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
   const target = long ? bypassLongPool : bypassPool;
-  if (!target) requireBypassDatabaseUrl();
-  return protectCheckedOutClient(await target!.connect(), long ? "pg bypass long pool" : "pg bypass pool");
+  if (target) {
+    return protectCheckedOutClient(await target.connect(), long ? "pg bypass long pool" : "pg bypass pool");
+  }
+  // No dedicated bypass credential. Outside the one-shot installer this stays
+  // a hard refusal naming the remedy. Inside the installer the base pools ARE
+  // the trusted installer (migration-owner) connection: this process runs no
+  // tenant traffic, the owner holds every application object, and the RLS
+  // policies still honor app.bypass_rls — so the installation-wide unit sets
+  // it explicitly on its own checked-out client and restores deny-by-default
+  // on release, the same convention as the migration client
+  // (scripts/bootstrap-migration-client.ts). Runtime servers never run with
+  // OPENBOOKS_BOOTSTRAP=1, so this fallback is unreachable from request
+  // traffic; the bypass GUC is never set from user input.
+  if (!isInstaller) requireBypassDatabaseUrl();
+  const fallbackPool = long ? longPool : basePool;
+  const raw = await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(fallbackPool);
+  const client = protectCheckedOutClient(raw, long ? "pg installer bypass long pool" : "pg installer bypass pool");
+  try {
+    await client.query("select set_config('app.bypass_rls', 'on', false), set_config('app.current_org', '', false)");
+  } catch (error) {
+    client.release(error as Error);
+    throw error;
+  }
+  const guardedRelease = client.release.bind(client);
+  client.release = ((error?: Error | boolean) => {
+    if (error) {
+      guardedRelease(error);
+      return;
+    }
+    client.query("select set_config('app.bypass_rls', 'off', false), set_config('app.current_org', '', false)")
+      .then(() => guardedRelease(), () => guardedRelease(true));
+  }) as pg.PoolClient["release"];
+  return client;
 };
 
 /** Set tenant scope on a runtime-role client from context (deny if none). */
