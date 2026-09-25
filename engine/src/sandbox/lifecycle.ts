@@ -37,6 +37,36 @@ export function requireFoundSandbox<T>(
 
 /** Stamped onto `sandboxes.last_error` while status is `refreshing`. Not a user error. */
 export const REFRESH_CLONE_PROOF_PREFIX = "clone-rls-proof:";
+export const SANDBOX_REFRESH_HEARTBEAT_MS = 30_000;
+
+export function startSandboxRefreshHeartbeat(
+  sandboxId: string,
+  orgId: string,
+  proofToken: string,
+  intervalMs = SANDBOX_REFRESH_HEARTBEAT_MS,
+): () => Promise<void> {
+  let pending: Promise<void> | null = null;
+  const timer = setInterval(() => {
+    if (pending) return;
+    pending = (async () => {
+      const renewed = await db.execute<{ id: string }>(sql`
+        update sandboxes set updated_at = now()
+         where id = ${sandboxId} and org_id = ${orgId}
+           and status = 'refreshing' and last_error = ${proofToken}
+         returning id`);
+      if (!renewed.rows[0]) throw new Error("sandbox refresh lease was lost");
+    })().catch((error) => {
+      // The session advisory lock remains the authoritative liveness fence;
+      // a missed heartbeat can delay recovery but cannot overlap active work.
+      console.error(`[sandbox-refresh] heartbeat failed for ${sandboxId}:`, error);
+    }).finally(() => { pending = null; });
+  }, intervalMs);
+  timer.unref?.();
+  return async () => {
+    clearInterval(timer);
+    if (pending) await pending;
+  };
+}
 
 /** Shared synchronous guard for the create action and lifecycle worker. */
 export function validateSandboxCutoff(tier: SandboxTier, asOfPeriodId?: string | null): void {
@@ -515,6 +545,7 @@ export async function refreshSandbox(
   const proofToken = newRefreshCloneProofToken();
 
   await withSandboxRefreshLock(sandboxId, async () => {
+    let stopHeartbeat: (() => Promise<void>) | null = null;
     try {
       // Commit refreshing + this request's proof token BEFORE the clone
       // unit. A mark inside that transaction rolls back with a failed
@@ -533,6 +564,7 @@ export async function refreshSandbox(
         );
         throw new Error(`cannot refresh sandbox ${sandboxId} while it is being deleted`);
       }
+      stopHeartbeat = startSandboxRefreshHeartbeat(sandboxId, s.org_id, proofToken);
 
       // The sandbox's current S3 object keys, snapshotted BEFORE the wipe:
       // objects live outside the row transaction, so keys whose versions
@@ -644,6 +676,8 @@ export async function refreshSandbox(
         err.message = `${err.message}; failed-status write matched 0 rows for sandbox ${sandboxId}`;
       }
       throw err;
+    } finally {
+      await stopHeartbeat?.();
     }
   });
 }
