@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { submitFinancialChange } from "@openbooks/engine/src/flows/financial-changes-adapter.ts";
 import { authorizeChange } from "../../_authorization";
@@ -13,11 +14,6 @@ export async function POST(
     await submitFinancialChange(gate.auth.user.orgId, id, gate.auth.user.id);
     return NextResponse.json({ submitted: true });
   } catch (e) {
-    return NextResponse.json(
-      {
-        error: e instanceof Error ? e.message : "change could not be submitted",
-      },
-      { status: 422 },
-    );
+    return apiErrorResponse(e);
   }
 }
