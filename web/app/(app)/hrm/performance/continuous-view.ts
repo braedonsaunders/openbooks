@@ -20,6 +20,7 @@ import {
   getCalibrationSession,
   listCalibrationSessions,
 } from '@openbooks/engine/src/hrm/performance/calibration.ts'
+import { HrmPerformanceError } from '@openbooks/engine/src/hrm/performance/errors.ts'
 import { getFeedbackSettings } from '@openbooks/engine/src/hrm/performance/feedback.ts'
 import {
   listCycleProgress,
@@ -48,6 +49,23 @@ import { translateTalentCode } from './talent-labels.ts'
  */
 
 export type ContinuousTab = 'cycles' | 'calibration' | 'talent' | 'settings' | 'retention'
+
+/**
+ * A section read that failed for an unexpected reason (typed NOT_FOUND
+ * and FORBIDDEN stay null/missing as before). The tab renders the
+ * localized message with a retry link that re-runs the loader — a dead
+ * read never looks like an empty grid again.
+ */
+export interface ContinuousLoadError {
+  message: string
+  retryHref: string
+  retryLabel: string
+}
+
+/** True for the typed absence/scope refusals a null section already names. */
+function isExpectedAbsence(error: unknown): boolean {
+  return error instanceof HrmPerformanceError && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
+}
 
 export interface ContinuousData {
   tab: ContinuousTab
@@ -107,6 +125,7 @@ export interface ContinuousData {
         failed: string
       } | null
     } | null
+    detailError: ContinuousLoadError | null
   } | null
   talent: {
     title: string
@@ -159,6 +178,8 @@ export interface ContinuousData {
     failed: string
     current: string
   } | null
+  talentError: ContinuousLoadError | null
+  settingsError: ContinuousLoadError | null
 }
 
 const f = item
@@ -175,6 +196,7 @@ export async function loadContinuousTab(
   canRetain: boolean,
 ): Promise<ContinuousData> {
   const t = await getTranslations('hrm')
+  const retryLabel = (await getTranslations('common'))('actions.retry')
   const rawTab = typeof sp.tab === 'string' ? sp.tab : null
   const calibrationOn = await isFeatureEnabled(authz.user.orgId, 'hrmCalibration')
   const successionOn = await isFeatureEnabled(authz.user.orgId, 'hrmSuccession')
@@ -212,6 +234,7 @@ export async function loadContinuousTab(
     const sessionId = typeof sp.session === 'string' && sp.session.length > 0 ? sp.session : sessions[0]?.id ?? null
     type CalibrationDetail = NonNullable<NonNullable<ContinuousData['calibration']>['detail']>
     let detail: CalibrationDetail | null = null
+    let detailError: ContinuousLoadError | null = null
     if (sessionId) {
       try {
         const session = await getCalibrationSession({ orgId: authz.user.orgId, actorId: authz.user.id, id: sessionId })
@@ -281,7 +304,17 @@ export async function loadContinuousTab(
                 }
               : null,
         }
-      } catch {
+      } catch (error) {
+        // A session that vanished (or left scope) simply has no detail —
+        // the sessions table above stays the named outcome. Anything else
+        // is an outage the grid must not hide.
+        if (!isExpectedAbsence(error)) {
+          detailError = {
+            message: t('performance.continuous.calibration.detailLoadFailed'),
+            retryHref: `/hrm/performance?tab=calibration&session=${sessionId}`,
+            retryLabel,
+          }
+        }
         detail = null
       }
     }
@@ -303,10 +336,12 @@ export async function loadContinuousTab(
         href: `/hrm/performance?tab=calibration&session=${s.id}`,
       })),
       detail,
+      detailError,
     }
   }
 
   let talent: ContinuousData['talent'] = null
+  let talentError: ContinuousLoadError | null = null
   if (tab === 'talent' && showTalent) {
     const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id })
     const cycleId = typeof sp.cycle === 'string' && sp.cycle.length > 0 ? sp.cycle : cycles.find((c) => c.status !== 'closed')?.id ?? cycles[0]?.id ?? null
@@ -409,13 +444,21 @@ export async function loadContinuousTab(
             positionLabel: t('performance.continuous.talent.positionLabel'),
           },
         }
-      } catch {
+      } catch (error) {
+        if (!isExpectedAbsence(error)) {
+          talentError = {
+            message: t('performance.continuous.talent.loadFailed'),
+            retryHref: cycleId ? `/hrm/performance?tab=talent&cycle=${cycleId}` : '/hrm/performance?tab=talent',
+            retryLabel,
+          }
+        }
         talent = null
       }
     }
   }
 
   let feedbackSettings: ContinuousData['feedbackSettings'] = null
+  let settingsError: ContinuousLoadError | null = null
   if (tab === 'settings' && showSettings) {
     try {
       const settings = await getFeedbackSettings({ orgId: authz.user.orgId, actorId: authz.user.id })
@@ -427,12 +470,19 @@ export async function loadContinuousTab(
         failed: t('performance.actionFailed'),
         current: settings.publicPraiseBy,
       }
-    } catch {
+    } catch (error) {
+      if (!isExpectedAbsence(error)) {
+        settingsError = {
+          message: t('performance.continuous.feedback.settingsLoadFailed'),
+          retryHref: '/hrm/performance?tab=settings',
+          retryLabel,
+        }
+      }
       feedbackSettings = null
     }
   }
 
-  return { tab, tabOptions, viewTabs, showCalibration, showTalent, calibration, talent, feedbackSettings }
+  return { tab, tabOptions, viewTabs, showCalibration, showTalent, calibration, talent, talentError, feedbackSettings, settingsError }
 }
 
 /**
@@ -444,6 +494,19 @@ export async function loadContinuousTab(
  */
 export function continuousTabChips(data: ContinuousData) {
   return widgetBlock('module-home-tabs', { tabs: data.viewTabs })
+}
+
+/**
+ * A failed section read as house blocks: the note carries the localized
+ * failure and the plain link button re-runs the loader for the same tab.
+ */
+function loadErrorBlocks(error: ContinuousLoadError): PageSpec['body'] {
+  return [
+    widgetBlock('hrm-note', { note: error.message }),
+    // widgetBlock, not widget: a bare WidgetRef is not a body Block, and
+    // the retry link must live in the tab body beside the note.
+    widgetBlock('plain-link-button', { href: error.retryHref, label: error.retryLabel, variant: 'outline' }),
+  ]
 }
 
 export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
@@ -500,7 +563,12 @@ export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
       if (d.create) {
         blocks.push(widgetBlock('hrm-session-dialog', { create: d.create }))
       }
+    } else if (cal.detailError) {
+      blocks.push(...loadErrorBlocks(cal.detailError))
     }
+  }
+  if (data.tab === 'talent' && data.talentError) {
+    blocks.push(...loadErrorBlocks(data.talentError))
   }
   if (data.tab === 'talent' && data.talent) {
     const tal = data.talent
@@ -553,6 +621,8 @@ export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
   }
   if (data.tab === 'settings' && data.feedbackSettings) {
     blocks.push(widgetBlock('hrm-feedback-settings', { settings: data.feedbackSettings }))
+  } else if (data.tab === 'settings' && data.settingsError) {
+    blocks.push(...loadErrorBlocks(data.settingsError))
   }
   return blocks
 }

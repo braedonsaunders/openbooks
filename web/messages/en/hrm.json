@@ -1051,7 +1051,8 @@
         "justificationLabel": "Justification",
         "saveLabel": "Save rating",
         "revertLabel": "Revert",
-        "revertReasonLabel": "Reason for revert"
+        "revertReasonLabel": "Reason for revert",
+        "detailLoadFailed": "The calibration detail could not be loaded. Try again."
       },
       "talent": {
         "title": "Talent & succession",
@@ -1087,7 +1088,8 @@
         "modeTalentLabel": "Talent review",
         "modeSuccessionLabel": "Succession plan",
         "employeeLabel": "Employee",
-        "positionLabel": "Position"
+        "positionLabel": "Position",
+        "loadFailed": "The talent grid could not be loaded. Try again."
       },
       "feedback": {
         "settingsTitle": "Feedback settings",
@@ -1107,7 +1109,8 @@
         "bodyPlaceholder": "Say what happened, specifically",
         "submitLabel": "Send",
         "praiseAction": "Give praise",
-        "respondLabel": "Respond"
+        "respondLabel": "Respond",
+        "settingsLoadFailed": "The feedback settings could not be loaded. Try again."
       }
     },
     "goalProgressInvalid": "Progress must be a whole number from 0 to 100."

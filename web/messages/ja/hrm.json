@@ -996,7 +996,8 @@
         "justificationLabel": "根拠",
         "saveLabel": "評価を保存",
         "revertLabel": "差し戻し",
-        "revertReasonLabel": "差し戻しの理由"
+        "revertReasonLabel": "差し戻しの理由",
+        "detailLoadFailed": "キャリブレーションの詳細を読み込めませんでした。もう一度お試しください。"
       },
       "talent": {
         "title": "タレントと後継",
@@ -1032,7 +1033,8 @@
         "modeTalentLabel": "タレントレビュー",
         "modeSuccessionLabel": "後継計画",
         "employeeLabel": "従業員",
-        "positionLabel": "職位"
+        "positionLabel": "職位",
+        "loadFailed": "タレントグリッドを読み込めませんでした。もう一度お試しください。"
       },
       "feedback": {
         "settingsTitle": "フィードバック設定",
@@ -1052,7 +1054,8 @@
         "bodyPlaceholder": "何が起きたか具体的に書いてください",
         "submitLabel": "送信",
         "praiseAction": "称賛する",
-        "respondLabel": "回答する"
+        "respondLabel": "回答する",
+        "settingsLoadFailed": "フィードバック設定を読み込めませんでした。もう一度お試しください。"
       }
     }
   },

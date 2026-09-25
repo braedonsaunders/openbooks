@@ -996,7 +996,8 @@
         "justificationLabel": "Begründung",
         "saveLabel": "Bewertung speichern",
         "revertLabel": "Zurücksetzen",
-        "revertReasonLabel": "Grund für das Zurücksetzen"
+        "revertReasonLabel": "Grund für das Zurücksetzen",
+        "detailLoadFailed": "Das Kalibrierungsdetail konnte nicht geladen werden. Versuchen Sie es erneut."
       },
       "talent": {
         "title": "Talent & Nachfolge",
@@ -1032,7 +1033,8 @@
         "modeTalentLabel": "Talentbeurteilung",
         "modeSuccessionLabel": "Nachfolgeplan",
         "employeeLabel": "Mitarbeiter",
-        "positionLabel": "Position"
+        "positionLabel": "Position",
+        "loadFailed": "Das Talent-Raster konnte nicht geladen werden. Versuchen Sie es erneut."
       },
       "feedback": {
         "settingsTitle": "Feedback-Einstellungen",
@@ -1052,7 +1054,8 @@
         "bodyPlaceholder": "Sagen Sie konkret, was passiert ist",
         "submitLabel": "Senden",
         "praiseAction": "Lob aussprechen",
-        "respondLabel": "Antworten"
+        "respondLabel": "Antworten",
+        "settingsLoadFailed": "Die Feedback-Einstellungen konnten nicht geladen werden. Versuchen Sie es erneut."
       }
     }
   },
