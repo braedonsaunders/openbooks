@@ -206,7 +206,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
     });
   },
 
-  async releaseApproval(subjectId, outcome, ctx): Promise<void> {
+  async releaseApproval(subjectId, outcome, ctx, _detail, run): Promise<void> {
     const today = await businessToday(ctx.orgId);
     await db.transaction(async (tx) => {
       const link = (await tx.execute<{ partyId: string }>(sql`
@@ -239,6 +239,18 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
       if (!row || row.retiredAt || row.approvalStatus !== "pending") return;
       if (row.partyId !== link.partyId) {
         throw new Error(`bank account ${subjectId} changed while its approval released — retry the action`);
+      }
+      // The approval vetted the dispatch-time party pinned in
+      // flow_runs.context. A party rehome landing between dispatch and
+      // release must not spend that vetting on another party's details:
+      // refuse and require resubmission under the current party. A missing
+      // dispatch snapshot refuses the same way — releasing blind is the
+      // failure this check exists to prevent.
+      const dispatchPartyId = run?.dispatchValues?.partyId;
+      if (typeof dispatchPartyId !== "string" || dispatchPartyId !== row.partyId) {
+        throw new Error(
+          `bank account ${subjectId} is owned by a different party than when its approval was requested — resubmit it for approval under the current party`,
+        );
       }
       const written = (await tx.execute(sql`
         update party_bank_accounts
