@@ -152,7 +152,7 @@ export async function loadMatch(
     const exWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId} and l.match_status = 'excluded'
       ${exParams.q ? sql` and (l.description ilike ${'%' + exParams.q + '%'} or l.amount::text ilike ${'%' + exParams.q + '%'})` : sql``}`
 
-    const [stmt, stmtC, flaggedC, gl, glC, review, ex, exC] = (await Promise.all([
+    const [stmt, stmtC, flaggedC, gl, glC, review, reviewC, ex, exC] = (await Promise.all([
       db.execute<StatementRow>(sql`
         select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
                l.possible_duplicate_of,
@@ -185,6 +185,11 @@ export async function loadMatch(
          where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
            and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7
          order by m.confidence asc, sl.posted_on limit 50`),
+      db.execute<CountRow>(sql`
+        select count(*) as n
+          from reconciliation_matches m
+         where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
+           and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7`),
       db.execute<StatementRow>(sql`
         select l.id, l.posted_on, l.amount, l.description
           from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -197,7 +202,7 @@ export async function loadMatch(
       stmtRows: stmt.rows, stmtTotal: Number(stmtC.rows[0]?.n ?? 0), stmtParams,
       flaggedTotal: Number(flaggedC.rows[0]?.n ?? 0),
       glRows: gl.rows, glTotal: Number(glC.rows[0]?.n ?? 0), glParams,
-      reviewRows: review.rows,
+      reviewRows: review.rows, reviewTotal: Number(reviewC.rows[0]?.n ?? 0),
       excludedRows: ex.rows, excludedTotal: Number(exC.rows[0]?.n ?? 0), exParams,
     }
   }

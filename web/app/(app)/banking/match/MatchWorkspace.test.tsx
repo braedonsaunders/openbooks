@@ -105,6 +105,7 @@ const data = {
   glTotal: 0,
   glParams: { page: 1, perPage: 25 },
   reviewRows: [],
+  reviewTotal: 0,
   excludedRows: [],
   excludedTotal: 0,
   exParams: { page: 1, perPage: 25 },

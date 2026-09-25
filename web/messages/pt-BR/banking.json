@@ -337,6 +337,7 @@
     "restoredToast": "Linha restaurada",
     "addedToast": "Lançamento adicionado e correspondido",
     "reviewHint": "Correspondências automáticas de baixa confiança — confirme se estão corretas ou desfaça a correspondência para refazer.",
+    "reviewTruncated": "Mostrando {shown} de {total}.",
     "columns": {
       "bankDate": "Data bancária",
       "confidence": "Confiança"
@@ -538,6 +539,7 @@
     "discardedToast": "Conciliação descartada",
     "updatedToast": "Conciliação atualizada",
     "bankLinesTitle": "Linhas do extrato bancário",
+    "suggestionsUnavailable": "Sugestões de regras indisponíveis — a visualização falhou. Você ainda pode conciliar manualmente.",
     "bankLinesCount": "({count, number} não correspondidas)",
     "searchBankLines": "Buscar linhas bancárias…",
     "noBankLinesSearch": "Nenhuma linha bancária corresponde a esta busca.",

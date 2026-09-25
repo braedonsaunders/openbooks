@@ -337,6 +337,7 @@
     "restoredToast": "Ligne restaurée",
     "addedToast": "Écriture ajoutée et rapprochée",
     "reviewHint": "Rapprochements automatiques à faible confiance — confirmez-les ou annulez-les pour recommencer.",
+    "reviewTruncated": "Affichage de {shown} sur {total}.",
     "columns": {
       "bankDate": "Date bancaire",
       "confidence": "Confiance"
@@ -538,6 +539,7 @@
     "discardedToast": "Rapprochement abandonné",
     "updatedToast": "Rapprochement mis à jour",
     "bankLinesTitle": "Lignes du relevé bancaire",
+    "suggestionsUnavailable": "Suggestions de règles indisponibles — l'aperçu a échoué. Vous pouvez toujours rapprocher manuellement.",
     "bankLinesCount": "({count, number} non appariées)",
     "searchBankLines": "Rechercher des lignes bancaires…",
     "noBankLinesSearch": "Aucune ligne bancaire ne correspond à cette recherche.",

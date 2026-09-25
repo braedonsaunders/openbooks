@@ -347,6 +347,7 @@
     "restoredToast": "Line restored",
     "addedToast": "Journal added and matched",
     "reviewHint": "Low-confidence auto-matches — confirm they're right, or unmatch to redo.",
+    "reviewTruncated": "Showing {shown} of {total}.",
     "columns": {
       "bankDate": "Bank date",
       "confidence": "Confidence"
@@ -545,6 +546,7 @@
     "discardedToast": "Reconciliation discarded",
     "updatedToast": "Reconciliation updated",
     "bankLinesTitle": "Bank statement lines",
+    "suggestionsUnavailable": "Rule suggestions are unavailable — the preview failed. You can still match manually.",
     "bankLinesCount": "({count, number} unmatched)",
     "searchBankLines": "Search bank lines…",
     "noBankLinesSearch": "No bank lines match this search.",

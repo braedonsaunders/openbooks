@@ -337,6 +337,7 @@
     "restoredToast": "明細を復元しました",
     "addedToast": "仕訳を追加して照合しました",
     "reviewHint": "確度の低い自動照合です。正しいか確認するか、照合を解除してやり直してください。",
+    "reviewTruncated": "{total} 件中 {shown} 件を表示しています。",
     "columns": {
       "bankDate": "銀行日付",
       "confidence": "確度"
@@ -538,6 +539,7 @@
     "discardedToast": "消込を破棄しました",
     "updatedToast": "消込を更新しました",
     "bankLinesTitle": "銀行明細行",
+    "suggestionsUnavailable": "ルールの提案を利用できません — プレビューに失敗しました。手動での消込は可能です。",
     "bankLinesCount": "（{count, number} 件未照合）",
     "searchBankLines": "銀行明細行を検索…",
     "noBankLinesSearch": "この検索に一致する銀行明細行はありません。",
