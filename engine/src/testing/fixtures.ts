@@ -908,6 +908,9 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   // its trigger honors only the session bypass flag, which pooled
   // connections never carry, so scratch reset/drop disables it here.
   { table: "dunning_log", trigger: "dunning_log_no_mutate" },
+  // Application idempotency evidence is immutable until expiry with no
+  // sandbox-wipe escape either; same scoped disable for the one transaction.
+  { table: "application_idempotency_keys", trigger: "application_idempotency_guard" },
   { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },
 ];
 
