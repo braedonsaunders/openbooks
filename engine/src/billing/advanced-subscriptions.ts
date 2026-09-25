@@ -4,6 +4,7 @@ import { civilDayIndex, isoFromCivilDayIndex } from "../platform/business-date.t
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
 import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
@@ -620,8 +621,18 @@ async function subscriptionContext(orgId: string, subscriptionId: string, allowe
   return row;
 }
 
-export async function createPlanVersion(orgId: string, actorId: string, input: CreatePlanVersionInput): Promise<string> {
+export async function createPlanVersion(
+  orgId: string,
+  actorId: string,
+  input: CreatePlanVersionInput,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<string> {
   return withOrg(orgId, async () => {
+    // Plan versions price every subsidiary's future invoices, so the catalog
+    // write needs unrestricted subsidiary scope — exactly like the other
+    // org-wide config writes. Only an explicit null is unrestricted; an
+    // absent scope fails closed.
+    assertUnrestrictedScope(allowedSubsidiaryIds);
     await assertEnabled(orgId);
     const plan = await ownedPlan(orgId, input.planId);
     const effectiveFrom = validDate(input.effectiveFrom, "effective date", true)!;
@@ -671,8 +682,16 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
   });
 }
 
-export async function publishPlanVersion(orgId: string, actorId: string, versionId: string): Promise<void> {
+export async function publishPlanVersion(
+  orgId: string,
+  actorId: string,
+  versionId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<void> {
   await withOrg(orgId, async () => {
+    // Publishing activates the version for every subsidiary at once — same
+    // unrestricted-scope gate as creation (see createPlanVersion).
+    assertUnrestrictedScope(allowedSubsidiaryIds);
     await assertEnabled(orgId);
     const found = (await db.execute<Pick<PlanVersionRow, "id" | "planId" | "effectiveFrom" | "status"> & Record<string, unknown>>(sql`
       select id, plan_id as "planId", effective_from as "effectiveFrom", status

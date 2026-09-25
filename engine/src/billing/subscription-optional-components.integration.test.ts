@@ -65,8 +65,8 @@ test("publishing an all-optional version refuses and leaves the draft unpublishe
       components: [
         { componentKey: "addon", name: "Add-on", unitPrice: "10.0000", incomeAccountId: org.accounts.revenue, isOptional: true },
       ],
-    });
-    await assert.rejects(publishPlanVersion(org.orgId, actor, versionId), /at least one required component/);
+    }, null);
+    await assert.rejects(publishPlanVersion(org.orgId, actor, versionId, null), /at least one required component/);
     const status = (await db.execute<{ status: string }>(
       sql`select status from subscription_plan_versions where id = ${versionId} and org_id = ${org.orgId}`,
     )).rows[0]!.status;
@@ -84,8 +84,8 @@ test("a version with a required component still publishes", DB, async () => {
         { componentKey: "base", name: "Base", unitPrice: "100.0000", incomeAccountId: org.accounts.revenue },
         { componentKey: "addon", name: "Add-on", unitPrice: "10.0000", incomeAccountId: org.accounts.revenue, isOptional: true },
       ],
-    });
-    await publishPlanVersion(org.orgId, actor, versionId);
+    }, null);
+    await publishPlanVersion(org.orgId, actor, versionId, null);
     const subscriptionId = await seedSubscription(org, actor, planId);
     await activateLifecycle(org.orgId, actor, {
       subscriptionId,
@@ -112,7 +112,7 @@ test("activating a legacy all-optional published version refuses with nothing wr
       components: [
         { componentKey: "addon", name: "Add-on", unitPrice: "10.0000", incomeAccountId: org.accounts.revenue, isOptional: true },
       ],
-    });
+    }, null);
     await db.execute(sql`update subscription_plan_versions set status = 'published', published_at = now(), published_by = ${actor} where id = ${versionId} and org_id = ${org.orgId}`);
     const subscriptionId = await seedSubscription(org, actor, planId);
     await assert.rejects(

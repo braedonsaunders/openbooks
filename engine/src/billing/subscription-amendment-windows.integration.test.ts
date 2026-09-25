@@ -17,24 +17,24 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
       const input = {planId,effectiveFrom:'2026-01-01',components:[{componentKey:'fee',name:'Fee',unitPrice:'10',incomeAccountId:org.accounts.revenue}]};
       if (scenario === 'invalid dates') {
         for (const effectiveFrom of ['2026-02-30','2026-04-31','', 'not-a-date']) {
-          await assert.rejects(createPlanVersion(org.orgId,actor,{...input,effectiveFrom}), AdvancedSubscriptionError);
+          await assert.rejects(createPlanVersion(org.orgId,actor,{...input,effectiveFrom}, null), AdvancedSubscriptionError);
         }
         assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_plan_versions where org_id=${org.orgId}`)).rows[0]!.n,0);
-        await createPlanVersion(org.orgId,actor,{...input,effectiveFrom:'2028-02-29'});
+        await createPlanVersion(org.orgId,actor,{...input,effectiveFrom:'2028-02-29'}, null);
         return;
       }
       if (scenario === 'interval inputs') {
         for (const intervalCount of [0, -1, 1.5, NaN, Infinity, 2147483648]) {
-          await assert.rejects(createPlanVersion(org.orgId,actor,{...input,intervalCount}),AdvancedSubscriptionError);
+          await assert.rejects(createPlanVersion(org.orgId,actor,{...input,intervalCount}, null),AdvancedSubscriptionError);
         }
-        await assert.rejects(createPlanVersion(org.orgId,actor,{...input,interval:'invalid' as 'monthly'}),AdvancedSubscriptionError);
-        await assert.rejects(createPlanVersion(org.orgId,actor,{...input,billingTiming:'invalid' as 'advance'}),AdvancedSubscriptionError);
+        await assert.rejects(createPlanVersion(org.orgId,actor,{...input,interval:'invalid' as 'monthly'}, null),AdvancedSubscriptionError);
+        await assert.rejects(createPlanVersion(org.orgId,actor,{...input,billingTiming:'invalid' as 'advance'}, null),AdvancedSubscriptionError);
         assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_plan_versions where org_id=${org.orgId}`)).rows[0]!.n,0);
-        await createPlanVersion(org.orgId,actor,{...input,intervalCount:2});
+        await createPlanVersion(org.orgId,actor,{...input,intervalCount:2}, null);
         return;
       }
-      const version = await createPlanVersion(org.orgId,actor,input);
-      await publishPlanVersion(org.orgId,actor,version);
+      const version = await createPlanVersion(org.orgId,actor,input, null);
+      await publishPlanVersion(org.orgId,actor,version, null);
       const subscriptionId = randomUUID();
       await db.execute(sql`insert into subscriptions(id,org_id,customer_id,plan_id,quantity,status,start_on,next_bill_on,auto_post,created_by) values (${subscriptionId},${org.orgId},${org.customerId},${planId},'1','active','2026-01-01','2026-01-01',false,${actor})`);
       if (scenario === 'renewal inputs') {

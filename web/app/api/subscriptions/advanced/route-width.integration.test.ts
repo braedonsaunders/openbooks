@@ -25,6 +25,7 @@ registerHooks({
           const s = globalThis.__planVersionWidthState;
           return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['ar.create']), allowedSubsidiaryIds: null };
         }
+        export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
       `);
     if (specifier.endsWith("/lib/features"))
       return virtual("export async function isFeatureEnabled() { return true }");
