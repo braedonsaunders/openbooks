@@ -137,7 +137,19 @@ export function TenantsList({
                       {org.sandboxCount}
                     </TableCell>
                     <TableCell className="w-px whitespace-nowrap px-2 text-center" style={{ width: 64 }}>
-                      <OrgOpenCell orgId={org.id} />
+                      {org.envKind === 'production' ? (
+                        <OrgOpenCell orgId={org.id} />
+                      ) : (
+                        // Entering acts through the platform identity, which
+                        // exists only for production tenants — offering Open
+                        // here would throw inside enterOrg.
+                        <span
+                          className="text-slate-300 dark:text-slate-600"
+                          title="Only production organizations can be opened from here"
+                        >
+                          —
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
