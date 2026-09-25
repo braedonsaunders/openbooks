@@ -243,7 +243,7 @@ export async function executeAppInvocation(args: {
   idempotencyKey: string;
   requestHash: string;
   /** Lock and revalidate app state in the same transaction as every attempt or replay. */
-  authorize?: () => Promise<void>;
+  authorize: () => Promise<void>;
   /** The attempt. MUST issue all of its statements through `db` so they join
    * the envelope's pinned tenant transaction. Must not reject except for
    * infrastructure faults. */
@@ -274,7 +274,7 @@ export async function executeAppInvocation(args: {
   // duplicates of the same key via a tenant-scoped advisory try-lock so a
   // loser can neither block a pooled client nor double-run.
   return withOrgTransaction(orgId, async () => {
-    await args.authorize?.();
+    await args.authorize();
     const gateName = `${args.operation}|${claimKey}|${actorId}`;
     const gate = await db.execute<{ acquired: boolean }>(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${gateName}, 0)) as acquired`);

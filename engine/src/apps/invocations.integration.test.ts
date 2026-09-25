@@ -35,6 +35,16 @@ type Fixture = {
   appId: string;
 };
 
+function invocationAuthority(fx: Fixture, appId = fx.appId, versionId: string | null = null) {
+  return {
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    appId,
+    versionId,
+    authorize: () => lockInstalledAppForInvocation(fx.orgId, appId, versionId),
+  };
+}
+
 async function makeFixture(): Promise<Fixture> {
   return await withBypass(async () => {
     const org = await createScratchOrg();
@@ -116,15 +126,11 @@ test(
       await disabledLockHeld;
       let ran = false;
       const pending = executeAppInvocation({
-        orgId: fx.orgId,
-        actorId: fx.actorId,
-        appId: fx.appId,
-        versionId: null,
+        ...invocationAuthority(fx),
         endpoint: "do",
         operation: "apps.call_backend.do",
         idempotencyKey: deriveAppInvocationKey({ endpoint: "do", body: "raced-disable" }),
         requestHash: deriveAppInvocationKey({ requestHashOf: "raced-disable" }),
-        authorize: () => lockInstalledAppForInvocation(fx.orgId, fx.appId, null),
         run: async () => {
           ran = true;
           await stageEffect(fx.orgId, fx.actorId);
@@ -160,10 +166,7 @@ test(
       let executions = 0;
       let stagedEffect = "";
       const outcome = await executeAppInvocation({
-        orgId: fx.orgId,
-        actorId: fx.actorId,
-        appId: fx.appId,
-        versionId: null,
+        ...invocationAuthority(fx),
         endpoint: "do",
         operation: "apps.call_backend.do",
         idempotencyKey: deriveAppInvocationKey({ endpoint: "do", body: { n: 1 } }),
@@ -208,10 +211,7 @@ for (const refusal of [
         const audits: AppInvocationAuditRow[] = [];
         let executions = 0;
         const refused = await executeAppInvocation({
-          orgId: fx.orgId,
-          actorId: fx.actorId,
-          appId: fx.appId,
-          versionId: null,
+          ...invocationAuthority(fx),
           endpoint: "flaky",
           operation: "apps.call_backend.flaky",
           idempotencyKey: deriveAppInvocationKey({ endpoint: "flaky", seq: refusal.label }),
@@ -245,10 +245,7 @@ for (const refusal of [
         // A retry after the failure takes the same claim over and succeeds —
         // with no effects left behind by the failure, never a duplicate.
         const retried = await executeAppInvocation({
-          orgId: fx.orgId,
-          actorId: fx.actorId,
-          appId: fx.appId,
-          versionId: null,
+          ...invocationAuthority(fx),
           endpoint: "flaky",
           operation: "apps.call_backend.flaky",
           idempotencyKey: deriveAppInvocationKey({ endpoint: "flaky", seq: refusal.label }),
@@ -287,10 +284,7 @@ test(
       const storedHash = deriveAppInvocationKey({ requestHashFor: "charge-100" });
       let executions = 0;
       const envelopeArgs = () => ({
-        orgId: fx.orgId,
-        actorId: fx.actorId,
-        appId: fx.appId,
-        versionId: null,
+        ...invocationAuthority(fx),
         endpoint: "charge",
         operation: "apps.call_backend.charge",
         idempotencyKey: key,
@@ -331,10 +325,7 @@ test(
     try {
       let executions = 0;
       const args = () => ({
-        orgId: fx.orgId,
-        actorId: fx.actorId,
-        appId: fx.appId,
-        versionId: null,
+        ...invocationAuthority(fx),
         endpoint: "parallel",
         operation: "apps.call_backend.parallel",
         idempotencyKey: deriveAppInvocationKey({ endpoint: "parallel" }),
@@ -395,10 +386,7 @@ test(
       try {
         await assert.rejects(
           executeAppInvocation({
-            orgId: fx.orgId,
-            actorId: fx.actorId,
-            appId: fx.appId,
-            versionId: null,
+            ...invocationAuthority(fx),
             endpoint: "unauditable",
             operation: "apps.call_backend.unauditable",
             idempotencyKey: deriveAppInvocationKey({ endpoint: "unauditable" }),
@@ -441,10 +429,7 @@ test(
       let executions = 0;
       const invoke = (appId: string, versionId: string | null, key: string) =>
         executeAppInvocation({
-          orgId: fx.orgId,
-          actorId: fx.actorId,
-          appId,
-          versionId,
+          ...invocationAuthority(fx, appId, versionId),
           endpoint: "shared",
           operation: "apps.call_backend_shared",
           idempotencyKey: key,
@@ -500,10 +485,7 @@ test(
       const versionId = randomUUID();
       const invoke = (key: string) =>
         executeAppInvocation({
-          orgId: fx.orgId,
-          actorId: fx.actorId,
-          appId: fx.appId,
-          versionId,
+          ...invocationAuthority(fx, fx.appId, versionId),
           endpoint: "aging",
           operation: "apps.call_backend_aging",
           idempotencyKey: key,
