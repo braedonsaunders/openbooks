@@ -29,6 +29,14 @@ export class EntryNumberError extends Error {
   }
 }
 
+/** Serialize only claimants for the same organization/number pair. */
+async function lockEntryNumber(tx: Tx, orgId: string, entryNumber: string): Promise<void> {
+  const key = `openbooks:entry-number:${orgId}:${entryNumber}`;
+  await tx.execute(sql`
+    select pg_advisory_xact_lock(hashtextextended(${key}, 0))
+  `);
+}
+
 /**
  * The first unused entry number at or after `preferred`.
  *
@@ -45,8 +53,8 @@ export class EntryNumberError extends Error {
  * Unlike allocateEntryNumber this never reuses a number the document already
  * holds: a derived entry is always an ADDITIONAL entry for that document.
  *
- * The caller holds `for update` on the org row, so this read-then-insert is
- * atomic against another posting in the same organization.
+ * The candidate number is locked before checking availability. This keeps
+ * read-then-insert atomic for that number without serializing other posts.
  */
 export async function nextFreeEntryNumber(
   tx: Tx,
@@ -55,6 +63,7 @@ export async function nextFreeEntryNumber(
 ): Promise<string> {
   for (let generation = 1; generation <= 200; generation += 1) {
     const candidate = generation === 1 ? preferred : `${preferred}-${generation}`;
+    await lockEntryNumber(tx, orgId, candidate);
     const taken = await tx.execute(sql`
       select 1 from journal_entries
        where org_id = ${orgId} and entry_number = ${candidate}
@@ -82,8 +91,8 @@ export async function nextFreeEntryNumber(
  * form cannot itself collide; the counter is a belt-and-braces terminator, not
  * an expected path.
  *
- * The caller holds `for update` on the org row, which serializes posting within
- * an organization and makes this read-then-insert atomic.
+ * Each candidate is locked before lookup, so unrelated organization postings
+ * remain parallel while colliding source numbers are qualified deterministically.
  */
 export async function allocateEntryNumber(
   tx: Tx,
@@ -93,6 +102,7 @@ export async function allocateEntryNumber(
   kind: string,
 ): Promise<string> {
   const holder = async (candidate: string): Promise<string | null | undefined> => {
+    await lockEntryNumber(tx, orgId, candidate);
     const found = await tx.execute<{ source_document_id: string | null }>(sql`
       select source_document_id from journal_entries
        where org_id = ${orgId} and entry_number = ${candidate}
@@ -118,4 +128,3 @@ export async function allocateEntryNumber(
     `could not allocate a journal entry number for document number "${preferred}"`,
   );
 }
-

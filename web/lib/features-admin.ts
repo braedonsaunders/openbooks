@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import { provisionFeatureDefaults } from '@openbooks/engine/src/provisioning/organization-provisioning.ts'
 import {
   FEATURES,
@@ -53,6 +54,7 @@ export async function applyFeatureChanges(
   clean: Record<string, boolean>,
 ): Promise<FeatureToggleResult> {
   return withOrgTransaction(orgId, async () => {
+    await lockLedgerSetupFence(db, orgId, "exclusive")
     // Serialize against every operation that can establish a feature dependency
     // (project activation/creation). Held to commit, so no blocker can appear
     // between the checks below and the flag write.

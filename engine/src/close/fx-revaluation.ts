@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { businessTimeZone } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { loadControlAccounts } from "../records/control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
@@ -456,7 +457,7 @@ async function periodEndRate(
 }
 
 /** Restate each legal entity with incremental immutable adjustment/reversal
- * pairs. The organization lock is taken before configuration and basis reads,
+ * pairs. The shared ledger-setup fence is taken before configuration and basis reads,
  * consistent with ordinary posting. Each entity retains its own savepoint so a
  * rejected entity cannot leave half a pair or discard successful siblings. */
 export async function runRevaluation(
@@ -468,7 +469,7 @@ export async function runRevaluation(
   bookId?: string,
 ): Promise<RevaluationRunResult> {
   return withOrgTransaction(orgId, async () => {
-    await db.execute(sql`select id from orgs where id=${orgId} for update`);
+    await lockLedgerSetupFence(db, orgId, "shared");
     if (!(await lockAndCheckOrgFeature(db, orgId, "multiCurrency"))) {
       throw new RevaluationFeatureDisabledError();
     }
@@ -499,7 +500,7 @@ export async function runRevaluation(
   });
 }
 
-/** Compute and insert one incremental pair under the run's organization lock
+/** Compute and insert one incremental pair under the run's shared setup fence
  * and subsidiary advisory lock. Every line uses the legal entity's functional
  * currency; its reversal is mandatory and atomic with the adjustment. */
 async function postRevaluationEntry(

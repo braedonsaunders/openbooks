@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments/payment-errors.ts";
 import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
 import { updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
@@ -85,9 +86,9 @@ export async function POST(req: Request) {
 
   try {
     const outcome = await withOrgTransaction(authz.user.orgId, async () => {
-      // Draft save already locks allocation books; take the posting aggregate
-      // fence before that save and before the document row, not only in the kernel.
-      await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for update`)
+      // Draft save already locks allocation books; take the shared setup fence
+      // before that save and before the document row, not only in the kernel.
+      await lockLedgerSetupFence(db, authz.user.orgId, "shared")
 
       const locked = (await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(sql`
         select kind, status, subsidiary_id as "subsidiaryId" from documents

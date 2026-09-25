@@ -15,6 +15,7 @@ import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";
 import { openItemsForParty } from "./payment-queries.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind } from "./payment-documents.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { expireStalePaymentLinkSessions } from "./payment-link-session-expiry.ts";
 // ---------------------------------------------------------------------------
 // Post + apply
@@ -138,8 +139,9 @@ export async function postPaymentWithApplications(
     } else if (liveClaims.length > 0) {
       throw new PaymentError("payment is claimed by a payment run; post it through that run");
     }
-    // Match the kernel's organization → book lock order before touching GL.
-    await db.execute(sql`select id from orgs where id = ${preflight.orgId} for update`);
+    // Acquire the shared ledger-setup side before touching GL; the kernel takes
+    // the same side and the payment row remains the per-document mutex.
+    await lockLedgerSetupFence(db, preflight.orgId, "shared");
     const beforeLock = (preflight.custom ?? {}) as {
       allocations?: AllocationInput[];
       creditAllocations?: CreditAllocationInput[];

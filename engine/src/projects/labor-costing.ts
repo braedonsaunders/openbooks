@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import {
   add,
   cmp,
@@ -782,9 +783,16 @@ export async function postPayrollVariance(opts: {
   // reverse the prior generation and repost (journal_entries_org_number).
   const entryNumberBase = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
   return inDbTransaction(async (tx) => {
-    // The organization row is the stable serialization point even before the
-    // first variance journal exists. It also freezes both account mappings for
-    // the complete reverse/recompute/repost unit.
+    // The shared setup fence protects both account mappings for the complete
+    // reverse/recompute/repost unit without serializing unrelated posting.
+    await lockLedgerSetupFence(tx, orgId, "shared");
+    // The old organization row lock also serialized two first-time variance
+    // calculations when neither had a prior journal row to lock. Keep that
+    // exclusion scoped to the variance business key.
+    const varianceLockKey = `labor-payroll-variance:${orgId}:${periodEnd}:${subsidiaryId}`;
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${varianceLockKey}, 0))
+    `);
     const config = (await tx.execute<{
         labor_clearing: string | null;
         payroll_variance: string | null;
@@ -793,9 +801,7 @@ export async function postPayrollVariance(opts: {
              settings->'controlAccounts'->>'payrollVariance' as payroll_variance
         from orgs
        where id = ${orgId}
-       for update`));
-    // Acquire the exclusive organization lock before the shared feature check:
-    // concurrent variance postings must never upgrade competing share locks.
+       for share`));
     if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
       throw new LaborCostingFeatureDisabledError();
     }

@@ -1,6 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-setup-fence.ts";
 import {
   assertValidControlAccountMappings,
   CONTROL_ACCOUNT_ROLES,
@@ -136,6 +137,17 @@ export async function updateCompanySettings(
   // transaction. Concurrent editors therefore build on the latest committed
   // JSON document instead of spreading a stale snapshot over one another.
   return db.transaction(async (tx) => {
+    const postingPolicyKeys: (keyof typeof body)[] = [
+      "baseCurrency",
+      "fiscalYearStartMonth",
+      "reportingFramework",
+      "taxFramework",
+      "controlAccounts",
+      "timeZone",
+    ];
+    if (postingPolicyKeys.some((key) => body[key] !== undefined)) {
+      await lockLedgerSetupFence(tx, orgId, "exclusive");
+    }
     const existing = await tx.execute(sql`
     select name, legal_name, base_currency, country, settings
       from orgs where id = ${orgId} for update`);

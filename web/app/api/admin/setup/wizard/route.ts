@@ -8,6 +8,7 @@ import { FEATURE_BY_KEY, acquireFeatureGateLock, featureDisableBlocked, featureR
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import { canonicalTimeZone } from '@openbooks/engine/src/platform/time-zone.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import {
   periodDerivationSql,
   periodDerivationStagingSql,
@@ -173,6 +174,7 @@ export async function PUT(req: Request) {
 
   try {
   await db.transaction(async (tx) => {
+    await lockLedgerSetupFence(tx, orgId, "exclusive")
     // Serialize against the feature switchboard before any gate reads or row
     // locks: the Features PUT and every operation that can establish a
     // feature dependency (project activation/creation) take this same fence,

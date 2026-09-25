@@ -1,6 +1,7 @@
 import { desc, sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, schema, withOrg } from "../platform/db.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -1588,6 +1589,7 @@ export async function runSync(
       if (JSON.stringify(before) !== JSON.stringify(resolved)) {
         const requestId = run!.id;
         await db.transaction(async (tx) => {
+          await lockLedgerSetupFence(tx, org.id, "exclusive");
           await tx.execute(sql`
             update orgs
                set settings = jsonb_set(

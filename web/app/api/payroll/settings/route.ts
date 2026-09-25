@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "@openbooks/engine/src/payroll/run-setup.ts";
 import { type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
 import {
@@ -200,6 +201,7 @@ async function currentPayrollBlob(
   orgId: string,
   lock = false,
 ): Promise<Record<string, unknown>> {
+  if (lock) await lockLedgerSetupFence(db, orgId, "exclusive")
   const r = (await db.execute<{ p: Record<string, unknown> | null }>(
     sql`select settings->'payroll' as p from orgs where id = ${orgId}${lock ? sql` for update` : sql``}`,
   ))

@@ -16,6 +16,7 @@ import { enqueuePostingEffects } from "./posting-effects.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { validateRequiredDimensions } from "./posting-accounts.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod, assertPayRunConsolidatedRateCoverage } from "./posting-period.ts";
@@ -27,12 +28,10 @@ import type { prepareDocumentPosting } from "./posting-prepare.ts";
 export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>, options: PostDocumentOptions): Promise<string> {
   const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot } = prepared;
   return await inDbTransaction(async (tx) => {
-    // Setup wizard mutations and posting both serialize on the organization
-    // aggregate root. This makes the wizard's accounting-foundation probe and
-    // its subsequent COA/currency/calendar writes one decision against the
-    // same lock: whichever operation acquires the row first wins, and the
-    // other re-checks after it commits.
-    await tx.execute(sql`select id from orgs where id = ${doc.orgId} for update`);
+    // Share the ledger-setup fence: setup writers exclude posting, while
+    // independent documents can post concurrently. The primary-book and
+    // period fences below remain narrower and protect their own state.
+    await lockLedgerSetupFence(tx, doc.orgId, "shared");
     if (doc.kind === "vendor_bill") {
       await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
     }
@@ -120,9 +119,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     //
     // A concurrent post of the SAME document still resolves to the same
     // preferred number and still collides on the index, which is what the
-    // 23505 branch below and the flip guard rely on. That is safe to keep:
-    // this transaction already holds `for update` on the org row, so postings
-    // in an organization are serialized and this read cannot race an insert.
+    // 23505 branch below and the flip guard rely on. Entry-number allocation
+    // itself is fenced by candidate number, so unrelated posts remain parallel.
     const entryNumber = await allocateEntryNumber(
       tx,
       doc.orgId,
@@ -257,8 +255,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
       .set({ status: "posted", postedAt: new Date() })
       .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId)));
 
-    // Exactly-once posting, serialized at the aggregate root: the flip only
-    // lands while the document is still unposted. Postgres row-locks the
+    // Exactly-once posting: the conditional flip only lands while the document
+    // is still unposted. Postgres row-locks the
     // document during this UPDATE, so a concurrent post blocks here, then
     // re-evaluates the predicate against the now-'posted' row and matches 0
     // rows. Zero rows → throw → THIS transaction rolls back, discarding the
@@ -395,7 +393,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
       secondaryByBook.set(line.bookId, list);
     }
     if (secondaryByBook.size > 0) {
-      // Revalidate under the org lock: a book deactivated after contribution
+      // Revalidate under the setup fence: a book deactivated after contribution
       // planning refuses instead of posting into a dead book.
       const bookRows = (await tx.execute<{ id: string; code: string; is_active: boolean; posts_gl: boolean }>(sql`
         select id, code, is_active, posts_gl from accounting_books

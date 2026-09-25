@@ -5,6 +5,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import {
   can,
   guardPermission,
@@ -326,6 +327,7 @@ export async function PUT(req: Request) {
   // Settings + control accounts + audit evidence commit together or not at
   // all — no partial save can survive a failure past validation.
   const rejected = await withOrgTransaction(orgId, async () => {
+    await lockLedgerSetupFence(db, orgId, "exclusive")
     const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
       select settings from orgs where id = ${orgId} for update`)
     if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) return projectsDisabledResponse()

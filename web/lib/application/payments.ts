@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-setup-fence.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
 import { loadPaymentDocument } from "@openbooks/engine/src/payments/payment-queries.ts";
@@ -153,9 +154,9 @@ export async function postPayment(
     request: { documentId: input.documentId, allocations: input.allocations ?? null },
     execute: async () => {
       try {
-        // A final-action draft save can retain book locks. Match the posting
-        // kernel's org -> document/book order at the outer transaction boundary.
-        await db.execute(sql`select id from orgs where id = ${context.authz.user.orgId} for update`);
+        // A final-action draft save can retain book locks. Take the shared
+        // setup fence before document/book locks, matching the posting kernel.
+        await lockLedgerSetupFence(db, context.authz.user.orgId, "shared");
 
         if (header.status === "draft") {
           // Persist the final-action allocation set before submission. The
