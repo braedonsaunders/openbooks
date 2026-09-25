@@ -186,14 +186,12 @@ test("H-BENEFIT-PAYINPUT: generation and void stay inside the actor's lens", { s
     assert.equal(voided.status, "voided");
 
     // An in-place rehome is refused by the identity guard (transfer is
-    // terminate + rehire, never an edit), so the race above cannot happen;
-    // the employment lock still guards termination ordering.
-    await assert.rejects(
-      db.execute(sql`
-        update worker_employments set employer_subsidiary_id = ${subB}
-         where org_id = ${org.orgId} and id = ${empA}`),
-      /employer_subsidiary_id is immutable/,
-    );
+    // terminate + rehire, never an edit); Drizzle wraps the trigger text on
+    // the cause, so the race above cannot happen; the lock guards ordering.
+    const rehome = await db.execute(sql`
+      update worker_employments set employer_subsidiary_id = ${subB}
+       where org_id = ${org.orgId} and id = ${empA}`).then(() => { throw new Error("expected the rehome to refuse"); }, (error: unknown) => error);
+    assert.match(String((rehome as { cause?: unknown }).cause ?? rehome), /employer_subsidiary_id is immutable/);
   } finally {
     await dropScratchOrg(org.orgId);
   }
