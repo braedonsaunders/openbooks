@@ -22,7 +22,12 @@ const mockAuthz = `
 const mockGates = `
   export async function refuseDisabledRecordType() { return null }
 `;
+const schemaUrl = new URL(
+  '../../../../../packages/customization/src/schema.ts',
+  import.meta.url,
+).href;
 const mockCustomization = `
+  export { defaultFormLayout, lockedFormEntriesUnchanged } from '${schemaUrl}'
   export const RECORD_TYPE_BY_KEY = { vendor_bill: { key: 'vendor_bill' } }
   export function parseFormLayout(input) { return { success: true, data: input, issues: [] } }
 `;
@@ -63,7 +68,14 @@ const form_layout_post_bool_unitUrl = './route.ts?form-layout-post-bool-unit'
 const { POST } = (await import(form_layout_post_bool_unitUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
-const layout = { schemaVersion: 1, recordType: "vendor_bill" };
+// A bare { schemaVersion, recordType } layout drops locked built-in fields,
+// which POST now refuses before the flags logic. The vehicle layout carries
+// the live default's placements so these tests still exercise the boolean
+// handling they were written for.
+const { defaultFormLayout: liveDefaultFormLayout } = await import(
+  "../../../../../packages/customization/src/schema.ts"
+);
+const layout = { ...liveDefaultFormLayout("vendor_bill") };
 
 function postRequest(body: unknown): Request {
   return new Request("http://localhost/api/customization/form-layouts", {

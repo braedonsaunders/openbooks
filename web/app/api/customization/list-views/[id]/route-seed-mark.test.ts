@@ -38,8 +38,13 @@ const seededViewsUrl = new URL(
   '../../../../../../packages/customization/src/seeded-views.ts',
   import.meta.url,
 ).href
+const schemaUrl = new URL(
+  '../../../../../../packages/customization/src/schema.ts',
+  import.meta.url,
+).href
 const mockCustomization = `
   export { stripSeededDefaultMark } from '${seededViewsUrl}'
+  export { lockedListEntriesUnchanged } from '${schemaUrl}'
   export const RECORD_TYPE_BY_KEY = { employee: { key: 'employee' } }
   export function parseListView(input) {
     return { success: true, data: input, issues: [] }
@@ -125,7 +130,10 @@ function installDb(loadRow: Record<string, unknown> | null) {
       const tx = {
         execute: async (query: unknown) => {
           state.statements.push(query)
-          return { rows: [{ id: VIEW_ID, name: 'Default view' }] }
+          // The route decides concurrent default+deactivate and locked-column
+          // edits from the locked row, so the stub returns the stored row
+          // (with its config), not a bare id.
+          return { rows: [state.loadRow ? { ...state.loadRow } : { id: VIEW_ID, name: 'Default view' }] }
         },
       }
       return fn(tx)

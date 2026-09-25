@@ -31,8 +31,13 @@ const seededViewsUrl = new URL(
   '../../../../../packages/customization/src/seeded-views.ts',
   import.meta.url,
 ).href
+const schemaUrl = new URL(
+  '../../../../../packages/customization/src/schema.ts',
+  import.meta.url,
+).href
 const mockCustomization = `
   export { stripSeededDefaultMark } from '${seededViewsUrl}'
+  export { defaultListView, lockedListEntriesUnchanged } from '${schemaUrl}'
   export const RECORD_TYPE_BY_KEY = { employee: { key: 'employee' } }
   export function parseListView(input) {
     return { success: true, data: input, issues: [] }
@@ -115,11 +120,17 @@ function installDb() {
   }
 }
 
+const { defaultListView: liveDefaultListView } = await import(
+  '../../../../../packages/customization/src/schema.ts'
+)
+// The vehicle config must carry the locked display_name placement: POST
+// refuses a config that drops locked columns before the default-scope logic
+// these tests exercise.
 const viewBody = {
   recordType: 'employee',
   name: 'Mine',
   scope: 'user',
-  config: { schemaVersion: 1, recordType: 'employee', columns: [], filters: [], sort: { column: 'display_name', dir: 'asc' }, perPage: 25 },
+  config: { ...liveDefaultListView('employee') },
 }
 
 test('POST of a personal default locks the owner scope before insert', async () => {

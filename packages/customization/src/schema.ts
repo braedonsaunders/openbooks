@@ -162,6 +162,24 @@ export function isLockedCustomizationEntry(
   return entries?.find((entry) => entry.key === key)?.locked === true
 }
 
+/**
+ * Key-order-insensitive serialization for placement comparison. Parsed
+ * configs come back in zod schema key order while builders emit their own
+ * order, so raw JSON.stringify sees a diff where there is none and the API
+ * refuses an untouched layout as "changed".
+ */
+function stablePlacement(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stablePlacement)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, stablePlacement((value as Record<string, unknown>)[key])]),
+    )
+  }
+  return value
+}
+
 function sameLockedPlacements<T extends { key: string }>(
   before: readonly T[],
   after: readonly T[],
@@ -169,7 +187,7 @@ function sameLockedPlacements<T extends { key: string }>(
 ): boolean {
   const beforeLocked = before.filter((entry) => isLocked(entry.key))
   const afterLocked = after.filter((entry) => isLocked(entry.key))
-  return JSON.stringify(beforeLocked) === JSON.stringify(afterLocked)
+  return JSON.stringify(stablePlacement(beforeLocked)) === JSON.stringify(stablePlacement(afterLocked))
 }
 
 /** Whether a proposed form edit changes any locked built-in field placement. */
@@ -186,7 +204,7 @@ export function lockedFormEntriesUnchanged(before: FormLayoutConfig, after: Form
         .filter((field) => isLockedCustomizationEntry(meta?.headerFields, field.key))
         .map((field) => ({ group: group.id, field })),
     )
-  return JSON.stringify(lockedHeader(before)) === JSON.stringify(lockedHeader(after))
+  return JSON.stringify(stablePlacement(lockedHeader(before))) === JSON.stringify(stablePlacement(lockedHeader(after)))
     && sameLockedPlacements(before.lines.columns, after.lines.columns, (key) => isLockedCustomizationEntry(meta?.lineFields, key))
 }
 

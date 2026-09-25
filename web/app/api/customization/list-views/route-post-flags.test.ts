@@ -26,7 +26,12 @@ const mockGates = `
     return null
   }
 `
+const schemaUrl = new URL(
+  '../../../../../packages/customization/src/schema.ts',
+  import.meta.url,
+).href
 const mockCustomization = `
+  export { defaultListView, lockedListEntriesUnchanged } from '${schemaUrl}'
   export const RECORD_TYPE_BY_KEY = { employee: { key: 'employee' } }
   export function parseListView(input) {
     return { success: true, data: input, issues: [] }
@@ -74,7 +79,14 @@ registerHooks({
 const list_view_post_flagsUrl = './route.ts?list-view-post-flags'
 const { POST } = await import(list_view_post_flagsUrl)
 
-const config = { schemaVersion: 1, recordType: 'employee' }
+// A bare { schemaVersion, recordType } config drops the locked display_name
+// column, which POST now refuses before the flags logic. The vehicle config
+// carries the live default's placements so these tests still exercise the
+// boolean handling they were written for.
+const { defaultListView: liveDefaultListView } = await import(
+  '../../../../../packages/customization/src/schema.ts'
+)
+const config = { ...liveDefaultListView('employee') }
 
 function postRequest(body: unknown): Request {
   return new Request('http://x/api/customization/list-views', {

@@ -28,7 +28,12 @@ const mockGates = `
     return null
   }
 `
+const schemaUrl = new URL(
+  '../../../../../../packages/customization/src/schema.ts',
+  import.meta.url,
+).href
 const mockCustomization = `
+  export { lockedListEntriesUnchanged } from '${schemaUrl}'
   export function parseListView() {
     return { success: true, data: { schemaVersion: 1, recordType: 'vendor_bill' }, issues: [] }
   }
