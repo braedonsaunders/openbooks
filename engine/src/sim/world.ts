@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { daysInCivilMonth } from "../platform/business-date.ts";
 import { dropSimOrg } from "../testing/fixtures.ts";
 import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
@@ -239,9 +239,16 @@ function monthsInWindow(startDate: string, endDate: string): { year: number; mon
   return out;
 }
 
-export async function provisionOrg(profile: Profile, window: { startDate: string; endDate: string }): Promise<SimOrg> {
+export async function provisionOrg(
+  profile: Profile,
+  window: { startDate: string; endDate: string },
+  sampleTemplateAttempt?: { profileId: string; seed: string },
+): Promise<SimOrg> {
+  await reconcileIncompleteSimProvisioning();
+  const orgId = randomUUID();
+  const attemptId = randomUUID();
+  const attemptedAt = new Date().toISOString();
   const world = await withBypass(async () => {
-    const orgId = randomUUID();
     const cur = profile.baseCurrency;
 
     await db.execute(sql`
@@ -301,7 +308,21 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
       if (accounts[k]) control[k] = accounts[k]!;
     }
     if (accounts.fxGainLoss) control.fxRealizedGainLoss = accounts.fxGainLoss;
-    const settings: Record<string, unknown> = { simHarness: true, simProfile: profile.id, controlAccounts: control };
+    const settings: Record<string, unknown> = {
+      simHarness: true,
+      simProfile: profile.id,
+      simProvisioningAttempt: { id: attemptId, status: "opening_balances" },
+      controlAccounts: control,
+    };
+    if (sampleTemplateAttempt) {
+      settings.sampleTemplateAttempt = {
+        version: 1,
+        profileId: sampleTemplateAttempt.profileId,
+        seed: sampleTemplateAttempt.seed,
+        stage: "provisioning",
+        attemptedAt,
+      };
+    }
     // Turn labor costing ON when the chart has the labor-flow accounts (T&M builds).
     if (accounts.laborWip && accounts.laborClearing) {
       settings.laborCosting = { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] };
@@ -535,25 +556,60 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods, employees, timeTypeId, laborItemId, engagements, jobs, subscriptions };
   });
 
-  // Opening balances — posted OUTSIDE the provisioning bypass block (createScriptJournal
-  // opens its own transaction; running it inside withBypass's pinned tx would nest and
-  // prematurely commit). Scaled so different companies open at different sizes.
-  const scale = profile.openingScale ?? (profile.industry === "construction" ? "2.5" : "1");
-  await withOrgContext(world.orgId, () =>
-    createScriptJournal(
-      world.orgId,
-      world.actors.controller,
-      {
-        documentDate: window.startDate,
-        memo: "Opening balances",
-        referenceNumber: "OPENING",
-        lines: openingBalanceLines(world.accounts, scale),
-      },
-      { post: true },
-    ),
-  );
+  try {
+    // This second transaction is crash-recoverable: the committed org carries
+    // its attempt id until opening balances post and the attempt is finalized.
+    const scale = profile.openingScale ?? (profile.industry === "construction" ? "2.5" : "1");
+    await withOrgContext(world.orgId, () =>
+      createScriptJournal(
+        world.orgId,
+        world.actors.controller,
+        {
+          documentDate: window.startDate,
+          memo: "Opening balances",
+          referenceNumber: "OPENING",
+          lines: openingBalanceLines(world.accounts, scale),
+        },
+        { post: true },
+      ),
+    );
+    const finalized = await withBypassContext(() => db.execute<{ id: string }>(sql`
+      update orgs
+         set settings = settings - 'simProvisioningAttempt', updated_at = now()
+       where id = ${world.orgId}
+         and settings->'simProvisioningAttempt'->>'id' = ${attemptId}
+         and settings->'simProvisioningAttempt'->>'status' = 'opening_balances'
+      returning id
+    `));
+    if (finalized.rows.length !== 1) throw new Error(`SIM provisioning attempt ${attemptId} lost org ${world.orgId} before completion`);
+  } catch (error) {
+    try {
+      await wipeSimOrg(world.orgId);
+    } catch (cleanupError) {
+      throw new Error(
+        `SIM provisioning failed for org ${world.orgId} and cleanup could not complete; retry provisioning to reconcile the tagged attempt`,
+        { cause: new AggregateError([error, cleanupError], "SIM provisioning and cleanup both failed") },
+      );
+    }
+    throw error;
+  }
 
   return world;
+}
+
+/** Remove abandoned phase-two attempts after a process crash. The identity
+ * predicate inside wipeSimOrg is rechecked under lock for every delete pass. */
+async function reconcileIncompleteSimProvisioning(): Promise<void> {
+  const stale = await withBypassContext(async () => {
+    const result = await db.execute<{ id: string }>(sql`
+      select id
+        from orgs
+       where settings->'simProvisioningAttempt'->>'status' = 'opening_balances'
+         and created_at < now() - interval '30 minutes'
+       order by created_at asc`);
+    return result.rows;
+  });
+  for (const { id } of stale) await wipeSimOrg(id);
 }
 
 /** Completely remove a tagged SIM org, including posted and append-only

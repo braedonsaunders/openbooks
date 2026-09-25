@@ -983,10 +983,11 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   return dropDisposableOrgEscaped(orgId, "scratch");
 }
 
-/** SIM cleanup shares the comprehensive delete machinery, never the Scratch
- * identity exception or fixture-pool lease handling. */
+/** Product SIM cleanup shares the comprehensive delete machinery, never the
+ * Scratch identity exception or fixture-pool lease handling. Its exact SIM
+ * name/tag predicate is the safety boundary; unlike test fixtures it must also
+ * recover tagged transient tenants on an application database. */
 export async function dropSimOrg(orgId: string): Promise<void> {
-  await assertFixtureDatabase();
   return withBypassContext(() => dropDisposableOrgEscaped(orgId, "sim"));
 }
 
