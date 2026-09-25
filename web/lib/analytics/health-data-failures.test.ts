@@ -37,6 +37,6 @@ test("Financial Health represents genuinely absent data and disabled budgets wit
   const result = await healthData(period, "00000000-0000-4000-8000-000000000001", null);
   assert.deepEqual(result.segments, { department: [], class: [], location: [] });
   assert.deepEqual(result.items.rows, []);
-  assert.deepEqual(result.budget, { scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } });
+  assert.deepEqual(result.budget, { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } });
   assert.ok(!state.queries.some(query => query.includes(state.fail)));
 });
