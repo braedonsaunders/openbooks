@@ -148,9 +148,11 @@ export interface DcYearRates {
   /**
    * Paid Family Leave employer rate for the year (2026: 0.75% of covered
    * wages each quarter, no cap stated). Self-employed opt-in and coverage
-   * nuances ride a later employer-fact channel.
+   * nuances ride a later employer-fact channel. Omitted for years before
+   * the program existed: pricing OPFL for such a year refuses by name
+   * rather than assuming a rate.
    */
-  opflRate: string;
+  opflRate?: string;
 }
 
 /**
@@ -364,7 +366,14 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export function dcOpflWithholding(payDate: string, coveredWages: string): string {
   const rates = dcRatesForPayDate(payDate);
-  return D(mulRateCents(U(coveredWages), rates.opflRate));
+  const rate = rates.opflRate;
+  if (rate == null) {
+    throw new PayrollError(
+      `District of Columbia Paid Family Leave has no transcribed employer rate for ${rates.year}. `
+      + "Transcribe the year's rate before calculating — refused by name",
+    );
+  }
+  return D(mulRateCents(U(coveredWages), rate));
 }
 
 export const DC_FACTOR_LABELS: Readonly<Record<string, string>> = {
