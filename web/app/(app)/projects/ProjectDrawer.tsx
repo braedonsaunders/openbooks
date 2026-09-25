@@ -36,7 +36,6 @@ import {
   type UnbilledClient,
   type EffectiveInvoicingClient,
 } from './tabs/BillingSection'
-import { formatMoney } from '@openbooks/engine/src/money/money.ts'
 import { SUBDIVISIONS } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
@@ -244,7 +243,7 @@ export function ProjectDrawer({
     return { value: entry.code, label }
   }), [locale])
   const [contractValue, setContractValue] = useState<string>(
-    payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '',
+    payload.contractValue ?? '',
   )
   const [notes, setNotes] = useState<string>(pr.notes ?? '')
   const [custom, setCustom] = useState<Record<string, unknown>>(
@@ -345,7 +344,7 @@ export function ProjectDrawer({
     setStartsOn(pr.starts_on ?? '')
     setEndsOn(pr.ends_on ?? '')
     setSiteJurisdiction(pr.site_jurisdiction ?? '')
-    setContractValue(payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '')
+    setContractValue(payload.contractValue ?? '')
     setNotes(pr.notes ?? '')
     setCustom(pr.custom ?? {})
     setSubsidiaryId(pr.subsidiary_id ?? '')

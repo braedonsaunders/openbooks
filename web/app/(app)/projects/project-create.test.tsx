@@ -101,7 +101,7 @@ const NEW_PAYLOAD = {
     project_type_id: null,
     invoicing_preference: null,
   },
-  contractValue: null,
+  contractValue: "100.0049",
   customerName: null,
   foremanName: null,
   managerName: null,
@@ -250,7 +250,7 @@ test("save posts once with a stable idempotency key, then opens the record", asy
   assert.ok(isUuid(key ?? ""), "the POST carries a UUID idempotency key");
   const body = JSON.parse(String(posts[0]!.init?.body)) as Record<string, unknown>;
   assert.equal(body.name, "Harbourview Tower");
-  assert.equal(body.isActive, true, "creates default to active");
+  assert.deepEqual([body.isActive, body.contractValue], [true, "100.0049"]);
   assert.deepEqual(globalThis.__projectCreateRouter!.replaces, [
     "/projects?project=44444444-4444-4444-8444-444444444444",
   ]);
