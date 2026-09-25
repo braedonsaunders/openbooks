@@ -788,7 +788,8 @@
         "slots": {
           "paye": "PAYE a recolher (imposto de renda)",
           "nic": "National Insurance a recolher (classe 1 de funcionário e empregador)",
-          "student-loans": "Deduções de empréstimo estudantil e de pós-graduação a recolher"
+          "student-loans": "Deduções de empréstimo estudantil e de pós-graduação a recolher",
+          "apprenticeship-levy": "Apprenticeship Levy a recolher (empregador)"
         }
       },
       "IE": {

@@ -788,7 +788,8 @@
         "slots": {
           "paye": "PAYE por pagar (impuesto sobre la renta)",
           "nic": "National Insurance por pagar (clase 1 de empleado y empleador)",
-          "student-loans": "Deducciones de préstamos estudiantiles y de posgrado por pagar"
+          "student-loans": "Deducciones de préstamos estudiantiles y de posgrado por pagar",
+          "apprenticeship-levy": "Apprenticeship Levy por pagar (empleador)"
         }
       },
       "IE": {

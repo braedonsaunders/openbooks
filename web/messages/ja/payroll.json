@@ -788,7 +788,8 @@
         "slots": {
           "paye": "PAYE未払金（所得税）",
           "nic": "National Insurance未払金（従業員・事業主負担クラス1）",
-          "student-loans": "学生ローン・大学院ローン控除未払金"
+          "student-loans": "学生ローン・大学院ローン控除未払金",
+          "apprenticeship-levy": "Apprenticeship Levy未払金（事業主負担）"
         }
       },
       "IE": {

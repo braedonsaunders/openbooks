@@ -788,7 +788,8 @@
         "slots": {
           "paye": "Verbindlichkeiten aus PAYE (Einkommensteuer)",
           "nic": "Verbindlichkeiten aus National Insurance (Klasse-1-Beiträge von Arbeitnehmer und Arbeitgeber)",
-          "student-loans": "Verbindlichkeiten aus Studienkredit- und Postgraduiertenkredit-Abzügen"
+          "student-loans": "Verbindlichkeiten aus Studienkredit- und Postgraduiertenkredit-Abzügen",
+          "apprenticeship-levy": "Verbindlichkeiten aus Apprenticeship Levy (Arbeitgeber)"
         }
       },
       "IE": {

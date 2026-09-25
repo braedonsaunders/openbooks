@@ -788,7 +788,8 @@
         "slots": {
           "paye": "PAYE à payer (impôt sur le revenu)",
           "nic": "National Insurance à payer (classe 1 employé et employeur)",
-          "student-loans": "Retenues de prêts étudiants et de troisième cycle à payer"
+          "student-loans": "Retenues de prêts étudiants et de troisième cycle à payer",
+          "apprenticeship-levy": "Apprenticeship Levy à payer (employeur)"
         }
       },
       "IE": {
