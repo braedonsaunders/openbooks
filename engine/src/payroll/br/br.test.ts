@@ -29,7 +29,7 @@ import {
 import { resolveObservedHolidays, undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 import { buildResolution } from "../statutory-rates.ts";
 
-const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8" };
+const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8", regimeTributario: "geral" };
 
 function brContext(overrides: Record<string, unknown> = {}): PayrollStatutoryComputeContext {
   return {
@@ -242,6 +242,24 @@ test("BR salário-família pays the 2026 quota per qualifying child under the ce
   );
   assert.equal(qualifying["BR_SALARIO_FAMILIA"], "67.5400");
 });
+test("BR Simples Annex III accrues no separate employer CPP; undeclared regime refuses", async () => {
+  // LC 123/2006 art. 13 VI folds CPP into the DAS: a Simples III employer
+  // paying R$ 10.000 accrues no separate 20% patronal, RAT or terceiros —
+  // only FGTS — while an undeclared regime refuses by name.
+  const simples3 = await computeBrStatutoryWithRates(
+    brContext({ income: "10000.00", pensionable: "10000.00", insurable: "10000.00" }),
+    { ...RATES, regimeTributario: "simples_3" },
+  );
+  assert.equal(simples3["BR_PATRONAL"], "0.0000");
+  assert.equal(simples3["BR_RAT"], "0.0000");
+  assert.equal(simples3["BR_TERCEIROS"], "0.0000");
+  assert.equal(simples3["BR_FGTS"], "800.0000");
+  await assert.rejects(
+    computeBrStatutoryWithRates(brContext({}), { ...RATES, regimeTributario: null }),
+    /br_regime_tributario is not declared/,
+  );
+});
+
 test("BR rate lookup carries the region, or no saved rate resolves", () => {
   // Every br_* row carries a region (the schema forbids an account-scoped
   // row without one), so the scope the pack hands the resolution must carry

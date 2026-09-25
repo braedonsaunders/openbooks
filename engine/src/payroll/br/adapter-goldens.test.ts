@@ -59,7 +59,7 @@ function brAdapterContext(salary: string, dependentes: string): RunLines {
   return { ctx, lines };
 }
 
-const RATES = { ratPct: "2", fap: "1", terceirosPct: "5.8" };
+const RATES = { ratPct: "2", fap: "1", terceirosPct: "5.8", regimeTributario: "geral" };
 
 test("adapter: R$ 6.000 payslip pushes IRRF + INSS + all four employer lines, assessed honestly", async () => {
   const { ctx, lines } = brAdapterContext("6000.00", "0");
@@ -131,15 +131,15 @@ test("adapter: R$ 5.000 Maria payslip — IRRF zeroes, INSS and employer cost re
 test("adapter: undeclared employer rates refuse by slot name", async () => {
   const { ctx } = brAdapterContext("6000.00", "0");
   await assert.rejects(
-    computeBrStatutoryWithRates(ctx, { ratPct: null, fap: "1", terceirosPct: "5.8" }),
+    computeBrStatutoryWithRates(ctx, { ratPct: null, fap: "1", terceirosPct: "5.8", regimeTributario: "geral" }),
     /br_rat/,
   );
   await assert.rejects(
-    computeBrStatutoryWithRates(ctx, { ratPct: "2", fap: null, terceirosPct: "5.8" }),
+    computeBrStatutoryWithRates(ctx, { ratPct: "2", fap: null, terceirosPct: "5.8", regimeTributario: "geral" }),
     /br_fap/,
   );
   await assert.rejects(
-    computeBrStatutoryWithRates(ctx, { ratPct: "2", fap: "1", terceirosPct: null }),
+    computeBrStatutoryWithRates(ctx, { ratPct: "2", fap: "1", terceirosPct: null, regimeTributario: "geral" }),
     /br_terceiros/,
   );
 });
