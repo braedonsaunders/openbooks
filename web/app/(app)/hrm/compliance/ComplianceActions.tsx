@@ -132,29 +132,44 @@ export function ComplianceActions({
     )
   }
 
-  const buttons: Array<{ key: string; label: string; run: () => void }> = []
-  if (actionKind === 'finding' && rowStatus === 'open') {
-    buttons.push({ key: 'ack', label: acknowledgeLabel, run: acknowledge })
-  }
-  if (actionKind === 'finding' && (rowStatus === 'open' || rowStatus === 'acknowledged')) {
-    buttons.push({ key: 'resolve', label: resolveLabel, run: resolve })
-  }
-  if (actionKind === 'entry' && rowStatus === 'computed') {
-    buttons.push({ key: 'approve', label: approveLabel, run: approve })
-    buttons.push({ key: 'void', label: voidLabel, run: voidEntry })
-  }
-  if (actionKind === 'run' && rowStatus === 'generated') {
-    buttons.push({ key: 'submit', label: submitLabel, run: submit })
-  }
-  if (buttons.length === 0) return null
+  // Buttons render inline with direct handler references: storing the
+  // ref-guarded handlers in a render-built array trips
+  // react-hooks/refs (a ref-capturing closure must not ride render
+  // output), while a JSX onClick reference is the exempt shape every
+  // sibling island uses.
+  const showAcknowledge = actionKind === 'finding' && rowStatus === 'open'
+  const showResolve = actionKind === 'finding' && (rowStatus === 'open' || rowStatus === 'acknowledged')
+  const showEntry = actionKind === 'entry' && rowStatus === 'computed'
+  const showSubmit = actionKind === 'run' && rowStatus === 'generated'
+  if (!showAcknowledge && !showResolve && !showEntry && !showSubmit) return null
 
   return (
     <span className="inline-flex items-center gap-1.5">
-      {buttons.map((button) => (
-        <Button key={button.key} size="sm" variant="outline" onClick={button.run} disabled={pending}>
-          {button.label}
+      {showAcknowledge ? (
+        <Button size="sm" variant="outline" onClick={acknowledge} disabled={pending}>
+          {acknowledgeLabel}
         </Button>
-      ))}
+      ) : null}
+      {showResolve ? (
+        <Button size="sm" variant="outline" onClick={resolve} disabled={pending}>
+          {resolveLabel}
+        </Button>
+      ) : null}
+      {showEntry ? (
+        <Button size="sm" variant="outline" onClick={approve} disabled={pending}>
+          {approveLabel}
+        </Button>
+      ) : null}
+      {showEntry ? (
+        <Button size="sm" variant="outline" onClick={voidEntry} disabled={pending}>
+          {voidLabel}
+        </Button>
+      ) : null}
+      {showSubmit ? (
+        <Button size="sm" variant="outline" onClick={submit} disabled={pending}>
+          {submitLabel}
+        </Button>
+      ) : null}
     </span>
   )
 }
