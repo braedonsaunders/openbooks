@@ -415,8 +415,52 @@ export interface UnbilledOpts {
  *     (billed_by_line_id null), valued at amount × markup (cost_multiplier).
  * This is a statistical projection, NOT a ledger balance (see the WIP note in the
  * plan) — idempotency rests on the provenance columns, not this number.
+ *
+ * The time and cost rollups are independent statements. Running them as pooled
+ * READ COMMITTED queries lets a rehome (time or cost lines moved between
+ * projects) land between the statements and produce an aggregate whose halves
+ * observe different generations — I5-platform-113. Pin a REPEATABLE READ READ
+ * ONLY snapshot (the same boundary projectCostSummary draws in this file) so
+ * both halves observe one committed generation. If a caller already owns a
+ * tenant transaction, participate in that transaction instead.
  */
 export async function projectUnbilled(orgId: string, projectId: string, opts: UnbilledOpts = {}): Promise<ProjectUnbilled> {
+  const active = orgContext.getStore()
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) {
+      throw new Error('cannot change organization inside an active tenant transaction')
+    }
+    return projectUnbilledInSnapshot(orgId, projectId, opts)
+  }
+
+  const client = await pool.connect()
+  try {
+    await client.query('begin isolation level repeatable read read only')
+    // Scope this transaction after BEGIN so the tenant setting is local to the
+    // snapshot and resets when the client is committed or rolled back.
+    await client.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [orgId],
+    )
+    const txDb = drizzle({ client })
+    const unbilled = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
+      await projectUnbilledInSnapshot(orgId, projectId, opts),
+    )
+    await client.query('commit')
+    return unbilled
+  } catch (error) {
+    try {
+      await client.query('rollback')
+    } catch {
+      // A broken connection is discarded when released.
+    }
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts: UnbilledOpts = {}): Promise<ProjectUnbilled> {
   const dateFilter = sql.join(
     [
       opts.startDate ? sql` and te.worked_on >= ${opts.startDate}` : sql``,
