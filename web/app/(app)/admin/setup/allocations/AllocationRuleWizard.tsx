@@ -91,6 +91,9 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   const [options, setOptions] = useState<PickerOptions | null>(null)
   const [drivers, setDrivers] = useState<WizardDriver[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
+  // A refused drivers list is not an empty drivers list: without this the
+  // split step shows "no drivers yet" and the driver path stays disabled.
+  const [driversError, setDriversError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [requestKey, setRequestKey] = useState(0)
 
@@ -101,6 +104,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
     let live = true
     const load = async () => {
       setLoadError(null)
+      setDriversError(null)
       const [optionsRes, driversRes] = await Promise.all([
         fetch('/api/allocations/options', { signal: controller.signal }),
         fetch('/api/allocations/drivers', { signal: controller.signal }),
@@ -127,6 +131,8 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
       if (driversRes.ok) {
         const body = (await driversRes.json()) as { drivers?: WizardDriver[] }
         setDrivers((body.drivers ?? []).filter((driver) => driver.isActive && knownDriverDimension(driver.dimension)))
+      } else {
+        setDriversError(t('drivers.loadFailed'))
       }
     }
     void load().catch((error: unknown) => {
@@ -564,7 +570,9 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
             disabled={drivers.length === 0}
             onClick={() => drivers.length > 0 && set('splitKind', 'driver')}
           />
-          {drivers.length === 0 ? (
+          {driversError ? (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">{driversError}</p>
+          ) : drivers.length === 0 ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('wizard.split.driverEmpty')}</p>
           ) : null}
           {draft.splitKind === 'driver' && drivers.length > 0 ? (
