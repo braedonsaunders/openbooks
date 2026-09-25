@@ -130,41 +130,45 @@ function clickRemove() {
   return btn
 }
 
-test('removing a feed connection confirms first', async (t) => {
-  globalThis.__feedConfirmAnswer = true
-  const { host, root } = await mount()
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await act(async () => {
-    clickRemove().click()
-    await tick()
-    await tick()
-  })
-  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'Remove must confirm before deleting')
-  assert.match(globalThis.__feedConfirmCalls?.[0] ?? '', /Remove this connection/)
-  assert.deepEqual(globalThis.__feedDeletes, ['/api/banking/bank-feeds/conn-1'])
-})
+const removeCases: Array<{
+  kind: string
+  leftAlone: string
+  mount: () => Promise<{ host: HTMLDivElement; root: { unmount(): void } }>
+  press: (host: HTMLDivElement) => void
+  confirm: RegExp
+  deleted: string
+}> = [
+  { kind: 'feed connection', leftAlone: 'the connection', mount, press: () => { clickRemove().click() }, confirm: /Remove this connection/, deleted: '/api/banking/bank-feeds/conn-1' },
+  { kind: 'SFTP server', leftAlone: 'the server', mount: mountSftpRemoves, press: (host) => { serverRemoveButton(host).click() }, confirm: /Remove this SFTP login/, deleted: '/api/banking/sftp/srv-1' },
+  { kind: 'routing schedule', leftAlone: 'the schedule', mount: mountSftpRemoves, press: (host) => { scheduleRemoveButton(host).click() }, confirm: /Remove this routing schedule/, deleted: '/api/banking/sftp/schedules/sched-1' },
+]
 
-test('cancelling the confirm leaves the connection alone', async (t) => {
-  globalThis.__feedConfirmAnswer = false
-  const { host, root } = await mount()
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await act(async () => {
-    clickRemove().click()
-    await tick()
-    await tick()
-  })
-  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'Remove must confirm before deleting')
-  assert.deepEqual(globalThis.__feedDeletes, [], 'a cancelled confirm must not delete')
+test('removing a connection confirms first; cancelling leaves it alone (F4T2-12)', async () => {
+  for (const confirmed of [true, false]) {
+    for (const removeCase of removeCases) {
+      globalThis.__feedConfirmAnswer = confirmed
+      const { host, root } = await removeCase.mount()
+      try {
+        await act(async () => {
+          removeCase.press(host)
+          await tick()
+          await tick()
+        })
+        assert.equal(globalThis.__feedConfirmCalls?.length, 1, `${removeCase.kind} Remove must confirm before deleting`)
+        if (confirmed) {
+          assert.match(globalThis.__feedConfirmCalls?.[0] ?? '', removeCase.confirm)
+          assert.deepEqual(globalThis.__feedDeletes, [removeCase.deleted])
+        } else {
+          assert.deepEqual(globalThis.__feedDeletes, [], `a cancelled confirm must not delete ${removeCase.leftAlone}`)
+        }
+      } finally {
+        await act(async () => {
+          root.unmount()
+        })
+        host.remove()
+      }
+    }
+  }
 })
 
 async function mountSftpSchedules(
@@ -448,72 +452,6 @@ function scheduleRemoveButton(host: Element): HTMLButtonElement {
   assert.ok(btn, 'the schedule row must offer Remove')
   return btn
 }
-
-async function clickButton(btn: HTMLButtonElement) {
-  await act(async () => {
-    btn.click()
-    await tick()
-    await tick()
-  })
-}
-
-test('removing an SFTP server confirms first (F4T2-12)', async (t) => {
-  globalThis.__feedConfirmAnswer = true
-  const { host, root } = await mountSftpRemoves()
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickButton(serverRemoveButton(host))
-  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'server Remove must confirm before deleting')
-  assert.match(globalThis.__feedConfirmCalls?.[0] ?? '', /Remove this SFTP login/)
-  assert.deepEqual(globalThis.__feedDeletes, ['/api/banking/sftp/srv-1'])
-})
-
-test('cancelling the server confirm leaves the login alone (F4T2-12)', async (t) => {
-  globalThis.__feedConfirmAnswer = false
-  const { host, root } = await mountSftpRemoves()
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickButton(serverRemoveButton(host))
-  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'server Remove must confirm before deleting')
-  assert.deepEqual(globalThis.__feedDeletes, [], 'a cancelled confirm must not delete the server')
-})
-
-test('removing a routing schedule confirms first (F4T2-12)', async (t) => {
-  globalThis.__feedConfirmAnswer = true
-  const { host, root } = await mountSftpRemoves()
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickButton(scheduleRemoveButton(host))
-  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'schedule Remove must confirm before deleting')
-  assert.match(globalThis.__feedConfirmCalls?.[0] ?? '', /Remove this routing schedule/)
-  assert.deepEqual(globalThis.__feedDeletes, ['/api/banking/sftp/schedules/sched-1'])
-})
-
-test('cancelling the schedule confirm leaves the route alone (F4T2-12)', async (t) => {
-  globalThis.__feedConfirmAnswer = false
-  const { host, root } = await mountSftpRemoves()
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  await clickButton(scheduleRemoveButton(host))
-  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'schedule Remove must confirm before deleting')
-  assert.deepEqual(globalThis.__feedDeletes, [], 'a cancelled confirm must not delete the schedule')
-})
 
 // F4T2-13 (pause/resume PATCH, binding PATCH, add-route POST and the SFTP
 // auto-route follow-up POST refreshed without checking status — the SFTP

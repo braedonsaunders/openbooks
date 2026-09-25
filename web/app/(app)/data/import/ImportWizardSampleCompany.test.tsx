@@ -301,29 +301,20 @@ test('the wizard does not send a commit when retry-key session storage cannot pe
   ))
 })
 
-test('a non-JSON parse refusal is shown by name instead of a JSON syntax error', async (t) => {
-  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
-  await mountWizard(t)
-  script.importFailureMode = 'parse'
-  await chooseImportSource()
-  await clickImportAction('Continue')
+for (const stage of [
+  { mode: 'parse' as const, clicks: ['Continue'], requests: ['parse'], error: /Could not read the import file\. \(status 502\)/ },
+  { mode: 'preview' as const, clicks: ['Continue', 'Preview'], requests: ['parse', 'preview'], error: /Could not preview this import\. \(status 502\)/ },
+]) {
+  test(`a non-JSON ${stage.mode} refusal is shown by name instead of a JSON syntax error`, async (t) => {
+    script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
+    await mountWizard(t)
+    script.importFailureMode = stage.mode
+    await chooseImportSource()
+    for (const label of stage.clicks) await clickImportAction(label)
 
-  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse'])
-  assert.ok((globalThis.__sampleTestToasts ?? []).some(
-    ({ kind, message }) => kind === 'error' && /Could not read the import file\. \(status 502\)/.test(message),
-  ))
-})
-
-test('a non-JSON preview refusal is shown by name instead of a JSON syntax error', async (t) => {
-  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
-  await mountWizard(t)
-  script.importFailureMode = 'preview'
-  await chooseImportSource()
-  await clickImportAction('Continue')
-  await clickImportAction('Preview')
-
-  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse', 'preview'])
-  assert.ok((globalThis.__sampleTestToasts ?? []).some(
-    ({ kind, message }) => kind === 'error' && /Could not preview this import\. \(status 502\)/.test(message),
-  ))
-})
+    assert.deepEqual(script.importRequests.map(({ mode }) => mode), stage.requests)
+    assert.ok((globalThis.__sampleTestToasts ?? []).some(
+      ({ kind, message }) => kind === 'error' && stage.error.test(message),
+    ))
+  })
+}

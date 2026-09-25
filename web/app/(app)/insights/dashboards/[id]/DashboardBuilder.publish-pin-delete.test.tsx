@@ -144,45 +144,30 @@ function errors(): string[] {
   return (globalThis.__builderToasts ?? []).filter((t) => t.kind === 'error').map((t) => t.message)
 }
 
-test('a non-JSON 500 on publish names the failure and releases the button', async (t) => {
-  const { host, root } = await mount()
-  t.after(async () => {
-    await act(async () => {
-      root.unmount()
+for (const action of [
+  { name: 'publish', label: 'Publish', path: '/api/insights/dashboards/d-1/publish', error: /Update failed \(status 500\)/ },
+  { name: 'pin', label: 'Pin to home', path: '/api/insights/dashboards/d-1/pin', error: /Could not update pin \(status 500\)/ },
+] as const) {
+  test(`a non-JSON 500 on ${action.name} names the failure and releases the button`, async (t) => {
+    const { host, root } = await mount()
+    t.after(async () => {
+      await act(async () => {
+        root.unmount()
+      })
+      host.remove()
     })
-    host.remove()
-  })
-  on('POST', '/api/insights/dashboards/d-1/publish', async () => new Response('', { status: 500 }))
-  await act(async () => {
-    findButton(document.body, 'Publish').click()
-    await tick()
-    await tick()
-    await tick()
-  })
-  assert.match(errors().join('\n'), /Update failed \(status 500\)/)
-  const publish = findButton(document.body, 'Publish')
-  assert.equal(publish.disabled, false, 'busy releases after the failed publish')
-})
-
-test('a non-JSON 500 on pin names the failure and releases the button', async (t) => {
-  const { host, root } = await mount()
-  t.after(async () => {
+    on('POST', action.path, async () => new Response('', { status: 500 }))
     await act(async () => {
-      root.unmount()
+      findButton(document.body, action.label).click()
+      await tick()
+      await tick()
+      await tick()
     })
-    host.remove()
+    assert.match(errors().join('\n'), action.error)
+    const button = findButton(document.body, action.label)
+    assert.equal(button.disabled, false, `busy releases after the failed ${action.name}`)
   })
-  on('POST', '/api/insights/dashboards/d-1/pin', async () => new Response('', { status: 500 }))
-  await act(async () => {
-    findButton(document.body, 'Pin to home').click()
-    await tick()
-    await tick()
-    await tick()
-  })
-  assert.match(errors().join('\n'), /Could not update pin \(status 500\)/)
-  const pin = findButton(document.body, 'Pin to home')
-  assert.equal(pin.disabled, false, 'busy releases after the failed pin')
-})
+}
 
 test('a non-JSON 500 on delete names the failure and releases the button', async (t) => {
   const { host, root } = await mount({ confirm: true, create: true })

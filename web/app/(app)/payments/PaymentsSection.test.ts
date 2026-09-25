@@ -161,15 +161,20 @@ async function renderSection(
   return { drawer: el.props.drawer, emptyAction: el.props.emptyAction, canManage: el.props.canManage };
 }
 
-test("an ap.pay-only user with ?paymentNew=1 gets the editable create drawer", async () => {
-  const section = (await renderSection("vendor_payment", ["ap.pay"], { paymentNew: "1" }, true))!;
-  assert.ok(section, "section renders for a payer");
-  assert.equal(section.canManage, false);
-  assert.ok(section.drawer, "the create drawer opens without the customization right");
-  assert.equal(section.drawer.props.createMode, true);
-  assert.equal(section.drawer.props.initialMode, "edit");
-  assert.ok(section.emptyAction, "the New payment button is still offered");
-});
+for (const party of [
+  { kind: "vendor_payment", grant: "ap.pay", party: "payer", button: "the New payment button is still offered", initialMode: "edit" as const },
+  { kind: "customer_payment", grant: "ar.pay", party: "receiver", button: "the New receipt button is still offered", initialMode: undefined },
+] as const) {
+  test(`an ${party.grant.replace(".pay", "")}.pay-only user with ?paymentNew=1 gets the editable create drawer`, async () => {
+    const section = (await renderSection(party.kind, [party.grant], { paymentNew: "1" }, true))!;
+    assert.ok(section, `section renders for a ${party.party}`);
+    assert.equal(section.canManage, false);
+    assert.ok(section.drawer, "the create drawer opens without the customization right");
+    assert.equal(section.drawer.props.createMode, true);
+    if (party.initialMode !== undefined) assert.equal(section.drawer.props.initialMode, party.initialMode);
+    assert.ok(section.emptyAction, party.button);
+  });
+}
 
 test("the same payer without ?paymentNew=1 sees New payment and no drawer", async () => {
   const section = (await renderSection("vendor_payment", ["ap.pay"], {}, true))!;
@@ -181,15 +186,6 @@ test("the same payer without ?paymentNew=1 sees New payment and no drawer", asyn
 test("a user without ap.pay never sees New payment", async () => {
   assert.equal(await renderSection("vendor_payment", ["gl.read"], { paymentNew: "1" }, false), null);
   assert.equal(await renderSection("vendor_payment", ["gl.read"], {}, false), null);
-});
-
-test("an ar.pay-only user on receipts with ?paymentNew=1 gets the editable create drawer", async () => {
-  const section = (await renderSection("customer_payment", ["ar.pay"], { paymentNew: "1" }, true))!;
-  assert.ok(section, "section renders for a receiver");
-  assert.equal(section.canManage, false);
-  assert.ok(section.drawer, "the create drawer opens without the customization right");
-  assert.equal(section.drawer.props.createMode, true);
-  assert.ok(section.emptyAction, "the New receipt button is still offered");
 });
 
 test("withholding canCreate hides both the button and the drawer", async () => {

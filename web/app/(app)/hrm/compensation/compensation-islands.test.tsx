@@ -236,17 +236,13 @@ async function submitPct(pctValue: string): Promise<{ postedCount: number; body:
   return result;
 }
 
-test("an unparseable percent is refused by name and never posted", async () => {
-  const refused = await submitPct("abc");
-  assert.equal(refused.postedCount, 0, "garbage never reaches the route as a null proposal");
-  assert.ok(refused.text.includes(PROPOSE_LABELS.pctInvalid), "the named refusal renders beside the form");
-});
-
-test("a negative percent is refused by name and never posted", async () => {
-  const refused = await submitPct("-2");
-  assert.equal(refused.postedCount, 0, "a negative raise never reaches the route");
-  assert.ok(refused.text.includes(PROPOSE_LABELS.pctInvalid), "the named refusal renders beside the form");
-});
+for (const input of ["abc", "-2"]) {
+  test(`an unpostable percent (${input}) is refused by name and never posted`, async () => {
+    const refused = await submitPct(input);
+    assert.equal(refused.postedCount, 0, "bad input never reaches the route");
+    assert.ok(refused.text.includes(PROPOSE_LABELS.pctInvalid), "the named refusal renders beside the form");
+  });
+}
 
 test("a valid percent posts the canonical decimal string", async () => {
   const sent = await submitPct("3.50");

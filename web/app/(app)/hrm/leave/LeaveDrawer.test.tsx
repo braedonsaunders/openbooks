@@ -284,20 +284,25 @@ test("a manager-capable actor sees the on-behalf mode and files with onBehalf", 
   });
 });
 
-test("the on-behalf mode refuses to file without naming the employee", async (t) => {
-  (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
-  const script: Script = { posts: [] };
-  const restoreFetch = installFetch(script, true);
-  t.after(restoreFetch);
-  const { unmount } = await mountFiling();
-  t.after(unmount);
+for (const mode of [
+  { name: "on-behalf", employments: true, setup: async () => { await click(radios()[1]!); }, subject: "employee", copy: /Pick the employee this request is filed for/ },
+  { name: "self-service", employments: false, setup: async () => {}, subject: "employment", copy: /Pick the employment this request is filed for/ },
+] as const) {
+  test(`the ${mode.name} mode refuses to file without naming the ${mode.subject}`, async (t) => {
+    (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
+    const script: Script = { posts: [] };
+    const restoreFetch = installFetch(script, mode.employments);
+    t.after(restoreFetch);
+    const { unmount } = await mountFiling();
+    t.after(unmount);
 
-  await click(radios()[1]!);
-  await click(buttonNamed("New request"));
+    await mode.setup();
+    await click(buttonNamed("New request"));
 
-  assert.equal(script.posts.length, 0, "no POST leaves without a named target employee");
-  assert.match(document.body.textContent ?? "", /Pick the employee this request is filed for/);
-});
+    assert.equal(script.posts.length, 0, `no POST leaves without a named target ${mode.subject}`);
+    assert.match(document.body.textContent ?? "", mode.copy);
+  });
+}
 
 test("a leave type requiring evidence attaches a selected File Cabinet file before finishing filing", async (t) => {
   (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };

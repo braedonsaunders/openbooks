@@ -317,21 +317,18 @@ function boardQuery(): string {
   return found[0]!
 }
 
-test('the board filters by the carried owner scope', async () => {
-  boardState.queries = []
-  await loadOpportunities({ view: 'board', undated: '1', owner: OWNER })
-  const text = boardQuery()
-  assert.ok(text.includes('owner_user_id'), 'the board query must predicate on the owner')
-  assert.ok(text.includes(OWNER), 'the board query must carry the owner id')
-})
-
-test('the board filters by the carried team scope', async () => {
-  boardState.queries = []
-  await loadOpportunities({ view: 'board', undated: '1', team: TEAM })
-  const text = boardQuery()
-  assert.ok(text.includes('sales_team_id'), 'the board query must predicate on the team')
-  assert.ok(text.includes(TEAM), 'the board query must carry the team id')
-})
+for (const scope of [
+  { name: 'owner', param: { owner: OWNER }, column: 'owner_user_id', id: OWNER },
+  { name: 'team', param: { team: TEAM }, column: 'sales_team_id', id: TEAM },
+] as const) {
+  test(`the board filters by the carried ${scope.name} scope`, async () => {
+    boardState.queries = []
+    await loadOpportunities({ view: 'board', undated: '1', ...scope.param })
+    const text = boardQuery()
+    assert.ok(text.includes(scope.column), `the board query must predicate on the ${scope.name}`)
+    assert.ok(text.includes(scope.id), `the board query must carry the ${scope.name} id`)
+  })
+}
 
 test('owner wins over team on the board', async () => {
   boardState.queries = []
