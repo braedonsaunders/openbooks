@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -487,16 +487,24 @@ test("comp classes resolve by priority and refuse when nothing matches", { skip:
   });
 });
 
-test("certified payroll does not offer generic US drafts as submission artifacts", { skip: !DB }, async () => {
+test("certified payroll offers the US pack's declared files and refuses an empty week by name", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const { org, adminId } = h;
     const projectId = await seedProject(org.orgId, "Certified Job");
     const listed = await listFormats(db, org.orgId, adminId);
     assert.equal(listed.packName, "United States");
-    assert.deepEqual(listed.formats, []);
+    // HR-13: the US pack declares its own files (federal weekly + one
+    // state XML) — the generic layer lists whatever the pack declares, so
+    // the old empty-list expectation no longer holds.
+    assert.deepEqual(listed.formats, [
+      { key: "federal-weekly", label: "WH-347 Certified Payroll (federal weekly)" },
+      { key: "state-xml", label: "California certified payroll XML (DIR eCPR)" },
+    ]);
+    // Declared but empty: the third named refusal (the week with no
+    // posted run), never a borrowed form.
     await assertConstructionRefusal(
       () => generate(db, { orgId: org.orgId, actorId: adminId, projectId, weekEnding: "2026-09-13", formatKey: "federal-weekly" }),
-      /The United States payroll pack declares no labor-compliance files/,
+      /No posted pay run covers the week ending 2026-09-13/,
     );
     await db.execute(sql`update orgs set country = 'GB' where id = ${org.orgId}`);
     const gb = await listFormats(db, org.orgId, adminId);
@@ -511,11 +519,41 @@ test("certified payroll does not offer generic US drafts as submission artifacts
 
 test("certified payroll resolves one employment per day and refuses history fan-out", { skip: !DB }, async () => {
   await withHarness(async (h) => {
-    const { org } = h;
+    const { org, adminId } = h;
     const { employmentId: firstId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Certified Worker");
     const resolve = (day: string) => resolveCertifiedEmployment(db, org.orgId, partyId, day);
     assert.equal(await resolve("2026-09-08"), firstId);
-    await db.execute(sql`update worker_employment_versions set effective_to = '2026-01-01' where org_id = ${org.orgId} and employment_id = ${firstId}`);
+    // Retire v1 through the lawful 0184 closing transition: live version
+    // rows are append-only (effective_to can never be rewritten), so the
+    // close (recorded_until + superseded_by + evidence event, one
+    // transaction) retires the first employment and its successor version
+    // ends before the probed day.
+    const v1 = (await db.execute<{ rowId: string; before: unknown }>(sql`
+      select id::text as "rowId", to_jsonb(v) as "before" from worker_employment_versions v
+       where v.org_id = ${org.orgId} and v.employment_id = ${firstId} and v.version_no = 1`)).rows[0];
+    assert.ok(v1, "seeded v1 must exist before the lawful close");
+    const changeId = randomUUID();
+    await withOrgTransaction(org.orgId, async () => {
+      const at = (await db.execute<{ now: string }>(sql`select now()::text as now`)).rows[0]!.now;
+      // Evidence first: closed_by_change_id is a tenant FK to
+      // employment_changes, while the closure proof itself is deferred to
+      // commit — so the event, the close, then the successor.
+      await db.execute(sql`
+        insert into employment_changes
+          (id, org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_source, recorded_by, closed_versions)
+        values (${changeId}, ${org.orgId}, ${firstId}, 1, 'terminated', '{}'::jsonb,
+                'first employment ended; worker rehired under a new employment', 'user', ${adminId},
+                jsonb_build_array(jsonb_build_object('table', 'worker_employment_versions', 'identity', ${firstId}::text,
+                                                     'version_no', 1, 'row_id', ${v1.rowId}::text, 'before', ${JSON.stringify(v1.before)}::jsonb)))`);
+      await db.execute(sql`
+        update worker_employment_versions
+           set recorded_until = ${at}::timestamptz, superseded_by = 2, closed_by_change_id = ${changeId}
+         where org_id = ${org.orgId} and employment_id = ${firstId} and version_no = 1`);
+      await db.execute(sql`
+        insert into worker_employment_versions
+          (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
+        values (${org.orgId}, ${firstId}, 2, 'active', '2020-01-01', '2026-01-01', ${at}::timestamptz)`);
+    });
     const secondId = randomUUID();
     await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${secondId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}, 1)`);
     await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at) values (${org.orgId}, ${secondId}, 1, 'active', '2026-01-01', now())`);
