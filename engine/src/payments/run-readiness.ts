@@ -325,10 +325,21 @@ export async function assertRunPayeesInScope(
  * EFT settings state, per-instruction bank-detail blockers, and subcontractor
  * compliance blockers.
  */
-export async function paymentRunReadiness(runId: string, orgId: string): Promise<{
+export async function paymentRunReadiness(
+  runId: string,
+  orgId: string,
+  // Payees the caller may see (null/undefined = unrestricted). Bank verdicts
+  // and compliance blockers name payees, so every row below is confined to
+  // this set — a rehomed payee outside it reads as missing, never as a
+  // named verdict. Resolve the set under the owners' row locks first.
+  visiblePayeeIds?: ReadonlySet<string> | null,
+): Promise<{
   eft: EftSettingsResult;
   blockers: RunBlocker[];
 }> {
+  const payeeScope = visiblePayeeIds === undefined || visiblePayeeIds === null
+    ? sql``
+    : sql`and i.payee_party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[])`
   const runInfo = (await db.execute<{ method: string; rail: string | null }>(sql`
     select r.method, f.rail
       from payment_runs r
@@ -368,7 +379,7 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
       from payment_instructions i
       join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
       left join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
-     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
+     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled' ${payeeScope}
   `));
 
   const blockers: RunBlocker[] = [];
@@ -392,7 +403,8 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
   // Compliance is re-evaluated here rather than trusted from run creation, and
   // the outcome is frozen so the run's readiness state is evidenced, not just
   // displayed.
-  const compliance = await paymentRunComplianceDecisions(runId, orgId);
+  const compliance = (await paymentRunComplianceDecisions(runId, orgId))
+    .filter((decision) => visiblePayeeIds === undefined || visiblePayeeIds === null || visiblePayeeIds.has(decision.partyId));
   for (const decision of compliance) {
     if (decision.decision === "cleared") continue;
     await recordReleaseCheck({
