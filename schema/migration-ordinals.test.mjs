@@ -5,7 +5,9 @@ import test from "node:test";
 
 const migrationsDirectory = "schema/migrations";
 const generatedDirectory = `${migrationsDirectory}/generated`;
-const bootstrapSource = readFileSync("scripts/bootstrap.ts", "utf8");
+// ARCH-FILE-SPLIT: the transition table, convergence surface, and target
+// validation live in scripts/bootstrap/migration-transitions.ts (was scripts/bootstrap.ts).
+const bootstrapSource = readFileSync("scripts/bootstrap/migration-transitions.ts", "utf8");
 
 function publishedMigrationFiles() {
   return readdirSync(generatedDirectory)

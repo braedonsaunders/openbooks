@@ -10,9 +10,10 @@ const MIGRATIONS_DIR = join(ROOT, 'schema', 'migrations', 'generated')
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex')
 
-// The digest-transition ledger in scripts/bootstrap.ts, parsed from source so
+// The digest-transition ledger in scripts/bootstrap/migration-transitions.ts
+// (split from scripts/bootstrap.ts by ARCH-FILE-SPLIT), parsed from source so
 // this test can never drift from what applyTracked actually enforces.
-const bootstrap = readFileSync(join(ROOT, 'scripts', 'bootstrap.ts'), 'utf8')
+const bootstrap = readFileSync(join(ROOT, 'scripts', 'bootstrap', 'migration-transitions.ts'), 'utf8')
 const TRANSITIONS = [...bootstrap.matchAll(
   /\{\s*filename: "generated\/([^"]+)",\s*from: "([0-9a-f]{64})",\s*to: "([0-9a-f]{64})",\s*strategy: "(restamp|reapply)",/g,
 )].map((match) => ({ file: match[1], from: match[2], to: match[3], strategy: match[4] }))
