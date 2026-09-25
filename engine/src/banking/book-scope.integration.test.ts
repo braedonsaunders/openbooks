@@ -154,10 +154,9 @@ for (const policy of ["inactive", "nonposting", "ambiguous"] as const) {
       const actor = await createScratchUser(org.orgId, "Bank operator", "admin");
       const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
       await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
-      const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "0" }, ctx);
       if (policy === "ambiguous") {
-        // 0345 made a second primary unrepresentable: the insert is refused
-        // at the write boundary and exactly one primary survives.
+        // Sabotage before history exists: with journals or sessions present
+        // the 0102 conversion guard refuses first by design.
         await assert.rejects(
           db.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'ALSO_PRIMARY','Ambiguous primary',true)`),
           (error: unknown) => errorChainMatches(error, /accounting_books_one_primary_per_org/),
@@ -168,6 +167,7 @@ for (const policy of ["inactive", "nonposting", "ambiguous"] as const) {
         assert.equal(primaries?.n, 1, "exactly one primary survives the refused sabotage");
         return;
       }
+      const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "0" }, ctx);
       await db.execute(sql`update accounting_books set is_active=${policy !== 'inactive'},posts_gl=${policy !== 'nonposting'} where org_id=${org.orgId} and id=${org.bookId}`);
       await assert.rejects(reconciliationTotals(recon.id, ctx), /exactly one active primary posting book/);
       await assert.rejects(autoMatch(recon.id, ctx), /exactly one active primary posting book/);

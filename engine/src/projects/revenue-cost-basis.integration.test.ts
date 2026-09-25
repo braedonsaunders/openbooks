@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { syncProjectRevenueContracts } from "./revenue.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -120,7 +121,14 @@ for (const invalid of ["missing-primary", "inactive-primary", "nonposting-primar
       if (invalid === "missing-primary") await db.execute(sql`update accounting_books set is_primary=false where id=${org.bookId}`);
       if (invalid === "inactive-primary") await db.execute(sql`update accounting_books set is_active=false where id=${org.bookId}`);
       if (invalid === "nonposting-primary") await db.execute(sql`update accounting_books set posts_gl=false where id=${org.bookId}`);
-      if (invalid === "ambiguous-primary") await db.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'OTHER','Other',true)`);
+      if (invalid === "ambiguous-primary") {
+        // 0345 made a second primary unrepresentable: pin the write-boundary
+        // refusal and the single survivor instead of building ambiguous data.
+        await assert.rejects(db.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'OTHER','Other',true)`),
+          (error: unknown) => errorChainMatches(error, /accounting_books_one_primary_per_org/));
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]?.n, 1);
+        return;
+      }
       if (invalid === "inactive-owner") {
         const inactive = randomUUID();
         await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active)
