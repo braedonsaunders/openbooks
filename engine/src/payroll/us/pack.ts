@@ -508,6 +508,16 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         { code: "PA-UC", name: "Pennsylvania UC (employee)", systemKey: "pa_uc_employee", kind: "deduction", sequence: 147, assessedOn: "earnings", remittance: "external" },
       ],
     },
+    {
+      key: "ca_sdi_employee",
+      regions: ["CA"],
+      components: [
+        // California State Disability Insurance (2026: 1.3% of all covered
+        // wages, no cap since 2024): an EMPLOYEE deduction, not PIT, so its
+        // own slot rather than the SIT line. Assessed on earnings (gross).
+        { code: "CA-SDI", name: "California SDI (employee)", systemKey: "ca_sdi_employee", kind: "deduction", sequence: 148, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
   ],
   computeStatutory: computeUsStatutory,
   statutoryEngineLabel: "Pub 15-T",

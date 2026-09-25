@@ -25,7 +25,7 @@ import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
-import { caEttWithholding } from "./states/ca.ts";
+import { caEttWithholding, caSdiWithholding } from "./states/ca.ts";
 import { coFamliWithholding } from "./states/co.ts";
 import { dcOpflWithholding } from "./states/dc.ts";
 import { ctPaidLeaveWithholding } from "./states/ct.ts";
@@ -628,6 +628,12 @@ export async function computeUsStatutory(
   // rather than assuming an exempt account. The cap tracks the UI-covered
   // wage base, the same first-$7,000 the SUI base measures.
   if (region === "CA") {
+    // California SDI employee withholding (2026: 1.3%, no cap) is an
+    // employee deduction, not PIT: posted here through the declared slot on
+    // the same base the CA levy priced (periodic plus supplemental).
+    const caSdi = caSdiWithholding(run.pay_date!, sum([income, nonPeriodic]));
+    pushStatutory("ca_sdi_employee", "deduction", "California SDI (employee)", caSdi, 148);
+    factors.CA_SDI_EMPLOYEE = caSdi;
     const reserve = config.ettReserveBalance(region);
     if (reserve == null) {
       throw new PayrollError(
