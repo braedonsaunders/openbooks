@@ -17,6 +17,7 @@ import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
 import { isFeatureEnabled } from "../features";
+import { clamp } from "../list-params";
 import { executeIdempotent } from "./idempotency";
 
 /**
@@ -80,7 +81,7 @@ export async function listCloseRuns(
   assertApplicationPermission(context, "close.run");
   // Declared lock targets do not narrow the organization-wide diagnostics.
   assertUnrestrictedCloseDiagnostics(context);
-  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const limit = clamp(input.limit ?? 50, 1, 100);
   const result = (await db.execute<CloseRunRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName",
            r.book_id as "bookId", b.code as "bookCode", r.status,
@@ -113,7 +114,7 @@ export async function listPeriodLocks(
   if (input.module && !LOCK_MODULES.has(input.module)) {
     throw new ApplicationError("invalid_input", "module must be ar, ap, banking, assets, tax, or gl", 422);
   }
-  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const limit = clamp(input.limit ?? 50, 1, 200);
   let where = sql`l.org_id = ${context.authz.user.orgId}`;
   if (input.periodId) where = sql`${where} and l.period_id = ${input.periodId}`;
   if (input.state) where = sql`${where} and l.state = ${input.state}`;
@@ -174,7 +175,7 @@ export async function listPeriodReopenRequests(
       422,
     );
   }
-  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const limit = clamp(input.limit ?? 50, 1, 100);
   let where = sql`r.org_id = ${context.authz.user.orgId}`;
   if (input.status) where = sql`${where} and r.status = ${input.status}`;
   if (input.periodId) where = sql`${where} and r.period_id = ${input.periodId}`;
