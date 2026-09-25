@@ -126,6 +126,40 @@ export function parseLohnsteuerbescheinigungRowId(rowId: string): PayrollFilingR
   return { employees: [employee], accounts: account ? [account] : [] };
 }
 
+/**
+ * The Bescheinigungszeitraum from the employment relationship (I6-payroll-268):
+ * the duration of the Dienstverhältnis during the certificate year (EStG
+ * §41b Abs. 1; BMF Anhang 23 I Nr. 1), clipped to the year — never inferred
+ * from first/last pay dates. Refuses when the relationship dates are
+ * unavailable, and when the relationship does not touch the year at all.
+ */
+export function bescheinigungszeitraum(
+  hiredOn: string | null,
+  terminatedOn: string | null,
+  taxYear: number,
+  employeeName: string,
+): { von: string; bis: string } {
+  if (hiredOn == null || hiredOn === "") {
+    throw new PayrollPackError(
+      `DE Lohnsteuerbescheinigung: no employment start (hired_on) is recorded for ${employeeName} — `
+      + `the Bescheinigungszeitraum is the duration of the Dienstverhältnis in ${taxYear} (EStG §41b Abs. 1), `
+      + "never inferred from pay dates; record the employment relationship dates before issuing",
+    );
+  }
+  const yearStart = `${taxYear}-01-01`;
+  const yearEnd = `${taxYear}-12-31`;
+  if (terminatedOn != null && terminatedOn !== "" && terminatedOn < yearStart) {
+    throw new PayrollPackError(
+      `DE Lohnsteuerbescheinigung: the employment relationship with ${employeeName} ended ${terminatedOn}, `
+      + `before ${taxYear} — no ${taxYear} certificate is owed for an employee not employed during the year`,
+    );
+  }
+  return {
+    von: hiredOn < yearStart ? yearStart : hiredOn,
+    bis: terminatedOn == null || terminatedOn === "" || terminatedOn > yearEnd ? yearEnd : terminatedOn,
+  };
+}
+
 const AUSDRUCK_2026 =
   "Ausdruck der elektronischen Lohnsteuerbescheinigung für 2026 "
   + "(BMF, Anlage LStH 2026 Anhang 23)";
@@ -320,7 +354,7 @@ export async function lohnsteuerbescheinigungSlips(
   const s = sql.raw("s");
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name, s.filing_account_id,
-           min(s.pay_date)::text as first_pay, max(s.pay_date)::text as last_pay,
+           max(s.pay_date)::text as last_pay,
            ${earningSum(s)} as gross,
            ${withheldSum(s, "lohnsteuer", "deduction")} as lst,
            ${withheldSum(s, "solidaritaetszuschlag", "deduction")} as soli,
@@ -375,11 +409,38 @@ export async function lohnsteuerbescheinigungSlips(
     account.country === "DE" && account.programType === "de_finanzamt" && account.isActive,
   );
   const soleFinanzamtId = soleFinanzamt.length === 1 ? soleFinanzamt[0]!.id : null;
+  // Employment relationships for the Bescheinigungszeitraum (I6-payroll-268):
+  // hired_on/terminated_on per party; earliest start and latest end win
+  // across spells, and a missing start refuses per slip below.
+  const roles = (await db.execute<{ employee_party_id: string; hired_on: string | null; terminated_on: string | null }>(sql`
+    select employee_party_id, hired_on::text, terminated_on::text from employee_roles
+     where org_id = ${orgId}
+  `));
+  const spellsByEmployee = new Map<string, { hiredOn: string | null; terminatedOn: string | null }[]>();
+  for (const role of roles.rows) {
+    const key = String(role.employee_party_id);
+    if (!wanted.has(key)) continue;
+    const spells = spellsByEmployee.get(key) ?? [];
+    spells.push({ hiredOn: role.hired_on ?? null, terminatedOn: role.terminated_on ?? null });
+    spellsByEmployee.set(key, spells);
+  }
 
   const slips: DeLohnsteuerbescheinigungSlip[] = [];
   for (const row of rows.rows) {
     const employeePartyId = String(row.employee_party_id);
     const employeeName = String(row.display_name);
+    const spells = spellsByEmployee.get(employeePartyId) ?? [];
+    const hiredOn = spells.reduce<string | null>(
+      (earliest, spell) => (spell.hiredOn != null && (earliest == null || spell.hiredOn < earliest) ? spell.hiredOn : earliest),
+      null,
+    );
+    const terminatedOn = spells.some((spell) => spell.terminatedOn == null || spell.terminatedOn === "")
+      ? null
+      : spells.reduce<string | null>(
+        (latest, spell) => (latest == null || (spell.terminatedOn ?? "") > latest ? (spell.terminatedOn ?? null) : latest),
+        null,
+      );
+    const { von, bis } = bescheinigungszeitraum(hiredOn, terminatedOn, taxYear, employeeName);
     const lastPay = String(row.last_pay);
     // The certificate's employer: this employment's own filing account, not
     // the org default — merging two establishments' stubs under one
@@ -435,8 +496,8 @@ export async function lohnsteuerbescheinigungSlips(
         const konfession = resolved.answers["konfession"] ?? null;
         return konfession == null || konfession === "" ? null : konfession;
       })(),
-      zeitraumVon: String(row.first_pay),
-      zeitraumBis: lastPay,
+      zeitraumVon: von,
+      zeitraumBis: bis,
       finanzamt: finanzamtLabel,
       gross: num(row.gross),
       lst: num(row.lst),
