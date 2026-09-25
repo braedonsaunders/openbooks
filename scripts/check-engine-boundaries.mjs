@@ -15,12 +15,10 @@
  *      tolerated (see engine/tsconfig.json).
  *   4. Every declared edge is used. A declaration nothing relies on is either
  *      stale or a permission granted in advance; both are removed.
- *   5. The module graph's strongly connected sets (cycles) must be exactly the
- *      ones pinned under `cycles`. A new cycle is refused; a cycle that has
- *      been broken must be struck from the list in the same commit, so the
- *      pin can only ever shrink. The pinned cycles are the engine's known
- *      layering debt: the posting kernel orchestrating subledgers that call
- *      back into it. Breaking them is refactoring work, not manifest work.
+ *   5. The module graph is acyclic. ARCH-MODULE-CYCLE C15 broke the last
+ *      pinned cycle and retired the `cycles` pin: any cycle is refused, and
+ *      a non-empty pin is refused. Breaking a would-be cycle is refactoring
+ *      work, not manifest work.
  *
  * Fails loudly with file:line, the two modules involved, and the remedy.
  *
@@ -163,7 +161,7 @@ export function analyze(root = ROOT) {
       const key = `${mod}->${targetMod}`;
       if (!usedEdges.has(key)) usedEdges.set(key, `${file}:${line}`);
       if (!manifest.modules[mod].dependsOn.includes(targetMod)) {
-        problems.push(`${file}:${line}: module "${mod}" imports "${spec}" from module "${targetMod}", which it does not declare. Either add "${targetMod}" to modules.${mod}.dependsOn in ${MANIFEST} (and keep the module graph's cycles unchanged), or move the shared piece into a module both already depend on.`);
+        problems.push(`${file}:${line}: module "${mod}" imports "${spec}" from module "${targetMod}", which it does not declare. Either add "${targetMod}" to modules.${mod}.dependsOn in ${MANIFEST} (and keep the module graph acyclic), or move the shared piece into a module both already depend on.`);
       }
     }
   }
@@ -176,25 +174,20 @@ export function analyze(root = ROOT) {
   const empty = [...declared].filter((name) => !files.some((f) => moduleOf(f) === name));
   for (const name of empty) problems.push(`${MANIFEST}: module "${name}" is declared but engine/src/${name}/ holds no files. Remove the declaration or add the module.`);
 
-  // Strongly connected sets over the DECLARED graph (Tarjan).
+  // Strongly connected sets over the DECLARED graph (Tarjan). The graph
+  // must be acyclic: any cycle is refused, and the retired "cycles" pin
+  // must stay empty.
   const sccs = stronglyConnected(manifest.modules);
   const actualCycles = sccs.filter((c) => c.length > 1).map((c) => [...c].sort());
-  const pinned = manifest.cycles.map((c) => [...c].sort());
-  const keyOf = (c) => c.join(",");
-  const actualKeys = new Set(actualCycles.map(keyOf));
-  const pinnedKeys = new Set(pinned.map(keyOf));
   for (const cycle of actualCycles) {
-    if (!pinnedKeys.has(keyOf(cycle))) {
-      const near = pinned.find((p) => p.some((m) => cycle.includes(m)));
-      problems.push(
-        `${MANIFEST}: the declared graph contains a cycle through {${cycle.join(", ")}} that is not pinned under "cycles".` +
-          (near ? ` The nearest pinned cycle is {${near.join(", ")}}; this change grew it.` : "") +
-          ` Cycles only shrink: remove the new edge or break an existing one; do not add to the pin.`,
-      );
-    }
+    problems.push(
+      `${MANIFEST}: refused: the declared graph contains a cycle through {${cycle.join(", ")}}. ` +
+        `The engine module graph must be acyclic: remove an edge or move the shared piece into a lower module both sides already depend on. ` +
+        `The "cycles" pin is retired and cannot bless this.`,
+    );
   }
-  for (const cycle of pinned) {
-    if (!actualKeys.has(keyOf(cycle))) problems.push(`${MANIFEST}: pinned cycle {${cycle.join(", ")}} no longer exists in the declared graph. Strike it from "cycles" in this commit so the pin keeps shrinking.`);
+  for (const cycle of manifest.cycles) {
+    problems.push(`${MANIFEST}: the "cycles" pin is retired; the module graph must be acyclic, so the pin must stay empty. Strike {${[...cycle].sort().join(", ")}} from "cycles".`);
   }
 
   const usage = {};
@@ -248,13 +241,13 @@ if (isMain) {
     console.log(JSON.stringify({ usage, cycles }, null, 2));
     process.exit(0);
   }
-  const { problems, files, cycles } = analyze();
+  const { problems, files } = analyze();
   if (problems.length) {
     console.error(`engine boundaries: ${problems.length} problem(s) across ${files} files\n`);
     for (const p of problems) console.error(`  ${p}`);
     process.exit(1);
   }
-  console.log(`engine boundaries: ${files} files inside declared modules; ${cycles.length} pinned cycle(s); every declared edge used.`);
+  console.log(`engine boundaries: ${files} files inside declared modules; acyclic; every declared edge used.`);
 }
 
 // --usage tolerates an incomplete manifest so the graph can be measured before

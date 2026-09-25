@@ -2,7 +2,7 @@
   "$comment": [
     "Engine module manifest. Each top-level directory under engine/src is one bounded module.",
     "dependsOn is the complete list of other modules a module's non-test files may import; scripts/check-engine-boundaries.mjs refuses anything else and refuses declared edges nothing uses.",
-    "cycles pins the strongly connected sets of the declared graph. They are known layering debt (the posting kernel orchestrates subledgers that post back through it) and may only shrink: a change that would grow one is refused.",
+    "cycles is retired: the module graph must be acyclic (ARCH-MODULE-CYCLE C15 broke the last cycle). scripts/check-engine-boundaries.mjs refuses any cycle and refuses a non-empty pin, so this list must stay empty.",
     "Tests and engine/src/testing are composition and may import any module."
   ],
   "modules": {
