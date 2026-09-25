@@ -353,7 +353,7 @@ async function uiPostReceipt(page: Page, payId: string): Promise<void> {
 async function auditActions(page: Page, drawerUrl: string): Promise<string> {
   await openDrawer(page, drawerUrl);
   const drawer = page.locator('[role="dialog"]').first();
-  await drawer.getByRole('tab', { name: 'Audit Trail', exact: true }).click();
+  await drawer.getByRole('button', { name: 'Audit Trail', exact: true }).click();
   await expect(drawer.getByText(/events/)).toBeVisible({ timeout: 15000 });
   return drawer.innerText();
 }
