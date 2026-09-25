@@ -6,7 +6,7 @@
  * Thin by design: every number comes from calculate.ts (pure, gold-tested).
  * This wrapper resolves the employee's operable tax code from the P6/P9
  * coding notice, reads the in-year record from committed stubs, enforces the
- * cumulative-basis completeness gate, and pushes the three statutory lines.
+ * cumulative-basis completeness gate, and refuses pension cases it cannot price.
  *
  * Assumed, declared loudly (no input channel exists yet — PROPOSEd to
  * Orchestrate alongside GB opening-YTD fields):
@@ -18,6 +18,10 @@
  *   State Pension age schedule plus apprenticeship/veteran status. Category-A
  *   arithmetic on a non-A employee is wrong money the engine cannot see —
  *   the input channel is the fix, not more guessing here.
+ * - Workplace-pension contributions require an effective-dated worker
+ *   assessment. Enrolled or opted-in workers and eligible jobholders without
+ *   a valid opt-out refuse by name: this pack does not calculate the scheme's
+ *   pay-reference-period qualifying earnings or employee/employer amounts.
  * - Directors are priced by the per-period (alternative) method. The annual
  *   method for directors (CA44) is not modeled.
  * - Two payments in the same Income Tax week are priced as one period's pay
@@ -150,6 +154,39 @@ export async function computeGbStatutory(
     );
   }
   const tables = gbTablesForTaxYear(taxYear);
+
+  const workplacePension = certificateFor("gb_workplace_pension");
+  const pensionAnswers = workplacePension?.answers;
+  if (!workplacePension?.onFile || !pensionAnswers) {
+    throw new PayrollPackError(
+      "GB workplace-pension assessment is required before payroll: record the worker's "
+      + "effective-dated automatic-enrolment age, worker category and enrolment status "
+      + "in gb_workplace_pension; eligible or opted-in contributions must be calculated "
+      + "by AE-capable payroll software until this pack supports them.",
+    );
+  }
+  if (pensionAnswers.enrolment_status === "enrolled" || pensionAnswers.enrolment_status === "opted_in") {
+    throw new PayrollPackError(
+      "GB workplace-pension contributions are due for this enrolled or opted-in worker, "
+      + "but the pack does not calculate employee and employer contributions on the "
+      + "scheme's pay-reference-period basis; use AE-capable payroll software and do not "
+      + "finalise this run without both amounts.",
+    );
+  }
+  if (pensionAnswers.worker_status === "eligible_jobholder"
+      && pensionAnswers.enrolment_status !== "opted_out") {
+    throw new PayrollPackError(
+      "GB eligible jobholders must be enrolled in a qualifying workplace pension; "
+      + "this pack cannot calculate the required employee and employer contributions. "
+      + "Use AE-capable payroll software and do not finalise this run.",
+    );
+  }
+  if (pensionAnswers.enrolment_status === "postponed") {
+    throw new PayrollPackError(
+      "GB workplace-pension postponement dates and duties are not calculated by this pack; "
+      + "use AE-capable payroll software to assess this worker before finalising the run.",
+    );
+  }
 
   const nicCategoryCertificate = certificateFor("gb_nic_category");
   const nicCategoryRaw = empFact("GB", {

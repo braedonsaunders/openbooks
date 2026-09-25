@@ -6,12 +6,9 @@
  * the same arrangement `engine/src/payroll/us/jurisdictions.ts` uses. Nothing
  * in the generic layer names a nation, a starter checklist, or a tax code.
  *
- * Two deliberate non-declarations:
- *
- * - Workplace-pension auto-enrolment: the 2026/27 trigger (£10,000) and
- *   qualifying-earnings band (£6,240–£50,270) are published (see rates.ts),
- *   but minimum contributions ride each employer's scheme, not a pack table.
- *   No slot until a sourced engine exists.
+ * Workplace-pension auto-enrolment has an effective-dated employee
+ * assessment record. Eligible enrolments still refuse by name until the
+ * scheme's qualifying-earnings basis and contribution calculation are wired.
  */
 
 import type {
@@ -213,9 +210,75 @@ const GB_NIC_CATEGORY_RECORD: PayrollCertificate = {
   ],
 };
 
+const GB_WORKPLACE_PENSION_ASSESSMENT: PayrollCertificate = {
+  key: "gb_workplace_pension",
+  form: "Workplace pension assessment",
+  label: "Automatic-enrolment eligibility and scheme record",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "The Pensions Regulator automatic-enrolment earnings thresholds "
+    + "(https://www.thepensionsregulator.gov.uk/business-advisers/automatic-enrolment-guide-for-business-advisers/automatic-enrolment-earnings-threshold); "
+    + "DWP 2026/27 review (https://www.gov.uk/government/publications/review-of-the-automatic-enrolment-earnings-trigger-and-qualifying-earnings-band-for-202627)",
+  summary:
+    "Effective-dated employer assessment of age, eligibility, and enrolment. Eligible, opted-in, or postponed cases refuse until qualifying earnings and scheme contributions are calculated.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "age_band",
+      label: "Worker age band for automatic enrolment",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "under_22", label: "16 to 21" },
+        { value: "22_to_state_pension_age", label: "22 to State Pension age" },
+        { value: "state_pension_age_or_over", label: "State Pension age or older" },
+        { value: "under_16_or_other_exclusion", label: "Outside the age range or otherwise excluded" },
+      ],
+      help: "Use the worker's documented age at this assessment's effective date.",
+    },
+    {
+      key: "worker_status",
+      label: "Automatic-enrolment worker assessment",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "eligible_jobholder", label: "Eligible jobholder" },
+        { value: "noneligible_jobholder", label: "Non-eligible jobholder" },
+        { value: "entitled_worker", label: "Entitled worker" },
+      ],
+      help: "Record the employer's assessment for this job and pay reference period.",
+    },
+    {
+      key: "enrolment_status",
+      label: "Workplace pension enrolment status",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "enrolled", label: "Enrolled in a qualifying scheme" },
+        { value: "not_enrolled", label: "Not enrolled" },
+        { value: "opted_out", label: "Valid opt-out currently in force" },
+        { value: "opted_in", label: "Opted in or joined voluntarily" },
+        { value: "postponed", label: "Postponement period" },
+      ],
+      help: "Use the scheme's current effective-dated enrolment record; unsupported contribution cases refuse at payroll.",
+    },
+    {
+      key: "scheme_basis",
+      label: "Pension scheme contribution basis",
+      kind: "choice",
+      choices: [
+        { value: "qualifying_earnings", label: "Qualifying earnings" },
+        { value: "certified_alternative", label: "Certified alternative basis" },
+      ],
+      help: "The payroll pack has no verified calculation for either basis yet; eligible contributions refuse by name.",
+    },
+  ],
+};
+
 export const GB_CERTIFICATES: PayrollPackCertificates = {
   country: "GB",
-  certificates: [GB_STARTER_CHECKLIST, GB_TAX_CODE_NOTICE, GB_NIC_CATEGORY_RECORD],
+  certificates: [GB_STARTER_CHECKLIST, GB_TAX_CODE_NOTICE, GB_NIC_CATEGORY_RECORD, GB_WORKPLACE_PENSION_ASSESSMENT],
 };
 
 // ===========================================================================

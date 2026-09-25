@@ -11,8 +11,9 @@
  *   employer (secondary), computed end to end for 2026/27, 2025/26 and
  *   2024/25 — each year from its own transcribed tables (year-tables.ts).
  *   Student and postgraduate loans use the declared NIC-able earnings base.
- *   Workplace-pension contributions remain employer-scheme configured. The
- *   Employment Allowance (£10,500) is tenant-entered, never computed
+ *   Workplace-pension assessment is effective-dated; cases with required
+ *   contributions refuse by name until employee/employer scheme amounts are
+ *   calculated. The Employment Allowance (£10,500) is tenant-entered, never computed
  *   (conditional eligibility).
  * - fiscal tax year opening 6 April, named for the opening year (2026/27).
  * - four nations, four supported: ENG/WLS/NIR share the rUK bands and SCT
