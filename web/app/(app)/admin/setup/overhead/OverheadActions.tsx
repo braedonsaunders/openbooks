@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowRight, BookMarked, Wand2, X } from 'lucide-react'
 import { Button, Input, Label, cn } from '@openbooks/ui'
+import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 
@@ -73,7 +74,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
     try {
       await post({
         action: 'publish', effectiveFrom,
-        rates: Object.entries(rates).filter(([, v]) => Number(v) > 0).map(([departmentId, v]) => ({ departmentId, ratePerHour: Number(v) })),
+        rates: Object.entries(rates).filter(([, v]) => compareMoney(v || '0', '0') > 0).map(([departmentId, v]) => ({ departmentId, ratePerHour: v })),
       })
       toast.success(t('publishDone'))
       setOpen(null)
@@ -87,12 +88,12 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
       if (approach === 'rate_card') {
         await post({
           action: 'publish', effectiveFrom,
-          rates: Object.entries(rates).filter(([, v]) => Number(v) > 0).map(([departmentId, v]) => ({ departmentId, ratePerHour: Number(v) })),
+          rates: Object.entries(rates).filter(([, v]) => compareMoney(v || '0', '0') > 0).map(([departmentId, v]) => ({ departmentId, ratePerHour: v })),
         })
       }
       const overhead =
-        approach === 'percent' ? { method: 'percent_of_labor', ratePercent: Number(flatRate) || 0 }
-        : approach === 'per_hour' ? { method: 'per_labor_hour', ratePerHour: Number(flatRate) || 0 }
+        approach === 'percent' ? { method: 'percent_of_labor', ratePercent: flatRate || '0' }
+        : approach === 'per_hour' ? { method: 'per_labor_hour', ratePerHour: flatRate || '0' }
         : { method: 'rate_engine', rateEngine: { rateSource: 'standard', hoursBasis: 'total_hours', dimension: 'overhead', scope: 'department' } }
       await post({
         action: 'apply',
