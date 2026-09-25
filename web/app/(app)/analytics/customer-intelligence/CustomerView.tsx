@@ -51,6 +51,8 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney, fmtPct } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
+import type { MoneyValue } from '../../../../lib/money-format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
 type Tab = (typeof TABS)[number]
@@ -156,7 +158,7 @@ export function CustomerView({
 }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const tabs = projectsEnabled ? TABS : TABS.filter((key) => key !== 'profitability')
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
@@ -666,7 +668,7 @@ function LifetimeTab({
         <KpiCard icon={FileText} accent="sky" label={t('kpi.totalInvoiced')} value={money(k.totalInvoiced)} sub={t('sub.invoiced')} />
         {projectsEnabled ? (
           <>
-            <KpiCard icon={HandCoins} accent={profitability.summary.totalGrossProfit < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(profitability.summary.totalGrossProfit)} sub={t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
+            <KpiCard icon={HandCoins} accent={cmp(profitability.summary.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={fmtMoney(profitability.summary.totalGrossProfit, { compact: true })} sub={t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
             <KpiCard icon={AlertTriangle} accent={k.fakeChampions > 0 ? 'amber' : 'emerald'} label={t('kpi.profitLeaks')} value={String(k.fakeChampions)} sub={t('sub.highRevenueLowMargin')} tone={k.fakeChampions > 0 ? 'negative' : 'positive'} />
           </>
         ) : null}
@@ -980,7 +982,7 @@ const PAGE_SIZE = 20
 function ProfitabilityTab({ p }: { p: Profitability }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const marginLabel = (m: number): string => {
     if (m >= 40) return t('margin.excellent')
     if (m >= 25) return t('margin.good')
@@ -997,6 +999,10 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
   const sorted = [...p.customers].sort((a, b) => {
     const av = a[sortCol]
     const bv = b[sortCol]
+    if (sortCol === 'totalRevenue' || sortCol === 'totalCost' || sortCol === 'grossProfit') {
+      const order = cmp(String(av ?? '0'), String(bv ?? '0'))
+      return sortDir === 'asc' ? order : -order
+    }
     if (typeof av === 'string' && typeof bv === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
     return sortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number)
   })
@@ -1024,7 +1030,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={DollarSign} accent="emerald" label={t('kpi.totalRevenue')} value={money(s.totalRevenue)} sub={t('sub.customersCount', { count: s.customerCount })} />
         <KpiCard icon={FileText} accent="red" label={t('kpi.totalCosts')} value={money(s.totalCost)} sub={t('sub.jobsCount', { count: s.totalJobs })} />
-        <KpiCard icon={HandCoins} accent={s.totalGrossProfit < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(s.totalGrossProfit)} sub={s.totalGrossProfit < 0 ? t('margin.loss') : t('margin.profit')} tone={s.totalGrossProfit < 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={HandCoins} accent={cmp(s.totalGrossProfit, '0') < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(s.totalGrossProfit)} sub={cmp(s.totalGrossProfit, '0') < 0 ? t('margin.loss') : t('margin.profit')} tone={cmp(s.totalGrossProfit, '0') < 0 ? 'negative' : 'positive'} />
         <KpiCard icon={Percent} accent={marginAccent(s.avgMarginPct)} label={t('kpi.avgMargin')} value={`${s.avgMarginPct.toFixed(1)}%`} sub={marginLabel(s.avgMarginPct)} />
       </div>
 
@@ -1065,7 +1071,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(c.totalRevenue)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{money(c.totalCost)}</td>
-                        <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', c.grossProfit < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</td>
+                        <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', cmp(c.grossProfit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</td>
                         <td className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct.toFixed(1)}%</td>
                         <td className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></td>
                       </InteractiveTableRow>
@@ -1082,7 +1088,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.revenue)}</td>
                               <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.costs)}</td>
-                              <td className={cn('px-3 py-2 text-right tabular-nums', j.profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300')}>{money(j.profit)}</td>
+                              <td className={cn('px-3 py-2 text-right tabular-nums', cmp(j.profit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300')}>{money(j.profit)}</td>
                               <td className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct))}>{j.marginPct.toFixed(1)}%</td>
                               <td />
                             </tr>
