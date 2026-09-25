@@ -28,23 +28,45 @@ const section = { country: 'CA', key: 't4', data: { rows: [], rowKey: 'id' } } a
   typeof recordFilingOriginal
 >[0]
 
-test('record-as-filed: a non-JSON 502 surfaces the fallback with the status', async () => {
-  const restore = stubFetch(
+for (const [name, respond, call, message] of [
+  [
+    'record-as-filed: a non-JSON 502 surfaces the fallback with the status',
     () => new Response('<html>proxy page</html>', { status: 502, headers: { 'content-type': 'text/html' } }),
-  )
-  try {
-    await assert.rejects(
-      recordFilingOriginal(section, 2026, 'filed'),
-      (error: unknown) => {
+    () => recordFilingOriginal(section, 2026, 'filed'),
+    'the filing could not be recorded (status 502)',
+  ],
+  [
+    'slip fetch: a non-JSON 502 surfaces the fallback with the status',
+    () => new Response(null, { status: 502 }),
+    () => fetchFilingSlip('/api/payroll/year-end/slip?country=CA'),
+    'the slip could not be loaded (status 502)',
+  ],
+  [
+    'lifecycle fetch: a non-JSON 500 surfaces the fallback with the status',
+    () => new Response('<html>proxy page</html>', { status: 500, headers: { 'content-type': 'text/html' } }),
+    () => fetchFilingLifecycle('CA', 't4', 2026),
+    'the filing history could not be loaded (status 500)',
+  ],
+  [
+    'discard register: a non-JSON 502 surfaces the fallback with the status',
+    () => new Response(null, { status: 502 }),
+    () => discardParallelRegister('reg-1'),
+    'could not discard the register (status 502)',
+  ],
+] as Array<[string, () => Response, () => Promise<unknown>, string]>) {
+  test(name, async () => {
+    const restore = stubFetch(respond)
+    try {
+      await assert.rejects(call(), (error: unknown) => {
         assert.ok(error instanceof Error)
-        assert.equal(error.message, 'the filing could not be recorded (status 502)')
+        assert.equal(error.message, message)
         return true
-      },
-    )
-  } finally {
-    restore()
-  }
-})
+      })
+    } finally {
+      restore()
+    }
+  })
+}
 
 test('record-as-filed: a named refusal surfaces, and a file refusal returns instead of throwing', async () => {
   let restore = stubFetch(() => Response.json({ error: 'the year is not open' }, { status: 422 }))
@@ -61,44 +83,10 @@ test('record-as-filed: a named refusal surfaces, and a file refusal returns inst
   }
 })
 
-test('slip fetch: a non-JSON 502 surfaces the fallback with the status', async () => {
-  const restore = stubFetch(() => new Response(null, { status: 502 }))
-  try {
-    await assert.rejects(
-      fetchFilingSlip('/api/payroll/year-end/slip?country=CA'),
-      (error: unknown) => {
-        assert.ok(error instanceof Error)
-        assert.equal(error.message, 'the slip could not be loaded (status 502)')
-        return true
-      },
-    )
-  } finally {
-    restore()
-  }
-})
-
 test('slip fetch: a body without a slip is refused by name', async () => {
   const restore = stubFetch(() => Response.json({ error: 'the row is not in the population' }))
   try {
     await assert.rejects(fetchFilingSlip('/api/payroll/year-end/slip?country=CA'), /not in the population/)
-  } finally {
-    restore()
-  }
-})
-
-test('lifecycle fetch: a non-JSON 500 surfaces the fallback with the status', async () => {
-  const restore = stubFetch(
-    () => new Response('<html>proxy page</html>', { status: 500, headers: { 'content-type': 'text/html' } }),
-  )
-  try {
-    await assert.rejects(
-      fetchFilingLifecycle('CA', 't4', 2026),
-      (error: unknown) => {
-        assert.ok(error instanceof Error)
-        assert.equal(error.message, 'the filing history could not be loaded (status 500)')
-        return true
-      },
-    )
   } finally {
     restore()
   }
@@ -121,22 +109,6 @@ test('issue correction: a named refusal surfaces, and a file refusal returns ins
   restore = stubFetch(() => Response.json({ fileRefusal: 'no correction file is declared' }))
   try {
     assert.equal(await postFilingCorrection(input), 'no correction file is declared')
-  } finally {
-    restore()
-  }
-})
-
-test('discard register: a non-JSON 502 surfaces the fallback with the status', async () => {
-  const restore = stubFetch(() => new Response(null, { status: 502 }))
-  try {
-    await assert.rejects(
-      discardParallelRegister('reg-1'),
-      (error: unknown) => {
-        assert.ok(error instanceof Error)
-        assert.equal(error.message, 'could not discard the register (status 502)')
-        return true
-      },
-    )
   } finally {
     restore()
   }

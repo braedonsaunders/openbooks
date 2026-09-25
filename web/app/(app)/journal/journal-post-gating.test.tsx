@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { JSDOM } = await import("jsdom");
@@ -177,12 +177,18 @@ async function openActions() {
   await tick();
 }
 
-test("a draft without gl.post offers no Edit, Post or Delete", async (t) => {
+// The five gating cases below share one mount/open/cleanup head; only the
+// status, the permission, and the asserted buttons differ.
+async function mountGated(t: TestContext, status: string, canPost: boolean, initialMode = "view") {
   (globalThis as Record<string, unknown>).__journalRouter = { push() {}, refresh() {} };
   const restoreFetch = scriptFetch();
   t.after(restoreFetch);
-  const { unmount } = await mount(docWith("draft"), false);
+  const { unmount } = await mount(docWith(status), canPost, initialMode);
   t.after(unmount);
+}
+
+test("a draft without gl.post offers no Edit, Post or Delete", async (t) => {
+  await mountGated(t, "draft", false);
   assert.equal(buttonsNamed("Edit").length, 0, "no Edit without gl.post");
   await openActions();
   assert.equal(buttonsNamed("Post").length, 0, "no Post without gl.post");
@@ -232,11 +238,7 @@ test("edit mode without gl.post offers no Save", async (t) => {
 });
 
 test("a draft with gl.post keeps Edit, Post and Delete", async (t) => {
-  (globalThis as Record<string, unknown>).__journalRouter = { push() {}, refresh() {} };
-  const restoreFetch = scriptFetch();
-  t.after(restoreFetch);
-  const { unmount } = await mount(docWith("draft"), true);
-  t.after(unmount);
+  await mountGated(t, "draft", true);
   assert.equal(buttonsNamed("Edit").length, 1, "Edit stays with gl.post");
   await openActions();
   assert.ok(buttonsNamed("Post").length >= 1, "Post stays with gl.post");
@@ -244,31 +246,19 @@ test("a draft with gl.post keeps Edit, Post and Delete", async (t) => {
 });
 
 test("an approved journal without gl.post offers no Void", async (t) => {
-  (globalThis as Record<string, unknown>).__journalRouter = { push() {}, refresh() {} };
-  const restoreFetch = scriptFetch();
-  t.after(restoreFetch);
-  const { unmount } = await mount(docWith("approved"), false);
-  t.after(unmount);
+  await mountGated(t, "approved", false);
   await openActions();
   assert.equal(buttonsNamed("Void").length, 0, "no Void without gl.post");
 });
 
 test("an approved journal with gl.post keeps Void", async (t) => {
-  (globalThis as Record<string, unknown>).__journalRouter = { push() {}, refresh() {} };
-  const restoreFetch = scriptFetch();
-  t.after(restoreFetch);
-  const { unmount } = await mount(docWith("approved"), true);
-  t.after(unmount);
+  await mountGated(t, "approved", true);
   await openActions();
   assert.ok(buttonsNamed("Void").length >= 1, "Void stays with gl.post");
 });
 
 test("a ?mode=edit deep link without gl.post lands read-only", async (t) => {
-  (globalThis as Record<string, unknown>).__journalRouter = { push() {}, refresh() {} };
-  const restoreFetch = scriptFetch();
-  t.after(restoreFetch);
-  const { unmount } = await mount(docWith("draft"), false, "edit");
-  t.after(unmount);
+  await mountGated(t, "draft", false, "edit");
   await openActions();
   assert.equal(buttonsNamed("Save").length, 0, "the deep link must not strand the reader in an unsavable editor");
   assert.equal(buttonsNamed("Edit").length, 0, "no Edit to re-enter the editor either");

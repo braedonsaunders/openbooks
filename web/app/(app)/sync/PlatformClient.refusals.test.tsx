@@ -137,67 +137,59 @@ async function renderClient() {
   };
 }
 
-test("a non-JSON 500 on connection test toasts the refusal and releases the button", async (t) => {
-  globalThis.__platformToasts = [];
-  const restoreFetch = scriptFetch((url, init) => {
-    if (url === "/api/platform/connections" && (!init?.method || init.method === "GET")) {
-      return Response.json({ connections: [CONNECTION], runs: [], sourceTypes: [], currencies: [] });
-    }
-    if (url === "/api/platform/connections/c1/test" && init?.method === "POST") {
-      return new Response("<html><body>Bad Gateway</body></html>", {
+for (const [name, respondTest, match, matchMessage, checkParseLeak] of [
+  [
+    "a non-JSON 500 on connection test toasts the refusal and releases the button",
+    () =>
+      new Response("<html><body>Bad Gateway</body></html>", {
         status: 502,
         headers: { "content-type": "text/html" },
-      });
+      }),
+    /Connection failed/,
+    "the operator must see the refused test, not a parse error",
+    true,
+  ],
+  [
+    "a named 422 refusal on connection test surfaces the server reason",
+    () => Response.json({ error: "connector URL refused" }, { status: 422 }),
+    /connector URL refused/,
+    "the toast must carry the server's named refusal",
+    false,
+  ],
+] as Array<[string, () => Response, RegExp, string, boolean]>) {
+  test(name, async (t) => {
+    globalThis.__platformToasts = [];
+    const restoreFetch = scriptFetch((url, init) => {
+      if (url === "/api/platform/connections" && (!init?.method || init.method === "GET")) {
+        return Response.json({ connections: [CONNECTION], runs: [], sourceTypes: [], currencies: [] });
+      }
+      if (url === "/api/platform/connections/c1/test" && init?.method === "POST") {
+        return respondTest();
+      }
+      return null;
+    });
+    t.after(restoreFetch);
+    const { unmount } = await renderClient();
+    t.after(unmount);
+
+    const testButton = buttonsNamed("Test")[0];
+    assert.ok(testButton, "the connection Test button must render once connections load");
+    await click(testButton);
+    await tick();
+    await tick();
+
+    const toasts = globalThis.__platformToasts ?? [];
+    const errors = toasts.filter((toast) => toast.kind === "error");
+    assert.ok(errors.length >= 1, `an error toast must fire, saw ${JSON.stringify(toasts)}`);
+    const last = errors[errors.length - 1]?.message ?? "";
+    assert.match(last, match, matchMessage);
+    if (checkParseLeak) {
+      assert.ok(
+        !/SyntaxError|Unexpected token|json/i.test(last),
+        `no JSON parse error may leak into the toast, saw: ${last}`,
+      );
+      const testAgain = buttonsNamed("Test")[0];
+      assert.ok(testAgain && !testAgain.disabled, "the Test button must release so the operator can retry");
     }
-    return null;
   });
-  t.after(restoreFetch);
-  const { unmount } = await renderClient();
-  t.after(unmount);
-
-  const testButton = buttonsNamed("Test")[0];
-  assert.ok(testButton, "the connection Test button must render once connections load");
-  await click(testButton);
-  await tick();
-  await tick();
-
-  const toasts = globalThis.__platformToasts ?? [];
-  const errors = toasts.filter((toast) => toast.kind === "error");
-  assert.ok(errors.length >= 1, `an error toast must fire, saw ${JSON.stringify(toasts)}`);
-  const last = errors[errors.length - 1]?.message ?? "";
-  assert.match(last, /Connection failed/, "the operator must see the refused test, not a parse error");
-  assert.ok(
-    !/SyntaxError|Unexpected token|json/i.test(last),
-    `no JSON parse error may leak into the toast, saw: ${last}`,
-  );
-  const testAgain = buttonsNamed("Test")[0];
-  assert.ok(testAgain && !testAgain.disabled, "the Test button must release so the operator can retry");
-});
-
-test("a named 422 refusal on connection test surfaces the server reason", async (t) => {
-  globalThis.__platformToasts = [];
-  const restoreFetch = scriptFetch((url, init) => {
-    if (url === "/api/platform/connections" && (!init?.method || init.method === "GET")) {
-      return Response.json({ connections: [CONNECTION], runs: [], sourceTypes: [], currencies: [] });
-    }
-    if (url === "/api/platform/connections/c1/test" && init?.method === "POST") {
-      return Response.json({ error: "connector URL refused" }, { status: 422 });
-    }
-    return null;
-  });
-  t.after(restoreFetch);
-  const { unmount } = await renderClient();
-  t.after(unmount);
-
-  const testButton = buttonsNamed("Test")[0];
-  assert.ok(testButton, "the connection Test button must render once connections load");
-  await click(testButton);
-  await tick();
-  await tick();
-
-  const toasts = globalThis.__platformToasts ?? [];
-  const errors = toasts.filter((toast) => toast.kind === "error");
-  assert.ok(errors.length >= 1, `an error toast must fire, saw ${JSON.stringify(toasts)}`);
-  const last = errors[errors.length - 1]?.message ?? "";
-  assert.match(last, /connector URL refused/, "the toast must carry the server's named refusal");
-});
+}

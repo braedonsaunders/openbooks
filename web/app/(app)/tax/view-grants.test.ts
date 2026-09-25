@@ -152,28 +152,26 @@ function reset(grants: string[]): void {
   viewState.grants = new Set(grants)
 }
 
-test('a reports.create holder sees no save or file action', async () => {
-  reset(['reports.read', 'reports.create'])
+for (const [name, grants, expected] of [
+  ['a reports.create holder sees no save or file action', ['reports.read', 'reports.create'], false],
+  ['a compliance.file holder sees the save action', ['reports.read', 'compliance.file'], true],
+] as Array<[string, string[], boolean]>) {
+  test(name, async () => {
+    reset(grants)
 
-  const data = await loadTax({})
+    const data = await loadTax({})
 
-  assert.equal(data.canSave, false)
-})
-
-test('a compliance.file holder sees the save action', async () => {
-  reset(['reports.read', 'compliance.file'])
-
-  const data = await loadTax({})
-
-  assert.equal(data.canSave, true)
-})
+    assert.equal(data.canSave, expected)
+  })
+}
 
 test('mark-filed follows the filing grant on the history drawer', async () => {
-  reset(['reports.read', 'reports.create'])
-  const denied = await loadTax({ filing: '11111111-1111-4111-8111-111111111111' })
-  assert.equal(denied.drawer?.canFile, false)
-
-  reset(['reports.read', 'compliance.file'])
-  const allowed = await loadTax({ filing: '11111111-1111-4111-8111-111111111111' })
-  assert.equal(allowed.drawer?.canFile, true)
+  for (const [grants, expected] of [
+    [['reports.read', 'reports.create'], false],
+    [['reports.read', 'compliance.file'], true],
+  ] as Array<[string[], boolean]>) {
+    reset(grants)
+    const data = await loadTax({ filing: '11111111-1111-4111-8111-111111111111' })
+    assert.equal(data.drawer?.canFile, expected)
+  }
 })

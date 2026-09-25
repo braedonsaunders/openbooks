@@ -167,15 +167,15 @@ test('shell without either setup permission names the refusal (F1T-10)', async (
   )
 })
 
-test('shell admits the layout CRM-setup alternative (parity with SetupLayout)', async () => {
-  const data = await loadWith({ user: { orgId: 'o1' }, perms: ['crm.setup.manage'] })
-  assert.equal(data.tab, 'drivers')
-})
-
-test('shell admits the admin setup permission', async () => {
-  const data = await loadWith({ user: { orgId: 'o1' }, perms: ['admin.setup.manage'] })
-  assert.equal(data.tab, 'drivers')
-})
+for (const [name, perm] of [
+  ['shell admits the layout CRM-setup alternative (parity with SetupLayout)', 'crm.setup.manage'],
+  ['shell admits the admin setup permission', 'admin.setup.manage'],
+] as Array<[string, string]>) {
+  test(name, async () => {
+    const data = await loadWith({ user: { orgId: 'o1' }, perms: [perm] })
+    assert.equal(data.tab, 'drivers')
+  })
+}
 
 test('shell surfaces feature-off as not-found (the Setup precedent)', async () => {
   await assert.rejects(loadWith({ user: { orgId: 'o1' }, perms: ['admin.setup.manage'] }, true), /NOT_FOUND/)

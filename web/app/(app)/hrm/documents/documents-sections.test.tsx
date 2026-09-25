@@ -250,25 +250,17 @@ test("the documents spec gives each setup section its own drawer key", async () 
 
 // - render: exactly one drawer opens ------------------------------------------
 
-test("?template=new opens only the templates drawer", async () => {
-  const { counts } = await renderSections({ template: "new" });
-  assert.deepEqual(counts, [1, 0, 0], "exactly one role=dialog mounts, in the templates section");
-});
-
-test("?category=new opens only the categories drawer", async () => {
-  const { counts } = await renderSections({ category: "new" });
-  assert.deepEqual(counts, [0, 1, 0], "exactly one role=dialog mounts, in the categories section");
-});
-
-test("?retention=new opens only the retention drawer", async () => {
-  const { counts } = await renderSections({ retention: "new" });
-  assert.deepEqual(counts, [0, 0, 1], "exactly one role=dialog mounts, in the retention section");
-});
-
-test("the legacy bare ?row=new no longer fans out to every section", async () => {
-  const { counts } = await renderSections({ row: "new" });
-  assert.deepEqual(counts, [0, 0, 0], "no section reads the shared key anymore");
-});
+for (const [name, params, expected, message] of [
+  ["?template=new opens only the templates drawer", { template: "new" }, [1, 0, 0], "exactly one role=dialog mounts, in the templates section"],
+  ["?category=new opens only the categories drawer", { category: "new" }, [0, 1, 0], "exactly one role=dialog mounts, in the categories section"],
+  ["?retention=new opens only the retention drawer", { retention: "new" }, [0, 0, 1], "exactly one role=dialog mounts, in the retention section"],
+  ["the legacy bare ?row=new no longer fans out to every section", { row: "new" }, [0, 0, 0], "no section reads the shared key anymore"],
+] as Array<[string, Record<string, string>, number[], string]>) {
+  test(name, async () => {
+    const { counts } = await renderSections(params);
+    assert.deepEqual(counts, expected, message);
+  });
+}
 
 test("document generation keeps the named API refusal in the dialog", async () => {
   const previousFetch = globals.fetch;
