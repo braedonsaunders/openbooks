@@ -95,6 +95,7 @@ export async function checkAssignment(
     select id from worker_employments
      where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
        and (${employmentScope}::uuid[] is null or employer_subsidiary_id = any(${employmentScope}::uuid[]))
+     for share
   `)).rows[0];
   if (!visibleEmployment) {
     throw new HrmQualificationError(
