@@ -4,7 +4,8 @@ import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expen
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
-import { isZero, sum } from "../money/money.ts";
+import { isZero } from "../money/money.ts";
+import { parseMoney, sumMoney } from "../money/brands.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { CustomGlLinesError, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import type { ContributedLine } from "../allocations/types.ts";
@@ -375,7 +376,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   );
   if (kernelLines.length < 2)
     throw new PostingError("posting produced fewer than 2 lines");
-  const total = sum(kernelLines.map((l) => l.amount));
+  const total = sumMoney(kernelLines.map((l) => l.amount));
   if (!isZero(total)) {
     throw new PostingError(
       `posting rule for ${doc.kind} does not balance (sum=${total})`,
@@ -420,10 +421,16 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // applySubsidiaries stamps in order and appends intercompany legs after,
   // so stamped[i] corresponds to unionLines[i] below for the contributor
   // stamps and lineage mapping at insert time.
+  // Cross-module intake: contributor lines carry the frozen allocations
+  // shape, so the kernel parses amounts once here (fail closed) instead of
+  // asserting a brand across the freeze boundary.
   const unionLines: (KernelLine & {
     contributorKind?: string | null;
     contributorRef?: string | null;
-  })[] = [...kernelLines, ...primaryContrib];
+  })[] = [
+    ...kernelLines,
+    ...primaryContrib.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
+  ];
 
   // -- allocation kernel: custom_gl_lines user scripts (A6) -----------------
   // Scripts observe the kernel read-only (kernel lines plus the rule
@@ -532,7 +539,11 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     contributorRef: string;
   })[] = [];
   if (customGlLines.length > 0) {
-    const translated = await applySubsidiaries(db, effectiveDoc, customGlLines);
+    const translated = await applySubsidiaries(
+      db,
+      effectiveDoc,
+      customGlLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
+    );
     if (translated.lines.length !== customGlLines.length) {
       throw new PostingError(
         "custom_gl_lines contributions did not survive subsidiary application unchanged",

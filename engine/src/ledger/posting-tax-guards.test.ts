@@ -190,13 +190,13 @@ test("a line missing a required dimension names the segment; present dimensions 
       segment_names: { department: "Department" },
     },
   ];
-  const missing: KernelLine[] = [{ accountId: "acct-1", amount: "10.0000" }];
+  const missing: KernelLine[] = [{ accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] }];
   await assert.rejects(
     () => validateRequiredDimensions(stubRunner(rows), "org-1", missing),
     (e: unknown) => e instanceof PostingError && /Department is required for account 6000/.test(e.message),
   );
   await validateRequiredDimensions(stubRunner(rows), "org-1", [
-    { accountId: "acct-1", amount: "10.0000", departmentId: "dept-1" },
+    { accountId: "acct-1", amount: "10.0000" as KernelLine["amount"], departmentId: "dept-1" },
   ]);
 });
 
@@ -205,7 +205,7 @@ test("the party segment label reads Party in the required-dimension refusal", as
     { id: "acct-1", number: null, name: "AR", required_dimensions: ["party"], segment_names: {} },
   ];
   await assert.rejects(
-    () => validateRequiredDimensions(stubRunner(rows), "org-1", [{ accountId: "acct-1", amount: "10.0000" }]),
+    () => validateRequiredDimensions(stubRunner(rows), "org-1", [{ accountId: "acct-1", amount: "10.0000" as KernelLine["amount"] }]),
     (e: unknown) => e instanceof PostingError && /^Party is required/.test(e.message),
   );
 });

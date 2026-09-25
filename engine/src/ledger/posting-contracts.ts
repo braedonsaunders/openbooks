@@ -1,5 +1,6 @@
 import type { schema } from "../platform/db.ts";
 import type { CustomGlLineRunEvidence } from "../scripting/scripting.ts";
+import type { Money } from "../money/brands.ts";
 /** Posting input contracts and the shared refusal identity; no runtime database dependency. */
 
 export type PostingDocument = typeof schema.documents.$inferSelect;
@@ -9,8 +10,10 @@ export type DocLine = PostingDocumentLine;
 
 export interface KernelLine {
   accountId: string;
-  /** Signed transaction-currency amount; translated before ledger insertion. */
-  amount: string;
+  /** Signed transaction-currency amount, canonical ledger money by the time
+   * a rule emits it (parsed at the DocLine boundary, brand-closed after);
+   * translated before ledger insertion. */
+  amount: Money;
   currency?: string;
   txnAmount?: string;
   fxRate?: string;
