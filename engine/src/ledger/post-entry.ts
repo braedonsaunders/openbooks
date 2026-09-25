@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../close/period-policy.ts";
-import { sum } from "../money/money.ts";
+import { sumMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
@@ -365,8 +365,8 @@ export async function postEntry(
 }
 
 /** Total of the entry's base amounts, for callers that settle against it. */
-export function postEntryTotal(lines: readonly { amount: string }[]): string {
-  return sum(lines.map((line) => line.amount));
+export function postEntryTotal(lines: readonly { amount: Money }[]): Money {
+  return sumMoney(lines.map((line) => line.amount));
 }
 
 /**

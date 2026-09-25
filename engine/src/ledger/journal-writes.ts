@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
-import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, orgContext, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
-import { fitsLedgerRange, isZero, ledgerSideTotals, normalizeMoney, sum } from "../money/money.ts";
+import { fitsLedgerRange, isZero, ledgerSideTotals } from "../money/money.ts";
+import { parseMoney, sumMoney, type Money } from "../money/brands.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
@@ -120,14 +120,10 @@ export class JournalWriteError extends Error {
   }
 }
 
-/** Persist leftover journal-line amounts through exact decimal then ledger money. Fail closed. */
-function persistJournalLineAmount(value: unknown, line: number): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) {
-    throw new JournalWriteError(`line ${line}: amount must be a nonzero number with at most 4 decimal places`);
-  }
+/** Parse journal-line amounts at the brand boundary. Fail closed, same message as before. */
+function persistJournalLineAmount(value: unknown, line: number): Money {
   try {
-    return normalizeMoney(exact);
+    return parseMoney(value);
   } catch {
     throw new JournalWriteError(`line ${line}: amount must be a nonzero number with at most 4 decimal places`);
   }
@@ -158,8 +154,8 @@ export function validateJournalInput(input: ScriptJournalInput): {
   documentDate: string;
   memo: string | null;
   referenceNumber: string | null;
-  lines: { accountId?: string; accountCode?: string; amount: string; description: string | null; departmentId: string | null; projectId: string | null }[];
-  totalDebits: string;
+  lines: { accountId?: string; accountCode?: string; amount: Money; description: string | null; departmentId: string | null; projectId: string | null }[];
+  totalDebits: Money;
 } {
   if (!input || typeof input !== "object") throw new JournalWriteError("journal input must be an object");
   if (!Array.isArray(input.lines) || input.lines.length < 2) {
@@ -182,7 +178,7 @@ export function validateJournalInput(input: ScriptJournalInput): {
     throw new JournalWriteError(`invalid documentDate "${input.documentDate}" (use YYYY-MM-DD)`);
   }
 
-  const amounts: string[] = [];
+  const amounts: Money[] = [];
   const lines = input.lines.map((l, i) => {
     const amount = persistJournalLineAmount(l.amount, i + 1);
     if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
@@ -209,7 +205,7 @@ export function validateJournalInput(input: ScriptJournalInput): {
     };
   });
   // Balanced to the 4dp the ledger stores.
-  const balance = sum(amounts);
+  const balance = sumMoney(amounts);
   if (!isZero(balance)) {
     throw new JournalWriteError(`journal is not balanced (debits − credits = ${balance})`);
   }
@@ -228,7 +224,8 @@ export function validateJournalInput(input: ScriptJournalInput): {
     memo: input.memo ? String(input.memo).slice(0, 2000) : null,
     referenceNumber: input.referenceNumber ? String(input.referenceNumber).slice(0, 100) : null,
     lines,
-    totalDebits: debitTotal,
+    // A sum of canonical Money stays canonical Money; the brand records that.
+    totalDebits: debitTotal as Money,
   };
 }
 
