@@ -644,8 +644,10 @@ function BudgetMoreActions({ scenario, canManage, canApprove, canExport, busy, o
 function BudgetImport({ scenarioId, closeHref, revisionRef, execute, onCommitted }: { scenarioId: string; closeHref: string; revisionRef: React.MutableRefObject<number>; execute: <T>(url: string, method: string, payload: Record<string, unknown>) => Promise<T>; onCommitted: () => void }) {
   const t = useTranslations('budgets')
   const [file, setFile] = useState<File | null>(null)
-  const [payload, setPayload] = useState<Record<string, unknown> | null>(null)
-  const [preview, setPreview] = useState<{ valid: boolean; rows: number; errors: { row: number; field: string; message: string }[] } | null>(null)
+  const requestId = useRef(0)
+  const [requestVersion, setRequestVersion] = useState(0)
+  const [payload, setPayload] = useState<{ requestId: number; value: Record<string, unknown> } | null>(null)
+  const [preview, setPreview] = useState<{ requestId: number; valid: boolean; rows: number; errors: { row: number; field: string; message: string }[] } | null>(null)
   const [busy, setBusy] = useState(false)
   async function encode(selected: File) {
     const format = selected.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'csv'
@@ -660,29 +662,33 @@ function BudgetImport({ scenarioId, closeHref, revisionRef, execute, onCommitted
   }
   async function validate() {
     if (!file) return
+    const selectedFile = file
+    const request = requestId.current
     setBusy(true)
     try {
-      const encoded = await encode(file)
-      setPayload(encoded)
+      const encoded = await encode(selectedFile)
+      if (requestId.current !== request) return
       const response = await fetch(`/api/budgets/${scenarioId}/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...encoded, expectedRevision: revisionRef.current }) })
       const data = await response.json()
+      if (requestId.current !== request) return
       if (!response.ok) throw new Error(data.error)
-      setPreview(data)
+      setPayload({ requestId: request, value: encoded })
+      setPreview({ ...data, requestId: request })
     } catch {
-      toast.error(t('import.failed'))
-    } finally { setBusy(false) }
+      if (requestId.current === request) toast.error(t('import.failed'))
+    } finally { if (requestId.current === request) setBusy(false) }
   }
   async function commit() {
-    if (!payload || !preview?.valid) return
+    if (!payload || payload.requestId !== requestId.current || !preview?.valid || preview.requestId !== requestId.current) return
     setBusy(true)
     try {
-      const data = await execute<{ revision: number; imported: number }>(`/api/budgets/${scenarioId}/import`, 'POST', { ...payload, commit: true })
+      const data = await execute<{ revision: number; imported: number }>(`/api/budgets/${scenarioId}/import`, 'POST', { ...payload.value, commit: true })
       toast.success(t('import.imported', { count: data.imported }))
-      setFile(null); setPayload(null); setPreview(null); onCommitted()
+      setFile(null); setPayload(null); setPreview(null); requestId.current += 1; setRequestVersion(requestId.current); onCommitted()
     } catch { toast.error(t('import.failed')) } finally { setBusy(false) }
   }
   return <UrlDrawer open stacked closeHref={closeHref} size="md" title={<span className="flex items-center gap-2"><FileUp size={17} />{t('import.title')}</span>} description={t('import.description')}>
-    <div className="space-y-3"><Input type="file" accept=".csv,.xlsx" aria-label={t('import.choose')} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(null) }} /><div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" disabled={!file || busy} onClick={() => void validate()}>{t('import.preview')}</Button>{preview?.valid ? <Button size="sm" disabled={busy} onClick={() => void commit()}>{t('import.apply')}</Button> : null}</div>
+    <div className="space-y-3"><Input type="file" accept=".csv,.xlsx" aria-label={t('import.choose')} onChange={(event) => { requestId.current += 1; setRequestVersion(requestId.current); setFile(event.target.files?.[0] ?? null); setPayload(null); setPreview(null); setBusy(false) }} /><div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" disabled={!file || busy} onClick={() => void validate()}>{t('import.preview')}</Button>{preview?.valid && preview.requestId === requestVersion ? <Button size="sm" disabled={busy} onClick={() => void commit()}>{t('import.apply')}</Button> : null}</div>
     {preview ? <div className={preview.valid ? 'text-sm text-emerald-700 dark:text-emerald-300' : 'text-sm text-red-700 dark:text-red-300'}>{preview.valid ? t('import.valid', { count: preview.rows }) : t('import.invalid', { count: preview.errors.length })}</div> : null}
     {preview && !preview.valid ? <ul className="max-h-40 space-y-1 overflow-auto text-xs text-red-700 dark:text-red-300">{preview.errors.slice(0, 50).map((error, index) => <li key={`${error.row}-${error.field}-${index}`}>{t('import.rowError', error)}</li>)}</ul> : null}
   </div></UrlDrawer>
