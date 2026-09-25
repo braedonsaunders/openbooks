@@ -23,6 +23,12 @@ export const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const config = {
+  // Types are gated by CI's own `npm run typecheck -w web` job, and a release
+  // needs that job green on the exact SHA. Type-checking again inside
+  // `next build` duplicates it: ~3.3 GB and ~2.5 min in the same process that
+  // already holds the Turbopack compilation, and it ran a GitHub runner out of
+  // memory (exit 143 at "Running TypeScript", 2026-09-24).
+  typescript: { ignoreBuildErrors: true },
   // Both loopback names serve the same local development instance.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   transpilePackages: ["@openbooks/engine", "@openbooks/schema"],
