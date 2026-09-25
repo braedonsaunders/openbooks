@@ -56,6 +56,7 @@ import {
   roundDiv,
   toUnits,
 } from "../money/money.ts";
+import type { Rate } from "../money/brands.ts";
 
 export type OverheadRateMethod = "simple" | "weighted" | "stepped";
 export type OverheadCompositeMethod = "sum" | "weighted" | "cascading";
@@ -243,18 +244,20 @@ export function compareOverheadDecimals(a: string | number, b: string | number):
  * method. Departments present in either map participate; a non-positive base
  * yields zero (mirrors the legacy `deptBase > 0` guard).
  */
+// Every rate below is fixed-4dp text (quantize/div/ZERO_4): canonical Rate.
 export function deriveOverheadCategoryDeptRates(
   input: OverheadCategoryDeptInput,
-): Record<string, string> {
+): Record<string, Rate> {
   const deptIds = [...new Set([...Object.keys(input.expenseByDept), ...Object.keys(input.baseByDept)])].sort();
-  const out: Record<string, string> = {};
+  const out: Record<string, Rate> = {};
   if (input.allocationMethod === "stepped" && (input.allocationTiers?.length ?? 0) > 0) {
     const tiers = [...(input.allocationTiers ?? [])].sort((a, b) =>
       compareOverheadDecimals(a.min ?? 0, b.min ?? 0),
     );
     for (const deptId of deptIds) {
       const base = quantizeOverheadMoney(input.baseByDept[deptId] ?? "0");
-      let matched: string | null = null;
+      // quantizeOverheadMoney emits fixed 4dp: a canonical Rate.
+      let matched: Rate | null = null;
       for (let i = tiers.length - 1; i >= 0; i -= 1) {
         const tier = tiers[i];
         if (!tier) continue;
@@ -263,17 +266,18 @@ export function deriveOverheadCategoryDeptRates(
         if (compareOverheadDecimals(base, min) < 0) continue;
         if (max !== null && compareOverheadDecimals(base, max) > 0) continue;
         if (compareOverheadDecimals(String(tier.rate ?? 0), "0") <= 0) continue;
-        matched = quantizeOverheadMoney(String(tier.rate ?? 0));
+        matched = quantizeOverheadMoney(String(tier.rate ?? 0)) as Rate;
         break;
       }
       if (matched !== null) {
         out[deptId] = matched;
         continue;
       }
-      out[deptId] =
+      out[deptId] = (
         compareOverheadDecimals(base, "0") > 0
           ? div(input.expenseByDept[deptId] ?? ZERO_4, base)
-          : ZERO_4;
+          : ZERO_4
+      ) as Rate;
     }
     return out;
   }
@@ -283,10 +287,11 @@ export function deriveOverheadCategoryDeptRates(
   // base-and-weight-weighted mean of these, pinned by test).
   for (const deptId of deptIds) {
     const base = quantizeOverheadMoney(input.baseByDept[deptId] ?? "0");
-    out[deptId] =
+    out[deptId] = (
       compareOverheadDecimals(base, "0") > 0
         ? div(input.expenseByDept[deptId] ?? ZERO_4, base)
-        : ZERO_4;
+        : ZERO_4
+    ) as Rate;
   }
   return out;
 }
@@ -296,22 +301,23 @@ export function deriveOverheadCategoryDeptRates(
  * mirroring the Overall headline semantics per department. Only included
  * categories participate.
  */
-export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): string {
+export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): Rate {
   const included = input.categories.filter((c) => c.includeInComposite);
-  if (included.length === 0) return ZERO_4;
+  // Every exit below is fixed-4dp text (literals, add-chains, fromUnits).
+  if (included.length === 0) return ZERO_4 as Rate;
   switch (input.compositeMethod) {
     case "sum": {
       let total = ZERO_4;
       for (const c of included) total = add(total, c.rate);
-      return total;
+      return total as Rate;
     }
     case "weighted": {
       let expenseTotal = ZERO_4;
       for (const c of included) expenseTotal = add(expenseTotal, c.expense);
-      if (cmp(expenseTotal, "0") <= 0) return ZERO_4;
+      if (cmp(expenseTotal, "0") <= 0) return ZERO_4 as Rate;
       let weightedUnits = 0n;
       for (const c of included) weightedUnits += toUnits(c.rate) * toUnits(c.expense);
-      return fromUnits(roundDiv(weightedUnits, toUnits(expenseTotal)));
+      return fromUnits(roundDiv(weightedUnits, toUnits(expenseTotal))) as Rate;
     }
     case "cascading": {
       const base = normalizeMoney(input.baseLaborRate ?? DEFAULT_BASE_LABOR_RATE);
@@ -329,7 +335,7 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
           running += rateUnits;
         }
       }
-      return fromUnits(running - baseUnits);
+      return fromUnits(running - baseUnits) as Rate;
     }
   }
 }
