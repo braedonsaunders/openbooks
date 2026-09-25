@@ -19,25 +19,10 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env, withOrg } from "../platform/db.ts";
 import { loadEntities } from "./migrate.ts";
-import type { MigrationSource } from "./source.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { stubMigrationSource as source } from "./integration-seeds.ts";
 
 const DB = !!env.OPENBOOKS_DB_URL;
-
-function source(): MigrationSource {
-  return {
-    name: "migration-test",
-    refKey: "migrationTest",
-    baseCurrency: "CAD",
-    accountingPeriods: async () => [],
-    entities: async () => [],
-    nativeChanges: async () => {
-      throw new Error("not used by this test");
-    },
-    trialBalance: async () => [],
-    monthlyActivity: async () => [],
-  };
-}
 
 async function currencyOf(orgId: string, ref: string): Promise<string | null> {
   const [row] = (await withOrg(orgId, () => db.execute<{ base_currency: string }>(sql`

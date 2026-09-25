@@ -20,7 +20,7 @@ import {
 } from "./period-run.ts";
 import { getRun, listRuns, queryLineage } from "./run-queries.ts";
 import type { DriverResolver, RunComputation } from "./types.ts";
-import { enableAllocations, negate, seedDepartment } from "./integration-seeds.ts";
+import { enableAllocations, journalLineCount, negate, seedDepartment } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -182,12 +182,6 @@ async function coordinateTotals(orgId: string): Promise<Map<string, string>> {
   return new Map(
     rows.map((row) => [`${row.account_id}|${row.department_id ?? ""}`, row.total]),
   );
-}
-
-async function journalLineCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from journal_lines where org_id = ${orgId}`)).rows;
-  return Number(rows[0]?.count ?? 0);
 }
 
 async function postedRunCount(orgId: string, ruleId: string): Promise<number> {
