@@ -73,6 +73,7 @@ const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
 const messagesFr = (await import("../messages/fr")).default;
+type Catalog = typeof messages | typeof messagesFr;
 const { ViewsMenu } = await import("./views-menu");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -81,7 +82,7 @@ const FAILED = (messages as { customization: { views: { setDefaultFailed: string
 const SET_DEFAULT = (messages as { customization: { views: { setDefault: string } } }).customization.views
   .setDefault;
 
-function provider(children: React.ReactElement, locale = "en", catalog = messages) {
+function provider(children: React.ReactElement, locale = "en", catalog: Catalog = messages) {
   /* eslint-disable react/no-children-prop */
   return React.createElement(NextIntlClientProvider, {
     locale,
@@ -94,7 +95,7 @@ function provider(children: React.ReactElement, locale = "en", catalog = message
 
 async function mountMenu(options: {
   locale?: string
-  catalog?: typeof messages
+  catalog?: Catalog
   available?: Array<{ id: string; name: string; recordType: string; scope: "org" | "user"; ownerId: string | null; isDefault: boolean; isActive: boolean }>
   currentName?: string
 } = {}): Promise<{ root: { unmount: () => void } }> {
