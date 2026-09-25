@@ -18,7 +18,7 @@ import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
-import { decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
+import { decimalAbs, decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -127,12 +127,26 @@ export async function loadBalanceSheet(
     orgInfo(),
   ])
 
-  const valueOf = (label: string) => view?.lines.find((l) => l.label === label)?.values?.[0] ?? '0.0000'
-  const totalAssets = valueOf(labels.totalAssets)
-  const totalLiabilities = valueOf(labels.totalLiabilities)
-  const totalEquity = valueOf(labels.totalEquity)
-  const difference = decimalAdd(totalAssets, decimalNeg(decimalAdd(totalLiabilities, totalEquity)))
-  const balanced = view !== null && decimalCmp(difference, '-0.0100') > 0 && decimalCmp(difference, '0.0100') < 0
+  // The badge checks every amount column, not just the first: with a
+  // breakout there is no total column, so reading values[0] alone reports a
+  // correct sheet as off. Variance columns are differences and ratios, never
+  // balanceable figures, and stay out of the check. The reported gap is the
+  // largest-magnitude column gap.
+  const amountIndexes = (view?.columns ?? [])
+    .map((c, i) => (c.kind === 'amount' ? i : -1))
+    .filter((i) => i >= 0)
+  const columnValue = (label: string, i: number) =>
+    view?.lines.find((l) => l.label === label)?.values?.[i] ?? '0.0000'
+  const gaps = amountIndexes.map((i) => {
+    const assets = columnValue(labels.totalAssets, i)
+    const claims = decimalAdd(columnValue(labels.totalLiabilities, i), columnValue(labels.totalEquity, i))
+    return decimalAdd(assets, decimalNeg(claims))
+  })
+  const difference = gaps.reduce(
+    (worst, gap) => (decimalCmp(decimalAbs(gap), decimalAbs(worst)) > 0 ? gap : worst),
+    '0.0000',
+  )
+  const balanced = view !== null && gaps.every((gap) => decimalCmp(gap, '-0.0100') > 0 && decimalCmp(gap, '0.0100') < 0)
 
 
   return {
