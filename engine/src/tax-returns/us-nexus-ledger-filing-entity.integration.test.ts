@@ -80,7 +80,9 @@ test("an entity ledger measures in the entity's functional currency", { skip: !D
     assert.equal(usd.translation, null);
     assert.equal(usd.states[0]?.state, "CA");
     assert.equal(usd.states[0]?.salesUsd, "1000.0000");
-    assert.equal(usd.states[0]?.threshold.salesUsd, "500000.0000");
+    // The direct USD path applies the statutory table verbatim (whole
+    // dollars); only the translated path carries ledger scale.
+    assert.equal(usd.states[0]?.threshold.salesUsd, "500000");
 
     // CAD entity measures only its own sale, in CAD.
     await seedUsdToCad(org.orgId);
