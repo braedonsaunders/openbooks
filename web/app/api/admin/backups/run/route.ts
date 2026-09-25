@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { s3Enabled } from "@openbooks/engine/src/platform/file-storage.ts";
 import { enqueueBackupRun } from "@openbooks/jobs";
 import { guardPermission } from "../../../../../lib/authz";
@@ -57,10 +57,21 @@ export async function POST() {
     // status predicate: an enqueue response may be ambiguous, and a worker
     // could already have claimed the run while the producer observed an error.
     try {
-      await db.execute(sql`
-        update backup_runs
-           set status = 'failed', error = ${message}, completed_at = now(), updated_at = now()
-         where id = ${runId} and org_id = ${orgId} and status = 'queued'`);
+      await withOrgTransaction(orgId, async () => {
+        const transitioned = await db.execute<{ id: string }>(sql`
+          update backup_runs
+             set status = 'failed', error = ${message}, completed_at = now(), updated_at = now()
+           where id = ${runId} and org_id = ${orgId} and status = 'queued'
+          returning id`);
+        if (transitioned.rows.length !== 1) {
+          throw new Error(`backup run ${runId} was not queued when enqueue failure cleanup ran`);
+        }
+        await db.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'backup_runs', ${runId}, 'update',
+                  jsonb_build_object('event', 'backup_enqueue_failed', 'status', jsonb_build_object('before', 'queued', 'after', 'failed'), 'error', ${message}),
+                  ${actor.id})`);
+      });
     } catch (cleanupError) {
       console.error(
         `[backup] run ${runId}: enqueue failure cleanup failed:`,

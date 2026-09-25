@@ -45,9 +45,11 @@ const mockSources = new Map<string, string>([
           if (text.includes('insert into backup_runs')) {
             return { rows: [{ id: state.runId }] }
           }
+          if (text.includes('update backup_runs')) return { rows: [{ id: state.runId }] }
           return { rows: [] }
         },
       }
+      export async function withOrgTransaction(_orgId, fn) { return fn() }
       export const env = {}
       export const pool = {}
     `,
@@ -133,8 +135,6 @@ test("an enqueue failure marks the queued run failed and releases the in-flight 
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { error: "could not queue backup" });
   assert.equal(routeState.enqueueCalls, 1);
-  const cleanup = routeState.calls.find((text) => text.includes("set status = 'failed'"));
-  assert.ok(cleanup, "the committed queued row is transitioned to failed");
-  assert.match(cleanup, /update backup_runs/);
-  assert.match(cleanup, /status = 'queued'/);
+  assert.ok(routeState.calls.some((text) => text.includes("update backup_runs") && text.includes("status = 'queued'")), "the queued run is transitioned to failed");
+  assert.ok(routeState.calls.some((text) => text.includes("insert into audit_log") && text.includes("backup_enqueue_failed")), "the actor-attributed failure event is recorded");
 });
