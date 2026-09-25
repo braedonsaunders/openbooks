@@ -157,7 +157,7 @@ test(
       // Configured entirely through the declared surfaces: a bare profile
       // plus the pack's two certificates — no profile column, no default.
       const employee = await nlEmployee(fx, "Jan Modaal", [
-        { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true" } },
+        { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
         { key: "nl_premies", answers: { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25" } },
       ]);
       const run = await createPayRun({
@@ -209,7 +209,7 @@ test(
     const fx = await nlPayrollOrg();
     try {
       const employee = await nlEmployee(fx, "No Premies", [
-        { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true" } },
+        { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
       ]);
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,

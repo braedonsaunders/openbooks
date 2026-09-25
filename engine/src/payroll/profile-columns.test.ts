@@ -112,8 +112,9 @@ test("answer validation accepts a complete NL declaration and refuses what it do
     null,
   );
   // Absent answers fall back to declared defaults at read time, so only a
-  // required field with no default is a problem when missing.
-  assert.equal(certificateAnswersProblem(opgaaf!, {}), null);
+  // required field with no default is a problem when missing — since the
+  // AOW age class lost its under-AOW default, an empty opgaaf is one.
+  assert.match(certificateAnswersProblem(opgaaf!, {}) ?? "", /"age_class" is required/);
   assert.equal(certificateAnswersProblem(premies!, {}), null);
   // An undeclared key is refused rather than stored where no engine reads it.
   assert.match(

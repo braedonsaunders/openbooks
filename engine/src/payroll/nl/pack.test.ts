@@ -172,7 +172,10 @@ function stubStored(rows: Record<string, Record<string, string>>): StoredCertifi
 const PREMIES = { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25" };
 
 function stubContext(
-  stored: Record<string, Record<string, string>> = { nl_premies: PREMIES },
+  stored: Record<string, Record<string, string>> = {
+    nl_loonheffingen: { age_class: "under_aow" },
+    nl_premies: PREMIES,
+  },
   overrides: Partial<PayrollStatutoryComputeContext> = {},
 ): {
   ctx: PayrollStatutoryComputeContext;
@@ -237,7 +240,7 @@ function stubContext(
 
 test("computeStatutory prices a 2026 maandloon end to end (korting + premies via certificates)", async () => {
   const { ctx, pushed } = stubContext({
-    nl_loonheffingen: { apply_loonheffingskorting: "true" },
+    nl_loonheffingen: { apply_loonheffingskorting: "true", age_class: "under_aow" },
     nl_premies: PREMIES,
   });
   const factors = await NL_PAYROLL_PACK.computeStatutory(ctx);
@@ -258,17 +261,13 @@ test("computeStatutory prices a 2026 maandloon end to end (korting + premies via
   assert.equal(zvw?.amount, "60.9400");
 });
 
-test("computeStatutory without the opgaaf prices without korting", async () => {
-  const { ctx } = stubContext();
-  const factors = await NL_PAYROLL_PACK.computeStatutory(ctx);
-  // € 999,00 zonder korting: the maandtabel's "zonder" column reads 357,08.
-  assert.equal(factors["LH"], "357.0800");
-  assert.equal(factors["AHK"], "0.0000");
-  assert.equal(factors["ARK"], "0.0000");
+test("computeStatutory refuses a missing opgaaf age class instead of assuming under-AOW", async () => {
+  const { ctx } = stubContext({ nl_premies: PREMIES });
+  await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /AOW age class.*record/i);
 });
 
 test("computeStatutory refuses SV premiums without the declared SV facts", async () => {
-  const { ctx } = stubContext({});
+  const { ctx } = stubContext({ nl_loonheffingen: { age_class: "under_aow" } });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /AWf/);
 });
 
@@ -288,6 +287,9 @@ test("computeStatutory refuses an untranscribed tax year and an unsupported regi
 });
 
 test("computeStatutory refuses a bonus by name", async () => {
-  const { ctx } = stubContext({ nl_premies: PREMIES }, { nonPeriodic: "500.0000" });
+  const { ctx } = stubContext({
+    nl_loonheffingen: { age_class: "under_aow" },
+    nl_premies: PREMIES,
+  }, { nonPeriodic: "500.0000" });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /bijzondere beloningen/);
 });

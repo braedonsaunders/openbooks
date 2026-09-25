@@ -78,11 +78,12 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
         { value: "aow_1945", label: "AOW-leeftijd, geboren vóór 1946" },
         { value: "aow_1946", label: "AOW-leeftijd, geboren in 1946 of later" },
       ],
-      // The witte tabellen price "jonger dan de AOW-leeftijd" unless the
-      // loonstaat records otherwise (Gegevens voor tabeltoepassing).
-      default: "under_aow",
+      // The table and volksverzekeringen liability differ by age class; the
+      // pack has no birth-date input from which this can be derived safely.
+      required: true,
       help: "Which loonheffing age column the employee falls in, read off the birth date on the "
-        + "opgaaf. The schijventarief and the heffingskortingen differ per column "
+        + "opgaaf. This must be recorded; an absent answer cannot default to under-AOW. "
+        + "The schijventarief and the heffingskortingen differ per column "
         + "(Rekenvoorschriften 2026, Tabellen 1–5).",
     },
     {
