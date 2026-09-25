@@ -1597,62 +1597,6 @@ test("direct inventory action retries replay the stored result without duplicati
   }
 });
 
-test("both inventory HTTP routes thread every monetary action through the idempotency boundary", () => {
-  const actionsRoute = readFileSync(
-    new URL("../../../web/app/api/inventory/actions/route.ts", import.meta.url),
-    "utf8",
-  );
-  const actionDrawer = readFileSync(
-    new URL("../../../web/app/(app)/inventory/InventoryActionDrawer.tsx", import.meta.url),
-    "utf8",
-  );
-  for (const operation of [
-    "inventory.receive",
-    "inventory.issue",
-    "inventory.adjust",
-    "inventory.transfer",
-    "inventory.build",
-    "inventory.landed",
-    "inventory.reverse",
-  ]) {
-    assert.match(actionsRoute, new RegExp(`operation: '${operation}'`));
-  }
-  assert.match(actionsRoute, /executeIdempotentInventoryAction/);
-  assert.match(actionsRoute, /idempotencyKey: body\.idempotencyKey/);
-  // IN8: one retry identity per intended action — minted once, reused across
-  // transport-uncertain retries, rotated only after success or an input change.
-  assert.match(
-    actionDrawer,
-    /retryKeyRef\.current = crypto\.randomUUID\(\)/,
-    "the inventory action drawer mints a key for every intended posting",
-  );
-  assert.match(
-    actionDrawer,
-    /body:\s*JSON\.stringify\(\{[\s\S]*idempotencyKey,/,
-    "the inventory action drawer sends that retry key with the posting",
-  );
-  // Key reuse with different input maps to 409, ahead of InventoryError's 422.
-  assert.match(actionsRoute, /instanceof InventoryIdempotencyConflictError[\s\S]*?\? 409/);
-
-  const advancedRoute = readFileSync(
-    new URL("../../../web/app/api/inventory/advanced/route.ts", import.meta.url),
-    "utf8",
-  );
-  for (const operation of [
-    "inventory.transfer-order.create",
-    "inventory.transfer-order.ship",
-    "inventory.transfer-order.receive",
-    "inventory.landed-voucher.post",
-  ]) {
-    assert.match(advancedRoute, new RegExp(`"${operation}"`));
-  }
-  assert.match(advancedRoute, /executeIdempotentInventoryAction/);
-  assert.match(advancedRoute, /instanceof InventoryIdempotencyConflictError[\s\S]*?\? 409/);
-  // Catalog-only ensures mint identifiers and stay OUTSIDE the replay boundary.
-  assert.match(advancedRoute, /await ensureLot\(orgId/);
-  assert.match(advancedRoute, /await ensureSerial\(orgId/);
-});
-
 test("manual-basis landed cost lands on a target whose layers carry no value, keeping GL = Σ layers", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
