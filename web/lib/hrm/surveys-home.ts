@@ -89,7 +89,11 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
   const authoring = sp.author === '1'
   const surveyId = typeof sp.survey === 'string' && sp.survey.length > 0 ? sp.survey : null
 
-  const surveys = await listSurveys({ orgId: authz.orgId, actorId: authz.userId, ...(status ? { status } : {}) })
+  // Status chips count every survey: the selected status filters only the
+  // visible rows below, so Draft and Closed never read 0 beside a
+  // filtered list (the same shape benefits fixed in 515a32fd2).
+  const surveys = await listSurveys({ orgId: authz.orgId, actorId: authz.userId })
+  const visible = status ? surveys.filter((survey) => survey.status === status) : surveys
   const kindLabel = (value: string): string => t(`surveys.kind.${value}`)
   const anonymityLabel = (value: string): string => t(`surveys.anonymity.${value}`)
   const statusLabel = (value: string): string => t(`surveys.status.${value}`)
@@ -98,8 +102,8 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
   // list figure and the results panel share one source of truth.
   const rows: SurveyRow[] = []
   const counts = new Map<string, number>()
-  for (const survey of surveys) {
-    counts.set(survey.status, (counts.get(survey.status) ?? 0) + 1)
+  for (const survey of surveys) counts.set(survey.status, (counts.get(survey.status) ?? 0) + 1)
+  for (const survey of visible) {
     let participation: string | null = null
     try {
       const results = await getSurveyResults({ orgId: authz.orgId, actorId: authz.userId, surveyId: survey.id })
