@@ -2307,6 +2307,27 @@
       "allFlagged": "All flagged"
     }
   },
+  "entityDrawer": {
+    "descriptionCustomer": "Customer payment history",
+    "descriptionVendor": "Vendor payment history",
+    "loading": "Loading…",
+    "loadFailed": "Could not load history.",
+    "historyUnavailable": "History is unavailable (status {status}).",
+    "reliability": "Reliability",
+    "avgToCollect": "Avg to Collect",
+    "avgToPay": "Avg to Pay",
+    "daysValue": "{days}d",
+    "paymentsCount": "{count} payments · 12mo",
+    "openOverdue": "Open · {count} overdue",
+    "tabOpen": "Open items ({count})",
+    "tabPayments": "Payments ({count} · {currency})",
+    "emptyOpen": "No open items.",
+    "emptyPayments": "No payments recorded.",
+    "overdue": "overdue",
+    "pagerRange": "{from}–{to} of {total}",
+    "prevPage": "Previous page",
+    "nextPage": "Next page"
+  },
   "cashWeek": {
     "drawerDescription": "Net {net} · ending {ending}",
     "netChange": "Net Change",

@@ -2342,6 +2342,27 @@
     },
     "monthYear": "{month} ''{yy}"
   },
+  "entityDrawer": {
+    "descriptionCustomer": "Historique de paiement du client",
+    "descriptionVendor": "Historique de paiement du fournisseur",
+    "loading": "Chargement…",
+    "loadFailed": "Impossible de charger l’historique.",
+    "historyUnavailable": "Historique indisponible (statut {status}).",
+    "reliability": "Fiabilité",
+    "avgToCollect": "Délai moyen d’encaissement",
+    "avgToPay": "Délai moyen de paiement",
+    "daysValue": "{days} j",
+    "paymentsCount": "{count} paiements · 12 mois",
+    "openOverdue": "Ouvert · {count} en retard",
+    "tabOpen": "Postes ouverts ({count})",
+    "tabPayments": "Paiements ({count} · {currency})",
+    "emptyOpen": "Aucun poste ouvert.",
+    "emptyPayments": "Aucun paiement enregistré.",
+    "overdue": "en retard",
+    "pagerRange": "{from}–{to} sur {total}",
+    "prevPage": "Page précédente",
+    "nextPage": "Page suivante"
+  },
   "cashWeek": {
     "actionBar": {
       "bills": "factures fournisseurs",

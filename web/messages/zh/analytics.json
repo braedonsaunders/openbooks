@@ -2342,6 +2342,27 @@
     },
     "monthYear": "{yy}年{month}"
   },
+  "entityDrawer": {
+    "descriptionCustomer": "客户付款历史",
+    "descriptionVendor": "供应商付款历史",
+    "loading": "加载中…",
+    "loadFailed": "无法加载历史记录。",
+    "historyUnavailable": "历史记录不可用（状态 {status}）。",
+    "reliability": "可靠性",
+    "avgToCollect": "平均回款天数",
+    "avgToPay": "平均付款天数",
+    "daysValue": "{days}天",
+    "paymentsCount": "{count}笔付款 · 12个月",
+    "openOverdue": "未结 · 逾期{count}笔",
+    "tabOpen": "未结项 ({count})",
+    "tabPayments": "付款 ({count} · {currency})",
+    "emptyOpen": "暂无未结项。",
+    "emptyPayments": "暂无付款记录。",
+    "overdue": "逾期",
+    "pagerRange": "第{from}–{to}项，共{total}项",
+    "prevPage": "上一页",
+    "nextPage": "下一页"
+  },
   "cashWeek": {
     "actionBar": {
       "bills": "账单",

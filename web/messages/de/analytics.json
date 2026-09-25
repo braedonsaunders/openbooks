@@ -2342,6 +2342,27 @@
     },
     "monthYear": "{month} ''{yy}"
   },
+  "entityDrawer": {
+    "descriptionCustomer": "Zahlungshistorie des Kunden",
+    "descriptionVendor": "Zahlungshistorie des Lieferanten",
+    "loading": "Wird geladen…",
+    "loadFailed": "Historie konnte nicht geladen werden.",
+    "historyUnavailable": "Historie nicht verfügbar (Status {status}).",
+    "reliability": "Zuverlässigkeit",
+    "avgToCollect": "Ø bis Zahlungseingang",
+    "avgToPay": "Ø bis Zahlung",
+    "daysValue": "{days} T",
+    "paymentsCount": "{count} Zahlungen · 12 Mo.",
+    "openOverdue": "Offen · {count} überfällig",
+    "tabOpen": "Offene Posten ({count})",
+    "tabPayments": "Zahlungen ({count} · {currency})",
+    "emptyOpen": "Keine offenen Posten.",
+    "emptyPayments": "Keine Zahlungen erfasst.",
+    "overdue": "überfällig",
+    "pagerRange": "{from}–{to} von {total}",
+    "prevPage": "Vorherige Seite",
+    "nextPage": "Nächste Seite"
+  },
   "cashWeek": {
     "actionBar": {
       "bills": "Rechnungen",
