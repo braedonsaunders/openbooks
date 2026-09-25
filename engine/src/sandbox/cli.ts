@@ -18,6 +18,10 @@ import { listSandboxes } from "./index.ts";
 import { validateSandboxTier } from "./clone.ts";
 import { resolveCliActor } from "./cli-actor.ts";
 import { resolveCreateMasking } from "./cli-masking.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// The sandbox CLI clones tenant data that may post: install the engine seams first.
+installEngineSeams();
 
 function flag(args: string[], name: string): string | undefined {
   const p = args.find((a) => a.startsWith(`--${name}=`));

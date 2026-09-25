@@ -8,6 +8,10 @@ import { resetOrg } from "../../sim/world.ts";
 import { exportDataset } from "./export.ts";
 import { rebuildDataset } from "./rebuild.ts";
 import type { GoldenSnapshot, ReplayDataset } from "./types.ts";
+import { installEngineSeams } from "../../composition/install.ts";
+
+// Replay rebuilds post: install the engine seams first.
+installEngineSeams();
 
 /**
  * Public replay-validation harness CLI.

@@ -5,6 +5,10 @@ import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { runScript, triggerTargetStamp } from "./scripting.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Script journal writes go through the installed writer.
+installEngineSeams();
 
 // D1: a script host write that outlives its run deadline must never commit
 // behind the timeout report, and a retry of the same logical run must

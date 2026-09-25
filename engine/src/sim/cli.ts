@@ -15,6 +15,10 @@ import * as opsPeriodic from "./ops-periodic.ts";
 import * as opsConstruction from "./ops-construction.ts";
 import * as opsTm from "./ops-tm.ts";
 import type { ScriptJournalLine } from "../ledger/journal-writes.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// The simulator posts and runs scripts: install the engine seams first.
+installEngineSeams();
 
 /**
  * The environment CLI — the entire action + observation surface a persona

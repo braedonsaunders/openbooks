@@ -6,6 +6,10 @@ import { db, withBypass } from "../platform/db.ts";
 import { claimDueScriptOccurrence } from "../scheduling/scheduler.ts";
 import { ScriptActorError, runBulkScript, runScheduledScript } from "./scripting.ts";
 import { processScriptJobData } from "../worker/scripts-worker.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Script journal writes go through the installed writer.
+installEngineSeams();
 import {
   createScratchOrg,
   createScratchUser,

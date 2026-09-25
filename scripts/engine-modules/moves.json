@@ -689,5 +689,6 @@
   "engine/src/worker/duties.ts": "engine/src/scheduling/duties.ts",
   "engine/src/xero.test.ts": "engine/src/connectors/xero.test.ts",
   "engine/src/xero.ts": "engine/src/connectors/xero.ts",
-  "engine/src/harness/scenario.ts": "engine/src/golden/scenario.ts"
+  "engine/src/harness/scenario.ts": "engine/src/golden/scenario.ts",
+  "engine/src/ledger/posting-effects-cli.ts": "engine/src/composition/posting-effects-cli.ts"
 }

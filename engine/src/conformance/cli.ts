@@ -42,6 +42,10 @@ import { finalizeCorpus, runCorpus } from "./runner.ts";
 import { runId, sourceSha } from "../platform/provenance.ts";
 import type { ControlCase } from "./controls.ts";
 import type { CorpusReport } from "./types.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Conformance cases post: install the engine seams first.
+installEngineSeams();
 
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);

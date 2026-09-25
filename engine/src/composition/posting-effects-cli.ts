@@ -9,10 +9,14 @@
  * writes immutable audit evidence with the authorizing user and reason.
  */
 import { pool } from "../platform/db.ts";
+import { installEngineSeams } from "./install.ts";
 import {
   listFailedPostingEffects,
   replayTerminalPostingEffect,
-} from "./posting-effects.ts";
+} from "../ledger/posting-effects.ts";
+
+// This CLI replays posting effects: install the engine seams first.
+installEngineSeams();
 
 function option(name: string): string | undefined {
   const prefix = `--${name}=`;

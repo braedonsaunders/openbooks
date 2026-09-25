@@ -7,7 +7,11 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { deleteDocument } from "./document-delete.ts";
 import { completeRequestedDocumentVoid, DocumentVoidError, rejectRequestedDocumentVoid, requestDocumentVoid } from "./document-void.ts";
 import { submitForApproval } from "../flows/submit.ts";
+import { installEngineSeams } from "../composition/install.ts";
 import { postDocument } from "./posting-document.ts";
+
+// before_void probe scripts write journals through the installed writer.
+installEngineSeams();
 import {
   createScratchOrg,
   createScratchUser,
