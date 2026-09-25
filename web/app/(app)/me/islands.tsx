@@ -249,8 +249,8 @@ export function ProfileDialog({
       <div className="flex flex-col gap-4 p-4">
         {strings.employments.length > 1 ? (
           <div className="flex flex-col gap-1.5">
-            <Label>{strings.employmentLabel}</Label>
-            <Select value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
+            <Label htmlFor="me-contact-employment">{strings.employmentLabel}</Label>
+            <Select id="me-contact-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
               <option value="">{strings.employmentLabel}</option>
               {strings.employments.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -262,16 +262,16 @@ export function ProfileDialog({
         ) : null}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label>{strings.phoneLabel}</Label>
-            <Input value={phone} disabled={clearPhone} onChange={(event) => setPhone(event.target.value)} />
+            <Label htmlFor="me-contact-phone">{strings.phoneLabel}</Label>
+            <Input id="me-contact-phone" value={phone} disabled={clearPhone} onChange={(event) => setPhone(event.target.value)} />
             <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={clearPhone} onChange={(event) => setClearPhone(event.target.checked)} />
               {strings.clearHint}
             </label>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>{strings.emailLabel}</Label>
-            <Input value={email} disabled={clearEmail} onChange={(event) => setEmail(event.target.value)} />
+            <Label htmlFor="me-contact-email">{strings.emailLabel}</Label>
+            <Input id="me-contact-email" value={email} disabled={clearEmail} onChange={(event) => setEmail(event.target.value)} />
             <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={clearEmail} onChange={(event) => setClearEmail(event.target.checked)} />
               {strings.clearHint}
@@ -300,8 +300,8 @@ export function ProfileDialog({
           </label>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>{strings.reasonLabel}</Label>
-          <Textarea placeholder={strings.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />
+          <Label htmlFor="me-contact-reason">{strings.reasonLabel}</Label>
+          <Textarea id="me-contact-reason" placeholder={strings.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />
         </div>
         {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
         <div className="flex items-center justify-end gap-2">
@@ -417,12 +417,12 @@ export function GoalProgressDialog({
     <UrlDrawer open closeHref={closeHref} title={dialog.title} description={dialog.description}>
       <div className="flex flex-col gap-4 p-4">
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.percentLabel}</Label>
-          <Input inputMode="numeric" value={percent} onChange={(event) => setPercent(event.target.value)} />
+          <Label htmlFor="me-allocation-percent">{dialog.percentLabel}</Label>
+          <Input id="me-allocation-percent" inputMode="numeric" value={percent} onChange={(event) => setPercent(event.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.noteLabel}</Label>
-          <Textarea placeholder={dialog.notePlaceholder} value={note} onChange={(event) => setNote(event.target.value)} />
+          <Label htmlFor="me-allocation-note">{dialog.noteLabel}</Label>
+          <Textarea id="me-allocation-note" placeholder={dialog.notePlaceholder} value={note} onChange={(event) => setNote(event.target.value)} />
         </div>
         {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
         <div className="flex items-center justify-end gap-2">
@@ -516,8 +516,8 @@ export function BenefitElectDialog({
       <div className="flex flex-col gap-4 p-4">
         {dialog.employments.length > 1 ? (
           <div className="flex flex-col gap-1.5">
-            <Label>{dialog.employmentLabel}</Label>
-            <Select value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
+            <Label htmlFor="me-elect-employment">{dialog.employmentLabel}</Label>
+            <Select id="me-elect-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
               <option value="">{dialog.employmentLabel}</option>
               {dialog.employments.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -528,8 +528,8 @@ export function BenefitElectDialog({
           </div>
         ) : null}
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.planLabel}</Label>
-          <Select value={planId} onChange={(event) => { setPlanId(event.target.value); setLevelKey('') }}>
+          <Label htmlFor="me-elect-plan">{dialog.planLabel}</Label>
+          <Select id="me-elect-plan" value={planId} onChange={(event) => { setPlanId(event.target.value); setLevelKey('') }}>
             <option value="">{dialog.planLabel}</option>
             {dialog.plans.map((option) => (
               <option key={option.value} value={option.value}>
@@ -540,8 +540,8 @@ export function BenefitElectDialog({
         </div>
         {levels.length > 0 ? (
           <div className="flex flex-col gap-1.5">
-            <Label>{dialog.levelLabel}</Label>
-            <Select value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
+            <Label htmlFor="me-elect-level">{dialog.levelLabel}</Label>
+            <Select id="me-elect-level" value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
               <option value="">{dialog.levelLabel}</option>
               {levels.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -552,8 +552,8 @@ export function BenefitElectDialog({
           </div>
         ) : null}
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.windowLabel}</Label>
-          <Select value={windowId} onChange={(event) => setWindowId(event.target.value)}>
+          <Label htmlFor="me-elect-window">{dialog.windowLabel}</Label>
+          <Select id="me-elect-window" value={windowId} onChange={(event) => setWindowId(event.target.value)}>
             <option value="">{dialog.windowLabel}</option>
             {dialog.windows.map((option) => (
               <option key={option.value} value={option.value}>
@@ -563,12 +563,12 @@ export function BenefitElectDialog({
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.fromLabel}</Label>
-          <Input value={from} placeholder="2026-04-01" onChange={(event) => setFrom(event.target.value)} />
+          <Label htmlFor="me-elect-from">{dialog.fromLabel}</Label>
+          <Input id="me-elect-from" value={from} placeholder="2026-04-01" onChange={(event) => setFrom(event.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.lifeEventLabel}</Label>
-          <Textarea placeholder={dialog.lifeEventPlaceholder} value={lifeEvent} onChange={(event) => setLifeEvent(event.target.value)} />
+          <Label htmlFor="me-elect-life-event">{dialog.lifeEventLabel}</Label>
+          <Textarea id="me-elect-life-event" placeholder={dialog.lifeEventPlaceholder} value={lifeEvent} onChange={(event) => setLifeEvent(event.target.value)} />
         </div>
         {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
         <div className="flex items-center justify-end gap-2">
@@ -651,8 +651,8 @@ export function BenefitChangeDialog({
       <div className="flex flex-col gap-4 p-4">
         {dialog.levels.length > 0 ? (
           <div className="flex flex-col gap-1.5">
-            <Label>{dialog.levelLabel}</Label>
-            <Select value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
+            <Label htmlFor="me-change-level">{dialog.levelLabel}</Label>
+            <Select id="me-change-level" value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
               <option value="">{dialog.levelLabel}</option>
               {dialog.levels.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -663,12 +663,12 @@ export function BenefitChangeDialog({
           </div>
         ) : null}
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.dateLabel}</Label>
-          <Input value={date} placeholder="2026-04-01" onChange={(event) => setDate(event.target.value)} />
+          <Label htmlFor="me-change-date">{dialog.dateLabel}</Label>
+          <Input id="me-change-date" value={date} placeholder="2026-04-01" onChange={(event) => setDate(event.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>{dialog.reasonLabel}</Label>
-          <Textarea placeholder={dialog.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />
+          <Label htmlFor="me-change-reason">{dialog.reasonLabel}</Label>
+          <Textarea id="me-change-reason" placeholder={dialog.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />
         </div>
         {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
         <div className="flex items-center justify-end gap-2">
