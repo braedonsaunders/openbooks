@@ -93,7 +93,7 @@ export async function computeJpStatutoryWithRates(
   }
   // Amounts arrive as decimal strings (money.ts 4dp, e.g. "300000.0000");
   // JPY has no minor unit, so anything below the yen refuses here.
-  const yenOf = (value: string, what: string): number => {
+  const yenOf = (value: string, what: string): bigint => {
     let units: bigint;
     try {
       units = toUnits(value === "" ? "0" : value);
@@ -104,11 +104,9 @@ export async function computeJpStatutoryWithRates(
     if (units! % 10000n !== 0n) {
       fail(`${what} "${value}" is not a whole yen amount (JPY has no minor unit)`);
     }
-    const yen = Number(units! / 10000n);
-    if (!Number.isSafeInteger(yen)) fail(`${what} "${value}" is out of range`);
-    return yen;
+    return units! / 10000n;
   };
-  if (yenOf(nonPeriodic, "non-periodic amount") !== 0) {
+  if (yenOf(nonPeriodic, "non-periodic amount") !== 0n) {
     fail(
       `non-periodic amount ${nonPeriodic} is refused: bonus withholding uses the 賞与に対する源泉徴収税額の`
       + "算出率の表, which is not transcribed — see JP_REFUSED_2026",
@@ -125,7 +123,7 @@ export async function computeJpStatutoryWithRates(
       + "grade value, copied off the JPS notice) is required — see JP_REFUSED_2026 on 定時決定/随時改定",
     );
   }
-  const standard = Number(standardRaw);
+  const standard = BigInt(standardRaw);
 
   const insuranceCertificate = certificateFor("jp_employment_insurance");
   const insuranceRaw = empFact("JP", {

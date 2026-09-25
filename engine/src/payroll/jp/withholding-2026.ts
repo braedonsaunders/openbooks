@@ -39,9 +39,9 @@ import { JP_PENSION_GRADES_2026 } from "./pension-2026.ts";
 import { JP_GENSEN_MONTHLY_2026 } from "./tables-2026.ts";
 
 /** The lowest 社会保険料等控除後 amount the numbered rows cover. */
-export const JP_GENSEN_LOOKUP_FLOOR = 105000;
+export const JP_GENSEN_LOOKUP_FLOOR = 105000n;
 /** Lookup domain ends here: the 加算 formula rows above are refused. */
-export const JP_GENSEN_LOOKUP_CEILING = 740000;
+export const JP_GENSEN_LOOKUP_CEILING = 740000n;
 /** 乙欄 sub-105,000 rate: 3.063% (復興特別所得税込み). */
 const OTSU_LOW_RATE_NUM = 3063n;
 const OTSU_LOW_RATE_DEN = 100000n;
@@ -50,15 +50,15 @@ function fail(message: string): never {
   throw new PayrollPackError(`JP payroll 2026: ${message}`);
 }
 
-function needIntYen(value: number, what: string): number {
-  if (!Number.isInteger(value) || value < 0) {
+function needIntYen(value: bigint, what: string): bigint {
+  if (value < 0n) {
     fail(`${what} must be a non-negative integer yen amount, got ${value}`);
   }
   return value;
 }
 
 /** The numbered row covering `amount`, or null below the floor. Refuses ≥ ceiling. */
-function gensenRow(amount: number): (typeof JP_GENSEN_MONTHLY_2026)[number] | null {
+function gensenRow(amount: bigint): (typeof JP_GENSEN_MONTHLY_2026)[number] | null {
   needIntYen(amount, "社会保険料等控除後の給与等の金額");
   if (amount >= JP_GENSEN_LOOKUP_CEILING) {
     fail(
@@ -76,7 +76,7 @@ function gensenRow(amount: number): (typeof JP_GENSEN_MONTHLY_2026)[number] | nu
  * 甲欄 lookup: row by 社会保険料等控除後の給与等の金額, column by
  * 扶養親族等の数 (0–7). Below 105,000円 every column is 0.
  */
-export function lookupGensenKo(amountYen: number, dependents: number): number {
+export function lookupGensenKo(amountYen: bigint, dependents: number): bigint {
   if (!Number.isInteger(dependents) || dependents < 0 || dependents > 7) {
     fail(
       `扶養親族等の数 ${dependents} is outside 0–7: the table's 7人超 1,610円-per-person `
@@ -84,24 +84,24 @@ export function lookupGensenKo(amountYen: number, dependents: number): number {
     );
   }
   const row = gensenRow(amountYen);
-  if (row === null) return 0;
+  if (row === null) return 0n;
   return row.ko[dependents]!;
 }
 
 /**
  * 乙欄 lookup: the row amount, or amount × 3.063% truncated below 105,000円.
  */
-export function lookupGensenOtsu(amountYen: number): number {
+export function lookupGensenOtsu(amountYen: bigint): bigint {
   needIntYen(amountYen, "社会保険料等控除後の給与等の金額");
   const row = gensenRow(amountYen);
   if (row === null) {
-    return Number((BigInt(amountYen) * OTSU_LOW_RATE_NUM) / OTSU_LOW_RATE_DEN);
+    return (amountYen * OTSU_LOW_RATE_NUM) / OTSU_LOW_RATE_DEN;
   }
   return row.otsu;
 }
 
 /** The pension grade row for an operator-entered 標準報酬月額. Refuses unknown values. */
-export function pensionGradeForStandard(standardYen: number): (typeof JP_PENSION_GRADES_2026)[number] {
+export function pensionGradeForStandard(standardYen: bigint): (typeof JP_PENSION_GRADES_2026)[number] {
   needIntYen(standardYen, "標準報酬月額");
   const grade = JP_PENSION_GRADES_2026.find((candidate) => candidate.standard === standardYen);
   if (!grade) {
@@ -119,7 +119,7 @@ export function pensionGradeForStandard(standardYen: number): (typeof JP_PENSION
  * one grade; grade 32 has no ceiling. Used by the boundary sweeps; the
  * adapter takes the operator-entered 標準報酬月額, never this.
  */
-export function pensionGradeForPay(payYen: number): (typeof JP_PENSION_GRADES_2026)[number] {
+export function pensionGradeForPay(payYen: bigint): (typeof JP_PENSION_GRADES_2026)[number] {
   needIntYen(payYen, "報酬月額");
   const grade = JP_PENSION_GRADES_2026.find(
     (candidate) =>
@@ -135,7 +135,7 @@ export function pensionGradeForPay(payYen: number): (typeof JP_PENSION_GRADES_20
  * 50銭 rule (50銭以下切り捨て, 50銭超切り上げ). Exact BigInt rationals —
  * `ratePercent` is a percent number ("9.85" for 9.85%).
  */
-export function healthHalfShare(standardYen: number, ratePercent: string): number {
+export function healthHalfShare(standardYen: bigint, ratePercent: string): bigint {
   needIntYen(standardYen, "標準報酬月額");
   const match = /^(\d+)(?:\.(\d+))?$/.exec(ratePercent.trim());
   if (!match) fail(`health rate "${ratePercent}" is not a percent number (9.85 for 9.85%)`);
@@ -150,14 +150,14 @@ export function healthHalfShare(standardYen: number, ratePercent: string): numbe
   const yen = num / unit;
   const rem = num % unit;
   const halfUnit = unit / 2n;
-  return Number(rem <= halfUnit ? yen : yen + 1n);
+  return rem <= halfUnit ? yen : yen + 1n;
 }
 
 export interface Jp2026Input {
   /** Monthly gross pay (income), integer yen. */
-  grossMonthly: number;
+  grossMonthly: bigint;
   /** Operator-entered 標準報酬月額: must equal a published grade value. */
-  standard: number;
+  standard: bigint;
   /** 甲欄 dependents 0–7, or null for 乙欄 (no declaration on file). */
   dependents: number | null;
   /** Tenant-declared health rate in force, percent number ("9.85"). */
@@ -165,13 +165,13 @@ export interface Jp2026Input {
 }
 
 export interface Jp2026Result {
-  pension: number;
-  pensionEmployer: number;
-  health: number;
-  healthEmployer: number;
+  pension: bigint;
+  pensionEmployer: bigint;
+  health: bigint;
+  healthEmployer: bigint;
   /** gross − pension − health: the 月額表 input (雇用保険 gap stated above). */
-  gensenBase: number;
-  gensen: number;
+  gensenBase: bigint;
+  gensen: bigint;
 }
 
 export function calculateJp2026(input: Jp2026Input): Jp2026Result {
@@ -180,7 +180,7 @@ export function calculateJp2026(input: Jp2026Input): Jp2026Result {
   const pension = grade.half;
   const health = healthHalfShare(input.standard, input.healthRate);
   const gensenBase = input.grossMonthly - pension - health;
-  if (gensenBase < 0) {
+  if (gensenBase < 0n) {
     fail(
       `gensen base is negative (gross ${input.grossMonthly} − pension ${pension} − health ${health}): `
       + "premiums exceed pay — refusing rather than looking up a negative amount",

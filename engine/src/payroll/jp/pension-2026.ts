@@ -46,50 +46,50 @@
 export interface JpPensionGrade {
   readonly grade: number;
   /** 標準報酬月額 — the amount the premium prices off. */
-  readonly standard: number;
+  readonly standard: bigint;
   /** 報酬月額 lower bound inclusive; null on grade 1 (everything below). */
-  readonly lo: number | null;
+  readonly lo: bigint | null;
   /** 報酬月額 upper bound exclusive; null on grade 32 (no ceiling). */
-  readonly hi: number | null;
+  readonly hi: bigint | null;
   /** Full monthly premium (労使合算), yen. */
-  readonly full: number;
+  readonly full: bigint;
   /** Each half share (折半額), yen — employee and employer pay the same. */
-  readonly half: number;
+  readonly half: bigint;
 }
 
 export const JP_PENSION_GRADES_2026: readonly JpPensionGrade[] = [
-  { grade: 1, standard: 88000, lo: null, hi: 93000, full: 16104, half: 8052 },
-  { grade: 2, standard: 98000, lo: 93000, hi: 101000, full: 17934, half: 8967 },
-  { grade: 3, standard: 104000, lo: 101000, hi: 107000, full: 19032, half: 9516 },
-  { grade: 4, standard: 110000, lo: 107000, hi: 114000, full: 20130, half: 10065 },
-  { grade: 5, standard: 118000, lo: 114000, hi: 122000, full: 21594, half: 10797 },
-  { grade: 6, standard: 126000, lo: 122000, hi: 130000, full: 23058, half: 11529 },
-  { grade: 7, standard: 134000, lo: 130000, hi: 138000, full: 24522, half: 12261 },
-  { grade: 8, standard: 142000, lo: 138000, hi: 146000, full: 25986, half: 12993 },
-  { grade: 9, standard: 150000, lo: 146000, hi: 155000, full: 27450, half: 13725 },
-  { grade: 10, standard: 160000, lo: 155000, hi: 165000, full: 29280, half: 14640 },
-  { grade: 11, standard: 170000, lo: 165000, hi: 175000, full: 31110, half: 15555 },
-  { grade: 12, standard: 180000, lo: 175000, hi: 185000, full: 32940, half: 16470 },
-  { grade: 13, standard: 190000, lo: 185000, hi: 195000, full: 34770, half: 17385 },
-  { grade: 14, standard: 200000, lo: 195000, hi: 210000, full: 36600, half: 18300 },
-  { grade: 15, standard: 220000, lo: 210000, hi: 230000, full: 40260, half: 20130 },
-  { grade: 16, standard: 240000, lo: 230000, hi: 250000, full: 43920, half: 21960 },
-  { grade: 17, standard: 260000, lo: 250000, hi: 270000, full: 47580, half: 23790 },
-  { grade: 18, standard: 280000, lo: 270000, hi: 290000, full: 51240, half: 25620 },
-  { grade: 19, standard: 300000, lo: 290000, hi: 310000, full: 54900, half: 27450 },
-  { grade: 20, standard: 320000, lo: 310000, hi: 330000, full: 58560, half: 29280 },
-  { grade: 21, standard: 340000, lo: 330000, hi: 350000, full: 62220, half: 31110 },
-  { grade: 22, standard: 360000, lo: 350000, hi: 370000, full: 65880, half: 32940 },
-  { grade: 23, standard: 380000, lo: 370000, hi: 395000, full: 69540, half: 34770 },
-  { grade: 24, standard: 410000, lo: 395000, hi: 425000, full: 75030, half: 37515 },
-  { grade: 25, standard: 440000, lo: 425000, hi: 455000, full: 80520, half: 40260 },
-  { grade: 26, standard: 470000, lo: 455000, hi: 485000, full: 86010, half: 43005 },
-  { grade: 27, standard: 500000, lo: 485000, hi: 515000, full: 91500, half: 45750 },
-  { grade: 28, standard: 530000, lo: 515000, hi: 545000, full: 96990, half: 48495 },
-  { grade: 29, standard: 560000, lo: 545000, hi: 575000, full: 102480, half: 51240 },
-  { grade: 30, standard: 590000, lo: 575000, hi: 605000, full: 107970, half: 53985 },
-  { grade: 31, standard: 620000, lo: 605000, hi: 635000, full: 113460, half: 56730 },
-  { grade: 32, standard: 650000, lo: 635000, hi: null, full: 118950, half: 59475 },
+  { grade: 1, standard: 88000n, lo: null, hi: 93000n, full: 16104n, half: 8052n },
+  { grade: 2, standard: 98000n, lo: 93000n, hi: 101000n, full: 17934n, half: 8967n },
+  { grade: 3, standard: 104000n, lo: 101000n, hi: 107000n, full: 19032n, half: 9516n },
+  { grade: 4, standard: 110000n, lo: 107000n, hi: 114000n, full: 20130n, half: 10065n },
+  { grade: 5, standard: 118000n, lo: 114000n, hi: 122000n, full: 21594n, half: 10797n },
+  { grade: 6, standard: 126000n, lo: 122000n, hi: 130000n, full: 23058n, half: 11529n },
+  { grade: 7, standard: 134000n, lo: 130000n, hi: 138000n, full: 24522n, half: 12261n },
+  { grade: 8, standard: 142000n, lo: 138000n, hi: 146000n, full: 25986n, half: 12993n },
+  { grade: 9, standard: 150000n, lo: 146000n, hi: 155000n, full: 27450n, half: 13725n },
+  { grade: 10, standard: 160000n, lo: 155000n, hi: 165000n, full: 29280n, half: 14640n },
+  { grade: 11, standard: 170000n, lo: 165000n, hi: 175000n, full: 31110n, half: 15555n },
+  { grade: 12, standard: 180000n, lo: 175000n, hi: 185000n, full: 32940n, half: 16470n },
+  { grade: 13, standard: 190000n, lo: 185000n, hi: 195000n, full: 34770n, half: 17385n },
+  { grade: 14, standard: 200000n, lo: 195000n, hi: 210000n, full: 36600n, half: 18300n },
+  { grade: 15, standard: 220000n, lo: 210000n, hi: 230000n, full: 40260n, half: 20130n },
+  { grade: 16, standard: 240000n, lo: 230000n, hi: 250000n, full: 43920n, half: 21960n },
+  { grade: 17, standard: 260000n, lo: 250000n, hi: 270000n, full: 47580n, half: 23790n },
+  { grade: 18, standard: 280000n, lo: 270000n, hi: 290000n, full: 51240n, half: 25620n },
+  { grade: 19, standard: 300000n, lo: 290000n, hi: 310000n, full: 54900n, half: 27450n },
+  { grade: 20, standard: 320000n, lo: 310000n, hi: 330000n, full: 58560n, half: 29280n },
+  { grade: 21, standard: 340000n, lo: 330000n, hi: 350000n, full: 62220n, half: 31110n },
+  { grade: 22, standard: 360000n, lo: 350000n, hi: 370000n, full: 65880n, half: 32940n },
+  { grade: 23, standard: 380000n, lo: 370000n, hi: 395000n, full: 69540n, half: 34770n },
+  { grade: 24, standard: 410000n, lo: 395000n, hi: 425000n, full: 75030n, half: 37515n },
+  { grade: 25, standard: 440000n, lo: 425000n, hi: 455000n, full: 80520n, half: 40260n },
+  { grade: 26, standard: 470000n, lo: 455000n, hi: 485000n, full: 86010n, half: 43005n },
+  { grade: 27, standard: 500000n, lo: 485000n, hi: 515000n, full: 91500n, half: 45750n },
+  { grade: 28, standard: 530000n, lo: 515000n, hi: 545000n, full: 96990n, half: 48495n },
+  { grade: 29, standard: 560000n, lo: 545000n, hi: 575000n, full: 102480n, half: 51240n },
+  { grade: 30, standard: 590000n, lo: 575000n, hi: 605000n, full: 107970n, half: 53985n },
+  { grade: 31, standard: 620000n, lo: 605000n, hi: 635000n, full: 113460n, half: 56730n },
+  { grade: 32, standard: 650000n, lo: 635000n, hi: null, full: 118950n, half: 59475n },
 ];
 
 /** The 2026 pension rate both shares price off: 18.300% total, 9.15% each. */
