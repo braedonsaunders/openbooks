@@ -257,7 +257,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'inbox-task-list': { props: ['actedLabel', 'delegatePlaceholder', 'notices', 'openLabel', 'rows', 'users'] },
   'insights-dashboard-builder': { props: ['availableCards', 'canCreate', 'canPublish', 'cards', 'dashboard', 'pinned'] },
   'insights-tabs': { props: ['active'] },
-  'inventory-action-drawer': { props: ['accounts', 'items', 'stockLocations'] },
+  'inventory-action-drawer': { props: ['accounts', 'items', 'stockLocations', 'subsidiaries'] },
   'invite-user': { props: ['allRoles'] },
   'invoicing-setup-workspace': { props: [], open: true },
   'item-drawer': { props: ['drawer'] },

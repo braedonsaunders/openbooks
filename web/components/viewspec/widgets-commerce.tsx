@@ -222,6 +222,7 @@ export const COMMERCE_WIDGETS = {
         (props.stockLocations as ComponentProps<typeof InventoryActionDrawer>['stockLocations']) ?? []
       }
       accounts={(props.accounts as ComponentProps<typeof InventoryActionDrawer>['accounts']) ?? []}
+      subsidiaries={(props.subsidiaries as ComponentProps<typeof InventoryActionDrawer>['subsidiaries']) ?? []}
     />
   ),
 

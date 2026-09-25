@@ -10,6 +10,7 @@ import { useBusinessToday } from '@/components/business-date-provider'
 interface ItemOpt { id: string; code?: string | null; name?: string | null }
 interface LocOpt { id: string; code?: string | null }
 interface AccountOpt { id: string; number?: string | null; name?: string | null }
+interface SubsidiaryOpt { id: string; name: string }
 
 const ACTIONS = ['receive', 'issue', 'adjust', 'transfer', 'build', 'landed'] as const
 type Action = (typeof ACTIONS)[number]
@@ -25,11 +26,13 @@ export function InventoryActionDrawer({
   items,
   stockLocations,
   accounts,
+  subsidiaries,
   closeHref = '/inventory',
 }: {
   items: ItemOpt[]
   stockLocations: LocOpt[]
   accounts: AccountOpt[]
+  subsidiaries: SubsidiaryOpt[]
   closeHref?: string
 }) {
   const t = useTranslations('inventory')
@@ -39,6 +42,7 @@ export function InventoryActionDrawer({
   const [action, setAction] = useState<Action>('receive')
   const [itemId, setItemId] = useState('')
   const [stockLocationId, setStockLocationId] = useState('')
+  const [subsidiaryId, setSubsidiaryId] = useState('')
   const [toStockLocationId, setToStockLocationId] = useState('')
   const [quantity, setQuantity] = useState('')
   const [unitCost, setUnitCost] = useState('')
@@ -67,6 +71,7 @@ export function InventoryActionDrawer({
   const itemOptions = items.map((i) => ({ value: i.id, label: `${i.code ? `${i.code} · ` : ''}${i.name ?? ''}`.trim() }))
   const locOptions = stockLocations.map((l) => ({ value: l.id, label: l.code ?? '' }))
   const accountOptions = accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))
+  const subsidiaryOptions = subsidiaries.map((s) => ({ value: s.id, label: s.name }))
 
   const needsCost = action === 'receive'
   const needsOffset = action === 'receive' || action === 'landed'
@@ -80,6 +85,10 @@ export function InventoryActionDrawer({
       toast.error(t('drawer.missingFields'))
       return
     }
+    if (!subsidiaryId) {
+      toast.error(t('create.selectSubsidiary'))
+      return
+    }
     setBusy(true)
     setPostError(null)
     try {
@@ -87,6 +96,7 @@ export function InventoryActionDrawer({
         action,
         itemId,
         stockLocationId,
+        subsidiaryId,
         toStockLocationId,
         quantity,
         unitCost,
@@ -107,6 +117,7 @@ export function InventoryActionDrawer({
           action,
           itemId,
           stockLocationId,
+          subsidiaryId,
           toStockLocationId: toStockLocationId || undefined,
           quantity,
           unitCost: unitCost || undefined,
@@ -190,6 +201,17 @@ export function InventoryActionDrawer({
               placeholder={t('drawer.selectLocation')}
               sheetTitle={t('labels.location')}
               ariaLabel={t('labels.location')}
+            />
+          </div>
+          <div className={field}>
+            <Label>{t('create.subsidiary')}<span className="text-red-500"> *</span></Label>
+            <SearchSelect
+              value={subsidiaryId}
+              onChange={setSubsidiaryId}
+              options={subsidiaryOptions}
+              placeholder={t('create.selectSubsidiary')}
+              sheetTitle={t('create.subsidiary')}
+              ariaLabel={t('create.subsidiary')}
             />
           </div>
           {action === 'transfer' ? (
