@@ -17,7 +17,7 @@ const mockSources = new Map<string, string>([
       export async function withV1Request(request, label, operation) {
         const result = await operation(
           { user: { orgId: "org-1", id: "user-1" }, keyId: "key-1" },
-          { authz: { user: { orgId: "org-1", id: "user-1" }, permissions: ["admin.setup.manage"] } },
+          { authz: { user: { orgId: "org-1", id: "user-1" }, permissions: ["admin.setup.manage"], allowedSubsidiaryIds: null } },
         )
         return Response.json(result.body, {
           status: result.status,
@@ -136,7 +136,9 @@ test("DELETE /api/v1/setup/[entityKey]/[id] deletes through the Setup command", 
   assert.deepEqual(await response.json(), { deleted: true });
   assert.equal(response.headers.get("idempotency-replayed"), "false");
   assert.deepEqual(routeState.deleted, {
-    actor: { orgId: "org-1", id: "user-1", permissions: ["admin.setup.manage"] },
+    // I1-refix-09: the route threads the actor scope into the Setup command;
+    // null is the unrestricted setup admin this double models.
+    actor: { orgId: "org-1", id: "user-1", permissions: ["admin.setup.manage"], allowedSubsidiaryIds: null },
     entityKey: "tax-codes",
     id: "row-1",
   });

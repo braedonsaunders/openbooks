@@ -84,7 +84,9 @@ test('certificates GET serves every pack\'s row-backed forms and no column-backe
     }
     assert.ok(body.countries.includes('NL'))
     const nl = body.declarations['NL']!.certificates.map((certificate) => certificate.key).sort()
-    assert.deepEqual(nl, ['nl_loonheffingen', 'nl_premies', 'nl_tax_liability', 'nl_contract'])
+    // Sorted on both sides: the GET promises the SET of row-backed forms,
+    // not an order (nl_contract joined the pack under I6-payroll-124).
+    assert.deepEqual(nl, ['nl_contract', 'nl_loonheffingen', 'nl_premies', 'nl_tax_liability'])
     // Column-backed certificates stay on the profile editor: serving them
     // here would offer two writable sources for one answer. Anchor the sweep
     // on a count first — a response that served NO certificates at all would
