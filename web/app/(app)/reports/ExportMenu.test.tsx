@@ -214,13 +214,15 @@ test('a 422 JSON refusal shows its named message and downloads nothing', async (
   )
 })
 
-test('a 500 shows the generic failure naming the format', async (t) => {
+test('a PDF print refusal shows the server message instead of a generic failure', async (t) => {
   await mountMenu(t)
-  script.exportStatus = 500
-  script.exportHtmlError = true
+  script.exportStatus = 422
+  script.exportJsonError = 'unknown statement'
   await openMenu()
-  await clickCsv()
+  const print = buttonsNamed('Print').at(-1)
+  assert.ok(print, 'the Print menu item must render')
   await act(async () => {
+    print.click()
     await tick()
     await tick()
   })
@@ -228,7 +230,7 @@ test('a 500 shows the generic failure naming the format', async (t) => {
   assert.deepEqual(script.clickedDownloads, [], 'a failure must download nothing')
   assert.equal(document.querySelector('[role="status"]'), null, 'a failure must not render completion')
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error' && /Could not export CSV/.test(toast.message)),
-    'a non-JSON failure must name the format in a generic message',
+    script.toasts.some((toast) => toast.kind === 'error' && /unknown statement/.test(toast.message)),
+    `a print refusal must surface the server message by name; saw ${JSON.stringify(script.toasts)}`,
   )
 })
