@@ -5,16 +5,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/admin/api-keys/KeyDrawer.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/api-keys/KeyDrawer.tsx",
-    "fn": "saveChanges",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/admin/custom-fields/FieldDrawer.tsx",
     "fn": "save",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
