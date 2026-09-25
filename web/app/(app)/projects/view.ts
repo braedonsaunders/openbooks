@@ -9,6 +9,7 @@ import { isFeatureEnabled } from '../../../lib/features'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
+import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadProject } from '../../api/projects/_lib'
@@ -31,7 +32,6 @@ import type { ProjectDrawer } from './ProjectDrawer'
 
 type ProjectDrawerProps = Parameters<typeof ProjectDrawer>[0]
 
-type PartyOption = { id: string; display_name: string; [key: string]: unknown }
 type ProjectTypeOption = {
   id: string
   name: string
@@ -85,10 +85,8 @@ export async function loadProjects(
   // cockpit — those tabs need a persisted project and stay hidden).
   const [parties, subsidiaries, cockpit, projectTypesRes] = openProject || creating
     ? await Promise.all([
-        db.execute<PartyOption>(sql`
-          select id, display_name from parties
-           where org_id = ${orgId} and is_active
-           order by display_name limit 2000`),
+        // Customer/foreman/manager pickers: only parties the caller may see.
+        listScopedPartyOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true }),
         subsidiaryUiOptions(orgId),
         openProject
           ? loadProjectCockpit(orgId, openProject.project.id as string, {
@@ -164,7 +162,7 @@ export async function loadProjects(
                   customFieldDefs: [],
                 }
               : openProject) as unknown as ProjectDrawerProps['payload'],
-            parties: parties.rows,
+            parties,
             subsidiaries,
             canManage,
             canViewGl,

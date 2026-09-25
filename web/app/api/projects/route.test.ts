@@ -71,7 +71,8 @@ const mockSources = new Map<string, string>([
           return { rows: state.inserted && state.orgMatch ? [{ id: state.requestKey }] : [] }
         }
         if (text.includes('from audit_log')) return { rows: state.auditAfter ? [{ after: state.auditAfter }] : [] }
-        if (text.includes('from parties')) return { rows: [] }
+        if (text.includes('from parties p')) return { rows: [] }
+        if (text.includes('from parties')) return { rows: [{ one: 1 }] }
         if (text.includes('from subsidiaries')) return { rows: [] }
         if (text.includes('from project_types')) return { rows: [] }
         return { rows: [] }
@@ -306,6 +307,24 @@ test("a disabled projects feature refuses the create", async () => {
   assert.ok(
     noInsertRecorded(),
     "no project row may be written while the feature is off",
+  );
+});
+
+test("a customer outside the caller subsidiary scope is refused before any write", async () => {
+  reset();
+  const outsider = "00000000-0000-4000-8000-00000000c00a";
+  const response = await post("00000000-0000-4000-8000-00000000c00b", {
+    name: "Harbourview Tower",
+    customerId: outsider,
+  });
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), {
+    error: `project customer "${outsider}" is not visible in your subsidiary scope`,
+    field: "customerId",
+  });
+  assert.ok(
+    noInsertRecorded(),
+    "no project row may be written with an out-of-scope customer",
   );
 });
 
