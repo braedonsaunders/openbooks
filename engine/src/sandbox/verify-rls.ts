@@ -19,6 +19,7 @@ import { sql } from "drizzle-orm";
 import { db, pool, withBypass, withOrg } from "../platform/db.ts";
 import { loadCatalog } from "./catalog.ts";
 import { selectCloneTables, type SandboxTier } from "./clone.ts";
+import { assertTemplateSandboxSource } from "./source-validation.ts";
 
 export const BOGUS_ORG_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -173,6 +174,14 @@ export async function verifyCloneRls(args: {
   productionOrgId: string;
   sandboxOrgId: string;
   tier: SandboxTier;
+  /**
+   * Sanctioned template pair (sample-company provisioning and refresh
+   * only). The proof then certifies the template/sample pair's isolation
+   * instead of a production/sandbox pair; the source side asserts the
+   * promoted-template registration flag rather than the production kind.
+   * Defaults to the production-only proof (I5-platform-66).
+   */
+  allowTemplateSource?: boolean;
 }): Promise<CloneRlsProof> {
   assertCloneRlsPair(args.productionOrgId, args.sandboxOrgId);
 
@@ -181,8 +190,9 @@ export async function verifyCloneRls(args: {
       id: string;
       env_kind: string;
       sandbox_of: string | null;
+      settings: Record<string, unknown> | null;
     }>(sql`
-      select id, env_kind, sandbox_of
+      select id, env_kind, sandbox_of, settings
         from orgs
        where id = ${args.productionOrgId} or id = ${args.sandboxOrgId}`);
     return result.rows;
@@ -194,7 +204,8 @@ export async function verifyCloneRls(args: {
       `clone RLS re-verification failed: production org ${args.productionOrgId} was not found. Pass the source tenant of the clone.`,
     );
   }
-  assertProductionSourceKind(production);
+  if (args.allowTemplateSource === true) assertTemplateSandboxSource(production, args.productionOrgId);
+  else assertProductionSourceKind(production);
   if (!sandbox) {
     throw new Error(
       `clone RLS re-verification failed: sandbox org ${args.sandboxOrgId} was not found. Pass the clone org createSandbox just created.`,
