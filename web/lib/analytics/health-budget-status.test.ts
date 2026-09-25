@@ -25,6 +25,7 @@ test('a revenue shortfall beyond tolerance reads under, not over', () => {
   // revenue side of the vocabulary.
   assert.equal(budgetLineStatus('income', '-390000', -0.3221, '1210982'), 'under')
   assert.equal(exactBudgetVariance('900719925474099.00', '900719925474099.01').variance, '0.0100')
+  assert.equal(budgetLineStatus('income_other', '-500', -0.5, '1000'), 'under')
 })
 
 test('a cost overrun beyond tolerance still reads over', () => {

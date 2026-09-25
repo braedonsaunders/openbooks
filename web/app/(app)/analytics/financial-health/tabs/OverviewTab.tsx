@@ -6,7 +6,7 @@ import { Sparkline, cn } from '@openbooks/ui'
 import type { HealthData, Insight } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { TrendChart } from '../../_ui/charts'
-import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct, toChartNumber } from '../../_ui/format'
 
 export function OverviewTab({ data }: { data: HealthData }) {
   const fmtMoney = useAnalyticsMoney()
@@ -14,15 +14,18 @@ export function OverviewTab({ data }: { data: HealthData }) {
   const m = data.monthly
   const labels = m.map((p) => p.label)
 
-  const spark = (key: 'revenue' | 'grossMarginPct' | 'operatingIncome') => m.map((p) => p[key])
+  // Money points cross to charts through the bounded one-way projection;
+  // ratios are already display numbers.
+  const sparkMoney = (key: 'revenue' | 'operatingIncome') => m.map((p) => toChartNumber(p[key]))
+  const sparkPct = (key: 'grossMarginPct') => m.map((p) => p[key])
 
   return (
     <div className="space-y-5">
       {/* Sparkline row */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <SparkCard label="Revenue Trend" points={spark('revenue')} last={fmtMoney(data.figures.revenue, { compact: true })} />
-        <SparkCard label="Margin Trend" points={spark('grossMarginPct')} last={fmtPct(data.figures.revenue > 0 ? data.figures.grossProfit / data.figures.revenue : 0)} />
-        <SparkCard label="Op Income Trend" points={spark('operatingIncome')} last={fmtMoney(data.figures.operatingIncome, { compact: true })} />
+        <SparkCard label="Revenue Trend" points={sparkMoney('revenue')} last={fmtMoney(data.figures.revenue, { compact: true })} />
+        <SparkCard label="Margin Trend" points={sparkPct('grossMarginPct')} last={fmtPct(data.figures.revenue > 0 ? data.figures.grossProfit / data.figures.revenue : 0)} />
+        <SparkCard label="Op Income Trend" points={sparkMoney('operatingIncome')} last={fmtMoney(data.figures.operatingIncome, { compact: true })} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -46,9 +49,9 @@ export function OverviewTab({ data }: { data: HealthData }) {
                 labels={labels}
                 area
                 series={[
-                  { name: 'Revenue', data: m.map((p) => p.revenue), color: '#0d9488' },
-                  { name: 'Gross Profit', data: m.map((p) => p.grossProfit), color: '#6366f1' },
-                  { name: 'Operating Income', data: m.map((p) => p.operatingIncome), color: '#f59e0b' },
+                  { name: 'Revenue', data: m.map((p) => toChartNumber(p.revenue)), color: '#0d9488' },
+                  { name: 'Gross Profit', data: m.map((p) => toChartNumber(p.grossProfit)), color: '#6366f1' },
+                  { name: 'Operating Income', data: m.map((p) => toChartNumber(p.operatingIncome)), color: '#f59e0b' },
                 ]}
               />
             ) : (

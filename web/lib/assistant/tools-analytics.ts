@@ -151,8 +151,11 @@ const financialHealthTool: AssistantToolDef = {
           cost: capList(r.drivers.cost, 50),
         },
         items: {
-          totalCurrent: num(r.items.totalCurrent),
-          totalChange: num(r.items.totalChange),
+          // Exact decimal strings pass through to the model unrounded —
+          // the assistant must reason over ledger-exact totals, not
+          // IEEE-754 projections.
+          totalCurrent: r.items.totalCurrent,
+          totalChange: r.items.totalChange,
           gainers: capList(r.items.gainers, 25),
           decliners: capList(r.items.decliners, 25),
           rows: capList(r.items.rows, 50),

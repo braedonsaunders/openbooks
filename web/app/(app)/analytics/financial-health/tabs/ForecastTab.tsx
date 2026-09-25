@@ -8,7 +8,8 @@ import { EmptyState, Select } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { ForecastChart } from '../../_ui/charts'
-import { useAnalyticsMoney } from '../../_ui/format'
+import { useAnalyticsMoney, toChartNumber } from '../../_ui/format'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { applyForecastMethod, applyForecastAdjustment, checkSignDomain, diagnostics, type ForecastMethod, type Seasonality, type SignDomain } from '../../_ui/forecast'
 
 type Metric = 'revenue' | 'gm' | 'opinc'
@@ -73,8 +74,21 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
   // Memoized chain: `result` below can only be compiled when its `series`
   // dep holds a stable identity across renders.
-  const hist = useMemo(() => data.monthly.filter((p) => p.revenue !== 0 || p.cogs !== 0), [data.monthly])
-  const series = useMemo(() => hist.map((p) => p[METRIC_KEY[metric]]), [hist, metric])
+  const hist = useMemo(
+    () => data.monthly.filter((p) => cmp(p.revenue, '0') !== 0 || cmp(p.cogs, '0') !== 0),
+    [data.monthly],
+  )
+  // The forecaster is a statistical model (smoothing/regression with
+  // confidence bands): it consumes the documented one-way chart projection
+  // of ledger history, like every other chart. Ratios pass through
+  // unchanged; only money crosses the projection.
+  const series = useMemo(
+    () => hist.map((p) => {
+      const v = p[METRIC_KEY[metric]]
+      return typeof v === 'number' ? v : toChartNumber(v)
+    }),
+    [hist, metric],
+  )
 
   const result = useMemo(() => {
     if (series.length < 3) return null
