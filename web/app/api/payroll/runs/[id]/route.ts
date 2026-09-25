@@ -573,6 +573,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // register + GL preview) onto the run, then route it through Flows. A
     // tenant with no pay_run flow gets `gated: false` and nothing is parked.
     if (body.action === 'submit-approval') {
+      // Population opacity precedes freshness: the staleness gate answers
+      // from the caller's visible inputs, so an opaque run would leak its
+      // activity as a stale-calculation refusal instead of the opaque
+      // 'pay run not found'. Assemble enforces the same check; this probe
+      // only orders it first (no-op for unrestricted callers).
+      await lockAndCheckPayrollRunPopulation(db, gate.user.orgId, id, gate.allowedSubsidiaryIds)
       // A tab left open across an edit must not route superseded figures to
       // approvers: re-check calculation freshness here, immediately before
       // evidence assembly, exactly as the commit branch does. A stale run is
