@@ -15,6 +15,7 @@ import { decideGate, DecisionFailedError } from "../flows/gates.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
 import { postAllocationRun, previewAllocationRun } from "./period-run.ts";
 import { processAllocationRunOutboxRow } from "./scheduling.ts";
+import { enableAllocations, seedDepartment } from "./integration-seeds.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -24,23 +25,6 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 // opens the flow and waits in pending_approval (no journal); the flow
 // engine's release posts (actor = approver) or records the rejection.
 // ---------------------------------------------------------------------------
-
-async function enableAllocations(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
-    where id = ${orgId}
-  `);
-}
-
-async function seedDepartment(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into departments (id, org_id, name, is_active, custom)
-    values (${id}, ${orgId}, ${name}, true, '{}'::jsonb)`);
-  return id;
-}
 
 async function seedPeriodRule(opts: {
   org: ScratchOrg;

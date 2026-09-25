@@ -20,6 +20,7 @@ import {
 } from "./period-run.ts";
 import { getRun, listRuns, queryLineage } from "./run-queries.ts";
 import type { DriverResolver, RunComputation } from "./types.ts";
+import { enableAllocations, negate, seedDepartment } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -28,28 +29,11 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // Every test leases its own scratch org (never shared across top-level tests).
 // ---------------------------------------------------------------------------
 
-async function seedDepartment(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into departments (id, org_id, name, is_active, custom)
-    values (${id}, ${orgId}, ${name}, true, '{}'::jsonb)`);
-  return id;
-}
-
 /**
  * The engine fences posting/reversing/re-running behind the org's
  * `allocations` switch: these tests drive the engine directly (no route
  * gate), so every scratch org opts in, the way the Features page would.
  */
-async function enableAllocations(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
-    where id = ${orgId}
-  `);
-}
-
 interface SeedTarget {
   departmentId?: string | null;
   subsidiaryId?: string | null;
@@ -176,10 +160,6 @@ async function seedSourceEntry(
   });
   assert.ok(entryId);
   return entryId;
-}
-
-function negate(amount: string): string {
-  return amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
 }
 
 async function accountTotals(orgId: string): Promise<Map<string, string>> {
