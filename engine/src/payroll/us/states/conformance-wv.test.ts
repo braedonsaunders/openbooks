@@ -174,13 +174,16 @@ test("WV IT-104NR reciprocal exemption requires an eligible residence and wage-o
   });
   assert.equal(reciprocal.tax, money("0"));
 
+  // Ordinary nonresident withholding prices verified West Virginia-source
+  // wages (I6-payroll-131): the full $800 paycheck is WV-source here.
+  const wvSourceWages = [{ region: "WV", subRegion: null, workShare: "1", source: "adequate_records", sourceWagesCurrentPeriod: "800.00" }];
   const invalidClaims: Record<string, string>[] = [
     { exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "false" },
   ];
   for (const answers of invalidClaims) {
     const ordinaryWithholding = WV_WITHHOLDING.compute({
       payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
-      certificate: cert(answers),
+      certificate: cert(answers), wageAllocations: wvSourceWages,
     });
     assert.equal(ordinaryWithholding.tax, money("25"));
     assert.ok(ordinaryWithholding.factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED);
@@ -191,6 +194,7 @@ test("WV IT-104NR reciprocal exemption requires an eligible residence and wage-o
     certificate: cert({
       exempt: "true", resident_state: "NY", only_wv_source_income_is_wages: "true",
     }),
+    wageAllocations: wvSourceWages,
   });
   assert.equal(outOfSetResidence.tax, money("25"));
   assert.equal(outOfSetResidence.factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED, "ineligible_resident_state");
