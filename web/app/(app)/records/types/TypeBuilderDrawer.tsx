@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -157,18 +157,13 @@ export function TypeBuilderDrawer({
   useEffect(() => {
     loadedUpdatedAt.current = type.updated_at
   }, [type.updated_at])
-  const first = useRef(true)
-  useEffect(() => {
-    // Create mode is local-only until Save: no revision exists to echo and no
-    // row exists to autosave into, so the debounced PATCH never arms.
-    if (createMode) return
-    if (first.current) {
-      first.current = false
-      return
-    }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
+  // The debounced PATCH, extracted so closing with a pending edit can flush
+  // it first (I4-webui-250 shape): true when the server accepts the edits.
+  // A network failure lands back on dirty with the translated message —
+  // never stuck on Saving with Publish disabled.
+  const persistEdits = useCallback(async (): Promise<boolean> => {
+    setSaveState('saving')
+    try {
       const res = await fetch(`/api/records/types/${type.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -187,7 +182,7 @@ export function TypeBuilderDrawer({
           // A parse failure must not hide the refuse or invent a success.
         }
         toast.error(message)
-        return
+        return false
       }
       const data = (await res.json()) as { issues?: Issue[]; type?: { updated_at?: string } }
       if (typeof data.type?.updated_at === 'string') {
@@ -196,10 +191,44 @@ export function TypeBuilderDrawer({
       setIssues(data.issues ?? [])
       setSaveState('saved')
       router.refresh()
+      return true
+    } catch {
+      setSaveState('dirty')
+      toast.error(t('typeBuilder.autosaveFailed'))
+      return false
+    }
+  }, [payload, router, t, type.id])
+  const saveStateRef = useRef(saveState)
+  useEffect(() => {
+    saveStateRef.current = saveState
+  }, [saveState])
+  // Closing with a debounced edit still pending must not drop it: flush the
+  // save first. If the flush fails, name the loss and keep the builder open
+  // on refusal instead of silently discarding the edit.
+  const beforeClose = useCallback(async (): Promise<boolean> => {
+    if (createMode || saveStateRef.current !== 'dirty') return true
+    if (await persistEdits()) return true
+    return confirmDialog({
+      message: tc('feedback.unsavedChanges'),
+      confirmLabel: tc('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }, [createMode, persistEdits, tc])
+  const first = useRef(true)
+  useEffect(() => {
+    // Create mode is local-only until Save: no revision exists to echo and no
+    // row exists to autosave into, so the debounced PATCH never arms.
+    if (createMode) return
+    if (first.current) {
+      first.current = false
+      return
+    }
+    setSaveState('dirty')
+    const timer = setTimeout(() => {
+      void persistEdits()
     }, 600)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload])
+  }, [createMode, payload, persistEdits])
 
   // -- id allocation (section + field ids share one namespace) ----------------
   function takenIds(): Set<string> {
@@ -431,6 +460,7 @@ export function TypeBuilderDrawer({
     <UrlDrawer
       open
       closeHref="/records/types"
+      beforeClose={beforeClose}
       size="xl"
       title={
         <span className="flex items-center gap-2.5">
