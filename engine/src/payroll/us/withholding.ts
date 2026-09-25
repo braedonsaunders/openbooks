@@ -212,6 +212,20 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
       source: "https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf",
     }],
   } as const,
+  MO: {
+    kind: "flat",
+    // Missouri DOR Form 4282 Employer's Tax Guide (Rev. 03-2026), §7.A: an
+    // employer already withholding Missouri tax from regular wages may
+    // withhold 4.7% of separately paid supplemental wages instead of the
+    // same-period aggregate difference. The flag below enforces the
+    // "regular withholding in effect" condition; without that history the
+    // dispatch refuses and names the aggregate-basis alternative.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.047",
+      source: "https://dor.mo.gov/forms/4282_2026.pdf",
+    }],
+    requiresRegularWithholding: true,
+  } as const,
   MT: {
     kind: "flat",
     // Montana Employer and Information Agent Guide with Tax Tables – 2026,
