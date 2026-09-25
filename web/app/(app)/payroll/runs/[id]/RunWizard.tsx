@@ -455,8 +455,10 @@ export function RunWizard(props: {
   // recalculation while pending, and no recall path exists for pay runs),
   // so submitting an uncalculated or stale run would strand it with empty
   // or superseded evidence and no way back but a rejection. The boundary
-  // agrees — assemblePayRunEvidence refuses an uncalculated run — so this
-  // mirrors the engine's accept set rather than inviting a 422.
+  // agrees — submit-approval re-checks calculation freshness with
+  // assertPayRunNotStale immediately before evidence assembly (and
+  // assemblePayRunEvidence refuses an uncalculated run) — so this mirrors
+  // the engine's accept set rather than inviting a 422.
   const canSubmitApproval =
     props.canRun && docDraft && calculated && !props.staleness.stale && !committed
     && props.approval.policyExists && !props.approval.submitted
