@@ -1,6 +1,8 @@
 import 'server-only'
 
+import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
+import { isUuid } from '../list-params'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmProcessError } from '@openbooks/engine/src/hrm/processes.ts'
 import { getProcess, listProcesses, type ProcessDetail, type ProcessSegment } from '@openbooks/engine/src/hrm/processes-read.ts'
@@ -120,6 +122,9 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
   const segment: ProcessSegment =
     sp.segment === 'open' || sp.segment === 'overdue' || sp.segment === 'completed' || sp.segment === 'cancelled' ? sp.segment : 'open'
   const processId = typeof sp.process === 'string' && sp.process.length > 0 ? sp.process : null
+  // A malformed id is never a live row id: 404 like the template page
+  // instead of throwing out of the detail read as a 500.
+  if (processId !== null && !isUuid(processId)) notFound()
   const canManage = can(authz, 'hrm.process.manage')
   const createOpen = sp.new === '1' && canManage
 
