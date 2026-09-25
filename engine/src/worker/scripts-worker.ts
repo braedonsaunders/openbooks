@@ -2,7 +2,7 @@ import { Worker } from "bullmq";
 import { SCRIPTS_QUEUE, getBlockingConnection, type ScriptJobData } from "@openbooks/jobs";
 import { withOrgContext } from "../platform/db.ts";
 import { runBulkScript, runScheduledScript, type ScriptOutcome } from "../scripting/scripting.ts";
-import { completeBulkRunKey, readBulkRunClaim } from "../scripting/bulk-run-claim.ts";
+import { bulkRunIdempotencyScope, claimBulkRunExecution, completeBulkRunKey } from "../scripting/bulk-run-claim.ts";
 
 /**
  * Execute one `scripts` queue payload — the exact code the worker callback
@@ -60,9 +60,13 @@ export async function processScriptJobData(
 /**
  * Bulk runs execute under the caller's run-key claim (E02). A redelivered
  * duplicate whose claim already completed reconciles onto the recorded
- * outcome without executing the script again; anything else runs and then
- * completes the claim idempotently. Jobs without a key (scheduled kinds
- * never reach here; pre-key Run-now jobs) run unclaimed, as before.
+ * outcome without executing the script again; the election lets exactly one
+ * live delivery own the execution, and that execution reuses the claim's
+ * stable journal scope so even a crash-takeover replays instead of
+ * double-posting. A rival racing a live execution refuses loudly — a failed
+ * job the operator can see — instead of silently posting twice. Jobs without
+ * a key (scheduled kinds never reach here; pre-key Run-now jobs) run
+ * unclaimed, as before.
  */
 async function runBulkScriptClaimed(d: ScriptJobData): Promise<ScriptOutcome> {
   const key = d.idempotencyKey;
@@ -70,11 +74,22 @@ async function runBulkScriptClaimed(d: ScriptJobData): Promise<ScriptOutcome> {
   if (!key || !actorId) {
     return runBulkScript(d.scriptId, d.orgId, { actorId });
   }
-  const claim = await readBulkRunClaim({ orgId: d.orgId, actorId, scriptId: d.scriptId, key });
-  if (claim.status === "completed") {
-    return claim.response as ScriptOutcome;
+  const execution = await claimBulkRunExecution({ orgId: d.orgId, actorId, scriptId: d.scriptId, key });
+  if (execution.status === "completed") {
+    return execution.response as ScriptOutcome;
   }
-  const outcome = await runBulkScript(d.scriptId, d.orgId, { actorId });
+  if (execution.status === "mismatched") {
+    throw new Error(
+      `bulk run key is already bound to a different script — refusing to execute script ${d.scriptId} under it`,
+    );
+  }
+  if (execution.status === "inflight") {
+    throw new Error(
+      "this bulk run is already in progress — refusing duplicate execution; " +
+        "retry with the same key after it completes to replay the recorded outcome",
+    );
+  }
+  const outcome = await runBulkScript(d.scriptId, d.orgId, { actorId, idempotencyScope: bulkRunIdempotencyScope(key) });
   await completeBulkRunKey({ orgId: d.orgId, actorId, scriptId: d.scriptId, key, response: outcome });
   return outcome;
 }
@@ -94,7 +109,16 @@ export function createScriptsWorker(): Worker<ScriptJobData> {
       // audit trail lives in script_runs.
       return { status: outcome.status, durationMs: outcome.durationMs };
     },
-    { connection: getBlockingConnection(), concurrency: 4 },
+    {
+      connection: getBlockingConnection(),
+      concurrency: 4,
+      // A bulk run legitimately holds its processing lock up to BULK_TIMEOUT_MS
+      // (30 s); the 30 s default lockDuration therefore stall-redelivers
+      // healthy runs. Hold the lock well past any legitimate run (script
+      // budgets top out at the 30 s bulk budget) so a redelivery means a
+      // crashed worker, not a slow one.
+      lockDuration: 60_000,
+    },
   );
 }
 

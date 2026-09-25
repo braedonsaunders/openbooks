@@ -1287,11 +1287,15 @@ export async function runBulkScript(
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
     ...(user ? { user } : {}),
   };
-  // Every bulk launch is a distinct run (operator-pressed "Run now" or one
-  // queue delivery): a per-run namespace, so two launches never share keys.
-  // Timeout retries rely on deadline fencing (a fenced write commits nothing).
+  // Retry identity: a claimed run-key intent reuses its stable scope, so a
+  // stall redelivery replays the first execution's documents instead of
+  // double-posting (E02). Unkeyed launches are distinct runs (a fresh
+  // operator press with no key): a per-run namespace, so two launches never
+  // share keys. Timeout retries rely on deadline fencing (a fenced write
+  // commits nothing).
+  const scope = opts.idempotencyScope ?? `run-${randomUUID()}`;
   const res = await runScript(s.source, ctx, BULK_TIMEOUT_MS, {
-    idempotencyNamespace: `bulk/${s.id}/run-${randomUUID()}`,
+    idempotencyNamespace: `bulk/${s.id}/${scope}`,
   });
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
 

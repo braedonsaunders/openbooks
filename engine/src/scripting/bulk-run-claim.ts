@@ -89,6 +89,77 @@ export async function claimBulkRunKey(args: {
   return { status: "inflight" };
 }
 
+/**
+ * Stable journal idempotency scope for one bulk-run intent. A stall
+ * redelivery of the same claim reuses this scope, so its journal writes
+ * replay the first execution's documents instead of double-posting (E02).
+ * Distinct keys stay distinct; unkeyed launches never reach here.
+ */
+export function bulkRunIdempotencyScope(key: string): string {
+  return `key/${key}`;
+}
+
+/**
+ * A marker left too long ago to belong to a live execution. Bulk runs are
+ * fenced by a 30 s budget, so a start marker older than this horizon is a
+ * crashed owner, not a slow one — a later delivery may take over and replay
+ * under the stable scope. Short enough to bound crash recovery, long past
+ * any legitimate run.
+ */
+export const BULK_RUN_EXECUTION_TAKEOVER_MS = 5 * 60_000;
+
+export type BulkRunExecution =
+  | { status: "mine" }
+  | { status: "completed"; response: unknown }
+  | { status: "inflight" }
+  | { status: "mismatched" };
+
+/**
+ * Atomically elect one executor for a claimed bulk run (E02). The winner
+ * stamps a start marker and runs; a rival delivery that finds a fresh marker
+ * — a BullMQ stall redelivery racing the live first execution — must NOT
+ * re-execute, it refuses loudly instead. A stale marker is a crashed owner:
+ * the takeover reuses the stable scope, so it replays instead of
+ * double-posting. Completed claims replay the recorded response; a key bound
+ * to another script refuses before any source runs.
+ */
+export async function claimBulkRunExecution(args: {
+  orgId: string;
+  actorId: string;
+  scriptId: string;
+  key: string;
+}): Promise<BulkRunExecution> {
+  const hash = requestHash(args.scriptId);
+  const startedAt = new Date().toISOString();
+  const cutoff = new Date(Date.now() - BULK_RUN_EXECUTION_TAKEOVER_MS).toISOString();
+  // One statement elects: exactly one rival wins the row lock. ISO-8601
+  // markers compare lexicographically; coalesce keeps a non-marker response
+  // takeover-eligible instead of throwing on the cast.
+  const won = (await db.execute<{ id: string }>(sql`
+    update application_idempotency_keys
+       set response = ${JSON.stringify({ bulkRunStartedAt: startedAt })}::jsonb
+     where org_id = ${args.orgId} and actor_id = ${args.actorId}
+       and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
+       and idempotency_key = ${args.key}
+       and request_hash = ${hash}
+       and completed_at is null
+       and (response is null or coalesce(response->>'bulkRunStartedAt', '') < ${cutoff})
+    returning id
+  `));
+  if (won.rows[0]) return { status: "mine" };
+  const rival = (await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(sql`
+    select request_hash as "requestHash", response, completed_at as "completedAt"
+      from application_idempotency_keys
+     where org_id = ${args.orgId} and actor_id = ${args.actorId}
+       and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
+       and idempotency_key = ${args.key}
+  `)).rows[0];
+  if (!rival) return { status: "mine" };
+  if (rival.requestHash !== hash) return { status: "mismatched" };
+  if (rival.completedAt !== null) return { status: "completed", response: rival.response };
+  return { status: "inflight" };
+}
+
 /** Read a claim without owning it (the worker's pre-run check). */
 export async function readBulkRunClaim(args: {
   orgId: string;

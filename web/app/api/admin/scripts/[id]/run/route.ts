@@ -10,6 +10,7 @@ import {
 } from '@openbooks/engine/src/scripting/scripting.ts'
 import {
   bulkRunClientKey,
+  bulkRunIdempotencyScope,
   bulkScriptQueueJobId,
   claimBulkRunKey,
   completeBulkRunKey,
@@ -118,8 +119,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (accepted) return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
         // Redis unavailable — run inline so "Run now" still works in dev,
         // under the same authenticated actor as the queued path, completing
-        // the same claim the worker would have completed.
-        const outcome = await runBulkScript(id, user.orgId, { actorId: user.id })
+        // the same claim the worker would have completed. The inline run
+        // shares the claim's stable journal scope, so a queued duplicate
+        // racing it replays instead of double-posting.
+        const outcome = await runBulkScript(id, user.orgId, { actorId: user.id, idempotencyScope: bulkRunIdempotencyScope(runKey) })
         const response = { queued: false, ...outcome }
         await completeBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey, response })
         return NextResponse.json(response)
