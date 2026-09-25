@@ -173,7 +173,8 @@ export const payrollStatutoryRates = pgTable(
 /**
  * Pack-declared employer facts whose legal value changes over time. These
  * are not rates: headcount bands, sector classifications and employer status
- * live here with an effective date and append-only supersession history
+ * live here with an effective date and append-only supersession history,
+ * scoped either to the legal employer or to one filing account
  * (a scheduled expiry uses the exclusive supersession boundary documented
  * on supersededOn below).
  */
@@ -182,8 +183,10 @@ export const payrollEmployerFacts = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    /** The payroll legal-employer subsidiary in this organization. */
-    subsidiaryId: uuid("subsidiary_id").notNull(),
+    /** Set for legal-employer facts; null for filing-account facts. */
+    subsidiaryId: uuid("subsidiary_id"),
+    /** Set for filing-account facts; null for legal-employer facts. */
+    filingAccountId: uuid("filing_account_id"),
     country: text("country").notNull(),
     factKey: text("fact_key").notNull(),
     effectiveFrom: date("effective_from").notNull(),
@@ -202,9 +205,20 @@ export const payrollEmployerFacts = pgTable(
       columns: [t.orgId, t.subsidiaryId],
       foreignColumns: [subsidiaries.orgId, subsidiaries.id],
     }).onDelete("restrict"),
+    foreignKey({
+      name: "payroll_employer_facts_org_filing_account_fkey",
+      columns: [t.orgId, t.filingAccountId],
+      foreignColumns: [payrollFilingAccounts.orgId, payrollFilingAccounts.id],
+    }).onDelete("restrict"),
     uniqueIndex("payroll_employer_facts_org_point").on(
-      t.orgId, t.subsidiaryId, t.country, t.factKey, t.effectiveFrom,
+      t.orgId,
+      sql`coalesce(${t.subsidiaryId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      t.country, t.factKey, t.effectiveFrom,
+      sql`coalesce(${t.filingAccountId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
     ).where(sql`${t.supersededOn} is null`),
+    check("payroll_employer_facts_scope",
+      sql`(${t.subsidiaryId} is not null and ${t.filingAccountId} is null)
+          or (${t.subsidiaryId} is null and ${t.filingAccountId} is not null)`),
     check("payroll_employer_facts_value_kind",
       sql`${t.valueKind} in ('choice', 'integer', 'decimal', 'boolean')`),
     check("payroll_employer_facts_decimal_scale",

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
@@ -15,6 +15,8 @@ interface Fact {
   legalBasis: string
   refusalReason: string
   required: boolean
+  scope?: 'legal_employer' | 'filing_account'
+  filingProgramType?: string
   effectivePeriod?: 'date' | 'calendar_year'
   effectiveThroughRequiredFor?: string[]
   scale?: number
@@ -24,9 +26,11 @@ interface Fact {
 }
 interface Pack { country: string; facts: Fact[] }
 interface Employer { id: string; name: string; country: string | null }
+interface FilingAccount { id: string; country: string; programType: string; accountNumber: string; name: string; subsidiaryId: string | null; stateCode: string | null }
 interface Row {
   id: string
-  subsidiaryId: string
+  subsidiaryId: string | null
+  filingAccountId: string | null
   country: string
   factKey: string
   effectiveFrom: string
@@ -34,7 +38,7 @@ interface Row {
   factValue: string
   changeReason: string
 }
-interface Payload { packs: Pack[]; rows: Row[]; subsidiaries: Employer[] }
+interface Payload { packs: Pack[]; rows: Row[]; subsidiaries: Employer[]; filingAccounts: FilingAccount[] }
 
 /** Pack-declared employer facts, audited and effective-dated in Payroll Setup. */
 export function EmployerFactsSection() {
@@ -44,6 +48,7 @@ export function EmployerFactsSection() {
   const [data, setData] = useState<Payload | null>(null)
   const [country, setCountry] = useState('')
   const [subsidiaryId, setSubsidiaryId] = useState('')
+  const [filingAccountId, setFilingAccountId] = useState('')
   const [factKey, setFactKey] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
   const [effectiveThrough, setEffectiveThrough] = useState('')
@@ -71,16 +76,34 @@ export function EmployerFactsSection() {
   const pack = data?.packs.find((candidate) => candidate.country === selectedCountry)
   const fact = pack?.facts.find((candidate) => candidate.key === factKey) ?? pack?.facts[0]
   const entity = data?.subsidiaries.find((candidate) => candidate.id === selectedSubsidiaryId)
-  const visibleRows = useMemo(() => data?.rows.filter((row) =>
-    row.country === selectedCountry && row.subsidiaryId === selectedSubsidiaryId,
-  ) ?? [], [data, selectedCountry, selectedSubsidiaryId])
+  const accountChoices = data?.filingAccounts.filter((account) =>
+    account.country === selectedCountry && account.programType === fact?.filingProgramType,
+  ) ?? []
+  const selectedFilingAccountId = accountChoices.some((candidate) => candidate.id === filingAccountId)
+    ? filingAccountId : accountChoices[0]?.id || ''
+  const account = accountChoices.find((candidate) => candidate.id === selectedFilingAccountId)
+  // Filtered inline (not memoized): the account-scoped row test reads the
+  // selected fact and filing account, both derived per render, which the
+  // compiler cannot preserve as manual-memoization dependencies.
+  const visibleRows = data?.rows.filter((row) =>
+    row.country === selectedCountry && (fact?.scope === 'filing_account'
+      ? row.filingAccountId === selectedFilingAccountId
+      : row.subsidiaryId === selectedSubsidiaryId),
+  ) ?? []
 
   const save = async () => {
     if (!fact) return
     await saveAction.execute(() => fetchAction('/api/payroll/settings/employer-facts', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ country: selectedCountry, factKey: fact.key, subsidiaryId: selectedSubsidiaryId, effectiveFrom: fact.effectivePeriod === 'calendar_year' ? `${effectiveFrom.slice(0, 4)}-01-01` : effectiveFrom, ...(fact.effectiveThroughRequiredFor?.includes(value) && effectiveThrough ? { effectiveThrough } : {}), value, changeReason: reason }),
+        body: JSON.stringify({ country: selectedCountry, factKey: fact.key,
+          ...(fact.scope === 'filing_account'
+            ? { filingAccountId: selectedFilingAccountId }
+            : { subsidiaryId: selectedSubsidiaryId }),
+          effectiveFrom: fact.effectivePeriod === 'calendar_year' ? `${effectiveFrom.slice(0, 4)}-01-01` : effectiveFrom,
+          ...(fact.effectiveThroughRequiredFor?.includes(value) && effectiveThrough ? { effectiveThrough } : {}),
+          value, changeReason: reason }),
+
       }), {
         fallbackMessage: t('saveFailed'),
         onRefused: (error) => setFailure(error.displayMessage(t('saveFailed'))),
@@ -111,19 +134,29 @@ export function EmployerFactsSection() {
           <div className="space-y-4">
             <div className="space-y-1">
               <Label htmlFor="employer-fact-country">{t('country')}</Label>
-              <Select id="employer-fact-country" value={selectedCountry} onChange={(event) => { setCountry(event.target.value); setFactKey(''); setValue(''); setEffectiveThrough('') }}>
+              <Select id="employer-fact-country" value={selectedCountry} onChange={(event) => { setCountry(event.target.value); setFactKey(''); setFilingAccountId(''); setValue(''); setEffectiveThrough('') }}>
                 {data.packs.map((entry) => <option key={entry.country} value={entry.country}>{entry.country}</option>)}
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="employer-fact-subsidiary">{t('subsidiary')}</Label>
-              <Select id="employer-fact-subsidiary" value={selectedSubsidiaryId} onChange={(event) => { setSubsidiaryId(event.target.value); setEffectiveThrough('') }}>
-                {data.subsidiaries.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{entry.country ? ` · ${entry.country}` : ''}</option>)}
-              </Select>
-            </div>
+            {fact?.scope === 'filing_account' ? (
+              <div className="space-y-1">
+                <Label htmlFor="employer-fact-filing-account">Filing account</Label>
+                <Select id="employer-fact-filing-account" value={selectedFilingAccountId} onChange={(event) => setFilingAccountId(event.target.value)}>
+                  {accountChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.accountNumber}{entry.stateCode ? ` · ${entry.stateCode}` : ''}</option>)}
+                </Select>
+                {accountChoices.length === 0 && <p role="status" className="text-sm text-muted-foreground">Add an active {fact.filingProgramType} account before recording this fact.</p>}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Label htmlFor="employer-fact-subsidiary">{t('subsidiary')}</Label>
+                <Select id="employer-fact-subsidiary" value={selectedSubsidiaryId} onChange={(event) => { setSubsidiaryId(event.target.value); setEffectiveThrough('') }}>
+                  {data.subsidiaries.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{entry.country ? ` · ${entry.country}` : ''}</option>)}
+                </Select>
+              </div>
+            )}
             <div className="space-y-1">
               <Label htmlFor="employer-fact-name">{t('fact')}</Label>
-              <Select id="employer-fact-name" value={fact?.key ?? ''} onChange={(event) => { setFactKey(event.target.value); setValue(''); setEffectiveThrough('') }}>
+              <Select id="employer-fact-name" value={fact?.key ?? ''} onChange={(event) => { setFactKey(event.target.value); setFilingAccountId(''); setValue(''); setEffectiveThrough('') }}>
                 {pack?.facts.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
               </Select>
             </div>
@@ -146,10 +179,12 @@ export function EmployerFactsSection() {
               <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact?.label}</Label><Input id="employer-fact-value" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} placeholder={fact?.kind === 'decimal' ? t('decimalPlaces', { scale: fact.scale ?? 0 }) : t('wholeNumber')} /></div>
             )}
             <div className="space-y-1"><Label htmlFor="employer-fact-reason">{t('reason')}</Label><Input id="employer-fact-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required /></div>
-            <Button onClick={() => void save()} disabled={saveAction.busy || !fact || !value || !reason.trim() || !selectedSubsidiaryId || (fact.effectiveThroughRequiredFor?.includes(value) === true && (!effectiveThrough || effectiveThrough < effectiveFrom))}>{saveAction.busy ? t('saving') : t('save')}</Button>
+            <Button onClick={() => void save()} disabled={saveAction.busy || !fact || !value || !reason.trim()
+              || (fact.scope === 'filing_account' ? !selectedFilingAccountId : !selectedSubsidiaryId)
+              || (fact.effectiveThroughRequiredFor?.includes(value) === true && (!effectiveThrough || effectiveThrough < effectiveFrom))}>{saveAction.busy ? t('saving') : t('save')}</Button>
           </div>
-          <div className="space-y-3" aria-label={t('currentFacts', { name: entity?.name ?? t('employerFallback') })}>
-            <h3 className="font-medium">{t('currentValues', { name: entityName })}</h3>
+          <div className="space-y-3" aria-label={t('currentFacts', { name: fact?.scope === 'filing_account' ? account?.name ?? 'Filing account' : entity?.name ?? t('employerFallback') })}>
+            <h3 className="font-medium">{t('currentValues', { name: fact?.scope === 'filing_account' ? account?.name ?? 'filing account' : entityName })}</h3>
             {visibleRows.length === 0 ? <p className="text-sm text-muted-foreground">{t('noRows')}</p> : visibleRows.map((row) => {
               const declaration = pack?.facts.find((entry) => entry.key === row.factKey)
               return <article key={row.id} className="rounded-md border p-3"><h4 className="font-medium">{declaration?.label ?? row.factKey}</h4><p>{row.factValue} · {t('effectiveOn', { date: row.effectiveFrom })}{row.effectiveThrough ? ` – ${row.effectiveThrough}` : ''}</p><p className="text-sm text-muted-foreground">{row.changeReason}</p></article>

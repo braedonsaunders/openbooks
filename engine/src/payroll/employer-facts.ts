@@ -2,6 +2,7 @@ import { normalizeDecimal } from "../money/money.ts";
 import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
 
 export type PayrollEmployerFactKind = "choice" | "integer" | "decimal" | "boolean";
+export type PayrollEmployerFactScope = "legal_employer" | "filing_account";
 
 /** A fact the pack requires of the legal employer and accepts through Setup. */
 export interface PayrollEmployerFact {
@@ -11,6 +12,10 @@ export interface PayrollEmployerFact {
   refusalReason: string;
   legalBasis: string;
   required: boolean;
+  /** Defaults to legal-employer; account facts bind to one declared filing identity. */
+  scope?: PayrollEmployerFactScope;
+  /** Required for filing-account facts; validated against that pack's filing declaration. */
+  filingProgramType?: string;
   /** Whether the fact changes on any date or only at calendar-year boundaries. */
   effectivePeriod?: "date" | "calendar_year";
   /** These values require an inclusive end date, stored via the supersession boundary. */
@@ -55,6 +60,12 @@ export function employerFact(country: string, key: string): PayrollEmployerFact 
     throw new PayrollPackError(
       `the ${country} payroll pack reads employer fact "${key}" without declaring it in employerFacts`,
     );
+  }
+  if ((fact.scope ?? "legal_employer") === "filing_account" && !fact.filingProgramType) {
+    throw new PayrollPackError(`${country} employer fact ${fact.key} must declare its filing program type`);
+  }
+  if ((fact.scope ?? "legal_employer") === "legal_employer" && fact.filingProgramType) {
+    throw new PayrollPackError(`${country} legal-employer fact ${fact.key} cannot declare a filing program type`);
   }
   return fact;
 }
