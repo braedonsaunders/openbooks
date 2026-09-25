@@ -214,7 +214,12 @@ test('competing project billing requests serialize their not-to-exceed capacity 
   // The second must wait on the project row, not reach INSERT with the same balance.
   const suffix = randomUUID().replaceAll('-', '')
   const fn = `billing_cap_${suffix}`, trigger = `billing_cap_${suffix}`
-  const blocker = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL })
+  // Observe through the admin login when available: the generators run on
+  // the bypass pool, and since the RLS-role split a runtime-role observer
+  // sees their pg_stat_activity rows as <insufficient privilege> (no query
+  // text, no wait events), so the lock-boundary count below would read 0
+  // forever. Same fallback shape as scenario-kernel-mirror.
+  const blocker = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL })
   const gate = Math.floor(Math.random() * 1_000_000_000)
   const runs: Promise<unknown>[] = []
   let released = false
