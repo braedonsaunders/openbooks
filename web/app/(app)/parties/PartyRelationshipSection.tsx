@@ -56,6 +56,31 @@ interface FormState {
 
 const text = (value: unknown): string => (value == null ? '' : String(value))
 
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+
+/**
+ * A stored UTC instant rendered as the viewer's local wall time for
+ * datetime-local. Slicing the ISO string instead shows the UTC clock face
+ * as local time and shifts the reminder by the zone offset (I4-webui-223).
+ */
+function instantToLocalInput(value: unknown): string {
+  if (value == null || value === '') return ''
+  const at = new Date(String(value))
+  if (Number.isNaN(at.getTime())) return ''
+  return `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())}T${pad2(at.getHours())}:${pad2(at.getMinutes())}`
+}
+
+/**
+ * Local datetime-local wall time back to an explicit UTC instant for PATCH.
+ * The API stores zone-less input in the session zone, so the wall time must
+ * never travel without its offset. Unparseable input passes through for the
+ * API's named 422 rather than failing silently here.
+ */
+function localInputToInstant(value: string): string {
+  const at = new Date(value)
+  return Number.isNaN(at.getTime()) ? value : at.toISOString()
+}
+
 function toForm(profile: Record<string, unknown>): FormState {
   const stage = String(profile.lifecycle_stage ?? 'lead')
   return {
@@ -69,9 +94,9 @@ function toForm(profile: Record<string, unknown>): FormState {
     annualRevenue: text(profile.annual_revenue),
     employeeCount: text(profile.employee_count),
     qualificationScore: text(profile.qualification_score),
-    // datetime-local wants `YYYY-MM-DDTHH:mm`, and the stamp arrives as an
-    // ISO string or a serialized Date depending on the driver.
-    nextActionAt: profile.next_action_at ? String(profile.next_action_at).slice(0, 16) : '',
+    // datetime-local wants the viewer's local `YYYY-MM-DDTHH:mm`, while the
+    // stamp arrives as a UTC instant (ISO string or serialized Date).
+    nextActionAt: instantToLocalInput(profile.next_action_at),
   }
 }
 
@@ -181,7 +206,9 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
           ownerUserId: form.ownerUserId || null,
           territoryId: form.territoryId || null,
           leadSourceId: form.leadSourceId || null,
-          nextActionAt: form.nextActionAt || null,
+          // Local wall time back to a UTC instant: the API stores zone-less
+          // input in the session zone, which would move the reminder.
+          nextActionAt: form.nextActionAt ? localInputToInstant(form.nextActionAt) : null,
           stageReason: stageReason || null,
           isActive: true,
           // The concurrency token the main and bank saves already carry: a
