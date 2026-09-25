@@ -55,7 +55,17 @@ const ID_NONRESIDENT_EARNINGS_RULE: UsNonresidentThresholdRule = {
   label: "Idaho $1,000 annual nonresident withholding threshold",
 };
 const DOLLAR = 10_000n;
-const ID_SUNSET_EDITION_FROM = "2026-07-23";
+/**
+ * First pay date the sunset edition prices. The document carries a
+ * 07-23-2026 revision stamp, but the Commission's July 31, 2026
+ * announcement — the only operative direction on record — tells employers
+ * to use the revised tables "going forward" from its issuance and
+ * establishes no earlier effective date. A revision stamp is not a
+ * direction, so the edition is dated from publication; July 23–30 pay
+ * dates refuse as untranscribed rather than pricing an effectiveness the
+ * Commission never stated.
+ */
+const ID_SUNSET_EDITION_FROM = "2026-07-31";
 
 export type IdPeriod =
   | "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual" | "daily";
@@ -109,7 +119,8 @@ export const ID_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
     "Idaho State Tax Commission, Table for Percentage Computation Method of "
     + "Withholding, revised 07-23-2026 — child-tax-credit sunset, $0 ICTCAT "
     + "allowance, 5.3% over the printed per-period threshold, $1,212 biweekly "
-    + "unmarried 4-allowance example ($31)",
+    + "unmarried 4-allowance example ($31); effective from the Commission's "
+    + "July 31, 2026 announcement directing use going forward from issuance",
   status: "published",
   region: "ID",
 }];
@@ -124,8 +135,9 @@ export function idRatesForPayDate(payDate: string): IdYearRates {
       `Idaho income tax withholding for pay dates before ${ID_SUNSET_EDITION_FROM} is not loaded — `
       + "the April 2025 Table for Percentage Computation Method still subtracted Idaho Child Tax "
       + `Credit allowances. Transcribe that earlier edition into ${RATES_MODULE} if a `
-      + "pre-July-23-2026 pay date must be calculated. Never apply the July 23 2026 "
-      + "zero-allowance tables to an earlier pay date.",
+      + "pre-July-31-2026 pay date must be calculated. Never apply the revised "
+      + "zero-allowance tables to an earlier pay date: the July 31, 2026 announcement directs "
+      + "their use going forward from issuance, and no operative date before that is established.",
     );
   }
   return ID_RATES_2026_07_23;
