@@ -108,11 +108,16 @@ export async function POST(request: Request) {
     // cannot see; a missing or foreign id stays invalid_subsidiary above.
     const denied = guardSubsidiaryScope(gate, subsidiaryId)
     if (denied) return denied
-  } else {
+  } else if (!parentId) {
     // No subsidiary means the shared chart: an org-wide write.
     const orgWideDenied = guardUnrestrictedScope(gate)
     if (orgWideDenied) return orgWideDenied
   }
+  // With a parent and no explicit subsidiary the account inherits the
+  // parent's subsidiary, so the org-wide gate must not fire before the
+  // parent lock: a hidden parent would answer 403 while a genuinely absent
+  // one answers 404, and the difference discloses the hidden row. The
+  // effective subsidiary is resolved inside the write transaction below.
 
   const definitions = (await db.execute<{ key: string }>(sql`
     select key from segment_definitions
@@ -138,29 +143,14 @@ export async function POST(request: Request) {
   if (unownedCreateRefs.length > 0) return bad('unknown_custom_reference', 'custom')
   const custom = validatedCustom.cleaned
 
-  const snapshot = {
-    id: requestId,
-    org_id: gate.user.orgId,
-    number,
-    name,
-    type: body.type,
-    description,
-    parent_id: parentId,
-    is_summary: isSummary,
-    is_active: isActive,
-    currency_restriction: currencyRestriction,
-    eliminate: body.eliminate === true,
-    subsidiary_id: subsidiaryId,
-    subsidiary_include_children: body.subsidiaryIncludeChildren !== false,
-    reconcilable,
-    monetary: typeof body.monetary === 'boolean' ? body.monetary : null,
-    required_dimensions: requiredDimensions,
-    custom,
-  }
-
   let created: boolean | NextResponse = false
   try {
     created = await db.transaction(async (tx) => {
+      // The account inherits its parent's subsidiary when the body names
+      // none. Resolve it under the hierarchy lock so the scope decision and
+      // the stored row agree, and so a hidden parent reads as not found
+      // exactly like an absent one.
+      let effectiveSubsidiaryId = subsidiaryId
       if (parentId) {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounts-hierarchy:${gate.user.orgId}`}, 0))`)
         try {
@@ -169,13 +159,42 @@ export async function POST(request: Request) {
           if (!(error instanceof ScopeNotFoundError)) throw error
           return recordNotFoundResponse()
         }
-        const parent = (await tx.execute<{ is_summary: boolean; is_active: boolean; type: string }>(sql`
-          select is_summary, is_active, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
+        const parent = (await tx.execute<{ is_summary: boolean; is_active: boolean; type: string; subsidiary_id: string | null }>(sql`
+          select is_summary, is_active, type, subsidiary_id from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
         `)).rows[0]
         if (!parent) return recordNotFoundResponse()
         if (!parent.is_summary) return bad('parent_must_be_summary', 'parentId')
         if (!parent.is_active) return bad('inactive_parent', 'parentId')
         if (parent.type !== body.type) return bad('parent_type_mismatch', 'parentId')
+        if (effectiveSubsidiaryId === null) {
+          effectiveSubsidiaryId = parent.subsidiary_id
+          if (effectiveSubsidiaryId === null) {
+            const orgWideDenied = guardUnrestrictedScope(gate)
+            if (orgWideDenied) return orgWideDenied
+          } else {
+            const denied = guardSubsidiaryScope(gate, effectiveSubsidiaryId)
+            if (denied) return denied
+          }
+        }
+      }
+      const snapshot = {
+        id: requestId,
+        org_id: gate.user.orgId,
+        number,
+        name,
+        type: body.type,
+        description,
+        parent_id: parentId,
+        is_summary: isSummary,
+        is_active: isActive,
+        currency_restriction: currencyRestriction,
+        eliminate: body.eliminate === true,
+        subsidiary_id: effectiveSubsidiaryId,
+        subsidiary_include_children: body.subsidiaryIncludeChildren !== false,
+        reconcilable,
+        monetary: typeof body.monetary === 'boolean' ? body.monetary : null,
+        required_dimensions: requiredDimensions,
+        custom,
       }
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into accounts
@@ -185,7 +204,7 @@ export async function POST(request: Request) {
         values
           (${requestId}, ${gate.user.orgId}, ${number}, ${name}, ${body.type}, ${description},
            ${parentId}, ${isSummary}, ${isActive}, ${currencyRestriction}, ${body.eliminate === true},
-           ${subsidiaryId}, ${body.subsidiaryIncludeChildren !== false}, ${reconcilable},
+           ${effectiveSubsidiaryId}, ${body.subsidiaryIncludeChildren !== false}, ${reconcilable},
            ${typeof body.monetary === 'boolean' ? body.monetary : null},
            ${JSON.stringify(requiredDimensions)}::jsonb, ${JSON.stringify(custom)}::jsonb,
            ${gate.user.id}, ${gate.user.id})

@@ -104,10 +104,11 @@ test(
     try {
       const res = await POST(postRequest({ name: 'Provision for Future Income Tax', type: 'asset_bank' }))
       assert.equal(res.status, 201)
-      const body = (await res.json()) as { account: { id: string }; warnings: string[] }
+      const body = (await res.json()) as { account: { id: string }; warnings: { code: string; name: string; message: string }[] }
       assert.ok(body.account?.id, 'the account is created — a warning is not a refusal')
       assert.equal(body.warnings?.length, 1)
-      assert.match(body.warnings[0]!, /Provision for Future Income Tax/)
+      assert.equal(body.warnings[0]!.code, 'asset_bank_uncorroborated')
+      assert.match(body.warnings[0]!.message, /Provision for Future Income Tax/)
 
       const clean = await POST(postRequest({ name: 'RBC Bank', type: 'asset_bank' }))
       assert.equal(clean.status, 201)
@@ -132,9 +133,10 @@ test(
 
       const renamed = await PATCH(patchRequest(id, { type: 'asset_bank', name: 'Operating' }), patchParams(id))
       assert.equal(renamed.status, 200)
-      const renamedBody = (await renamed.json()) as { warnings: string[] }
+      const renamedBody = (await renamed.json()) as { warnings: { code: string; name: string; message: string }[] }
       assert.equal(renamedBody.warnings?.length, 1)
-      assert.match(renamedBody.warnings[0]!, /Operating/)
+      assert.equal(renamedBody.warnings[0]!.code, 'asset_bank_uncorroborated')
+      assert.match(renamedBody.warnings[0]!.message, /Operating/)
 
       const fixed = await PATCH(patchRequest(id, { name: 'Operating Bank' }), patchParams(id))
       assert.equal(fixed.status, 200)

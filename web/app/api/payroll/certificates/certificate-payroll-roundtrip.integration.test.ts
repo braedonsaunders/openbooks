@@ -24,7 +24,7 @@ const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks
 const { sql } = await import('drizzle-orm')
 const { setPackSlotAccount } = await import('@openbooks/engine/src/payroll/packs.ts')
 const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts"), { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts"), { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route')
 
 /**
@@ -104,11 +104,39 @@ async function gbPayrollOrg() {
                                     effective_from, is_active, created_by, updated_by)
       values (${org.orgId}, ${employeeId}, 'GBP', '36000', 'year', 2080, '2026-04-01', true,
               ${state.actorId}, ${state.actorId})`)
+    // Stub calculation resolves the employment through the payroll profile.
+    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, subsidiaryId)
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                             province, pay_basis, is_active, created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'GB', 'ENG', 'salary', true,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                             country, province, pay_basis, is_active, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'GB', 'ENG', 'salary', true,
               ${state.actorId}, ${state.actorId})`)
+    // The pension assessment is a second prerequisite gate ahead of the tax
+    // code check: an entitled worker with no enrolment passes it, keeping
+    // the tax code the only missing input by design.
+    const pension = await fileCertificate(
+      employeeId, 'gb_workplace_pension',
+      { age_band: '22_to_state_pension_age', worker_status: 'entitled_worker', enrolment_status: 'not_enrolled' },
+      '2026-04-01',
+    )
+    assert.equal(pension.status, 200, await pension.clone().text())
+    // The NIC letter is a third prerequisite gate ahead of the tax code
+    // check: category A, not a director.
+    const nic = await fileCertificate(
+      employeeId, 'gb_nic_category',
+      { category_letter: 'A', director_status: 'not_director' },
+      '2026-04-01',
+    )
+    assert.equal(nic.status, 200, await nic.clone().text())
+    // The student-loan plan rides the starter checklist; the tax-code notice
+    // stays the only missing input. (The test files the same checklist
+    // again below — a second save supersedes.)
+    const checklist = await fileCertificate(
+      employeeId, 'gb_starter_checklist',
+      { starter_declaration: 'A', student_loan_plan: 'none', student_loan_postgraduate: 'false' },
+      '2026-04-01',
+    )
+    assert.equal(checklist.status, 200, await checklist.clone().text())
     return { org, scheduleId, employeeId }
   })
 }
@@ -156,7 +184,7 @@ test('a GB employee refused for a missing P6/P9 code calculates after it is file
     assert.equal(filed.status, 200, await filed.clone().text())
     const starter = await fileCertificate(
       employeeId, 'gb_starter_checklist',
-      { starter_declaration: 'A', student_loan_plan: 'none' }, '2026-04-01',
+      { starter_declaration: 'A', student_loan_plan: 'none', student_loan_postgraduate: 'false' }, '2026-04-01',
     )
     assert.equal(starter.status, 200, await starter.clone().text())
 

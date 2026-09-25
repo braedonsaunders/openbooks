@@ -87,7 +87,7 @@ const { POST: postBankFileRelease } = (await import(bankFileReleaseUrl)) as type
 hooks.deregister();
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
+const { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
@@ -237,6 +237,10 @@ test(
         await db.execute(sql`
           insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province)
           values (${orgId}, ${empA}, ${scheduleA}, 'CA', 'ON')`);
+        // Stub rows carry a NOT NULL employment: each employee works for
+        // their own entity.
+        const employmentA = await seedWorkerEmployment(orgId, empA, rootId);
+        const employmentB = await seedWorkerEmployment(orgId, empB, subBId);
         const componentId = randomUUID();
         await db.execute(sql`
           insert into pay_components (org_id, id, code, name, kind, basis, sequence)
@@ -255,11 +259,11 @@ const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecyc
         const runB = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleB });
 
         // Wage PII on each run, so a pre-fix 200 would disclose real stub rows.
-        for (const [run, emp, province] of [[runA, empA, "ON"], [runB, empB, "ON"]] as const) {
+        for (const [run, emp, employment, province] of [[runA, empA, employmentA, "ON"], [runB, empB, employmentB, "ON"]] as const) {
           await db.execute(sql`
-            insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+            insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                    periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
-            select ${orgId}, ${run.documentId}, ${emp}, ${province}, 26, r.pay_date, r.tax_year, d.currency,
+            select ${orgId}, ${run.documentId}, ${emp}, ${employment}, ${province}, 26, r.pay_date, r.tax_year, d.currency,
                    '2500.00', '1900.00'
               from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
              where r.org_id = ${orgId} and r.document_id = ${run.documentId}`);
