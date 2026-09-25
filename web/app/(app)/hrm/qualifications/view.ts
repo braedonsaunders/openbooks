@@ -9,6 +9,7 @@ import {
   link,
   page,
   pageHeader,
+  pagination,
   panel,
   statTile,
   table,
@@ -203,6 +204,18 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
                     ],
                     empty: { title: f('coverageEmpty') },
                   }),
+                  // The crew pages 50 at a time: the pager loads the
+                  // remainder instead of silently cutting past the cap.
+                  {
+                    ...pagination({
+                      basePath: '/hrm/qualifications',
+                      total: f('coverageTotal'),
+                      page: f('coveragePage'),
+                      perPage: f('coveragePerPage'),
+                      pageParamKey: 'crewPage',
+                    }),
+                    when: f('coverageProjectId'),
+                  },
                 ],
               }),
             ]
