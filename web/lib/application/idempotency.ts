@@ -125,6 +125,8 @@ export async function executeIdempotent<T>(args: {
   execute: () => Promise<T>;
   /** Maps a freshly executed command's value onto the transport status to record. */
   successStatus?: (value: T) => number;
+  /** Recheck resource authorization before returning a stored response. */
+  authorizeReplay?: () => Promise<void>;
   /** Upper bound on waiting an in-flight rival out; defaults to the standard budget. */
   rivalWaitBudgetMs?: number;
 }): Promise<{ replayed: boolean; value: T }> {
@@ -148,10 +150,10 @@ export async function executeIdempotent<T>(args: {
     throw error;
   }
 
-  const replay = (row: StoredKeyRow): { replayed: boolean; value: T } => ({
-    replayed: true,
-    value: row.response as T,
-  });
+  const replay = async (row: StoredKeyRow): Promise<{ replayed: boolean; value: T }> => {
+    await args.authorizeReplay?.();
+    return { replayed: true, value: row.response as T };
+  };
   const assertMatchingPayload = (row: StoredKeyRow): void => {
     if (row.requestHash !== hash) {
       throw conflict("idempotencyKey was already used with different input");

@@ -186,11 +186,7 @@ export async function uploadCabinetFile(
   input: { folderId: string; filename: string; contentType: string; contentBase64: string },
 ): Promise<{ id: string; name: string; folderId: string; folderName: string | null; contentType: string; sizeBytes: number }> {
   const { filename, contentType, bytes } = validateCabinetUpload(input);
-  const folder = await getFolder(authz.user.orgId, input.folderId);
-  if (!folder) throw notFound("folder");
-  // Uploading needs Editor+ on the destination folder — the route's gate.
-  const level = await folderAccessLevel(authz.user.orgId, cabinetViewer(authz), input.folderId);
-  if (!accessAtLeast(level, "editor")) throw forbidden("documents.manage");
+  await assertCabinetUploadAccess(authz, input.folderId);
   const meta = await createFile({
     orgId: authz.user.orgId,
     folderId: input.folderId,
@@ -208,4 +204,13 @@ export async function uploadCabinetFile(
     contentType: meta.contentType,
     sizeBytes: meta.sizeBytes,
   };
+}
+
+/** Reauthorize a replay before it returns the stored file metadata. */
+export async function assertCabinetUploadAccess(authz: Authz, folderId: string): Promise<void> {
+  const viewer = cabinetViewer(authz);
+  const folder = await getFolder(authz.user.orgId, folderId, viewer);
+  if (!folder) throw notFound("folder");
+  const level = await folderAccessLevel(authz.user.orgId, viewer, folderId);
+  if (!accessAtLeast(level, "editor")) throw forbidden("documents.manage");
 }

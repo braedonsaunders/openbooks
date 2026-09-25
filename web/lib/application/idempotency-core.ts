@@ -39,3 +39,7 @@ export function canonicalJson(value: unknown): string {
 export function requestHash(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }
+
+export function withContentDigest<T extends Record<string, unknown>>(request: T, content: Uint8Array | string): T & { contentHash: string } {
+  return { ...request, contentHash: createHash("sha256").update(content).digest("hex") };
+}

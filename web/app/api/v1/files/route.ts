@@ -6,6 +6,7 @@ import {
 } from "../../../../lib/api/v1-request";
 import { listApplicationFiles, uploadCabinetFile } from "../../../../lib/application/files";
 import { executeIdempotent } from "../../../../lib/application/idempotency";
+import { withContentDigest } from "../../../../lib/application/idempotency-core";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,14 @@ export async function POST(request: Request): Promise<NextResponse> {
       context,
       operation: "file.upload",
       idempotencyKey: requireV1IdempotencyKey(request),
-      request: { folderId, filename, contentType },
+      request: withContentDigest(
+        { folderId, filename, contentType },
+        contentBase64.replace(/\s+/g, ""),
+      ),
+      authorizeReplay: async () => {
+        const { assertCabinetUploadAccess } = await import("../../../../lib/application/files");
+        await assertCabinetUploadAccess(context.authz, folderId);
+      },
       execute: async () => uploadCabinetFile(context.authz, {
         folderId, filename, contentType, contentBase64,
       }),
