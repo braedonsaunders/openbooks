@@ -20,7 +20,9 @@
  * wage-bracket tables. The engine is the calculation rules. Circular CT
  * Examples 8–10 print table cells ($17.65, $39.97, $78.82); the same facts
  * through Tables A–E are different cents, pinned in the conformance test so
- * the two official methods are not collapsed.
+ * the two official methods are not collapsed. Nonresidents working fewer
+ * than 15 Connecticut days in the calendar year are excluded on verified
+ * work-day records; with no records, Example 10 prices all wages.
  *
  * Rules in Circular CT that this engine refuses, rather than inventing:
  *   • Resident out-of-state proration (Examples 1–4) — needs the other
@@ -43,13 +45,31 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
+  evaluateUsNonresidentThreshold,
   refuseUntranscribedYear,
+  requireUsWageAllocation,
+  type UsNonresidentThresholdRule,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/ct.ts";
+
+/**
+ * Circular CT p. 8: a nonresident working in Connecticut fewer than 15 days
+ * in the calendar year is not subject to withholding; at 15 days the wages
+ * are priced (and allocated by CT-W4NA below). No catch-up of prior exempt
+ * pays is transcribed here, so crossing starts withholding with the current
+ * pay — never a retroactive collection the publication does not state.
+ */
+const CT_NONRESIDENT_DAY_RULE: UsNonresidentThresholdRule = {
+  measure: "service_days",
+  threshold: 15,
+  crossing: ">=",
+  catchUpPriorWages: false,
+  label: "Connecticut nonresident 15-day withholding threshold",
+};
 
 export type CtWithholdingCode = "A" | "B" | "C" | "D" | "F";
 
@@ -503,6 +523,27 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "CT", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  // Residency hierarchy for nonresidents: with Connecticut work-day records,
+  // under 15 calendar-year days withholds nothing; at 15 days the wages price
+  // below. With no work-day records, Example 10 withholds as if all services
+  // were in Connecticut — the threshold is evaluated only where its facts exist.
+  if (input.basis === "nonresident") {
+    const ctRecords = (input.wageAllocations ?? []).filter(
+      (item) => item.region === "CT" && item.subRegion == null,
+    );
+    if (ctRecords.length > 0) {
+      const allocation = requireUsWageAllocation(input.wageAllocations, "CT", null);
+      const threshold = evaluateUsNonresidentThreshold(
+        allocation, CT_NONRESIDENT_DAY_RULE, input.periodsPerYear,
+      );
+      if (!threshold.crossed) {
+        factors.CT_NONRESIDENT_UNDER_15_DAYS = "1";
+        return { state: "CT", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+      }
+      factors.CT_NONRESIDENT_SERVICE_DAYS_YTD = String(allocation.serviceDaysYearToDate);
+    }
+  }
+
   // Circular CT: paid with regular wages, add them and run the rules once
   // (Example 11). A supplemental that stands alone from regular wages is
   // Example 12's two-check recompute — tax on regular-plus-supplemental
@@ -626,6 +667,8 @@ export const CT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CT_TAX: "Connecticut tax this period (flat method)",
   CT_ANNUAL_WAGES: "Connecticut annualized wages",
   CT_SOURCE_WAGES: "Connecticut-source wages after CT-W4NA allocation",
+  CT_NONRESIDENT_UNDER_15_DAYS: "Connecticut nonresident under the 15-day threshold",
+  CT_NONRESIDENT_SERVICE_DAYS_YTD: "Connecticut nonresident service days year to date",
   CT_EXEMPTION: "Connecticut personal exemption",
   CT_TAXABLE: "Connecticut taxable income",
   CT_INITIAL_TAX: "Connecticut initial tax from tables",
@@ -782,7 +825,8 @@ export const CT_REGION: PayrollRegionWithholding = {
   label: "Connecticut income tax",
   implemented: true,
   // Circular CT p. 8: wages of a nonresident are subject to withholding if
-  // paid for services rendered in Connecticut. Example 10: with no CT-W4NA
+  // paid for services rendered in Connecticut, except a nonresident working
+  // fewer than 15 days in the calendar year. Example 10: with no CT-W4NA
   // and no allocation records, withhold as if all services were in Connecticut.
   // Form CT-W4NA's percentage (Examples 8–9) is not a field on CT-W4 and is
   // not applied here — inventing a 60% default would under-withhold.

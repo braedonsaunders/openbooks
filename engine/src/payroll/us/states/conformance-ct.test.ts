@@ -162,6 +162,17 @@ test("CT Circular CT Example 8 — weekly $700 Code F is the calculation rules, 
     },
   });
   assert.equal(allocated.factors.CT_ANNUAL_WAGES, money("21840"));
+  // Circular CT p. 8: five verified Connecticut days in the year withholds
+  // nothing, even with $700 of wages on the check.
+  const underThreshold = CT_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "700.00", basis: "nonresident",
+    certificate: cert({ withholding_code: "F" }),
+    wageAllocations: [{
+      region: "CT", subRegion: null, workShare: "1", source: "CT-W4NA allocation records",
+      serviceDaysCurrentPeriod: 2, serviceDaysYearToDate: 5,
+    }],
+  });
+  assert.equal(underThreshold.tax, money("0"));
 });
 
 test("CT Circular CT Example 9 — weekly $1,000 Code A is the calculation rules, not $39.97", () => {
