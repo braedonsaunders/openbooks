@@ -135,8 +135,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const nextSummary = body.isSummary ?? Boolean(existing.is_summary)
   if (nextSummary && nextReconcilable) return bad('summary_reconcilable_conflict')
   if (body.isSummary === true && existingPayload.hasTransactions) return bad('summary_has_transactions', 'isSummary')
-  if (body.isSummary === false && existingPayload.childCount > 0) return bad('summary_has_children', 'isSummary')
-  if (body.isActive === false && existingPayload.activeChildCount > 0) return bad('inactive_has_children', 'isActive')
 
   let currencyRestriction: string | null | undefined
   if (body.currencyRestriction !== undefined) {
@@ -218,7 +216,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // Keep hierarchy serialization before any per-account row lock. Two
       // concurrent reparents otherwise hold their own row and can deadlock
       // when the hierarchy loser tries to inspect the winner's row.
-      if (parentId !== undefined) {
+      if (parentId !== undefined || body.isSummary === false || body.isActive === false) {
         await tx.execute(sql`
           select pg_advisory_xact_lock(hashtextextended(${`accounts-hierarchy:${gate.user.orgId}`}, 0))
         `)
@@ -241,6 +239,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         throw new PatchNotFound()
       }
       if (!locked.unchanged) throw new Error('account_changed')
+      if (body.isSummary === false || body.isActive === false) {
+        const children = (await tx.execute<{ has_children: boolean; has_active_children: boolean }>(sql`
+          select exists(select 1 from accounts child where child.org_id = ${gate.user.orgId} and child.parent_id = ${id}) as has_children,
+                 exists(select 1 from accounts child where child.org_id = ${gate.user.orgId} and child.parent_id = ${id} and child.is_active) as has_active_children
+        `)).rows[0]
+        if (body.isSummary === false && children?.has_children) throw new PatchInvalid('summary_has_children', 'isSummary')
+        if (body.isActive === false && children?.has_active_children) throw new PatchInvalid('inactive_has_children', 'isActive')
+      }
       if (parentId !== undefined) {
         if (parentId) {
           try {
@@ -249,11 +255,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             if (error instanceof ScopeNotFoundError) throw new PatchNotFound()
             throw error
           }
-          const parent = (await tx.execute<{ is_summary: boolean; type: string }>(sql`
-            select is_summary, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
+          const parent = (await tx.execute<{ is_summary: boolean; is_active: boolean; type: string }>(sql`
+            select is_summary, is_active, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
           `))
           if (!parent.rows[0]) throw new PatchNotFound()
           if (!parent.rows[0].is_summary) throw new PatchInvalid('parent_must_be_summary', 'parentId')
+          if (!parent.rows[0].is_active) throw new PatchInvalid('inactive_parent', 'parentId')
           if (parent.rows[0].type !== nextType) throw new PatchInvalid('parent_type_mismatch', 'parentId')
           const cycle = (await tx.execute(sql`
             with recursive descendants as (

@@ -169,11 +169,12 @@ export async function POST(request: Request) {
           if (!(error instanceof ScopeNotFoundError)) throw error
           return recordNotFoundResponse()
         }
-        const parent = (await tx.execute<{ is_summary: boolean; type: string }>(sql`
-          select is_summary, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
+        const parent = (await tx.execute<{ is_summary: boolean; is_active: boolean; type: string }>(sql`
+          select is_summary, is_active, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
         `)).rows[0]
         if (!parent) return recordNotFoundResponse()
         if (!parent.is_summary) return bad('parent_must_be_summary', 'parentId')
+        if (!parent.is_active) return bad('inactive_parent', 'parentId')
         if (parent.type !== body.type) return bad('parent_type_mismatch', 'parentId')
       }
       const inserted = (await tx.execute<{ id: string }>(sql`
@@ -233,6 +234,10 @@ export async function POST(request: Request) {
       : String(error)
     if (message.includes('accounts_org_number')) return bad('number_in_use', 'number')
     if (message.includes('idempotency_key_conflict')) return bad('invalid_idempotency_key', undefined, 409)
+    if (message.includes('parent_not_found')) return recordNotFoundResponse()
+    if (message.includes('inactive_parent')) return bad('inactive_parent', 'parentId')
+    if (message.includes('parent_must_be_summary')) return bad('parent_must_be_summary', 'parentId')
+    if (message.includes('parent_type_mismatch')) return bad('parent_type_mismatch', 'parentId')
     throw error
   }
   if (created instanceof NextResponse) return created
