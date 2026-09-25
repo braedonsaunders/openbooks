@@ -429,6 +429,39 @@ export interface PayrollContributionProgram {
 }
 
 /**
+ * An opening wage-base carry-in scoped to one filing account (see
+ * `accountOpeningBases` on the pack). A state unemployment account is keyed
+ * by EIN, a federal W-2 program by nothing, and a W-2 program that prints
+ * one slip per state by the two-letter state code: one row per account means
+ * the carry-in can never land on the wrong slip, and an employer with two
+ * SUI accounts in one state cannot file either until the history is
+ * attributed to the exact account.
+ */
+export interface PayrollAccountOpeningBase {
+  /** Program code, e.g. `us_sui`, `us_w2_state`. Keys the carry-in. */
+  key: string;
+  /** Operator label, e.g. `SUI insurable wages carried in under this SUI account`. */
+  label: string;
+  /** What the carry-in is, in the program's own statutory words. */
+  help: string;
+  /** Filing-account `program_type`, e.g. `us_state_sui`. */
+  filingProgramType: string;
+  /**
+   * True when one row is carried per state (SUI, state W-2 slips) and the
+   * region must be a two-letter state code; false for federal EIN-level
+   * programs, which cannot carry a state.
+   */
+  requiresRegion: boolean;
+  /**
+   * Legacy `payroll_opening_balances` text field this declaration replaces for
+   * W-2 reporting. While both carry amounts the carry-in screen refuses the
+   * save and names the replacement; once the legacy column reads zero the
+   * account rows are the only source and the legacy amount pays nothing.
+   */
+  replacesLegacyField?: string;
+}
+
+/**
  * One second-order opening year-to-date amount a country pack declares for
  * mid-year adopters (see `openingYtdFields` on the pack). The generic
  * opening-balances layer — the field list, the money validation, the
@@ -670,6 +703,11 @@ export interface PayrollCountryPack {
    * the pack's every program rides the two classic flags.
    */
   contributionPrograms?: readonly PayrollContributionProgram[];
+  /**
+   * Filing-account-scoped opening wage-base carry-ins (see the type).
+   * Absent means the pack's openings need no per-account attribution.
+   */
+  accountOpeningBases?: readonly PayrollAccountOpeningBase[];
   /**
    * pay_components.tax_treatment for EMPLOYEE-paid union dues, or null when
    * the pack's statutory engine gives dues no tax treatment at all.

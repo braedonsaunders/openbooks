@@ -83,6 +83,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.opening-balances-version-test')]
       export const OpeningBalanceSaveError = state.ErrorClass
       export const assertTaxYear = state.assertTaxYear
+      export async function declaredAccountOpeningBaseFields() { return [] }
       export async function declaredProgramBaseFields() { return [] }
       export const OPENING_BALANCE_FIELDS = []
       export async function saveOpeningBalances(input) {

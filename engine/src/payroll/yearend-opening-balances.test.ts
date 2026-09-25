@@ -6,6 +6,7 @@ import {
   carryOpeningYearEndYtd,
   openingYtdIntoT4Slip,
   openingYtdIntoW2Slip,
+  openingAccountYtdIntoW2Slip,
   seedOpeningOnlySlips,
   t4Slips,
   w2Slips,
@@ -183,17 +184,12 @@ test("an opening with no committed stub still produces a slip", () => {
   assert.equal(slip!.box26CppPensionable, "50000.0000");
 });
 
-test("the W-2 carry-in reaches taxable, tax and both FICA wage bases", () => {
-  const before = w2("e1");
-  const after = openingYtdIntoW2Slip(before, opening({
-    taxableYtd: "12000.25", taxYtd: "1500.50", pensionableYtd: "14000.75",
-  }));
-  assert.equal(after.box1Wages, "60000.2500");
-  assert.equal(after.box2FederalIncomeTax, "7500.5000");
-  assert.equal(after.box3SsWages, "62000.7500");
-  assert.equal(after.box4SsTax, before.box4SsTax);
-  assert.equal(after.box5MedicareWages, "62000.7500");
-  assert.equal(after.box6MedicareTax, before.box6MedicareTax);
+test("the W-2 carry-in is restricted to its federal account", () => {
+  const otherEin = w2("e1", { filingAccountId: "ein-b" });
+  const after = openingAccountYtdIntoW2Slip(otherEin, opening({ accountBasesYtd: {
+    us_w2_taxable: [{ filingAccountId: "ein-a", insurableYtd: "12000.25" }],
+  } }));
+  assert.equal(after.box1Wages, "48000.0000");
 });
 
 test("opening bases are capped together with committed T4 bases", () => {

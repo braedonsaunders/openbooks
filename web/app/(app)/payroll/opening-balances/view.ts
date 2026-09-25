@@ -4,12 +4,14 @@ import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
   OPENING_BALANCE_FIELDS,
+  declaredAccountOpeningBaseFields,
   declaredEmployerLevyFields,
   declaredProgramBaseFields,
   employerLevyOpeningsForYear,
   type OpeningBalanceYear,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
+import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements-openings.ts'
 import { itSurtaxSaldoCarryIns } from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -86,6 +88,7 @@ export interface PayrollOpeningBalancesData {
     fields: BalancesProps['fields']
     programs: BalancesProps['programs']
     suiStates: BalancesProps['suiStates']
+    accountPrograms: BalancesProps['accountPrograms']
     components: BalancesProps['components']
     canManage: boolean
   }
@@ -131,6 +134,11 @@ export async function loadPayrollOpeningBalances(
       [IT_SALDO_FIELDS[1].key]: saldo.comunaleSaldo,
     }
   }
+  const accountDeclarations = await declaredAccountOpeningBaseFields()
+  const filingAccounts = (await listFilingAccounts(orgId, 'US')).filter((account) =>
+    authz.allowedSubsidiaryIds === null || account.subsidiaryId === null
+      || authz.allowedSubsidiaryIds.has(account.subsidiaryId),
+  )
   // Bank carry-ins are NOT year-scoped (a bank has one lifetime balance), so
   // this load deliberately ignores `year`. See EntitlementOpeningsView.
   const banks = await scopedEntitlementOpenings(authz)
@@ -178,6 +186,24 @@ export async function loadPayrollOpeningBalances(
         help: 'Pre-adoption wages insurable for unemployment insurance in this state. Enter only wages the gaining state\u2019s transfer rule lets transfer (most states credit same-employer wages reported to another state toward the new state\u2019s base).',
         packs: ['US'],
       })),
+      accountPrograms: accountDeclarations.flatMap((program) =>
+        filingAccounts
+          .filter((account) => account.country === program.country && account.programType === program.filingProgramType)
+          .filter((account) => !program.requiresRegion || account.stateCode !== null)
+          .map((account) => {
+            const region = program.requiresRegion ? account.stateCode : null
+            return ({
+              key: `${program.programKey}:${account.id}:${region ?? ''}`,
+              programKey: program.programKey,
+              label: `${program.label} — ${account.name}${region ? ` (${region})` : ''}`,
+              help: `${program.help} Filing account: ${account.name} (${account.accountNumber}).`,
+              country: program.country,
+              filingAccountId: account.id,
+              region,
+              requiresRegion: program.requiresRegion,
+            })
+          }),
+      ),
       components: data.components,
       canManage: can(authz, 'payroll.manage'),
     },
@@ -225,6 +251,7 @@ export function payrollOpeningBalancesSpec(_data: PayrollOpeningBalancesData): P
           fields: f('balances.fields'),
           programs: f('balances.programs'),
           suiStates: f('balances.suiStates'),
+          accountPrograms: f('balances.accountPrograms'),
           components: f('balances.components'),
           canManage: f('balances.canManage'),
         }),

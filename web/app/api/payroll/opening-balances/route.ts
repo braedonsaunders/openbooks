@@ -6,6 +6,7 @@ import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import {
   assertTaxYear,
+  declaredAccountOpeningBaseFields,
   declaredProgramBaseFields,
   OPENING_BALANCE_FIELDS,
   OpeningBalanceSaveError,
@@ -76,6 +77,7 @@ export async function GET(req: Request) {
   // the grid shows one carry-in column per program some employee's country
   // pack declares, labeled from the declaration itself.
   const programs = await declaredProgramBaseFields()
+  const accountPrograms = await declaredAccountOpeningBaseFields()
   return NextResponse.json({
     ...data,
     fields: OPENING_BALANCE_FIELDS.map((field) => ({
@@ -94,6 +96,11 @@ export async function GET(req: Request) {
         + 'Enter only wages the gaining state\u2019s transfer rule lets transfer '
         + '(most states credit same-employer wages reported to another state toward the new state\u2019s base).',
     },
+    accountPrograms: accountPrograms.map((program) => ({
+      key: program.programKey, label: program.label, help: program.help,
+      country: program.country, filingProgramType: program.filingProgramType,
+      requiresRegion: program.requiresRegion,
+    })),
   })
 }
 
@@ -159,6 +166,7 @@ export async function POST(req: Request) {
       components?: unknown
       programs?: unknown
       suiStates?: unknown
+      accountBases?: unknown
       updatedAt?: unknown
     }
     if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
@@ -232,6 +240,34 @@ export async function POST(req: Request) {
       }
       suiStates = persisted.map
     }
+    let accountBases: Record<string, unknown>[] | undefined
+    if (row.accountBases !== undefined) {
+      if (!Array.isArray(row.accountBases)) {
+        return NextResponse.json({ error: 'accountBases must be an array' }, { status: 422 })
+      }
+      accountBases = []
+      for (const rawBase of row.accountBases) {
+        if (rawBase == null || typeof rawBase !== 'object' || Array.isArray(rawBase)) {
+          return NextResponse.json({ error: 'each account base must be an object' }, { status: 422 })
+        }
+        const base = rawBase as Record<string, unknown>
+        if (typeof base.programKey !== 'string' || typeof base.filingAccountId !== 'string'
+          || !(base.region === null || typeof base.region === 'string')) {
+          return NextResponse.json({ error: 'each account base needs a programKey, filingAccountId, and region' }, { status: 422 })
+        }
+        const amount = persistMoney(base.insurableYtd)
+        if (amount === 'invalid') {
+          return NextResponse.json({ error: moneyRefusal(`Account wage-base opening for "${base.programKey}"`, base.insurableYtd, 'an amount', 4) }, { status: 422 })
+        }
+        if (amount === '') continue
+        accountBases.push({
+          programKey: base.programKey,
+          filingAccountId: base.filingAccountId,
+          region: base.region,
+          insurableYtd: amount,
+        })
+      }
+    }
     rows.push({
       employeePartyId: row.employeePartyId,
       amounts: amounts.map,
@@ -244,6 +280,7 @@ export async function POST(req: Request) {
       // Same contract for state SUI carry-ins: absent keeps what is stored,
       // {} clears them.
       suiStates,
+      accountBases,
       updatedAt,
     })
   }

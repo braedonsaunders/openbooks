@@ -1166,6 +1166,44 @@ export const payrollOpeningProgramBases = pgTable(
   ],
 );
 
+/** A statutory opening wage base whose year-to-date belongs to one filing account. */
+export const payrollOpeningAccountBases = pgTable(
+  "payroll_opening_account_bases",
+  {
+    id: id(),
+    orgId: orgRef(),
+    employeePartyId: uuid("employee_party_id").notNull(),
+    taxYear: integer("tax_year").notNull(),
+    programKey: text("program_key").notNull(),
+    filingAccountId: uuid("filing_account_id").notNull(),
+    region: text("region"),
+    insurableYtd: money("insurable_ytd").notNull().default("0"),
+    ...auditColumns,
+  },
+  (t) => [
+    foreignKey({
+      name: "payroll_opening_account_bases_parent_fk",
+      columns: [t.orgId, t.employeePartyId, t.taxYear],
+      foreignColumns: [payrollOpeningBalances.orgId, payrollOpeningBalances.employeePartyId, payrollOpeningBalances.taxYear],
+    }),
+    foreignKey({
+      name: "payroll_opening_account_bases_account_fk",
+      columns: [t.orgId, t.filingAccountId],
+      foreignColumns: [payrollFilingAccounts.orgId, payrollFilingAccounts.id],
+    }),
+    uniqueIndex("payroll_opening_account_bases_org_point").on(
+      t.orgId, t.employeePartyId, t.taxYear, t.programKey, t.filingAccountId,
+      sql`coalesce(${t.region}, '')`,
+    ),
+    index("payroll_opening_account_bases_year_lookup").on(
+      t.orgId, t.taxYear, t.employeePartyId, t.filingAccountId,
+    ),
+    check("payroll_opening_account_bases_program_key", sql`length(btrim(${t.programKey})) > 0`),
+    check("payroll_opening_account_bases_region", sql`${t.region} IS NULL OR ${t.region} ~ '^[A-Z]{2}$'`),
+    check("payroll_opening_account_bases_nonnegative", sql`${t.insurableYtd} >= 0`),
+  ],
+);
+
 /**
  * Employer-scope opening carry-in (0174): the pre-adoption employer base for
  * one pack-declared aggregate levy in one scope — the employer total a

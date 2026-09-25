@@ -41,6 +41,17 @@ interface SuiStateDescriptor {
  */
 type SuiCarryRow = OpeningBalanceRow & { suiStateAmounts?: Record<string, string> }
 
+interface AccountProgramDescriptor {
+  key: string
+  programKey: string
+  label: string
+  help: string
+  country: string
+  filingAccountId: string
+  region: string | null
+  requiresRegion: boolean
+}
+
 interface ComponentDescriptor {
   componentId: string
   code: string
@@ -84,6 +95,8 @@ type OpeningBalancesViewProps = {
   programs: ProgramDescriptor[]
   /** One carry-in column per US state for SUI-insurable wages. */
   suiStates?: SuiStateDescriptor[]
+  /** Per EIN / state account bases declared by the country pack. */
+  accountPrograms?: AccountProgramDescriptor[]
   components: ComponentDescriptor[]
   canManage: boolean
 }
@@ -99,6 +112,7 @@ function OpeningBalancesYearView({
   fields,
   programs,
   suiStates = [],
+  accountPrograms = [],
   components,
   canManage,
 }: OpeningBalancesViewProps) {
@@ -163,6 +177,10 @@ function OpeningBalancesYearView({
     () => suiStates.filter((s) => s.packs.some((pack) => packs.has(pack))),
     [suiStates, packs],
   )
+  const visibleAccountPrograms = useMemo(
+    () => accountPrograms.filter((p) => packs.has(p.country)),
+    [accountPrograms, packs],
+  )
 
   const valueOf = (row: OpeningBalanceRow, key: string): string => {
     const edited = draft[row.employeePartyId]?.[key]
@@ -202,10 +220,21 @@ function OpeningBalancesYearView({
     }))
   }
 
-  const programValueOf = (row: OpeningBalanceRow, key: string): string => {
-    const edited = programDraft[row.employeePartyId]?.[key]
+  const programValueOf = (row: OpeningBalanceRow, program: ProgramDescriptor): string => {
+    const edited = programDraft[row.employeePartyId]?.[program.key]
     if (edited !== undefined) return edited
-    const stored = row.programAmounts?.[key]
+    const stored = row.programAmounts?.[program.key]
+    if (stored === undefined) return ''
+    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+      ? ''
+      : trimZeros(stored)
+  }
+
+  const accountProgramValueOf = (row: OpeningBalanceRow, program: AccountProgramDescriptor): string => {
+    const edited = programDraft[row.employeePartyId]?.[`account:${program.key}`]
+    if (edited !== undefined) return edited
+    const stored = row.accountBases.find((base) => base.programKey === program.programKey
+      && base.filingAccountId === program.filingAccountId && base.region === program.region)?.insurableYtd
     if (stored === undefined) return ''
     return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
       ? ''
@@ -304,6 +333,23 @@ function OpeningBalancesYearView({
               : (row?.suiStateAmounts?.[sui.key] ?? '0')
           }
         }
+        const accountBases = (row?.accountBases ?? [])
+          .filter((base) => !visibleAccountPrograms.some((program) => program.programKey === base.programKey
+            && program.filingAccountId === base.filingAccountId && program.region === base.region))
+          .map((base) => ({ ...base }))
+        for (const program of visibleAccountPrograms) {
+          const draftKey = `account:${program.key}`
+          const edited = programDraft[employeePartyId]?.[draftKey]
+          accountBases.push({
+            programKey: program.programKey,
+            filingAccountId: program.filingAccountId,
+            region: program.region,
+            insurableYtd: edited !== undefined
+              ? edited.trim()
+              : (row?.accountBases.find((base) => base.programKey === program.programKey
+                && base.filingAccountId === program.filingAccountId && base.region === program.region)?.insurableYtd ?? '0'),
+          })
+        }
         // The row's loader-served version: a carry-in someone else saved
         // after this snapshot refuses with a named 409 instead of being
         // silently overwritten by these replayed full-row amounts.
@@ -314,6 +360,7 @@ function OpeningBalancesYearView({
           components: componentAmounts,
           programs: programAmounts,
           suiStates: suiStateAmounts,
+          ...(visibleAccountPrograms.length > 0 ? { accountBases } : {}),
         }
       })
       // Client-side decimal gate: every EDITED non-blank value is classified
@@ -353,6 +400,14 @@ function OpeningBalancesYearView({
           const edited = suiDraft[employeePartyId]?.[sui.key]
           if (edited === undefined || edited.trim() === '') continue
           const refusal = moneyFieldError(sui.label, 'a money amount', edited, 4)
+          if (refusal !== null) {
+            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+          }
+        }
+        for (const program of visibleAccountPrograms) {
+          const edited = programDraft[employeePartyId]?.[`account:${program.key}`]
+          if (edited === undefined || edited.trim() === '') continue
+          const refusal = moneyFieldError(program.label, 'a money amount', edited, 4)
           if (refusal !== null) {
             clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
           }
@@ -569,6 +624,17 @@ function OpeningBalancesYearView({
                   </span>
                 </th>
               ))}
+              {visibleAccountPrograms.map((program) => (
+                <th
+                  key={`account:${program.key}`}
+                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {program.label}
+                    <FieldHelp help={program.help} />
+                  </span>
+                </th>
+              ))}
               {components.map((component, index) => (
                 <th
                   key={component.componentId}
@@ -601,7 +667,7 @@ function OpeningBalancesYearView({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={visibleFields.length + visiblePrograms.length + visibleSuiStates.length + components.length + 1}
+                  colSpan={visibleFields.length + visiblePrograms.length + visibleSuiStates.length + visibleAccountPrograms.length + components.length + 1}
                   className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   {text('empty', 'No employees have an active payroll profile yet.')}
@@ -679,7 +745,7 @@ function OpeningBalancesYearView({
                       {applies ? (
                         <MoneyInput
                           ariaLabel={`${row.employeeName} — ${program.label}`}
-                          value={programValueOf(row, program.key)}
+                          value={programValueOf(row, program)}
                           onChange={(value) =>
                             setProgramValue(row.employeePartyId, program.key, value)
                           }
@@ -711,6 +777,29 @@ function OpeningBalancesYearView({
                             setSuiValue(row.employeePartyId, sui.key, value)
                           }
                           field={sui.label}
+                          noun="a money amount"
+                          maxScale={4}
+                          placeholder="0.00"
+                          disabled={row.locked || !canManage || saving}
+                          className="w-32 text-right tabular-nums"
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
+                      )}
+                    </td>
+                  )
+                })}
+                {visibleAccountPrograms.map((program) => {
+                  const applies = (row.country == null || row.country === program.country)
+                  const key = `account:${program.key}`
+                  return (
+                    <td key={key} className="px-2 py-1.5 text-right">
+                      {applies ? (
+                        <MoneyInput
+                          ariaLabel={`${row.employeeName} — ${program.label}`}
+                          value={accountProgramValueOf(row, program)}
+                          onChange={(value) => setProgramValue(row.employeePartyId, key, value)}
+                          field={program.label}
                           noun="a money amount"
                           maxScale={4}
                           placeholder="0.00"
