@@ -80,7 +80,7 @@ test("an entity ledger measures in the entity's functional currency", { skip: !D
     assert.equal(usd.translation, null);
     assert.equal(usd.states[0]?.state, "CA");
     assert.equal(usd.states[0]?.salesUsd, "1000.0000");
-    assert.equal(usd.states[0]?.threshold.salesUsd, 500000);
+    assert.equal(usd.states[0]?.threshold.salesUsd, "500000.0000");
 
     // CAD entity measures only its own sale, in CAD.
     await seedUsdToCad(org.orgId);
@@ -90,7 +90,7 @@ test("an entity ledger measures in the entity's functional currency", { skip: !D
     assert.equal(cad.currency, "CAD");
     assert.equal(cad.states[0]?.salesUsd, "200.0000");
     // The CA $500k sales-only trigger translates at the policy rate.
-    assert.equal(cad.states[0]?.threshold.salesUsd, 675000);
+    assert.equal(cad.states[0]?.threshold.salesUsd, "675000.0000");
     assert.equal(cad.states[0]?.status, "none");
     assert.ok(cad.translation);
     assert.equal(cad.translation.rateType, "spot");
@@ -127,7 +127,7 @@ test("a declared working currency converts every entity sale through one rate", 
     assert.equal(result.currency, "CAD");
     // CAD 200 raw + USD 1000 at the spot fallback (unstamped 1.0 header) × 1.35.
     assert.equal(result.states[0]?.salesUsd, "1550.0000");
-    assert.equal(result.states[0]?.threshold.salesUsd, 675000);
+    assert.equal(result.states[0]?.threshold.salesUsd, "675000.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

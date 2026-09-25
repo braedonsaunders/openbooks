@@ -4,14 +4,14 @@ import { evaluateUsNexus, thresholdForState } from './us-nexus.ts'
 
 test('default states use $100k OR 200 transactions', () => {
   const t = thresholdForState('FL')
-  assert.equal(t.salesUsd, 100_000)
+  assert.equal(t.salesUsd, '100000')
   assert.equal(t.txnCount, 200)
   assert.equal(t.measure, 'sales_or_txn')
 })
 
 test('overrides win (CA sales-only $500k, NY sales AND 100 txns)', () => {
-  assert.deepEqual(thresholdForState('CA'), { state: 'CA', salesUsd: 500_000, txnCount: null, measure: 'sales_only' })
-  assert.deepEqual(thresholdForState('NY'), { state: 'NY', salesUsd: 500_000, txnCount: 100, measure: 'sales_and_txn' })
+  assert.deepEqual(thresholdForState('CA'), { state: 'CA', salesUsd: '500000', txnCount: null, measure: 'sales_only' })
+  assert.deepEqual(thresholdForState('NY'), { state: 'NY', salesUsd: '500000', txnCount: 100, measure: 'sales_and_txn' })
 })
 
 test('states without a statewide sales tax never create nexus obligations', () => {
@@ -75,10 +75,16 @@ test('a penny under the dollar threshold is not met', () => {
 test('injected thresholds evaluate in the working currency (entity ledger)', () => {
   // A CAD entity ledger converts the CA $500k sales-only trigger at its
   // policy rate (×1.35 → $675k) and injects it; the decision is exact in CAD.
-  const cad = new Map([['CA', { state: 'CA', salesUsd: 675_000, txnCount: null, measure: 'sales_only' as const }]])
+  const cad = new Map([['CA', { state: 'CA', salesUsd: '675000', txnCount: null, measure: 'sales_only' as const }]])
   const below = evaluateUsNexus([{ state: 'CA', salesUsd: '400000.0000', txnCount: 3 }], { thresholds: cad })[0]!
   assert.equal(below.status, 'none')
-  assert.equal(below.threshold.salesUsd, 675_000)
+  assert.equal(below.threshold.salesUsd, '675000')
+  // A sub-cent fractional threshold still decides exactly through the string path.
+  const hair = evaluateUsNexus(
+    [{ state: 'CA', salesUsd: '675000.0050', txnCount: 3 }],
+    { thresholds: new Map([['CA', { state: 'CA', salesUsd: '675000.005', txnCount: null, measure: 'sales_only' as const }]]) },
+  )[0]!
+  assert.equal(hair.status, 'met')
   const above = evaluateUsNexus([{ state: 'CA', salesUsd: '700000.0000', txnCount: 3 }], { thresholds: cad })[0]!
   assert.equal(above.status, 'met')
   // States without an injected entry keep the USD reference threshold.
