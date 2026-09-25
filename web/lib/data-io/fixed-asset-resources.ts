@@ -7,6 +7,7 @@ import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal } from '../exact-decimal'
+import { pgErrorCode, pgErrorConstraint } from '../setup/coerce'
 import {
   enforceExportRowLimit,
   MAX_EXPORT_ROWS,
@@ -689,9 +690,13 @@ export function fixedAssetsResource(orgId: string): DataResource {
           }))
         } catch (error) {
           outcome.failed++
+          const message =
+            pgErrorCode(error) === '23505' && pgErrorConstraint(error) === 'fixed_assets_org_asset_number_unique'
+              ? 'the asset row could not be imported; check your access and input, then retry'
+              : error instanceof Error ? error.message : 'write failed'
           outcome.errors.push({
             row: rowNo,
-            message: error instanceof Error ? error.message : 'write failed',
+            message,
           })
         }
       }
