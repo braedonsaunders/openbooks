@@ -9,6 +9,9 @@
  *       standard deduction $12,450 / $27,750 with the printed phase-out;
  *       2026 rate schedules; official Examples 1–3 ($0 / $33 / $257);
  *       invalid or missing W-4ME → single, zero allowances; daily × 260.
+ *   Plus the August 2026 revision for the high-income surcharge only:
+ *     26_wh_tab_instr_August2026.pdf — additional 2% on annualized income
+ *     above $1,000,000 single / $1,500,000 married (I6-payroll-97).
  *
  * The booklet's own note: the $12,450 / $27,750 withholding deductions
  * differ from the $15,300 / $30,600 return amounts. This engine uses the
@@ -54,6 +57,14 @@ export interface MeYearRates {
   singlePhaseSpan: string;
   marriedPhaseSpan: string;
   supplementalRate: string;
+  /**
+   * August 2026 revision: additional 2% on annualized withholding income
+   * above the filing-status threshold (I6-payroll-97). Transcribed here,
+   * not in the December 2025 booklet the rest of this module follows.
+   */
+  singleSurchargeThreshold: string;
+  marriedSurchargeThreshold: string;
+  surchargeRate: string;
 }
 
 export const ME_RATES_2026: MeYearRates = {
@@ -69,6 +80,9 @@ export const ME_RATES_2026: MeYearRates = {
   singlePhaseSpan: "75000",
   marriedPhaseSpan: "150000",
   supplementalRate: pctToRate("5"),
+  singleSurchargeThreshold: "1000000",
+  marriedSurchargeThreshold: "1500000",
+  surchargeRate: pctToRate("2"),
 };
 
 const ME_EDITIONS_BY_YEAR: Record<number, MeYearRates> = {
@@ -164,7 +178,15 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const taxable = max0(annualWages - personal - standard);
   trace("ME_TAXABLE", taxable);
 
-  const annualTax = meRoundToDollar(meAnnualTax(taxable, married));
+  // August 2026 surcharge (I6-payroll-97): 2% of annualized withholding
+  // income above the filing-status threshold, added to the annual tax
+  // before de-annualizing and rounding — one rounded annual figure.
+  const surchargeThreshold = U(married ? rates.marriedSurchargeThreshold : rates.singleSurchargeThreshold);
+  const surchargeExcess = annualWages > surchargeThreshold ? annualWages - surchargeThreshold : 0n;
+  const surcharge = mulRateCents(surchargeExcess, rates.surchargeRate);
+  trace("ME_SURCHARGE", surcharge);
+
+  const annualTax = meRoundToDollar(meAnnualTax(taxable, married) + surcharge);
   trace("ME_ANNUAL_TAX", annualTax);
   const periodTax = meRoundToDollar(divIntCents(annualTax, P));
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
@@ -191,6 +213,7 @@ export const ME_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ME_ALLOWANCES: "Maine personal allowances",
   ME_STANDARD_DEDUCTION: "Maine standard deduction",
   ME_TAXABLE: "Maine taxable income",
+  ME_SURCHARGE: "Maine high-income surcharge (annual)",
   ME_ANNUAL_TAX: "Maine tax (annual)",
   ME_WITHHELD: "Maine tax withheld this period",
 };
