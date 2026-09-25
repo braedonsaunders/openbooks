@@ -328,7 +328,7 @@ test('North Carolina separate supplementals use 4.09% only with regular withhold
     levy: levy('NC', 'us_nc_nc4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate' as const, federalIncomeTax: '0.00',
-    certificateFor: (key) => key === 'us_nc_nc4' ? certificate('us_nc_nc4', {}) : null, tenantRates: () => undefined,
+    certificateFor: (key: string) => key === 'us_nc_nc4' ? certificate('us_nc_nc4', {}) : null, tenantRates: () => undefined,
   }
   const result = computeUsWithholding({ ...input, regularWageTaxWithheldThisYear: true })
   assert.equal(result?.tax, '20.0000')
@@ -386,7 +386,7 @@ test('Virginia separate supplemental flat election requires regular withholding 
     levy: levy('VA', 'us_va_va4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
     periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
     supplementalPaymentTiming: 'separate' as const, federalIncomeTax: '0.00',
-    certificateFor: (key) => key === 'us_va_va4' ? certificate('us_va_va4', {}) : null, tenantRates: () => undefined,
+    certificateFor: (key: string) => key === 'us_va_va4' ? certificate('us_va_va4', {}) : null, tenantRates: () => undefined,
   }
   const result = computeUsWithholding({ ...input, regularWageTaxWithheldThisYear: true })
   assert.equal(result?.tax, '28.7500')
@@ -418,7 +418,7 @@ test('New York separate supplemental rates follow the NYS and NYC schedules', ()
   const nycInput = {
     levy: nycLevy, payDate: '2026-06-01', periodEnd: PERIOD_END, periodsPerYear: 26,
     wages: '0.0000', supplemental: '500.0000', supplementalPaymentTiming: 'separate' as const,
-    federalIncomeTax: '0.00', certificateFor: (key) => key === 'us_ny_it2104' ? certificate('us_ny_it2104', {}) : null,
+    federalIncomeTax: '0.00', certificateFor: (key: string) => key === 'us_ny_it2104' ? certificate('us_ny_it2104', {}) : null,
     tenantRates: () => undefined,
   }
   assert.throws(

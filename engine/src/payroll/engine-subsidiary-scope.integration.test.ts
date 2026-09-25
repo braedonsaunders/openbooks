@@ -195,6 +195,7 @@ test(
           employeeName: "Scoped Worker",
           emp: { labour_jurisdiction: null },
           country: "CA",
+          subsidiaryId: null,
           province: "ON",
           periodStart: "2026-01-01",
           periodEnd: "2026-01-02",
