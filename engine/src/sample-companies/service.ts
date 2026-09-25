@@ -1269,6 +1269,7 @@ export async function cloneSampleCompanyTemplate(
       masked: false,
       createdBy: null,
       lifecycleAuthority: { systemReason: "sample company template provisioning" },
+      allowTemplateSource: true,
       settingsOverlay: sampleCompanyBirthMarker({
         industryKey: args.input.industryKey,
         profileId: args.profileId,

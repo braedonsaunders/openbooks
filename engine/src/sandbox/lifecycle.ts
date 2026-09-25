@@ -24,7 +24,11 @@ import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
 import { verifyCloneRls } from "./verify-rls.ts";
-import { assertProductionSandboxSource, isSampleTemplateSource } from "./source-validation.ts";
+import {
+  assertProductionSandboxSource,
+  assertTemplateSandboxSource,
+  isSampleTemplateSource,
+} from "./source-validation.ts";
 
 /** A zero-row sandbox lookup is a failure: the caller asked to act on a named id. */
 export function requireFoundSandbox<T>(
@@ -166,6 +170,14 @@ export interface CreateSandboxInput {
   asOfPeriodId?: string | null;
   createdBy?: string | null;
   lifecycleAuthority?: SandboxLifecycleAuthority;
+  /**
+   * Sanctioned template consumer (sample-company provisioning only).
+   * createSandbox otherwise accepts production sources exclusively
+   * (I5-platform-66); flipping this asserts the source carries the promoted
+   * sample-template registration flag instead — ordinary sandbox and
+   * production orgs still refuse.
+   */
+  allowTemplateSource?: boolean;
   /**
    * Caller-owned settings keys merged over the provisional org row at birth
    * and preserved across the clone's authoritative configuration overwrite.
@@ -459,7 +471,8 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
     select env_kind, name, legal_name, base_currency, country, tax_ids, settings
       from orgs where id = ${input.productionOrgId}`));
   const p = prod.rows[0];
-  assertProductionSandboxSource(p, input.productionOrgId);
+  if (input.allowTemplateSource === true) assertTemplateSandboxSource(p, input.productionOrgId);
+  else assertProductionSandboxSource(p, input.productionOrgId);
 
   // Birth the org and lifecycle row together and record the initiating actor
   // in the same production-owner scope before any clone work begins.
@@ -539,6 +552,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       productionOrgId: input.productionOrgId,
       sandboxOrgId,
       tier,
+      allowTemplateSource: input.allowTemplateSource,
     });
     const ready = await db.execute<{ id: string }>(sql`
       update sandboxes
