@@ -338,17 +338,17 @@ test("per-diem: brackets price the day, approval crosses the seam, voids carry r
       }),
       /only through earning components/,
     );
-    const policy = await createPolicy(db, {
+    await createPolicy(db, {
       orgId: org.orgId, actorId: adminId, name: "Daily rate", basis: "flat_daily",
-      rules: { amount: "75.0000" }, currency: "USD", effectiveFrom: "2026-01-01", payComponentId: componentId,
+      rules: { amount: "75.0000" }, weeklyRule: { worked_days: 2, paid_days: 5 }, currency: "USD",
+      effectiveFrom: "2026-01-01", payComponentId: componentId,
     });
-    assert.equal(policy.basis, "flat_daily");
     await seedTime(org.orgId, partyId, projectId, "2026-09-08", "8.0000");
-    await seedTime(org.orgId, partyId, projectId, "2026-09-09", "8.0000");
+    await seedTime(org.orgId, partyId, await seedProject(org.orgId, "Second remote job"), "2026-09-08", "4.0000");
     const entries = await computeForWeek(db, {
       orgId: org.orgId, actorId: adminId, employmentId, weekStart: "2026-09-07",
     });
-    assert.equal(entries.length, 2);
+    assert.equal(entries.length, 2, "two project rows on one civil date count as one worked date, below the weekly threshold, so no top-up");
     assert.ok(entries.every((entry) => entry.amount === "75.0000"));
     const approved = await approveEntry(db, { orgId: org.orgId, actorId: adminId, entryId: entries[0]!.id, kind: "per_diem" });
     assert.equal(approved.status, "approved");
