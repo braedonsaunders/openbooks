@@ -157,6 +157,7 @@ test('close assistant reads fail closed for restricted-subsidiary and unpermitte
         assert.deepEqual(await executeAssistantTool(caller, 'get_close_run_status', { runId }), { ok: false, error: 'forbidden' });
         assert.deepEqual(await executeAssistantTool(caller, 'list_period_locks', {}), { ok: false, error: 'forbidden' });
         assert.deepEqual(await executeAssistantTool(caller, 'list_period_reopen_requests', {}), { ok: false, error: 'forbidden' });
+        assert.deepEqual(await executeAssistantTool(caller, 'list_reporting_packages', {}), { ok: false, error: 'forbidden' });
       }
     });
   } finally {
