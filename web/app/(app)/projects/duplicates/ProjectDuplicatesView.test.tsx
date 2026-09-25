@@ -77,7 +77,7 @@ async function mount(t: TestContext, handler: (url: URL, init?: RequestInit) => 
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <ProjectDuplicatesView />
+        <ProjectDuplicatesView canMerge />
       </NextIntlClientProvider>,
     )
     await tick()

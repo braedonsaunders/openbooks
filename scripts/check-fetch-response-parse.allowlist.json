@@ -85,16 +85,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
-    "fn": "preview",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
-    "fn": "merge",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/projects/tabs/WorkBreakdownTab.tsx",
     "fn": "refresh",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
