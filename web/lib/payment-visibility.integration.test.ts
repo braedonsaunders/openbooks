@@ -114,6 +114,8 @@ const { createPaymentDocument, updateDraftPayment } = (await import(root + "engi
 const { POST: suggest } = await import('../app/api/payments/suggest/route')
 const { POST: postPayment } =
   await import('../app/api/payments/post-with-applications/route')
+const { postPayment: postPaymentAdapter } = await import('./application/payments')
+const { applicationContextFromSession } = await import('./application/context')
 const { GET: getPayment, PATCH: patchPayment } =
   await import('../app/api/payments/[id]/route')
 const { POST: settleInstruction } = await import('../app/api/payments/runs/[id]/instructions/[instructionId]/settlement/route')
@@ -486,6 +488,10 @@ for (const boundary of [
                   }),
                 }),
               ).then((result) => { response = result })
+              const adapterPosting = postPaymentAdapter(applicationContextFromSession(authz, 'api', randomUUID()), {
+                documentId: payment.id,
+                idempotencyKey: randomUUID(),
+              }).then(() => null, (error) => error)
               let waiting = false
               try {
                 for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
@@ -508,6 +514,7 @@ for (const boundary of [
               await posting
               assert.ok(waiting, 'posting must reach its locked reload after the stale scope precheck')
               assert.equal(response?.status, 404, 'the locked recheck hides the payment after rehome')
+              assert.equal((await adapterPosting as { status?: number } | null)?.status, 404, 'the adapter recheck hides the payment after rehome')
               const persisted = (await db.execute<{
                 status: string
                 subsidiary_id: string
