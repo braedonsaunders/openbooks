@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assertAccountCurrencyRestrictions } from "./posting-subsidiaries.ts";
-import { assertCreditMemoDirection } from "./posting-invariants.ts";
+import { assertCreditMemoDirection } from "../journal/posting-invariants.ts";
 import { defaultPartyAddress, providerTaxDocumentKind, taxConfigsFromEvidence } from "./posting-provider-tax.ts";
-import { PostingError, type KernelLine, type PostingDeps, type PostingDocument, type PostingDocumentLine, type TaxPostingComponent } from "./posting-contracts.ts";
+import { PostingError, type KernelLine, type PostingDeps, type PostingDocument, type PostingDocumentLine, type TaxPostingComponent } from "../journal/posting-contracts.ts";
 import { validateRequiredDimensions } from "./posting-accounts.ts";
 import { validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import type { db } from "../platform/db.ts";

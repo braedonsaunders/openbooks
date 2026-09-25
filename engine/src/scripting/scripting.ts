@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { newAsyncContext } from "../platform/quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import type { ContributedLine } from "../allocations/types.ts";
+import type { CustomGlLineRunEvidence } from "../journal/posting-contracts.ts";
 import { db, schema } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
@@ -1754,26 +1755,6 @@ export async function runCustomGlLineScripts(
     }
   }
   return out;
-}
-
-/**
- * One completed custom_gl_lines execution, captured in memory so its
- * script_runs evidence can be re-recorded after a refused post rolls the
- * in-transaction row back (PA1 made prepare+commit one unit). The row the
- * runner inserted is byte-identical to this except id/at, which the
- * re-record mints fresh. A run that SUCCEEDED before a later refusal keeps
- * status "ok": the script executed fine, the post is what was refused.
- */
-export interface CustomGlLineRunEvidence {
-  orgId: string;
-  scriptId: string;
-  targetKind: string;
-  targetId: string;
-  status: "ok" | "aborted" | "error" | "timeout";
-  logs: string[];
-  errorMessage: string | null;
-  durationMs: number;
-  createdBy: string | null;
 }
 
 const CUSTOM_GL_LINE_UUID_RE =

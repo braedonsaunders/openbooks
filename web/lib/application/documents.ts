@@ -8,7 +8,7 @@ import {
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { controlDeps, loadDocument } from "@openbooks/engine/src/ledger/document-service.ts";
 import { DocumentEditError } from "@openbooks/engine/src/records/document-edit-policy.ts";
 import type { DocumentEditInput } from "@openbooks/engine/src/ledger/document-input.ts";

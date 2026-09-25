@@ -10,7 +10,7 @@ import {
 import { requestDocumentVoid } from "./document-void.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "./posting-document.ts";
-import { type PostingDeps } from "./posting-contracts.ts";
+import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

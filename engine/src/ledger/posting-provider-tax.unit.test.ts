@@ -7,7 +7,7 @@ import {
   type PostingDocument,
   type PostingDocumentLine,
   type TaxPostingComponent,
-} from "./posting-contracts.ts";
+} from "../journal/posting-contracts.ts";
 import {
   documentLocationChange,
   resolveProviderTaxPlans,

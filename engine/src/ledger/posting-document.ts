@@ -9,7 +9,7 @@ import {
   withOrgContext,
   withOrgTransaction,
 } from "../platform/db.ts";
-import { PostingError, type PostingDeps, type PostDocumentOptions } from "./posting-contracts.ts";
+import { PostingError, type PostingDeps, type PostDocumentOptions } from "../journal/posting-contracts.ts";
 import { assertCustomerInvoiceCredit } from "./posting-invoice-credit.ts";
 import { prepareDocumentPosting } from "./posting-prepare.ts";
 import { commitDocumentPosting } from "./posting-commit.ts";

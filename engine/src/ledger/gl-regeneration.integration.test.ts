@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "./posting-document.ts";
-import { PostingError, type PostingDeps } from "./posting-contracts.ts";
+import { PostingError, type PostingDeps } from "../journal/posting-contracts.ts";
 import { regenerateGlImpactTx } from "./posting-replay.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 

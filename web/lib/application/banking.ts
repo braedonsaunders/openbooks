@@ -12,7 +12,7 @@ import {
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { addJournalMatchFromLine, JournalPostingDeniedError } from "../banking-rules";
 import { normalizeMoneyValue } from "../cash/core";
 import { canonicalDecimal } from "../exact-decimal";

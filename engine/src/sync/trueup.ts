@@ -6,7 +6,7 @@ import { db, withOrg } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { civilDateFromParts, daysInCivilMonth } from "../platform/business-date.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import type { MigrationSource } from "./source.ts";
 
 /**

@@ -154,7 +154,7 @@
       "mode": "unit",
       "inheritedFrom": "engine/src/ledger/posting.ts"
     },
-    "engine/src/ledger/posting-invariants.ts": {
+    "engine/src/journal/posting-invariants.ts": {
       "ratio": 0.34782608695652173,
       "measured": 23,
       "mode": "unit",

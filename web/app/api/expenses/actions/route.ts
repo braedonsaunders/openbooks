@@ -9,7 +9,7 @@ import {
   loadRequiredControlAccounts,
 } from '@openbooks/engine/src/records/control-accounts.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { can, getAuthz, guardSubsidiaryScope, subsidiaryScopeAllows, type Authz } from '../../../../lib/authz'
 import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";

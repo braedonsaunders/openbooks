@@ -3,7 +3,7 @@ import test from "node:test";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
-import { type Doc, PostingError } from "./posting-contracts.ts";
+import { type Doc, PostingError } from "../journal/posting-contracts.ts";
 import { resolvePostingPeriod, assertPayRunConsolidatedRateCoverage } from "./posting-period.ts";
 
 function scripted(rows: unknown[][]) {

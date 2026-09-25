@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import { postDocument } from "./posting-document.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
-import { PostingError } from "./posting-contracts.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

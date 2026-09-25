@@ -8,7 +8,7 @@ import {
   measureLinkedOrderRelief,
   resultingExposureAfterPosting,
 } from "../receivables/credit-policy.ts";
-import { PostingError } from "./posting-contracts.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 
 export interface PostingInvoiceSubject {
   id: string;

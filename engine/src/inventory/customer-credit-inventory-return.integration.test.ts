@@ -9,7 +9,7 @@ import {
   restoredReturnCost,
 } from "./documents-customer-credits.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { PostingError } from "../ledger/posting-contracts.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 

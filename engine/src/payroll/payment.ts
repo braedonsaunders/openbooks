@@ -6,7 +6,7 @@ import { PayrollError } from "./error.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../periods/period-policy.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {

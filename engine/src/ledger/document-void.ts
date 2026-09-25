@@ -7,7 +7,7 @@ import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
-import { markEntryReversed, postEntry } from "./post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import {

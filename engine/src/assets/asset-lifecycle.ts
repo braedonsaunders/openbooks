@@ -8,7 +8,7 @@ import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 
 /**
  * Fixed-asset lifecycle posting — disposal by sale and write-off.

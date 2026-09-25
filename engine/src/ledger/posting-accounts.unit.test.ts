@@ -17,7 +17,7 @@ import {
   type Doc,
   type KernelLine,
   type PostingDeps,
-} from "./posting-contracts.ts";
+} from "../journal/posting-contracts.ts";
 
 type Runner = Pick<typeof db, "execute">;
 

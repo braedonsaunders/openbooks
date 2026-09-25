@@ -21,16 +21,16 @@ import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/docum
 
 import { assertBillPostingAllowed, ComplianceError } from "../compliance/compliance.ts";
 
-import { type KernelLine, type PostingDeps, PostingError } from "./posting-contracts.ts";
+import { type KernelLine, type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
 import { validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import { RULES } from "./posting-rules.ts";
-import { assertFinalKernelBalance, assertCreditMemoDirection } from "./posting-invariants.ts";
+import { assertFinalKernelBalance, assertCreditMemoDirection } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
-import type { PostDocumentOptions } from "./posting-contracts.ts";
+import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
 
 /** Resolve inputs and automation before opening the accounting transaction. */
 export async function prepareDocumentPosting(documentId: string, deps: PostingDeps, options: PostDocumentOptions) {

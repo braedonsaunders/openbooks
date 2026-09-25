@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
-import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,

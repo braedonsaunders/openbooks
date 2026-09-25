@@ -25,7 +25,7 @@ import {
 
 export { MAX_RECOGNITION_TERM_MONTHS };
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
-import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 
 /**

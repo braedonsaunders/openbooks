@@ -7,7 +7,7 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
-import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { assertInventoryAccountsPostable } from "./journal.ts";
 import { lockInventoryPosition, assertInventoryDate } from "./position.ts";
 

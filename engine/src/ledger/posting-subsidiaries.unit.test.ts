@@ -8,7 +8,7 @@ import {
   assertAccountCurrencyRestrictions,
   applySubsidiaries,
 } from "./posting-subsidiaries.ts";
-import { PostingError, type Doc, type KernelLine } from "./posting-contracts.ts";
+import { PostingError, type Doc, type KernelLine } from "../journal/posting-contracts.ts";
 
 type Runner = Pick<typeof db, "execute">;
 

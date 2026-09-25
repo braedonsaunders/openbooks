@@ -1,7 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { PostingError } from "./posting-contracts.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 

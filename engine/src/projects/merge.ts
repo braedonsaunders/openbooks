@@ -7,7 +7,7 @@ import {
   postEntry,
   repointDraftProjectLines,
   type PostEntryInput,
-} from "../ledger/post-entry.ts";
+} from "../journal/post-entry.ts";
 import { neg } from "../money/money.ts";
 
 /**

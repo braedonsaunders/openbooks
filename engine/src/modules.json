@@ -40,7 +40,7 @@
     "assets": {
       "description": "Fixed-asset lifecycle and book depreciation.",
       "dependsOn": [
-        "ledger",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -79,6 +79,7 @@
         "banking",
         "flows",
         "inventory",
+        "journal",
         "ledger",
         "money",
         "organization",
@@ -95,7 +96,7 @@
         "allocations",
         "banking",
         "flows",
-        "ledger",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -121,6 +122,7 @@
         "country-tax-packs",
         "hrm",
         "inventory",
+        "journal",
         "ledger",
         "money",
         "payments",
@@ -142,7 +144,7 @@
       "dependsOn": [
         "close",
         "fx",
-        "ledger",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -244,7 +246,7 @@
       "description": "Inventory movements, costing, NRV write-downs, transfers and builds.",
       "dependsOn": [
         "banking",
-        "ledger",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -260,6 +262,7 @@
         "flows",
         "fx",
         "inventory",
+        "journal",
         "money",
         "organization",
         "payables",
@@ -273,6 +276,14 @@
         "revenue",
         "scripting",
         "tax"
+      ]
+    },
+    "journal": {
+      "description": "Double-entry journal kernel: postEntry/markEntryReversed, posting contracts and kernel balance invariants. No document orchestration.",
+      "dependsOn": [
+        "money",
+        "periods",
+        "platform"
       ]
     },
     "money": {
@@ -310,6 +321,7 @@
         "delivery",
         "flows",
         "fx",
+        "journal",
         "ledger",
         "money",
         "organization",
@@ -324,7 +336,7 @@
       "description": "Payroll: runs, readiness, remittances, filings, entitlements, year-end, bank files, statutory country packs.",
       "dependsOn": [
         "flows",
-        "ledger",
+        "journal",
         "money",
         "organization",
         "payments",
@@ -349,7 +361,7 @@
       "dependsOn": [
         "allocations",
         "fx",
-        "ledger",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -363,7 +375,7 @@
       "dependsOn": [
         "billing",
         "inventory",
-        "ledger",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -377,6 +389,7 @@
       "dependsOn": [
         "close",
         "crm",
+        "journal",
         "ledger",
         "organization",
         "payments",
@@ -416,6 +429,7 @@
     "revenue": {
       "description": "Revenue recognition obligations and schedules; lease accounting.",
       "dependsOn": [
+        "journal",
         "ledger",
         "money",
         "organization",
@@ -476,6 +490,7 @@
       "description": "User scripts: the QuickJS trigger runtime and its configuration boundary.",
       "dependsOn": [
         "allocations",
+        "journal",
         "ledger",
         "money",
         "organization",
@@ -500,6 +515,7 @@
         "consolidation",
         "flows",
         "harness",
+        "journal",
         "ledger",
         "money",
         "payments",
@@ -523,6 +539,7 @@
         "connectors",
         "crm",
         "fx",
+        "journal",
         "ledger",
         "money",
         "organization",
@@ -549,7 +566,7 @@
       "dependsOn": [
         "assets",
         "country-tax-packs",
-        "ledger",
+        "journal",
         "money",
         "organization",
         "periods",
@@ -594,14 +611,12 @@
     [
       "agents",
       "allocations",
-      "assets",
       "backup",
       "billing",
       "close",
       "continuous-close",
       "flows",
       "hrm",
-      "inventory",
       "ledger",
       "payables",
       "payments",
@@ -615,7 +630,6 @@
       "scripting",
       "sftp",
       "sync",
-      "tax-returns",
       "worker"
     ],
     [

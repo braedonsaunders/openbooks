@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
-import { markEntryReversed, postEntry } from "./post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

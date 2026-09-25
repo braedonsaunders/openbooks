@@ -16,8 +16,8 @@ import {
   sum,
   toUnits,
 } from "../money/money.ts";
-import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
-import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
+import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 
 /**

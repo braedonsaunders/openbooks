@@ -12,7 +12,7 @@ import {
   type PostingDeps,
   type PostingDocument,
   type PostingDocumentLine,
-} from "./posting-contracts.ts";
+} from "../journal/posting-contracts.ts";
 
 const deps = (): PostingDeps => ({
   control: { ar: "1100", ap: "2100", bank: "1000" },
