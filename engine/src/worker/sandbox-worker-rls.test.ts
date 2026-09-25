@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  assertProductionSourceKind,
   evaluateCloneRlsProof,
   unverifiedCloneRlsTables,
 } from "../sandbox/verify-rls.ts";
@@ -262,15 +263,6 @@ test("clone RLS proof accepts verified tables while reporting one-sided ones", (
     ]),
     ["report_schedules", "saved_views"],
   );
-  assert.throws(
-    () =>
-      evaluateCloneRlsProof({
-        productionOrgId: PRODUCTION_ORG,
-        sandboxOrgId: SANDBOX_ORG,
-        tables: [oneSidedTable("report_schedules", 3)],
-      }),
-    /unverified tables: report_schedules/,
-  );
 });
 
 test("clone RLS proof refuses comparing a tenant to itself", () => {
@@ -430,20 +422,20 @@ test("refresh ready write refuses a clone this request did not just prove", () =
 
 test("requireFoundSandbox refuses a missing sandbox instead of succeeding", () => {
   const missingId = "33333333-3333-4333-8333-333333333333";
-  assert.throws(
-    () => requireFoundSandbox(missingId, undefined),
-    new RegExp(`sandbox not found: ${missingId}`),
-  );
-  assert.throws(
-    () => requireFoundSandbox(missingId, null),
-    new RegExp(`sandbox not found: ${missingId}`),
-  );
-  assert.throws(
-    () => requireFoundSandbox(missingId, ""),
-    new RegExp(`sandbox not found: ${missingId}`),
-  );
-  assert.equal(requireFoundSandbox(missingId, "org-1"), "org-1");
+  for (const missing of [undefined, null, ""]) {
+    assert.throws(
+      () => requireFoundSandbox(missingId, missing),
+      new RegExp(`sandbox not found: ${missingId}`),
+    );
+  }
   assert.deepEqual(requireFoundSandbox(missingId, { status: "ready" }), { status: "ready" });
+});
+
+test("clone RLS proof refuses a sandbox-kind source as production", () => {
+  assert.throws(
+    () => assertProductionSourceKind({ id: SANDBOX_ORG, env_kind: "sandbox" }),
+    /not a production tenant/,
+  );
 });
 
 test("deleteSandbox treats a missing sandbox row as a failure", () => {

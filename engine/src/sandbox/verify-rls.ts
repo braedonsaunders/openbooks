@@ -55,6 +55,21 @@ export function unverifiedCloneRlsTables(tables: CloneRlsTableCounts[]): string[
     .map((table) => table.table);
 }
 
+/**
+ * The isolation proof is meaningless when the "production" side is itself a
+ * sandbox: the counts would certify a nested clone as the production source.
+ * Normal createSandbox rejects such a source, but the explicit-pair
+ * verifier and CLI accept any found org — so refuse a non-production
+ * source here, before any counting, with the remedy.
+ */
+export function assertProductionSourceKind(production: { id: string; env_kind: string }): void {
+  if (production.env_kind !== "production") {
+    throw new Error(
+      `clone RLS re-verification failed: org ${production.id} is not a production tenant (env_kind=${production.env_kind}). Pass the production source of the clone, not a sandbox.`,
+    );
+  }
+}
+
 export function assertCloneRlsPair(productionOrgId: string, sandboxOrgId: string): void {
   if (!UUID_VALUE.test(productionOrgId)) {
     throw new Error(
@@ -179,6 +194,7 @@ export async function verifyCloneRls(args: {
       `clone RLS re-verification failed: production org ${args.productionOrgId} was not found. Pass the source tenant of the clone.`,
     );
   }
+  assertProductionSourceKind(production);
   if (!sandbox) {
     throw new Error(
       `clone RLS re-verification failed: sandbox org ${args.sandboxOrgId} was not found. Pass the clone org createSandbox just created.`,
