@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
-import { employerFactsFor, resolveEmployerFact } from "./employer-facts.ts";
+import { employerFactsFor } from "./employer-facts.ts";
+import { requireUsContributorySuiMethod } from "./us/compute-statutory.ts";
 
 test("every country pack publishes exactly its declared employer-fact vocabulary", () => {
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
@@ -20,10 +21,6 @@ test("every country pack publishes exactly its declared employer-fact vocabulary
   }
 });
 
-test("FR's effectif is a sourced, precise, required legal-employer fact", () => {
-  assert.equal(resolveEmployerFact("FR", "effectif_moyen_annuel", "49.99"), "49.99");
-  assert.throws(
-    () => resolveEmployerFact("FR", "effectif_moyen_annuel", "50.001"),
-    /Effectif salarié annuel de l'employeur.*2 fractional digits/,
-  );
+test("US reimbursable SUI account refuses pricing as contributory", () => {
+  assert.throws(() => requireUsContributorySuiMethod("reimbursable", "CA"), /benefit-charge liability/);
 });

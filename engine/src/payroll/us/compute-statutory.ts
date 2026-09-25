@@ -5,6 +5,9 @@ import { U } from "../canada/decimal.ts";
 import { add, sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
+// Side effect: registers the US employer-fact declaration before direct reads.
+import "./employer-facts.ts";
+
 // Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
@@ -56,6 +59,17 @@ export type UsYtdRow = {
   /** LST withheld this year by stub factor key (`LIT_PA-<worksite PSD>-LST`). */
   lstWithheldYtd: Record<string, string>;
 };
+
+/** A non-contributory SUI financing method has no priced liability yet: refuse by name. */
+export function requireUsContributorySuiMethod(method: string | null, region: string): void {
+  if (method !== "contributory") {
+    throw new PayrollPackError(
+      `US SUI cannot be calculated for the ${region} employer account using the "${method}" financing method. `
+      + "This payroll engine does not yet record the account's benefit-charge liability; "
+      + "do not configure a fictitious contributory rate. Use the external state benefit-charge process until this financing method is supported.",
+    );
+  }
+}
 
 /** Resolve the SUI wage-base year-to-date for one region.
  *
@@ -365,6 +379,11 @@ export async function computeUsStatutory(
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region, filingAccountId);
   const sui = config.sui(region, ytd.suiAccountId);
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
+  const suiFinancingMethod = suiExempt ? null : await resolveStoredEmployerFact({
+    tx, orgId, filingAccountId,
+    country: "US", factKey: "sui_financing_method", asOf: run.pay_date!,
+  });
+  if (!suiExempt) requireUsContributorySuiMethod(suiFinancingMethod, region);
   const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, taxYear, ytd, suiExempt) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const federalAlienStatus = certificateFor("us_w4_tax_residency")?.answers.alien_status;
