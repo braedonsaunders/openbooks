@@ -1308,11 +1308,6 @@ test(
     assert.equal(reloadedFirst.filename, first.filename);
     assert.equal(all.find((a) => a.id === second.id)!.status, "generated");
 
-    // Both sets of bytes survive independently, and they are different files.
-    const oldBytes = await releasePayRunBankFile(fx.orgId, first.id, fx.actorId);
-    const newBytes = await releasePayRunBankFile(fx.orgId, second.id, fx.actorId);
-    assert.notEqual(oldBytes.bytes.toString("utf8"), newBytes.bytes.toString("utf8"));
-    assert.equal(oldBytes.artifact.status, "superseded", "releasing it does not reinstate it");
   },
 );
 

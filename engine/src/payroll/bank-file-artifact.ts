@@ -1052,16 +1052,28 @@ export async function releasePayRunBankFile(
     // instruct money the ledger no longer owes.
     const lifecycle = (await tx.execute<{
       run_status: string; paid_at: string | null; doc_status: string; document_id: string;
+      bank_file_status: string; replacement_file_number: string | null;
     }>(sql`
       select r.run_status, r.paid_at, d.status as doc_status,
-             f.pay_run_document_id as document_id
+             f.pay_run_document_id as document_id, f.status as bank_file_status,
+             replacement.file_number as replacement_file_number
         from pay_run_bank_files f
         join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
         join documents d on d.id = r.document_id and d.org_id = r.org_id
+        left join pay_run_bank_files replacement
+          on replacement.org_id = f.org_id and replacement.id = f.superseded_by_file_id
        where f.org_id = ${orgId} and f.id = ${artifactId}
        for update of f, r, d
     `)).rows[0];
     if (!lifecycle) throw new PayrollError("payroll bank file not found");
+    if (lifecycle.bank_file_status === "superseded") {
+      const replacement = lifecycle.replacement_file_number
+        ? ` ${lifecycle.replacement_file_number}`
+        : " replacement";
+      throw new PayrollError(
+        `payroll bank file ${row.fileNumber} was superseded by${replacement}; release the replacement bank file instead`,
+      );
+    }
     if (lifecycle.run_status !== "committed") {
       throw new PayrollError("this pay run is no longer committed — refusing to release its bank file");
     }
