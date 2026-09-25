@@ -11,6 +11,7 @@ import {
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,
   payrollJurisdictionDeclared,
+  setPackSlotAccount,
   statutoryRemittanceDeclaration,
   type PayrollCountryPack,
 } from "./packs.ts";
@@ -20,8 +21,10 @@ import { calculatePayRun, captureCalculatedStubs } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { statutoryHolidayLinesForStub } from "./run-stub-records.ts";
-import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -263,7 +266,7 @@ test("seeding a third pack provisions exactly its declaration — no Canadian co
     // statutory component of anybody else's.
     assert.deepEqual(
       rows.rows.map((r) => r.code),
-      ["BASE", "OT", "STAT", "STATPREM", "BONUS", "VACPAY"],
+      ["BASE", "OT", "STAT", "STATPREM", "ALLOW", "BONUS", "VACPAY"],
     );
     assert.ok(rows.rows.every((r) => r.country === null));
     const systemKeys = new Set(rows.rows.map((r) => r.system_key));
@@ -685,6 +688,20 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       },
     })}::jsonb where id = ${orgId}`);
   await seedPayrollComponents(orgId, actorId, "CA");
+  await seedOntarioEhtFixture(orgId, actorId);
+  // The MB leg needs its own explicit EHT declaration: ca_eht refuses per
+  // region when unconfigured, and this test pins holiday pay, never EHT.
+  // Values are an explicit zero, asserted nowhere here.
+  await db.execute(sql`
+    insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                         rate_values, created_by, updated_by)
+    values (${orgId}, 'CA', 'ca_eht', 'MB', 2026, '{"rate": "0", "annualExemption": "0"}',
+            ${actorId}, ${actorId})`);
+  // The QC leg needs its CNT exemption class: an unclassified Québec
+  // employer refuses by name. Ordinary-sector, subject to the contribution.
+  await upsertPayrollEmployerFact({ orgId, actorId, subsidiaryId: org.subsidiaryId,
+    country: "CA", factKey: "cnt_exemption", effectiveFrom: "2026-01-01",
+    value: "none", changeReason: "test employer subject to CNT" });
   // The production Quebec path emits the pack's separate Revenu Québec
   // income-tax component. Point it at the same fixture payable account so
   // this regression reaches holiday-line persistence rather than failing in
@@ -701,6 +718,10 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
                                          rate_values, created_by, updated_by)
     values (${orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
             ${actorId}, ${actorId})`);
+  // The priced CNT line needs its liability account at commit, like every
+  // employer levy above. Same payable; the contribution itself is asserted
+  // nowhere here.
+  await setPackSlotAccount(orgId, actorId, "CA", "cnt", craPayable);
   await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}
      where org_id = ${orgId} and system_key = 'hsf'`);
@@ -724,13 +745,16 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                     is_active, created_by, updated_by)
       values (${orgId}, ${id}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+    // Stub calculation refuses employees without an HRM employment, so the
+    // hire carries one and the profile points at it.
+    const employmentId = await seedWorkerEmployment(orgId, id, org.subsidiaryId);
     // Every row is Canadian, including 'ZZ': that is the extra-provincial
     // withholding code, not another country — the CA pack prices all four.
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                              pay_basis, federal_claim_code, provincial_claim_code,
                                              vacation_method, is_active, created_by, updated_by)
-      values (${orgId}, ${id}, ${scheduleId}, 'CA', ${province}, 'hourly', 1, 1,
+      values (${orgId}, ${id}, ${employmentId}, ${scheduleId}, 'CA', ${province}, 'hourly', 1, 1,
               'accrue', true, ${actorId}, ${actorId})`);
     return id;
   };

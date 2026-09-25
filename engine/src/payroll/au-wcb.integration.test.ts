@@ -13,7 +13,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -23,7 +23,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * Observed shape: readiness warned "nothing is being accrued" for NSW / VIC /
  * QLD, the operator saved 0.012 / 0.014 / 0.011, the warning cleared — and the
  * committed run carried zero WCB lines anywhere, though the ledger balanced.
- * Each employee works 80h × $30 = $2,400 gross (NSW 28.80, VIC 33.60, QLD 26.40).
+ * Each employee works 80h × $30 = $2,400 gross plus $288 SG; WorkSafe
+ * rateable remuneration includes super, so $2,688 prices the premium
+ * (NSW 32.26, VIC 37.63, QLD 29.57).
  */
 test(
   "AU WCB: configured regional rates accrue per region and leave net pay untouched",
@@ -90,15 +92,16 @@ test(
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
           values (${employeeId}, ${org.orgId}, 'person', ${name}, ${auSubId}, true, '{}'::jsonb)`);
+        const employmentId = await seedWorkerEmployment(org.orgId, employeeId, auSubId);
         await db.execute(sql`
           insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                         is_active, created_by, updated_by)
           values (${org.orgId}, ${employeeId}, 'AUD', '30', 'hour', '2026-07-01', true, ${actorId}, ${actorId})`);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+          insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country,
                                                  province, pay_basis, vacation_percent,
                                                  vacation_method, is_active, created_by, updated_by)
-          values (${org.orgId}, ${employeeId}, ${scheduleId}, 'AU', ${province}, 'hourly', '0',
+          values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'AU', ${province}, 'hourly', '0',
                   'accrue', true, ${actorId}, ${actorId})`);
         await db.execute(sql`
           insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key,
@@ -111,6 +114,14 @@ test(
                     tax_free_threshold: "true",
                     stsl_debt: "false",
                   })}::jsonb, ${actorId}, ${actorId})`);
+        // SG prices only the remaining headroom under the annual maximum
+        // contributions base: July opens the financial year, so verified
+        // qualifying YTD is zero — an undeclared YTD refuses by name.
+        await db.execute(sql`
+          insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key,
+                                                 answers, created_by, updated_by)
+          values (${randomUUID()}, ${org.orgId}, ${employeeId}, 'AU', 'au_sg_administration',
+                  '{"qualifying_ytd": "0"}'::jsonb, ${actorId}, ${actorId})`);
         for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
           await db.execute(sql`
             insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -163,9 +174,9 @@ test(
       assert.deepEqual(result.errors, []);
 
       const expected: Record<string, string> = {
-        [nswEmployeeId]: "28.8000",
-        [vicEmployeeId]: "33.6000",
-        [qldEmployeeId]: "26.4000",
+        [nswEmployeeId]: "32.2600",
+        [vicEmployeeId]: "37.6300",
+        [qldEmployeeId]: "29.5700",
       };
       for (const [employeeId, amount] of Object.entries(expected)) {
         const lines = (await db.execute<{
@@ -221,7 +232,7 @@ test(
          where org_id = ${org.orgId} and document_id = ${run.documentId}`));
       assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
       const wcbLegs = glLines.rows.filter((row) => row.account_id === wcbPayable);
-      assert.equal(sum(wcbLegs.map((row) => row.amount)), neg("88.8000"));
+      assert.equal(sum(wcbLegs.map((row) => row.amount)), neg("99.4600"));
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

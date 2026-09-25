@@ -28,6 +28,7 @@ import {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
+  seedWorkerEmployment,
 } from "../../testing/fixtures.ts";
 import "../../testing/database-bypass.ts";
 import {
@@ -67,11 +68,12 @@ async function makeEmployee(
     values (${id}, ${orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
   await db.execute(sql`
     insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+  const employmentId = await seedWorkerEmployment(orgId, id, subsidiaryId);
   await db.execute(sql`
     insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
+      (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, pay_basis, is_active,
        created_by, updated_by)
-    values (${orgId}, ${id}, ${scheduleId}, 'IE', 'IE', 'salary', true,
+    values (${orgId}, ${id}, ${employmentId}, ${scheduleId}, 'IE', 'IE', 'salary', true,
             ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into labor_cost_rates
@@ -96,6 +98,21 @@ async function fileRpn(
     values (${orgId}, ${employeeId}, 'IE', 'ie_rpn', null, null,
             ${JSON.stringify({ tax_credits_total: credits, rate_band_total: band, usc_cutoff_total: "70044", pay_basis: "cumulative" })}::jsonb,
             '2026-01-01'::date, ${actorId}, ${actorId})`);
+}
+
+// The employer-recorded PRSI class (Class A here): missing status must not
+// be priced as Class A, so the engine refuses without this certificate.
+async function filePrsiClass(
+  orgId: string,
+  employeeId: string,
+  actorId: string,
+): Promise<void> {
+  await db.execute(sql`
+    insert into employee_tax_certificates
+      (org_id, employee_party_id, country, certificate_key, region, sub_region,
+       answers, effective_from, created_by, updated_by)
+    values (${orgId}, ${employeeId}, 'IE', 'ie_prsi_class', null, null,
+            '{"prsi_class": "A"}'::jsonb, '2026-01-01'::date, ${actorId}, ${actorId})`);
 }
 
 test(
@@ -147,6 +164,8 @@ test(
         const brendan = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Brendan Doyle", "31200");
         await fileRpn(org.orgId, aoife, actorId, "4000", "44000");
         await fileRpn(org.orgId, brendan, actorId, "3300", "40000");
+        await filePrsiClass(org.orgId, aoife, actorId);
+        await filePrsiClass(org.orgId, brendan, actorId);
 
         // Run 1: week of 2–8 March 2026 — pre-October PRSI edition.
         const run1 = await createPayRun({

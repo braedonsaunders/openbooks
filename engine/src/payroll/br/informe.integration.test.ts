@@ -10,8 +10,9 @@ import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
+import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { upsertStatutoryRate } from "../statutory-rates.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 import { sealSecret } from "../../platform/secrets.ts";
 import { BR_PACK_RATES } from "./rates.ts";
 import { brInformeRows } from "./informe.ts";
@@ -103,6 +104,12 @@ async function brPayrollOrg(): Promise<Fixture> {
     orgId: org.orgId, actorId, rates: BR_PACK_RATES, rateKey: "br_terceiros",
     region: "BR", filingAccountId, taxYear: 2025, values: { aliquota: "5.8" },
   });
+  // General-regime establishment: employer CPP accrues separately (LC
+  // 123/2006 art. 18 §5-C). An unclassified establishment refuses by name;
+  // the informe asserts employee figures, never the employer leg.
+  await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, subsidiaryId,
+    country: "BR", factKey: "br_regime_tributario", effectiveFrom: "2025-01-01",
+    value: "geral", changeReason: "test establishment under the general regime" });
 
   const employee = async (name: string, annualSalary: string, dependentes: number, cpf: string) => {
     const id = randomUUID();
@@ -112,16 +119,17 @@ async function brPayrollOrg(): Promise<Fixture> {
     await db.execute(sql`
       insert into employee_roles (id, org_id, party_id)
       values (${randomUUID()}, ${org.orgId}, ${id})`);
+    const employmentId = await seedWorkerEmployment(org.orgId, id, subsidiaryId);
     await db.execute(sql`
       insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                     effective_from, is_active, created_by, updated_by)
       values (${org.orgId}, ${id}, 'BRL', ${annualSalary}, 'year', 2080, '2025-01-01', true,
               ${actorId}, ${actorId})`);
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country,
                                              province, pay_basis, filing_account_id, br_dependentes,
                                              sin_encrypted, is_active, created_by, updated_by)
-      values (${org.orgId}, ${id}, ${scheduleId}, 'BR', 'BR',
+      values (${org.orgId}, ${id}, ${employmentId}, ${scheduleId}, 'BR', 'BR',
               'salary', ${filingAccountId}, ${dependentes}, ${sealSecret(cpf)}, true, ${actorId},
               ${actorId})`);
     return id;
