@@ -111,7 +111,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await runDocumentVersionedTransaction<
       RouteTransaction,
-      { status: string; updatedAt: string; subsidiaryId: string | null },
+      { status: string; updatedAt: string; subsidiaryId: string | null; partyId: string | null },
       void
     >({
       expectedRevision,
@@ -120,8 +120,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // the write transaction: a concurrent writer cannot slip between the
       // check and the header/line replacement.
       lock: async (tx) => {
-        const row = (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
-          select status, subsidiary_id as "subsidiaryId",
+        const row = (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; partyId: string | null }>(sql`
+          select status, subsidiary_id as "subsidiaryId", party_id as "partyId",
                  ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
             from documents
            where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
@@ -137,6 +137,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             422,
             `a ${locked.status} expense report cannot be edited — create a correcting report instead`,
           )
+        }
+
+        const employeeId = (body.partyId === undefined ? locked.partyId : body.partyId) ?? null
+        if (employeeId !== null) {
+          const employee = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+            select p.subsidiary_id as "subsidiaryId" from parties p
+             where p.id = ${employeeId} and p.org_id = ${user.orgId} and p.is_active
+             for key share of p
+          `)).rows[0]
+          if (!employee || (gate.allowedSubsidiaryIds !== null && employee.subsidiaryId !== null && !gate.allowedSubsidiaryIds.has(employee.subsidiaryId))
+            || (employee.subsidiaryId !== null && employee.subsidiaryId !== locked.subsidiaryId)) {
+            throw new DocumentEditError(404, 'employee not found for this expense report')
+          }
         }
 
         const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
