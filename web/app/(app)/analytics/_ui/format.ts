@@ -62,6 +62,20 @@ export function ratioNumber(numerator: string, denominator: string, fallback = 0
   return Number(negative ? -mag : mag) / Number(scale)
 }
 
+/** Escape a tenant-controlled name before inserting it into an ECharts HTML
+ * tooltip string. ECharts writes formatter output via innerHTML, so a vendor,
+ * customer, account, department, class, or location name containing markup
+ * would execute as stored XSS. Money and percent fragments are
+ * locale-formatted numbers and need no escaping — only names do. */
+export function escapeTooltipHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /** Render an exact 0..1 ratio as percentage points without a Number hop. */
 export function formatExactPercent(value: string, decimals = 0): string {
   return `${formatExactMoney(mulDecimal(value, '100'), decimals)}%`

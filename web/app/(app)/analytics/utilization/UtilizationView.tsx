@@ -18,7 +18,7 @@ import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useSort } from '../_ui/useSort'
-import { useAnalyticsMoney } from '../_ui/format'
+import { escapeTooltipHtml, useAnalyticsMoney } from '../_ui/format'
 import { countLabel } from '@/lib/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
@@ -113,16 +113,6 @@ function treemapColor(pct: number): string {
     }
   }
   return 'rgb(134,239,172)'
-}
-
-/** Escape tenant-controlled names before inserting them into ECharts' HTML tooltip. */
-function escapeTooltipHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 /* ---------------------------------------------------------- entries drawer */
