@@ -271,7 +271,7 @@ export async function loadPersonaMetrics(
 
   if (need('upcoming')) {
     const upcoming: { label: string; date: string; href: string }[] = []
-    if (await isFeatureEnabled(orgId, 'payroll')) {
+    if (can(authz, 'payroll.manage') && await isFeatureEnabled(orgId, 'payroll')) {
       const holidays = (await db.execute<{ name: string; on: string }>(sql`
         select coalesce(nullif(name, ''), jurisdiction) as name, observed_on::text as on from payroll_holidays
          where org_id = ${orgId} and observed_on >= ${today}::date and observed_on <= ${today}::date + 30
@@ -359,7 +359,7 @@ export async function loadPersonaMetrics(
     out.teamQuals = (await qualificationSourceAvailable()) ? [] : null
   }
 
-  if (need('adminAttention') && hasAdminPersona(authz)) {
+  if (need('adminAttention') && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
     const attention: { label: string; count: number; href: string }[] = []
     if (can(authz, 'hrm.employment.read')) {
       const pending = await listInbox(ctx ?? await inboxContext(authz), {
@@ -374,37 +374,37 @@ export async function loadPersonaMetrics(
       const missing = home?.missingSettings.length ?? 0
       if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
     }
-    const unmatched = (await db.execute<{ n: number }>(sql`
+    const unmatched = can(authz, 'banking.read') ? (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from bank_statement_lines
-       where org_id = ${orgId} and match_status = 'unmatched'`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0
+       where org_id = ${orgId} and match_status = 'unmatched'`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0 : 0
     if (unmatched > 0) attention.push({ label: tp('attentionBankLines'), count: unmatched, href: '/banking/match' })
-    const openClose = (await db.execute<{ n: number }>(sql`
+    const openClose = can(authz, 'close.run') ? (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from close_runs
-       where org_id = ${orgId} and status not in ('closed', 'cancelled')`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0
+       where org_id = ${orgId} and status not in ('closed', 'cancelled')`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0 : 0
     if (openClose > 0) attention.push({ label: tp('attentionCloseRuns'), count: openClose, href: '/close' })
     out.adminAttention = attention
   }
 
-  if (need('workflowErrors') && (hasAdminPersona(authz) || can(authz, 'flows.manage'))) {
+  if (need('workflowErrors') && can(authz, 'flows.manage') && authz.allowedSubsidiaryIds === null) {
     const failed = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from flow_runs
        where org_id = ${orgId} and status = 'failed'`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0
     out.workflowErrors = { count: failed, href: '/admin/flows' }
   }
 
-  if (need('adminCalendar') && hasAdminPersona(authz)) {
+  if (need('adminCalendar') && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
     const calendar: { label: string; date: string }[] = []
-    const schedules = (await db.execute<{ name: string; at: string }>(sql`
+    const schedules = can(authz, 'reports.read') ? (await db.execute<{ name: string; at: string }>(sql`
       select d.name as name, s.next_run_at::text as at from report_schedules s
         join report_definitions d on d.org_id = s.org_id and d.id = s.definition_id
        where s.org_id = ${orgId} and s.next_run_at <= now() + interval '30 days'
          and d.archived_at is null
-       order by s.next_run_at limit 5`).catch(() => ({ rows: [] as { name: string; at: string }[] }))).rows
+       order by s.next_run_at limit 5`).catch(() => ({ rows: [] as { name: string; at: string }[] }))).rows : []
     for (const schedule of schedules) calendar.push({ label: schedule.name, date: schedule.at.slice(0, 10) })
-    const remittances = (await db.execute<{ at: string }>(sql`
+    const remittances = can(authz, 'payroll.manage') ? (await db.execute<{ at: string }>(sql`
       select created_at::text as at from payment_remittances
        where org_id = ${orgId} and status = 'pending'
-       order by created_at limit 5`).catch(() => ({ rows: [] as { at: string }[] }))).rows
+       order by created_at limit 5`).catch(() => ({ rows: [] as { at: string }[] }))).rows : []
     for (const remittance of remittances) calendar.push({ label: tp('calendarPayrollRemittance'), date: remittance.at.slice(0, 10) })
     out.adminCalendar = calendar.slice(0, 6)
   }
