@@ -7,6 +7,8 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission } from "../../../../lib/authz";
 import {
   parseFormLayout,
+  defaultFormLayout,
+  lockedFormEntriesUnchanged,
   RECORD_TYPE_BY_KEY,
   type FormLayoutConfig,
 } from "@openbooks/customization";
@@ -92,6 +94,8 @@ export async function POST(req: Request) {
   const layout = parsed.data as FormLayoutConfig;
   if (layout.recordType !== body.recordType)
     return NextResponse.json({ error: "layout.recordType does not match recordType" }, { status: 400 });
+  if (!lockedFormEntriesUnchanged(defaultFormLayout(body.recordType as keyof typeof RECORD_TYPE_BY_KEY), layout))
+    return NextResponse.json({ error: "locked built-in fields cannot be changed" }, { status: 400 });
 
   try {
     // db.execute goes through the pool (each statement may land on a different

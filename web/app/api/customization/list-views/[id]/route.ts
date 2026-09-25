@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, can } from "../../../../../lib/authz";
-import { parseListView, stripSeededDefaultMark } from "@openbooks/customization";
+import { lockedListEntriesUnchanged, parseListView, stripSeededDefaultMark, type ListViewConfig } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 import { isUuid } from "../../../../../lib/list-params";
 import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
@@ -75,6 +75,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     isDefault?: boolean;
     isActive?: boolean;
   };
+  let proposedConfig: ListViewConfig | undefined;
   const sets: ReturnType<typeof sql>[] = [];
   const changes: Record<string, unknown> = {};
   if (body.name !== undefined && typeof body.name !== "string") {
@@ -102,7 +103,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // explicitly here rather than relying on the parser dropping unknown
     // keys, so a sort-only edit that passes the shape rule is still stored
     // unmarked — and resolution keeps it instead of replacing it live.
-    sets.push(sql`config = ${stripSeededDefaultMark(parsed.data!)}`);
+    proposedConfig = stripSeededDefaultMark(parsed.data!);
+    sets.push(sql`config = ${proposedConfig}`);
     changes.config = true;
   }
   if (body.isDefault !== undefined) {
@@ -146,13 +148,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ownerId: string | null;
         isDefault: boolean;
         isActive: boolean;
+        config: unknown;
       }>(sql`
         select id, record_type as "recordType", scope, owner_id as "ownerId",
-               is_default as "isDefault", is_active as "isActive"
+               is_default as "isDefault", is_active as "isActive", config
           from list_views
          where id = ${id} and org_id = ${user.orgId}
          for update`)).rows[0];
       if (!locked) return { kind: "not_found" as const };
+      if (proposedConfig) {
+        const currentConfig = parseListView(locked.config);
+        if (!currentConfig.success || !lockedListEntriesUnchanged(currentConfig.data!, proposedConfig))
+          return { kind: "locked_entries" as const };
+      }
       const nextFlags = nextDefaultFlags(locked, { isDefault: body.isDefault, isActive: body.isActive });
       const inactiveDefault = refuseInactiveDefault({ kind: "view", ...nextFlags });
       if (!inactiveDefault.ok) return { kind: "inactive_default" as const, error: inactiveDefault.error };
@@ -190,6 +198,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return { kind: "ok" as const };
     });
     if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "locked_entries") return NextResponse.json({ error: "locked built-in columns cannot be changed" }, { status: 400 });
     if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {

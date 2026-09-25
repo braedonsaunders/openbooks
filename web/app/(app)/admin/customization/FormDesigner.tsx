@@ -16,6 +16,7 @@ import {
   getRecordType,
   isCustomFieldKey,
   isCustomTabKey,
+  isLockedCustomizationEntry,
   mergeRegisteredFieldsIntoLayout,
   resolveFormTabs,
   type FieldKind,
@@ -493,7 +494,7 @@ export function FormDesigner({
               <div className="mb-2 flex items-center gap-2">
                 <Input value={g.label ?? ''} onChange={(e) => setGroupLabel(gi, e.target.value)} placeholder={t('designer.forms.groupLabel')} className="h-8 flex-1" />
                 {layout.header.groups.length > 1 ? (
-                  <button type="button" onClick={() => removeGroup(gi)} aria-label={tCommon('actions.delete')} className="text-slate-400 hover:text-red-600">
+                  <button type="button" onClick={() => removeGroup(gi)} disabled={g.fields.some((f) => isLockedCustomizationEntry(meta?.headerFields, f.key))} aria-label={tCommon('actions.delete')} className="text-slate-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40">
                     <Trash2 size={15} />
                   </button>
                 ) : null}
@@ -506,7 +507,7 @@ export function FormDesigner({
                     label={fieldDefaultLabel(f.key)}
                     kindLabel={kindBadge(f.key)}
                     overridable={!!meta?.headerFields.find((x) => x.key === f.key)?.requiredOverridable}
-                    locked={!!meta?.headerFields.find((x) => x.key === f.key)?.locked}
+                    locked={isLockedCustomizationEntry(meta?.headerFields, f.key)}
                     groups={layout.header.groups}
                     groupIndex={gi}
                     onToggleVisible={() => updateField(gi, fi, { visible: !f.visible })}
@@ -535,7 +536,7 @@ export function FormDesigner({
                   col={c}
                   label={fieldDefaultLabel(c.key)}
                   kindLabel={kindBadge(c.key)}
-                  locked={!!meta?.lineFields.find((x) => x.key === c.key)?.locked}
+                  locked={isLockedCustomizationEntry(meta?.lineFields, c.key)}
                   onToggleVisible={() => updateCol(ci, { visible: !c.visible })}
                   onLabel={(v) => updateCol(ci, { labelOverride: v || null })}
                   onWidth={(v) => updateCol(ci, { width: v || null })}
@@ -697,8 +698,8 @@ function FieldRow({
         <KindChip label={kindLabel} />
         {locked ? <Badge variant="outline">{t('designer.forms.locked')}</Badge> : null}
         <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={onMoveUp} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={16} /></button>
-          <button type="button" onClick={onMoveDown} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={16} /></button>
+          <button type="button" onClick={onMoveUp} disabled={locked} className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label={tCommon('actions.previous')}><ChevronUp size={16} /></button>
+          <button type="button" onClick={onMoveDown} disabled={locked} className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label={tCommon('actions.next')}><ChevronDown size={16} /></button>
           <button type="button" onClick={onToggleVisible} disabled={locked} className={cn('text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40', !field.visible && 'text-red-500')} aria-pressed={field.visible} aria-label={field.visible ? t('designer.forms.visible') : t('designer.forms.hidden')}>
             {field.visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
@@ -708,7 +709,7 @@ function FieldRow({
         <Input value={field.labelOverride ?? ''} onChange={(e) => onLabel(e.target.value)} placeholder={t('designer.forms.renamePlaceholder', { label })} className="h-8 w-44" disabled={locked} />
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-slate-400">{t('designer.forms.colSpan')}</span>
-          <Select value={field.colSpan ? String(field.colSpan) : '1'} onChange={(e) => onColSpan(e.target.value)} triggerClassName="h-8 w-20" aria-label={t('designer.forms.colSpan')}>
+          <Select value={field.colSpan ? String(field.colSpan) : '1'} onChange={(e) => onColSpan(e.target.value)} disabled={locked} triggerClassName="h-8 w-20" aria-label={t('designer.forms.colSpan')}>
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
@@ -718,6 +719,7 @@ function FieldRow({
         {groups.length > 1 ? (
           <Select
             value={String(groupIndex)}
+            disabled={locked}
             triggerClassName="h-8 w-40"
             onChange={(e) => { const v = Number(e.target.value); if (!Number.isNaN(v) && v !== groupIndex) onMoveGroup(v) }}
             aria-label={t('designer.forms.moveToGroup')}
@@ -730,7 +732,7 @@ function FieldRow({
           </Select>
         ) : null}
         <label className="flex items-center gap-1.5 text-xs text-slate-500">
-          <input type="checkbox" checked={!!field.required} onChange={onToggleRequired} disabled={!overridable} className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 disabled:opacity-40" />
+          <input type="checkbox" checked={!!field.required} onChange={onToggleRequired} disabled={locked || !overridable} className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500 disabled:opacity-40" />
           {t('designer.forms.required')}
         </label>
       </div>
@@ -759,8 +761,8 @@ function ColumnRow({ col, label, kindLabel, locked, onToggleVisible, onLabel, on
         <KindChip label={kindLabel} />
         {locked ? <Badge variant="outline">{t('designer.forms.locked')}</Badge> : null}
         <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={onMoveUp} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={16} /></button>
-          <button type="button" onClick={onMoveDown} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={16} /></button>
+          <button type="button" onClick={onMoveUp} disabled={locked} className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label={tCommon('actions.previous')}><ChevronUp size={16} /></button>
+          <button type="button" onClick={onMoveDown} disabled={locked} className="text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label={tCommon('actions.next')}><ChevronDown size={16} /></button>
           <button type="button" onClick={onToggleVisible} disabled={locked} className={cn('text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40', !col.visible && 'text-red-500')} aria-label={t('designer.list.visible')}>
             {col.visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
@@ -768,7 +770,7 @@ function ColumnRow({ col, label, kindLabel, locked, onToggleVisible, onLabel, on
       </div>
       <div className="flex flex-wrap items-center gap-2 pl-6">
         <Input value={col.labelOverride ?? ''} onChange={(e) => onLabel(e.target.value)} placeholder={t('designer.forms.renamePlaceholder', { label })} className="h-8 w-44" disabled={locked} />
-        <Input value={col.width ?? ''} onChange={(e) => onWidth(e.target.value)} placeholder="minmax(120px,1fr)" className="h-8 w-44 font-mono text-xs" aria-label={t('designer.forms.width')} />
+        <Input value={col.width ?? ''} onChange={(e) => onWidth(e.target.value)} placeholder="minmax(120px,1fr)" className="h-8 w-44 font-mono text-xs" aria-label={t('designer.forms.width')} disabled={locked} />
       </div>
     </div>
   )
