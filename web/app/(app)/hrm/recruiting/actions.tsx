@@ -742,9 +742,13 @@ const RATING_KEYS = ['strong_no', 'no', 'yes', 'strong_yes'] as const
 /** Submit the viewer's own scorecard: overall plus per-attribute ratings. */
 export function ScorecardFormIsland({
   interviewId,
+  criteria,
   labels,
 }: {
   interviewId: string
+  /** One input per kit criterion (id + display label); empty while the
+   * interview names no kit, in which case only overall + notes submit. */
+  criteria: { id: string; label: string }[]
   labels: { overall: string; submit: string; failed: string; ratings: string; privateNotes: string; sharedNotes: string; ratingOptions: Record<(typeof RATING_KEYS)[number], string> }
 }) {
   const fieldPrefix = useId()
@@ -761,9 +765,12 @@ export function ScorecardFormIsland({
     setBusy(true)
     setError(null)
     try {
+      // Unrated criteria stay out of the payload — the endpoint owns
+      // requiredness and refuses by name.
+      const rated = Object.fromEntries(Object.entries(ratings).filter(([, value]) => value !== ''))
       const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/scorecards`, 'POST', {
         overall,
-        ratings,
+        ratings: rated,
         privateNotes: privateNotes.trim() || null,
         sharedNotes: sharedNotes.trim() || null,
       })
@@ -792,21 +799,34 @@ export function ScorecardFormIsland({
           ))}
         </Select>
       </div>
-      <div>
-        <Label htmlFor={`${fieldPrefix}-ratings`}>{labels.ratings}</Label>
-        <Textarea
-          id={`${fieldPrefix}-ratings`}
-          placeholder='{"<attribute-id>": "yes"}'
-          value={JSON.stringify(ratings)}
-          onChange={(event) => {
-            try {
-              setRatings(JSON.parse(event.target.value) as Record<string, string>)
-            } catch {
-              /* keep last good value while typing */
-            }
-          }}
-        />
-      </div>
+      {criteria.length > 0 ? (
+        <fieldset>
+          <legend className="text-sm leading-none font-medium text-slate-900 dark:text-slate-100">
+            {labels.ratings}
+          </legend>
+          <div className="mt-1 space-y-2">
+            {criteria.map((criterion) => (
+              <div key={criterion.id} className="flex items-center gap-2">
+                <Label htmlFor={`${fieldPrefix}-rating-${criterion.id}`} className="min-w-0 flex-1">
+                  {criterion.label}
+                </Label>
+                <Select
+                  id={`${fieldPrefix}-rating-${criterion.id}`}
+                  value={ratings[criterion.id] ?? ''}
+                  onChange={(event) => setRatings((prev) => ({ ...prev, [criterion.id]: event.target.value }))}
+                >
+                  <option value="">—</option>
+                  {RATING_KEYS.map((key) => (
+                    <option key={key} value={key}>
+                      {labels.ratingOptions[key]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
       <div>
         <Label htmlFor={`${fieldPrefix}-private-notes`}>{labels.privateNotes}</Label>
         <Textarea id={`${fieldPrefix}-private-notes`} value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} />

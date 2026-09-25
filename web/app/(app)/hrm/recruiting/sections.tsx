@@ -542,6 +542,7 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           <div className="mt-2">
             <ScorecardFormIsland
               interviewId={detail.id}
+              criteria={detail.criteria}
               labels={{ overall: labels.overall ?? 'Overall', submit: labels.submit ?? 'Submit', failed: labels.failed ?? 'Save failed.', ratings: detail.labels.ratings ?? 'Ratings', privateNotes: detail.labels.privateNotes ?? 'Private notes', sharedNotes: detail.labels.sharedNotes ?? 'Shared notes', ratingOptions: { strong_no: detail.labels.ratingStrongNo ?? 'Strong no', no: detail.labels.ratingNo ?? 'No', yes: detail.labels.ratingYes ?? 'Yes', strong_yes: detail.labels.ratingStrongYes ?? 'Strong yes' } }}
             />
           </div>
