@@ -36,6 +36,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
+import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
 import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
 import { drawerTitleKind } from './drawer-title'
@@ -464,6 +465,7 @@ export async function loadRecruitingPage(
           interviewPanel: t('recruiting.interview.panel'),
           interviewSubmit: t('recruiting.interview.submit'),
           interviewFailed: t('recruiting.interview.failed'),
+          interviewInvalidTime: t('recruiting.depth.invalidTime'),
           completeTitle: t('recruiting.interview.completeTitle'),
           completeOutcome: t('recruiting.interview.outcome'),
           completeFeedback: t('recruiting.interview.feedback'),
@@ -503,6 +505,7 @@ export async function loadRecruitingPage(
         offerEmployer: { value: detail.employerSubsidiaryId, label: offerEmployerName },
         offerEmployerOptions,
         employeeOptions: employeeRows.map((option) => ({ value: option.id, label: option.name })),
+        timeZone: await businessTimeZone(authz.user.orgId),
           kindOptions: ['phone', 'video', 'onsite', 'panel', 'assessment'].map((value) => ({
             value,
             label: t(`recruiting.interviewKind.${value}`),
