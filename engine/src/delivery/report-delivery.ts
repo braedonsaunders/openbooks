@@ -168,7 +168,7 @@ export async function dispatchQueuedReportRuns(
 export type ReportRenderer = (orgId: string, definitionId: string, runId: string) => Promise<Buffer>;
 
 /** Render once, retain immutable bytes/hash, and create recipient outbox rows atomically. */
-export async function processScheduledReportRun(runId: string, render: ReportRenderer): Promise<{ skipped?: true; deliveries?: number }> {
+export async function processScheduledReportRun(runId: string, render: ReportRenderer): Promise<{ skipped?: true; deliveries?: number; unclaimed?: true }> {
   // The claim below is a lease: locked_at names this renderer's ownership and
   // the stale-run sweep (dispatchQueuedReportRuns) may reassign it after
   // STALE_RUN_MS. Every terminal write below is conditional on still holding
@@ -184,8 +184,14 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
   `));
   const row = claimed.rows[0];
   if (!row) {
+    // A stored artifact is proof the run already delivered, so standing
+    // down is a genuine skip. Otherwise the run is exhausted, owned by
+    // another renderer, or unknown — none of which is a skip, so return a
+    // named outcome the worker surfaces on the completed job instead of
+    // reporting success-by-silence.
     const complete = (await db.execute(sql`select 1 from report_run_artifacts where run_id=${runId}`));
-    return complete.rows[0] ? { skipped: true } : { skipped: true };
+    if (complete.rows[0]) return { skipped: true };
+    return { unclaimed: true };
   }
 
   return runInSpan(

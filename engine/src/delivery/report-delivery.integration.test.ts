@@ -254,8 +254,9 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
         assert.equal(state.terminal_failed_by, REPORT_RUN_WORKER_IDENTITY);
       }
     }
-    // A terminal run is never claimed again — no further surfacing is possible.
-    assert.deepEqual(await processScheduledReportRun(runId, async () => Buffer.alloc(0)), { skipped: true });
+    // A terminal run is never claimed again: the undelivered no-claim path
+    // reports it by name rather than as a skip, with no new terminal log.
+    assert.deepEqual(await processScheduledReportRun(runId, async () => Buffer.alloc(0)), { unclaimed: true });
     assert.equal(emissions.length, 1);
 
     const log = (await db.execute<{ id: string }>(sql`
