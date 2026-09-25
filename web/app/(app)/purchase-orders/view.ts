@@ -105,7 +105,7 @@ export async function loadPurchaseOrders(
           taxGroupOptions(authz.user.orgId),
           db.execute<ElementOf<OrderDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`),
           db.execute<ElementOf<OrderDrawerProps['projects']>>(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`),
-          customSegmentOptions(authz.user.orgId),
+          customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
           subsidiaryUiOptions(authz.user.orgId),
           inventoryEnabled
             ? db.execute<ElementOf<OrderDrawerProps['stockLocations']>>(sql`

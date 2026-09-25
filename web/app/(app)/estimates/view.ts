@@ -133,7 +133,7 @@ export async function loadEstimates(
           taxGroupOptions(authz.user.orgId),
           db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`),
           db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`),
-          customSegmentOptions(authz.user.orgId),
+          customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
           subsidiaryUiOptions(authz.user.orgId),
           inventoryEnabled
             ? db.execute(sql`
