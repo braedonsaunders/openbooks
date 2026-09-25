@@ -12,7 +12,7 @@ import { ES_TAX_YEARS } from "./rates.ts";
 
 /**
  * The ES pack's year-end builders: Modelo 190 perceptor rows and Modelo 111
- * quarterly aggregates, both straight off the committed-stub subledger.
+ * quarterly plus monthly aggregates, all straight off the committed-stub subledger.
  *
  * A filing reports what was actually paid and withheld — never a
  * recomputation. Draft and uncommitted runs never appear: every query joins
@@ -261,6 +261,15 @@ export async function es296Population(orgId: string, taxYear: number): Promise<P
   };
 }
 
+export interface Es111Month {
+  month: number;
+  /** Casilla 01: distinct persons paid IRPF-subject cash wages in the month. */
+  perceptores: number;
+  /** Casilla 02: cash employment income satisfied in the month. */
+  percepciones: string;
+  /** Casilla 03: IRPF withheld in the month. */
+  retenciones: string;
+}
 /**
  * The Modelo 111 quarterly worksheet: one row per calendar quarter with
  * committed stubs, keyed by pay date (the 111 is cash-basis — percepciones
@@ -294,6 +303,49 @@ export async function es111Quarters(orgId: string, taxYear: number): Promise<Es1
   }
   return rows.rows.map((row) => ({
     quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
+    perceptores: Number(row.perceptores),
+    percepciones: num(row.percepciones),
+    retenciones: num(row.retenciones),
+  }));
+}
+
+/**
+ * The Modelo 111 monthly worksheet: one row per calendar month with
+ * committed stubs, keyed by pay date (same cash basis as the quarterly
+ * path). The AEAT obliges large enterprises and qualifying public
+ * administrations (annual budget above €6m, Instrucciones del Modelo 111)
+ * to self-assess monthly — for those retenedores the quarterly worksheet
+ * is the wrong return, so the surface offers this monthly population
+ * instead of a regroup-manually note.
+ */
+export async function es111Months(orgId: string, taxYear: number): Promise<Es111Month[]> {
+  await assertEsFilingYear(orgId, taxYear, "the Modelo 111");
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    select extract(month from s.pay_date)::int as month,
+           count(distinct s.employee_party_id) as perceptores,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
+                  and coalesce(pc.taxable, true))) as percepciones,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.system_key = 'irpf')) as retenciones
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
+     group by 1 order by 1
+  `));
+  if (rows.rows.length === 0) {
+    throw new PayrollError(
+      `no committed ES pay stubs for tax year ${taxYear} — the Modelo 111 reports amounts `
+      + "actually paid and withheld in each month, so calculate and commit the year's pay "
+      + "runs first",
+    );
+  }
+  return rows.rows.map((row) => ({
+    month: Number(row.month),
     perceptores: Number(row.perceptores),
     percepciones: num(row.percepciones),
     retenciones: num(row.retenciones),
@@ -338,6 +390,26 @@ export async function es111Population(orgId: string, taxYear: number): Promise<P
       perceptores: String(quarter.perceptores),
       percepciones: quarter.percepciones,
       retenciones: quarter.retenciones,
+    })),
+  };
+}
+
+export async function es111MonthlyPopulation(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+  const months = await es111Months(orgId, taxYear);
+  return {
+    rowKey: "rowId",
+    columns: [
+      { key: "month", label: "Mes" },
+      { key: "perceptores", label: "N.º perceptores (01)" },
+      { key: "percepciones", label: "Percepciones (02)", align: "right", money: true },
+      { key: "retenciones", label: "Retenciones (03)", align: "right", money: true },
+    ],
+    rows: months.map((month) => ({
+      rowId: `M${month.month}`,
+      month: `M${month.month}`,
+      perceptores: String(month.perceptores),
+      percepciones: month.percepciones,
+      retenciones: month.retenciones,
     })),
   };
 }
@@ -427,6 +499,52 @@ export async function es190Slip(
  * casilla 01 (n.º de perceptores), casilla 02 (importe de las percepciones
  * dinerarias), casilla 03 (importe de las retenciones).
  */
+function es111SlipBody(input: {
+  taxYear: number;
+  periodLabel: string;
+  basisNote: string;
+  deadlineNote: string;
+  perceptores: number;
+  percepciones: string;
+  retenciones: string;
+}): PayrollFilingSlipData {
+  return {
+    formCode: "ES_111",
+    formName: "Modelo 111 — Retenciones e ingresos a cuenta (rendimientos del trabajo)",
+    formNumber: "Modelo 111",
+    headerFields: [
+      { label: "Ejercicio", value: String(input.taxYear) },
+      { label: "Período", value: input.periodLabel },
+    ],
+    boxes: [
+      {
+        code: "01",
+        label: "N.º de perceptores — rendimientos dinerarios del trabajo",
+        value: String(input.perceptores),
+      },
+      {
+        code: "02",
+        label: "Importe de las percepciones — rendimientos dinerarios del trabajo",
+        value: input.percepciones,
+        emphasis: true,
+      },
+      {
+        code: "03",
+        label: "Importe de las retenciones — rendimientos dinerarios del trabajo",
+        value: input.retenciones,
+        emphasis: true,
+      },
+    ],
+    notes: [
+      input.basisNote,
+      "Rendimientos en especie (casillas 04–06) and apartados II onward (actividades "
+        + "económicas, premios, cesión de imagen): the engine prices no especie and payroll "
+        + "never produces non-employment income — complete those apartados from outside payroll.",
+      input.deadlineNote,
+    ],
+  };
+}
+
 export async function es111Slip(
   orgId: string, taxYear: number, rowId: string,
 ): Promise<PayrollFilingSlipData> {
@@ -435,44 +553,44 @@ export async function es111Slip(
   if (!quarter) {
     throw new PayrollError(`no ${taxYear} Modelo 111 quarter matches the requested row`);
   }
-  return {
-    formCode: "ES_111",
-    formName: "Modelo 111 — Retenciones e ingresos a cuenta (rendimientos del trabajo)",
-    formNumber: "Modelo 111",
-    headerFields: [
-      { label: "Ejercicio", value: String(taxYear) },
-      { label: "Período", value: `Trimestre ${quarter.quarter} (Q${quarter.quarter})` },
-    ],
-    boxes: [
-      {
-        code: "01",
-        label: "N.º de perceptores — rendimientos dinerarios del trabajo",
-        value: String(quarter.perceptores),
-      },
-      {
-        code: "02",
-        label: "Importe de las percepciones — rendimientos dinerarios del trabajo",
-        value: quarter.percepciones,
-        emphasis: true,
-      },
-      {
-        code: "03",
-        label: "Importe de las retenciones — rendimientos dinerarios del trabajo",
-        value: quarter.retenciones,
-        emphasis: true,
-      },
-    ],
-    notes: [
+  return es111SlipBody({
+    taxYear,
+    periodLabel: `Trimestre ${quarter.quarter} (Q${quarter.quarter})`,
+    basisNote:
       "Cash-basis: percepciones satisfechas en el trimestre — the quarter comes from each "
-        + "committed stub's pay date, and the worksheet ties to the pay runs to the cent.",
-      "Rendimientos en especie (casillas 04–06) and apartados II onward (actividades "
-        + "económicas, premios, cesión de imagen): the engine prices no especie and payroll "
-        + "never produces non-employment income — complete those apartados from outside payroll.",
-      "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero); "
-        + "grandes empresas autoliquidan mensualmente — regroup the same committed stubs by "
-        + "month from the pay dates above.",
-    ],
-  };
+      + "committed stub's pay date, and the worksheet ties to the pay runs to the cent.",
+    deadlineNote:
+      "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero). A "
+      + "monthly filer — gran empresa o administración con presupuesto anual superior a 6 M€ "
+      + "(Instrucciones del Modelo 111) — files the mensual worksheet, not this quarter.",
+    perceptores: quarter.perceptores,
+    percepciones: quarter.percepciones,
+    retenciones: quarter.retenciones,
+  });
+}
+
+export async function es111MonthlySlip(
+  orgId: string, taxYear: number, rowId: string,
+): Promise<PayrollFilingSlipData> {
+  const months = await es111Months(orgId, taxYear);
+  const month = months.find((m) => `M${m.month}` === rowId);
+  if (!month) {
+    throw new PayrollError(`no ${taxYear} Modelo 111 month matches the requested row`);
+  }
+  return es111SlipBody({
+    taxYear,
+    periodLabel: `Mes ${month.month} (M${month.month})`,
+    basisNote:
+      "Cash-basis: percepciones satisfechas en el mes — the month comes from each committed "
+      + "stub's pay date, and the worksheet ties to the pay runs to the cent.",
+    deadlineNote:
+      "Autoliquidación mensual para grandes empresas y administraciones obligadas "
+      + "(Instrucciones del Modelo 111): file each month separately. A trimestral filer uses "
+      + "the quarterly worksheet instead of summing these months.",
+    perceptores: month.perceptores,
+    percepciones: month.percepciones,
+    retenciones: month.retenciones,
+  });
 }
 
 export async function es216Slip(
