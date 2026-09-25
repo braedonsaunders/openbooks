@@ -182,6 +182,20 @@ test("MN Section 2 exempt stops withholding; Method 2 supplemental is a flat 6.2
   assert.ok(U(withBonus.tax) > U("45.63"));
 });
 
+test("MN nonresident expected pay under $15,300 withholds nothing", () => {
+  // 2026 booklet p. 4: no Minnesota withholding when the expected amount
+  // paid is under $15,300. $269.23 × 52 = $13,999.96 of Minnesota-source wages.
+  const result = MN_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: cert({ marital_status: "single", allowances: "0" }),
+    wageAllocations: [{
+      region: "MN", subRegion: null, workShare: "0.26923", source: "approved_time_entries",
+      sourceWagesCurrentPeriod: "269.23", sourceWagesYearToDate: "0", periodsYearToDate: 1,
+    }],
+  });
+  assert.equal(result.tax, money("0"));
+});
+
 test("MN refuses a year it has not transcribed", () => {
   assert.throws(
     () => MN_WITHHOLDING.compute({

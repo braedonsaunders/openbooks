@@ -32,13 +32,34 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
+  evaluateUsNonresidentThreshold,
   refuseUntranscribedYear,
+  requireUsSourceWages,
+  requireUsWageAllocation,
+  type UsNonresidentThresholdRule,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/mn.ts";
+
+/**
+ * Booklet p. 4 — no Minnesota withholding from a nonresident when the
+ * amount the employer expects to pay is under $15,300. The expectation is
+ * the verified Minnesota-source wages for the year: committed source wages
+ * plus the current payroll's source wages projected over the year. The
+ * exception is expectation-based, so crossing it starts withholding
+ * prospectively — no catch-up of wages correctly exempt when paid.
+ */
+const MN_NONRESIDENT_EXPECTED_PAY_RULE: UsNonresidentThresholdRule = {
+  measure: "source_wages",
+  threshold: "15300",
+  crossing: ">=",
+  annualizeCurrentWages: true,
+  catchUpPriorWages: false,
+  label: "Minnesota $15,300 nonresident expected-pay exception",
+};
 
 export type MnSchedule = "single" | "married";
 
@@ -190,6 +211,26 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // Method 1: "Add the supplemental payment to the regular wages."
   // Daily payrolls annualize with the booklet's 360, not the caller's P.
   const annualP = mnAnnualPeriods(P, rates.dailyPeriods);
+
+  // Booklet p. 4 — a nonresident whose expected Minnesota pay is under
+  // $15,300 is not withheld. Above the threshold the existing full-wage
+  // computation continues unchanged.
+  if (input.basis === "nonresident") {
+    const allocation = requireUsWageAllocation(input.wageAllocations, "MN", null);
+    const sourceWages = U(requireUsSourceWages(input.wageAllocations, "MN", null));
+    const threshold = evaluateUsNonresidentThreshold(
+      allocation, MN_NONRESIDENT_EXPECTED_PAY_RULE, P,
+    );
+    trace("MN_NONRESIDENT_SOURCE_WAGES", sourceWages);
+    trace("MN_EXPECTED_ANNUAL_SOURCE_WAGES", sourceWages * BigInt(annualP));
+    if (!threshold.crossed) {
+      factors.MN_NONRESIDENT_UNDER_15300 = "1";
+      return {
+        state: "MN", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors,
+      };
+    }
+  }
+
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   const annualWages = wages * BigInt(annualP);
   trace("MN_ANNUAL_WAGES", annualWages);
@@ -238,6 +279,9 @@ export const MN_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MN_TAXABLE: "Minnesota taxable income",
   MN_ANNUAL_TAX: "Minnesota tax (annual)",
   MN_WITHHELD: "Minnesota tax withheld this period",
+  MN_NONRESIDENT_SOURCE_WAGES: "Minnesota-source wages this period for a nonresident",
+  MN_EXPECTED_ANNUAL_SOURCE_WAGES: "Expected Minnesota-source pay for the year",
+  MN_NONRESIDENT_UNDER_15300: "Minnesota nonresident under-$15,300 expected-pay exception",
 };
 
 export const MN_WITHHOLDING: UsStateWithholdingEngine = {
