@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
 import { isUuid } from "../../../../../lib/list-params";
@@ -24,7 +25,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     return NextResponse.json({ run });
   } catch (error) {
     if (error instanceof RunQueryError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return apiErrorResponse(error);
     }
     throw error;
   }

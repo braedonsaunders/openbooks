@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
@@ -67,10 +68,10 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     if (error instanceof DriverNotAvailableError) {
-      return NextResponse.json({ error: error.message }, { status: 422 });
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
     if (error instanceof DriverAdminError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return apiErrorResponse(error);
     }
     throw error;
   }

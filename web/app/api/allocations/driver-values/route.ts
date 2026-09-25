@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../lib/api/json";
@@ -19,9 +20,9 @@ const valueBodySchema = z.object({
   note: z.string().nullable().optional(),
 });
 
-function toResponse(error: unknown): NextResponse {
+async function toResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof DriverAdminError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
+    return apiErrorResponse(error);
   }
   throw error;
 }

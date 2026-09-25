@@ -12,11 +12,11 @@ function typedRefusal(error: unknown, safeStatus?: number): error is Error & { s
 /** Shared API boundary for typed business refusals and unexpected failures. */
 export async function apiErrorResponse(
   error: unknown,
-  options: { request?: Request; safeStatus?: number } = {},
+  options: { request?: Request; safeStatus?: number; details?: Record<string, unknown> } = {},
 ): Promise<NextResponse> {
   if (typedRefusal(error, options.safeStatus)) {
     const status = ('status' in error ? error.status : 'statusCode' in error ? error.statusCode : options.safeStatus) as number
-    return NextResponse.json({ error: error.message }, { status })
+    return NextResponse.json({ error: error.message, ...options.details }, { status })
   }
 
   const requestId = randomUUID()

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import type { NextResponse } from 'next/server'
 import { AllocationRuleError, AllocationRunError } from '../../engine/src/allocations/index.ts'
+import { apiErrorResponse } from './api/error-response'
 
 /**
  * Uniform record denial for allocation configuration writes: a missing
@@ -7,9 +8,9 @@ import { AllocationRuleError, AllocationRunError } from '../../engine/src/alloca
  * id-bearing message that would confirm the record exists. Every other
  * error keeps the standard mapping.
  */
-export function allocationWriteErrorResponse(error: unknown): NextResponse {
+export async function allocationWriteErrorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof AllocationRuleError && error.code === 'NOT_FOUND') {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return apiErrorResponse(new AllocationRuleError('NOT_FOUND', 'not found'), { safeStatus: 404 })
   }
   return allocationErrorResponse(error)
 }
@@ -20,23 +21,19 @@ export function allocationWriteErrorResponse(error: unknown): NextResponse {
  * problem codes the drawer renders inline. Unexpected failures stay a
  * generic 500.
  */
-export function allocationErrorResponse(error: unknown): NextResponse {
+export async function allocationErrorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof AllocationRuleError) {
-    if (error.code === 'NOT_FOUND') return NextResponse.json({ error: error.message }, { status: 404 })
+    if (error.code === 'NOT_FOUND') return apiErrorResponse(error, { safeStatus: 404 })
     if (error.code === 'STALE') {
-      return NextResponse.json(
-        { error: error.message, code: 'STALE' },
-        { status: 409 },
-      )
+      return apiErrorResponse(error, { safeStatus: 409, details: { code: 'STALE' } })
     }
-    const body: { error: string; code: string; problems?: { code: string; message: string }[] } = {
-      error: error.message,
+    const details: Record<string, unknown> = {
       code: error.code,
     }
-    if (error.problems) body.problems = error.problems
-    return NextResponse.json(body, { status: 422 })
+    if (error.problems) details.problems = error.problems
+    return apiErrorResponse(error, { safeStatus: 422, details })
   }
-  return NextResponse.json({ error: 'Unable to save the allocation rule.' }, { status: 500 })
+  return apiErrorResponse(error)
 }
 
 /**
@@ -44,13 +41,9 @@ export function allocationErrorResponse(error: unknown): NextResponse {
  * with the engine message. Unexpected defects stay a generic 500 so a
  * closed GL period never renders as "posting failed".
  */
-export function allocationRunErrorResponse(error: unknown, fallback: string): NextResponse {
+export async function allocationRunErrorResponse(error: unknown, _fallback: string): Promise<NextResponse> {
   if (error instanceof AllocationRunError) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.code === 'NOT_FOUND' ? 404 : 422 },
-    )
+    return apiErrorResponse(error, { safeStatus: error.code === 'NOT_FOUND' ? 404 : 422 })
   }
-  console.error(fallback, error)
-  return NextResponse.json({ error: fallback }, { status: 500 })
+  return apiErrorResponse(error)
 }
