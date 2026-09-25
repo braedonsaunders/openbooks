@@ -1,7 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
 import { can, guardRootSubsidiaryScope, subsidiaryScopeAllows } from "../../../../../lib/authz";
@@ -9,6 +8,7 @@ import {
   canReadContinuousCloseAgent,
   loadWorkItemAccess,
   readableContinuousCloseAgents,
+  withLockedWorkItemAccess,
 } from "../../../../../lib/continuous-close";
 import { loadWorkItemDetail } from "../../../../../lib/agents/work-item";
 import { findingProposalCommand } from "../../../../../lib/agents/proposals";
@@ -117,7 +117,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "reason_required" }, { status: 422 });
   }
   const status = ACTION_STATUS[action as keyof typeof ACTION_STATUS];
-  const updated = await db.transaction(async (tx) => {
+  // I1-refix-72: re-resolve agent, scope, and lifecycle inside the same
+  // row-locked transaction as the write — the pre-check above still guards
+  // the assign/note path, but a rehome between a pre-check and this write
+  // would move another entity's finding under it.
+  const result = await withLockedWorkItemAccess(authz.user.orgId, id, async (tx, locked) => {
+    if (!canReadContinuousCloseAgent(authz, locked.agentKey)) return { error: "forbidden" as const };
+    if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, locked.subjectSubsidiaryId)) {
+      return { error: "not_found" as const };
+    }
+    if (!(ALLOWED_ACTIONS[locked.status] as readonly string[]).includes(action)) {
+      return { error: "invalid_transition" as const };
+    }
     const changed = (await tx.execute<{ id: string }>(sql`
       update ai_work_items set
         status = ${status},
@@ -127,17 +138,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         dismissed_by = case when ${status} = 'dismissed' then ${authz.user.id}::uuid else null end,
         dismissal_reason = case when ${status} = 'dismissed' then ${reason} else null end,
         updated_at = now(), updated_by = ${authz.user.id}
-       where id = ${id} and org_id = ${authz.user.orgId} and status = ${access.status}
+       where id = ${id} and org_id = ${authz.user.orgId} and status = ${locked.status}
        returning id
     `));
-    if (changed.rows.length === 0) return false;
+    if (changed.rows.length === 0) return { error: "conflict" as const };
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${authz.user.orgId}, 'ai_work_items', ${id}, 'update',
               ${JSON.stringify({ action, status, reason: reason || null })}::jsonb, ${authz.user.id})
     `);
-    return true;
+    return { status };
   });
-  if (!updated) return NextResponse.json({ error: "conflict" }, { status: 409 });
-  return NextResponse.json({ ok: true, status });
+  if (!result) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if ("error" in result) {
+    const statusCode = result.error === "not_found" ? 404 : result.error === "forbidden" ? 403 : 409;
+    return NextResponse.json({ error: result.error }, { status: statusCode });
+  }
+  return NextResponse.json({ ok: true, status: result.status });
 }
