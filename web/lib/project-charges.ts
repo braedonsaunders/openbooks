@@ -157,10 +157,6 @@ export async function createProjectCharge(
   opts: { post?: boolean; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<{ id: string; documentNumber: string; approvalPending: boolean }> {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
-  const [equipmentOn, inventoryOn] = await Promise.all([
-    isFeatureEnabled(orgId, 'equipment'),
-    isFeatureEnabled(orgId, 'inventory'),
-  ])
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
   const created = await inDbTransaction(async (tx) => {
@@ -171,6 +167,13 @@ export async function createProjectCharge(
     if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
       throw new ChargeError('Projects feature is disabled')
     }
+    // Equipment and Inventory gate individual lines below. Read both under
+    // the same fence: the entry reads used to be unlocked, so a disable
+    // racing this insert landed gated lines after the capability was gone.
+    // Sequential: the transaction shares one pinned client that must never
+    // receive overlapping queries.
+    const equipmentOn = await lockAndCheckOrgFeature(tx, orgId, 'equipment')
+    const inventoryOn = await lockAndCheckOrgFeature(tx, orgId, 'inventory')
     // Lock the project and recheck scope inside the write transaction: the
     // route's pre-read may be stale by the time this insert lands, and a
     // concurrent rehome must refuse here rather than stamp the charge with
