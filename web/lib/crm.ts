@@ -3,11 +3,16 @@ import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-sco
 import { sql, type SQL } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { documentRevisionCounterSql, documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { isDocKindEnabled } from "./documents.ts";
 import { isIsoCalendarDate } from './crm-dates'
 
-export async function loadCrmAccount(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
+export function loadCrmAccount(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
+  return withScopeSnapshot(orgId, () => loadCrmAccountSnapshot(partyId, orgId, allowed))
+}
+
+async function loadCrmAccountSnapshot(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const profile = (await db.execute<Record<string, unknown>>(sql`
     select cp.*, ${documentRevisionSql(sql`cp.updated_at`)} as "__accountRevision",
            s.name as status_name, s.is_qualified, u.name as owner_name,
@@ -77,7 +82,11 @@ export async function loadCrmAccount(partyId: string, orgId: string, allowed?: R
   }
 }
 
-export async function loadOpportunity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
+export function loadOpportunity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
+  return withScopeSnapshot(orgId, () => loadOpportunitySnapshot(id, orgId, allowed))
+}
+
+async function loadOpportunitySnapshot(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const opportunity = (await db.execute<Record<string, unknown>>(sql`
     select o.*, ${documentRevisionCounterSql(sql`o.revision_seq`)} as "__opportunityRevision",
            p.display_name as party_name, c.name as contact_name,
@@ -138,7 +147,11 @@ export async function loadOpportunity(id: string, orgId: string, allowed?: Reado
   return { opportunity: opportunity.rows[0], lines: lines.rows, team: team.rows, documents: visibleDocuments, activities: activities.rows, history: history.rows }
 }
 
-export async function loadActivity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
+export function loadActivity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
+  return withScopeSnapshot(orgId, () => loadActivitySnapshot(id, orgId, allowed))
+}
+
+async function loadActivitySnapshot(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const activity = (await db.execute<Record<string, unknown>>(sql`
     select a.*, ${documentRevisionSql(sql`a.updated_at`)} as "__activityRevision",
            ou.name as owner_name, au.name as assigned_name
