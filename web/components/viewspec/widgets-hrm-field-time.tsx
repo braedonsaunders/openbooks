@@ -49,6 +49,8 @@ export const HRM_FIELD_TIME_WIDGETS = {
       kiosks={(props.kiosks as ComponentProps<typeof FieldTimeSetup>['kiosks']) ?? []}
       chains={(props.chains as ComponentProps<typeof FieldTimeSetup>['chains']) ?? []}
       kioskLinkBase={str(props, 'kioskLinkBase') ?? ''}
+      canManageKiosks={props.canManageKiosks === true}
+      canEditPolicy={props.canEditPolicy === true}
     />
   ),
 } satisfies Record<string, WidgetRenderer>

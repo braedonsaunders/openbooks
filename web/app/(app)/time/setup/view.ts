@@ -12,8 +12,10 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../lib/features'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
  * The field-time setup surface: declared rules, kiosks with token
@@ -47,6 +49,18 @@ export interface FieldSetupData {
   }[]
   chains: { subject: string; stages: { order: number; approverKind: string; roleKey?: string | null }[] | null }[]
   kioskLinkBase: string
+  /**
+   * Whether the caller may manage kiosks (time.kiosk.manage plus the
+   * fieldTimeKiosk feature): without it the kiosk section hides instead
+   * of showing devices whose register/revoke calls would only 403.
+   */
+  canManageKiosks: boolean
+  /**
+   * Whether the caller's settings and chain edits would persist: both
+   * PUTs need unrestricted subsidiary scope, so a restricted manager
+   * reads the policy with disabled forms instead of failing saves.
+   */
+  canEditPolicy: boolean
 }
 
 const f = ref<FieldSetupData>()
@@ -56,14 +70,28 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
   await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
   const t = await getTranslations('timesheets')
   const orgId = authz.user.orgId
+  // Kiosk devices are the kiosks API's authority (time.kiosk.manage plus
+  // the fieldTimeKiosk feature), not this page's: without both the
+  // section hides, and with a restricted scope the list matches that
+  // API's project visibility exactly.
+  const canManageKiosks = can(authz, 'time.kiosk.manage') && (await isFeatureEnabled(orgId, 'fieldTimeKiosk'))
+  const canEditPolicy = authz.allowedSubsidiaryIds === null
   const settings = (await db.execute<{ settings: unknown }>(sql`
     select settings->'fieldTime' as settings from orgs where id = ${orgId}`)).rows[0]?.settings as Record<string, unknown> | null
-  const kiosks = (await db.execute<FieldSetupData['kiosks'][number]>(sql`
+  const kiosks = !canManageKiosks
+    ? []
+    : (await db.execute<FieldSetupData['kiosks'][number]>(sql`
     select id::text as id, name, location_id::text as "locationId",
            project_id::text as "projectId", pin_required as "pinRequired",
            photo_required as "photoRequired", is_active as "isActive",
            last_seen_at::text as "lastSeenAt"
-      from time_kiosks where org_id = ${orgId} order by name`)).rows
+      from time_kiosks where org_id = ${orgId}
+       ${authz.allowedSubsidiaryIds === null ? sql`` : sql`and project_id is not null and exists (
+         select 1 from projects p
+          where p.org_id = time_kiosks.org_id and p.id = time_kiosks.project_id
+            and ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
+       )`}
+     order by name`)).rows
   const chains = (await db.execute<{ subject_kind: string; stages: unknown }>(sql`
     select subject_kind, stages from time_approval_stages where org_id = ${orgId}`)).rows
   return {
@@ -90,6 +118,8 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
       stages: (chains.find((chain) => chain.subject_kind === subject)?.stages ?? null) as FieldSetupData['chains'][number]['stages'],
     })),
     kioskLinkBase: '/kiosk',
+    canManageKiosks,
+    canEditPolicy,
   }
 }
 
@@ -114,6 +144,8 @@ export function fieldSetupSpec(data: FieldSetupData): PageSpec {
             kiosks: data.kiosks,
             chains: data.chains,
             kioskLinkBase: data.kioskLinkBase,
+            canManageKiosks: data.canManageKiosks,
+            canEditPolicy: data.canEditPolicy,
           }),
         ],
       }),
