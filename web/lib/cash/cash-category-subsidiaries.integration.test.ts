@@ -13,7 +13,7 @@ import {
   dropScratchOrg,
 } from "@openbooks/engine/src/testing/fixtures.ts";
 
-const { cashPosition } = await import("./cash-position.ts");
+const [{ cashPosition }, { apPosition }, { arPosition }] = await Promise.all([import("./cash-position.ts"), import("./ap-position.ts"), import("./ar-position.ts")]);
 
 const SETTINGS = { weeklyCap: "0.0000", restrictToSafe: false } as const;
 
@@ -55,7 +55,6 @@ test("subsidiary cash views attribute manual and formula categories", { skip: !p
     const ids = (position: { categories: Array<{ id: string }> }) =>
       position.categories.map((c) => c.id).sort();
     await withOrgContext(org.orgId, async () => {
-      // Whole-org (unscoped, unrestricted) views show everything.
       const consolidated = await cashPosition(
         org.orgId, 4, SETTINGS, org.date, undefined, null, true,
       );
@@ -63,7 +62,11 @@ test("subsidiary cash views attribute manual and formula categories", { skip: !p
       const restricted = await cashPosition(
         org.orgId, 4, SETTINGS, org.date, [branchId], new Set([branchId]), false,
       );
-      assert.deepEqual(ids(restricted), ["cat-branch"]);
+      assert.deepEqual([
+        ids(restricted),
+        ids(await apPosition(org.orgId, 4, SETTINGS, org.date, new Set([branchId]))),
+        ids(await arPosition(org.orgId, 4, SETTINGS, org.date, new Set([branchId]))),
+      ], [["cat-branch"], ["cat-branch"], ["cat-branch"]]);
       const branchCat = restricted.categories.find((c) => c.id === "cat-branch")!;
       assert.ok(branchCat.total !== "0.0000", "the attributed category keeps its full value");
       // An unrestricted admin narrowing to one subsidiary keeps today's
