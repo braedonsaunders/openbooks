@@ -1439,6 +1439,8 @@ export async function importStatement(
     sourceEvidence?: StatementSourceEvidence | null;
     dryRun?: boolean;
     beforeWrite?: (executor: SqlExecutor) => Promise<void>;
+    /** Domain fence checked on the import writer immediately before persistence. */
+    writeFence?: (tx: SqlExecutor) => Promise<void>;
   },
   ctx: BankingContext,
 ): Promise<ImportResult> {
@@ -1513,6 +1515,7 @@ export async function importStatement(
       );
     }
     await opts.beforeWrite?.(tx);
+    await opts.writeFence?.(tx);
     const sourceAlreadyImported = Boolean((await tx.execute<{ imported: boolean }>(sql`
       select exists (
         select 1

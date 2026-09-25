@@ -10,6 +10,7 @@ import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { randomUUID } from 'node:crypto'
+import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpWatchFolderOverlapRefusal } from '@openbooks/engine/src/sftp/watch-folders.ts'
 
 export const runtime = 'nodejs'
 const FORMATS = new Set(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940'])
@@ -97,7 +98,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Reconcilable accounts require an explicit currency before statement import or reconciliation' }, { status: 422 })
   }
   const format = FORMATS.has(String(body.format)) ? body.format : 'auto'
-  const folder = (String(body.folder ?? 'inbound').trim() || 'inbound').replace(/^\/+|\/+$/g, '')
+  let folder: string
+  try {
+    folder = normalizeSftpWatchFolder(String(body.folder ?? 'inbound').trim() || 'inbound')
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 })
+  }
   // The one external account identifier this schedule accepts. Stored
   // canonical (whitespace-blind, case-blind) so the import comparison
   // cannot be smuggled past spacing or case; absent stays null (an
@@ -105,6 +111,70 @@ export async function POST(req: Request) {
   const expectedExternalAccountId = normalizeExternalAccountId(expectedExternalAccountInput)
   try {
     const r = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-schedule-folders:' + user.orgId + ':' + body.sftpServerId}, 0))`)
+      const eligibility = (await tx.execute<{
+        server_active: boolean;
+        bank_feeds_on: boolean;
+        account_subsidiary_id: string | null;
+        account_currency: string | null;
+        account_reconcilable: boolean;
+        account_active: boolean;
+        account_summary: boolean;
+      }>(sql`
+        select sv.is_active as server_active,
+               case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end as bank_feeds_on,
+               a.subsidiary_id as account_subsidiary_id, a.currency_restriction as account_currency,
+               a.reconcilable as account_reconcilable, a.is_active as account_active, a.is_summary as account_summary
+          from sftp_servers sv join orgs o on o.id = sv.org_id
+          join accounts a on a.org_id = sv.org_id and a.id = ${body.accountId}
+         where sv.id = ${body.sftpServerId} and sv.org_id = ${user.orgId}
+         for share of sv, o, a
+      `)).rows[0]
+      if (!eligibility) return { notFound: true as const }
+      if (!eligibility.account_reconcilable || !eligibility.account_active || eligibility.account_summary) {
+        return { ineligible: true as const }
+      }
+      if (!eligibility.server_active || !eligibility.bank_feeds_on) {
+        return { conflict: 'SFTP server or bank feeds changed while the schedule was being created; enable bank feeds before retrying' }
+      }
+      const txScope = guardSubsidiaryScope(gate, eligibility.account_subsidiary_id)
+      if (txScope) return { conflict: 'Account is outside the caller’s subsidiary scope' }
+      if (!eligibility.account_currency) {
+        return { conflict: 'Reconcilable accounts require an explicit currency before statement import or reconciliation' }
+      }
+      const siblings = (await tx.execute<{ id: string; folder: string; account_label: string }>(sql`
+        select sc.id, sc.folder,
+               coalesce(nullif(a.number, ''), a.name, sc.account_id::text) as account_label
+          from sftp_import_schedules sc
+          join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
+         where sc.org_id = ${user.orgId} and sc.sftp_server_id = ${body.sftpServerId}
+           and sc.is_active
+         for update of sc
+      `)).rows
+      const siblingRefs = siblings.map((row) => ({
+        id: row.id,
+        folder: row.folder,
+        accountLabel: row.account_label,
+      }))
+      let overlap: ReturnType<typeof findSftpWatchFolderOverlap>
+      try {
+        overlap = findSftpWatchFolderOverlap(folder, siblingRefs)
+      } catch {
+        const invalid = siblings.find((row) => {
+          try {
+            normalizeSftpWatchFolder(row.folder)
+            return false
+          } catch {
+            return true
+          }
+        })
+        return {
+          conflict: `SFTP schedule '${invalid?.id ?? ''}' has invalid folder '${invalid?.folder ?? ''}'; deactivate or delete it before creating another route`,
+        }
+      }
+      if (overlap) {
+        return { conflict: sftpWatchFolderOverlapRefusal(folder, overlap) }
+      }
       const inserted = (await tx.execute<{ id: string } & Record<string, unknown>>(sql`
       insert into sftp_import_schedules (org_id, sftp_server_id, account_id, format, folder, csv_mapping, expected_external_account_id, created_by)
       values (${user.orgId}, ${body.sftpServerId}, ${body.accountId}, ${format}, ${folder},
@@ -122,9 +192,15 @@ export async function POST(req: Request) {
         actorId: user.id,
         requestId: requestId(req),
       }, tx)
-      return inserted
+      return { inserted }
     })
-    return NextResponse.json({ id: r.id })
+    if ('notFound' in r) return NextResponse.json({ error: 'SFTP server or account not found' }, { status: 404 })
+    if ('ineligible' in r) return NextResponse.json({ error: 'Account not found or not reconcilable' }, { status: 422 })
+    if ('conflict' in r) {
+      const status = r.conflict === 'Account is outside the caller’s subsidiary scope' ? 404 : 409
+      return NextResponse.json({ error: r.conflict }, { status })
+    }
+    return NextResponse.json({ id: r.inserted.id })
   } catch (e) {
     // A parent deleted between the checks above and the insert still refuses
     // at the storage layer (0242 composite FKs) — surface the same typed

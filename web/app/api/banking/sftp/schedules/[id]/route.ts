@@ -2,8 +2,9 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { runDueSftpImports } from '@openbooks/engine/src/sftp/import-job.ts'
+import { runDueSftpImports, sftpImportScheduleRunLockKey } from '@openbooks/engine/src/sftp/import-job.ts'
 import { SFTP_UNBOUND_SCHEDULE_NOTICE_KIND, sftpUnboundScheduleNoticeHref } from '@openbooks/engine/src/sftp/schedule-notice.ts'
+import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpWatchFolderOverlapRefusal } from '@openbooks/engine/src/sftp/watch-folders.ts'
 import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
 import { auditSetupChange } from '../../../../../../lib/setup/audit'
 import { randomUUID } from 'node:crypto'
@@ -139,10 +140,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const canonical = normalizeExternalAccountId(body.expectedExternalAccountId) ?? null
     const bound = await db.transaction(async (tx) => {
+      const route = (await tx.execute<{ sftp_server_id: string }>(sql`
+        select sftp_server_id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}
+      `)).rows[0]
+      if (!route) return null
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`sftp-schedule-folders:${user.orgId}:${route.sftp_server_id}`}, 0))`)
+      const runLock = (await tx.execute<{ acquired: boolean }>(sql`
+        select pg_try_advisory_xact_lock(hashtextextended(${sftpImportScheduleRunLockKey(user.orgId, id)}, 0)) as acquired
+      `)).rows[0]?.acquired
+      if (!runLock) return { busy: true as const }
       const before = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         select * from sftp_import_schedules where id = ${id} and org_id = ${user.orgId} for update
       `)).rows[0]
       if (!before) return null
+      const account = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from accounts
+         where id = ${before.account_id} and org_id = ${user.orgId}
+         for share
+      `)).rows[0]
+      if (!account || guardSubsidiaryScope(gate, account.subsidiary_id)) return { scope: true as const }
       if (before.run_claim_token) return { busy: true as const }
       const after = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         update sftp_import_schedules set expected_external_account_id = ${canonical}, updated_at = now(), updated_by = ${user.id}
@@ -162,6 +178,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return after
     })
     if (!bound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if ('scope' in bound) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if ('busy' in bound) {
       return NextResponse.json(
         { error: 'This schedule is being scanned; wait for the scan to finish before changing its expected bank account.' },
@@ -192,13 +209,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (runScoped) return runScoped
     // The scan itself is engine-initiated (system-actor provenance); triggering
     // it does not turn this operator into the statements' importer.
-    const runs = await runDueSftpImports(user.orgId, id)
+    const runs = await runDueSftpImports(user.orgId, id, {
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null,
+    })
     const mine = runs.find((r) => r.scheduleId === id)
     if (mine?.alreadyRunning) {
       return NextResponse.json(
         { error: mine.errors[0], code: 'SFTP_IMPORT_ALREADY_RUNNING' },
         { status: 409 },
       )
+    }
+    if (mine?.notRun === 'account-scope') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (mine?.notRun === 'inactive') return await refuseUnexecutedRun(id, user.orgId)
+    if (mine?.notRun === 'configuration-conflict') {
+      return NextResponse.json({ error: mine.errors[0] ?? 'SFTP schedule configuration prevents this run.' }, { status: 409 })
     }
     if (mine) return NextResponse.json({ ok: true, result: mine })
     // No scan executed for this schedule: the engine deliberately excludes
@@ -220,12 +244,70 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // check a missing or foreign-tenant id would report {ok:true} while no read
   // can observe any effect. Refuse exactly like the run branch above.
   const updated = await db.transaction(async (tx) => {
+    const route = (await tx.execute<{ sftp_server_id: string }>(sql`
+      select sftp_server_id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}
+    `)).rows[0]
+    if (!route) return null
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-schedule-folders:' + user.orgId + ':' + route.sftp_server_id}, 0))`)
+    const runLock = (await tx.execute<{ acquired: boolean }>(sql`
+      select pg_try_advisory_xact_lock(hashtextextended(${sftpImportScheduleRunLockKey(user.orgId, id)}, 0)) as acquired
+    `)).rows[0]?.acquired
+    if (!runLock) return { busy: true as const }
     const before = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
       select * from sftp_import_schedules where id = ${id} and org_id = ${user.orgId} for update
     `)).rows[0]
     if (!before) return null
+    const account = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from accounts
+       where id = ${before.account_id} and org_id = ${user.orgId}
+       for share
+    `)).rows[0]
+    if (!account || guardSubsidiaryScope(gate, account.subsidiary_id)) return { scope: true as const }
+    // The schedule lock proves no scan still owns this claim. A token left by
+    // a worker that died is therefore stale and can be invalidated safely.
+    if (before.run_claim_token) {
+      await tx.execute(sql`
+        update sftp_import_schedules
+           set run_claim_token = null, run_claimed_at = null
+         where id = ${id} and org_id = ${user.orgId}
+      `)
+    }
+    const activate = body.isActive !== false
+    if (activate && before.is_active === false) {
+      const siblings = (await tx.execute<{ id: string; folder: string; account_label: string }>(sql`
+        select sc.id, sc.folder,
+               coalesce(nullif(a.number, ''), a.name, sc.account_id::text) as account_label
+          from sftp_import_schedules sc
+          join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
+         where sc.org_id = ${user.orgId} and sc.sftp_server_id = ${before.sftp_server_id}
+           and sc.is_active and sc.id <> ${id}
+         for update of sc
+      `)).rows
+      const siblingRefs = siblings.map((row) => ({
+        id: row.id,
+        folder: row.folder,
+        accountLabel: row.account_label,
+      }))
+      let overlap: ReturnType<typeof findSftpWatchFolderOverlap>
+      try {
+        overlap = findSftpWatchFolderOverlap(String(before.folder), siblingRefs)
+      } catch {
+        const invalid = siblings.find((row) => {
+          try {
+            normalizeSftpWatchFolder(row.folder)
+            return false
+          } catch {
+            return true
+          }
+        })
+        return { conflict: `SFTP schedule '${invalid?.id ?? ''}' has invalid folder '${invalid?.folder ?? ''}'; deactivate or delete it before activating another route` }
+      }
+      if (overlap) {
+        return { conflict: sftpWatchFolderOverlapRefusal(String(before.folder), overlap) }
+      }
+    }
     const after = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
-      update sftp_import_schedules set is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
+      update sftp_import_schedules set is_active = ${activate}, updated_at = now(), updated_by = ${user.id}
        where id = ${id} and org_id = ${user.orgId}
       returning *
     `)).rows[0]
@@ -242,6 +324,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return after
   })
   if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if ('scope' in updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if ('busy' in updated) {
+    return NextResponse.json(
+      { error: 'This schedule is being scanned; wait for the scan to finish before changing its active state.' },
+      { status: 409 },
+    )
+  }
+  if ('conflict' in updated) return NextResponse.json({ error: updated.conflict }, { status: 409 })
   return NextResponse.json({ ok: true })
 }
 
@@ -258,10 +348,25 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   // reporting {ok:true}. The org-scoped predicate keeps foreign ids
   // indistinguishable from absent.
   const deleted = await db.transaction(async (tx) => {
+    const route = (await tx.execute<{ sftp_server_id: string }>(sql`
+      select sftp_server_id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}
+    `)).rows[0]
+    if (!route) return null
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-schedule-folders:' + user.orgId + ':' + route.sftp_server_id}, 0))`)
+    const runLock = (await tx.execute<{ acquired: boolean }>(sql`
+      select pg_try_advisory_xact_lock(hashtextextended(${sftpImportScheduleRunLockKey(user.orgId, id)}, 0)) as acquired
+    `)).rows[0]?.acquired
+    if (!runLock) return { busy: true as const }
     const before = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
       select * from sftp_import_schedules where id = ${id} and org_id = ${user.orgId} for update
     `)).rows[0]
     if (!before) return null
+    const account = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from accounts
+       where id = ${before.account_id} and org_id = ${user.orgId}
+       for share
+    `)).rows[0]
+    if (!account || guardSubsidiaryScope(gate, account.subsidiary_id)) return { scope: true as const }
     const removed = (await tx.execute<{ id: string }>(sql`
       delete from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}
       returning id
@@ -279,6 +384,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return removed
   })
   if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if ('scope' in deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if ('busy' in deleted) {
+    return NextResponse.json(
+      { error: 'This schedule is being scanned; wait for the scan to finish before deleting it.' },
+      { status: 409 },
+    )
+  }
   // A deleted schedule has no setting to visit: resolve its named notice so
   // a stale item cannot outlive the schedule it names.
   await db.execute(sql`

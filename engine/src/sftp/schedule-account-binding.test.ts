@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assertScheduleAccountBinding } from "./import-job.ts";
+import { findSftpWatchFolderOverlap } from "./watch-folders.ts";
 
 /**
- * The schedule account-identity gate, unit-pinned: a stranger file for
- * another account refuses naming the file, the found account, and the
- * expected one; an identified file with no binding refuses with the
- * schedule remedy; an unidentified file (CSV) relies on folder isolation
- * and passes. The live-folder behavior is covered by
- * sftp-import-account-binding.integration.test.ts.
+ * Account identity and identifier-less folder isolation; live imports are
+ * covered by sftp-import-account-binding.integration.test.ts.
  */
 
 test("a match across spacing and case imports", () => {
@@ -50,6 +47,7 @@ test("an identified file with no binding refuses with the schedule remedy", () =
 });
 
 test("an unidentified file relies on folder isolation and passes", () => {
+  assert.ok(findSftpWatchFolderOverlap("bank", [{ id: "schedule-child", folder: "bank/east", accountLabel: "A" }]));
   assertScheduleAccountBinding({
     scheduleId: "sched-1",
     filename: "statement.csv",

@@ -11,6 +11,7 @@ import { pgErrorCode } from '../../../../../lib/setup/coerce'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { sftpImportScheduleRunLockKey } from '@openbooks/engine/src/sftp/import-job.ts'
 
 export const runtime = 'nodejs'
 
@@ -108,6 +109,40 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         refused = NextResponse.json({ error: rootOverlapRefusal(before.root_prefix, hit), code: 'sftp_root_overlap' }, { status: 409 })
         return
       }
+    }
+    if (!nextActive && before.is_active) {
+      // A server disable must fence every live schedule scan before it
+      // revokes the shared login. Each scan owns the matching session lock
+      // through its last import and archive operation; try-locking returns a
+      // truthful 409 instead of disabling the server mid-run. A claim token
+      // with no live lock belongs to a dead worker and is invalidated here.
+      const schedules = (await tx.execute<{ id: string }>(sql`
+        select id from sftp_import_schedules
+         where org_id = ${user.orgId} and sftp_server_id = ${id}
+         order by id
+      `)).rows
+      for (const schedule of schedules) {
+        const acquired = (await tx.execute<{ acquired: boolean }>(sql`
+          select pg_try_advisory_xact_lock(hashtextextended(${sftpImportScheduleRunLockKey(user.orgId, schedule.id)}, 0)) as acquired
+        `)).rows[0]?.acquired
+        if (!acquired) {
+          refused = NextResponse.json(
+            { error: 'A statement import is still running on this server — wait for the scan to finish before disabling it.', code: 'SFTP_IMPORT_RUNNING' },
+            { status: 409 },
+          )
+          return
+        }
+      }
+      await tx.execute(sql`
+        select id from sftp_import_schedules
+         where org_id = ${user.orgId} and sftp_server_id = ${id}
+         order by id for update
+      `)
+      await tx.execute(sql`
+        update sftp_import_schedules
+           set run_claim_token = null, run_claimed_at = null
+         where org_id = ${user.orgId} and sftp_server_id = ${id}
+      `)
     }
     const after = (await tx.execute<SftpServerAuditRow & { id: string }>(sql`
       update sftp_servers set is_active = ${nextActive}, updated_at = now(), updated_by = ${user.id}
