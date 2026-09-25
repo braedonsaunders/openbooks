@@ -10,6 +10,7 @@ import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
 import { crewToday } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 // HR-20 end
 import { isFeatureEnabled } from '../../../lib/features'
+import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import type { ProjectCockpitData } from './ProjectDrawer'
 import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money/money.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -119,17 +120,14 @@ export async function loadProjectCockpit(
          and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
        order by unit_number limit 2000`)
       : Promise.resolve({ rows: [] }),
-    // Operators an equipment charge can be attributed to. Active, non-terminated
-    // employees — the same population payroll pays, because that is who an
-    // equipment incentive can actually reach.
+    // Operators an equipment charge can be attributed to: active employees
+    // the caller may see. The org-wide join disclosed out-of-scope staff, so
+    // this rides the scoped party options like every other party picker.
     equipmentEnabled
-      ? db.execute<ChargeOperatorRow>(sql`
-      select p.id, p.display_name as "displayName"
-        from parties p
-        join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
-       where p.org_id = ${orgId} and er.is_active and er.terminated_on is null
-       order by p.display_name limit 2000`)
-      : Promise.resolve({ rows: [] }),
+      ? listScopedPartyOptions(orgId, scope, { role: 'employee', activeOnly: true }).then((rows) =>
+          rows.map((row) => ({ id: row.id, displayName: row.display_name })),
+        )
+      : Promise.resolve([] as ChargeOperatorRow[]),
     db.execute<RecognitionStatusRow>(sql`
       select c.id as contract_id, o.percent_complete, o.allocated_price,
              coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
@@ -164,7 +162,7 @@ export async function loadProjectCockpit(
   const charges = chargeRes.rows
   const items = itemRes.rows
   const equipment = equipmentRes.rows
-  const operators = operatorRes.rows
+  const operators = operatorRes
 
   // Recognition status for the Financials tab card — shown for fixed-price /
   // percent-complete project types; posting stays with the central run.
