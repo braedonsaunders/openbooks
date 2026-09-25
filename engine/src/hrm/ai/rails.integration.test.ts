@@ -377,13 +377,7 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     assert.ok(trace.sources.some((s) => s.kind === "pay_stub" && s.id === stubCur));
     assert.ok((await decisionCount(org.orgId)) > before, "explain-pay must log its decision");
 
-    // Explaining another person's pay without a grant refuses, NAMING the
-    // missing permission. The class is deliberately not pinned: the scope
-    // check delegates to requireHrmSelfRead, so the refusal is the shared
-    // HrmAuthorizationError every other HRM read raises, and hrmRefusal
-    // already surfaces its message to the caller intact. Asserting the
-    // message is the stronger test anyway -- an instanceof pin passes for
-    // a refusal that says nothing useful.
+    // Explaining another person's pay without a grant refuses by permission name.
     const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
     await assert.rejects(
       explainPay(db, { orgId: org.orgId, actorId: outsider, employmentId }),
@@ -690,6 +684,11 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
         province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
       values (${stubId}, ${org.orgId}, ${runId}, ${partyA}, ${empA},
         'ON', 26, '2026-09-30', 2026, 'CAD', 7123.45, 5401.67, 800)`);
+    assert.equal((await db.execute<{ nullable: string }>(sql`
+      select is_nullable as nullable from information_schema.columns
+       where table_schema = 'public' and table_name = 'pay_stubs' and column_name = 'employment_id'`)).rows[0]?.nullable, "NO");
+    await assert.rejects(explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empB, stubId }),
+      /matched no row for this employment/);
     const trace = await explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empA });
     assert.equal(trace.gross, "7123.4500");
     const summaries = (await listDecisions(db, {
