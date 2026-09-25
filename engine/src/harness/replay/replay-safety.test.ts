@@ -1,20 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
+import { rebuildPasses } from "./rebuild.ts";
 
-const cli = readFileSync("engine/src/harness/replay/cli.ts", "utf8");
-const exporter = readFileSync("engine/src/harness/replay/export.ts", "utf8");
-const rebuild = readFileSync("engine/src/harness/replay/rebuild.ts", "utf8");
-
-test("replay commands require an explicit dedicated simulation database", () => {
-  assert.match(cli, /assertSimEnabled\(\)/);
-  assert.match(cli, /assertDedicatedSimDatabase\("replay validation harness"\)/);
-  assert.match(exporter, /await assertSimOrg\(world\.orgId\)/);
-});
-
+// A diagnostic GL fallback is not a successful native rebuild: the report
+// must fail whenever anything fell back. Same predicate rebuildDataset uses,
+// so this fails when the rule weakens. (Replay CLI sim guards are covered
+// behaviorally in engine/src/sim/db-guard.test.ts.)
 test("a diagnostic GL fallback can never produce a passing replay report", () => {
-  const passAssignment = rebuild.match(/report\.pass\s*=[\s\S]*?return \{ report, world: corpusWorld \};/)?.[0] ?? "";
-  assert.match(passAssignment, /report\.fallbacks\.length === 0/);
-  assert.match(passAssignment, /report\.hardFailures\.length === 0/);
-  assert.match(passAssignment, /integrity\.pass/);
+  const clean = { fallbacks: [], hardFailures: [], trialBalanceDiffs: [], openBalanceDiffs: [], projectDiffs: [] };
+  assert.equal(rebuildPasses(clean, true), true);
+  assert.equal(rebuildPasses({ ...clean, fallbacks: [{ event: "e1", kind: "invoice", reason: "native post failed" }] }, true), false);
 });
