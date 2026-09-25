@@ -1,9 +1,14 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
-import { cmp } from "../money/money.ts";
+import { cmp, fromUnits, roundDiv, toUnits } from "../money/money.ts";
 import { PayrollPackError, payrollPack, statutoryAssessment } from "./packs.ts";
 import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
-import { assertAggregateLeviesValid, assessAggregateLevyStub } from "./employer-aggregate.ts";
+import {
+  assertAggregateLeviesValid,
+  assessAggregateLevyStub,
+  taxMonthsElapsed,
+} from "./employer-aggregate.ts";
+import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
 import { resolveStatutoryRates } from "./statutory-rates.ts";
 import type { PayrollEmployerAggregateLevy } from "./packs.ts";
 import type { PushStatutoryFn, StubLine } from "./statutory-context.ts";
@@ -23,6 +28,11 @@ import type { AggregateStubPriors } from "./employer-aggregate.ts";
  *   stub factors, plus the pack's declared opening field for a mid-year
  *   adopter — resolved through the opening registry, so the generic layer
  *   never names a pack's column;
+ * - for an accruing allowance: the levy already paid in scope (committed and
+ *   own-document amount factors), the annual allocated share (the levy's
+ *   subsidiary-scoped employer fact at the pay date — an undeclared share
+ *   refuses through the fact's own required flag), and the tax months
+ *   elapsed at the pay date;
  * - tenant values, resolved ONCE per run by the caller through
  *   `resolveStatutoryRates` and passed down (never a query per employee).
  *
@@ -45,6 +55,10 @@ export interface AggregatePriorsInput {
   region: string;
   levies: readonly PayrollEmployerAggregateLevy[];
   tenantValues: Record<string, Record<string, string>>;
+  /** The paying legal employer (scopes accruing-allowance fact reads). */
+  subsidiaryId?: string;
+  /** ISO pay date (counts elapsed tax months for accruing allowances). */
+  payDate?: string;
 }
 
 export interface ResolvedAggregateLevy {
@@ -81,6 +95,12 @@ export async function assessStubAggregateLevies(input: {
   region: string;
   gross: string;
   taxableGross: string;
+  /** NIC-able earnings leg (prices `pensionable`-source bases). */
+  pensionable?: string;
+  /** Schedule periodicity (selects `pensionable`-source period floors). */
+  periodsPerYear?: number;
+  /** The paying legal employer (scopes accruing-allowance fact reads). */
+  subsidiaryId?: string;
   lines: readonly StubLine[];
   pushStatutory: PushStatutoryFn;
   /** ISO pay date the tenant-rate resolution is as-of; absent reads current. */
@@ -133,10 +153,14 @@ export async function assessStubAggregateLevies(input: {
     region: input.region,
     levies: leviesToAssess,
     tenantValues,
+    subsidiaryId: input.subsidiaryId,
+    payDate: input.payDate,
   });
   const factors: Record<string, string> = {};
   for (const { levy, priors } of resolved) {
-    const stubBase = levy.base.source === "gross" ? input.gross : input.taxableGross;
+    const stubBase = levy.base.source === "gross" ? input.gross
+      : levy.base.source === "taxable" ? input.taxableGross
+      : pensionableStubBase(levy, input.pensionable, input.periodsPerYear);
     const assessed = assessAggregateLevyStub(levy, stubBase, priors);
     if (cmp(assessed.amount, "0") !== 0) {
       input.pushStatutory(
@@ -151,7 +175,10 @@ export async function assessStubAggregateLevies(input: {
 export async function resolveAggregateLevyPriors(
   input: AggregatePriorsInput,
 ): Promise<ResolvedAggregateLevy[]> {
-  const { tx, orgId, country, documentId, employeePartyId, taxYear, region, levies, tenantValues } = input;
+  const {
+    tx, orgId, country, documentId, employeePartyId, taxYear, region,
+    levies, tenantValues, subsidiaryId, payDate,
+  } = input;
   return Promise.all(levies.map(async (levy) => ({
     levy,
     priors: {
@@ -165,8 +192,154 @@ export async function resolveAggregateLevyPriors(
         })
         : "0",
       tenantValues,
+      accruing: levy.allowance?.kind === "accruing_allowance"
+        ? await resolveAccruingInputs(tx, {
+          orgId, country, subsidiaryId, payDate, documentId, taxYear, levy,
+          region: levy.base.scope === "region" ? region : null,
+        })
+        : undefined,
     },
   })));
+}
+
+/**
+ * This stub's share of a pensionable-source base: the NIC-able leg less the
+ * year's period floor for the schedule periodicity, floored at zero (base
+ * below the floor contributes nothing, exactly like sub-threshold earnings
+ * attract no secondary charge).
+ */
+function pensionableStubBase(
+  levy: PayrollEmployerAggregateLevy,
+  pensionable: string | undefined,
+  periodsPerYear: number | undefined,
+): string {
+  if (pensionable === undefined || periodsPerYear === undefined) {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" prices a pensionable base the run did not resolve — `
+      + "engine defect",
+    );
+  }
+  const floor = levy.base.periodFloor;
+  if (!floor) {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" prices a pensionable base with no period floors — `
+      + "engine defect",
+    );
+  }
+  const threshold = periodsPerYear === 52 ? floor.weekly
+    : periodsPerYear === 12 ? floor.monthly
+    : periodsPerYear === 1 ? floor.annual
+    : null;
+  if (threshold === null) {
+    if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
+      throw new PayrollPackError(
+        `employer-aggregate levy "${levy.key}" needs a positive integer periods-per-year, `
+        + `got ${periodsPerYear}`,
+      );
+    }
+    // Unlisted periodicity prorates the annual floor to the penny, the way
+    // the agency prints weekly and monthly thresholds.
+    return pensionableLessFloor(
+      levy.key,
+      pensionable,
+      fromUnits(roundDiv(toUnits(floor.annual), BigInt(periodsPerYear) * 100n) * 100n),
+    );
+  }
+  return pensionableLessFloor(levy.key, pensionable, threshold);
+}
+
+function pensionableLessFloor(levyKey: string, pensionable: string, threshold: string): string {
+  let base: bigint;
+  try {
+    base = toUnits(pensionable) - toUnits(threshold);
+  } catch {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levyKey}" prices a pensionable base that is not decimal money — `
+      + "engine defect",
+    );
+  }
+  return base <= 0n ? "0" : fromUnits(base);
+}
+
+/** Accruing-allowance inputs: paid in scope, the allocated share, months elapsed. */
+async function resolveAccruingInputs(
+  tx: Pick<typeof db, "execute">,
+  input: {
+    orgId: string;
+    country: string;
+    subsidiaryId: string | undefined;
+    payDate: string | undefined;
+    documentId: string;
+    taxYear: number;
+    levy: PayrollEmployerAggregateLevy;
+    region: string | null;
+  },
+): Promise<{ priorAmount: string; allowanceAnnual: string; monthsElapsed: number }> {
+  const { orgId, country, subsidiaryId, payDate, documentId, taxYear, levy, region } = input;
+  if (levy.allowance?.kind !== "accruing_allowance") {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" resolves accruing inputs for a non-accruing allowance — `
+      + "engine defect",
+    );
+  }
+  if (!subsidiaryId) {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" needs the paying legal employer to resolve its `
+      + "allowance share — assign the payroll run to its legal employer",
+    );
+  }
+  if (payDate === undefined || payDate === "") {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" accrues its allowance against the pay date, which the `
+      + "run did not resolve — engine defect",
+    );
+  }
+  const allowanceAnnual = await resolveStoredEmployerFact({
+    tx, orgId, subsidiaryId, country,
+    factKey: levy.allowance.factKey, asOf: payDate,
+  });
+  if (allowanceAnnual === null) {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" has no allowance share recorded for this legal employer `
+      + `— record it in Payroll Setup → Employer facts (${levy.allowance.factKey})`,
+    );
+  }
+  return {
+    priorAmount: await employerPriorAmount(tx, { orgId, country, documentId, taxYear, levy, region }),
+    allowanceAnnual,
+    monthsElapsed: taxMonthsElapsed(payDate, levy.allowance.yearStartMonth, levy.allowance.yearStartDay),
+  };
+}
+
+/** Levy already paid in scope: opening carry-in plus committed and own-document amount factors. */
+async function employerPriorAmount(
+  tx: Pick<typeof db, "execute">,
+  input: {
+    orgId: string;
+    country: string;
+    documentId: string;
+    taxYear: number;
+    levy: PayrollEmployerAggregateLevy;
+    region: string | null;
+  },
+): Promise<string> {
+  // No country filter: the stub-factor half of the match reads org-wide like
+  // every aggregate levy (see employerPriorBase below); only the opening
+  // carry-in subquery there is country-scoped, and no paid carry-in column
+  // exists, so `input.country` is intentionally unread here.
+  const { orgId, documentId, taxYear, levy, region } = input;
+  const amountKey = levy.factorKey;
+  const rows = (await tx.execute<{ prior: string }>(sql`
+    select coalesce(sum((s.factors->>${amountKey})::numeric), 0) as prior
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear}
+       and (${region}::text is null or s.province = ${region})
+       and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
+       and d.status <> 'voided'
+  `));
+  return rows.rows[0]!.prior;
 }
 
 /** Employer base in scope: opening carry-in plus committed and own-document factors. */

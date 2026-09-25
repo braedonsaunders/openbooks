@@ -11,6 +11,8 @@
  *   employer (secondary), computed end to end for 2026/27, 2025/26 and
  *   2024/25 — each year from its own transcribed tables (year-tables.ts).
  *   Student and postgraduate loans use the declared NIC-able earnings base.
+ *   The Apprenticeship Levy accrues per stub against the employer aggregate
+ *   through the generic channel (see ./employer-levies.ts).
  *   Workplace-pension assessment is effective-dated; cases with required
  *   contributions refuse by name until employee/employer scheme amounts are
  *   calculated. The Employment Allowance (£10,500) is tenant-entered, never computed
@@ -41,6 +43,8 @@ import type {
   PayrollStatutorySlot,
 } from "../packs.ts";
 import { computeGbStatutory, GB_FACTOR_LABELS } from "./compute-statutory.ts";
+import { GB_EMPLOYER_FACTS } from "./employer-facts.ts";
+import { gbEmployerAggregateLevies } from "./employer-levies.ts";
 import { gbPackFilings } from "./filings.ts";
 import { GB_EMPLOYEE_FACTS } from "./employee-facts.ts";
 import {
@@ -143,6 +147,22 @@ export const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
       },
     ],
   },
+  {
+    key: "apprenticeship-levy",
+    // Paid to HMRC with the PAYE, like both NIC shares.
+    liabilityAccountRole: "payrollDeductions",
+    components: [
+      {
+        code: "APP-LEVY",
+        name: "Apprenticeship Levy",
+        systemKey: "apprenticeship_levy",
+        kind: "employer_contribution",
+        sequence: 211,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+    ],
+  },
 ];
 
 /**
@@ -237,5 +257,9 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   factorLabels: { ...GB_FACTOR_LABELS },
   // Statutory calculation facts are declared and produced by GB certificates.
   employeeFacts: GB_EMPLOYEE_FACTS,
-  employerFacts: [],
+  // The Apprenticeship Levy allowance share each legal employer declares.
+  employerFacts: GB_EMPLOYER_FACTS,
+  // The Apprenticeship Levy, assessed per stub against the employer
+  // aggregate through the generic channel (see ./employer-levies.ts).
+  employerAggregateLevies: gbEmployerAggregateLevies,
 };

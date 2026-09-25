@@ -27,9 +27,12 @@
  *   engine (minimum contributions ride each employer's scheme).
  * - Student-loan / postgraduate-loan annual thresholds: declared in
  *   calculate.ts by tax-year edition from HMRC's payroll technical
- *   specification and SL3 tables. Class 1A/1B, statutory sick/maternity pay,
- *   the apprenticeship levy and RTI mechanics likewise: named, declared
- *   nothing.
+ *   specification and SL3 tables. Class 1A/1B, statutory sick/maternity pay
+ *   and RTI mechanics likewise: named, declared nothing.
+ * - Apprenticeship Levy (0.5% above £3M, £15,000 allowance, EPS): computed
+ *   through the generic employer-aggregate channel (see ./employer-levies.ts
+ *   for the HMRC sources) — the allowance share rides the
+ *   `gb_apprenticeship_levy_allowance` employer fact, never this module.
  *
  * Region codes are ISO 3166-2:GB: ENG (England), SCT (Scotland), WLS (Wales),
  * NIR (Northern Ireland). Scotland is in `regionsWithOwnTables` because the
@@ -243,8 +246,9 @@ const GB_EMPLOYMENT_ALLOWANCE_SLOT: PayrollStatutoryRateSlot = {
   // allowance claims nothing and refuses nothing — refusing would stop every
   // GB run for a figure nothing prices.
   whenUnconfigured: "zero",
-  // No consumer yet: no employer-aggregate levy is declared, so nothing reads
-  // this back. Declared so the allowance is tenant-entered (the amount the
+  // No consumer yet: the Apprenticeship Levy reads its allowance from the
+  // gb_apprenticeship_levy_allowance employer fact, not this slot, so nothing
+  // reads this back. Declared so the allowance is tenant-entered (the amount the
   // employer claims, once eligible) rather than silently absent or, worse,
   // computed as though every employer qualified.
   systemKeys: [],

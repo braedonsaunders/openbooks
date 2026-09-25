@@ -76,10 +76,10 @@ test("certificates are a starter checklist and a coding notice, not a W-4 clone"
   assert.equal(taxCode.kind, "code");
 });
 
-test("slots declare PAYE, employee/employer NIC, and both loan repayments", () => {
+test("slots declare PAYE, employee/employer NIC, both loan repayments, and the Apprenticeship Levy", () => {
   assert.deepEqual(
     GB_PACK.statutorySlots.map((slot) => slot.key),
-    ["paye", "nic", "student-loans"],
+    ["paye", "nic", "student-loans", "apprenticeship-levy"],
   );
   const [paye, nic, loans] = GB_PACK.statutorySlots;
   assert.equal(paye!.components[0]!.assessedOn, "taxable_income");

@@ -105,6 +105,36 @@ test("sheltered stubs sequence room across the run in order", () => {
   assert.equal(cmp(second.amount, "5"), 0);
 });
 
+test("accruing allowance prices the cumulative method: flat percent of the whole base less accrued share less paid", () => {
+  // HMRC shape: £2.9M prior base, £100k this stub, £1,250 paid, £15,000
+  // allowance with 3 tax months elapsed (£3,750 accrued) at 0.5% —
+  // 0.5% × £3,000,000 − £3,750 − £1,250 = £10,000.00, stamping both factors.
+  const levy: PayrollEmployerAggregateLevy = {
+    key: "levy",
+    label: "Levy",
+    systemKey: "levy",
+    description: "Levy",
+    sequence: 280,
+    base: { source: "gross", scope: "org" },
+    timing: "per_run",
+    rate: { kind: "flat_percent", percent: "0.5" },
+    allowance: { kind: "accruing_allowance", factKey: "levy_allowance", yearStartMonth: 4, yearStartDay: 6 },
+    factorKey: "GB_LEVY",
+  };
+  assert.deepEqual(
+    assessAggregateLevyStub(levy, "100000.0000", {
+      ...PRIORS,
+      employerPriorBase: "2900000.0000",
+      accruing: { priorAmount: "1250.0000", allowanceAnnual: "15000.00", monthsElapsed: 3 },
+    }),
+    {
+      amount: "10000.0000",
+      assessable: "100000.0000",
+      factors: { GB_LEVY: "10000.0000", GB_LEVY_EARN: "100000.0000" },
+    },
+  );
+});
+
 test("per-employee cap binds on personal room, not employer room", () => {
   const priors: AggregateStubPriors = {
     ...PRIORS,
