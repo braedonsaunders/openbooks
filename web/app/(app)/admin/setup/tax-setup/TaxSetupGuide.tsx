@@ -100,7 +100,7 @@ export function TaxSetupGuide({
       if (anySelected) {
         // Deselect the country and all its subs.
         next.delete(countryPack)
-        c.subs.forEach((s) => next.delete(s.packCode))
+        countries.find((country) => country.country === c.country)?.subs.forEach((s) => next.delete(s.packCode))
       } else {
         next.add(countryPack)
       }
@@ -273,5 +273,4 @@ export function TaxSetupGuide({
     </div>
   )
 }
-
 
