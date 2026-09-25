@@ -184,7 +184,12 @@ export function LeaveDrawer({
             <p className="text-sm text-slate-600">{detail.request.decisionReason}</p>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            {detail.request.status === 'draft' ? (
+            {/* Submit and the evidence picker post routes guarded by
+                hrm.leave.request exactly (manage does not substitute), so
+                they ride the same gate as withdraw/cancel — a reader
+                without the grant sees the draft read-only, never a
+                hopeful Submit. */}
+            {canWithdrawCancel && detail.request.status === 'draft' ? (
               <div className="w-full space-y-2">
                 {detail.request.requiresAttachment ? (
                   <>
