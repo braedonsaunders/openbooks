@@ -216,9 +216,9 @@ function saveRateBody(overrides: Record<string, unknown> = {}): Record<string, u
     departmentId: null,
     subsidiaryId: null,
     currency: "CAD",
-    rate: 100,
+    rate: "100",
     basis: "hour",
-    annualHours: 2080,
+    annualHours: "2080",
     effectiveFrom: "2026-01-01",
     ...overrides,
   };
@@ -232,7 +232,7 @@ test("a restricted setup actor cannot change org-wide labor costing policy", asy
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: new Set([f.subsidiaryId]),
     };
-    const res = await PUT(putRequest({ settings: { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] } }));
+    const res = await PUT(putRequest({ settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] } }));
     assert.equal(res.status, 403);
     assert.deepEqual(await res.json(), { error: "requires unrestricted subsidiary access" });
     assert.equal(await storedPolicy(f.orgId), null);
@@ -285,7 +285,7 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
       allowedSubsidiaryIds: null,
     };
     const endCreated = await POST(postRequest(saveRateBody({ jobTitle: "Organization-wide field technician" })));
-    const deleteCreated = await POST(postRequest(saveRateBody({ rate: 125, effectiveFrom: "2026-02-01" })));
+    const deleteCreated = await POST(postRequest(saveRateBody({ rate: "125", effectiveFrom: "2026-02-01" })));
     assert.equal(endCreated.status, 200);
     assert.equal(deleteCreated.status, 200);
     const beforeRates = await storedRates(f.orgId);
@@ -316,7 +316,7 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
     const departmentId = (await db.execute<{ id: string }>(sql`
       insert into departments (org_id, name, is_active, subsidiary_id)
       values (${f.orgId}, 'Field crew', true, ${f.subsidiaryId}) returning id`)).rows[0]!.id;
-    const departmentCreated = await POST(postRequest(saveRateBody({ departmentId, rate: 140 })));
+    const departmentCreated = await POST(postRequest(saveRateBody({ departmentId, rate: "140" })));
     assert.equal(departmentCreated.status, 200);
     const departmentRateId = (await storedRates(f.orgId)).find((rate) => rate.rate === "140.0000")!.id;
     const departmentEnd = await POST(postRequest({ action: "end-rate", id: departmentRateId, effectiveTo: "2026-06-30" }));
@@ -441,10 +441,10 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
     const res = await PUT(putRequest({
       settings: {
         mode: "post",
-        hoursPerDay: 8.5,
-        annualHours: 2000,
+        hoursPerDay: "8.5",
+        annualHours: "2000",
         components: [
-          { key: "burden", name: "Statutory Burden", kind: "percent_of_wage", value: 13, scaleWithOvertime: true },
+          { key: "burden", name: "Statutory Burden", kind: "percent_of_wage", value: "13", scaleWithOvertime: true },
           { kind: "per_day", value: "75.50" },
         ],
       },
@@ -503,13 +503,13 @@ test("allowUnratedTime persists when explicitly set and rejects non-booleans", a
     };
 
     const res = await PUT(putRequest({
-      settings: { mode: "off", hoursPerDay: 8, annualHours: 2080, components: [], allowUnratedTime: true },
+      settings: { mode: "off", hoursPerDay: "8", annualHours: "2080", components: [], allowUnratedTime: true },
     }));
     assert.equal(res.status, 200);
     assert.equal((await storedPolicy(f.orgId))?.allowUnratedTime, true);
 
     const bad = await PUT(putRequest({
-      settings: { mode: "off", hoursPerDay: 8, annualHours: 2080, components: [], allowUnratedTime: "yes" },
+      settings: { mode: "off", hoursPerDay: "8", annualHours: "2080", components: [], allowUnratedTime: "yes" },
     }));
     assert.equal(bad.status, 422);
     // The rejected save left the stored opt-in exactly as it was.
@@ -542,18 +542,27 @@ test("a malformed component rejects the whole save and persists nothing", async 
     ];
     for (const components of malformedComponents) {
       const res = await PUT(putRequest({
-        settings: { mode: "post", hoursPerDay: 8, annualHours: 2080, components },
+        settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components },
         laborWip: f.wipAccount,
       }));
       assert.equal(res.status, 422, `expected 422 for components ${JSON.stringify(components)}`);
     }
 
+    // A JSON number is refused by name with the decimal-string remedy — the
+    // rounded IEEE-754 value must never look exact.
+    const numeric = await PUT(putRequest({
+      settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [{ kind: "per_hour", value: 5 }] },
+      laborWip: f.wipAccount,
+    }));
+    assert.equal(numeric.status, 422);
+    assert.match(((await numeric.json()) as { error: string }).error, /decimal string/);
+
     // Structural refusals around the component list itself.
     const tooMany = Array.from({ length: 21 }, (_, i) => ({ kind: "per_hour", value: i }));
     for (const settings of [
-      { mode: "post", hoursPerDay: 8, annualHours: 2080, components: tooMany },
-      { mode: "post", hoursPerDay: 8, annualHours: 2080, components: "burden" },
-      { mode: "sometimes", hoursPerDay: 8, annualHours: 2080, components: [] },
+      { mode: "post", hoursPerDay: "8", annualHours: "2080", components: tooMany },
+      { mode: "post", hoursPerDay: "8", annualHours: "2080", components: "burden" },
+      { mode: "sometimes", hoursPerDay: "8", annualHours: "2080", components: [] },
     ]) {
       const res = await PUT(putRequest({ settings }));
       assert.equal(res.status, 422, `expected 422 for settings ${JSON.stringify(settings)}`);
@@ -579,7 +588,7 @@ test("a valid save with an invalid control account persists NOTHING — not even
     // Regression: the old handler had already written laborCosting before it
     // validated the account ids, so this 422 still persisted the policy.
     const badUuid = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: 7.5, annualHours: 1900, components: [] },
+      settings: { mode: "post", hoursPerDay: "7.5", annualHours: "1900", components: [] },
       laborWip: "not-a-uuid",
     }));
     assert.equal(badUuid.status, 422);
@@ -595,7 +604,7 @@ test("a valid save with an invalid control account persists NOTHING — not even
       ["laborWip", summaryId],
     ] as const) {
       const res = await PUT(putRequest({
-        settings: { mode: "post", hoursPerDay: 7.5, annualHours: 1900, components: [] },
+        settings: { mode: "post", hoursPerDay: "7.5", annualHours: "1900", components: [] },
         [key]: accountId,
       }));
       assert.equal(res.status, 422);
@@ -626,7 +635,7 @@ test("re-saves keep the audit trail continuous — before values match what was 
       allowUnratedTime: false,
     };
     const res1 = await PUT(putRequest({
-      settings: { ...first, hoursPerDay: 8, components: first.components.map((c) => ({ ...c, value: 30 })) },
+      settings: { ...first, hoursPerDay: "8", components: first.components.map((c) => ({ ...c, value: "30" })) },
       laborWip: f.wipAccount,
       laborClearing: f.clearingAccount,
     }));
@@ -684,13 +693,13 @@ test("a save whose INSERT fails after the close commits NO rate gap and NO orpha
     };
 
     // Prior open rate, saved through the real path (one audit row).
-    const first = await POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })));
+    const first = await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })));
     assert.equal(first.status, 200);
 
     // Arm the injected failure on the replacement upsert — it fires after the
     // close UPDATE has already run inside the same transaction.
     routeState.fault = (text) => text.replaceAll(/\s+/g, " ").trim().startsWith("insert into labor_cost_rates");
-    const failed = await POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })));
+    const failed = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
     routeState.fault = null;
     assert.equal(failed.status, 422);
 
@@ -721,12 +730,12 @@ test("a save whose AUDIT write fails rolls the close and the replacement back to
       allowedSubsidiaryIds: null,
     };
 
-    const first = await POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })));
+    const first = await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })));
     assert.equal(first.status, 200);
 
     // Fail the LAST write in the unit: data must not survive without evidence.
     routeState.fault = (text) => text.replaceAll(/\s+/g, " ").includes("insert into audit_log");
-    const failed = await POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })));
+    const failed = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
     routeState.fault = null;
     assert.equal(failed.status, 422);
 
@@ -766,9 +775,9 @@ test("concurrent same-scope starts serialize into one deterministic, fully evide
       }
     };
 
-    const promiseA = POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })));
+    const promiseA = POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })));
     await barrier;
-    const promiseB = POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })));
+    const promiseB = POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
     const [resA, resB] = await Promise.all([promiseA, promiseB]);
     routeState.onExecute = null;
     assert.equal(resA.status, 200);
@@ -819,7 +828,7 @@ test("saves keep exact decimal/date scope evidence — new start, correction in 
 
     const first = await POST(postRequest(saveRateBody({ rate: "100.5", effectiveFrom: "2026-01-01" })));
     assert.equal(first.status, 200);
-    const successor = await POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })));
+    const successor = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
     assert.equal(successor.status, 200);
 
     let rates = await storedRates(f.orgId);
@@ -898,7 +907,7 @@ test("end/delete audit-write failures roll the data change back with the evidenc
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
-    const saved = await POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })));
+    const saved = await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })));
     assert.equal(saved.status, 200);
     const rates = await storedRates(f.orgId);
     const rateId = rates[0]!.id;
@@ -938,7 +947,7 @@ test("an inactive control account is refused like a summary one", async () => {
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${dormantId}, ${f.orgId}, '9998', 'Dormant Account', 'asset_current_other', false, false, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
     const res = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] },
+      settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] },
       laborWip: dormantId,
     }));
     assert.equal(res.status, 422);
@@ -1072,7 +1081,7 @@ test("reconcile rejects an impossible calendar date with a 422, never a 500", as
       allowedSubsidiaryIds: null,
     };
     const put = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: 8, annualHours: 2000, components: [] },
+      settings: { mode: "post", hoursPerDay: "8", annualHours: "2000", components: [] },
       laborWip: f.wipAccount,
       laborClearing: f.clearingAccount,
       payrollVariance: f.varianceAccount,
@@ -1106,12 +1115,12 @@ test("a backdated save-rate persists mid-timeline, capped the day before its suc
       allowedSubsidiaryIds: null,
     };
 
-    const current = await POST(postRequest(saveRateBody({ rate: 32.5, effectiveFrom: "2026-09-17" })));
+    const current = await POST(postRequest(saveRateBody({ rate: "32.5", effectiveFrom: "2026-09-17" })));
     assert.equal(current.status, 200);
-    const future = await POST(postRequest(saveRateBody({ rate: 34, effectiveFrom: "2026-09-19" })));
+    const future = await POST(postRequest(saveRateBody({ rate: "34", effectiveFrom: "2026-09-19" })));
     assert.equal(future.status, 200);
 
-    const backdated = await POST(postRequest(saveRateBody({ rate: 35, effectiveFrom: "2026-09-05" })));
+    const backdated = await POST(postRequest(saveRateBody({ rate: "35", effectiveFrom: "2026-09-05" })));
     assert.equal(backdated.status, 200);
 
     const rates = await storedRates(f.orgId);
@@ -1150,16 +1159,16 @@ test("a same-start correction keeps the row's window instead of reopening past i
       allowedSubsidiaryIds: null,
     };
 
-    assert.equal((await POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })))).status, 200);
-    assert.equal((await POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })))).status, 200);
-    const backdated = await POST(postRequest(saveRateBody({ rate: 110, effectiveFrom: "2026-02-01" })));
+    assert.equal((await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })))).status, 200);
+    assert.equal((await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })))).status, 200);
+    const backdated = await POST(postRequest(saveRateBody({ rate: "110", effectiveFrom: "2026-02-01" })));
     assert.equal(backdated.status, 200);
 
     let rates = await storedRates(f.orgId);
     assert.equal(rates.length, 3);
     assert.equal(rates[1]!.effectiveTo, "2026-02-28");
 
-    const correction = await POST(postRequest(saveRateBody({ rate: 115, effectiveFrom: "2026-02-01" })));
+    const correction = await POST(postRequest(saveRateBody({ rate: "115", effectiveFrom: "2026-02-01" })));
     assert.equal(correction.status, 200);
     rates = await storedRates(f.orgId);
     assert.equal(rates.length, 3);
@@ -1183,10 +1192,10 @@ test("a storage refusal past validation never leaks driver text to the client", 
       allowedSubsidiaryIds: null,
     };
 
-    assert.equal((await POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })))).status, 200);
+    assert.equal((await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })))).status, 200);
 
     routeState.fault = (text) => text.replaceAll(/\s+/g, " ").trim().startsWith("insert into labor_cost_rates");
-    const failed = await POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })));
+    const failed = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
     routeState.fault = null;
     assert.equal(failed.status, 422);
     const body = await failed.json() as { error: string; errorCode: string };

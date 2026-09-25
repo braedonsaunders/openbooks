@@ -105,7 +105,7 @@ test("a negative worker-comp group rate refuses instead of reducing the rate", (
 
 test("the shared component parser refuses garbage the write API would", () => {
   assert.throws(() => parseLaborCostComponents([{ kind: "annual_bonus", value: "5" }]), /component 1: unknown kind/);
-  assert.throws(() => parseLaborCostComponents([{ kind: "per_hour", value: "1.23456" }]), /at most 4 decimals/);
+  assert.throws(() => parseLaborCostComponents([{ kind: "per_hour", value: "1.23456" }]), /at most 4 decimal places/);
   assert.throws(() => parseLaborCostComponents([{ kind: "per_hour", value: "-2" }]), /cannot be negative/);
   assert.deepEqual(parseLaborCostComponents(null), []);
   assert.deepEqual(parseLaborCostComponents([{ kind: "per_day", value: "75.50" }]), [

@@ -27,6 +27,7 @@ import {
   supersedeLaborCostRate,
 } from '@openbooks/engine/src/projects/labor-cost-rates.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isCalendarDate } from '../../../../../lib/setup/coerce'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -266,8 +267,12 @@ export async function PUT(req: Request) {
   const hoursPerDayRaw = cfg.hoursPerDay == null || cfg.hoursPerDay === ''
     ? '8'
     : canonicalDecimal(cfg.hoursPerDay, 4)
+  // Text-only boundary: a JSON number (or any other unreadable spelling) is
+  // refused by name with the decimal-string remedy, not a bare 'invalid'.
+  if (hoursPerDayRaw === null) {
+    return NextResponse.json({ error: decimalNullRefusal('hoursPerDay', 'a number of hours', cfg.hoursPerDay, 4) }, { status: 422 })
+  }
   if (
-    hoursPerDayRaw === null ||
     compareDecimal(hoursPerDayRaw, '0') <= 0 ||
     compareDecimal(hoursPerDayRaw, '24') > 0
   ) {
@@ -282,8 +287,10 @@ export async function PUT(req: Request) {
   const annualHoursRaw = cfg.annualHours == null || cfg.annualHours === ''
     ? '2080'
     : canonicalDecimal(cfg.annualHours, 4)
+  if (annualHoursRaw === null) {
+    return NextResponse.json({ error: decimalNullRefusal('annualHours', 'a number of hours', cfg.annualHours, 4) }, { status: 422 })
+  }
   if (
-    annualHoursRaw === null ||
     compareDecimal(annualHoursRaw, '0') <= 0 ||
     compareDecimal(annualHoursRaw, '8784') > 0
   ) {
@@ -458,7 +465,10 @@ export async function POST(req: Request) {
     const currency = typeof body.currency === 'string' ? body.currency.toUpperCase() : ''
     if (!currencies.includes(currency)) return NextResponse.json({ error: 'currency is not configured for this organization' }, { status: 422 })
     const rateRaw = canonicalDecimal(body.rate, 4)
-    if (rateRaw === null || compareDecimal(rateRaw, '0') < 0 || compareDecimal(rateRaw, NUMERIC_19_4_MAX) > 0) {
+    if (rateRaw === null) {
+      return NextResponse.json({ error: decimalNullRefusal('rate', 'an exact decimal rate', body.rate, 4) }, { status: 422 })
+    }
+    if (compareDecimal(rateRaw, '0') < 0 || compareDecimal(rateRaw, NUMERIC_19_4_MAX) > 0) {
       return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
     }
     const rate = normalizeMoney(rateRaw)
@@ -466,7 +476,10 @@ export async function POST(req: Request) {
     const annualHoursRaw = body.annualHours == null || body.annualHours === ''
       ? '2080'
       : canonicalDecimal(body.annualHours, 4)
-    if (annualHoursRaw === null || compareDecimal(annualHoursRaw, '0') <= 0 || compareDecimal(annualHoursRaw, NUMERIC_19_4_MAX) > 0) {
+    if (annualHoursRaw === null) {
+      return NextResponse.json({ error: decimalNullRefusal('annualHours', 'a number of hours', body.annualHours, 4) }, { status: 422 })
+    }
+    if (compareDecimal(annualHoursRaw, '0') <= 0 || compareDecimal(annualHoursRaw, NUMERIC_19_4_MAX) > 0) {
       return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
     }
     let annualHours: string
