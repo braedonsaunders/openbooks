@@ -13,7 +13,8 @@ import { fitsLedgerRange, isZero, ledgerSideTotals, normalizeMoney, sum } from "
 // under both CJS and ESM interop.
 import { CronExpressionParser } from "cron-parser";
 import { listSchema, runUserSql } from "../platform/sqlapi.ts";
-import { createScriptJournal, type ScriptJournalResult } from "../ledger/journal-writes.ts";
+import type { ScriptJournalResult } from "../journal/script-journal-contract.ts";
+import { installedScriptJournalWriter } from "./journal-writer.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
@@ -835,6 +836,12 @@ export async function runScript(
           let pendingWrite: Promise<JournalWriteOutcome> | undefined;
           const outcome = await withScriptHostDeadline(deadline, () => {
             pendingWrite = (async (): Promise<JournalWriteOutcome> => {
+              // Fail closed when the process never installed the ledger
+              // writer: refuse before any authorization I/O, never no-op.
+              const writer = installedScriptJournalWriter();
+              if (!writer) {
+                return { kind: "refused" as const, refusal: "journal.create: journal writes are not installed in this process (call installEngineSeams())" };
+              }
               if (ctx.user?.id && !(await actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post"))) {
                 return { kind: "refused" as const, refusal: "journal.create: missing permission: gl.post" };
               }
@@ -842,7 +849,7 @@ export async function runScript(
               const allowedSubsidiaryIds = ctx.user?.id
                 ? await actorAllowedSubsidiaryIds(db, ctx.org.id, ctx.user.id)
                 : null;
-              const created = await createScriptJournal(
+              const created = await writer(
                 ctx.org.id,
                 ctx.user?.id ?? null,
                 input,

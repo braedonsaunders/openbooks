@@ -11,6 +11,10 @@ import { diffKeyed, openBalancesByParty, trialBalanceByKey, type SnapshotDiff } 
 import { computeExpected } from "./reference-ledger.ts";
 import { generateCorpus } from "./corpus.ts";
 import type { Corpus, ExpectedBalances } from "../corpus-lib/types.ts";
+import { installEngineSeams } from "../../composition/install.ts";
+
+// Corpus runs post: install the engine seams first.
+installEngineSeams();
 
 /**
  * Differential-testing harness CLI.

@@ -4,6 +4,10 @@ import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext } from "../platform/db.ts";
 import { runId, sourceSha } from "../platform/provenance.ts";
 import { runScenarioForOrg } from "../golden/scenario.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// The golden scenario posts: install the engine seams first.
+installEngineSeams();
 
 /**
  * Golden-fixture harness runner.

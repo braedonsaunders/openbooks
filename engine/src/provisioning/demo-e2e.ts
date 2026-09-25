@@ -4,6 +4,10 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { PostingError, type PostingDeps } from "../journal/posting-contracts.ts";
 import { ensureReadRole, runUserSql } from "../platform/sqlapi.ts";
 import { selectOnlyOrg } from "./org-selection.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// The demo provisions and posts: install the engine seams first.
+installEngineSeams();
 
 /**
  * End-to-end demo using imported accounting data:

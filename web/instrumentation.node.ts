@@ -43,6 +43,11 @@ export async function registerNodeInstrumentation() {
   const { registerFlowApprovalReleaseHandlers } = await import('./lib/flow-approval-releases')
   await registerFlowApprovalReleaseHandlers()
 
+  // Engine seams (script journal writer, ...): the web process posts and
+  // runs scripts, so install the composition root beside the web handlers.
+  const { installEngineSeams } = await import('@openbooks/engine/src/composition/install.ts')
+  installEngineSeams()
+
   registerFlowPdfRenderer(async ({ orgId, subjectKind, subjectId }) => {
     const { PDF_RECORD_TYPE_BY_KEY } = await import('./lib/pdf-templates/catalog')
     const meta = PDF_RECORD_TYPE_BY_KEY[subjectKind]

@@ -5,6 +5,10 @@ import { isUuid } from "../platform/uuid.ts";
 import { getConnection, listConnections } from "./connection.ts";
 import { buildSource } from "./connection.ts";
 import { preflightFullSync, runFullMigration, runSync } from "./sync.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// The sync CLI runs migrations that may post: install the engine seams first.
+installEngineSeams();
 
 /**
  * Dev CLI for the native sync engine, driven by a stored connection.

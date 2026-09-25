@@ -7,6 +7,10 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { scriptOccurrenceKey } from "../scheduling/scheduler.ts";
 import { bulkRunIdempotencyScope } from "../scripting/bulk-run-claim.ts";
 import { processScriptJobData, scheduledScopeFromJob } from "./scripts-worker.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Worker script duties write journals through the installed writer.
+installEngineSeams();
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

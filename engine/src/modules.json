@@ -106,6 +106,14 @@
         "records"
       ]
     },
+    "composition": {
+      "description": "Composition root: installs the runtime seams (script journal writer first) that lower modules cannot import without cycling.",
+      "dependsOn": [
+        "ledger",
+        "platform",
+        "scripting"
+      ]
+    },
     "compliance": {
       "description": "Subcontractor compliance (COIs, lien waivers) and year-end information returns.",
       "dependsOn": [
@@ -120,6 +128,7 @@
         "allocations",
         "assets",
         "close",
+        "composition",
         "consolidation",
         "country-tax-packs",
         "hrm",
@@ -224,6 +233,7 @@
     "harness": {
       "description": "Verification harnesses: golden scenario, differential corpus, replay, mutation.",
       "dependsOn": [
+        "composition",
         "golden",
         "ledger",
         "money",
@@ -409,6 +419,7 @@
       "description": "Organization provisioning and seeders: defaults, roles, users, dashboards, project types, the end-to-end demo.",
       "dependsOn": [
         "close",
+        "composition",
         "crm",
         "journal",
         "ledger",
@@ -471,6 +482,7 @@
     "sample-companies": {
       "description": "Sample company generators.",
       "dependsOn": [
+        "composition",
         "platform",
         "records",
         "sandbox",
@@ -480,6 +492,7 @@
     "sandbox": {
       "description": "Environments: sandbox cloning, refresh, promotion, catalog and wipe guards.",
       "dependsOn": [
+        "composition",
         "organization",
         "platform",
         "scripting"
@@ -509,7 +522,6 @@
       "description": "User scripts: the QuickJS trigger runtime and its configuration boundary.",
       "dependsOn": [
         "journal",
-        "ledger",
         "money",
         "organization",
         "platform"
@@ -531,6 +543,7 @@
         "assets",
         "billing",
         "close",
+        "composition",
         "consolidation",
         "flows",
         "golden",
@@ -555,6 +568,7 @@
       "dependsOn": [
         "banking",
         "close",
+        "composition",
         "connectors",
         "crm",
         "fx",
@@ -636,8 +650,7 @@
       "payables",
       "payments",
       "payroll",
-      "projects",
-      "scripting"
+      "projects"
     ]
   ]
 }

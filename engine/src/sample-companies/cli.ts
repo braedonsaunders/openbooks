@@ -7,6 +7,10 @@ import {
 } from "./service.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY } from "./catalog.ts";
 import { pool } from "../platform/db.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Company builds post: install the engine seams first.
+installEngineSeams();
 
 function valueAfter(flag: string): string | null {
   const index = process.argv.indexOf(flag);

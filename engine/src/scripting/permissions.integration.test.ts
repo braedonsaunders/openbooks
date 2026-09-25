@@ -21,6 +21,10 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// Script journal writes go through the installed writer.
+installEngineSeams();
 import {
   MAX_SCRIPT_LOG_BYTES,
   MAX_SCRIPT_LOG_ENTRIES,
