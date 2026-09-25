@@ -85,13 +85,17 @@ const SEQ_SOLI_AUSGLEICH = 116;
 const SEQ_KIST_AUSGLEICH = 118;
 
 /** Cents (integer) of a canonical 4-decimal money string. Sub-cent dust truncates. */
-function centsOf(amount: string): number {
-  return Number(toUnits(amount) / 100n);
+function centsOf(amount: string): bigint {
+  return toUnits(amount) / 100n;
 }
 
 /** Canonical 4-decimal string of integer cents. */
-function eurosOf(cents: number): string {
-  return fromUnits(BigInt(cents) * 100n);
+function eurosOf(cents: bigint): string {
+  return fromUnits(cents * 100n);
+}
+
+function nonNegative(cents: bigint): bigint {
+  return cents > 0n ? cents : 0n;
 }
 
 function refuse(what: string): never {
@@ -261,18 +265,18 @@ export async function computeDeSettlementWithRates(
     pvz: pvz as 0 | 1,
     pva: pva as 0 | 1 | 2 | 3 | 4,
     r: konfession != null && konfession !== "" ? 1 : 0,
-    lzzfreib: 0,
-    lzzhinzu: 0,
-    pkpv: 0,
-    pkpvagz: 0,
+    lzzfreib: 0n,
+    lzzhinzu: 0n,
+    pkpv: 0n,
+    pkpvagz: 0n,
   });
-  const annualLstC = annual.lstjahr * 100;
+  const annualLstC = annual.lstjahr * 100n;
   const annualSoliC = annual.solzj;
   // Kirchenlohnsteuer on the annual BK base, where elected: 8 % in BY/BW,
   // 9 % elsewhere (the pack's declared split, EStG §51a base) — the same
   // rule the monthly pass applies, now on the annual base.
   const kistRate = ctx.region === "BY" || ctx.region === "BW" ? 8 : 9;
-  const annualKistC = annual.bk === 0 ? 0 : Math.floor((annual.bk * kistRate) / 100);
+  const annualKistC = annual.bk === 0n ? 0n : (annual.bk * BigInt(kistRate)) / 100n;
 
   const withheldLstC = centsOf(ctx.priors.ytdWithheldBySystemKey["lohnsteuer"] ?? "0.0000");
   const withheldSoliC = centsOf(ctx.priors.ytdWithheldBySystemKey["solidaritaetszuschlag"] ?? "0.0000");
@@ -282,21 +286,21 @@ export async function computeDeSettlementWithRates(
   const refundLstC = withheldLstC - annualLstC;
   const refundSoliC = withheldSoliC - annualSoliC;
   const refundKistC = withheldKistC - annualKistC;
-  if (refundLstC > 0) {
+  if (refundLstC > 0n) {
     push("lohnsteuer", "credit", "Lohnsteuer-Jahresausgleich (§42b EStG) — Erstattung", eurosOf(refundLstC), SEQ_LST_AUSGLEICH);
   }
-  if (refundSoliC > 0) {
+  if (refundSoliC > 0n) {
     push("solidaritaetszuschlag", "credit", "Solidaritätszuschlag zum Jahresausgleich (§42b EStG) — Erstattung", eurosOf(refundSoliC), SEQ_SOLI_AUSGLEICH);
   }
-  if (refundKistC > 0) {
+  if (refundKistC > 0n) {
     push("kirchenlohnsteuer", "credit", "Kirchenlohnsteuer zum Jahresausgleich (§42b EStG) — Erstattung", eurosOf(refundKistC), SEQ_KIST_AUSGLEICH);
   }
 
   return {
     JAHRESLST: eurosOf(annualLstC),
-    LST_AUSGLEICH: eurosOf(Math.max(refundLstC, 0)),
-    SOLI_AUSGLEICH: eurosOf(Math.max(refundSoliC, 0)),
-    KIST_AUSGLEICH: eurosOf(Math.max(refundKistC, 0)),
+    LST_AUSGLEICH: eurosOf(nonNegative(refundLstC)),
+    SOLI_AUSGLEICH: eurosOf(nonNegative(refundSoliC)),
+    KIST_AUSGLEICH: eurosOf(nonNegative(refundKistC)),
   };
 }
 

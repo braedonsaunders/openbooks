@@ -91,18 +91,22 @@ export const STKL_BY_ROMAN: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = {
 };
 
 /** Cents (integer) of a "1234.56" euro string. Sub-cent dust truncates. */
-function centsOf(euros: string): number {
-  return Number(toUnits(euros) / 100n);
+function centsOf(euros: string): bigint {
+  return toUnits(euros) / 100n;
 }
 
 /** "1234.56" euro string of integer cents. */
-function eurosOf(cents: number): string {
-  return fromUnits(BigInt(cents) * 100n);
+function eurosOf(cents: bigint): string {
+  return fromUnits(cents * 100n);
 }
 
 /** Half-up share of a cent base at a milli-percent rate (8750 = 8.75%). */
-function shareHalfUp(baseCents: number, milliPercent: number): number {
-  return Math.floor((baseCents * milliPercent + 50000) / 100000);
+function shareHalfUp(baseCents: bigint, milliPercent: bigint): bigint {
+  return (baseCents * milliPercent + 50000n) / 100000n;
+}
+
+function minBigInt(a: bigint, b: bigint): bigint {
+  return a < b ? a : b;
 }
 
 export interface DeResolvedRates {
@@ -198,7 +202,7 @@ export function computeDeStatutoryWithRates(
       + `(EStG §39f) — got Steuerklasse ${stklRaw}.`,
     );
   }
-  if (af === 1 && freibetragAnnual !== 0) {
+  if (af === 1 && freibetragAnnual !== 0n) {
     throw new DePayrollRefusal(
       "DE 2026 engine: no Freibetrag beside the Faktor (PAP plausibility: AF = 1 with LZZFREIB).",
     );
@@ -222,7 +226,7 @@ export function computeDeStatutoryWithRates(
     );
   }
 
-  if (ctx.nonPeriodic !== "0" && centsOf(ctx.nonPeriodic) !== 0) {
+  if (ctx.nonPeriodic !== "0" && centsOf(ctx.nonPeriodic) !== 0n) {
     throw dePapSonstigeBezuegeRefusal();
   }
 
@@ -242,10 +246,10 @@ export function computeDeStatutoryWithRates(
     pvz: pvz as 0 | 1,
     pva: pva as 0 | 1 | 2 | 3 | 4,
     r: konfession != null && konfession !== "" ? 1 : 0,
-    lzzfreib: Math.floor(freibetragAnnual / 12),
-    lzzhinzu: Math.floor(hinzuAnnual / 12),
-    pkpv: 0,
-    pkpvagz: 0,
+    lzzfreib: freibetragAnnual / 12n,
+    lzzhinzu: hinzuAnnual / 12n,
+    pkpv: 0n,
+    pkpvagz: 0n,
   });
 
   // --- SV: four branches on the same gross, monthly BBGs, halves. ---
@@ -255,22 +259,22 @@ export function computeDeStatutoryWithRates(
   // all transcribed in DE_2026_RATES / DE_2026_CEILINGS with quotes.
   const pensionable = centsOf(ctx.pensionable);
   const insurable = centsOf(ctx.insurable);
-  const kvBase = Math.min(pensionable, Math.round(DE_2026_CEILINGS.kvPbbgMonthly * 100));
-  const rvBase = Math.min(insurable, Math.round(DE_2026_CEILINGS.rvBbgMonthly * 100));
-  const kvzHundredths = Math.round(rates.kvz * 100);
-  const kvHalfMilli = (Math.round(DE_2026_RATES.kv * 100) + kvzHundredths) * 5;
+  const kvBase = minBigInt(pensionable, toUnits(String(DE_2026_CEILINGS.kvPbbgMonthly)) / 100n);
+  const rvBase = minBigInt(insurable, toUnits(String(DE_2026_CEILINGS.rvBbgMonthly)) / 100n);
+  const kvzHundredths = BigInt(Math.round(rates.kvz * 100));
+  const kvHalfMilli = (BigInt(Math.round(DE_2026_RATES.kv * 100)) + kvzHundredths) * 5n;
   const kvW = shareHalfUp(kvBase, kvHalfMilli);
-  const rvHalfMilli = Math.round((DE_2026_RATES.rv / 2) * 1000);
+  const rvHalfMilli = BigInt(Math.round((DE_2026_RATES.rv / 2) * 1000));
   const rvW = shareHalfUp(rvBase, rvHalfMilli);
-  const avHalfMilli = Math.round((DE_2026_RATES.av / 2) * 1000);
+  const avHalfMilli = BigInt(Math.round((DE_2026_RATES.av / 2) * 1000));
   const avW = shareHalfUp(rvBase, avHalfMilli);
   const pvBase = kvBase;
-  const pvEmployeeMilli = Math.round(DE_2026_RATES.pv / 2 * 1000)
-    + (ctx.region === "SN" ? Math.round(DE_2026_RATES.pvSachsenDifferential * 1000) : 0)
-    + (pvz === 1 ? Math.round(DE_2026_RATES.pvKinderlosenzuschlag * 1000) : 0)
-    - Math.round(DE_2026_RATES.pvKindAbschlag * 1000) * pva;
-  const pvEmployerMilli = Math.round(DE_2026_RATES.pv / 2 * 1000)
-    - (ctx.region === "SN" ? Math.round(DE_2026_RATES.pvSachsenDifferential * 1000) : 0);
+  const pvEmployeeMilli = BigInt(Math.round(DE_2026_RATES.pv / 2 * 1000))
+    + (ctx.region === "SN" ? BigInt(Math.round(DE_2026_RATES.pvSachsenDifferential * 1000)) : 0n)
+    + (pvz === 1 ? BigInt(Math.round(DE_2026_RATES.pvKinderlosenzuschlag * 1000)) : 0n)
+    - BigInt(Math.round(DE_2026_RATES.pvKindAbschlag * 1000)) * BigInt(pva);
+  const pvEmployerMilli = BigInt(Math.round(DE_2026_RATES.pv / 2 * 1000))
+    - (ctx.region === "SN" ? BigInt(Math.round(DE_2026_RATES.pvSachsenDifferential * 1000)) : 0n);
   const pvW = shareHalfUp(pvBase, pvEmployeeMilli);
   const pvEr = shareHalfUp(pvBase, pvEmployerMilli);
 
@@ -278,7 +282,7 @@ export function computeDeStatutoryWithRates(
   // 8% in Bayern/Baden-Württemberg, 9% elsewhere (pack-declared split);
   // Cent ↓. Zero (no confession) pushes nothing, like every zero line.
   const kistRate = ctx.region === "BY" || ctx.region === "BW" ? 8 : 9;
-  const kist = pap.bk === 0 ? 0 : Math.floor((pap.bk * kistRate) / 100);
+  const kist = pap.bk === 0n ? 0n : (pap.bk * BigInt(kistRate)) / 100n;
 
   pushStatutory("lohnsteuer", "deduction", "Lohnsteuer", eurosOf(pap.lstlzz), 110);
   pushStatutory("solidaritaetszuschlag", "deduction", "Solidaritätszuschlag", eurosOf(pap.solzlzz), 115);

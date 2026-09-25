@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmp } from "../../money/money.ts";
+import { cmp, fromUnits } from "../../money/money.ts";
 import { resolveCertificate } from "../certificates.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
@@ -101,13 +101,13 @@ test("full monthly period computes: PAP wiring + hand-checked SV and adapter nam
   await assert.rejects(computeDeStatutory(ctx), /refuses.*U1.*U2.*U3.*Berufsgenossenschaft/);
   const result = computeDeStatutoryWithRates(ctx, { kvz: 2.9 });
   const pap = computePapLaufend2026({
-    lzz: 2, re4: 300000, stkl: 1, zkf: 0, af: 0, f: 1,
+    lzz: 2, re4: 300000n, stkl: 1, zkf: 0, af: 0, f: 1,
     alv: 0, krv: 0, pkv: 0, kvz: 2.9, pvs: 0, pvz: 1, pva: 0, r: 0,
-    lzzfreib: 0, lzzhinzu: 0, pkpv: 0, pkpvagz: 0,
+    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n,
   });
-  assert.equal(result.LST, (pap.lstlzz / 100).toFixed(4));
-  assert.equal(result.SOLI, (pap.solzlzz / 100).toFixed(4));
-  assert.equal(result.BK, (pap.bk / 100).toFixed(4));
+  assert.equal(result.LST, fromUnits(pap.lstlzz * 100n));
+  assert.equal(result.SOLI, fromUnits(pap.solzlzz * 100n));
+  assert.equal(result.BK, fromUnits(pap.bk * 100n));
   assert.equal(line(pushed, "lohnsteuer", "deduction"), result.LST);
   assert.equal(result.KV_W, "218.7500");
   assert.equal(result.KV_ER, "218.7500");
@@ -137,11 +137,11 @@ test("ceilings cap the SV base; KiSt elected at 9% outside BY/BW", () => {
   assert.equal(result.RV_W, "651.0000");
   assert.equal(result.PV_W, "139.5000"); // 5812.50 × 2.4%, PV rides the KV ceiling
   const pap = computePapLaufend2026({
-    lzz: 2, re4: 700000, stkl: 1, zkf: 0, af: 0, f: 1,
+    lzz: 2, re4: 700000n, stkl: 1, zkf: 0, af: 0, f: 1,
     alv: 0, krv: 0, pkv: 0, kvz: 2.9, pvs: 0, pvz: 1, pva: 0, r: 1,
-    lzzfreib: 0, lzzhinzu: 0, pkpv: 0, pkpvagz: 0,
+    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n,
   });
-  const expectedKist = (Math.floor((pap.bk * 9) / 100) / 100).toFixed(4);
+  const expectedKist = fromUnits(((pap.bk * 9n) / 100n) * 100n);
   assert.equal(result.KIST, expectedKist);
   assert.ok(Number(result.KIST) > 0, "confession set: KiSt accrues");
   assert.equal(line(pushed, "kirchenlohnsteuer", "deduction"), result.KIST);
@@ -173,11 +173,11 @@ test("Sachsen PV split and BY KiSt at 8%", () => {
   });
   const byResult = computeDeStatutoryWithRates(by.ctx, { kvz: 2.9 });
   const pap = computePapLaufend2026({
-    lzz: 2, re4: 300000, stkl: 1, zkf: 0, af: 0, f: 1,
+    lzz: 2, re4: 300000n, stkl: 1, zkf: 0, af: 0, f: 1,
     alv: 0, krv: 0, pkv: 0, kvz: 2.9, pvs: 0, pvz: 1, pva: 0, r: 1,
-    lzzfreib: 0, lzzhinzu: 0, pkpv: 0, pkpvagz: 0,
+    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n,
   });
-  assert.equal(byResult.KIST, (Math.floor((pap.bk * 8) / 100) / 100).toFixed(4));
+  assert.equal(byResult.KIST, fromUnits(((pap.bk * 8n) / 100n) * 100n));
 });
 
 test("missing KVZ refuses by name — never zero, never the average", () => {

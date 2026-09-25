@@ -35,7 +35,7 @@ function std(over: Partial<DePapLaufendInput>): DePapLaufendInput {
     lzz: 1, af: 0, f: 1,
     alv: 0, krv: 0, pkv: 0, kvz: 2.9,
     pvs: 0, pva: 0, r: 0,
-    lzzfreib: 0, lzzhinzu: 0, pkpv: 0, pkpvagz: 0, zkf: 0,
+    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n, zkf: 0,
     ...over,
   } as DePapLaufendInput;
 }
@@ -141,11 +141,11 @@ test("agency golden: allgemeine Prüftabelle (43×6 cells, KVZ 2.90)", () => {
   for (const [gross, ...want] of ALLGEMEINE) {
     STKL.forEach((stkl, i) => {
       const out = computePapLaufend2026(std({
-        re4: gross * 100,
+        re4: BigInt(gross) * 100n,
         stkl,
         pvz: stkl === 2 ? 0 : 1,
       }));
-      assert.equal(out.lstjahr, want[i], `${gross} Kl.${stkl}`);
+      assert.equal(out.lstjahr, BigInt(want[i]!), `${gross} Kl.${stkl}`);
       cells += 1;
     });
   }
@@ -157,13 +157,13 @@ test("agency golden: besondere Prüftabelle (43×6 cells, privat versichert)", (
   for (const [gross, ...want] of BESONDERE) {
     STKL.forEach((stkl, i) => {
       const out = computePapLaufend2026(std({
-        re4: gross * 100,
+        re4: BigInt(gross) * 100n,
         stkl,
         alv: 1, krv: 1, pkv: 1,
-        pkpv: stkl === 3 ? 5000000 : stkl === 6 ? 0 : 3000000,
+        pkpv: stkl === 3 ? 5000000n : stkl === 6 ? 0n : 3000000n,
         pvz: 1,
       }));
-      assert.equal(out.lstjahr, want[i], `${gross} Kl.${stkl}`);
+      assert.equal(out.lstjahr, BigInt(want[i]!), `${gross} Kl.${stkl}`);
       cells += 1;
     });
   }
@@ -180,46 +180,46 @@ test("hand-worked: 30000 Klasse I allgemeine, every step shown", () => {
   // Zone 3: Y = (22689−17799)/10000 = 0.489; RW = 0.489×173.1 = 84.6459;
   // RW = 2481.6459; RW = 1213.5248…; ST = ⌊1213.5248 + 1034.87⌋ = 2248.
   // JBMG = 2248 < 20350 → no Soli. R = 0 → BK = 0.
-  const out = computePapLaufend2026(std({ re4: 3000000, stkl: 1, pvz: 1 }));
-  assert.equal(out.vsp, 604500);
-  assert.equal(out.zve, 2268900);
-  assert.equal(out.st, 2248);
-  assert.equal(out.lstjahr, 2248);
-  assert.equal(out.jbmg, 2248);
-  assert.equal(out.solzj, 0);
-  assert.equal(out.solzlzz, 0);
-  assert.equal(out.bk, 0);
-  assert.equal(out.vfrb, 123000);
-  assert.equal(out.wvfrb, 1034100);
-  assert.equal(out.lstlzz, 224800);
+  const out = computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1 }));
+  assert.equal(out.vsp, 604500n);
+  assert.equal(out.zve, 2268900n);
+  assert.equal(out.st, 2248n);
+  assert.equal(out.lstjahr, 2248n);
+  assert.equal(out.jbmg, 2248n);
+  assert.equal(out.solzj, 0n);
+  assert.equal(out.solzlzz, 0n);
+  assert.equal(out.bk, 0n);
+  assert.equal(out.vfrb, 123000n);
+  assert.equal(out.wvfrb, 1034100n);
+  assert.equal(out.lstlzz, 224800n);
 });
 
 test("hand-worked: Soli Milderungszone at 110000 Klasse I", () => {
   // LSTJAHR = JBMG = 27393 (agency cell). Full 5.5%: ⌊27393×5.5/100⌋ in
   // Cent = ⌊150661.5⌋ = 150661. Milderung: ⌊(27393−20350)×11.9/100⌋ =
   // ⌊83811.7⌋ = 83811 < 150661 → SOLZJ = 83811.
-  const out = computePapLaufend2026(std({ re4: 11000000, stkl: 1, pvz: 1 }));
-  assert.equal(out.lstjahr, 27393);
-  assert.equal(out.solzj, 83811);
-  assert.equal(out.solzlzz, 8381100);
+  const out = computePapLaufend2026(std({ re4: 11000000n, stkl: 1, pvz: 1 }));
+  assert.equal(out.lstjahr, 27393n);
+  assert.equal(out.solzj, 83811n);
+  assert.equal(out.solzlzz, 8381100n);
 });
 
 test("hand-worked: monthly split of the 30000 Klasse I year", () => {
   // LZZ = 2, RE4 = 2500.00 → ZRE4J = 30000.00, same year, then
   // LSTLZZ = ⌊224800/12⌋ = 18733.
-  const out = computePapLaufend2026(std({ lzz: 2, re4: 250000, stkl: 1, pvz: 1 }));
-  assert.equal(out.lstjahr, 2248);
-  assert.equal(out.lstlzz, 18733);
+  const out = computePapLaufend2026(std({ lzz: 2, re4: 250000n, stkl: 1, pvz: 1 }));
+  assert.equal(out.lstjahr, 2248n);
+  assert.equal(out.lstlzz, 18733n);
 });
 
 test("hand-worked: Kinderfreibetrag lowers JBMG, not LSTJAHR", () => {
   // 40000 Kl. III, ZKF = 1: KFB = 9756. First pass ST = 1000 (agency cell).
   // Second pass ZTABFB = 1266 + 9756 = 11022; ZVE = 40000 − 11022 − 8060 =
   // 20918.00; X = ⌊20918/2⌋ = 10459 < 12349 → JBMG = 0.
-  const out = computePapLaufend2026(std({ re4: 4000000, stkl: 3, pvz: 1, zkf: 1 }));
-  assert.equal(out.lstjahr, 1000);
-  assert.equal(out.jbmg, 0);
-  assert.equal(out.solzj, 0);
+  const out = computePapLaufend2026(std({ re4: 4000000n, stkl: 3, pvz: 1, zkf: 1 }));
+  assert.equal(out.lstjahr, 1000n);
+  assert.equal(out.jbmg, 0n);
+  assert.equal(out.solzj, 0n);
 });
 
 test("hand-worked: micro wage uses ANP ceiling and VSPN uplift", () => {
@@ -228,44 +228,44 @@ test("hand-worked: micro wage uses ANP ceiling and VSPN uplift", () => {
   // 108.50; VSP = ⌈201.50⌉ = 202 (Euro ↑). MVSPHB: VSPALV = 13.00;
   // VSPHB = 121.50; VSPN = ⌈214.50⌉ = 215 > 202 → VSP = 215.00.
   // ZVE = 1000 − 1036 − 215 < 0 → clamped 0 → ST = 0.
-  const out = computePapLaufend2026(std({ re4: 100000, stkl: 1, pvz: 1 }));
-  assert.equal(out.vsp, 21500);
-  assert.equal(out.zve, 0);
-  assert.equal(out.lstjahr, 0);
-  assert.equal(out.vfrb, 100000);
+  const out = computePapLaufend2026(std({ re4: 100000n, stkl: 1, pvz: 1 }));
+  assert.equal(out.vsp, 21500n);
+  assert.equal(out.zve, 0n);
+  assert.equal(out.lstjahr, 0n);
+  assert.equal(out.vfrb, 100000n);
 });
 
 test("hand-worked: confession key yields the Kirchenlohnsteuer base", () => {
   // R > 0: BK = JBMG per period; the 8%/9% Land rate applies outside PAP.
-  const out = computePapLaufend2026(std({ re4: 3000000, stkl: 1, pvz: 1, r: 5 }));
-  assert.equal(out.bk, 224800);
+  const out = computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, r: 5 }));
+  assert.equal(out.bk, 224800n);
 });
 
 test("tariff units: zone edges and closed forms", () => {
-  assert.equal(papUptab26(12348, 1), 0);
-  assert.equal(papUptab26(12349, 1), 0);
+  assert.equal(papUptab26(12348n, 1), 0n);
+  assert.equal(papUptab26(12349n, 1), 0n);
   // 17799: Y = 0.5451 → ⌊(0.5451×914.51+1400)×0.5451⌋ = 1034.
-  assert.equal(papUptab26(17799, 1), 1034);
+  assert.equal(papUptab26(17799n, 1), 1034n);
   // 17800: Y = 0.0001 → ⌊(0.0001×173.1+2397)×0.0001+1034.87⌋ = 1035.
-  assert.equal(papUptab26(17800, 1), 1035);
+  assert.equal(papUptab26(17800n, 1), 1035n);
   // 69878/69879 zone-3/zone-4 joint: both 18213.
-  assert.equal(papUptab26(69878, 1), 18213);
-  assert.equal(papUptab26(69879, 1), 18213);
+  assert.equal(papUptab26(69878n, 1), 18213n);
+  assert.equal(papUptab26(69879n, 1), 18213n);
   // Closed forms: ⌊0.42×100000−11135.63⌋ = 30864; splitting doubles it.
-  assert.equal(papUptab26(100000, 1), 30864);
-  assert.equal(papUptab26(100000, 2), 61728);
+  assert.equal(papUptab26(100000n, 1), 30864n);
+  assert.equal(papUptab26(100000n, 2), 61728n);
   // 277825/277826 zone-4/zone-5 joint: 105550/105551.
-  assert.equal(papUptab26(277825, 1), 105550);
-  assert.equal(papUptab26(277826, 1), 105551);
+  assert.equal(papUptab26(277825n, 1), 105550n);
+  assert.equal(papUptab26(277826n, 1), 105551n);
   // MST5-6 at W1STKL5: UP5-6 gives DIFF = 1968, MIST = 1969 → max; no VERGL
   // path at exactly W1 → 1969.
-  assert.equal(papMst56(14071), 1969);
+  assert.equal(papMst56(14071n), 1969n);
 });
 
 test("sweep: tariff monotone, engine bounded on the LZZ×STKL grid", () => {
-  let prev = -1;
+  let prev = -1n;
   for (let x = 0; x <= 300000; x += 37) {
-    const st = papUptab26(x, 1);
+    const st = papUptab26(BigInt(x), 1);
     assert.ok(st >= prev, `tariff must not fall at ${x}`);
     prev = st;
   }
@@ -273,31 +273,31 @@ test("sweep: tariff monotone, engine bounded on the LZZ×STKL grid", () => {
     for (const stkl of STKL) {
       const per = lzz === 1 ? 1 : lzz === 2 ? 12 : lzz === 3 ? 52 : 360;
       const out = computePapLaufend2026(std({
-        lzz, stkl, re4: 40000, pvz: stkl === 2 ? 0 : 1,
+        lzz, stkl, re4: 40000n, pvz: stkl === 2 ? 0 : 1,
       }));
-      assert.ok(out.lstlzz >= 0 && out.solzlzz >= 0 && out.bk >= 0);
-      assert.ok(out.lstlzz <= 40000 * per, `period tax cannot exceed period pay`);
+      assert.ok(out.lstlzz >= 0n && out.solzlzz >= 0n && out.bk >= 0n);
+      assert.ok(out.lstlzz <= 40000n * BigInt(per), `period tax cannot exceed period pay`);
     }
   }
 });
 
 test("refusals name the untranscribed path", () => {
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 1, pvz: 1, vbez: 100 })), /Versorgungsbez/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 1, pvz: 1, alter1: 1 })), /Altersentlastungsbetrag/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 1, pvz: 1, sonstb: 100 })), /sonstige Bez/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 1, pvz: 1, jre4: 100 })), /sonstige Bez/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, vbez: 100n })), /Versorgungsbez/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, alter1: 1 })), /Altersentlastungsbetrag/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, sonstb: 100n })), /sonstige Bez/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, jre4: 100n })), /sonstige Bez/);
 });
 
 test("validators enforce PAP 3.1 plausibility", () => {
-  const good = { re4: 3000000, stkl: 1, pvz: 1 } as const;
+  const good = { re4: 3000000n, stkl: 1, pvz: 1 } as const;
   assert.throws(() => computePapLaufend2026(std({ ...good, lzz: 5 as never })), /LZZ/);
   assert.throws(() => computePapLaufend2026(std({ ...good, stkl: 7 as never })), /STKL/);
-  assert.throws(() => computePapLaufend2026(std({ ...good, re4: -1 })), /RE4/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 5, pvz: 1, zkf: 1 })), /ZKF/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 3, pvz: 1, af: 1 })), /Faktorverfahren/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 4, pvz: 1, af: 1, lzzfreib: 100 })), /Faktor/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 6, pvz: 1, lzzhinzu: 100 })), /VI/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000, stkl: 4, pvz: 1, af: 1, f: 0 })), /\bF\b/);
+  assert.throws(() => computePapLaufend2026(std({ ...good, re4: -1n })), /RE4/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 5, pvz: 1, zkf: 1 })), /ZKF/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 3, pvz: 1, af: 1 })), /Faktorverfahren/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 4, pvz: 1, af: 1, lzzfreib: 100n })), /Faktor/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 6, pvz: 1, lzzhinzu: 100n })), /VI/);
+  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 4, pvz: 1, af: 1, f: 0 })), /\bF\b/);
   assert.throws(() => computePapLaufend2026(std({ ...good, pva: 5 as never })), /PVA/);
   assert.throws(() => computePapLaufend2026(std({ ...good, kvz: -0.01 })), /KVZ/);
 });
