@@ -390,3 +390,26 @@ export async function markEntryReversed(
       `journal entry ${input.entryId} is not a posted entry of this organization — only a posted entry can be marked reversed; corrections append a reversal through the ledger API instead of editing history`,
     );
 }
+
+/**
+ * Re-point the project dimension on DRAFT lines only, for merges and
+ * corrections that move attribution without touching posted history. The
+ * append-only guard admits draft edits and refuses everything else, so the
+ * entry-status predicate is the whole safety case: drafts are the only rows
+ * this statement can match. Zero matched rows is a legal no-op (nothing
+ * attributed) and the count is returned for audit.
+ */
+export async function repointDraftProjectLines(
+  executor: SqlExecutor,
+  input: { orgId: string; fromId: string; toId: string },
+): Promise<number> {
+  const moved = (await executor.execute<{ id: string }>(sql`
+    update journal_lines jl set project_id = ${input.toId}
+     where jl.org_id = ${input.orgId} and jl.project_id = ${input.fromId}
+       and exists (
+         select 1 from journal_entries e
+          where e.id = jl.entry_id and e.org_id = jl.org_id and e.status = 'draft'
+       )
+    returning jl.id`)).rows;
+  return moved.length;
+}
