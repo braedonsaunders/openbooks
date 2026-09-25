@@ -286,13 +286,13 @@ export async function loadCompliancePage(
       }),
     )
     const visible = kindFilter ? findings.filter((finding) => finding.kind === kindFilter) : findings
-    // The tiles above count the full lists while the tables cap at 200:
-    // each table names its truncation instead of presenting a slice as
-    // the population.
+    // No silent prefix cap: the tables render the complete visible
+    // populations so tables and stats agree (I4-webui-148). The truncation
+    // note below renders only when a cap reappears (AC-webui-051).
     const truncatedNote = (shown: number, total: number): string | null =>
       total > shown ? t('compliance.truncatedNote', { limit: shown, total }) : null
     const findingsTruncatedNote = truncatedNote(200, visible.length)
-    const findingRows: ComplianceFindingRow[] = visible.slice(0, 200).map((finding) => ({
+    const findingRows: ComplianceFindingRow[] = visible.map((finding) => ({
       id: finding.id,
       kind: finding.kind,
       kindLabel: t(`compliance.kinds.${finding.kind}`),
@@ -341,7 +341,7 @@ export async function loadCompliancePage(
     }
     const formatLabels = new Map(formatOptions.map((format) => [format.value, format.label]))
     const runsTruncatedNote = truncatedNote(200, runs.length)
-    const runRows: ComplianceRunRow[] = runs.slice(0, 200).map((run) => ({
+    const runRows: ComplianceRunRow[] = runs.map((run) => ({
       id: run.id,
       projectLabel: run.projectId ? (projectName.get(run.projectId) ?? run.projectId) : '—',
       weekLabel: run.weekEnding,
@@ -361,7 +361,7 @@ export async function loadCompliancePage(
     }))
     const entries = perdiemOn ? await listEntries(db, orgId, actorId, null) : []
     const entriesTruncatedNote = truncatedNote(200, entries.length)
-    const entryRows: ComplianceEntryRow[] = entries.slice(0, 200).map((entry) => ({
+    const entryRows: ComplianceEntryRow[] = entries.map((entry) => ({
       id: entry.id,
       dayLabel: entry.workedOn,
       amountLabel: `${entry.amount} ${entry.currency}`,
