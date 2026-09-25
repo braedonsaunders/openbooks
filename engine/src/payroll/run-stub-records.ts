@@ -233,7 +233,7 @@ export async function statutoryHolidayLinesForStub(
 export async function insertPayStubRow(
   tx: Pick<typeof db, "execute">,
   stub: {
-    orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string | null;
+    orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string;
     country: string; filingAccountId: string | null; province: string; periodsPerYear: number; payDate: string; taxYear: number;
     federalClaim: string; provincialClaim: string; currency: string | null;
     gross: string; pensionable: string; insurable: string; net: string;

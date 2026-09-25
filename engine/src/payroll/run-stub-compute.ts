@@ -65,6 +65,12 @@ export async function calculateStub(
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
   const employeePartyId = emp.party_id!;
+  const employmentId = emp.employment_id;
+  if (!employmentId) {
+    throw new PayrollError(
+      `payroll cannot calculate a stub for ${employeePartyId} without an HRM employment — create or resolve the worker's employment before running payroll`,
+    );
+  }
   const schedule = (await tx.execute<{ periods_per_year: number }>(sql`
     select periods_per_year from pay_schedules
      where org_id = ${orgId} and id = ${run.pay_schedule_id}
@@ -476,7 +482,7 @@ export async function calculateStub(
       resolveStatutoryRates: () => ctx.statutoryRatesFor(country, taxYear),
       gross,
       statutoryHours,
-      employmentId: emp.employment_id ?? null,
+      employmentId,
       employeeName: emp.display_name ?? employeePartyId,
       taxYear, country, region: province, run, emp,
       filingAccountId: jurisdiction.filingAccountId,
@@ -609,7 +615,7 @@ export async function calculateStub(
   }).method;
 
   const stubId = await insertPayStubRow(tx, {
-    orgId, actorId, documentId, employeePartyId, employmentId: emp.employment_id ?? null,
+    orgId, actorId, documentId, employeePartyId, employmentId,
     country, filingAccountId: jurisdiction.filingAccountId, province, periodsPerYear: P, payDate: run.pay_date!, taxYear,
     federalClaim: factors.TC ?? "0", provincialClaim: factors.TCP ?? "0",
     currency: run.doc_currency!, gross, pensionable, insurable, net,

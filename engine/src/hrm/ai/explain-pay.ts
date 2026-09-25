@@ -171,7 +171,7 @@ async function loadStub(
                net_pay::text as "netPay", employer_cost::text as "employerCost"
           from pay_stubs
          where org_id = ${orgId}::uuid and id = ${stubId}::uuid
-           and (employment_id = ${employmentId}::uuid or employment_id is null)`)).rows
+           and employment_id = ${employmentId}::uuid`)).rows
     : (await exec.execute<StubRow>(sql`
         select id::text as id, employment_id::text as "employmentId",
                pay_run_document_id::text as "payRunDocumentId",
