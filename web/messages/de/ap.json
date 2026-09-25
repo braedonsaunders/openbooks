@@ -225,6 +225,30 @@
       "link": "Cashflow-Prognose öffnen"
     },
     "configure": "Konfigurieren",
+    "config": {
+      "weeklyCapLabel": "Wöchentliches Kreditoren-Limit ({currency})",
+      "weeklyCapHelp": "0 = unbegrenzt. Mit Limit werden Verbindlichkeiten pro Woche oldest-due-first bis zu diesem Betrag gewählt, der Rest wird verschoben.",
+      "restrictLabel": "Auf sichere Kapazität beschränken (0/1)",
+      "restrictHelp": "1 = nie mehr zur Zahlung vorschlagen, als in der Woche an Liquidität verfügbar ist (prognostizierte Zuflüsse − Abflüsse). Überlauf wird verschoben.",
+      "scheduleTitle": "Wie Rechnungen terminiert werden",
+      "orderLabel": "Auswahlreihenfolge",
+      "orderValue": "Älteste Fälligkeit zuerst",
+      "orderNote": "Rechnungen werden nach ältestem Fälligkeitsdatum, dann höchstem Betrag gewählt, bis zur Wochenkapazität — der Rest wird verschoben",
+      "predictionLabel": "Zahlungstermin-Prognose",
+      "predictionValue": "Statistisch → Fälligkeitsdatum → globaler Durchschnitt",
+      "predictionNote": "Lieferantenspezifische Durchschnittstage (+½σ-Puffer), mindestens das Fälligkeitsdatum",
+      "overdueLabel": "Überfälligkeits-Verschiebung",
+      "overdueValue": "+7 / +14 / +28 Tage",
+      "overdueNote": "Überfällige Rechnungen werden je nach Überfälligkeit verschoben (≤30 / ≤60 / >60 Tage)",
+      "snapLabel": "Werktags-Rundung",
+      "snapValue": "An",
+      "snapNote": "Prognosetermine am Wochenende wandern auf den nächsten Werktag",
+      "dpoLabel": "Ø Tage bis Zahlung (DPO)",
+      "dpoValue": "{dpo}T",
+      "dpoNote": "Fallback, wenn ein Lieferant keine Zahlungshistorie hat",
+      "footerPre": "Wiederkehrende Flüsse (Lohn, Miete, Kredite) prägen die sichere Kapazität — konfigurieren Sie sie im",
+      "footerLink": "Cash-Cockpit"
+    },
     "configTitle": "Regel zur Kreditoren-Zahlungsauswahl",
     "configDescription": "Wie der Zahlungslauf dieser Woche gewählt wird — das wöchentliche Limit, der Sicherheitspuffer und das Planungsmodell hinter der Empfehlung."
   }

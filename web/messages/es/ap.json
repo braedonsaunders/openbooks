@@ -147,6 +147,30 @@
       "link": "Abrir el pronóstico de tesorería"
     },
     "configure": "Configurar",
+    "config": {
+      "weeklyCapLabel": "Límite semanal de pagos a proveedores ({currency})",
+      "weeklyCapHelp": "0 = ilimitado. Con límite, las cuentas por pagar se eligen por vencimiento más antiguo hasta este importe cada semana y el resto se difiere.",
+      "restrictLabel": "Restringir a capacidad segura (0/1)",
+      "restrictHelp": "1 = nunca recomendar pagar más allá del efectivo disponible esa semana (entradas proyectadas − salidas). El excedente se difiere.",
+      "scheduleTitle": "Cómo se programan las facturas",
+      "orderLabel": "Orden de selección",
+      "orderValue": "Vencimiento más antiguo primero",
+      "orderNote": "Las facturas se eligen por fecha de vencimiento más antigua y luego por mayor importe, hasta la capacidad semanal — el resto se difiere",
+      "predictionLabel": "Predicción de fecha de pago",
+      "predictionValue": "Estadística → Vencimiento → Promedio global",
+      "predictionNote": "Promedio de días de pago por proveedor (margen de +½σ), como mínimo la fecha de vencimiento",
+      "overdueLabel": "Desplazamiento por mora",
+      "overdueValue": "+7 / +14 / +28 días",
+      "overdueNote": "Las facturas vencidas se adelantan según su antigüedad (≤30 / ≤60 / >60 días)",
+      "snapLabel": "Ajuste a día hábil",
+      "snapValue": "Activado",
+      "snapNote": "Las fechas previstas en fin de semana se mueven al siguiente día hábil",
+      "dpoLabel": "Días promedio de pago (DPO)",
+      "dpoValue": "{dpo}d",
+      "dpoNote": "Valor alternativo cuando un proveedor no tiene historial de pagos",
+      "footerPre": "Los flujos recurrentes (nómina, alquiler, préstamos) determinan la capacidad segura — configúrelos en el",
+      "footerLink": "Panel de tesorería"
+    },
     "configTitle": "Regla de selección de pagos",
     "configDescription": "Cómo se elige el lote de pago de esta semana — el límite semanal, la protección de capacidad segura y el modelo de planificación detrás de la recomendación."
   }

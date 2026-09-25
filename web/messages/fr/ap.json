@@ -152,6 +152,30 @@
       "link": "Ouvrir les prévisions de trésorerie"
     },
     "configure": "Configurer",
+    "config": {
+      "weeklyCapLabel": "Plafond hebdomadaire des paiements ({currency})",
+      "weeklyCapHelp": "0 = illimité. Avec un plafond, les dettes sont choisies par échéance la plus ancienne jusqu’à ce montant chaque semaine, le reste est reporté.",
+      "restrictLabel": "Limiter à la capacité sûre (0/1)",
+      "restrictHelp": "1 = ne jamais recommander de payer au-delà de la trésorerie disponible cette semaine (entrées prévues − sorties). Le dépassement est reporté.",
+      "scheduleTitle": "Comment les factures sont planifiées",
+      "orderLabel": "Ordre de sélection",
+      "orderValue": "Échéance la plus ancienne d’abord",
+      "orderNote": "Les factures sont choisies par date d’échéance la plus ancienne puis par montant, jusqu’à la capacité hebdomadaire — le reste est reporté",
+      "predictionLabel": "Prévision de date de paiement",
+      "predictionValue": "Statistique → Échéance → Moyenne globale",
+      "predictionNote": "Délai moyen de paiement par fournisseur (marge de +½σ), plancher à la date d’échéance",
+      "overdueLabel": "Report des impayés",
+      "overdueValue": "+7 / +14 / +28 jours",
+      "overdueNote": "Les factures en retard sont avancées selon leur ancienneté (≤30 / ≤60 / >60 jours)",
+      "snapLabel": "Alignement jour ouvré",
+      "snapValue": "Activé",
+      "snapNote": "Les dates prévues un week-end sont déplacées au jour ouvré suivant",
+      "dpoLabel": "Délai moyen de paiement (DPO)",
+      "dpoValue": "{dpo} j",
+      "dpoNote": "Valeur de repli quand un fournisseur n’a pas d’historique de paiement",
+      "footerPre": "Les flux récurrents (paie, loyers, emprunts) façonnent la capacité sûre — configurez-les dans le",
+      "footerLink": "Pilotage de trésorerie"
+    },
     "configTitle": "Règle de sélection des paiements",
     "configDescription": "Comment le lot de paiement de cette semaine est choisi — le plafond hebdomadaire, le garde-fou de capacité sûre et le modèle de planification derrière la recommandation."
   }
