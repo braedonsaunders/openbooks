@@ -23,7 +23,8 @@ import {
   UsersRound,
   type LucideIcon,
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { ActionError, fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import {
   defaultFormLayout,
@@ -42,6 +43,7 @@ import { FairValuePricesEditor } from './FairValuePricesEditor'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
+import { useAppAction } from '../../../lib/use-app-action'
 
 interface AccountOpt {
   id: string
@@ -247,7 +249,8 @@ export function ItemDrawer({
   const [isActive, setIsActive] = useState<boolean>(createMode ? true : it.is_active === true)
 
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
+  const action = useAppAction()
+  const busy = action.busy
 
   // Persisted records open read-only. A true create drawer is an in-memory
   // form and therefore starts editable; closing it cannot leave a draft row.
@@ -358,46 +361,41 @@ export function ItemDrawer({
 
   async function save() {
     if (!nameValid) return
-    setBusy(true)
     setSaveState('saving')
     if (createMode && !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-    try {
-      const res = await fetch(createMode ? '/api/items' : `/api/items/${it.id}`, {
-        method: createMode ? 'POST' : 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
+    const saved = await action.execute(
+      async () => {
+        const result = await fetchAction<ItemPayload>(createMode ? '/api/items' : `/api/items/${it.id}`, {
+          method: createMode ? 'POST' : 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
+          },
+          body: JSON.stringify(savePayload),
+        })
+        if (result.ok && createMode && typeof result.data?.item?.id !== 'string') {
+          return { ok: false as const, error: new ActionError({ kind: 'unexpected' }) }
+        }
+        return result
+      },
+      {
+        fallbackMessage: tCommon('feedback.saveFailed'),
+        onOk: (data) => {
+          setSaveState('saved')
+          setDirty(false)
+          if (createMode) {
+            const savedId = data?.item?.id
+            const separator = basePath.includes('?') ? '&' : '?'
+            router.replace(`${basePath}${separator}item=${savedId}` as never)
+          } else {
+            setMode('view')
+          }
+          router.refresh()
         },
-        body: JSON.stringify(savePayload),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => null) as { error?: string } | null
-        setSaveState('error')
-        toast.error(data?.error ?? tCommon('feedback.saveFailed'))
-        return
-      }
-      const data = await res.json().catch(() => null) as ItemPayload | null
-      const savedId = data?.item?.id
-      if (createMode && !savedId) {
-        setSaveState('error')
-        toast.error(tCommon('feedback.saveFailed'))
-        return
-      }
-      setSaveState('saved')
-      setDirty(false)
-      if (createMode) {
-        const separator = basePath.includes('?') ? '&' : '?'
-        router.replace(`${basePath}${separator}item=${savedId}` as never)
-      } else {
-        setMode('view')
-      }
-      router.refresh()
-    } catch {
-      setSaveState('error')
-      toast.error(tCommon('feedback.saveFailed'))
-    } finally {
-      setBusy(false)
-    }
+        onRefused: () => setSaveState('error'),
+      },
+    )
+    if (!saved) setSaveState('error')
   }
 
   function cancel() {
@@ -412,21 +410,18 @@ export function ItemDrawer({
   }
 
   async function setActiveState(next: boolean) {
-    setBusy(true)
-    const res = await fetch(`/api/items/${it.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: next }),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => null) as { error?: string } | null
-      toast.error(data?.error ?? t('drawer.updateFailed'))
-    } else {
-      setIsActive(next)
-      toast.success(next ? t('drawer.activated') : t('drawer.deactivated'))
-    }
-    setBusy(false)
-    router.refresh()
+    await action.execute(
+      () => fetchAction(`/api/items/${it.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: next }),
+      }),
+      {
+        fallbackMessage: t('drawer.updateFailed'),
+        successMessage: next ? t('drawer.activated') : t('drawer.deactivated'),
+        onOk: () => { setIsActive(next); router.refresh() },
+      },
+    )
   }
 
   const ro = !editable
@@ -649,6 +644,7 @@ export function ItemDrawer({
       }
     >
       <div className="space-y-7 p-1">
+        <ActionAlert error={action.refusal} fallbackMessage={tCommon('feedback.saveFailed')} />
         {choosingKind ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {kindOptions.map((option) => {
