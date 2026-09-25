@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { add, mulDecimal, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
@@ -25,8 +25,10 @@ export const OPERATING_EXPENSE_TYPES = ["expense", "expense_deferred"] as const;
 export const OPEX_RATIO_REVENUE_TYPES = ["income", "income_other"] as const;
 
 /** Whole-percent operating-expenses-to-revenue ratio; 0 when revenue is not positive. */
-export function operatingExpenseRatio(opex: number, revenue: number): number {
-  return revenue > 0 ? Math.round((opex / revenue) * 100) : 0;
+export function operatingExpenseRatio(opex: string | number, revenue: string | number): number {
+  const denominator = toUnits(revenue);
+  if (denominator <= 0n) return 0;
+  return Number(roundDiv(toUnits(opex) * 100n, denominator));
 }
 
 interface OpexRevenueRow extends Record<string, unknown> {
@@ -48,7 +50,7 @@ export async function periodOperatingExpenses(
   from: string,
   to: string,
   allowed: ReadonlySet<string> | null,
-): Promise<{ opex: number; revenue: number }> {
+): Promise<{ opex: string; revenue: string }> {
   const opexTypes = sql.join(
     OPERATING_EXPENSE_TYPES.map((t) => sql`${t}`),
     sql`, `,
@@ -83,5 +85,5 @@ export async function periodOperatingExpenses(
     opex = add(opex, mulDecimal(String(row.opex ?? 0), ctx.rateAt(row.func ?? null, date)));
     revenue = add(revenue, mulDecimal(String(row.revenue ?? 0), ctx.rateAt(row.func ?? null, date)));
   }
-  return { opex: Number(opex), revenue: Number(revenue) };
+  return { opex, revenue };
 }
