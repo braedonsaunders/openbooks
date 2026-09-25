@@ -20,6 +20,7 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/lib/confirm'
+import { useUnsavedNavigationGuard } from '@/lib/use-unsaved-navigation-guard'
 import type { Layout, LayoutItem } from 'react-grid-layout'
 import type { DashboardLayoutData } from '@openbooks/schema'
 import { WIDGETS, type WidgetMeta } from './_widget-registry'
@@ -84,6 +85,7 @@ export function DashboardGrid({
   hiddenQuickActionIds?: readonly string[]
 }) {
   const t = useTranslations('dashboard')
+  const tCommon = useTranslations('common')
   const cardNameById = useMemo(
     () => new Map(libraryCards.map((c) => [c.id, c.name])),
     [libraryCards],
@@ -97,6 +99,9 @@ export function DashboardGrid({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [baseline, setBaseline] = useState(() => JSON.stringify(initialLayout.widgets))
   const dirty = useMemo(() => JSON.stringify(layout) !== baseline, [baseline, layout])
+  // Customize mode without this silently drops the draft on back-link,
+  // browser-back, or tab close — the same shared guard the admin editors use.
+  useUnsavedNavigationGuard(mode === 'edit' && dirty, tCommon('feedback.unsavedChanges'), tCommon('confirm.discardChanges'))
 
   useLayoutEffect(() => {
     const phone = window.matchMedia('(max-width: 639px)')
