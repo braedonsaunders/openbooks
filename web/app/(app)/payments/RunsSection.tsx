@@ -252,6 +252,31 @@ export async function RunsSection({
        where r.id = ${runId} and ${runScope} and r.direction = ${direction}
     `)))
     if (run.rows[0]) {
+      // Payees outside the caller's subsidiary fence read as missing here,
+      // exactly as GET /api/payments/runs/[id] scopes them: the same
+      // visible-payee set filters the instructions, the source-document
+      // items, and the readiness verdicts (names, amounts, bank blockers,
+      // compliance reasons).
+      const payees = (await db.execute<{ id: string }>(sql`
+        select p.id from parties p
+         where p.org_id = ${orgId} and p.id in (
+           select i.payee_party_id from payment_instructions i
+            where i.payment_run_id = ${runId} and i.org_id = ${orgId}
+         )
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+      `)).rows
+      const visiblePayeeIds = authz.allowedSubsidiaryIds === null
+        ? null
+        : new Set(payees.map((payee) => payee.id))
+      const payeeScope = visiblePayeeIds === null
+        ? sql``
+        : sql`and i.payee_party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[])`
+      // Items name the source document's party rather than the instruction
+      // payee; the same visible set applies. A null party names nobody, so
+      // those rows stay.
+      const itemPartyScope = visiblePayeeIds === null
+        ? sql``
+        : sql`and (d.party_id is null or d.party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[]))`
       const [instructions, readiness, files, events, items] = await Promise.all([
         (db.execute(sql`
           select i.id, i.amount, i.currency, i.status, p.display_name as payee,
@@ -262,10 +287,10 @@ export async function RunsSection({
             join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
             left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
             left join payment_settlements ps on ps.payment_instruction_id = i.id and ps.org_id = i.org_id
-           where i.payment_run_id = ${runId} and i.org_id = ${orgId}
+           where i.payment_run_id = ${runId} and i.org_id = ${orgId} ${payeeScope}
            order by p.display_name
         `)),
-        paymentRunReadiness(runId, orgId),
+        paymentRunReadiness(runId, orgId, visiblePayeeIds),
         (db.execute(sql`
           select pf.id, pf.sequence_number, pf.filename, pf.content_hash, pf.status,
                  pf.payment_count, pf.total_amount, pf.currency, pf.generated_at,
@@ -290,7 +315,7 @@ export async function RunsSection({
             from payment_run_items ri
             join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
-           where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
+           where ri.payment_run_id = ${runId} and ri.org_id = ${orgId} ${itemPartyScope}
            order by p.display_name, d.document_number
         `)),
       ])
