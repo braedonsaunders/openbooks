@@ -136,15 +136,11 @@ export async function transferInventoryTx(
     throw new InventoryError("transfer quantity must be positive");
   if (input.fromStockLocationId === input.toStockLocationId)
     throw new InventoryError("transfer needs two different locations");
-  await assertInventoryFeature(tx, orgId);
-  const period = await periodForDate(orgId, input.date, tx);
-  if (!period)
-    throw new InventoryError(`no accounting period for ${input.date}`);
-  const bookId = input.postingBookId ?? await primaryBookId(orgId, tx);
-  const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, tx);
+  // Canonical lock order: fence both positions before the transaction takes
+  // any row lock (the feature share-lock below included), or a peer holding
+  // the fence deadlocks against this transaction at posting. The subsidiary
+  // context read is lock-free, so it stays above the fence.
   const ctx = await loadSubsidiaryContext(tx, orgId);
-  assertMovementOwner(ctx, input.subsidiaryId);
-
   // Serialize every transfer touching either position. Sorting the lock keys
   // prevents two opposite-direction transfers from deadlocking.
   for (const locationId of [
@@ -160,6 +156,13 @@ export async function transferInventoryTx(
       input.subsidiaryId,
     );
   }
+  await assertInventoryFeature(tx, orgId);
+  const period = await periodForDate(orgId, input.date, tx);
+  if (!period)
+    throw new InventoryError(`no accounting period for ${input.date}`);
+  const bookId = input.postingBookId ?? await primaryBookId(orgId, tx);
+  const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, tx);
+  assertMovementOwner(ctx, input.subsidiaryId);
   // Costing policy revisions lock this same profile before revaluing layers;
   // take a share lock only after both positions are fenced, then use this
   // transaction-local policy snapshot for the entire transfer.

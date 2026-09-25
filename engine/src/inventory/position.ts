@@ -159,6 +159,17 @@ export async function getOnHandWith(
   };
 }
 
+/**
+ * Canonical lock order for every inventory mutation: fence the position
+ * BEFORE the transaction takes any row lock (feature share-locks, book
+ * reads, layer locks). Ledger posting ends every mutation with an orgs
+ * FOR UPDATE, so a transaction that takes row locks first and fences second
+ * deadlocks against a peer that fenced first and posts second (40P01) —
+ * each waits on a lock the other holds. Fence-first makes every waiter
+ * hold nothing its peer's posting path needs, so contenders serialize.
+ * Positions must therefore be known (or discovered lock-free) before this
+ * call; multi-position operations fence the sorted key set.
+ */
 export async function lockInventoryPosition(
   tx: Runner,
   itemId: string,

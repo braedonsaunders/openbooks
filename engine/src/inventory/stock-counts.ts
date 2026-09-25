@@ -515,6 +515,19 @@ export async function postStockCount(
   // Checks run row-locked inside the caller's transaction; the adjustments,
   // stamps and flip below join that same unit (see the module atomicity note).
   const prepared = await db.transaction(async (tx) => {
+    // Canonical lock order: fence every line position before the
+    // transaction takes any row lock, or a peer holding the fence deadlocks
+    // against this transaction at posting. The lines are fixed once the
+    // count reaches review; the re-read below revalidates them under fence.
+    const subjects = (await tx.execute<{ item_id: string; stock_location_id: string }>(sql`
+      select item_id, stock_location_id from stock_count_lines
+       where org_id = ${orgId} and stock_count_id = ${countId}`));
+    for (const key of [
+      ...new Set(subjects.rows.map((line) => `${line.item_id}:${line.stock_location_id}`)),
+    ].sort()) {
+      const separator = key.indexOf(":");
+      await lockInventoryPosition(tx, key.slice(0, separator), key.slice(separator + 1));
+    }
     await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, countId, true);
     if (count.status === "posted") {
