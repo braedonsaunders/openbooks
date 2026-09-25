@@ -1815,6 +1815,10 @@
       "pending_verification": "Vérification en attente",
       "not_yet_effective": "Pas encore en vigueur"
     },
+    "severityNames": {
+      "block": "Bloc",
+      "warn": "Avertissement"
+    },
     "emptyTitle": "Aucune qualification enregistrée",
     "emptyDescription": "Enregistrez les licences et certifications de l'équipe pour contrôler les affectations.",
     "ledgerTruncated": "Affichage de {shown} sur {total}.",

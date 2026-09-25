@@ -1815,6 +1815,10 @@
       "pending_verification": "確認待ち",
       "not_yet_effective": "未発効"
     },
+    "severityNames": {
+      "block": "ブロック",
+      "warn": "警告"
+    },
     "emptyTitle": "資格が登録されていません",
     "emptyDescription": "作業員の免許・資格を登録して配置を管理します。",
     "ledgerTruncated": "{total} 件中 {shown} 件を表示しています。",
