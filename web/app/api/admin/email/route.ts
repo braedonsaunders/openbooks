@@ -68,7 +68,10 @@ export async function PUT(req: Request) {
       mailgunRegion,
       smtpHost: clearableStr(body.smtpHost),
       smtpPort: body.smtpPort === undefined ? undefined : typeof body.smtpPort === 'number' ? body.smtpPort : body.smtpPort ? Number(body.smtpPort) : null,
-      smtpSecure: smtpSecure === true,
+      // Omission keeps the saved value (validated boolean above when
+      // present); coercing to === true here would silently turn TLS off on
+      // a partial update (I5-platform-16 follow-up).
+      smtpSecure: smtpSecure === undefined ? undefined : smtpSecure === true,
       smtpUsername: clearableStr(body.smtpUsername),
       // secret: non-empty string ⇒ seal; null ⇒ clear; blank/omitted ⇒ keep.
       secret: body.secret === null ? null : typeof body.secret === 'string' && body.secret.trim() ? body.secret.trim() : undefined,
