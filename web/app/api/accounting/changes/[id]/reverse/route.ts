@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { proposeAssetReversal } from "@openbooks/engine/src/assets/asset-change-reversals.ts";
@@ -37,12 +38,6 @@ export async function POST(
       ),
     });
   } catch (e) {
-    return NextResponse.json(
-      {
-        error:
-          e instanceof Error ? e.message : "reversal could not be proposed",
-      },
-      { status: 422 },
-    );
+    return apiErrorResponse(e);
   }
 }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { applyAssetGroupValuation } from "@openbooks/engine/src/assets/group-valuations.ts";
 import {
   applyLossOfControl,
@@ -50,9 +51,6 @@ export async function POST(
       await applyLeaseChange(gate.auth.user.orgId, id, gate.auth.user.id),
     );
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "change could not be applied" },
-      { status: 422 },
-    );
+    return apiErrorResponse(e);
   }
 }
