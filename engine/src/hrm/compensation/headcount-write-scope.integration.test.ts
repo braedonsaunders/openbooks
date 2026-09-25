@@ -89,6 +89,11 @@ const LINE_BASE = {
 test("H-HEADCOUNT: lines and transitions stay inside the actor's lens", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    // Approving a B line opens a requisition: the hrm parent and the
+    // recruiting child must both resolve on, or the gate refuses by name.
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb), '{features,hrmRecruiting}', 'true'::jsonb)
+       where id = ${org.orgId}`);
     const adminId = await createScratchUser(org.orgId, "Headcount Admin", "hcw_admin");
     await grantPermissions(org.orgId, adminId, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.recruiting.manage"]);
     const subB = randomUUID();
