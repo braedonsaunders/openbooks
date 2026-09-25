@@ -627,6 +627,27 @@ export async function completeRequestedDocumentVoid(
       kind: string;
       previousStatus: string;
     } = await db.transaction(async (tx) => {
+      // Bank-file release locks the artifact before the run and document.
+      // Take those artifact locks before this void follows the document lock
+      // protocol, so a release either finishes first and is refused below, or
+      // waits until the void makes the run ineligible for release.
+      const bankFiles = (await tx.execute<{
+        file_number: string;
+        release_count: number;
+      }>(sql`
+        select f.file_number, f.release_count
+          from pay_run_bank_files f
+         where f.org_id = ${orgId} and f.pay_run_document_id = ${documentId}
+         order by f.file_number, f.id
+         for update of f
+      `)).rows;
+      const releasedBankFile = bankFiles.find((file) => file.release_count > 0);
+      if (releasedBankFile) {
+        throw new DocumentVoidError(
+          `this pay run has released EFT bank file ${releasedBankFile.file_number}; record the payment or reverse it at the bank and mark the artifact before voiding`,
+        );
+      }
+
       // Discover the source entry and all currently live application endpoints
       // before taking locks. lockApplicationEvidence then acquires the shared
       // document → entry → line protocol used by application writers. The

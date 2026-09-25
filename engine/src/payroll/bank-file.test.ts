@@ -30,6 +30,7 @@ import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { sealJson } from "../platform/secrets.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
@@ -990,7 +991,7 @@ test("a run already recorded as paid is refused by name", { skip: !DB }, async (
 });
 
 test(
-  "a generated bank file cannot be released after its pay run is voided",
+  "a released bank file refuses voiding its pay run",
   { skip: !DB },
   async () => {
     const fx = await payrollOrg();
@@ -1000,22 +1001,21 @@ test(
       orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
     });
 
-    // A generated file may sit awaiting treasury release while the run is
-    // voided. Releasing it after that reversal would instruct the bank to pay
-    // liabilities the ledger no longer carries.
-    await db.execute(sql`
-      update pay_runs set run_status = 'voided'
-       where org_id = ${fx.orgId} and document_id = ${documentId}`);
-
+    await releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId);
     await assert.rejects(
-      releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId),
-      /voided|no longer committed/i,
+      requestDocumentVoid({
+        orgId: fx.orgId,
+        documentId,
+        actorId: fx.actorId,
+        reason: "correct the committed payroll run",
+      }),
+      new RegExp(`${artifact.fileNumber}.*record the payment or reverse it at the bank and mark the artifact`),
     );
     const row = (await db.execute<{ status: string; releaseCount: number }>(sql`
       select status, release_count as "releaseCount"
         from pay_run_bank_files
        where org_id = ${fx.orgId} and id = ${artifact.id}`)).rows[0]!;
-    assert.deepEqual(row, { status: "generated", releaseCount: 0 });
+    assert.deepEqual(row, { status: "released", releaseCount: 1 });
   },
 );
 
