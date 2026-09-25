@@ -160,6 +160,9 @@ export interface QualificationsPageData {
   coverageRows: CoverageRowData[]
   coverageTruncated: boolean
   coverageHint: string
+  coverageTotal: number
+  coveragePage: number
+  coveragePerPage: number
   alertsTitle: string
   alertsEmpty: string
   alerts: AlertRow[]
@@ -285,6 +288,7 @@ export async function loadQualificationsPage(
     if (sp.type) out.type = sp.type
     if (sp.section) out.section = sp.section
     if (sp.projectId) out.projectId = sp.projectId
+    if (sp.crewPage) out.crewPage = sp.crewPage
     for (const [k, v] of Object.entries(extra)) {
       if (v === undefined) delete out[k]
       else out[k] = v
@@ -327,23 +331,31 @@ export async function loadQualificationsPage(
   // horizontally), so every type stays visible — never a silent sixth-column cut.
   const coverageTypes = allCoverageTypes
   const coverageRows: CoverageRowData[] = []
-  let coverageTruncated = false
-  let coverageCrewTotal = 0
+  // One gate read per employment covers every column, so the matrix pages
+  // the crew instead of silently cutting it: every page is complete, the
+  // panel hint counts the whole crew, and the pager below the table loads
+  // the remainder.
+  const COVERAGE_PER_PAGE = 50
+  let coverageTotal = 0
+  let coveragePage = 1
   if (coverageProjectId) {
-    coverageCrewTotal = Number((await db.execute<{ n: string }>(sql`
+    coverageTotal = Number((await db.execute<{ n: string }>(sql`
       select count(distinct r.party_id) as n from schedule_resources r
        where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
     `)).rows[0]?.n ?? 0)
+    const pageCount = Math.max(1, Math.ceil(coverageTotal / COVERAGE_PER_PAGE))
+    const requested = Number.parseInt(sp.crewPage ?? '1', 10)
+    coveragePage = Math.min(pageCount, Math.max(1, Number.isNaN(requested) ? 1 : requested))
     const crewParties = (
       await db.execute<{ party: string }>(sql`
         select distinct r.party_id::text as party from schedule_resources r
          where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
-         limit 51
+         order by r.party_id
+         limit ${COVERAGE_PER_PAGE} offset ${(coveragePage - 1) * COVERAGE_PER_PAGE}
       `)
     ).rows.map((r) => r.party)
-    coverageTruncated = crewParties.length > 50
     // party → employment, then display names through the shared labels.
-    const employmentByParty = await employmentsForParties(orgId, crewParties.slice(0, 50))
+    const employmentByParty = await employmentsForParties(orgId, crewParties)
     const crewEmployments = [...employmentByParty.values()]
     const crewLabels = await loadQueueLabels(orgId, crewEmployments, [])
     // One gate read per employment covers every column: the verdict
@@ -496,10 +508,15 @@ export async function loadQualificationsPage(
     coverageProjectId,
     coverageTypes: columns,
     coverageRows,
-    coverageTruncated,
-    coverageHint: coverageTruncated
-      ? t('qualifications.coverageTruncated', { shown: coverageRows.length, total: coverageCrewTotal })
+    // The hint names the whole crew while the pager loads it: partial
+    // exactly when this page shows fewer rows than the crew holds.
+    coverageTruncated: coverageTotal > coverageRows.length,
+    coverageHint: coverageTotal > coverageRows.length
+      ? t('qualifications.coverageTruncated', { shown: coverageRows.length, total: coverageTotal })
       : '',
+    coverageTotal,
+    coveragePage,
+    coveragePerPage: COVERAGE_PER_PAGE,
     alertsTitle: t('qualifications.alertsTitle'),
     alertsEmpty: t('qualifications.alertsEmpty'),
     alerts: alerts.map((a) => ({
