@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
@@ -242,14 +243,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!locked.unchanged) throw new Error('account_changed')
       if (parentId !== undefined) {
         if (parentId) {
-          const parent = (await tx.execute<{ is_summary: boolean; type: string; subsidiary_id: string | null }>(sql`
-            select is_summary, type, subsidiary_id from accounts
-             where id = ${parentId} and org_id = ${gate.user.orgId}
+          try {
+            await lockScopeRow(tx, gate.user.orgId, 'account', parentId, gate.allowedSubsidiaryIds, 'share', { orgWideNull: true })
+          } catch (error) {
+            if (error instanceof ScopeNotFoundError) throw new PatchNotFound()
+            throw error
+          }
+          const parent = (await tx.execute<{ is_summary: boolean; type: string }>(sql`
+            select is_summary, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
           `))
           if (!parent.rows[0]) throw new PatchNotFound()
-          if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
-            throw new PatchNotFound()
-          }
           if (!parent.rows[0].is_summary) throw new PatchInvalid('parent_must_be_summary', 'parentId')
           if (parent.rows[0].type !== nextType) throw new PatchInvalid('parent_type_mismatch', 'parentId')
           const cycle = (await tx.execute(sql`
