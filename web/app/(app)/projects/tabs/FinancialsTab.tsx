@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Card, CardContent, cn } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
-import { add, cmp, neg } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, neg, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 interface CategoryRow { category: string; amount: string }
 interface AccountRow { accountId: string; number: string | null; name: string; amount: string }
@@ -63,6 +63,19 @@ export function shouldHideFinancialLine(hideWhenZero: boolean, value: string | n
   return hideWhenZero && cmp(String(value), '0') === 0
 }
 
+/** Convert an exact money ratio to a bounded CSS coordinate (millionths of a percent). */
+function budgetPercent(value: string | number, scale: string | number): bigint {
+  const amount = toUnits(String(value))
+  const denominator = toUnits(String(scale))
+  if (amount <= 0n || denominator <= 0n) return 0n
+  const percentUnits = roundDiv(amount * 100_000_000n, denominator)
+  return percentUnits > 100_000_000n ? 100_000_000n : percentUnits
+}
+
+function percentCss(units: bigint): string {
+  return `${units / 1_000_000n}.${(units % 1_000_000n).toString().padStart(6, '0')}%`
+}
+
 function Line({ label, hint, value, variant, tone }: {
   label: string; hint?: string; value: ReactNode; variant: 'line' | 'subtotal' | 'total'; tone?: 'good' | 'bad'
 }) {
@@ -110,10 +123,13 @@ export function FinancialsTab({ data }: {
   const actualCost = m.actual_cost ?? 0
   const committedCost = m.committed_cost ?? 0
   const totalCost = m.total_cost ?? 0
-  const scale = Math.max(Number(costBudget), Number(totalCost), 1)
-  const actualPct = Math.min(100, (Number(actualCost) / scale) * 100)
-  const committedPct = Math.min(100 - actualPct, (Number(committedCost) / scale) * 100)
-  const budgetMarkerPct = Math.min(100, (Number(costBudget) / scale) * 100)
+  const scale = cmp(String(costBudget), '1') > 0
+    ? String(costBudget)
+    : cmp(String(totalCost), '1') > 0 ? String(totalCost) : '1'
+  const actualPct = budgetPercent(actualCost, scale)
+  const committedPctRaw = budgetPercent(committedCost, scale)
+  const committedPct = committedPctRaw > 100_000_000n - actualPct ? 100_000_000n - actualPct : committedPctRaw
+  const budgetMarkerPct = budgetPercent(costBudget, scale)
   const overBudget = cmp(String(totalCost), String(costBudget)) > 0 && cmp(String(costBudget), '0') > 0
 
   const innerTabs = [
@@ -231,9 +247,9 @@ export function FinancialsTab({ data }: {
               </span>
             </div>
             <div className="relative h-6 w-full overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800">
-              <div className="absolute inset-y-0 left-0 bg-teal-500" style={{ width: `${actualPct}%` }} title={t('cockpit.actualAmount', { amount: money(actualCost) })} />
-              <div className="absolute inset-y-0 bg-amber-400" style={{ left: `${actualPct}%`, width: `${committedPct}%` }} title={t('cockpit.committedAmount', { amount: money(committedCost) })} />
-              {cmp(String(costBudget), '0') > 0 ? <div className="absolute inset-y-0 w-0.5 bg-slate-900 dark:bg-white" style={{ left: `${budgetMarkerPct}%` }} title={t('cockpit.costBudgetAmount', { amount: money(costBudget) })} /> : null}
+              <div className="absolute inset-y-0 left-0 bg-teal-500" style={{ width: percentCss(actualPct) }} title={t('cockpit.actualAmount', { amount: money(actualCost) })} />
+              <div className="absolute inset-y-0 bg-amber-400" style={{ left: percentCss(actualPct), width: percentCss(committedPct) }} title={t('cockpit.committedAmount', { amount: money(committedCost) })} />
+              {cmp(String(costBudget), '0') > 0 ? <div className="absolute inset-y-0 w-0.5 bg-slate-900 dark:bg-white" style={{ left: percentCss(budgetMarkerPct) }} title={t('cockpit.costBudgetAmount', { amount: money(costBudget) })} /> : null}
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-teal-500" /> {t('cockpit.actualAmount', { amount: money(actualCost) })}</span>
