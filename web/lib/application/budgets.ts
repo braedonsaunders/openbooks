@@ -33,7 +33,8 @@ function featureOff(): never {
 export async function listApplicationBudgets(context: ApplicationContext) {
   assertApplicationPermission(context, "budgets.read");
   if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) featureOff();
-  return { budgets: await budgetScenarioOptions(context.authz.user.orgId) };
+  if (context.authz.allowedSubsidiaryIds?.size === 0) return { budgets: [] };
+  return { budgets: await budgetScenarioOptions(context.authz.user.orgId, context.authz.allowedSubsidiaryIds) };
 }
 
 /** One scenario — same `loadBudgetScenario` reader as GET /api/budgets/[id]. */
@@ -41,7 +42,8 @@ export async function getApplicationBudget(context: ApplicationContext, scenario
   assertApplicationPermission(context, "budgets.read");
   if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) featureOff();
   if (!isUuid(scenarioId)) throw invalidInput("budget id must be a UUID");
-  const scenario = await loadBudgetScenario(scenarioId, context.authz.user.orgId);
+  if (context.authz.allowedSubsidiaryIds?.size === 0) throw notFound("budget");
+  const scenario = await loadBudgetScenario(scenarioId, context.authz.user.orgId, context.authz.allowedSubsidiaryIds);
   if (!scenario) throw notFound("budget");
   return scenario;
 }

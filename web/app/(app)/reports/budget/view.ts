@@ -123,7 +123,7 @@ export async function loadBudgetReport(
     }
   }
   const [scenarios, dimensions] = await Promise.all([
-    budgetScenarioOptions(authz.user.orgId),
+    budgetScenarioOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
     loadBudgetDimensionOptions(authz.user.orgId),
   ])
 

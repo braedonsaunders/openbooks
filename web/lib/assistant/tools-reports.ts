@@ -473,7 +473,7 @@ const listBudgetScenarios: AssistantToolDef = {
     if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {
       return { ok: false, error: "budgets_feature_disabled" };
     }
-    const scenarios = await budgetScenarioOptions(authz.user.orgId);
+    const scenarios = await budgetScenarioOptions(authz.user.orgId, authz.allowedSubsidiaryIds);
     return { ok: true, data: { scenarios, href: "/budgets" } };
   },
 };
@@ -491,7 +491,8 @@ const getBudgetScenario: AssistantToolDef = {
       return { ok: false, error: "budgets_feature_disabled" };
     }
     const a = raw as { scenarioId: string };
-    const scenario = await loadBudgetScenario(a.scenarioId, authz.user.orgId);
+    if (authz.allowedSubsidiaryIds?.size === 0) return { ok: false, error: "forbidden" };
+    const scenario = await loadBudgetScenario(a.scenarioId, authz.user.orgId, authz.allowedSubsidiaryIds);
     if (!scenario) return { ok: false, error: "budget_scenario_not_found" };
     return { ok: true, data: { ...scenario, href: `/budgets?scenario=${scenario.id}` } };
   },

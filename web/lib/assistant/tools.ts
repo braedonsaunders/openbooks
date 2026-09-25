@@ -974,7 +974,8 @@ const budgetVsActualTool: AssistantToolDef = {
     }
     const { scenarioId, departmentId, projectId } = raw as { scenarioId?: string; departmentId?: string; projectId?: string };
     if (!scenarioId) {
-      return { ok: true, data: { scenarios: await budgetScenarioOptions(authz.user.orgId), href: "/budgets" } };
+      if (authz.allowedSubsidiaryIds?.size === 0) return { ok: false, error: "forbidden" };
+      return { ok: true, data: { scenarios: await budgetScenarioOptions(authz.user.orgId, authz.allowedSubsidiaryIds), href: "/budgets" } };
     }
     const denied = reportScopeDenied(authz);
     if (denied) return denied;
@@ -1171,7 +1172,10 @@ const continuousCloseFindings: AssistantToolDef = {
              (select count(*)::int from ai_work_item_evidence e
                where e.org_id = w.org_id and e.work_item_id = w.id) as evidence_count
         from ai_work_items w
+        left join accounts subject_account
+          on subject_account.id = w.subject_id and w.subject_type = 'account' and subject_account.org_id = w.org_id
        where w.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`subject_account.subsidiary_id`, authz.allowedSubsidiaryIds)}
          and w.agent_key in (${sql.join(agents.map((agent) => sql`${agent}`), sql`, `)})
          and w.status in (${sql.join(statuses.map((status) => sql`${status}`), sql`, `)})
          ${a.severity ? sql`and w.severity = ${a.severity}` : sql``}
@@ -1219,11 +1223,14 @@ const getContinuousCloseFinding: AssistantToolDef = {
     }
     const findingId = (raw as { findingId: string }).findingId;
     const item = (await db.execute<Record<string, unknown>>(sql`
-      select id, agent_key, finding_type, detector_version, severity, status,
-             confidence::text, materiality::text, subject_type, subject_id,
-             summary, first_detected_at, last_detected_at
-        from ai_work_items
-       where id = ${findingId} and org_id = ${authz.user.orgId}
+      select w.id, w.agent_key, w.finding_type, w.detector_version, w.severity, w.status,
+             w.confidence::text, w.materiality::text, w.subject_type, w.subject_id,
+             w.summary, w.first_detected_at, w.last_detected_at
+        from ai_work_items w
+        left join accounts subject_account
+          on subject_account.id = w.subject_id and w.subject_type = 'account' and subject_account.org_id = w.org_id
+       where w.id = ${findingId} and w.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`subject_account.subsidiary_id`, authz.allowedSubsidiaryIds)}
     `));
     const row = item.rows[0];
     if (!row) return { ok: false, error: "finding_not_found" };

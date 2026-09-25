@@ -15,14 +15,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const scenario = await loadBudgetScenario(id, gate.user.orgId)
+  const scenario = await loadBudgetScenario(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!scenario) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  // Reads reveal only scenarios wholly within scope: a scenario carrying
-  // lines outside the caller's subsidiaries answers as missing — name,
-  // description and status stay inside the scope that owns them.
-  if ((await scenarioOutOfScopeSubsidiaryNames(id, gate.user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  }
   return NextResponse.json(scenario)
 }
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
