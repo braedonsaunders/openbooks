@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { db, orgContext, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
@@ -120,12 +121,18 @@ export class JournalWriteError extends Error {
   }
 }
 
-/** Parse journal-line amounts at the brand boundary. Fail closed, same message as before. */
+/**
+ * Parse journal-line amounts at the brand boundary. Fail closed with the
+ * shared decimal composer: parseMoney refuses every unreadable value
+ * alike, so name this line's cause and remedy here — a JSON number must be
+ * resent as decimal text — never a bare "number", which sends operators to
+ * retype a value the gate cannot read.
+ */
 function persistJournalLineAmount(value: unknown, line: number): Money {
   try {
     return parseMoney(value);
   } catch {
-    throw new JournalWriteError(`line ${line}: amount must be a nonzero number with at most 4 decimal places`);
+    throw new JournalWriteError(decimalNullRefusal(`line ${line} amount`, "a nonzero decimal amount", value, 4));
   }
 }
 
@@ -181,7 +188,7 @@ export function validateJournalInput(input: ScriptJournalInput): {
   const amounts: Money[] = [];
   const lines = input.lines.map((l, i) => {
     const amount = persistJournalLineAmount(l.amount, i + 1);
-    if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
+    if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero decimal amount`);
     // One shared ledger bound (money.ts MAX_LEDGER_WHOLE_DIGITS): the UI
     // draft refuses the same figures with the same message, so a line that
     // saves in the editor never dies here and vice versa.

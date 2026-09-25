@@ -102,11 +102,11 @@ test("fewer than 2 lines is refused", () => {
 test("zero and non-numeric amounts are refused", () => {
   assert.throws(
     () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "0" }, { accountId: B, amount: "0" }] }),
-    /nonzero number/,
+    /nonzero decimal/,
   );
   assert.throws(
     () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "abc" }, { accountId: B, amount: "-1" }] }),
-    /nonzero number/,
+    /nonzero decimal/,
   );
 });
 
@@ -421,7 +421,9 @@ test("memo, reference, and description caps truncate at their documented widths"
 
 test("unreadable line amounts fail closed naming the line", () => {
   // The persist gate runs inside validation, before any balance or account
-  // check: no malformed amount can reach posting as a zero or a guess.
+  // check: no malformed amount can reach posting as a zero or a guess. Each
+  // refusal names the line and its cause-specific remedy through the shared
+  // decimal composer (its own suite owns the remedy wording).
   for (const bad of ["12,34", "1,234", "1.23456", "$100", "1e3", "abc", "", "   ", null, undefined]) {
     assert.throws(
       () => validateJournalInput({
@@ -432,8 +434,7 @@ test("unreadable line amounts fail closed naming the line", () => {
         ],
       }),
       (error: unknown) =>
-        error instanceof JournalWriteError
-        && /line 1: amount must be a nonzero number with at most 4 decimal places/.test(error.message),
+        error instanceof JournalWriteError && /line 1 amount /.test(error.message),
       `amount ${String(bad)}`,
     );
   }
