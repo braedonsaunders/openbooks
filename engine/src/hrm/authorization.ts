@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { featureEnabled } from "../organization/feature-registry.ts";
 import {
   assertUnrestrictedScope,
   lockScopeRows,
@@ -211,6 +212,45 @@ export async function requireHrmCompensationManageOnEmployment(
  */
 
 export class HrmAuthorizationError extends Error {}
+
+export type RecruitingFeatureKey =
+  | "hrmRecruiting"
+  | "hrmStructuredInterviews"
+  | "hrmInterviewScheduling"
+  | "hrmOfferSigning"
+  | "hrmJobBoards"
+  | "hrmCandidateRetention"
+  | "hrmTalentPool";
+
+const RECRUITING_FEATURE_LABEL: Record<RecruitingFeatureKey, string> = {
+  hrmRecruiting: "Recruiting",
+  hrmStructuredInterviews: "Structured interviews",
+  hrmInterviewScheduling: "Interview scheduling",
+  hrmOfferSigning: "Offer signing",
+  hrmJobBoards: "Job boards",
+  hrmCandidateRetention: "Candidate retention",
+  hrmTalentPool: "Talent pool",
+};
+
+/**
+ * The service-boundary gate for recruiting capabilities. featureEnabled
+ * resolves the registry's full dependency chain, so a child capability can
+ * never survive a disabled Recruiting or HRM parent.
+ */
+export async function requireRecruitingFeature(
+  exec: SqlExecutor,
+  orgId: string,
+  key: RecruitingFeatureKey = "hrmRecruiting",
+): Promise<void> {
+  const row = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
+    select settings->'features' as features from orgs where id = ${orgId}
+  `)).rows[0];
+  if (!featureEnabled(row?.features ?? {}, key)) {
+    throw new HrmAuthorizationError(
+      `${RECRUITING_FEATURE_LABEL[key]} is off — turn it on in Company Settings → Features before using this surface; nothing was written`,
+    );
+  }
+}
 
 /** Foundation employment duties. No future capabilities are granted here. */
 export const HRM_EMPLOYMENT_PERMISSIONS = [
@@ -1222,6 +1262,7 @@ async function requireHrmRecruitingAccess(
   requisitionId: string,
   permission: HrmRecruitingPermission,
 ): Promise<TrustedRequisitionSubject> {
+  await requireRecruitingFeature(exec, orgId);
   // The live grant set decides, then the trusted subject plus the employer
   // scope. No caller-supplied parties, booleans, or scope at any boundary.
   if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
@@ -1275,6 +1316,7 @@ export async function requireRecruitingManageForEmployer(
   actorId: string,
   employerSubsidiaryId: string,
 ): Promise<Set<string> | null> {
+  await requireRecruitingFeature(exec, orgId);
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.manage"))) {
     throw new HrmAuthorizationError(
       "Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles.",
@@ -1299,6 +1341,7 @@ export async function requireAggregateRecruitingRead(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
+  await requireRecruitingFeature(exec, orgId);
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read"))) {
     throw new HrmAuthorizationError(
       "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
@@ -1317,6 +1360,7 @@ export async function actorHoldsRecruitingRead(
   orgId: string,
   actorId: string,
 ): Promise<boolean> {
+  await requireRecruitingFeature(exec, orgId);
   return actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read");
 }
 
@@ -1339,6 +1383,7 @@ export async function requireOwnRequisitionForHiringManager(
   actorId: string,
   requisitionId: string,
 ): Promise<TrustedRequisitionSubject> {
+  await requireRecruitingFeature(exec, orgId);
   const subject = await loadTrustedRequisitionSubject(exec, orgId, requisitionId);
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (!person.partyId || subject.hiringManagerPartyId === null || person.partyId !== subject.hiringManagerPartyId) {
@@ -1391,6 +1436,7 @@ export async function requireHrmRecruitingManageOrg(
   orgId: string,
   actorId: string,
 ): Promise<void> {
+  await requireRecruitingFeature(exec, orgId);
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.manage"))) {
     throw new HrmAuthorizationError(
       "Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles.",
@@ -1409,6 +1455,7 @@ export async function requireHrmRecruitingReadOrg(
   orgId: string,
   actorId: string,
 ): Promise<void> {
+  await requireRecruitingFeature(exec, orgId);
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read"))) {
     throw new HrmAuthorizationError(
       "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",

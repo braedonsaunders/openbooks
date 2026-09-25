@@ -746,6 +746,7 @@ export async function readOfferForSigning(signingToken: string): Promise<{
   const { orgId, offerId } = await offerScopeForToken(signingToken);
   const tokenHash = hashRecruitingToken(signingToken);
   return withOrgTransaction(orgId, async () => {
+    await requireDepthFeature(db, orgId, "hrmOfferSigning");
     const full = (await db.execute<{
       signatureStatus: string | null;
       version: number;
@@ -833,6 +834,7 @@ export async function signOffer(query: {
   const documentHash: unknown = query.documentHash;
   const renderedFileId = query.renderedFileId == null ? null : requireId(query.renderedFileId, "renderedFileId");
   return withOrgTransaction(orgId, async () => {
+    await requireDepthFeature(db, orgId, "hrmOfferSigning");
     const current = (await db.execute<{
       signatureStatus: string | null;
       version: number;
@@ -931,6 +933,7 @@ export async function declineOfferSigning(query: {
   }
   const tokenHash = hashRecruitingToken(query.signingToken);
   return withOrgTransaction(orgId, async () => {
+    await requireDepthFeature(db, orgId, "hrmOfferSigning");
     const locked = (await db.execute<{ signatureStatus: string | null; signingTokenHash: string | null }>(sql`
       select signature_status as "signatureStatus", signing_token_hash as "signingTokenHash"
         from hrm_offers where org_id = ${orgId} and id = ${offerId} for update

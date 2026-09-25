@@ -54,6 +54,8 @@ test("H-RECRUIT-GRANTS: readers read shared config and history", { skip: !DB }, 
     assert.equal((await listRetentionRuns({ orgId, actorId: readerId, ruleId: rule.id })).length, 1, "runs list under read");
     assert.equal((await listOfferTemplates({ orgId, actorId: readerId })).length, 1, "templates list under read");
     assert.deepEqual(await listPoolMembers({ orgId, actorId: readerId, poolId: pool.id }), [], "empty pool lists under read");
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,hrmRecruiting}', 'false'::jsonb, true) where id = ${orgId}`);
+    await assert.rejects(createCandidate({ orgId, actorId: h.adminId, displayName: "Disabled", email: "disabled@example.test" }), /Recruiting is off/);
   } finally {
     await teardownScopeHarness(h);
   }

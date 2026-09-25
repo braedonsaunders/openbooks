@@ -46,7 +46,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.hrm-recruiting-requisitions-route-test')]
       export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
+        if (key !== 'hrmRecruiting') throw new Error('unexpected feature ' + key)
         return state.featureOn
       }
     `,

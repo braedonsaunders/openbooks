@@ -99,13 +99,6 @@ async function grantPermissions(orgId: string, userId: string, permissions: stri
   }
 }
 
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
 async function linkPerson(orgId: string, userId: string, name: string): Promise<string> {
   const partyId = randomUUID();
   await db.execute(sql`
@@ -118,7 +111,7 @@ async function linkPerson(orgId: string, userId: string, name: string): Promise<
 
 async function setupHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableHrm(org.orgId);
+  await enableRecruitingDepth(org.orgId);
   const recruiterId = await createScratchUser(org.orgId, "HRM Recruiter", "hrm_recruiter");
   const approverId = await createScratchUser(org.orgId, "HRM Approver", "hrm_approver");
   const managerId = await createScratchUser(org.orgId, "Hiring Manager", "hiring_manager");

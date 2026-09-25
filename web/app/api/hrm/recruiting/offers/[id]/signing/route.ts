@@ -17,7 +17,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrm")) ||
     !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
     !(await isFeatureEnabled(gate.user.orgId, "hrmOfferSigning"))
   ) {

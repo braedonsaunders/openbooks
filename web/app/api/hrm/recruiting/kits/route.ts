@@ -14,7 +14,6 @@ export const runtime = "nodejs";
  * is off — the Setup surface hides with the same switch.
  */
 async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return false;
   if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
   return isFeatureEnabled(orgId, "hrmStructuredInterviews");
 }
