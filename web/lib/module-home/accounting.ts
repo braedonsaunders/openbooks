@@ -92,7 +92,11 @@ function workItemScope(orgId: string, allowed: AccountingSubsidiaryScope) {
   const ids = [...allowed]
   if (ids.length === 0) return sql` and false`
   const idArray = sql`${`{${ids.join(',')}}`}::uuid[]`
-  const accountVisible = sql`(a.subsidiary_id is null or a.subsidiary_id = any(${idArray}))`
+  // Null-subsidiary (shared) account subjects fail closed for restricted
+  // readers, matching the workbench resolver: a shared account aggregates
+  // activity across every subsidiary, so counting it would leak B-only
+  // activity into an A-scoped severity count.
+  const accountVisible = sql`(a.subsidiary_id = any(${idArray}))`
   const documentVisible = sql`d.subsidiary_id = any(${idArray})`
   return sql` and (
     (w.subject_type = 'account' and exists (
