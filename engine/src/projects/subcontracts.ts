@@ -470,6 +470,13 @@ export async function updateDraftSubcontract(input: {
   defaultRetainagePercent: string;
   startsOn?: string | null;
   endsOn?: string | null;
+  /**
+   * Optimistic-concurrency token: the subcontract's updated_at exactly as
+   * the editor's loader read it. Subcontracts carry no revision counter,
+   * so the write fences on the last-write stamp instead — a stale token
+   * writes zero rows and refuses as a conflict, never a silent overwrite.
+   */
+  expectedUpdatedAt: string;
 }): Promise<void> {
   const title = input.title.trim();
   const original = persistSubcontractOriginalCommitment(input.originalCommitment);
@@ -484,12 +491,19 @@ export async function updateDraftSubcontract(input: {
     const before = (await tx.execute(sql`select * from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`));
     if (!before.rows[0]) throw new SubcontractError("Subcontract not found");
     if (before.rows[0].status !== "draft") throw new SubcontractError("Only a draft subcontract can be edited");
+    // Concurrent editors are fenced by the stamp the loader read: a stale
+    // token writes zero rows, which is a conflict (409), never a success.
     const after = (await tx.execute(sql`
       update subcontracts set title = ${title}, description = ${input.description ?? null}, original_commitment = ${original},
         default_retainage_percent = ${retainage}, starts_on = ${startsOn}, ends_on = ${endsOn},
         updated_at = now(), updated_by = ${input.userId}
-      where org_id = ${input.orgId} and id = ${input.id} returning *
+      where org_id = ${input.orgId} and id = ${input.id} and updated_at = ${input.expectedUpdatedAt}::timestamptz returning *
     `));
+    if (!after.rows[0]) {
+      throw new SubcontractConflictError(
+        "This subcontract changed while you were editing — reload it to see the other editor's values, then re-enter your changes",
+      );
+    }
     await audit(tx, input.orgId, "subcontracts", input.id, "update", { before: before.rows[0], after: after.rows[0] }, input.userId);
   });
 }

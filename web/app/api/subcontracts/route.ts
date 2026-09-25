@@ -104,6 +104,7 @@ export async function GET(request: Request) {
   const contract = (await db.execute<Record<string, unknown> & { projectSubsidiaryId: string | null }>(sql`
     select s.id, s.number, s.title, s.description, s.status, s.currency, p.subsidiary_id as "projectSubsidiaryId",
            s.project_id as "projectId", p.name as "projectName", s.vendor_id as "vendorId", v.display_name as "vendorName",
+           s.updated_at as "updatedAt",
            s.original_commitment as "originalCommitment", s.default_retainage_percent as "defaultRetainagePercent",
            s.purchase_order_id as "purchaseOrderId", s.starts_on as "startsOn", s.ends_on as "endsOn",
            s.payment_hold_reason as "paymentHoldReason", s.submitted_at as "submittedAt", s.approved_at as "approvedAt",
@@ -336,9 +337,15 @@ export async function POST(request: Request) {
         if (originalCommitment === null) return invalidDecimal("Original commitment", body.originalCommitment);
         const defaultRetainagePercent = exactMoney(body.defaultRetainagePercent);
         if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent", body.defaultRetainagePercent, "a percent");
+        // Concurrent editors are fenced by the stamp the loader read: a
+        // missing token is 422, a stale one 409s in the engine — mirroring
+        // the pay-application revision token.
+        if (typeof body.expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(body.expectedUpdatedAt))) {
+          return NextResponse.json({ error: "expectedUpdatedAt must be the updated-at token the loader read" }, { status: 422 });
+        }
         await updateDraftSubcontract({
           ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
-        } as unknown as { orgId: string; userId: string; id: string; title: string; description?: string | null; originalCommitment: string; defaultRetainagePercent: string; startsOn?: string | null; endsOn?: string | null; });
+        } as unknown as { orgId: string; userId: string; id: string; title: string; description?: string | null; originalCommitment: string; defaultRetainagePercent: string; startsOn?: string | null; endsOn?: string | null; expectedUpdatedAt: string; });
         break;
       }
       case "addSovLine": {
