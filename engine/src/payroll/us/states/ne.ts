@@ -35,6 +35,7 @@ import {
   payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -42,6 +43,7 @@ import {
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/ne.ts";
+const NE_9N_KEY = "us_ne_9n";
 
 export type NeFilingStatus = "single" | "married";
 
@@ -194,7 +196,39 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("NE_SPECIAL_MINIMUM_BASE", specialMinimumBase);
   trace("NE_TAX_QUALIFIED_DEDUCTIONS", taxQualifiedDeductions);
   trace("NE_SPECIAL_MINIMUM", specialMinimum);
-  const total = ordinary > specialMinimum ? ordinary : specialMinimum;
+  // Circular EN, Nonresident Employees, General Rule: calculate withholding
+  // on TOTAL wages first, then multiply the calculated amount by the Form 9N
+  // percentage. A filed 9N states the percentage; otherwise the verified
+  // Nebraska work share is the adequate record; with neither, the full
+  // amount stands (a nonresident working 100% in Nebraska files no 9N).
+  // The employee-requested additional amount is added after, unprorated.
+  let allocationRate = "1";
+  if (input.basis === "nonresident") {
+    const form9n = input.supportingCertificates?.[NE_9N_KEY];
+    if (form9n?.onFile) {
+      const percentage = certificateAmount(form9n, "nebraska_wages_percentage");
+      if (percentage == null || U(percentage) > U("100")) {
+        throw new PayrollError(
+          "Nebraska Form 9N needs a Nebraska wage percentage from 0 through 100; "
+          + "correct the filed allocation before calculating — refused by name",
+        );
+      }
+      allocationRate = pctToRate(percentage);
+    } else if ((input.wageAllocations ?? []).some((item) =>
+      item.region === "NE" && item.subRegion === null)) {
+      allocationRate = requireUsWageAllocation(input.wageAllocations, "NE", null).workShare;
+    }
+    factors.NE_NONRESIDENT_ALLOCATION = allocationRate;
+  }
+  const sourcedPeriodTax = input.basis === "nonresident"
+    ? mulRateCents(periodTax, allocationRate) : periodTax;
+  const sourcedMinimum = input.basis === "nonresident"
+    ? mulRateCents(specialMinimum, allocationRate) : specialMinimum;
+  if (input.basis === "nonresident") trace("NE_NONRESIDENT_TAX", sourcedPeriodTax);
+  const sourcedOrdinary = sourcedPeriodTax + extra;
+  const total = input.basis === "nonresident"
+    ? (sourcedOrdinary > sourcedMinimum ? sourcedOrdinary : sourcedMinimum)
+    : (ordinary > specialMinimum ? ordinary : specialMinimum);
   trace("NE_WITHHELD", total);
 
   return {
@@ -223,6 +257,8 @@ export const NE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NE_SPECIAL_MINIMUM_BASE: "Nebraska special-minimum base (wages less tax-qualified deductions)",
   NE_TAX_QUALIFIED_DEDUCTIONS: "Tax-qualified deductions (Nebraska special minimum)",
   NE_SPECIAL_MINIMUM: "Nebraska special minimum withholding",
+  NE_NONRESIDENT_ALLOCATION: "Nebraska nonresident share of wages subject to withholding",
+  NE_NONRESIDENT_TAX: "Nebraska withholding apportioned to Nebraska wages",
   NE_WITHHELD: "Nebraska tax withheld this period",
 };
 
@@ -233,6 +269,7 @@ export const NE_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: NE_TAX_YEAR_EDITIONS,
   printedPeriods: NE_PERIODS,
+  supportingCertificateKeys: [NE_9N_KEY],
   taxableWageBases: {
     income: "state:US:NE:income", nonPeriodic: "state:US:NE:nonPeriodic",
   },
@@ -324,6 +361,39 @@ export const NE_CERTIFICATE: PayrollCertificate = {
         + "including an exempt claim, for employers with more than 24 employees.",
     },
   ],
+};
+
+/**
+ * Form 9N, Nebraska Nonresident Employee Certificate for Allocation of
+ * Income Tax Withholding. Filed by a nonresident working in Nebraska and
+ * other states; designates the percentage of wages subject to Nebraska
+ * withholding. A nonresident working 100% in Nebraska files no 9N.
+ */
+export const NE_9N_CERTIFICATE: PayrollCertificate = {
+  key: NE_9N_KEY,
+  form: "9N",
+  label: "Nebraska Nonresident Employee Certificate for Allocation of Income Tax Withholding",
+  scope: { level: "region", region: "NE" },
+  purpose: "withholding",
+  citation:
+    "Nebraska Department of Revenue, Circular EN for wages paid on or after "
+    + "January 1, 2026, Nonresident Employees, General Rule; Form 9N",
+  summary:
+    "Reports the percentage of a nonresident employee's wages subject to Nebraska "
+    + "withholding. The employer calculates withholding on total wages first, then "
+    + "multiplies by this percentage. Without a 9N (or adequate work records), "
+    + "Nebraska withholding applies to total wages.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "nebraska_wages_percentage",
+    label: "Percentage of wages subject to Nebraska withholding",
+    kind: "amount",
+    decimals: 4,
+    min: "0",
+    max: "100",
+    required: true,
+    help: "Enter the Form 9N percentage of the employee's wages subject to Nebraska income tax withholding.",
+  }],
 };
 
 export const NE_REGION: PayrollRegionWithholding = {
