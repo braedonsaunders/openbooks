@@ -3,6 +3,7 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import { releaseFlowApproval } from "./approval-release-hook.ts";
 
 export const ALLOCATION_RUN_SUBJECT_KIND = "allocation_run";
 
@@ -118,6 +119,9 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter = {
   // Nothing on a run is a flow-writable header field: the stored computation
   // is the thing being approved, and a flow must not rewrite it.
   writableFields: new Set<string>(),
+  // releaseApproval below delegates to the registered engine handler:
+  // allocation runs release inside the engine (see releaseViaHandler).
+  releaseViaHandler: true,
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const run = await loadRun(subjectId);
@@ -172,56 +176,13 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter = {
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
   ): Promise<void> {
-    // Deterministic, engine-owned release — independent of any authored
-    // change_status node. Only acts while the run awaits approval, so it is
-    // idempotent and never fights a status a later action set. Runs inside
-    // decideGate's serialized org transaction; every statement below joins
-    // that unit (inDbTransaction participates rather than nesting).
-    const run = await loadRun(subjectId);
-    if (!run || run.org_id !== ctx.orgId) {
-      throw new Error(`allocation run ${subjectId} does not belong to this organization`);
-    }
-    if (run.status !== "pending_approval") return;
-    // Break the static import cycle (period-run dispatches flows on open).
-    const { postAllocationRun } = await import("../allocations/period-run.ts");
-    if (outcome === "approved") {
-      if (!ctx.userId) throw new Error("a signed-in approver is required");
-      const comment = detail?.comment?.trim() || null;
-      const reason = (comment ?? "Approved through approval flow").slice(0, 500);
-      try {
-        await postAllocationRun(subjectId, ctx.userId, reason, { viaApproval: true });
-      } catch (error) {
-        // Approval granted but posting impossible (e.g. the period closed
-        // while the approval was pending): return the run to previewed with
-        // the refusal recorded, so it can be re-posted — and re-approved —
-        // instead of stranding in pending_approval with a failed flow.
-        // Rethrown so the flow run marks failed (fail-closed evidence).
-        const message = error instanceof Error ? error.message : String(error);
-        await db.execute(sql`
-          update allocation_runs
-             set status = 'previewed', error = ${message},
-                 flow_run_id = null, updated_at = now(), updated_by = ${ctx.userId}
-           where id = ${subjectId} and org_id = ${ctx.orgId}`);
-        await db.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${ctx.orgId}, 'allocation_runs', ${subjectId}, 'update',
-                  ${JSON.stringify({ mode: "allocation_run_approval_refused", reason: message })}::jsonb,
-                  ${ctx.userId})`);
-        throw error;
-      }
-      return;
-    }
-    const comment = detail?.comment?.trim() || null;
-    await db.execute(sql`
-      update allocation_runs
-         set status = 'failed', error = ${comment ? `rejected: ${comment}` : "rejected"},
-             updated_at = now(), updated_by = ${ctx.userId ?? null}
-       where id = ${subjectId} and org_id = ${ctx.orgId} and status = 'pending_approval'`);
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${ctx.orgId}, 'allocation_runs', ${subjectId}, 'update',
-              ${JSON.stringify({ mode: "allocation_run_rejected", reason: comment })}::jsonb,
-              ${ctx.userId ?? null})`);
+    await releaseFlowApproval({
+      subjectKind: ALLOCATION_RUN_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      ctx,
+    });
   },
 
   async setField(): Promise<void> {

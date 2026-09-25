@@ -66,7 +66,7 @@ export {
   type EmailActionClaims,
 } from "./email-tokens.ts";
 export { runDueScheduledFlows, lastCronOccurrenceBetween } from "./scheduled.ts";
-export { flowSubjectProfileForOrg, getFlowAdapter, listFlowSubjectProfiles, webHookReleasedSubjectKinds } from "./registry.ts";
+export { flowSubjectProfileForOrg, getFlowAdapter, listFlowSubjectProfiles, handlerReleasedSubjectKinds } from "./registry.ts";
 export {
   checkFlowLock,
   getFlowLock,

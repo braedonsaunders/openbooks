@@ -3,14 +3,15 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import type {
+  FlowExecCtx,
   FlowSubjectAdapter,
   FlowSubjectContext,
 } from "./types.ts";
+import { releaseFlowApproval } from "./approval-release-hook.ts";
 import {
   BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
-import { releaseLeaveRequest } from "../hrm/leave.ts";
 
 /**
  * Leave requests as a native flow subject.
@@ -98,6 +99,8 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
 export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter = {
   subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
   profile: hrmLeaveRequestSubjectProfile,
+  // releaseApproval below delegates to the registered engine handler.
+  releaseViaHandler: true,
   // A flow must not rewrite the range it is approving: the request freezes
   // on submit, so no header field is flow-writable.
   writableFields: new Set<string>(),
@@ -141,19 +144,18 @@ export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter = {
     );
   },
 
-  async releaseApproval(subjectId, outcome, ctx, detail): Promise<void> {
-    if (!UUID_RE.test(subjectId)) {
-      throw new Error(`unknown leave request ${subjectId}`);
-    }
-    if (outcome !== "approved" && outcome !== "rejected") {
-      throw new Error(`unknown leave decision ${outcome}`);
-    }
-    await releaseLeaveRequest({
-      orgId: ctx.orgId,
-      actorId: ctx.userId ?? "",
-      requestId: subjectId,
+  async releaseApproval(
+    subjectId: string,
+    outcome: "approved" | "rejected",
+    ctx: FlowExecCtx,
+    detail?: { comment?: string | null },
+  ): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+      subjectId,
       outcome,
-      comment: detail?.comment ?? null,
+      comment: detail?.comment,
+      ctx,
     });
   },
 

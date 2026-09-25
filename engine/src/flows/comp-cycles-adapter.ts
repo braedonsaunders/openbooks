@@ -7,11 +7,11 @@ import type {
   FlowSubjectContext,
   FlowExecCtx,
 } from "./types.ts";
+import { releaseFlowApproval } from "./approval-release-hook.ts";
 import {
   BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
-import { releaseCompCycleDecision } from "../hrm/compensation/cycles.ts";
 
 /**
  * Compensation cycles as a native flow subject.
@@ -102,6 +102,8 @@ async function loadCycle(subjectId: string): Promise<CycleRow | null> {
 export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = {
   subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
   profile: hrmCompCycleSubjectProfile,
+  // releaseApproval below delegates to the registered engine handler.
+  releaseViaHandler: true,
   // A flow must not rewrite the round it is approving: the cycle freezes
   // on submit, so no header field is flow-writable.
   writableFields: new Set<string>(),
@@ -170,17 +172,12 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = {
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
   ): Promise<void> {
-    if (!UUID_RE.test(subjectId)) {
-      throw new Error(`unknown compensation cycle ${subjectId}`);
-    }
-    if (outcome !== "approved" && outcome !== "rejected") {
-      throw new Error(`unknown compensation decision ${outcome}`);
-    }
-    const cycle = await loadCycle(subjectId);
-    if (!cycle) throw new Error("compensation cycle is not visible");
-    // The release stamps the cycle inside decideGate's savepoint; the
-    // service refuses a non-review cycle so the gate stays pending.
-    await releaseCompCycleDecision(cycle.org_id, subjectId, outcome, ctx.userId ?? "");
-    void detail;
+    await releaseFlowApproval({
+      subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      ctx,
+    });
   },
 };

@@ -109,6 +109,10 @@
     "composition": {
       "description": "Composition root: installs the runtime seams (script journal writer first) that lower modules cannot import without cycling.",
       "dependsOn": [
+        "allocations",
+        "close",
+        "flows",
+        "hrm",
         "ledger",
         "platform",
         "scripting"
@@ -201,10 +205,7 @@
     "flows": {
       "description": "Approvals and workflow engine: gates, registry, subject adapters, record flows, the approvals worklist.",
       "dependsOn": [
-        "allocations",
-        "close",
         "delivery",
-        "hrm",
         "ledger",
         "organization",
         "payments",
@@ -643,9 +644,7 @@
   "cycles": [
     [
       "allocations",
-      "close",
       "flows",
-      "hrm",
       "ledger",
       "payables",
       "payments",

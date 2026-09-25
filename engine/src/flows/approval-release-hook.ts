@@ -1,10 +1,12 @@
 import type { FlowExecCtx } from "./types.ts";
 
 /**
- * Web-owned approval releases.
+ * Registered approval releases.
  *
- * Most flow subjects can release entirely inside the engine. A few product
- * records orchestrate services that intentionally live in the web package
+ * Most flow subjects can release entirely inside the engine. Engine-owned
+ * releases (allocation runs, close runs, comp cycles, change requests,
+ * leave requests) register from installEngineSeams. A few product records
+ * orchestrate services that intentionally live in the web package
  * (field-ticket rate resolution and project-charge materialization). The
  * engine cannot import web, so the node server registers those handlers at
  * boot, exactly like the existing flow PDF renderer.
@@ -54,7 +56,8 @@ export async function releaseFlowApproval(
   const handler = handlers.get(args.subjectKind);
   if (!handler) {
     throw new Error(
-      `approval release handler for "${args.subjectKind}" is not registered`,
+      `approval release handler for "${args.subjectKind}" is not registered; ` +
+        `engine handlers install via installEngineSeams(), product handlers at web boot`,
     );
   }
   await handler(args);
