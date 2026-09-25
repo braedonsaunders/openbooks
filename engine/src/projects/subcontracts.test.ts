@@ -370,7 +370,7 @@ test("createSubcontract refuses unreadable commitment money before any database 
 
 test("updateDraftSubcontract refuses unreadable commitment money before any database work", async (t) => {
   mockTransaction(t, { projects: false }, []);
-  const base = { orgId: "org-1", userId: "user-1", id: "s-1", title: "Roofing", originalCommitment: "1000", defaultRetainagePercent: "10" };
+  const base = { orgId: "org-1", userId: "user-1", id: "s-1", title: "Roofing", originalCommitment: "1000", defaultRetainagePercent: "10", expectedUpdatedAt: "2026-09-14T11:00:00.000Z" };
   for (const bad of MALFORMED_MONEY) {
     await assert.rejects(
       updateDraftSubcontract({ ...base, originalCommitment: bad as string }),
