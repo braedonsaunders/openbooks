@@ -320,6 +320,7 @@ test('a US state-tax stub prints FIT plus state withholding in YTD tax', { skip:
       }
       await setPackSlotAccount(org.orgId, actorId, 'US', 'state_income_tax', statePayable)
       await setPackSlotAccount(org.orgId, actorId, 'US', 'local_income_tax', statePayable)
+      await setPackSlotAccount(org.orgId, actorId, 'US', 'ca_sdi_employee', statePayable)
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
                                   is_elimination, is_active, custom)

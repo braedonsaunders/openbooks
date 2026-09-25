@@ -542,6 +542,7 @@ test(
       // its own payable — never the federal one the FIT rides.
       await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
       await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
+      await setPackSlotAccount(org.orgId, actorId, "US", "ca_sdi_employee", statePayable);
       // The CA hire calculates, so its ETT leg needs the UI reserve balance.
       // A deficit account is exempt: no leg posts, and this test (FICA/FUTA/
       // SUI, never ETT) asserts none of it.
@@ -597,7 +598,6 @@ test(
                 '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
                 ${actorId}, ${actorId})`);
 
-      // A second employee in a taxing state must error per-employee, not crash the run.
       const caStateEmployee = randomUUID();
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -637,12 +637,9 @@ test(
         values(${originalFilingAccountId},${org.orgId},'US','us_ein','12-3456789','Original employer',true)`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       // BOTH employees calculate now. This assertion used to be "1 paid, 1
-      // refused, because California is not supported" — the second employee was
-      // here to prove that an unsupported state errors per employee instead of
-      // crashing the run. California IS supported now: its tables are
-      // transcribed and its income tax is withheld on the stub, and the
-      // per-employee error channel is still proven by the same shape below with
-      // a state that genuinely has no engine.
+      // refused, because California is not supported" — California IS
+      // supported now: its tables are transcribed and its income tax and
+      // SDI are withheld on the stub.
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 2);
 

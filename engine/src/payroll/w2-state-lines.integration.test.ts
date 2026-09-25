@@ -90,6 +90,7 @@ async function usPayrollOrg(): Promise<Fixture> {
   }
   await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
+  await setPackSlotAccount(org.orgId, actorId, "US", "ca_sdi_employee", statePayable);
   // The presence-only ETT rate above makes California runs accrue ETT, which
   // posts through its slot like every other employer contribution.
   await setPackSlotAccount(org.orgId, actorId, "US", "ca_ett", ettPayable);
