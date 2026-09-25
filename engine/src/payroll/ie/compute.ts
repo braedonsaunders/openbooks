@@ -135,6 +135,13 @@ export interface IeStatutoryInput {
   taxCreditsAnnual: string;
   /** RPN annual standard-rate cut-off (special figure under exemption). */
   rateBandAnnual: string;
+  /**
+   * RPN annual USC cutoff-point total for THIS employment (Revenue may
+   * allocate reduced cutoffs to a concurrent second employment). The
+   * published band widths scale pro-rata to this total; at the standard
+   * €70,044 total the scaling is identity.
+   */
+  uscCutoffAnnual: string;
   /** This period's taxable pay (gross less ordinary pension contributions). */
   taxablePayPeriod: string;
   /** Prior cumulative taxable pay this year (0 on week-1 / first period). */
@@ -239,12 +246,23 @@ function uscPass(
   periodsPerYear: number,
   elapsedPeriods: number,
   cumulativeGrossPay: bigint,
+  cutoffAnnual: bigint,
 ): bigint {
   // No in-year exemption-floor test: the employer applies the RPN's USC
   // cut-off points ("This will tell you what USC rates and cut-off points
   // to apply"), and the €13,000 floor arrives as the RPN's USC exemption
   // (reconciled by Revenue at year-end). Testing the floor in-engine would
   // under-deduct USC for most of the year and then catch up in one leap.
+  //
+  // The RPN states one cutoff total per employment (reduced for a concurrent
+  // second employment per the USC Regulations 2018, reg. 10): the published
+  // band widths scale pro-rata to that total, so a standard-total RPN prices
+  // exactly the published bands while an allocated-total RPN narrows them.
+  const standardTotal = edition.uscBands.reduce(
+    (sum, band) => sum + (band.width === null ? 0n : U(band.width)),
+    0n,
+  );
+  if (standardTotal <= 0n) fail("published USC bands carry no finite width");
   const p = BigInt(periodsPerYear);
   const n = BigInt(elapsedPeriods);
   let remaining = cumulativeGrossPay;
@@ -252,7 +270,12 @@ function uscPass(
   for (const band of edition.uscBands) {
     if (remaining <= 0n) break;
     // Widths scale like cut-offs (ceiling, same convention as PAYE bands).
-    const width = band.width === null ? null : ceil2(roundDiv(U(band.width) * n, p));
+    const width = band.width === null
+      ? null
+      : ceil2(roundDiv(
+        (cutoffAnnual === standardTotal ? U(band.width) : roundDiv(U(band.width) * cutoffAnnual, standardTotal)) * n,
+        p,
+      ));
     const base = width === null || remaining < width ? remaining : width;
     charge += mulRateCents(base, band.rate);
     remaining -= base;
@@ -377,13 +400,16 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
   }
   const creditsAnnual = parseMoney(input.taxCreditsAnnual, "tax credits");
   const bandAnnual = parseMoney(input.rateBandAnnual, "rate band");
+  const uscCutoffAnnual = parseMoney(input.uscCutoffAnnual, "USC cutoffs");
   const payPeriod = parseMoney(input.taxablePayPeriod, "period taxable pay");
   const payYtd = parseMoney(input.taxablePayYtd, "cumulative taxable pay");
   const taxYtd = parseMoney(input.taxPaidYtd, "tax paid");
   const reckonable = parseMoney(input.reckonablePayPeriod, "reckonable pay");
   const grossYtd = parseMoney(input.grossPayYtd, "cumulative gross pay");
   const uscYtd = parseMoney(input.uscPaidYtd, "USC paid");
-  if (creditsAnnual < 0n || bandAnnual < 0n) fail("RPN credits and band must be non-negative");
+  if (creditsAnnual < 0n || bandAnnual < 0n || uscCutoffAnnual < 0n) {
+    fail("RPN credits, band and USC cutoffs must be non-negative");
+  }
   if (payPeriod < 0n || payYtd < 0n || reckonable < 0n || grossYtd < 0n) {
     fail("pay inputs must be non-negative");
   }
@@ -410,7 +436,7 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
     usc = 0n;
   } else {
     const cumulativeGross = grossYtd + reckonable;
-    const cumulativeUsc = uscPass(edition, input.periodsPerYear, input.elapsedPeriods, cumulativeGross);
+    const cumulativeUsc = uscPass(edition, input.periodsPerYear, input.elapsedPeriods, cumulativeGross, uscCutoffAnnual);
     usc =
       input.basis === "cumulative" ? cumulativeUsc - uscYtd : max0(cumulativeUsc - uscYtd);
   }

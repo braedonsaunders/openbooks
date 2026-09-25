@@ -241,7 +241,8 @@ test(
                 ${ieSubId}, true, ${actorId}, ${actorId})`);
       const ieEmployee = await makeEmployee(org.orgId, ieSubId, actorId, ieScheduleId, "IE", "IE", "44200", "EUR");
       await fileCertificate(org.orgId, ieEmployee, actorId, "IE", "ie_rpn", {
-        tax_credits_total: "4000", rate_band_total: "44000", pay_basis: "cumulative",
+        tax_credits_total: "4000", rate_band_total: "44000", usc_cutoff_total: "70044",
+        pay_basis: "cumulative",
       }, "2026-01-01");
       const ieRun = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: ieScheduleId,

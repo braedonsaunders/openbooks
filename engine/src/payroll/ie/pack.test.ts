@@ -101,6 +101,7 @@ describe("IE payroll pack", () => {
     assert.equal(
       certificateAnswersProblem(rpn, {
         pay_basis: "cumulative", tax_credits_total: "0", rate_band_total: "0",
+        usc_cutoff_total: "70044",
       }),
       null,
       "an explicit zero is a valid RPN amount",
@@ -258,6 +259,7 @@ describe("IE payroll pack", () => {
         pay_basis: "cumulative",
         tax_credits_total: "4000",
         rate_band_total: "44000",
+        usc_cutoff_total: "70044",
       },
     };
     const common = {

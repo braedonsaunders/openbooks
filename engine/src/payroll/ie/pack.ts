@@ -148,9 +148,11 @@ const IE_RPN: PayrollCertificate = {
     },
     {
       key: "usc_cutoff_total", label: "USC cutoff points (annual)",
-      kind: "amount", decimals: 2, min: "0",
-      help: "The RPN's USC rate cutoff points. Used with the published USC bands to compute "
-        + "USC payable or refundable each pay, cumulatively within the year.",
+      kind: "amount", decimals: 2, min: "0", required: true,
+      help: "The RPN's USC rate cutoff points for THIS employment (€70,044 standard total; "
+        + "Revenue allocates a reduced total to a concurrent second employment). The published "
+        + "USC bands scale pro-rata to this total. Required whenever an RPN is on file — an "
+        + "unrecorded total must not silently price as the full standard bands.",
     },
     {
       key: "usc_exempt", label: "Exempt from USC",
@@ -478,11 +480,15 @@ export const IE_FACTOR_LABELS: Readonly<Record<string, string>> = {
  * through the higher-rate band or remove the employee's credits. */
 export function requiredIeRpnAmount(
   answers: Readonly<Record<string, string>>,
-  key: "tax_credits_total" | "rate_band_total",
+  key: "tax_credits_total" | "rate_band_total" | "usc_cutoff_total",
 ): string {
   const value = answers[key]?.trim();
   if (value == null || value === "") {
-    const label = key === "tax_credits_total" ? "tax-credit total" : "standard-rate band";
+    const label = key === "tax_credits_total"
+      ? "tax-credit total"
+      : key === "rate_band_total"
+        ? "standard-rate band"
+        : "USC cutoff total";
     throw new PayrollPackError(
       `IE payroll cannot calculate PAYE: the Revenue Payroll Notification is missing its ${label}; ` +
       "obtain and file a complete RPN, entering an explicit 0 only when Revenue states the amount is zero.",
@@ -528,11 +534,13 @@ export async function computeIeStatutory(
   const pensionDeduction = deduction("pension_f");
   const taxableBase = add(add(income, nonPeriodic), neg(pensionDeduction));
   const elapsed = elapsedPeriodsForPayDate(payDate, P);
-  const rpnAmount = (key: "tax_credits_total" | "rate_band_total"): string => {
+  const rpnAmount = (key: "tax_credits_total" | "rate_band_total" | "usc_cutoff_total"): string => {
     const value = answer(key);
     // Let calculateIeStatutory raise the established emergency-basis refusal
     // before parsing these unused placeholders when there is no RPN. With an
-    // RPN on file, missing/blank PAYE amounts are never treated as zero.
+    // RPN on file, missing/blank RPN amounts are never treated as zero — a
+    // concurrent employment's allocated USC cutoffs must not silently price
+    // as the full standard bands.
     if (!hasRpn) return "";
     return requiredIeRpnAmount(value === null ? {} : { [key]: value }, key);
   };
@@ -545,6 +553,7 @@ export async function computeIeStatutory(
     hasRpn,
     taxCreditsAnnual: rpnAmount("tax_credits_total"),
     rateBandAnnual: rpnAmount("rate_band_total"),
+    uscCutoffAnnual: rpnAmount("usc_cutoff_total"),
     taxablePayPeriod: taxableBase,
     taxablePayYtd: add(ytd.taxbase, rpnNum("prior_cumulative_pay")),
     // grossYtd reuses the prior taxable pay as the prior-gross proxy: exact

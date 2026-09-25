@@ -94,7 +94,7 @@ async function fileRpn(
       (org_id, employee_party_id, country, certificate_key, region, sub_region,
        answers, effective_from, created_by, updated_by)
     values (${orgId}, ${employeeId}, 'IE', 'ie_rpn', null, null,
-            ${JSON.stringify({ tax_credits_total: credits, rate_band_total: band, pay_basis: "cumulative" })}::jsonb,
+            ${JSON.stringify({ tax_credits_total: credits, rate_band_total: band, usc_cutoff_total: "70044", pay_basis: "cumulative" })}::jsonb,
             '2026-01-01'::date, ${actorId}, ${actorId})`);
 }
 
