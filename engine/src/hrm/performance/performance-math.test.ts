@@ -27,38 +27,22 @@ test("parseRatingScale accepts a well-formed scale", () => {
   assert.deepEqual(parseRatingScale({ min: "1.5", max: "4.5" }).labels, []);
 });
 
-test("parseRatingScale refuses an inverted scale by name", () => {
-  assert.throws(() => parseRatingScale({ min: 5, max: 1 }), (e: unknown) => {
-    assert.ok(e instanceof PerformanceMathError);
-    assert.match(e.message, /inverted/);
-    assert.match(e.message, /min 5 is not below max 1/);
-    return true;
-  });
-});
-
-test("parseRatingScale refuses a missing scale by name", () => {
-  assert.throws(() => parseRatingScale(null), (e: unknown) => {
-    assert.ok(e instanceof PerformanceMathError);
-    assert.match(e.message, /no readable rating scale/);
-    assert.match(e.message, /before opening the cycle/);
-    return true;
-  });
-});
-
-test("parseRatingScale refuses a span wider than 99 points", () => {
-  assert.throws(() => parseRatingScale({ min: 0, max: 100 }), (e: unknown) => {
-    assert.ok(e instanceof PerformanceMathError);
-    assert.match(e.message, /more than 99 points/);
-    return true;
-  });
-});
-
-test("parseRatingScale refuses non-string labels", () => {
-  assert.throws(() => parseRatingScale({ min: 1, max: 5, labels: ["ok", 3] }), (e: unknown) => {
-    assert.ok(e instanceof PerformanceMathError);
-    assert.match(e.message, /labels must be an array of strings/);
-    return true;
-  });
+test("parseRatingScale refuses malformed scales by name", () => {
+  // One row per malformed shape; every row keeps its own message patterns —
+  // the message is the product of the refusal, so no two rows share asserts.
+  const cases: { name: string; input: unknown; patterns: RegExp[] }[] = [
+    { name: "inverted", input: { min: 5, max: 1 }, patterns: [/inverted/, /min 5 is not below max 1/] },
+    { name: "missing", input: null, patterns: [/no readable rating scale/, /before opening the cycle/] },
+    { name: "wide span", input: { min: 0, max: 100 }, patterns: [/more than 99 points/] },
+    { name: "non-string labels", input: { min: 1, max: 5, labels: ["ok", 3] }, patterns: [/labels must be an array of strings/] },
+  ];
+  for (const { name, input, patterns } of cases) {
+    assert.throws(() => parseRatingScale(input), (e: unknown) => {
+      assert.ok(e instanceof PerformanceMathError, `${name} refuses as PerformanceMathError`);
+      for (const pattern of patterns) assert.match(e.message, pattern, `${name} names its remedy`);
+      return true;
+    });
+  }
 });
 
 test("assertRatingInScale accepts the inclusive bounds", () => {
