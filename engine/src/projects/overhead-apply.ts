@@ -182,6 +182,11 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     ? await ensureOverheadKernelRule(orgId, actorId, advisory.accountId, await businessToday(orgId))
     : null;
   return inDbTransaction(async (tx) => {
+    // Aggregate first: the kernel posts through postEntry, which serializes
+    // on the org row FOR UPDATE — claim it before the policy SHARE and the
+    // time-entry claim below, or two concurrent appliers deadlock on the
+    // SHARE-to-UPDATE upgrade (journal-before-members, like labor posting).
+    await tx.execute(sql`select id from orgs where id = ${orgId} for update`);
     // Lock the policy row through commit so a configuration change cannot
     // reinterpret half of one source claim.
     const settings = await overheadApplicationSettingsFrom(tx, orgId, true);
