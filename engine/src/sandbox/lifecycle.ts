@@ -443,11 +443,13 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       sandboxOrgId,
       tier,
     });
-    await db.execute(sql`
+    const ready = await db.execute<{ id: string }>(sql`
       update sandboxes
          set status = 'ready', storage_rows = ${result.rowsCopied}, last_refresh_at = now(),
              last_error = null, updated_at = now()
-       where id = ${sb.id} and org_id = ${sandboxOrgId}`);
+       where id = ${sb.id} and org_id = ${sandboxOrgId} and status = 'provisioning'
+       returning id`);
+    if (!ready.rows[0]) throw new Error(`cannot mark sandbox ${sb.id} ready; provisioning state changed before clone completion`);
   } catch (err) {
     await db.execute(sql`
       update sandboxes
@@ -671,7 +673,7 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   const marked = (await db.execute<{ id: string }>(sql`
     update sandboxes
        set status = 'deleting', last_error = null, updated_at = now()
-     where id = ${sandboxId} and org_id = ${orgId} and status <> 'refreshing'
+     where id = ${sandboxId} and org_id = ${orgId} and status not in ('provisioning', 'refreshing', 'deleting')
      returning id`));
   if (!marked.rows[0]) {
     requireFoundSandbox(
@@ -679,7 +681,9 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
       (await db.execute<{ status: string }>(sql`
       select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0],
     );
-    throw new Error(`cannot delete sandbox ${sandboxId} while it is refreshing — retry once the refresh completes`);
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0]?.status;
+    throw new Error(`cannot delete sandbox ${sandboxId} while it is ${status ?? "unavailable"} — retry once provisioning or refresh has completed`);
   }
   try {
     const { tenantTables } = await loadCatalog();
