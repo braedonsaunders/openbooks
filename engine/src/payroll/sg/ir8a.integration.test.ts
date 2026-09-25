@@ -74,7 +74,9 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
   const cpfErId = await component("CPF_ER", "CPF — employer share", "employer_contribution", "cpf_er", false);
   const sdlId = await component("SDL", "Skills Development Levy", "employer_contribution", "sdl", false);
 
-  const run = async (periodEnd: string, payDate: string, status: "committed" | "draft"): Promise<string> => {
+  const run = async (
+    periodEnd: string, payDate: string, status: "committed" | "draft", taxYear = 2026,
+  ): Promise<string> => {
     const documentId = randomUUID();
     await db.execute(sql`
       insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
@@ -85,13 +87,13 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                             tax_year, run_status, calculated_at, created_by, updated_by)
       values (${documentId}, ${org.orgId}, ${scheduleId}, ${`${periodEnd.slice(0, 8)}01`}, ${periodEnd},
-              ${payDate}, 2026, ${status}, now(), ${actorId}, ${actorId})`);
+              ${payDate}, ${taxYear}, ${status}, now(), ${actorId}, ${actorId})`);
     return documentId;
   };
 
   const stub = async (
     documentId: string, employeeId: string, payDate: string,
-    gross: string, cpfEe: string, cpfEr: string, sdl: string,
+    gross: string, cpfEe: string, cpfEr: string, sdl: string, taxYear = 2026,
   ): Promise<void> => {
     const stubId = randomUUID();
     await db.execute(sql`
@@ -100,7 +102,7 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
                              pensionable_earnings, insurable_earnings, factors,
                              country, country_source, created_by, updated_by)
       values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, 'SG',
-              12, ${payDate}, 2026, 'SGD', ${gross}, ${gross},
+              12, ${payDate}, ${taxYear}, 'SGD', ${gross}, ${gross},
               ${gross}, ${gross}, '{}'::jsonb,
               'SG', 'calculation', ${actorId}, ${actorId})`);
     await db.execute(sql`
@@ -125,6 +127,10 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
   await stub(feb, employeeA, "2026-03-05", "4500.00", "900.00", "765.00", "11.25");
   await stub(feb, employeeB, "2026-03-05", "3000.00", "600.00", "510.00", "7.50");
   await stub(mar, employeeA, "2026-04-05", "4500.00", "900.00", "765.00", "11.25");
+
+  // Next-year-paid bonus for A (I6-payroll-292): entitled 2026, paid January 2027.
+  const jan27 = await run("2027-01-31", "2027-02-05", "committed", 2027);
+  await stub(jan27, employeeA, "2027-02-05", "1200.00", "0.00", "0.00", "0.00", 2027);
 
   return { orgId: org.orgId, actorId, employeeA, employeeB };
 }
@@ -203,6 +209,15 @@ test(
       // The builder agrees with the declaration: same rows, same figures.
       const slips = await ir8aSlips(fx.orgId, 2026);
       assert.equal(slips.length, 2);
+      // I6-payroll-292: the January-2027 bonus never vanishes from the 2026
+      // return — it surfaces on the slip's next-year-paid review pool.
+      assert.equal(
+        cmp(
+          String(slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.nextYearPaid),
+          "1200.00",
+        ),
+        0,
+      );
       assert.equal(
         cmp(
           String(slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.employmentIncome),
