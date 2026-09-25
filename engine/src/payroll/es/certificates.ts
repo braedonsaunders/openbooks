@@ -198,7 +198,42 @@ const ES_ZONA_IRPF: PayrollCertificate = {
   ],
 };
 
+const ES_RETRIBUCION_ANUAL: PayrollCertificate = {
+  key: "es_retribucion_anual",
+  form: "Previsión anual de retribuciones",
+  label: "Previsión de retribuciones para IRPF",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation: "RIRPF art. 83.2.1ª (RD 439/2007): remuneration normally expected in the calendar year",
+  summary:
+    "The employer records the total employment remuneration expected for this employee from this payer "
+    + "in the calendar year, based on the effective contract and predictable circumstances.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "importe_anual_previsto",
+      label: "Total remuneration expected for this calendar year (€)",
+      kind: "amount",
+      decimals: 2,
+      min: "0.01",
+      required: true,
+      help: "Include only remuneration expected from this payer in the current calendar year, including "
+        + "predictable one-off amounts. Update this signed declaration when expected remuneration changes.",
+    },
+    {
+      key: "periodos_recurrentes_esperados",
+      label: "Recurring pay periods expected from now through year-end",
+      kind: "count",
+      min: "1",
+      max: "12",
+      required: true,
+      help: "Count the monthly recurring payroll periods in which this employee is expected to be paid "
+        + "during this calendar year, including this period. A December starter normally has one.",
+    },
+  ],
+};
+
 export const ES_CERTIFICATES: PayrollPackCertificates = {
   country: "ES",
-  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF],
+  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL],
 };

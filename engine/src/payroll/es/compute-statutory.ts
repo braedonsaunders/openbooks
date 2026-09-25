@@ -18,6 +18,7 @@
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { sql } from "drizzle-orm";
 import { empFact } from "../employee-facts.ts";
+import { certificateAmount, certificateCount } from "../certificates.ts";
 // Side effect: registers ES_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
@@ -222,6 +223,24 @@ export async function computeEsStatutory(
   const periodPay = dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (periodPay < 0n) fail("period pay must be non-negative");
 
+  const retribucionAnualCert = certificateFor("es_retribucion_anual");
+  if (!retribucionAnualCert) {
+    fail("es_retribucion_anual is missing; certify remuneration expected from this payer this calendar year");
+  }
+  const retribucionAnualRaw = certificateAmount(retribucionAnualCert, "importe_anual_previsto");
+  if (retribucionAnualRaw == null) {
+    fail("es_retribucion_anual importe_anual_previsto is missing; certify the calendar-year total");
+  }
+  const retribucionAnualUnits = dec(retribucionAnualRaw, "es_retribucion_anual importe_anual_previsto");
+  if (retribucionAnualUnits <= 0n) fail("es_retribucion_anual importe_anual_previsto must be positive");
+  if (retribucionAnualUnits < periodPay) {
+    fail("es_retribucion_anual expected annual remuneration is below the current pay period total");
+  }
+  const periodosAnuales = certificateCount(retribucionAnualCert, "periodos_recurrentes_esperados");
+  if (periodosAnuales == null || periodosAnuales < 1 || periodosAnuales > 12) {
+    fail("es_retribucion_anual periodos_recurrentes_esperados must be 1–12 monthly periods");
+  }
+
   const currentGross = dec(ctx.gross ?? D(periodPay), "gross");
   const nonPeriodicUnits = dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (currentGross < nonPeriodicUnits) {
@@ -259,12 +278,13 @@ export async function computeEsStatutory(
       contratoTemporal: temporal === "true",
     });
   const cotizacionesAnual = D(
-    U(ssRecurrente.trabajadorTotal) * 12n
+    U(ssRecurrente.trabajadorTotal) * BigInt(periodosAnuales)
       + U(ss.trabajadorTotal) - U(ssRecurrente.trabajadorTotal),
   );
 
-  // Annual RETRIB = twelve months plus the once-paid non-periodic amount.
-  const retribAnual = D(dec(income, "income") * 12n + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic"));
+  // RIRPF art. 83.2.1ª prices the calendar-year amount normally expected,
+  // not twelve copies of a check whose employee may have started midyear.
+  const retribAnual = D(retribucionAnualUnits);
   const irpf = calculateEsIrpf2026({
     payDate,
     retribuciones: retribAnual,
