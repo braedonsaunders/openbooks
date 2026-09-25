@@ -10,8 +10,8 @@ const AUTONOMIES = ['read_only', 'draft', 'propose', 'act_with_confirmation'] as
 
 /**
  * HR-21 AI governance ledger section on /admin/ai. Capabilities table
- * (autonomy select down-only, reviewer edit, review stamp, enabled
- * toggle, sync-from-registry) and the decisions log with
+ * (autonomy select down-only, reviewer edit, review stamp, read-only
+ * effective Features status, sync-from-registry) and the decisions log with
  * capability filter chips and CSV export. Every mutation goes through
  * the existing /api/admin/ai-* routes with their setup-grant gates and
  * refusals rendered inline. Renders nothing without the setup grant —
@@ -158,16 +158,6 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
                   </td>
                   <td className="px-3 py-2 text-xs">
                     {cap.enabledLabel}
-                    <span className="block">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void patch({ key: cap.key, enabled: !cap.enabled })}
-                      >
-                        {cap.enabled ? ledger.disabledLabel : cap.enabledLabel}
-                      </Button>
-                    </span>
                   </td>
                 </tr>
               ))}

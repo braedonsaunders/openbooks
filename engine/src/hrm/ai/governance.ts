@@ -9,6 +9,7 @@ import {
 } from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { featureEnabled, type FeatureState } from "../../organization/feature-registry.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmAuthorizationError, loadApprovalPerson, requireHrmSelfRead } from "../authorization.ts";
 import { AiRailsError } from "./errors.ts";
@@ -124,9 +125,25 @@ export type CapabilityRow = {
   autonomy: string;
   reviewerRole: string | null;
   noticeRequired: boolean;
+  /** Effective Features switchboard state, never the legacy stored column. */
   enabled: boolean;
   lastReviewedAt: string | null;
   reviewedBy: string | null;
+}
+
+async function orgFeatureState(exec: SqlExecutor, orgId: string): Promise<FeatureState> {
+  return (await exec.execute<{ features: FeatureState | null }>(sql`
+    select settings->'features' as features from orgs where id = ${orgId}::uuid
+  `)).rows[0]?.features ?? {};
+}
+
+function withSwitchboardStatus(rows: CapabilityRow[], features: FeatureState): CapabilityRow[] {
+  return rows.map((row) => {
+    const featureKey = AI_CAPABILITIES.get(row.key)?.featureKey ?? row.key;
+    // Features is the sole switchboard. The legacy enabled column remains
+    // stored for schema compatibility, but is never an authority or mirror.
+    return { ...row, enabled: featureEnabled(features, featureKey) };
+  });
 }
 
 /**
@@ -146,11 +163,11 @@ export async function syncCapabilities(
     const rows = (await exec.execute<{ id: string }>(sql`
       insert into ai_capabilities (
         org_id, key, name, purpose, data_scope, autonomy,
-        reviewer_role, notice_required, enabled
+        reviewer_role, notice_required
       ) values (
         ${orgId}::uuid, ${def.key}, ${def.name}, ${def.purpose},
         ${JSON.stringify(def.dataScope)}::jsonb, ${def.maxAutonomy},
-        ${def.reviewerRole}, ${def.noticeRequired}, true
+        ${def.reviewerRole}, ${def.noticeRequired}
       )
       on conflict do nothing
       returning id::text as id`)).rows;
@@ -164,6 +181,7 @@ export async function syncCapabilities(
 
 /** List the org's capability rows (ledger read). */
 export async function listCapabilities(exec: SqlExecutor, orgId: string): Promise<CapabilityRow[]> {
+  const features = await orgFeatureState(exec, orgId);
   const rows = (await exec.execute<CapabilityRow>(sql`
     select id::text as id, key, name, purpose, data_scope as "dataScope",
            autonomy, reviewer_role as "reviewerRole",
@@ -173,7 +191,7 @@ export async function listCapabilities(exec: SqlExecutor, orgId: string): Promis
       from ai_capabilities
      where org_id = ${orgId}::uuid
      order by key`)).rows;
-  return rows;
+  return withSwitchboardStatus(rows, features);
 }
 
 /**
@@ -189,7 +207,6 @@ export async function updateCapability(
     readonly key: string;
     readonly autonomy?: string;
     readonly reviewerRole?: string | null;
-    readonly enabled?: boolean;
     readonly markReviewed?: boolean;
   },
 ): Promise<CapabilityRow> {
@@ -210,7 +227,6 @@ export async function updateCapability(
     update ai_capabilities
        set autonomy = coalesce(${input.autonomy ?? null}, autonomy),
            reviewer_role = case when ${hasReviewer} then ${input.reviewerRole ?? null} else reviewer_role end,
-           enabled = coalesce(${input.enabled ?? null}, enabled),
            last_reviewed_at = ${reviewedAt},
            reviewed_by = ${reviewedBy},
            updated_by = ${actorId}::uuid,
@@ -228,6 +244,7 @@ export async function updateCapability(
       `AI capability "${input.key}" is not registered for this organization — sync it from the code registry on /admin/ai first`,
     );
   }
+  row.enabled = featureEnabled(await orgFeatureState(exec, orgId), def.featureKey);
   await logDecision(exec, {
     orgId,
     actorId,
@@ -331,6 +348,7 @@ export async function overdueReviews(
   orgId: string,
   olderThanMonths: number,
 ): Promise<CapabilityRow[]> {
+  const features = await orgFeatureState(exec, orgId);
   const rows = (await exec.execute<CapabilityRow>(sql`
     select id::text as id, key, name, purpose, data_scope as "dataScope",
            autonomy, reviewer_role as "reviewerRole",
@@ -342,7 +360,7 @@ export async function overdueReviews(
        and (last_reviewed_at is null
             or last_reviewed_at < now() - (${olderThanMonths}::int * interval '1 month'))
      order by key`)).rows;
-  return rows;
+  return withSwitchboardStatus(rows, features);
 }
 
 /**

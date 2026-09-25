@@ -426,7 +426,6 @@ export interface AiLedgerData {
   reviewLabel: string;
   saveLabel: string;
   failedLabel: string;
-  disabledLabel: string;
   allLabel: string;
   capabilityColumns: { capability: string; autonomy: string; reviewer: string; notice: string; reviewed: string; enabled: string };
   decisionColumns: { when: string; capability: string; summary: string; outcome: string; reviewer: string };
@@ -465,7 +464,6 @@ export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
     reviewLabel: t('aiLedger.review'),
     saveLabel: t('aiLedger.save'),
     failedLabel: t('aiLedger.failed'),
-    disabledLabel: t('aiLedger.disabled'),
     allLabel: t('aiLedger.all'),
     capabilityColumns: {
       capability: t('aiLedger.columns.capability'),
