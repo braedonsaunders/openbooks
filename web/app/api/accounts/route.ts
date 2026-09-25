@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope } from '../../../lib/authz'
@@ -78,21 +79,7 @@ export async function POST(request: Request) {
   const reconcilable = body.reconcilable === true
   if (isSummary && reconcilable) return bad('summary_reconcilable_conflict')
 
-  if (parentId) {
-    if (!isUuid(parentId)) return bad('invalid_parent', 'parentId')
-    const parent = (await db.execute<{ is_summary: boolean; type: string; subsidiary_id: string | null }>(sql`
-      select is_summary, type, subsidiary_id from accounts
-       where id = ${parentId} and org_id = ${gate.user.orgId}
-    `))
-    if (!parent.rows[0]) return recordNotFoundResponse()
-    // Check visibility before testing whether the parent can contain this
-    // account; those details are hidden for another subsidiary.
-    if (guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
-      return recordNotFoundResponse()
-    }
-    if (!parent.rows[0].is_summary) return bad('parent_must_be_summary', 'parentId')
-    if (parent.rows[0].type !== body.type) return bad('parent_type_mismatch', 'parentId')
-  }
+  if (parentId && !isUuid(parentId)) return bad('invalid_parent', 'parentId')
 
   const currencyRestriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null
   if (currencyRestriction) {
@@ -171,9 +158,24 @@ export async function POST(request: Request) {
     custom,
   }
 
-  let created = false
+  let created: boolean | NextResponse = false
   try {
     created = await db.transaction(async (tx) => {
+      if (parentId) {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounts-hierarchy:${gate.user.orgId}`}, 0))`)
+        try {
+          await lockScopeRow(tx, gate.user.orgId, 'account', parentId, gate.allowedSubsidiaryIds, 'share', { orgWideNull: true })
+        } catch (error) {
+          if (!(error instanceof ScopeNotFoundError)) throw error
+          return recordNotFoundResponse()
+        }
+        const parent = (await tx.execute<{ is_summary: boolean; type: string }>(sql`
+          select is_summary, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
+        `)).rows[0]
+        if (!parent) return recordNotFoundResponse()
+        if (!parent.is_summary) return bad('parent_must_be_summary', 'parentId')
+        if (parent.type !== body.type) return bad('parent_type_mismatch', 'parentId')
+      }
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into accounts
           (id, org_id, number, name, type, description, parent_id, is_summary, is_active,
@@ -233,6 +235,7 @@ export async function POST(request: Request) {
     if (message.includes('idempotency_key_conflict')) return bad('invalid_idempotency_key', undefined, 409)
     throw error
   }
+  if (created instanceof NextResponse) return created
 
   const payload = await loadAccount(requestId, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return bad('save_failed', undefined, 500)
