@@ -674,6 +674,9 @@ test(
         deductions.find((line) => line.system_key === "state_income_tax")!.description,
         "District of Columbia income tax",
       );
+      // Paid Family Leave is an employer contribution, not income tax:
+      // $2,000 × 0.75% = $15.00, traced on the stub rather than deducted.
+      assert.equal(stub!.factors.DC_OPFL_EMPLOYER, "15.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
