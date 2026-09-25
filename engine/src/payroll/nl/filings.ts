@@ -48,9 +48,22 @@ import type { NlAgeClass } from "./rates.ts";
 // The slip builder
 // ---------------------------------------------------------------------------
 
-/** One employee's jaaropgaaf figures for the year, off committed stubs. */
+/**
+ * One dienstbetrekking's jaaropgaaf figures for the year, off committed
+ * stubs. Handboek Loonheffingen 2026, §15.1: one statement is required for
+ * each dienstbetrekking; only multiple inkomstenverhoudingen within ONE
+ * dienstbetrekking may be combined. The statement identity is therefore the
+ * employment relationship (pay_stubs.employment_id, migration 0186), not
+ * the employee alone.
+ */
 export interface JaaropgaafSlip {
   employeePartyId: string;
+  /**
+   * The dienstbetrekking this statement covers, or null for stubs that
+   * predate employment stamping — those keep the legacy per-employee
+   * aggregate, since no relationship can be attributed to them.
+   */
+  employmentId: string | null;
   employeeName: string;
   /** Loon voor de loonbelasting/premie volksverzekeringen (loonstaat kolom 14). */
   loon: string;
@@ -96,7 +109,7 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
        and s.country = 'NL'
     )
-    select c.employee_party_id, p.display_name,
+    select c.employee_party_id, c.employment_id, p.display_name,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
@@ -117,8 +130,8 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
                   and pc.system_key in ('ww', 'wia', 'wko'))) as premies
       from committed c
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
-     group by c.employee_party_id, p.display_name
-     order by p.display_name
+     group by c.employee_party_id, c.employment_id, p.display_name
+     order by p.display_name, c.employment_id
   `));
   const slips: JaaropgaafSlip[] = [];
   for (const row of rows.rows) {
@@ -126,6 +139,7 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
     const opgaaf = await nlOpgaafOnFile(orgId, employeePartyId, taxYear);
     slips.push({
       employeePartyId,
+      employmentId: row.employment_id == null ? null : String(row.employment_id),
       employeeName: String(row.display_name),
       loon: num(row.loon),
       ingehouden: num(row.ingehouden),
@@ -224,15 +238,36 @@ async function employerName(orgId: string): Promise<string> {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The jaaropgaaf row grammar, as the inverse of jaaropgaafPopulation's bare
- * employee-UUID construction. One row per employee: §15.1 permits combining
- * multiple income relationships of one employment into a single statement.
+ * The statement's row identity: the dienstbetrekking, not the employee.
+ * A stamped statement is `employeePartyId:employmentId` (both UUIDs); an
+ * unstamped legacy statement keeps the bare employee UUID, which is the
+ * per-employee aggregate of unattributable stubs. The scope stays the
+ * employee — both dienstbetrekkingen belong to them — while the slip
+ * builder re-resolves the employment leg to the statement it built.
  * Owned HERE, beside the builder — the subsidiary-scope guard parses through
  * the declaration, never its own copy of this shape.
  */
+export function jaaropgaafRowId(slip: Pick<JaaropgaafSlip, "employeePartyId" | "employmentId">): string {
+  return slip.employmentId === null
+    ? slip.employeePartyId
+    : `${slip.employeePartyId}:${slip.employmentId}`;
+}
+
+/**
+ * The jaaropgaaf row grammar, as the inverse of jaaropgaafPopulation's
+ * dienstbetrekking construction. One row per dienstbetrekking (§15.1):
+ * a bare employee UUID is the legacy unstamped statement, and
+ * `employee:employment` is one stamped statement. Owned HERE, beside the
+ * builder — the subsidiary-scope guard parses through the declaration,
+ * never its own copy of this shape.
+ */
 export function parseJaaropgaafRowId(rowId: string): PayrollFilingRowScope | null {
-  if (!UUID_RE.test(rowId)) return null;
-  return { employees: [rowId], accounts: [] };
+  const parts = rowId.split(":");
+  if (parts.length === 1 && UUID_RE.test(parts[0]!)) return { employees: [parts[0]!], accounts: [] };
+  if (parts.length === 2 && UUID_RE.test(parts[0]!) && UUID_RE.test(parts[1]!)) {
+    return { employees: [parts[0]!], accounts: [] };
+  }
+  return null;
 }
 
 async function jaaropgaafPopulation(orgId: string, taxYear: number): Promise<PayrollFilingData> {
@@ -257,7 +292,7 @@ async function jaaropgaafPopulation(orgId: string, taxYear: number): Promise<Pay
       { key: "svLoon", label: "Premieloon (SV-loon)", align: "right", money: true },
     ],
     rows: slips.map((slip) => ({
-      rowId: slip.employeePartyId,
+      rowId: jaaropgaafRowId(slip),
       employee: slip.employeeName,
       loon: slip.loon,
       ingehouden: slip.ingehouden,
@@ -269,12 +304,19 @@ async function jaaropgaafPopulation(orgId: string, taxYear: number): Promise<Pay
   };
 }
 
-/** One employee's jaaropgaaf — the §15.3 mandatory list in the authority's own terms. */
+/** One dienstbetrekking's jaaropgaaf — the §15.3 mandatory list in the authority's own terms. */
 async function jaaropgaafSlip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+  const parsed = parseJaaropgaafRowId(rowId);
+  if (!parsed) {
+    throw new PayrollError(
+      `no ${taxYear} jaaropgaaf matches the requested row — a jaaropgaaf row is the employee UUID, `
+      + "or the employee and employment UUIDs joined by a colon for a stamped dienstbetrekking",
+    );
+  }
   const slips = await jaaropgaafSlips(orgId, taxYear);
-  const slip = slips.find((candidate) => candidate.employeePartyId === rowId);
+  const slip = slips.find((candidate) => jaaropgaafRowId(candidate) === rowId);
   if (!slip) {
-    throw new PayrollError(`no ${taxYear} jaaropgaaf matches the requested employee`);
+    throw new PayrollError(`no ${taxYear} jaaropgaaf matches the requested dienstbetrekking`);
   }
   return {
     formCode: "NL_JAAROPGAAF",
@@ -282,6 +324,11 @@ async function jaaropgaafSlip(orgId: string, taxYear: number, rowId: string): Pr
     formNumber: "Jaaropgaaf",
     headerFields: [
       { label: "Employee", value: slip.employeeName },
+      // The face of the per-dienstbetrekking identity (§15.1): two rows for
+      // one employee are distinguished by the employment they cover.
+      ...(slip.employmentId === null
+        ? [{ label: "Dienstbetrekking", value: "Unstamped legacy stubs (per-employee aggregate)" }]
+        : [{ label: "Dienstbetrekking (employment id)", value: slip.employmentId }]),
       { label: "Employer / withholding agent", value: await employerName(orgId) },
       { label: "Tax year", value: String(taxYear) },
       { label: "Burgerservicenummer (BSN)", value: await bsnForSlip(orgId, slip.employeePartyId) },
