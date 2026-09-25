@@ -33,6 +33,25 @@ import {
 
 export type ScheduleKind = "prevailing_wage" | "union_agreement" | "org_declared";
 
+export interface RateScheduleLineView {
+  id: string;
+  classificationId: string;
+  classificationCode: string;
+  classificationName: string;
+  baseRate: string;
+  fringeRate: string;
+  fringeCreditRate: string;
+  overtimeMultiplier: string;
+  currency: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+export interface RateScheduleEditorData {
+  lines: readonly RateScheduleLineView[];
+  classifications: readonly { id: string; code: string; name: string }[];
+}
+
 export interface RateSchedule {
   readonly id: string;
   readonly kind: ScheduleKind;
@@ -350,6 +369,66 @@ export async function updateScheduleScope(
     const found = rows.find((row) => row.id === scheduleId);
     if (!found) throw new HrmConstructionError(`Rate schedule ${scheduleId} cannot be read back after scoping.`);
     return found;
+  });
+}
+
+/** Read the effective-dated lines available to a schedule editor. The parent
+ * schedule is resolved through the same authorization and subsidiary checks as
+ * the schedule list before any line data is returned. */
+export async function listScheduleLines(
+  exec: SqlExecutor,
+  input: { orgId: string; actorId: string; scheduleId: string },
+): Promise<RateScheduleEditorData> {
+  const scheduleId = requireId(input.scheduleId, "scheduleId");
+  const orgId = requireId(input.orgId, "orgId");
+  const actorId = requireId(input.actorId, "actorId");
+  return withOrgTransaction(orgId, async () => {
+    // Match the FOR UPDATE schedule scope writer so lines cannot be read
+    // under the old subsidiary scope while the schedule is being rehomed.
+    const locked = (await exec.execute(sql`
+      select id from hrm_rate_schedules
+       where org_id = ${orgId}::uuid and id = ${scheduleId}::uuid for share
+    `)).rows[0];
+    const schedules = await listSchedules(exec, orgId, actorId);
+    if (!locked || !schedules.some((schedule) => schedule.id === scheduleId)) {
+      throw new HrmConstructionError(
+        `Rate schedule ${scheduleId} does not exist in this organization — use one of its schedules.`,
+      );
+    }
+    const [lines, classifications] = await Promise.all([
+      exec.execute<{
+        id: string;
+        classificationId: string;
+        classificationCode: string;
+        classificationName: string;
+        baseRate: string;
+        fringeRate: string;
+        fringeCreditRate: string;
+        overtimeMultiplier: string;
+        currency: string;
+        effectiveFrom: string;
+        effectiveTo: string | null;
+      }>(sql`
+      select line.id::text as id, line.classification_id::text as "classificationId",
+             classification.code as "classificationCode", classification.name as "classificationName",
+             line.base_rate::text as "baseRate", line.fringe_rate::text as "fringeRate",
+             line.fringe_credit_rate::text as "fringeCreditRate",
+             line.overtime_multiplier::text as "overtimeMultiplier", line.currency,
+             line.effective_from::text as "effectiveFrom", line.effective_to::text as "effectiveTo"
+        from hrm_rate_schedule_lines line
+        join hrm_work_classifications classification
+          on classification.org_id = line.org_id and classification.id = line.classification_id
+       where line.org_id = ${input.orgId}::uuid and line.schedule_id = ${scheduleId}::uuid
+       order by line.effective_from desc, classification.code
+      `),
+      exec.execute<{ id: string; code: string; name: string }>(sql`
+      select id::text as id, code, name
+        from hrm_work_classifications
+       where org_id = ${input.orgId}::uuid and is_active
+       order by code, name
+      `),
+    ]);
+    return { lines: lines.rows, classifications: classifications.rows };
   });
 }
 
