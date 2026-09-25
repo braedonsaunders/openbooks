@@ -85,6 +85,7 @@ import {
   IT_2025_ULTERIORE_DETRAZIONE,
 } from "./tax-year-2025.ts";
 import {
+  IT_2026_BOLZANO_DETRAZIONE,
   IT_2026_DETRAZIONE_C2,
   IT_2026_DETRAZIONE_LAVORO,
   IT_2026_INPS_IVS,
@@ -148,6 +149,18 @@ export interface ItYearTables {
     readonly incomeCap: string;
     readonly detrazioneReduction: string;
   };
+  /**
+   * The transcribed Provincia autonoma di Bolzano detrazione on the
+   * addizionale regionale (amount against the rate-priced surtax, through
+   * the income cap). Null when the year transcribes none — the refused list
+   * then names regional detrazioni as untranscribed instead of pricing them
+   * as zero. Applied only on an explicit Bolzano domicile attribution (the
+   * "04" region code covers Trento too, on its own timetable).
+   */
+  readonly bolzanoDetrazione: {
+    readonly amount: string;
+    readonly incomeCap: string;
+  } | null;
 }
 
 export const IT_2025_TABLES: ItYearTables = {
@@ -164,6 +177,9 @@ export const IT_2025_TABLES: ItYearTables = {
   ulterioreDetrazione: IT_2025_ULTERIORE_DETRAZIONE,
   somma: IT_2025_SOMMA,
   trattamentoIntegrativo: IT_2025_TRATTAMENTO_INTEGRATIVO,
+  // 2025 transcribes no regional detrazione: regional relief stays on the
+  // refused list rather than pricing as zero.
+  bolzanoDetrazione: null,
 };
 
 export const IT_2026_TABLES: ItYearTables = {
@@ -180,6 +196,7 @@ export const IT_2026_TABLES: ItYearTables = {
   ulterioreDetrazione: IT_2026_ULTERIORE_DETRAZIONE,
   somma: IT_2026_SOMMA,
   trattamentoIntegrativo: IT_2026_TRATTAMENTO_INTEGRATIVO,
+  bolzanoDetrazione: IT_2026_BOLZANO_DETRAZIONE,
 };
 
 const U = (s: string | number): bigint => toUnits(s);
@@ -283,6 +300,14 @@ export interface It2025Input {
   periodsPerYear: number;
   /** Domicile regione (ISTAT code); domicile selects, never the workplace. */
   regionCode: string;
+  /**
+   * Domiciled in the autonomous province of Bolzano/Bozen. The "04" region
+   * code covers Trento and Bolzano on different timetables, and no comuni
+   * mapping attributes a province — so "04" without this attribution
+   * refuses by name, and `true` outside "04" refuses as contradictory.
+   * Null elsewhere prices no credit.
+   */
+  domicileBolzano?: boolean | null;
   /** Domicile comune (codice catastale); null refuses the comunale. */
   comuneCode: string | null;
   /** Declared regionale rate; null refuses (never guessed). */
@@ -885,7 +910,9 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   // brackets are entered; region 04 has no region-wide schedule at all —
   // Trento and Bolzano deliberate separately, and Bolzano's 2026 EUR 430.50
   // credit through EUR 90,000 (https://finanze.provincia.bz.it/it/addizionale-regionale-irpef-imposta-sul-reddito-delle-persone-fisiche)
-  // is not transcribed — so 04 always refuses (I6-payroll-56).
+  // is transcribed (IT_2026_BOLZANO_DETRAZIONE) and prices only on an
+  // explicit Bolzano domicile attribution — so unattributed 04 refuses
+  // (I6-payroll-56).
   if (input.regionalRate != null && input.regionalRate !== "" && hasRegionalBrackets) {
     refuse(
       `IT ${year} regionale computation is ambiguous for regione ${input.regionCode}: both a scalar rate `
@@ -900,13 +927,21 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + `enter one schedule, never both; see ${refused}`,
     );
   }
-  if (input.regionCode === "04") {
+  // Regione 04 covers Trento and Bolzano on different timetables and the
+  // pack carries no comuni map to tell them apart — so "04" without the
+  // Bolzano domicile attribution refuses instead of guessing, and a "true"
+  // outside 04 refuses as contradictory.
+  if (input.regionCode === "04" && input.domicileBolzano !== true && input.domicileBolzano !== false) {
     refuse(
-      `IT ${year} refuses regione 04 (Trentino-Alto Adige/Südtirol) from the scalar slot: the addizionale `
-      + "regionale is deliberated separately by the autonomous provinces of Trento and Bolzano, never region-wide, "
-      + "and Bolzano's 2026 EUR 430.50 credit through EUR 90,000 of regional taxable income is not transcribed — "
-      + `a single 04 computation cannot be correct; see ${refused}. Price the province's schedule outside the pack `
-      + "(pay-run adjustment, engine/src/payroll/run-adjustments.ts) until province-level inputs exist",
+      `regione 04 needs the Bolzano domicile attribution: the addizionale regionale there is set `
+      + `separately by Trento and Bolzano, and the pack attributes no province without it. Declare `
+      + `domicilio_bolzano "true" or "false" on the it_detrazioni certificate before calculating; see ${refused}`,
+    );
+  }
+  if (input.domicileBolzano === true && input.regionCode !== "04") {
+    refuse(
+      `domicilio_bolzano "true" contradicts regione ${input.regionCode}: only the autonomous province `
+      + `of Bolzano (regione 04) grants this credit — correct the region or the attribution; see ${refused}`,
     );
   }
   if (input.regionCode === "03" && !hasRegionalBrackets) {
@@ -918,9 +953,15 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + "(pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
     );
   }
-  const addRegionale = hasRegionalBrackets
+  let addRegionale = hasRegionalBrackets
     ? r2(marginalPctTax(imponibile, input.regionalBrackets ?? []))
     : r2(mulPct(imponibile, input.regionalRate ?? ""));
+  const bolzano = tables.bolzanoDetrazione;
+  if (input.domicileBolzano === true && bolzano !== null && imponibile <= U(bolzano.incomeCap)) {
+    // Capienza, like the national detrazioni above: the credit offsets the
+    // surtax owed, never below zero.
+    addRegionale = max0(addRegionale - U(bolzano.amount));
+  }
   const exemption = input.municipalSurtax?.exemption == null || input.municipalSurtax.exemption === ""
     ? null
     : needNonNegative(input.municipalSurtax.exemption, "municipalExemption", year);
@@ -1169,6 +1210,13 @@ export async function computeItStatutoryWithRates(
     presumedTotalIncome: presumed && presumed !== "0" ? presumed : null,
     periodsPerYear,
     regionCode: ctx.region,
+    // Tri-state like tempo_determinato below: answered "true"/"false" rides
+    // through, anything else is unattributed (regione 04 then refuses).
+    domicileBolzano: answers["domicilio_bolzano"] === "true"
+      ? true
+      : answers["domicilio_bolzano"] === "false"
+        ? false
+        : null,
     comuneCode: (answers["domicilio_comune"] ?? null) as string | null,
     regionalRate: rates.regionalRate,
     municipalSurtax: rates.municipalRate == null

@@ -362,6 +362,17 @@ export const IT_2026_MINIMALE = {
  * 2027 istruzioni on publication; the sentence is identical across years,
  * which is why the carry is a note and not a fresh quote.
  */
+/**
+ * Provincia autonoma di Bolzano 2026: €430,50 credito d'imposta on the
+ * addizionale regionale for regional taxable income through €90.000
+ * (before any dependent-child relief, which the pack does not carry).
+ * https://finanze.provincia.bz.it/it/addizionale-regionale-irpef-imposta-sul-reddito-delle-persone-fisiche
+ */
+export const IT_2026_BOLZANO_DETRAZIONE = {
+  amount: "430.50",
+  incomeCap: "90000",
+} as const;
+
 export const IT_2026_ROUNDING = "half-up-to-cent" as const;
 
 /**
@@ -394,7 +405,7 @@ export const IT_REFUSED_2026: readonly string[] = [
   "CCNL minimo contrattuale half of the imponibile floor (D.L. 338/1989: needs the applicable contract, which the pack does not carry)",
   "part-time minimale hourly computation and tempo parziale specifics",
   "addizionale regionale/comunale scaglioni schedules (bracketed deliberations cannot be entered in the flat rate slots)",
-  "addizionale regionale detrazioni/casi particolari (Veneto/Marche CU cod. 1 and regional family relief: per-region tables not transcribed)",
+  "addizionale regionale detrazioni/casi particolari (Veneto/Marche CU cod. 1 and regional family relief: per-region tables not transcribed — the Bolzano 2026 €430,50 credit excepted, see IT_2026_BOLZANO_DETRAZIONE)",
   "addizionale comunale casi particolari tipizzazioni (Elenco colonne A–Z1) and fusioni handling",
   "addizionale comunale acconto 30% instalment schedule (the prior-year saldo withholds as priced instalments from the assessed channel; the monthly advances pace the full current-year liability instead of ninths of 30%, and the December conguaglio settles the combined position — the timing difference is absorbed, not refused)",
   "art. 16-ter TUIR oneri detrazioni incl. the 75.000+ cap and the 2026 c. 5-bis 440 euro reduction above 200.000 (no oneri inputs in the engine: the sterilizzazione applies to a detrazione amount that is always zero here)",

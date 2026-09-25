@@ -181,6 +181,13 @@ export interface ItConguaglioDeclaration {
   premiRisultatoEligible?: boolean | null;
   /** Domicile comune (codice catastale); null refuses the comunale, as monthly. */
   comuneCode: string | null;
+  /**
+   * Domiciled in the autonomous province of Bolzano; unattributed "04"
+   * refuses, as monthly. Optional: an absent key reads exactly like an
+   * explicit null (every reader tests `!== true` / `!== false`), so fixture
+   * declarations need not restate the unattributed default.
+   */
+  domicileBolzano?: boolean | null;
 }
 
 export interface ItConguaglioRates {
@@ -264,6 +271,7 @@ export function calculateItConguaglio(
       periodsPerYear: 1,
       taxYearWorkDays: input.taxYearWorkDays ?? null,
       regionCode: input.regionCode,
+      domicileBolzano: declaration.domicileBolzano,
       comuneCode: declaration.comuneCode,
       regionalRate: rates.regionalRate,
       municipalSurtax: rates.municipalRate == null
@@ -430,6 +438,11 @@ function readSettlementDeclaration(
     isPensioner: bool(answers["titolare_pensione"] ?? null),
     presumedTotalIncome: presumed && presumed !== "0" ? presumed : null,
     comuneCode: (answers["domicilio_comune"] ?? null) as string | null,
+    domicileBolzano: answers["domicilio_bolzano"] === "true"
+      ? true
+      : answers["domicilio_bolzano"] === "false"
+        ? false
+        : null,
   };
 }
 
