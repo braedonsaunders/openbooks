@@ -956,32 +956,14 @@ async function saveWithKind(kind: "customer" | "vendor" | "employee"): Promise<R
   }
 }
 
-test("choosing kind vendor in the generic edit drawer enables the vendor role in the save", async () => {
-  const body = await saveWithKind("vendor");
-  assert.equal(body.kind, "vendor");
-  assert.equal(
-    ((body.roles as Record<string, { enabled: boolean }>).vendor ?? {}).enabled,
-    true,
-    "the kind choice must carry roles.vendor.enabled so the audited save backs the claim",
-  );
-});
-
-test("choosing kind customer in the generic edit drawer enables the customer role in the save", async () => {
-  const body = await saveWithKind("customer");
-  assert.equal(body.kind, "customer");
-  assert.equal(
-    ((body.roles as Record<string, { enabled: boolean }>).customer ?? {}).enabled,
-    true,
-    "the kind choice must carry roles.customer.enabled so the audited save backs the claim",
-  );
-});
-
-test("choosing kind employee in the generic edit drawer enables the employee role in the save", async () => {
-  const body = await saveWithKind("employee");
-  assert.equal(body.kind, "employee");
-  assert.equal(
-    ((body.roles as Record<string, { enabled: boolean }>).employee ?? {}).enabled,
-    true,
-    "the kind choice must carry roles.employee.enabled so the audited save backs the claim",
-  );
-});
+for (const kind of ["vendor", "customer", "employee"] as const) {
+  test(`choosing kind ${kind} in the generic edit drawer enables the ${kind} role in the save`, async () => {
+    const body = await saveWithKind(kind);
+    assert.equal(body.kind, kind);
+    assert.equal(
+      ((body.roles as Record<string, { enabled: boolean }>)[kind] ?? {}).enabled,
+      true,
+      `the kind choice must carry roles.${kind}.enabled so the audited save backs the claim`,
+    );
+  });
+}
