@@ -6,6 +6,7 @@ import {
   requireHrmBenefitsManage,
   requireHrmBenefitsManageOnEmployment,
 } from "../authorization.ts";
+import { lockScopeRow, ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
 import { BenefitsError } from "./errors.ts";
 import { enrollmentTouchesMonth, monthBounds, monthlyFromBasis, prorateForMonth } from "./benefits-math.ts";
 import {
@@ -108,6 +109,12 @@ async function periodsPerYearForEmployment(
   return typeof value === "number" ? value : null;
 }
 
+/**
+ * The party behind a generation employment. The caller holds this
+ * employment row FOR SHARE (locked in id order before the per-election
+ * loop), so the plain read below is stable: no rehome can move the row
+ * between this read and the inserts it feeds.
+ */
 async function workerPartyForEmployment(
   exec: SqlExecutor,
   orgId: string,
@@ -183,6 +190,25 @@ export async function generateBenefitPayrollInputs(
         scope === null ||
         (row.employerSubsidiaryId != null && scope.has(String(row.employerSubsidiaryId))),
     );
+    // Lock every employment behind this run FOR SHARE in id order BEFORE
+    // generating: the election list above read subsidiaries unlocked, so
+    // a concurrent rehome could move an employment between the list and
+    // the inserts below. Under the lock each employment is rechecked
+    // against the actor's scope; a moved or missing employment refuses by
+    // name instead of generating into the wrong legal entity.
+    for (const employmentId of [...new Set(elections.map((row) => String(row.employmentId)))].sort()) {
+      try {
+        await lockScopeRow(db, orgId, "employment", employmentId, scope, "share");
+      } catch (error) {
+        if (error instanceof ScopeNotFoundError) {
+          throw new BenefitsError(
+            "NOT_FOUND",
+            "an employment behind this month's enrolments is not visible in this organization and legal-entity scope — it may have been moved after the list was read; reload and regenerate",
+          );
+        }
+        throw error;
+      }
+    }
     const out: BenefitPayrollInputDTO[] = [];
     for (const election of elections) {
       const active: ActiveElection = {
