@@ -29,6 +29,7 @@ import { depthTabOptions } from '../recruiting/depth-view'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
+import { listScopedDepartmentOptions } from '../../../../lib/scoped-options'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
 import type { PositionCreateProps } from './PositionCreateForm'
 import type { PositionManageProps } from './PositionManageForm'
@@ -470,10 +471,8 @@ export async function loadPositionsPage(
         employerRefusal = t('positions.create.noEmployer')
       }
     }
-    const departmentRows = (await db.execute<{ id: string; name: string }>(sql`
-      select id::text as id, name from departments
-       where org_id = ${authz.user.orgId}::uuid and is_active
-       order by name`)).rows
+    // Departments the viewer may staff into (NULL subsidiary stays shared).
+    const departmentRows = await listScopedDepartmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds)
     create = {
       basePath: '/hrm/positions',
       effectiveDate,
