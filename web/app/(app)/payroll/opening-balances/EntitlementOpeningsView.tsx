@@ -214,7 +214,7 @@ export function EntitlementOpeningsView({
             id="entitlement-openings-asof"
             type="date"
             value={asOf}
-            disabled={!canManage}
+            disabled={!canManage || saving}
             className="w-40"
             onChange={(event) => setAsOf(event.target.value)}
           />
@@ -407,7 +407,7 @@ export function EntitlementOpeningsView({
                             noun={plan.unit === 'hours' ? 'a number of hours' : 'a money amount'}
                             maxScale={4}
                             placeholder="0.00"
-                            disabled={!canManage || lock !== undefined}
+                            disabled={!canManage || lock !== undefined || saving}
                             className={cn('w-32 text-right tabular-nums')}
                           />
                         </div>

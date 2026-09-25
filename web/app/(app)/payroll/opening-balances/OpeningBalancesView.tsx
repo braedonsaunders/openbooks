@@ -578,7 +578,7 @@ function OpeningBalancesYearView({
                           noun="a money amount"
                           maxScale={4}
                           placeholder="0.00"
-                          disabled={row.locked || !canManage}
+                          disabled={row.locked || !canManage || saving}
                           className="w-32 text-right tabular-nums"
                         />
                       ) : (
@@ -605,7 +605,7 @@ function OpeningBalancesYearView({
                           noun="a money amount"
                           maxScale={4}
                           placeholder="0.00"
-                          disabled={row.locked || !canManage}
+                          disabled={row.locked || !canManage || saving}
                           className="w-32 text-right tabular-nums"
                         />
                       ) : (
@@ -632,7 +632,7 @@ function OpeningBalancesYearView({
                       noun="a money amount"
                       maxScale={4}
                       placeholder="0.00"
-                      disabled={row.locked || !canManage || !component.capped}
+                      disabled={row.locked || !canManage || !component.capped || saving}
                       className="w-32 text-right tabular-nums"
                     />
                   </td>

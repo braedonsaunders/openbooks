@@ -297,7 +297,7 @@ function EmployerLevyOpeningsYearView({
                           <Input
                             aria-label={`${levy.label} base year-to-date${row.region ? `, ${row.region}` : ''}`}
                             value={valueOf(levy.country, levy.levyKey, row.region)}
-                            disabled={!canManage}
+                            disabled={!canManage || saving}
                             className="w-40"
                             inputMode="decimal"
                             onChange={(event) => setAmount(levy.country, levy.levyKey, row.region, event.target.value)}
@@ -319,7 +319,7 @@ function EmployerLevyOpeningsYearView({
                           aria-label={text('regionLabel', 'Region code')}
                           placeholder={text('regionPlaceholder', 'e.g. ON')}
                           value={row.region}
-                          disabled={!canManage}
+                          disabled={!canManage || saving}
                           className="w-32"
                           onChange={(event) =>
                             setAdded((current) =>
@@ -335,7 +335,7 @@ function EmployerLevyOpeningsYearView({
                           aria-label={`${levy.label} · ${text('newBaseLabel', 'New region base year-to-date')}${row.region ? ` · ${row.region}` : ''}`}
                           className="w-40"
                           inputMode="decimal"
-                          disabled={!canManage}
+                          disabled={!canManage || saving}
                           value={row.baseYtd}
                           onChange={(event) =>
                             setAdded((current) =>
@@ -354,6 +354,7 @@ function EmployerLevyOpeningsYearView({
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={saving}
                           onClick={() => {
                             const id = nextId
                             setNextId(id + 1)
