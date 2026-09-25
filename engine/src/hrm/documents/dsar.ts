@@ -395,6 +395,75 @@ async function fetchExportFileBytes(
  * claim owned by another worker, or a terminal row — returns silently and
  * never fails another worker's export.
  */
+/**
+ * Subject-data projection for the payroll profile: every live column of
+ * employee_payroll_profiles EXCEPT the deny set below. The hand-kept list
+ * this replaces silently dropped each new payroll pack column (0389's
+ * br_salario_familia_filhos, then 0406's es_contrato_temporal) from the
+ * subject's own file while the export still reported ready — a
+ * completeness lie in the other direction. Deriving the list from the
+ * catalog flips the default: a new held column exports unless denied.
+ *
+ * Denied by name, never by drift:
+ * - org_id, employee_party_id, created_by, updated_by: tenancy, subject
+ *   link and audit actors, uniformly omitted across every DSAR module
+ *   (the payload already carries orgId/partyId at the top level);
+ * - sin_encrypted: the sealed SIN envelope — authentication-grade secret
+ *   material (reseal_secret in engine/src/sandbox/masking.ts, the single
+ *   registry that classifies it), never subject-visible data. sin_last3
+ *   stays: it identifies the record.
+ * A future sealed-secret column must join this set (and that registry) —
+ * inclusion is the default, secrecy is explicit. Numerics and dates cast
+ * to text exactly as the hand list did; everything else reads raw, so the
+ * payload shape for existing keys is byte-identical.
+ */
+const PAYROLL_PROFILE_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "sin_encrypted",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_PROFILE_TEXT_CAST_TYPES: ReadonlySet<string> = new Set([
+  "numeric",
+  "date",
+  "timestamptz",
+  "timestamp",
+]);
+
+async function payrollProfileProjection(): Promise<SQL> {
+  const columns = (await db.execute<{ column_name: string; udt_name: string }>(sql`
+    select column_name, udt_name
+      from information_schema.columns
+     where table_schema = 'public' and table_name = 'employee_payroll_profiles'
+     order by ordinal_position
+  `)).rows;
+  const names = new Set(columns.map((column) => column.column_name));
+  // Fail closed on a catalog the deny set no longer describes: a renamed
+  // secret that stops matching its deny entry must refuse loudly, never
+  // export under its new name.
+  for (const denied of PAYROLL_PROFILE_DENIED_COLUMNS) {
+    if (!names.has(denied)) {
+      throw new Error(
+        `DSAR payroll profile deny-list names unknown column ${denied} — rebase it on the live schema`,
+      );
+    }
+  }
+  const picked = columns.filter((column) => !PAYROLL_PROFILE_DENIED_COLUMNS.has(column.column_name));
+  if (picked.length === 0) {
+    throw new Error("DSAR payroll profile projection is empty — nothing held about the subject would export");
+  }
+  return sql.join(
+    picked.map((column) =>
+      PAYROLL_PROFILE_TEXT_CAST_TYPES.has(column.udt_name)
+        ? sql`${sql.identifier(column.column_name)}::text as ${sql.identifier(column.column_name)}`
+        : sql`${sql.identifier(column.column_name)}`,
+    ),
+    sql`, `,
+  );
+}
+
 export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
   const claimed = await withOrgTransaction(orgId, () =>
@@ -864,28 +933,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
          order by country, certificate_key, effective_from nulls last
       `)).rows;
       payload.payrollProfiles = (await db.execute<Record<string, unknown>>(sql`
-        select id, employment_id, pay_schedule_id, country, province,
-               residence_region, labour_jurisdiction, pay_basis,
-               federal_claim_code, federal_claim_amount::text as federal_claim_amount,
-               provincial_claim_code, provincial_claim_amount::text as provincial_claim_amount,
-               additional_tax_per_period::text as additional_tax_per_period,
-               prescribed_zone_deduction::text as prescribed_zone_deduction,
-               authorized_annual_deductions::text as authorized_annual_deductions,
-               authorized_federal_credits::text as authorized_federal_credits,
-               authorized_provincial_credits::text as authorized_provincial_credits,
-               cpp_exempt, ei_exempt, sin_last3, tax_exempt, filing_status,
-               multiple_jobs, dependent_credits::text as dependent_credits,
-               other_income_annual::text as other_income_annual,
-               deductions_annual::text as deductions_annual,
-               w4_pre_2020, w4_allowances,
-               fica_exempt, futa_exempt, sui_exempt,
-               vacation_percent::text as vacation_percent, vacation_method,
-               union_agreement_id, union_classification_id, filing_account_id,
-               stub_delivery, payment_method, paid_on_commission,
-               pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion,
-               es_situacion_laboral, jp_hyojun_hoshu, jp_kaigo_dainigou,
-               br_dependentes, br_pensao_mensal::text as br_pensao_mensal,
-               is_active, created_at::text as created_at, updated_at::text as updated_at
+        select ${await payrollProfileProjection()}
           from employee_payroll_profiles
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by created_at
