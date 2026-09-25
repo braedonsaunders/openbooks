@@ -123,7 +123,8 @@
     "actionFailed": "A ação do orçamento falhou.",
     "revisionConflict": "Este orçamento foi alterado em outro lugar. Recarregue para continuar.",
     "selfApprovalForbidden": "Você não pode aprovar um orçamento que você enviou. Peça a outro aprovador que decida.",
-    "created": "Rascunho de orçamento criado."
+    "created": "Rascunho de orçamento criado.",
+    "savedWithLineFailure": "O rascunho do orçamento foi criado, mas não foi possível salvar as linhas ({reason}). Ele está aberto; revise as linhas antes de tentar novamente."
   },
   "import": {
     "button": "Importar",
