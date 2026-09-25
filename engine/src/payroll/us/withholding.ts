@@ -359,6 +359,8 @@ export interface UsWithholdingInput {
   taxableWageBases?: PayrollTaxBases;
   /** Federal W-4 Step 1(c) status for state methods that use the federal form. */
   federalFilingStatus?: "single" | "married_joint" | "head_household";
+  /** Federal W-4 additional amount, for states that declare a fallback share. */
+  federalAdditionalPerPeriod?: string;
   /** Preserved status and allowances from an effective 2019-or-earlier federal W-4. */
   federalLegacyW4?: UsStateWithholdingInput["federalLegacyW4"];
   /** Federal W-4 exempt claim, used by state rules that inherit it. */
@@ -663,6 +665,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         supplemental: "0",
         federalIncomeTax: input.federalIncomeTax,
         federalWithholdingExempt: input.federalWithholdingExempt,
+        federalAdditionalPerPeriod: input.federalAdditionalPerPeriod,
         taxQualifiedDeductions: input.taxQualifiedDeductions,
         certificate,
         supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
@@ -786,6 +789,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       supplementalPaymentTiming: input.supplementalPaymentTiming,
       federalIncomeTax: input.federalIncomeTax,
       federalWithholdingExempt: input.federalWithholdingExempt,
+      federalAdditionalPerPeriod: input.federalAdditionalPerPeriod,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
