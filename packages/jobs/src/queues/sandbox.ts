@@ -3,6 +3,10 @@ import { getConnection } from '../connection'
 
 export const SANDBOX_QUEUE = 'sandbox'
 
+export type SandboxJobInitiator =
+  | { actorId: string; systemReason?: never }
+  | { actorId?: null; systemReason: string }
+
 /**
  * One sandbox lifecycle operation, run asynchronously so a create/refresh that
  * copies a large tenant doesn't block the request. `op` selects the action;
@@ -18,10 +22,11 @@ export type SandboxJobData =
       masked: boolean
       asOfPeriodId?: string | null
       createdBy?: string | null
+      initiator: SandboxJobInitiator
     }
-  | { op: 'refresh'; sandboxId: string; keepCustomizations: boolean }
-  | { op: 'reset'; sandboxId: string }
-  | { op: 'delete'; sandboxId: string }
+  | { op: 'refresh'; sandboxId: string; keepCustomizations: boolean; initiator: SandboxJobInitiator }
+  | { op: 'reset'; sandboxId: string; initiator: SandboxJobInitiator }
+  | { op: 'delete'; sandboxId: string; initiator: SandboxJobInitiator }
 
 let sandboxQueue: Queue<SandboxJobData> | undefined
 

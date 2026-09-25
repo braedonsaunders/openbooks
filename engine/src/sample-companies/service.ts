@@ -392,6 +392,7 @@ export async function promoteExistingSampleTemplate(
     tier: "full",
     masked,
     createdBy: null,
+    lifecycleAuthority: { systemReason: "sample company promotion from approved template" },
   }));
   await withOrgTransaction(clone.sandboxOrgId, async () => {
     await db.transaction(async (tx) => {
@@ -677,7 +678,7 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
         `refusing to delete partial sample company ${orgId}: expected exactly one sandbox row, found ${sandboxRows.length}`,
       );
     }
-    await deleteSandbox(sandboxRows[0]!.id);
+    await deleteSandbox(sandboxRows[0]!.id, { systemReason: "sample company cleanup requested by its owner" });
     const remaining = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from orgs where id = ${orgId}`)).rows[0]!.n;
     if (remaining !== 0) {
@@ -1267,6 +1268,7 @@ export async function cloneSampleCompanyTemplate(
       tier: "full",
       masked: false,
       createdBy: null,
+      lifecycleAuthority: { systemReason: "sample company template provisioning" },
       settingsOverlay: sampleCompanyBirthMarker({
         industryKey: args.input.industryKey,
         profileId: args.profileId,
@@ -1472,7 +1474,7 @@ export async function createSampleCompany(
     await reacquireLockIfNeeded();
     const winnerBeforeFinalize = await existingFor(input.memberUserId, input.industryKey);
     if (winnerBeforeFinalize) {
-      await withBypassContext(() => deleteSandbox(cloned.sandboxId));
+      await withBypassContext(() => deleteSandbox(cloned.sandboxId, { systemReason: "compensate duplicate sample company provisioning" }));
       return {
         orgId: winnerBeforeFinalize.id,
         name: winnerBeforeFinalize.name,
@@ -1506,7 +1508,7 @@ export async function createSampleCompany(
       await reacquireLockIfNeeded();
       const winner = await existingFor(input.memberUserId, input.industryKey);
       if (winner && winner.id !== cloned.sandboxOrgId) {
-        await withBypassContext(() => deleteSandbox(cloned.sandboxId));
+        await withBypassContext(() => deleteSandbox(cloned.sandboxId, { systemReason: "compensate duplicate sample company provisioning" }));
         return {
           orgId: winner.id,
           name: winner.name,

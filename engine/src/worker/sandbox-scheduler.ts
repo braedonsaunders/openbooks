@@ -172,7 +172,7 @@ export async function tick(
       try {
         // Hand back to 'ready' is done by the refresh op; enqueue it.
         await enqueue(
-          { op: "refresh", sandboxId: s.id, keepCustomizations: s.keep !== false },
+          { op: "refresh", sandboxId: s.id, keepCustomizations: s.keep !== false, initiator: { systemReason: "scheduled sandbox refresh" } },
           { jobId: `sbxsched|${s.id}|${Math.floor(Date.now() / window)}` },
         );
       } catch (e) {

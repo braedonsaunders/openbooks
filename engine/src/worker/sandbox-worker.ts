@@ -31,13 +31,14 @@ export async function processSandboxJobData(d: SandboxJobData): Promise<unknown>
           masked: d.masked,
           asOfPeriodId: d.asOfPeriodId ?? null,
           createdBy: d.createdBy ?? null,
+          lifecycleAuthority: d.initiator,
         });
       case "refresh":
-        return await refreshSandbox(d.sandboxId, { keepCustomizations: d.keepCustomizations });
+        return await refreshSandbox(d.sandboxId, { keepCustomizations: d.keepCustomizations, authority: d.initiator });
       case "reset":
-        return await resetSandbox(d.sandboxId);
+        return await resetSandbox(d.sandboxId, d.initiator);
       case "delete":
-        return await deleteSandbox(d.sandboxId);
+        return await deleteSandbox(d.sandboxId, d.initiator);
       default: {
         // Unknown kinds (a poisoned payload, or an op from a release this
         // worker no longer knows) must fail LOUD: falling through would
