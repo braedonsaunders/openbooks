@@ -63,6 +63,7 @@ function fakeSettlement(overrides: {
   emp?: Record<string, string | null>;
   elstam?: Record<string, string | null> | null;
   pv?: Record<string, string | null> | null;
+  ausgleich?: Record<string, string | null> | null;
   ytdGross?: string;
   withheld?: Record<string, string>;
 }): { ctx: PayrollAnnualSettlementContext; pushed: Pushed[] } {
@@ -83,6 +84,9 @@ function fakeSettlement(overrides: {
   const pv = overrides.pv === undefined
     ? { kinderlosenzuschlag: "true", abschlag_kinder: "0" }
     : overrides.pv;
+  const ausgleich = overrides.ausgleich === undefined
+    ? { ganzjaehrig: "true", unveraendert: "true", kein_ausschluss: "true" }
+    : overrides.ausgleich;
   const ctx = {
     taxYear: 2026,
     country: "DE",
@@ -92,11 +96,7 @@ function fakeSettlement(overrides: {
     employeePartyId: "emp",
     employeeName: "Test Employee",
     run: {},
-    emp: overrides.emp ?? {
-      [DE_AUSGLEICH_GANZJAEHRIG]: "true",
-      [DE_AUSGLEICH_UNVERAENDERT]: "true",
-      [DE_AUSGLEICH_KEIN_AUSSCHLUSS]: "true",
-    },
+    emp: overrides.emp ?? {},
     filingAccountId: null,
     periodsPerYear: 12,
     storedCertificates: [],
@@ -108,6 +108,10 @@ function fakeSettlement(overrides: {
       if (key === "de_pv_nachweis") {
         if (pv == null) return null;
         return { certificate: {}, onFile: true, effectiveFrom: null, answers: pv, missing: [] };
+      }
+      if (key === "de_ausgleich") {
+        if (ausgleich == null) return null;
+        return { certificate: {}, onFile: true, effectiveFrom: null, answers: ausgleich, missing: [] };
       }
       return null;
     },
@@ -147,11 +151,13 @@ test("2026 declares the Jahresausgleich edition; every other year settles nothin
   assert.equal(edition.label, "Lohnsteuer-Jahresausgleich (§42b EStG)");
   assert.equal(edition.mode, "adjustment_line");
   assert.equal(edition.settlementSystemKey, "lohnsteuer");
+  // The attestations ride the de_ausgleich certificate, not the run record:
+  // no employee facts are required, and the certificate is required.
+  assert.deepEqual([...edition.requiredEmployeeFacts], []);
   assert.deepEqual(
-    [...edition.requiredEmployeeFacts],
-    [DE_AUSGLEICH_GANZJAEHRIG, DE_AUSGLEICH_UNVERAENDERT, DE_AUSGLEICH_KEIN_AUSSCHLUSS],
+    [...edition.requiredCertificates],
+    ["de_elstam", "de_pv_nachweis", "de_ausgleich"],
   );
-  assert.deepEqual([...edition.requiredCertificates], ["de_elstam", "de_pv_nachweis"]);
   assert.deepEqual([...edition.usesTenantRates], ["de_kvz"]);
   // The edition prices through the DB-backed entry point (rate resolution,
   // then the pure half every behavior test above exercises directly).
@@ -284,24 +290,23 @@ test("per-line independence: an LST refund with a Soli shortfall pushes LST only
   assert.equal(credit(pushed, "solidaritaetszuschlag"), null);
 });
 
-test("missing §42b facts refuse by name for the employee", async () => {
+test("a missing §42b certificate refuses by name for the employee", async () => {
   const edition = deAnnualSettlement(2026);
   assert.ok(edition);
-  const { ctx } = fakeSettlement({ emp: {} });
+  const { ctx } = fakeSettlement({ ausgleich: null });
   assert.deepEqual(missingSettlementInputs(edition, {
     emp: ctx.emp,
     certificateFor: ctx.certificateFor,
-  }), [
-    `employee fact ${DE_AUSGLEICH_GANZJAEHRIG}`,
-    `employee fact ${DE_AUSGLEICH_UNVERAENDERT}`,
-    `employee fact ${DE_AUSGLEICH_KEIN_AUSSCHLUSS}`,
-  ]);
+  }), ["certificate de_ausgleich"]);
   await assert.rejects(
     () => computeDeSettlementWithRates(ctx, { kvz: 2.9 }),
     (error: unknown) => {
       assert.ok(error instanceof PayrollPackError, "a pack refusal");
       assert.match(error.message, /Test Employee/);
+      assert.match(error.message, /certificate de_ausgleich/);
       assert.match(error.message, new RegExp(DE_AUSGLEICH_GANZJAEHRIG));
+      assert.match(error.message, new RegExp(DE_AUSGLEICH_UNVERAENDERT));
+      assert.match(error.message, new RegExp(DE_AUSGLEICH_KEIN_AUSSCHLUSS));
       return true;
     },
   );
@@ -311,10 +316,10 @@ test("a denied attestation refuses as excluded, not as missing", async () => {
   const edition = deAnnualSettlement(2026);
   assert.ok(edition);
   const { ctx } = fakeSettlement({
-    emp: {
-      [DE_AUSGLEICH_GANZJAEHRIG]: "false",
-      [DE_AUSGLEICH_UNVERAENDERT]: "true",
-      [DE_AUSGLEICH_KEIN_AUSSCHLUSS]: "true",
+    ausgleich: {
+      ganzjaehrig: "false",
+      unveraendert: "true",
+      kein_ausschluss: "true",
     },
   });
   await assert.rejects(

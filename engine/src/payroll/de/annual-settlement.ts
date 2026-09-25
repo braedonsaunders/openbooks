@@ -47,7 +47,7 @@ import {
   type PayrollAnnualSettlementContext,
 } from "../annual-settlement.ts";
 import type { PayrollTaxYearDefinition } from "../packs.ts";
-import { empFact } from "../employee-facts.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
 import { STKL_BY_ROMAN } from "./compute-statutory.ts";
 import {
@@ -147,30 +147,57 @@ export async function computeDeSettlementWithRates(
     );
   }
 
-  // Per-employee §42b attestations: missing refuses by name (an assumed yes
-  // is a silently wrong refund), denied refuses as excluded. The missing
-  // wording ("employee fact <key>") is deliberately identical to the
-  // generic missingSettlementInputs scan, which the edition's tests assert
-  // in parallel.
+  // Per-employee §42b attestations, fed from the de_ausgleich certificate:
+  // no profile surface collects these flags, so the run record cannot carry
+  // them and the edition requires the certificate instead — the run-boundary
+  // scan refuses `certificate de_ausgleich` before compute ever runs. The
+  // answers flow through this emp-shaped record so every read still resolves
+  // through the declaration (the house idiom — see the FR RGDU path).
+  // Missing refuses by name (an assumed yes is a silently wrong refund),
+  // denied refuses as excluded. The no-certificate wording names
+  // `certificate de_ausgleich`, deliberately identical to the generic
+  // missingSettlementInputs scan, which the edition's tests assert in
+  // parallel; the field-level wording names the employee-fact keys too, so
+  // drift against the DE_* consts refuses loudly here rather than silently.
   // Literal keys (the house idiom — see JP/ES compute paths): the
   // employee-facts conformance test reads them off the AST, so a const
-  // reference here would certify nothing. Drift against the DE_* consts is
-  // pinned both ways by that same test (consumed must equal declared).
-  const ganzjaehrig = empFact("DE", ctx.emp, "de_ausgleich_ganzjaehrig");
-  const unveraendert = empFact("DE", ctx.emp, "de_ausgleich_unveraendert");
-  const keinAusschluss = empFact("DE", ctx.emp, "de_ausgleich_kein_ausschluss");
+  // reference here would certify nothing.
+  const ausgleich = ctx.certificateFor("de_ausgleich");
+  if (ausgleich == null || !ausgleich.onFile) {
+    refuse(
+      `no Ausgleich for employee "${ctx.employeeName}" without the §42b attestations `
+      + `(certificate de_ausgleich: employee facts ${DE_AUSGLEICH_GANZJAEHRIG}, `
+      + `${DE_AUSGLEICH_UNVERAENDERT}, ${DE_AUSGLEICH_KEIN_AUSSCHLUSS}) — file each flag on the `
+      + `certificate from the HR records, the ELStAM history and the Lohnkonto; an assumed yes `
+      + `would be a silently wrong refund.`,
+    );
+  }
+  const ausgleichEmployeeFacts = {
+    de_ausgleich_ganzjaehrig: ausgleich.answers["ganzjaehrig"] ?? null,
+    de_ausgleich_unveraendert: ausgleich.answers["unveraendert"] ?? null,
+    de_ausgleich_kein_ausschluss: ausgleich.answers["kein_ausschluss"] ?? null,
+  };
+  const ganzjaehrig = resolveEmployeeFact(
+    "DE", "de_ausgleich_ganzjaehrig", empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_ganzjaehrig"),
+  );
+  const unveraendert = resolveEmployeeFact(
+    "DE", "de_ausgleich_unveraendert", empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_unveraendert"),
+  );
+  const keinAusschluss = resolveEmployeeFact(
+    "DE", "de_ausgleich_kein_ausschluss", empFact("DE", ausgleichEmployeeFacts, "de_ausgleich_kein_ausschluss"),
+  );
   const absent: string[] = [];
-  if (ganzjaehrig == null || ganzjaehrig === "") absent.push(`employee fact ${DE_AUSGLEICH_GANZJAEHRIG}`);
-  if (unveraendert == null || unveraendert === "") absent.push(`employee fact ${DE_AUSGLEICH_UNVERAENDERT}`);
-  if (keinAusschluss == null || keinAusschluss === "") absent.push(`employee fact ${DE_AUSGLEICH_KEIN_AUSSCHLUSS}`);
+  if (ganzjaehrig == null) absent.push(`certificate de_ausgleich field ganzjaehrig (employee fact ${DE_AUSGLEICH_GANZJAEHRIG})`);
+  if (unveraendert == null) absent.push(`certificate de_ausgleich field unveraendert (employee fact ${DE_AUSGLEICH_UNVERAENDERT})`);
+  if (keinAusschluss == null) absent.push(`certificate de_ausgleich field kein_ausschluss (employee fact ${DE_AUSGLEICH_KEIN_AUSSCHLUSS})`);
   if (absent.length > 0) {
     refuse(
       `no Ausgleich for employee "${ctx.employeeName}" without the §42b attestations `
-      + `(${absent.join(", ")}) — declare each on the employee's Payroll tab from the HR records, `
+      + `(${absent.join(", ")}) — answer each flag on the certificate from the HR records, `
       + `the ELStAM history and the Lohnkonto; an assumed yes would be a silently wrong refund.`,
     );
   }
-  if (!ctx.bool(ganzjaehrig) || !ctx.bool(unveraendert) || !ctx.bool(keinAusschluss)) {
+  if (ganzjaehrig !== "true" || unveraendert !== "true" || keinAusschluss !== "true") {
     refuse(
       `no Ausgleich for employee "${ctx.employeeName}" under §42b Abs. 1 EStG: the attestations `
       + `deny a continuously employed, unchanged, exclusion-free Ausgleichsjahr — this employee `
@@ -340,12 +367,11 @@ export function deAnnualSettlement(taxYear: number): PayrollAnnualSettlement | n
       + "(BMF-Schreiben vom 12.11.2025, Stand 12.11.2025 endgültig, Anlage 1 — annual path); "
       + "SVRV 2026 (bundeseinheitliche ceilings); SGB XI §§55/58 (PV Abschläge, Sachsen)",
     mode: "adjustment_line",
-    requiredEmployeeFacts: [
-      DE_AUSGLEICH_GANZJAEHRIG,
-      DE_AUSGLEICH_UNVERAENDERT,
-      DE_AUSGLEICH_KEIN_AUSSCHLUSS,
-    ],
-    requiredCertificates: ["de_elstam", "de_pv_nachweis"],
+    // The attestations live on the de_ausgleich certificate, not on the run
+    // record (no profile surface collects them), so the edition requires the
+    // certificate: the run-boundary scan refuses it by name before compute.
+    requiredEmployeeFacts: [],
+    requiredCertificates: ["de_elstam", "de_pv_nachweis", "de_ausgleich"],
     usesTenantRates: ["de_kvz"],
     settlementSystemKey: "lohnsteuer",
     compute: computeDeSettlement,

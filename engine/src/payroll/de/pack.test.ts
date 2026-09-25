@@ -61,10 +61,10 @@ test("all 16 Länder are known regions, all supported end to end", () => {
   assert.ok(DE_PAYROLL_PACK.regions.unsupportedReason.includes("{region}"));
 });
 
-test("certificates declare ELStAM (not a W-4/TD1 clone) plus the PV Kindernachweis", () => {
+test("certificates declare ELStAM (not a W-4/TD1 clone) plus the PV Kindernachweis and the §42b attestation record", () => {
   const declaration = DE_PAYROLL_PACK.certificates();
   assert.equal(declaration.country, "DE");
-  assert.equal(declaration.certificates.length, 2);
+  assert.equal(declaration.certificates.length, 3);
   const byKey = new Map(declaration.certificates.map((cert) => [cert.key, cert]));
   const elstam = byKey.get("de_elstam");
   assert.ok(elstam, "ELStAM declared");
@@ -90,6 +90,13 @@ test("certificates declare ELStAM (not a W-4/TD1 clone) plus the PV Kindernachwe
   const pv = byKey.get("de_pv_nachweis");
   assert.ok(pv, "PV Kindernachweis declared");
   assert.deepEqual(resolveCertificate({ certificate: pv, stored: [{ certificateKey: pv.key, answers: {}, effectiveFrom: "2026-01-01" }] }).missing, ["kinderlosenzuschlag", "abschlag_kinder"]);
+  // The §42b attestations live on their own employer-settled record — no
+  // profile surface collects them, so the settlement requires this filing.
+  const ausgleich = byKey.get("de_ausgleich");
+  assert.ok(ausgleich, "§42b attestation record declared");
+  assert.equal(ausgleich.scope.level, "country");
+  assert.equal(ausgleich.purpose, "withholding");
+  assert.deepEqual(resolveCertificate({ certificate: ausgleich, stored: [{ certificateKey: ausgleich.key, answers: {}, effectiveFrom: "2026-01-01" }] }).missing, ["ganzjaehrig", "unveraendert", "kein_ausschluss"]);
 });
 
 test("de_kvz tenant slot declared (org-wide); no national average transcribed", () => {

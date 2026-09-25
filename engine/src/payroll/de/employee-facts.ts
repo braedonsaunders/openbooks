@@ -6,8 +6,9 @@
  * cannot show: continuous employment through the Ausgleichsjahr, constancy
  * of class and Betriebsstätte, and the absence of every statutory exclusion.
  * The monthly engine reads none of them, so all three are `required: false`
- * (absent is an accepted answer every month of the year) with an honest
- * `none` producer (no profile surface collects them yet) — and the
+ * (absent is an accepted answer every month of the year) — and each is
+ * produced by the de_ausgleich certificate declared in ./pack.ts, which the
+ * operator files per employee per year from the employer's own records. The
  * settlement refuses by name for the employee missing or denying any of
  * them. An assumed "yes" would be a silently wrong refund, and a
  * `required: true` here would make the pack unpayable (packPayableProblem),
@@ -37,12 +38,7 @@ export const DE_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
       + "leaver, or beschränkt Steuerpflichtiger settles through assessment, never through "
       + "this settlement.",
     required: false,
-    producer: {
-      kind: "none",
-      notes:
-        "Attested from the employer's HR records (entry/exit dates, residence for §1 EStG); "
-        + "no profile surface collects it yet, so the settlement refuses until it is declared.",
-    },
+    producer: { kind: "certificate", certificate: "de_ausgleich", field: "ganzjaehrig" },
   },
   {
     key: DE_AUSGLEICH_UNVERAENDERT,
@@ -56,12 +52,7 @@ export const DE_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
       + "Sachsen PV split (§58 Abs. 3 und 5 SGB XI) and the 8%-in-BY/BW-versus-9% "
       + "Kirchenlohnsteuer rate key off it, and the annual recomputation prices one rate.",
     required: false,
-    producer: {
-      kind: "none",
-      notes:
-        "Attested from the ELStAM retrieval history and the Betriebsstätten record; no profile "
-        + "surface collects it yet, so the settlement refuses until it is declared.",
-    },
+    producer: { kind: "certificate", certificate: "de_ausgleich", field: "unveraendert" },
   },
   {
     key: DE_AUSGLEICH_KEIN_AUSSCHLUSS,
@@ -76,12 +67,7 @@ export const DE_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
       + "sonstige Bezüge, Versorgungsbezüge and the Altersentlastungsbetrag (PAP paths this "
       + "pack does not transcribe) likewise exclude the employee from this settlement.",
     required: false,
-    producer: {
-      kind: "none",
-      notes:
-        "Attested from the Lohnkonto, the benefit records and the pay history; no profile "
-        + "surface collects it yet, so the settlement refuses until it is declared.",
-    },
+    producer: { kind: "certificate", certificate: "de_ausgleich", field: "kein_ausschluss" },
   },
 ];
 
