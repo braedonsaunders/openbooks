@@ -278,19 +278,21 @@ export function EmploymentTab({
           if (!enrollmentsRes.ok || !dependentsRes.ok) {
             const unexpected = [enrollmentsRes, dependentsRes].find((res) => !res.ok && !benefitsForbidden(res))
             if (unexpected) throw new Error(await readApiErrorMessage(unexpected, t('employment.benefits.loadFailed')))
+            // Hidden, then FALL THROUGH: a return here would exit the whole
+            // IIFE and the feedback/competency block below would never load.
             setState((s) => ({ ...s, benefits: 'hidden', benefitsError: null }))
-            return
+          } else {
+            const enrollments = (await enrollmentsRes.json()) as { enrollments?: BenefitElection[] }
+            const dependents = (await dependentsRes.json()) as { dependents?: BenefitDependent[] }
+            if (cancelled || requestId.current !== current) return
+            setState((s) => ({
+              ...s,
+              benefits: 'ready',
+              benefitsError: null,
+              benefitElections: Array.isArray(enrollments.enrollments) ? enrollments.enrollments : [],
+              benefitDependents: Array.isArray(dependents.dependents) ? dependents.dependents : [],
+            }))
           }
-          const enrollments = (await enrollmentsRes.json()) as { enrollments?: BenefitElection[] }
-          const dependents = (await dependentsRes.json()) as { dependents?: BenefitDependent[] }
-          if (cancelled || requestId.current !== current) return
-          setState((s) => ({
-            ...s,
-            benefits: 'ready',
-            benefitsError: null,
-            benefitElections: Array.isArray(enrollments.enrollments) ? enrollments.enrollments : [],
-            benefitDependents: Array.isArray(dependents.dependents) ? dependents.dependents : [],
-          }))
         } catch (e) {
           if (cancelled || requestId.current !== current) return
           setState((s) => ({
@@ -313,19 +315,22 @@ export function EmploymentTab({
           if (!feedbackRes.ok || !profileRes.ok) {
             const unexpected = [feedbackRes, profileRes].find((res) => !res.ok && !continuousForbidden(res))
             if (unexpected) throw new Error(await readApiErrorMessage(unexpected, t('employment.continuous.loadFailed')))
+            // Hidden, then fall through like the benefits block above: a
+            // return here would exit the whole IIFE past any block added
+            // below.
             setState((s) => ({ ...s, continuous: 'hidden', continuousError: null }))
-            return
+          } else {
+            const fb = (await feedbackRes.json()) as { feedback?: DrawerFeedback[] }
+            const cp = (await profileRes.json()) as { profile?: DrawerCompetency[] }
+            if (cancelled || requestId.current !== current) return
+            setState((s) => ({
+              ...s,
+              continuous: 'ready',
+              continuousError: null,
+              feedback: Array.isArray(fb.feedback) ? fb.feedback : [],
+              competencies: Array.isArray(cp.profile) ? cp.profile : [],
+            }))
           }
-          const fb = (await feedbackRes.json()) as { feedback?: DrawerFeedback[] }
-          const cp = (await profileRes.json()) as { profile?: DrawerCompetency[] }
-          if (cancelled || requestId.current !== current) return
-          setState((s) => ({
-            ...s,
-            continuous: 'ready',
-            continuousError: null,
-            feedback: Array.isArray(fb.feedback) ? fb.feedback : [],
-            competencies: Array.isArray(cp.profile) ? cp.profile : [],
-          }))
         } catch (e) {
           if (cancelled || requestId.current !== current) return
           setState((s) => ({
@@ -542,11 +547,11 @@ export function EmploymentTab({
                 <p className="text-sm text-slate-500 dark:text-slate-400">{exit.record.notes}</p>
               ) : null}
               {canRecordExit ? (
-                <ExitRecordForm employmentId={employmentId} existing={exit.record} />
+                <ExitRecordForm employmentId={employmentId} existing={exit.record} onSaved={reload} />
               ) : null}
             </div>
           ) : canRecordExit ? (
-            <ExitRecordForm employmentId={employmentId} existing={null} />
+            <ExitRecordForm employmentId={employmentId} existing={null} onSaved={reload} />
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.exit.empty')}</p>
           )}

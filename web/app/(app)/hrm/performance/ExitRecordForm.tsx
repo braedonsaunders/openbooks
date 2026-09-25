@@ -28,6 +28,7 @@ const REASONS = [
 export function ExitRecordForm({
   employmentId,
   existing,
+  onSaved,
 }: {
   employmentId: string
   existing: {
@@ -40,6 +41,15 @@ export function ExitRecordForm({
     notes: string | null
     revision: number
   } | null
+  /**
+   * Refetch hook for hosts that hold the record in client state (the
+   * Employment tab fetches the exit record itself): after a record or a
+   * correction, the stored revision moved, so the host must re-read
+   * before the next submit — otherwise the next create reports "already
+   * has an exit record" and the next correction fails stale-revision.
+   * Server-rendered hosts omit it: router.refresh() re-runs their loader.
+   */
+  onSaved?: () => void
 }) {
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
@@ -141,6 +151,7 @@ export function ExitRecordForm({
         setBusy(false)
         return
       }
+      onSaved?.()
       router.refresh()
       setBusy(false)
     } catch {
