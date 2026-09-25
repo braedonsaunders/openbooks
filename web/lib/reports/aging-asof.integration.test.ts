@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto'
 /**
  * AR/AP aging is a point-in-time statement: the `asOf` boundary must scope
  * BOTH the document set and the open balances. The repo's own audit harness
- * (engine/src/harness/scenario.ts, `subledger-gl-tieout`) reconstructs the
+ * (engine/src/golden/scenario.ts, `subledger-gl-tieout`) reconstructs the
  * subledger "point-in-time as-of the cutoff (payments applied after it don't
  * reduce the balance, and their GL is excluded too)". Aging that reads the
  * live cached `documents.open_balance` silently drops invoices settled after

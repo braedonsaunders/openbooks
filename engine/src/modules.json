@@ -214,9 +214,17 @@
         "platform"
       ]
     },
+    "golden": {
+      "description": "Golden scenario checkpoint: double-entry integrity, subledger-to-GL tie-out, RLS probes; shared by the harness and the simulator's invariant oracle.",
+      "dependsOn": [
+        "money",
+        "platform"
+      ]
+    },
     "harness": {
       "description": "Verification harnesses: golden scenario, differential corpus, replay, mutation.",
       "dependsOn": [
+        "golden",
         "ledger",
         "money",
         "payments",
@@ -525,7 +533,7 @@
         "close",
         "consolidation",
         "flows",
-        "harness",
+        "golden",
         "journal",
         "ledger",
         "money",
@@ -630,10 +638,6 @@
       "payroll",
       "projects",
       "scripting"
-    ],
-    [
-      "harness",
-      "sim"
     ]
   ]
 }

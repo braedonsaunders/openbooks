@@ -8,7 +8,7 @@ import {
   createScratchOrg,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
-import { probeTableIsolation, runScenario } from "./scenario.ts";
+import { probeTableIsolation, runScenario } from "../golden/scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

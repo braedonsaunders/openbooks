@@ -22,7 +22,7 @@ type OrgRow = { id: string; name: string; ccy: string };
 // Return type is inferred (not annotated): drizzle rows are
 // Assume<T, QueryResultRow>, which resolves to T for concrete callers but is
 // not assignable back to a bare T inside a generic helper — the same reason
-// engine/src/harness/scenario.ts leaves its one/all helpers unannotated.
+// engine/src/golden/scenario.ts leaves its one/all helpers unannotated.
 const q = async <T extends Record<string, unknown> = Record<string, unknown>>(
   s: ReturnType<typeof sql>,
 ) => (await db.execute<T>(s)).rows;

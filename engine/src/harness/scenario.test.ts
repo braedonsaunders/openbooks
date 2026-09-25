@@ -12,7 +12,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import { runScenarioForOrg, type Checkpoint } from "./scenario.ts";
+import { runScenarioForOrg, type Checkpoint } from "../golden/scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
