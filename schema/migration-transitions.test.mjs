@@ -22,16 +22,16 @@ const presentFiles = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith(
 const presentContent = new Map(presentFiles.map((name) => [name, readFileSync(join(MIGRATIONS_DIR, name), 'utf8')]))
 
 /**
- * Every digest each migration file ever published, across all branches: a
- * ledger can record any of them. One `git log --raw` names every historical
- * blob; one `git cat-file --batch` hashes them all in a single process.
+ * Every digest each migration file ever published on main: only landed bytes
+ * can wedge a durable ledger, so fleet lanes' drafts stay invisible (they
+ * converge on rebase; no lane can audit another's unfinished edit).
  */
 function publishedDigests() {
   const raw = execFileSync(
     'git',
     // --no-abbrev: the batch responses echo full blob SHAs, and attribution
     // below keys on them; abbreviated raw SHAs would never match back.
-    ['log', '--all', '--raw', '--no-abbrev', '--format=%H', '--', 'schema/migrations/generated'],
+    ['log', 'main', '--raw', '--no-abbrev', '--format=%H', '--', 'schema/migrations/generated'],
     { cwd: ROOT, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 },
   )
   const blobs = new Map() // blobSha -> Set<filename>
