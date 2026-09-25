@@ -349,6 +349,8 @@ function readSettlementDeclaration(
       : answers["tempo_determinato"] === "false"
         ? false
         : null,
+    hasRenewalIncreases: answers["aumenti_rinnovo_ccnl"] === "true" ? true : undefined,
+    hasShiftAllowances: answers["indennita_notturno_festivi"] === "true" ? true : undefined,
     isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
       ? undefined
       : bool(answers["anzianita_post_1995"]),
