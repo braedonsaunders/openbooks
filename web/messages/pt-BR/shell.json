@@ -158,6 +158,7 @@
     },
     "markAllRead": "Marcar tudo como lido",
     "markRead": "Marcar como lido",
+    "markFailed": "Não foi possível marcar as notificações como lidas.",
     "readLabel": "Lido",
     "emptyTitle": "Nada por aqui ainda",
     "emptyDescription": "As notificações chegam quando um fluxo, uma aprovação ou uma automação de fechamento precisa de você.",

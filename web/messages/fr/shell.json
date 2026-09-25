@@ -158,6 +158,7 @@
     },
     "markAllRead": "Tout marquer comme lu",
     "markRead": "Marquer comme lu",
+    "markFailed": "Impossible de marquer les notifications comme lues.",
     "readLabel": "Lu",
     "emptyTitle": "Rien pour l'instant",
     "emptyDescription": "Les notifications arrivent lorsqu'un flux, une approbation ou une automatisation de clôture a besoin de vous.",

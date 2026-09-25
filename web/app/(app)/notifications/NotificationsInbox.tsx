@@ -8,11 +8,13 @@
 // the header bell used before the inbox moved onto its own page), followed by
 // router.refresh() so the server-rendered counts and tabs re-resolve.
 
-import { useCallback, useState, useTransition } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Check } from 'lucide-react'
-import { cn } from '@openbooks/ui'
+import { Alert, Button, cn } from '@openbooks/ui'
+import { useAppAction } from '../../../lib/use-app-action'
 
 export interface NotificationRow {
   id: string
@@ -24,8 +26,8 @@ export interface NotificationRow {
   read: boolean
 }
 
-async function markRead(body: { ids: string[] } | { all: true }): Promise<void> {
-  await fetch('/api/notifications', {
+function markRead(body: { ids: string[] } | { all: true }) {
+  return fetchAction('/api/notifications', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -35,20 +37,25 @@ async function markRead(body: { ids: string[] } | { all: true }): Promise<void> 
 export function NotificationsInbox({ rows }: { rows: NotificationRow[] }) {
   const t = useTranslations('shell.notifications')
   const router = useRouter()
-  const [pending, startTransition] = useTransition()
+  const { busy, execute } = useAppAction()
+  const [failure, setFailure] = useState<string | null>(null)
   // Rows the reader has just marked read: the refresh that follows is a round
   // trip, and a dot that lingers until it lands reads as a failed click.
   const [justRead, setJustRead] = useState<Record<string, true>>({})
 
   const read = useCallback(
     (id: string) => {
-      setJustRead((prev) => ({ ...prev, [id]: true }))
-      startTransition(async () => {
-        await markRead({ ids: [id] })
-        router.refresh()
+      setFailure(null)
+      void execute(() => markRead({ ids: [id] }), {
+        fallbackMessage: t('markFailed'),
+        onRefused: (error) => setFailure(error.displayMessage(t('markFailed'))),
+        onOk: () => {
+          setJustRead((prev) => ({ ...prev, [id]: true }))
+          router.refresh()
+        },
       })
     },
-    [router],
+    [execute, router, t],
   )
 
   function open(row: NotificationRow) {
@@ -58,6 +65,7 @@ export function NotificationsInbox({ rows }: { rows: NotificationRow[] }) {
 
   return (
     <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+      {failure ? <li className="p-3"><Alert variant="destructive">{failure}</Alert></li> : null}
       {rows.map((row) => {
         const unread = !row.read && !justRead[row.id]
         const clickable = Boolean(row.href)
@@ -87,7 +95,7 @@ export function NotificationsInbox({ rows }: { rows: NotificationRow[] }) {
               <button
                 type="button"
                 onClick={() => read(row.id)}
-                disabled={pending}
+                disabled={busy}
                 className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               >
                 <Check size={13} aria-hidden />
@@ -132,22 +140,23 @@ function RowBody({ row, unread }: { row: NotificationRow; unread: boolean }) {
 export function NotificationsMarkAllRead({ unread }: { unread: number }) {
   const t = useTranslations('shell.notifications')
   const router = useRouter()
-  const [pending, startTransition] = useTransition()
+  const { busy, execute } = useAppAction()
+  const [failure, setFailure] = useState<string | null>(null)
   if (unread <= 0) return null
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() =>
-        startTransition(async () => {
-          await markRead({ all: true })
-          router.refresh()
+    <span className="inline-flex flex-col items-end gap-1">
+      {failure ? <span role="alert" className="text-xs text-red-700 dark:text-red-300">{failure}</span> : null}
+      <Button variant="outline" disabled={busy} onClick={() => {
+        setFailure(null)
+        void execute(() => markRead({ all: true }), {
+          fallbackMessage: t('markFailed'),
+          onRefused: (error) => setFailure(error.displayMessage(t('markFailed'))),
+          onOk: () => router.refresh(),
         })
-      }
-      className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-    >
-      <Check size={15} aria-hidden />
-      {t('markAllRead')}
-    </button>
+      }}>
+        <Check size={15} aria-hidden />
+        {t('markAllRead')}
+      </Button>
+    </span>
   )
 }

@@ -158,6 +158,7 @@
     },
     "markAllRead": "すべて既読にする",
     "markRead": "既読にする",
+    "markFailed": "通知を既読にできませんでした。",
     "readLabel": "既読",
     "emptyTitle": "まだ何もありません",
     "emptyDescription": "フロー、承認、決算の自動処理で対応が必要になると通知が届きます。",
