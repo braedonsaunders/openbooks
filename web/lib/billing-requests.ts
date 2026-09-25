@@ -171,6 +171,13 @@ export async function createBillingRequest(
     if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
       throw new Error("Projects feature is disabled");
     }
+    // Field-ticket billing rechecks its subordinate gate under the same
+    // fence: the preflight above read it unlocked, and a Field Tickets
+    // disable racing this insert must refuse the request rather than bill
+    // on a capability that is already gone.
+    if (basis === "field_ticket" && !(await lockAndCheckOrgFeature(tx, orgId, "fieldTickets"))) {
+      throw new Error("Field Ticket billing is disabled");
+    }
     // Re-check and lock the project at the write boundary. The preflight above
     // keeps hidden projects out of the preference/type lookups, while this
     // transaction-scoped read prevents a concurrent subsidiary reassignment
