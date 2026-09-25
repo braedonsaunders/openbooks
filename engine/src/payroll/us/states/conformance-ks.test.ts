@@ -13,7 +13,7 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  KS_CERTIFICATE, KS_REGION, KS_TABLES, KS_WITHHOLDING, ksAllowance, ksPeriodTax,
+  KS_CERTIFICATE, KS_K4C_CERTIFICATE, KS_REGION, KS_TABLES, KS_WITHHOLDING, ksAllowance, ksPeriodTax,
 } from "./ks.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
@@ -77,6 +77,20 @@ test("KS extra withholding is added and exempt is zero", () => {
     payDate: "2026-03-15", periodsPerYear: 24, wages: "2000.00",
     basis: "resident", certificate: cert({ exempt: "true" }),
   }).tax, money("0"));
+});
+
+test("KS nonresident K-4C percentage apportions the full calculated tax", () => {
+  // KW-100: $2,000 semimonthly married/3 prices $41.44 on all wages; a filed K-4C at 40% apportions it to $16.58.
+  const result = KS_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "2000.00", basis: "nonresident",
+    certificate: cert({ filing_status: "married", allowances: "3" }),
+    supportingCertificates: {
+      [KS_K4C_CERTIFICATE.key]: resolvedCertificate(KS_K4C_CERTIFICATE, {
+        kansas_services_percentage: "40",
+      }),
+    },
+  });
+  assert.equal(result.tax, money("16.58"));
 });
 
 test("KS refuses a year it has not transcribed", () => {
