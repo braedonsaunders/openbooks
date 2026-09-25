@@ -7,6 +7,7 @@ import {
   recordTickDutyFailures,
   recordTickOutcome,
   recordTickOverlapSkip,
+  recordTickSectionFailures,
 } from "./tick-health.ts";
 import {
   computeScheduledScriptNextRunAt,
@@ -547,6 +548,27 @@ export async function tick(
     // One cross-replica claim around the ENTIRE scan set: a replica that loses
     // the race skips every duty below, not merely one subsystem.
     const claimResult = await claimTick(WEB_TICK_LOCK_KEY, async () => {
+      // Section failures are collected, not thrown: every scan below still
+      // runs when an earlier one breaks, but the tick records unhealthy and
+      // names each failed section instead of reporting healthy (C-56 sibling).
+      const sectionFailures: { key: string; error: string }[] = [];
+      const failSection = (key: string, error: unknown) => {
+        sectionFailures.push({
+          key,
+          error: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+        });
+      };
+      const finishSections = () => {
+        recordTickSectionFailures(sectionFailures);
+        if (sectionFailures.length > 0) {
+          console.error(
+            `[scheduler] tick finished with failed sections: ` +
+              sectionFailures.map((failure) => failure.key).join(", ") +
+              ` — recorded in tick health; the other sections already ran`,
+          );
+        }
+        return sectionFailures.length === 0;
+      };
       await recoverLostScriptOccurrences();
       await runDueScripts();
 
@@ -555,6 +577,7 @@ export async function tick(
         const { runDueSftpImports } = await import("../sftp/import-job.ts");
         await runDueSftpImports();
       } catch (e) {
+        failSection("sftp-imports", e);
         console.error("[scheduler] sftp import scan failed:", e);
       }
 
@@ -564,6 +587,7 @@ export async function tick(
         const { runDueBankFeeds } = await import("../banking/bank-feed-providers.ts");
         await runDueBankFeeds();
       } catch (e) {
+        failSection("bank-feeds", e);
         console.error("[scheduler] bank feed sync failed:", e);
       }
 
@@ -572,6 +596,7 @@ export async function tick(
         const { runDuePaymentSchedules } = await import("../payments/operations.ts");
         await runDuePaymentSchedules();
       } catch (e) {
+        failSection("payment-schedules", e);
         console.error("[scheduler] payment schedule scan failed:", e);
       }
 
@@ -581,6 +606,7 @@ export async function tick(
         const { runDueRecurringSchedules } = await import("../billing/recurring.ts");
         await runDueRecurringSchedules();
       } catch (e) {
+        failSection("recurring-billing", e);
         console.error("[scheduler] recurring billing scan failed:", e);
       }
 
@@ -596,6 +622,7 @@ export async function tick(
         const { processDuePostingEffects } = await import("../ledger/posting-effects.ts");
         await withBypassContext(() => processDuePostingEffects());
       } catch (e) {
+        failSection("durable-outbox", e);
         console.error("[scheduler] durable outbox tick failed:", e);
       }
 
@@ -607,6 +634,7 @@ export async function tick(
         await withBypassContext(() => recoverLostScheduledFlows());
         await runDueScheduledFlows();
       } catch (e) {
+        failSection("scheduled-flows", e);
         console.error("[scheduler] scheduled flows scan failed:", e);
       }
 
@@ -632,6 +660,7 @@ export async function tick(
           );
         }
       } catch (e) {
+        failSection("worker-duties", e);
         console.error("[scheduler] worker duties failed:", e);
       }
 
@@ -641,6 +670,7 @@ export async function tick(
         await recloseExpiredReopens();
         await runDueCloseAutomations();
       } catch (e) {
+        failSection("close-automation", e);
         console.error("[scheduler] close automation scan failed:", e);
       }
 
@@ -649,8 +679,10 @@ export async function tick(
         const { runDueContinuousCloseAgents } = await import("../continuous-close/continuous-close.ts");
         await runDueContinuousCloseAgents();
       } catch (e) {
+        failSection("continuous-close", e);
         console.error("[scheduler] continuous-close scan failed:", e);
       }
+      return finishSections();
     });
     if (claimResult === null) {
       const skipped = recordTickOverlapSkip();
@@ -659,7 +691,7 @@ export async function tick(
           `(overlap skip #${skipped.overlapSkips}, ${skipped.consecutiveSkips} consecutive)`,
       );
     } else {
-      recordTickOutcome(true);
+      recordTickOutcome(claimResult);
     }
   } catch (e) {
     // Never let a tick rejection escape setInterval — an unhandled rejection
