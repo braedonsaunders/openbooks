@@ -809,6 +809,15 @@ export async function processDueSchedulerOutbox(
   limit = 50,
   run: SchedulerOutboxRunner = runOutboxWork,
 ): Promise<{ processed: number; succeeded: number; failed: number; fenced: number }> {
+  // Claim-time clock: a row claimed late in a long pass must carry its own
+  // claim time, not the pass start — otherwise it is born stale and the
+  // other topology's stale recovery reclaims and re-runs it. The pass
+  // reference `now` anchors virtual-clock callers (which advance it
+  // explicitly), so each stamp is the reference plus the wall time elapsed
+  // since the pass started: the real claim time in production, the virtual
+  // time under test.
+  const passStartedWallMs = Date.now();
+  const passClock = () => new Date(now.getTime() + (Date.now() - passStartedWallMs));
   await recoverStaleSchedulerOutbox(now);
   const due = (await db.execute<{ id: string }>(sql`
     select id from scheduler_outbox
@@ -823,13 +832,14 @@ export async function processDueSchedulerOutbox(
   let failed = 0;
   let fenced = 0;
   for (const candidate of due.rows) {
+    const claimedAt = passClock();
     const claimed = (await db.execute<OutboxRow>(sql`
       update scheduler_outbox
          set status='running',
              attempt_count=attempt_count+1,
-             locked_at=${now},
+             locked_at=${claimedAt},
              lease_token=gen_random_uuid(),
-             last_attempt_at=${now},
+             last_attempt_at=${claimedAt},
              error=null,
              updated_at=now()
        where id=${candidate.id}
@@ -852,7 +862,7 @@ export async function processDueSchedulerOutbox(
         },
         () => run(row),
       );
-      await markSucceeded(row, now);
+      await markSucceeded(row, passClock());
       succeeded++;
       recordOutboxAttempt("scheduler_outbox", row.kind, "succeeded", Date.now() - startedAt);
     } catch (error) {
@@ -863,7 +873,7 @@ export async function processDueSchedulerOutbox(
         continue;
       }
       try {
-        await markFailed(row, error, now);
+        await markFailed(row, error, passClock());
       } catch (completionError) {
         if (!(completionError instanceof SchedulerOutboxLeaseFencedError)) throw completionError;
         fenced++;
