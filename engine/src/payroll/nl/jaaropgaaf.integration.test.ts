@@ -132,6 +132,7 @@ async function nlEmployee(
     ["nl_loonheffingen", args.opgaaf],
     ["nl_premies", PREMIES],
     ["nl_tax_liability", { liability_class: "standard_resident" }],
+    ["nl_contract", { contract_start: "2025-01-01" }],
   ] as const) {
     await db.execute(sql`
       insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,

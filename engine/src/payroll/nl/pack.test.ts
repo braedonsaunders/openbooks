@@ -74,7 +74,7 @@ test("loonheffing is national: NL is known and supported, no subnational table d
 test("the NL pack declares both certificates, and they pass generic validation", () => {
   const declared = NL_PAYROLL_PACK.certificates();
   assert.equal(declared.country, "NL");
-  assert.deepEqual(declared.certificates.map((certificate) => certificate.key), ["nl_loonheffingen", "nl_premies", "nl_tax_liability"]);
+  assert.deepEqual(declared.certificates.map((certificate) => certificate.key), ["nl_loonheffingen", "nl_premies", "nl_tax_liability", "nl_contract"]);
   const [form, premies] = declared.certificates;
   assert.equal(form!.form, "Model opgaaf gegevens voor de loonheffingen");
   assert.equal(form!.storage, "certificate_rows");
@@ -176,6 +176,7 @@ function stubContext(
     nl_loonheffingen: { age_class: "under_aow" },
     nl_premies: PREMIES,
     nl_tax_liability: { liability_class: "standard_resident" },
+    nl_contract: { contract_start: "2025-01-01" },
   },
   overrides: Partial<PayrollStatutoryComputeContext> = {},
 ): {
@@ -246,6 +247,7 @@ test("computeStatutory prices a 2026 maandloon end to end (korting + premies via
     nl_loonheffingen: { apply_loonheffingskorting: "true", age_class: "under_aow" },
     nl_premies: PREMIES,
     nl_tax_liability: { liability_class: "standard_resident" },
+    nl_contract: { contract_start: "2025-01-01" },
   });
   const factors = await NL_PAYROLL_PACK.computeStatutory(ctx);
   // € 999,00 with korting: the witte maandtabel's "met" column reads 13,83.
@@ -269,6 +271,7 @@ test("computeStatutory refuses a missing opgaaf age class instead of assuming un
   const { ctx } = stubContext({
     nl_premies: PREMIES,
     nl_tax_liability: { liability_class: "standard_resident" },
+    nl_contract: { contract_start: "2025-01-01" },
   });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /AOW age class.*record/i);
 });
@@ -287,6 +290,7 @@ test("computeStatutory refuses an undeclared age class by name", async () => {
     nl_loonheffingen: { age_class: "aow_1970" },
     nl_premies: PREMIES,
     nl_tax_liability: { liability_class: "standard_resident" },
+    nl_contract: { contract_start: "2025-01-01" },
   });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /age_class|is not one of/);
 });
@@ -303,6 +307,7 @@ test("computeStatutory refuses a bonus by name", async () => {
     nl_loonheffingen: { age_class: "under_aow" },
     nl_premies: PREMIES,
     nl_tax_liability: { liability_class: "standard_resident" },
+    nl_contract: { contract_start: "2025-01-01" },
   }, { nonPeriodic: "500.0000" });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /bijzondere beloningen/);
 });

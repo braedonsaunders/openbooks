@@ -160,6 +160,7 @@ test(
         { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
         { key: "nl_premies", answers: { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25", sv_loon_ytd: "0" } },
         { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
+        { key: "nl_contract", answers: { contract_start: "2025-01-01" } },
       ]);
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
