@@ -350,7 +350,6 @@ export const FR_COTISATION_REFUSALS_2026: readonly string[] = [
   "AT/MP (Carsat-notified) and versement mobilité (commune-dependent): effective establishment rates resolved from the audited payroll statutory-rate setup; never inferred from a national table",
   "FNAL without a known legal-employer effectif_moyen_annuel — the 0,10 % plafonné vs 0,50 % déplafonné choice cannot be made",
   "AGIRC-ARRCO T1/T2 both shares, CEG and CET: transcribed in ./retraite-2026.ts and computed",
-  "APEC 0,06 % (transcribed in ./retraite-2026.ts): cadres only — no pack channel carries the employee's cadre status",
   "AGIRC-ARRCO split modified by accord collectif: the page allows a collective agreement to modify the regulated 60/40 — the engine applies 60/40 with no tenant-override channel",
   "Brut/net-imposable bridge: COMPUTED — the stub's earnings figure is the brut; the PAS assiette (net imposable) is derived in ./cotisations.ts (calculateFrNetImposable2026: brut minus déductible lines, CSG 2,4 pts + CRDS added back)",
 ];

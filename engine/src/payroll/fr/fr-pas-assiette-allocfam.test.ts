@@ -85,6 +85,7 @@ function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): 
         taux_option: "personnalise",
         taux_transmis: transmitted,
         rgdu_eligibility: "eligible",
+        apec_eligibility: "covered",
       },
     })) as never,
     bool: () => false,

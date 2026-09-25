@@ -16,8 +16,8 @@ import { FR_EMPLOYEE_FACTS } from "./employee-facts.ts";
  *
  * Calendar 2026 PAS grille I (métropole) is transcribed in ./tables-2026.ts
  * and the 2026 URSSAF cotisation rates in ./cotisations-2026.ts, both computed
- * in ./compute-statutory.ts. Declared from primary sources. APEC and
- * tenant-declared rates without an engine channel stay refused by name
+ * in ./compute-statutory.ts. Declared from primary sources. Tenant-declared
+ * rates without an engine channel stay refused by name
  * (FR_REFUSED_2026, FR_COTISATION_REFUSALS_2026):
  * - PAS (prélèvement à la source): CGI art. 204 A et s., in force 1 Jan 2019;
  *   rate management on impots.gouv.fr ("Gérer mon prélèvement à la source").
@@ -91,6 +91,8 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
       { code: "CEG-ER", name: "Contribution d'équilibre général (employeur)", systemKey: "ceg", kind: "employer_contribution", sequence: 241, assessedOn: "earnings", remittance: "external" },
       { code: "CET", name: "Contribution d'équilibre technique (salariale)", systemKey: "cet", kind: "deduction", sequence: 142, assessedOn: "earnings", remittance: "external" },
       { code: "CET-ER", name: "Contribution d'équilibre technique (employeur)", systemKey: "cet", kind: "employer_contribution", sequence: 242, assessedOn: "earnings", remittance: "external" },
+      { code: "APEC", name: "Cotisation APEC (salariale)", systemKey: "apec", kind: "deduction", sequence: 143, assessedOn: "earnings", remittance: "external" },
+      { code: "APEC-ER", name: "Cotisation APEC (employeur)", systemKey: "apec", kind: "employer_contribution", sequence: 243, assessedOn: "earnings", remittance: "external" },
     ],
   },
   {
@@ -202,9 +204,31 @@ const FR_PAS_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+const FR_APEC_CERTIFICATE: PayrollCertificate = {
+  key: "fr_apec_status",
+  form: "Classification APEC",
+  label: "Statut d'affiliation APEC",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation: "ANI du 17 novembre 2017, articles 2.1 et 2.2; ANI APEC du 12 juillet 2011",
+  summary: "The employee's effective classification determines whether APEC contributions apply.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "apec_eligibility",
+    label: "APEC classification coverage",
+    kind: "choice",
+    choices: [
+      { value: "covered", label: "Covered under ANI articles 2.1 or 2.2" },
+      { value: "not_covered", label: "Not covered under ANI articles 2.1 or 2.2" },
+    ],
+    required: true,
+    help: "Use the employee's effective professional classification and applicable collective agreement; do not infer coverage from job title alone.",
+  }],
+};
+
 const FR_CERTIFICATES: PayrollPackCertificates = {
   country: "FR",
-  certificates: [FR_PAS_CERTIFICATE],
+  certificates: [FR_PAS_CERTIFICATE, FR_APEC_CERTIFICATE],
 };
 
 // ---------------------------------------------------------------------------
@@ -220,7 +244,7 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
       // Implemented for grille I (métropole): PAS plus the 2026 URSSAF
       // cotisations and AGIRC-ARRCO T1/T2 + CEG + CET compute end to end.
       // AT/MP and versement-mobilité rates resolve from the establishment's
-      // effective SIRET rates; DOM domiciles and APEC remain refused by name.
+      // effective SIRET rates; DOM domiciles remain refused by name.
       implemented: true,
       // Non-residents face the specific retenue à la source (CGI art. 182 A),
       // not PAS — and the levy DOES reach their French wages, so this stays

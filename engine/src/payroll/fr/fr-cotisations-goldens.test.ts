@@ -307,7 +307,7 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
     },
     storedCertificates: [],
     certificateFor: (() => ({
-      answers: { domicile: "metropole", taux_option: "non_personnalise", rgdu_eligibility: "eligible" },
+      answers: { domicile: "metropole", taux_option: "non_personnalise", rgdu_eligibility: "eligible", apec_eligibility: "covered" },
     })) as never,
     bool: () => false,
     assertRegionSupported: () => {},
@@ -316,7 +316,7 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
   };
   const factors = await FR_PAYROLL_PACK.computeStatutory(ctx);
   assert.equal(factors.FR_RGDU_COEFFICIENT, "0.3178");
-  assert.equal(factors.FR_RGDU_ADJUSTMENT, "635.6000");
+  assert.deepEqual(pushed.filter((line) => line.systemKey === "apec").map((line) => line.amount), ["0.4800", "0.7200"]);
   assert.equal(pushed.find((line) => line.systemKey === "rgdu_urssaf")?.amount, "-540.6000");
   assert.equal(pushed.find((line) => line.systemKey === "rgdu_arrco")?.amount, "-95.0000");
   assert.equal(pushed.find((line) => line.systemKey === "atmp")?.amount, "22.0000");
@@ -358,7 +358,7 @@ test("adapter refuses without a known effectif, naming FNAL", async () => {
     pushStatutory: () => {},
     storedCertificates: [],
     certificateFor: (() => ({
-      answers: { domicile: "metropole" },
+      answers: { domicile: "metropole", apec_eligibility: "not_covered" },
     })) as never,
     bool: () => false,
     assertRegionSupported: () => {},

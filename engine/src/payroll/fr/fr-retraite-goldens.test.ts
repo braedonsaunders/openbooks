@@ -38,7 +38,7 @@ test("table integrity: tranches, taux appelés, CEG, CET and APEC", () => {
   assert.equal(FR_CEG_2026.t1.rate, "0.0215");
   assert.equal(FR_CEG_2026.t2.rate, "0.027");
   assert.equal(FR_CET_2026.rate, "0.0035");
-  // APEC transcribed and refused (cadres only, no channel).
+  // The APEC total and its statutory employee/employer split are transcribed.
   assert.equal(FR_APEC_2026.rate, "0.0006");
 });
 
