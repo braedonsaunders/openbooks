@@ -455,6 +455,8 @@ export interface UsStateWithholdingInput {
   federalLegacyW4?: { status: "single" | "married"; allowances: number };
   /** Federal W-4 exempt claim; some state worksheets inherit its withholding result. */
   federalTaxExempt?: boolean;
+  /** Federal W-4 additional tax per period, for state-declared fallback rules. */
+  federalAdditionalPerPeriod?: string;
   /** Whether the state withholding certificate itself is filed and effective. */
   stateCertificateOnFile?: boolean;
   /** Supplemental wages this period (bonus, commission, severance). */

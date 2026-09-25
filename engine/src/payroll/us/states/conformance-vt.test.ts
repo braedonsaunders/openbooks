@@ -49,12 +49,9 @@ test("VT missing W-4VT withholds as single with zero allowances", () => {
   const empty = VT_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
     basis: "resident", certificate: resolveCertificate({ certificate: VT_CERTIFICATE }),
+    federalAdditionalPerPeriod: "10.00",
   });
-  const singleZero = VT_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident", certificate: cert({ filing_status: "single", allowances: "0" }),
-  });
-  assert.equal(empty.tax, singleZero.tax);
+  assert.equal(empty.tax, money("85.13"));
   assert.equal(empty.factors.VT_ALLOWANCE, money("0"));
 });
 

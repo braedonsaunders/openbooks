@@ -166,6 +166,7 @@ export async function computeUsStatutory(
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const federalAlienStatus = certificateFor("us_w4_tax_residency")?.answers.alien_status;
   const nonresidentAlien = requireUsFederalAlienStatus(federalAlienStatus);
+  const federalAdditionalPerPeriod = empFact("US", emp, "additional_tax_per_period") ?? "0.0000";
   const statutory = calculatePub15T({
     payDate: run.pay_date!, periodsPerYear: P,
     wages: fitWages, supplemental: nonPeriodic,
@@ -175,7 +176,7 @@ export async function computeUsStatutory(
     dependentCredits: empFact("US", emp, "dependent_credits") ?? undefined,
     otherIncomeAnnual: empFact("US", emp, "other_income_annual") ?? undefined,
     deductionsAnnual: empFact("US", emp, "deductions_annual") ?? undefined,
-    extraPerPeriod: empFact("US", emp, "additional_tax_per_period") ?? undefined,
+    extraPerPeriod: federalAdditionalPerPeriod,
     pre2020: bool(empFact("US", emp, "w4_pre_2020"))
       ? { allowances: Number(empFact("US", emp, "w4_allowances") ?? 0), married: filingStatus === "married_joint" }
       : undefined,
@@ -366,6 +367,7 @@ export async function computeUsStatutory(
         }
         : undefined,
       federalTaxExempt: bool(empFact("US", emp, "tax_exempt")),
+      federalAdditionalPerPeriod,
       supplemental: nonPeriodic,
       supplementalWageAmounts,
       supplementalPaymentTiming,

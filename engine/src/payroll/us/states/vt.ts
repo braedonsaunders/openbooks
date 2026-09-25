@@ -9,12 +9,13 @@
  *       2-allowance example ($45.77); civil-union partners use Married.
  *
  * This is a per-period TABLE method. An unpublished frequency is refused.
- * Using a federal W-4 in place of W-4VT is certificate administration —
- * the engine does not invent Vermont allowances from a federal form.
+ * Without W-4VT, the DOR uses the single/zero-allowance table and 30% of
+ * federal W-4 additional withholding; no federal allowances are inferred.
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { mulRatio } from "../../../money/money.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
   type PayrollCertificate,
@@ -258,7 +259,10 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("VT_TAXABLE", taxable);
 
   const periodTax = vtPeriodTax(taxable, published, married);
-  const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+  const stateExtra = certificateAmount(input.certificate, "additional_per_period");
+  const extra = stateExtra == null && !(input.stateCertificateOnFile ?? input.certificate.onFile)
+    ? U(mulRatio(input.federalAdditionalPerPeriod ?? "0.0000", 3n, 10n))
+    : U(stateExtra ?? "0");
   const total = periodTax + extra;
   trace("VT_WITHHELD", total);
 
@@ -316,12 +320,13 @@ export const VT_CERTIFICATE: PayrollCertificate = {
   purpose: "withholding",
   citation:
     "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding "
-    + "Instructions, Tables, and Charts; Form W-4VT",
+    + "Instructions, Tables, and Charts; Form W-4VT; employer guidance: "
+    + "https://tax.vermont.gov/business-and-corp/withholding-tax/instructions",
   summary:
     "Sets Vermont filing status and allowances. Civil-union partners use the "
     + "Married table. A missing W-4VT is withheld as single with zero allowances. "
-    + "Copying a federal W-4 onto this certificate is administration, not an "
-    + "engine guess.",
+    + "Federal allowances are not copied; without W-4VT, the employer adds "
+    + "30% of the federal W-4 additional amount.",
   storage: "certificate_rows",
   fields: [
     {
