@@ -66,6 +66,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
       "BR/br_terceiros",
       "CA/ca_hsf",
       "DE/de_kvz",
+      "FR/fr_atmp",
       "IT/it_addizionale_comunale",
       "IT/it_addizionale_regionale",
       "JP/jp_health_rate",
@@ -82,7 +83,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
   );
   assert.deepEqual(
     [...answers.entries()].filter(([, answer]) => answer === "legacy").map(([key]) => key).sort(),
-    ["AU/au_workers_comp", "FR/fr_atmp", "FR/fr_versement_mobilite", "PL/pl_wypadkowe"],
+    ["AU/au_workers_comp", "FR/fr_versement_mobilite", "PL/pl_wypadkowe"],
   );
 });
 
