@@ -129,6 +129,7 @@ export async function GET(req: Request) {
             lastTickAt: scheduler.lastTickAt,
             lastTickOk: scheduler.lastTickOk,
             dutyFailures: scheduler.lastDutyFailures,
+            sectionFailures: scheduler.lastSectionFailures,
           }
         : null,
     }, { status: ready ? 200 : 503 });

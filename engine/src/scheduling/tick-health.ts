@@ -35,6 +35,8 @@ export type SchedulerTickHealth = {
   lastTickOk: boolean | null;
   /** Failed worker duties from the last completed tick. */
   lastDutyFailures: SchedulerDutyFailure[];
+  /** Scan sections that threw during the last completed tick, by section key. */
+  lastSectionFailures: SchedulerDutyFailure[];
 };
 
 /** Consecutive overlap skips that mark the scheduler degraded. */
@@ -50,16 +52,17 @@ let health: SchedulerTickHealth = {
   lastTickAt: null,
   lastTickOk: null,
   lastDutyFailures: [],
+  lastSectionFailures: [],
 };
 
 /** A copy of this process's tick health (never the live object). */
 export function getSchedulerTickHealth(): SchedulerTickHealth {
-  return { ...health, lastDutyFailures: [...health.lastDutyFailures] };
+  return { ...health, lastDutyFailures: [...health.lastDutyFailures], lastSectionFailures: [...health.lastSectionFailures] };
 }
 
 /** Test seam: reset this process's tick health. Production never calls this. */
 export function resetSchedulerTickHealth(): void {
-  health = { overlapSkips: 0, consecutiveSkips: 0, lastTickAt: null, lastTickOk: null, lastDutyFailures: [] };
+  health = { overlapSkips: 0, consecutiveSkips: 0, lastTickAt: null, lastTickOk: null, lastDutyFailures: [], lastSectionFailures: [] };
 }
 
 /**
@@ -85,6 +88,12 @@ export function recordTickOutcome(ok: boolean, at: Date = new Date()): Scheduler
 /** Store the failed worker duties from a finished tick (empty clears). */
 export function recordTickDutyFailures(failures: SchedulerDutyFailure[]): SchedulerTickHealth {
   health = { ...health, lastDutyFailures: [...failures] };
+  return getSchedulerTickHealth();
+}
+
+/** Store the scan sections that threw during a finished tick (empty clears). */
+export function recordTickSectionFailures(failures: SchedulerDutyFailure[]): SchedulerTickHealth {
+  health = { ...health, lastSectionFailures: [...failures] };
   return getSchedulerTickHealth();
 }
 
@@ -143,6 +152,14 @@ export async function readSchedulerTickHealth(): Promise<SchedulerTickHealth | n
         (entry): entry is SchedulerDutyFailure =>
           typeof entry?.key === "string" && typeof entry?.error === "string",
       ),
+      // Payloads predating section failures carry no such field: default to
+      // empty rather than refusing the whole health read.
+      lastSectionFailures: Array.isArray(parsed.lastSectionFailures)
+        ? parsed.lastSectionFailures.filter(
+          (entry): entry is SchedulerDutyFailure =>
+            typeof entry?.key === "string" && typeof entry?.error === "string",
+        )
+        : [],
     };
   } catch {
     return null;
