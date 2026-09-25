@@ -121,7 +121,7 @@ export function validateNlDefinition(
   if (!isRecord(raw)) throw nlDefinitionRefused("definition must be an object");
   const allowedTop = new Set([
     "entity", "mode", "columns", "breakouts", "measures",
-    "filters", "sorts", "limit", "groupBy",
+    "filters", "sorts", "limit",
   ]);
   for (const key of Object.keys(raw)) {
     if (!allowedTop.has(key)) throw nlDefinitionRefused(`unknown definition key "${key}"`);
