@@ -25,6 +25,7 @@ import { useMoney } from "@/components/money-provider";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useTranslations } from "next-intl";
 import { readApiErrorMessage } from "@/lib/api-error";
+import { useDirtyClose } from "@/lib/use-dirty-close";
 import {
   financialChangeEventLabel,
   financialChangeStatusLabel,
@@ -136,6 +137,15 @@ function LeaseCreateForm({
   });
   const [flags, setFlags] = useState<Record<string, boolean>>({}),
     [busy, setBusy] = useState(false);
+  const [initialForm] = useState(f);
+  const dirty = JSON.stringify(f) !== JSON.stringify(initialForm) || Object.values(flags).some(Boolean);
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy,
+    onClose: close,
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
   const [requestKey] = useState(() => crypto.randomUUID());
   const set = (key: string, value: string) =>
     setF((old) => ({ ...old, [key]: value }));
@@ -212,7 +222,7 @@ function LeaseCreateForm({
   return (
     <Drawer
       open
-      onClose={close}
+      onClose={() => void closeGuard.close()}
       stacked={!!parent}
       title={parent ? t("leases.createTitleSeparate") : t("leases.createTitle")}
       size="2xl"
@@ -413,7 +423,7 @@ function LeaseCreateForm({
           <Button disabled={busy} onClick={save}>
             {parent ? t("leases.createProposal") : t("leases.saveDraft")}
           </Button>
-          <Button variant="outline" onClick={close}>
+          <Button variant="outline" onClick={() => void closeGuard.close()}>
             {tCommon("actions.cancel")}
           </Button>
         </div>
@@ -430,6 +440,7 @@ function ChangeLease({
 }) {
   const today = useBusinessToday();
   const t = useTranslations("assets");
+  const tCommon = useTranslations("common");
   const router = useRouter(),
     [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false);
@@ -458,6 +469,13 @@ function ChangeLease({
 
   // Start the form from the given lease with a fresh idempotency key.
   function resetToLease() {
+    setOriginalProposal(JSON.stringify({
+      operation: "modification", date: today, reason: "", assessment: "",
+      payment: lease.payment_amount, periods: String(lease.term_periods),
+      rate: lease.annual_discount_rate_percent, timing: lease.payment_timing,
+      frequency: lease.payment_frequency, scope: "0", settlement: "0",
+      gainAccount: "", criteria: lease.classification_inputs ?? {},
+    }));
     setOperation("modification");
     setDate(today);
     setReason("");
@@ -478,13 +496,29 @@ function ChangeLease({
   // reopened popover replays the previous terms, and the second proposal
   // replays the first key and the server refuses it.
   function handleOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) return;
+    if (!next) {
+      void closeGuard.close();
+      return;
+    }
     resetToLease();
+    setOpen(true);
   }
   const [criteria, setCriteria] = useState<Record<string, unknown>>(
     lease.classification_inputs,
   );
+  const proposalSnapshot = () => JSON.stringify({
+    operation, date, reason, assessment, payment, periods, rate, timing,
+    frequency, scope, settlement, gainAccount, criteria,
+  });
+  const [originalProposal, setOriginalProposal] = useState<string | null>(null);
+  const dirty = originalProposal !== null && proposalSnapshot() !== originalProposal;
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy,
+    onClose: () => setOpen(false),
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
   // A new lease id resets the form even when no remount happens (a keyless
   // parent): otherwise a proposal typed for lease A stays in the form when
   // the page shows lease B. Placed after every useState it touches.
