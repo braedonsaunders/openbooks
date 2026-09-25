@@ -199,12 +199,14 @@ export function ncPercentageMethod(input: {
 /**
  * The annualized method — NC-30 p. 19.
  *
- * Published alongside the percentage method and NOT wired into `compute`, for
- * the reason California's annualized method is not: both are the state's, they
- * are an employer's election, and an engine that chose between them on its own
- * would be unreproducible. It answers for any pay frequency, which the
- * percentage method's four printed periods do not, so it is exported for a
- * caller who needs one.
+ * Published alongside the percentage method. It answers for any pay
+ * frequency, which the percentage method's four printed periods do not, so
+ * `compute` uses it for a frequency with no percentage table (a quarterly
+ * payroll is the common one) instead of refusing a calculation the state
+ * publishes. Printed frequencies stay on the percentage method: where both
+ * methods exist the employer elects between them, and an engine that chose
+ * on its own would be unreproducible. It is also exported for a caller who
+ * needs it directly.
  *
  * The conformance test runs NC-30's own example through both and gets $4.00
  * twice.
@@ -274,13 +276,36 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // were a single payment."
   const wages = U(input.wages) + U(input.supplemental ?? "0");
 
-  const { tax, factors } = ncPercentageMethod({
-    payDate: input.payDate,
-    periodsPerYear: input.periodsPerYear,
-    wages: D(wages),
-    schedule,
-    allowances,
-  });
+  // A frequency with no percentage table is calculated with the state's
+  // annualized method, never refused and never scaled. Printed frequencies
+  // stay on the percentage method (see above): no silent election.
+  const period = payPeriodFor(input.periodsPerYear);
+  let tax: bigint;
+  let factors: Record<string, string>;
+  if (period != null && NC_PERIODS.includes(period)) {
+    ({ tax, factors } = ncPercentageMethod({
+      payDate: input.payDate,
+      periodsPerYear: input.periodsPerYear,
+      wages: D(wages),
+      schedule,
+      allowances,
+    }));
+  } else {
+    const annualized = ncAnnualizedMethod({
+      payDate: input.payDate,
+      periodsPerYear: input.periodsPerYear,
+      wages: D(wages),
+      schedule,
+      allowances,
+    });
+    tax = U(annualized.tax);
+    factors = {
+      NC_METHOD: "annualized",
+      NC_SCHEDULE: schedule,
+      NC_ANNUAL_TAX: annualized.annualTax,
+      NC_TAX: annualized.tax,
+    };
+  }
 
   // NC-4 line 2 — "Additional amount, if any, you want withheld from each pay
   // period (Enter whole dollars)".
@@ -337,6 +362,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 export const NC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NC_METHOD: "North Carolina method applied",
   NC_SCHEDULE: "North Carolina schedule",
+  NC_ANNUAL_TAX: "North Carolina annualized method annual tax",
   NC_EXEMPT: "Exempt from North Carolina withholding",
   NC_STANDARD_DEDUCTION: "North Carolina standard deduction",
   NC_ALLOWANCES: "North Carolina allowances",
@@ -354,8 +380,8 @@ export const NC_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: NC_TAX_YEAR_EDITIONS,
   // NC-30's percentage method prints weekly, biweekly, semimonthly and monthly
-  // and nothing else. A quarterly payroll is refused rather than scaled; the
-  // exported annualized method is the state's own answer for one.
+  // and nothing else. A frequency with no percentage table is calculated with
+  // the state's annualized method; printed frequencies stay percentage.
   printedPeriods: NC_PERIODS,
   taxableWageBases: {
     income: "state:US:NC:income", nonPeriodic: "state:US:NC:nonPeriodic",
