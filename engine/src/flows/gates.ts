@@ -182,6 +182,22 @@ async function loadGate(gateId: string, orgId?: string): Promise<GateRow | null>
   return gate ?? null;
 }
 
+/**
+ * Dispatch-time subject snapshot pinned on the run row
+ * (flow_runs.context holds the adapter's values object from dispatch).
+ * Release paths that spend dispatch-time vetting bind to this; a missing
+ * row or snapshot returns null so the adapter refuses instead of
+ * releasing blind.
+ */
+async function loadRunDispatchValues(orgId: string, runId: string): Promise<Record<string, unknown> | null> {
+  const [run] = await db
+    .select({ context: schema.flowRuns.context })
+    .from(schema.flowRuns)
+    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId)));
+  const context = run?.context as Record<string, unknown> | null | undefined;
+  return context && typeof context === "object" ? context : null;
+}
+
 async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
   // A deactivated user decides nothing — not even through a still-valid
   // one-click email link (the sessionless path has no other activity check).
@@ -659,6 +675,14 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
       // stamped, so a re-drive would skip release and complete vacuously —
       // the truthful remedy is retrying the DECISION.
       const release = adapter.releaseApproval;
+      // Dispatch-time subject snapshot for engine-enforced release: adapters
+      // whose release spends dispatch-time vetting bind to this run's pinned
+      // values, so a subject rehomed after dispatch cannot release under a
+      // stale gate. Loaded once for every release below.
+      const releaseRun = {
+        id: gate.runId,
+        dispatchValues: await loadRunDispatchValues(gate.orgId, gate.runId),
+      };
       let releasedBeforeActions = false;
       if (
         subject &&
@@ -667,9 +691,15 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
       ) {
         try {
-          await release(gate.subjectId, "approved", ctx, {
-            comment: args.comment?.trim() || null,
-          });
+          await release(
+            gate.subjectId,
+            "approved",
+            ctx,
+            {
+              comment: args.comment?.trim() || null,
+            },
+            releaseRun,
+          );
           releasedBeforeActions = true;
         } catch (e) {
           throw new ReleaseError(
@@ -722,16 +752,28 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         try {
           if (outcome.resume === "reject") {
             await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
-            await release(gate.subjectId, "rejected", ctx, {
-              comment: args.comment?.trim() || null,
-            });
+            await release(
+              gate.subjectId,
+              "rejected",
+              ctx,
+              {
+                comment: args.comment?.trim() || null,
+              },
+              releaseRun,
+            );
           } else if (
             !releasedBeforeActions &&
             (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
           ) {
-            await release(gate.subjectId, "approved", ctx, {
-              comment: args.comment?.trim() || null,
-            });
+            await release(
+              gate.subjectId,
+              "approved",
+              ctx,
+              {
+                comment: args.comment?.trim() || null,
+              },
+              releaseRun,
+            );
           }
         } catch (e) {
           throw new ReleaseError(

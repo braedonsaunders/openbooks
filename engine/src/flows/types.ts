@@ -81,6 +81,15 @@ export interface FlowSubjectAdapter {
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
+    /**
+     * The run being released: `id` for correlation, `dispatchValues` the
+     * subject snapshot pinned in flow_runs.context at dispatch. Adapters
+     * whose release spends dispatch-time vetting (identity-scoped
+     * approvals) must bind the release to it — a subject rehomed after
+     * dispatch would otherwise release under a stale gate. Null when the
+     * run row carries no snapshot: refuse, never release blind.
+     */
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
   ): Promise<void>;
   /**
    * True when this adapter's releaseApproval delegates to the web-registered
