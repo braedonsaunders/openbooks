@@ -512,6 +512,8 @@
     "statusPaidPending": "支払済み；発生計上待ち",
     "statusPlanned": "予定",
     "postToast": "{posted}件計上；{skipped}件スキップ",
-    "commenceToast": "リースを開始しました"
+    "commenceToast": "リースを開始しました",
+    "statusTerminated": "終了",
+    "statusComplete": "完了"
   }
 }

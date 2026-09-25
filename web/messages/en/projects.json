@@ -482,6 +482,9 @@
       "releaseHold": "Release hold",
       "releaseReason": "Release reason",
       "release": "Release"
+    },
+    "status": {
+      "converted": "Converted"
     }
   },
   "duplicates": {

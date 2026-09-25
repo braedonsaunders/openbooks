@@ -482,6 +482,9 @@
       "releaseHold": "Lever le blocage",
       "releaseReason": "Motif de la levée",
       "release": "Lever"
+    },
+    "status": {
+      "converted": "Converti"
     }
   },
   "duplicates": {

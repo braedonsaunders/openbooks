@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { enumLabel } from "@/lib/enum-label";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import {
@@ -141,6 +142,14 @@ export function WipBillingWorkspace({
   const { money } = useMoney();
   const today = useBusinessToday();
   const t = useTranslations("projects.wipBilling");
+  const tCommon = useTranslations("common");
+  const prebillStatusLabels = {
+    draft: tCommon("status.draft"),
+    review: tCommon("status.pendingApproval"),
+    approved: tCommon("status.approved"),
+    converted: t("status.converted"),
+    void: tCommon("status.voided"),
+  } satisfies Record<"draft" | "review" | "approved" | "converted" | "void", string>;
   const [creating, setCreating] = useState(false);
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [periodStart, setPeriodStart] = useState("");
@@ -384,7 +393,7 @@ export function WipBillingWorkspace({
                       </TableCell>
                       <TableCell>
                         <Badge variant={STATUS_VARIANT[row.status]}>
-                          {row.status}
+                          {enumLabel(row.status, prebillStatusLabels, tCommon("labels.unknownValue"))}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -487,7 +496,7 @@ export function WipBillingWorkspace({
             <span className="flex items-center gap-2.5">
               <span>{selected.worksheetNumber}</span>
               <Badge variant={STATUS_VARIANT[selected.status]}>
-                {selected.status}
+                {enumLabel(selected.status, prebillStatusLabels, tCommon("labels.unknownValue"))}
               </Badge>
             </span>
           }

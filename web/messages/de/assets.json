@@ -512,6 +512,8 @@
     "statusPaidPending": "Gezahlt; Abgrenzung ausstehend",
     "statusPlanned": "Geplant",
     "postToast": "{posted} Planereignisse gebucht; {skipped} übersprungen",
-    "commenceToast": "Leasing begonnen"
+    "commenceToast": "Leasing begonnen",
+    "statusTerminated": "Beendet",
+    "statusComplete": "Abgeschlossen"
   }
 }

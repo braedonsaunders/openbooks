@@ -3,6 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { enumLabel } from "@/lib/enum-label";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
 import { confirmDialog } from "../../../lib/confirm";
@@ -99,6 +100,12 @@ export function CollectionsClient({
 function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; incomeAccounts: Opt[] }) {
   const { money } = useMoney()
   const t = useTranslations("ar.collections.subscriptions");
+  const tCommon = useTranslations("common");
+  const subscriptionStatusLabels = {
+    active: tCommon("status.active"),
+    paused: tCommon("status.paused"),
+    canceled: tCommon("status.cancelled"),
+  } satisfies Record<"active" | "paused" | "canceled", string>;
   // The refusal fallback lives under `ar.collections.errors`, not under this
   // section — read from `t` it rendered the literal text
   // `ar.collections.subscriptions.errors.actionFailed` whenever the API
@@ -208,7 +215,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                   <td className="text-right tabular-nums">{s.quantity}</td>
                   <td className="text-right tabular-nums">{s.status === "active" ? money(s.mrr, { currency: s.planCurrency ?? undefined }) : "—"}</td>
                   <td>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</td>
-                  <td><Badge variant={s.status === "active" ? "default" : "secondary"}>{s.status}</Badge></td>
+                  <td><Badge variant={s.status === "active" ? "default" : "secondary"}>{enumLabel(s.status, subscriptionStatusLabels, tCommon("labels.unknownValue"))}</Badge></td>
                   <td className="whitespace-nowrap text-right">
                     {s.status === "active" && changing === s.id ? (
                       <span className="inline-flex items-center gap-1">

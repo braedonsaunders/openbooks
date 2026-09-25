@@ -159,7 +159,8 @@
     "expectedPayDate": "Expected pay date",
     "openBalance": "Open balance",
     "defaultForm": "Default form",
-    "asOf": "As of"
+    "asOf": "As of",
+    "unknownValue": "Unknown value"
   },
   "status": {
     "draft": "Draft",
@@ -181,7 +182,8 @@
     "pending_approval": "Submitted",
     "calculated": "Calculated",
     "committed": "Committed",
-    "retired": "Retired"
+    "retired": "Retired",
+    "paused": "Paused"
   },
   "filters": {
     "showInactive": "Show inactive"

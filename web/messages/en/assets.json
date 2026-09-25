@@ -512,6 +512,8 @@
     "statusPaidPending": "Paid; accrual pending",
     "statusPlanned": "Planned",
     "postToast": "Posted {posted} schedule events; {skipped} skipped",
-    "commenceToast": "Lease commenced"
+    "commenceToast": "Lease commenced",
+    "statusTerminated": "Terminated",
+    "statusComplete": "Complete"
   }
 }

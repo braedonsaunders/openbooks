@@ -482,6 +482,9 @@
       "releaseHold": "Liberar retención",
       "releaseReason": "Motivo de la liberación",
       "release": "Liberar"
+    },
+    "status": {
+      "converted": "Convertido"
     }
   },
   "duplicates": {

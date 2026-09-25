@@ -482,6 +482,9 @@
       "releaseHold": "解除冻结",
       "releaseReason": "释放原因",
       "release": "释放"
+    },
+    "status": {
+      "converted": "已转换"
     }
   },
   "duplicates": {

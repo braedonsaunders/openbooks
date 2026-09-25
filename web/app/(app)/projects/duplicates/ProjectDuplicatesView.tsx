@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { enumLabel } from '@/lib/enum-label'
 import { toast } from 'sonner'
 import { GitMerge, Play } from 'lucide-react'
 import {
@@ -55,6 +56,12 @@ function withoutPreview(current: Record<string, Preview>, key: string): Record<s
 
 export function ProjectDuplicatesView() {
   const t = useTranslations('projects')
+  const tCommon = useTranslations('common')
+  const projectStatusLabels = {
+    quoted: t('status.quoted'),
+    awarded: t('status.awarded'),
+    substantially_complete: t('status.substantially_complete'),
+  } satisfies Record<'quoted' | 'awarded' | 'substantially_complete', string>
   const [groups, setGroups] = useState<DuplicateGroup[] | null>(null)
   const [survivors, setSurvivors] = useState<Record<string, string>>({})
   // One cached preview per group + duplicate row. The survivor direction is
@@ -217,9 +224,9 @@ export function ProjectDuplicatesView() {
                           <td className="py-1 pr-2">{project.name}</td>
                           <td className="py-1 pr-2">
                             {project.isActive ? (
-                              <Badge variant="success">{project.status}</Badge>
+                              <Badge variant="success">{enumLabel(project.status, projectStatusLabels, tCommon('labels.unknownValue'))}</Badge>
                             ) : (
-                              <Badge variant="warning">{project.status}</Badge>
+                              <Badge variant="warning">{enumLabel(project.status, projectStatusLabels, tCommon('labels.unknownValue'))}</Badge>
                             )}
                           </td>
                           <td className="py-1">
