@@ -228,6 +228,22 @@ export async function amendLockedWeek(
     await lockTimesheetWeek(orgId, ownedEmployee, week)
     const days = weekWindow(week)
 
+    // The header owns the week lifecycle and must precede entry locks, just as
+    // it does during approval. Re-read status after acquiring the row lock so
+    // a concurrent approval cannot leave this amendment acting on stale week
+    // state (or deadlock while each transaction owns the other's rows).
+    const header = ((await db.execute<{ status: string }>(sql`
+      select status from timesheet_weeks
+       where org_id = ${orgId}
+         and employee_party_id = ${ownedEmployee}
+         and week_start = ${week}::date
+       for update
+    `)).rows[0])
+    if (!header) throw new Error('timesheet week not found')
+    if (header.status !== 'approved') {
+      throw new Error('only an approved week can be amended')
+    }
+
     const src = (await db.execute<AmendableRow>(sql`
       select ${AMENDABLE_COLUMNS}
         from time_entries
