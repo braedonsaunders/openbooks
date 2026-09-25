@@ -130,7 +130,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
             revises only future group service. Consolidation posts the resulting
             adjustment.
           </p>
-          <Label>Posted valuation</Label>
+          <Label id="group-valuation-event-label">Posted valuation</Label>
           <SearchSelect
             value={eventId}
             onChange={(value) => {
@@ -142,38 +142,44 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
               label: `${e.date} · ${e.book_name} · ${e.kind} ${e.amount}${e.recorded ? " · revise group assessment" : ""}`,
             }))}
             placeholder="Select the source valuation"
+            ariaLabelledBy="group-valuation-event-label"
+            ariaLabel="Posted valuation"
           />
           {!events.length ? (
             <p>No unreversed valuation of a transferred asset is available.</p>
           ) : null}
-          <Label>
+          <Label htmlFor="group-valuation-carrying">
             Group carrying amount ({event?.group_currency ?? "group currency"})
           </Label>
           <Input
+            id="group-valuation-carrying"
             value={carryingValue}
             onChange={(e) => {
               setCarrying(e.target.value);
               changed();
             }}
           />
-          <Label>Buyer functional currency to group currency rate</Label>
+          <Label htmlFor="group-valuation-rate">Buyer functional currency to group currency rate</Label>
           <Input
+            id="group-valuation-rate"
             value={rate}
             onChange={(e) => {
               setRate(e.target.value);
               changed();
             }}
           />
-          <Label>Group recoverability and remaining-service assessment</Label>
+          <Label htmlFor="group-valuation-assessment">Group recoverability and remaining-service assessment</Label>
           <Textarea
+            id="group-valuation-assessment"
             value={assessment}
             onChange={(e) => {
               setAssessment(e.target.value);
               changed();
             }}
           />
-          <Label>Reason</Label>
+          <Label htmlFor="group-valuation-reason">Reason</Label>
           <Textarea
+            id="group-valuation-reason"
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
