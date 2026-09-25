@@ -58,7 +58,7 @@ test("golden: K475 on £27,000 prices £31,750 of taxable income", () => {
   // rates is £6,350.00 of annual liability — the band engine must agree.
   const code = parseGbTaxCode("K475");
   assert.equal(code.kind, "k");
-  assert.equal((code as { number: number }).number, 475);
+  assert.equal((code as { number: bigint }).number, 475n);
   assert.equal(gbRukLiabilityUnits(3_175_000_00n), 635_000_00n);
 });
 
@@ -235,15 +235,15 @@ test("golden: Tables-A values follow the §4.3.1 decomposition", () => {
   // ceiling(2,579/52) = £49.60 plus 2 × £96.16 = £241.92. K475 month 1
   // (no +9): ceiling(4,750/12) = £395.84. Each verified against the
   // Tables-A lookup the spec automates (§4.3.1c).
-  assert.equal(gbTablesAValueUnits(1257, 12, 1, "free"), 104_826_00n);
-  assert.equal(gbTablesAValueUnits(1257, 52, 1, "free"), 24_192_00n);
-  assert.equal(gbTablesAValueUnits(1257, 12, 3, "free"), 3n * 104_826_00n);
-  assert.equal(gbTablesAValueUnits(475, 12, 1, "additional"), 39_584_00n);
-  assert.equal(gbTablesAValueUnits(0, 12, 1, "free"), 0n);
+  assert.equal(gbTablesAValueUnits(1257n, 12, 1, "free"), 104_826_00n);
+  assert.equal(gbTablesAValueUnits(1257n, 52, 1, "free"), 24_192_00n);
+  assert.equal(gbTablesAValueUnits(1257n, 12, 3, "free"), 3n * 104_826_00n);
+  assert.equal(gbTablesAValueUnits(475n, 12, 1, "additional"), 39_584_00n);
+  assert.equal(gbTablesAValueUnits(18_014_398_509_482n * 500n + 1n, 12, 1, "additional"), 18_014_398_509_482n * 4_166_700n + 8_400n);
   // Manual Example 3's Tables-A leg (p.4): code 431L at week 11. 431 needs
   // no decomposition (quotient 0, remainder 431): 11 × ceiling(4,319/52) =
   // 11 × £83.06 = £913.66 — the figure the example subtracts.
-  assert.equal(gbTablesAValueUnits(431, 52, 11, "free"), 91_366_00n);
+  assert.equal(gbTablesAValueUnits(431n, 52, 11, "free"), 91_366_00n);
 });
 
 test("golden: manual Examples 5 and 6 price through this engine unchanged", () => {
