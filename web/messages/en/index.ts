@@ -15,6 +15,7 @@ import analytics from './analytics.json'
 import admin from './admin.json'
 import allocations from './allocations.json'
 import apiDocs from './apiDocs.json'
+import apiErrors from './apiErrors.json'
 import ap from './ap.json'
 import approvals from './approvals.json'
 import assistant from './assistant.json'
@@ -80,6 +81,7 @@ export default {
   admin,
   allocations,
   apiDocs,
+  apiErrors,
   ap,
   approvals,
   assistant,
