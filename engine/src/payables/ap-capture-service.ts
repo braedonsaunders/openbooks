@@ -1269,9 +1269,16 @@ export async function materializeCapture(input: {
       }
     }
     if (!item.purchase_order_id) {
+      // One confirmation per capture, not per line: a multi-line invoice
+      // repeating the same coding would otherwise spend all three
+      // confirmations — and auto-activate the rule — from a single bill.
+      const confirmedAccountRules = new Set<string>();
       for (const line of capture.lines) {
         if (!line.accountId || !line.description) continue;
         const description = normalizedKey(line.description);
+        const ruleKey = `${description}|${line.accountId}`;
+        if (confirmedAccountRules.has(ruleKey)) continue;
+        confirmedAccountRules.add(ruleKey);
         const existing = (await tx.execute<{ id: string }>(sql`
           select id from ap_capture_rules where org_id = ${input.orgId} and rule_kind = 'vendor_account'
             and match->>'partyId' = ${vendorId} and match->>'description' = ${description}
