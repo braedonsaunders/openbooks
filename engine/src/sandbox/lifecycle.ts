@@ -935,8 +935,12 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
     // wipe (never before — the worker must not delete objects whose rows may
     // still exist if the wipe fails). The inline delete below stays.
     for (const versionId of manifest.versionIds) {
+      // Scope delete-path intents to the surviving production org (like the
+      // manifest above): the sandbox org row is dropped below, and outbox
+      // rows pointed at it violate storage_cleanup_outbox_org_fk. The worker
+      // drains by object key, so the S3 deletes still happen.
       await enqueueStorageCleanupStandalone({
-        orgId,
+        orgId: productionOrgId,
         objectKey: fileCabinetObjectKey(versionId),
         ownerKind: "file_version",
         ownerId: versionId,
