@@ -184,6 +184,13 @@ export interface PerformancePageData {
     goals: PerformanceGoalRow[]
     goalsTitle: string
     goalsEmpty: string
+    /**
+     * Goal authoring: the subject sets their own, HR (manage) sets any in
+     * scope — the same authority the goal endpoints enforce. Progress and
+     * the add-goal form render only with it.
+     */
+    canWriteGoals: boolean
+    employmentId: string
     canAnswer: boolean
     canShare: boolean
     canAcknowledge: boolean
@@ -655,6 +662,8 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         })),
         goalsTitle: t('performance.goalsTitle'),
         goalsEmpty: t('performance.goalsEmpty'),
+        canWriteGoals: isSubject || canManage,
+        employmentId: full.review.employmentId,
         canAnswer: isReviewer && full.review.status === 'pending',
         canShare:
           full.review.kind !== 'self' &&

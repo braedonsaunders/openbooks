@@ -41,6 +41,7 @@ export function GoalForm({ employmentId, cycleId }: { employmentId: string; cycl
       }
       setTitle('')
       setDueOn('')
+      setBusy(false)
       router.refresh()
     } catch {
       setError(t('performance.actionFailed'))
@@ -98,6 +99,7 @@ export function GoalProgressForm({ goalId, failed }: { goalId: string; failed: s
         setBusy(false)
         return
       }
+      setBusy(false)
       router.refresh()
     } catch {
       setError(failed)
