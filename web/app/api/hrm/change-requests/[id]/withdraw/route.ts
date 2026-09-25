@@ -9,9 +9,15 @@ import { withdrawChangeRequestBody } from "../../bodies";
 
 export const runtime = "nodejs";
 
-/** Withdraw a draft or pending employment change request. */
+/**
+ * Withdraw a draft or pending employment change request — HR through
+ * hrm.employment.manage for any request, or the requester through
+ * hrm.self.request for their own profile-change request (the engine
+ * enforces own-employment and kind; anything else keeps the manage refusal).
+ */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.employment.manage");
+  const hr = await guardPermission("hrm.employment.manage");
+  const gate = hr instanceof NextResponse ? await guardPermission("hrm.self.request") : hr;
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
