@@ -78,10 +78,19 @@ export function QualificationDrawer({
   const [typesError, setTypesError] = useState<string | null>(null)
   const typeRequestId = useRef(0)
   // The record form names the worker through the employments picker (ids,
-  // never free-text uuids). A picker failure is an error with retry, never
-  // a silent empty list.
+  // never free-text uuids): a searchable server-backed page, since the
+  // options contract refuses limits above 100 and a fixed 200 always 422s.
+  // A picker failure is an error with retry, never a silent empty list.
   const [employments, setEmployments] = useState<{ value: string; label: string }[]>([])
   const [employmentsError, setEmploymentsError] = useState<string | null>(null)
+  const [employmentQuery, setEmploymentQuery] = useState('')
+  // Loading is a fact about the state, not a second copy of it (the drawer
+  // derives its own loading the same way): settled flips only in the async
+  // continuations below, so no setState-in-effect is needed.
+  const [employmentsReady, setEmploymentsReady] = useState(false)
+  const [employmentRetry, setEmploymentRetry] = useState(0)
+  const employmentRequestId = useRef(0)
+  const employmentsLoading = recordOpen && !employmentsReady
   const [evidenceFileId, setEvidenceFileId] = useState('')
   const [evidenceQuery, setEvidenceQuery] = useState('')
   const [evidenceFiles, setEvidenceFiles] = useState<{ value: string; label: string }[]>([])
@@ -258,30 +267,6 @@ export function QualificationDrawer({
     }
   }
 
-  async function readEmployments(): Promise<{ value: string; label: string }[]> {
-    const res = await fetch('/api/hrm/options?source=employments&limit=200', { method: 'GET' })
-    // res.ok first, always: the refusal names the missing grant.
-    if (!res.ok) throw new Error(await readApiErrorMessage(res, t('qualifications.recordForm.employmentsFailed')))
-    const payload = (await res.json().catch(() => ({}))) as {
-      options?: { employmentId?: unknown; label?: unknown }[]
-    }
-    const page = Array.isArray(payload.options) ? payload.options : []
-    return page.flatMap((row) =>
-      typeof row.employmentId === 'string' && typeof row.label === 'string'
-        ? [{ value: row.employmentId, label: row.label }]
-        : [],
-    )
-  }
-
-  async function loadEmployments(): Promise<void> {
-    setEmploymentsError(null)
-    try {
-      setEmployments(await readEmployments())
-    } catch (e) {
-      setEmploymentsError((e as Error).message)
-    }
-  }
-
   async function record(): Promise<void> {
     await run('/api/hrm/qualifications', 'POST', {
       employmentId: form.employmentId || undefined,
@@ -295,23 +280,47 @@ export function QualificationDrawer({
   }
 
   // The employment picker loads with the record form, not with the drawer:
-  // detail never needs it.
+  // detail never needs it. The query forwards server-side (remote) so any
+  // worker stays selectable beyond the page.
   useEffect(() => {
     if (!recordOpen) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const list = await readEmployments()
-        if (!cancelled) setEmployments(list)
-      } catch (e) {
-        if (!cancelled) setEmploymentsError((e as Error).message)
-      }
-    })()
+    const id = (employmentRequestId.current += 1)
+    const selectedId = form.employmentId
+    const params = new URLSearchParams({ source: 'employments', limit: '25' })
+    if (employmentQuery.trim()) params.set('q', employmentQuery.trim())
+    if (selectedId) params.set('include', selectedId)
+    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+      .then(async (res) => {
+        if (id !== employmentRequestId.current) return
+        // res.ok first, always: the refusal names the missing grant.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, t('qualifications.recordForm.employmentsFailed')))
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { employmentId?: unknown; label?: unknown }[]
+        }
+        if (id !== employmentRequestId.current) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        const next = page.flatMap((row) =>
+          typeof row.employmentId === 'string' && typeof row.label === 'string'
+            ? [{ value: row.employmentId, label: row.label }]
+            : [],
+        )
+        if (selectedId && !next.some((option) => option.value === selectedId)) {
+          next.push({ value: selectedId, label: selectedId })
+        }
+        setEmployments(next)
+        setEmploymentsError(null)
+        setEmploymentsReady(true)
+      })
+      .catch((e) => {
+        if (id !== employmentRequestId.current) return
+        setEmploymentsError(e instanceof Error ? e.message : t('qualifications.recordForm.employmentsFailed'))
+        setEmploymentsReady(true)
+      })
     return () => {
-      cancelled = true
+      employmentRequestId.current += 1
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordOpen])
+  }, [recordOpen, employmentQuery, form.employmentId, employmentRetry])
 
   const q = detail?.qualification
   const isPending = q?.storedStatus === 'pending_verification'
@@ -384,16 +393,29 @@ export function QualificationDrawer({
         <div className="flex flex-col gap-3">
           <div>
             <Label htmlFor="q-employment">{t('qualifications.recordForm.employment')}</Label>
-            <Select id="q-employment" value={form.employmentId} onChange={(e) => setForm({ ...form, employmentId: e.target.value })}>
-              <option value="">{t('qualifications.recordForm.employmentPlaceholder')}</option>
-              {employments.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </Select>
+            <SearchSelect
+              id="q-employment"
+              value={form.employmentId}
+              onChange={(next) => setForm({ ...form, employmentId: next })}
+              options={employments}
+              ariaLabel={t('qualifications.recordForm.employment')}
+              sheetTitle={t('qualifications.recordForm.employment')}
+              emptyLabel={t('qualifications.recordForm.employmentPlaceholder')}
+              placeholder={t('qualifications.recordForm.employmentPlaceholder')}
+              remote
+              loading={employmentsLoading}
+              onSearchChange={(next) => {
+                setEmploymentQuery(next)
+                setEmploymentsReady(false)
+              }}
+            />
             {employmentsError ? (
               <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
                 {employmentsError}{' '}
-                <Button variant="ghost" size="sm" onClick={() => void loadEmployments()}>
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setEmploymentsReady(false)
+                  setEmploymentRetry((n) => n + 1)
+                }}>
                   {tCommon('actions.retry')}
                 </Button>
               </p>
