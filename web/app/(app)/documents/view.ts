@@ -61,6 +61,9 @@ export interface DocumentsData {
   searchPlaceholder: string
   currentParams: Record<string, string | string[] | undefined>
   canManage: boolean
+  /** documents.manage, or Editor+ on the current folder: may upload here and
+   *  create sub-folders (top-level creation still needs documents.manage). */
+  canWrite: boolean
   trashHref: string
   trashLabel: string
   allFilesHref: string
@@ -197,6 +200,14 @@ export async function loadDocuments(
 
   const newFolderParent = activeFolderId
   const isEmpty = files.length === 0 && childFolders.length === 0
+  // Upload needs Editor+ on the folder and sub-folder creation needs
+  // Editor+ on the parent — the upload and sub-folder APIs' own bar, not
+  // documents.manage — so Editor-grant holders get the affordances where
+  // they may act. At the virtual root there is no folder tier, so only
+  // documents.manage writes there.
+  const canEditCurrent = accessAtLeast(currentAccess, 'editor')
+  const canWrite = canManage || canEditCurrent
+  const canCreateFolder = canManage || (activeFolderId !== undefined && canEditCurrent)
 
   // A ?file= / ?folder= that names nothing resolvable must say so: the
   // drawers stay closed (malformed id, deleted item, or nothing shared —
@@ -204,7 +215,7 @@ export async function loadDocuments(
   // alone would read as a working link.
   const fileLinkDead = sp.file !== undefined && !openFile
   const folderLinkDead =
-    folderParam !== undefined && (folderParam === 'new' ? !canManage : !openFolder)
+    folderParam !== undefined && (folderParam === 'new' ? !canCreateFolder : !openFolder)
   const linkNotice = fileLinkDead || folderLinkDead ? t('list.linkNotFound') : null
 
   return {
@@ -213,6 +224,7 @@ export async function loadDocuments(
     searchPlaceholder: t('list.searchPlaceholder'),
     currentParams: sp,
     canManage,
+    canWrite,
     trashHref: '/documents/trash',
     trashLabel: t('trash.link'),
     allFilesHref: folderHref(sp, null),
@@ -236,7 +248,7 @@ export async function loadDocuments(
       folderName: localizedTree.find((folder) => folder.id === f.folderId)?.name ?? f.folderName,
     })),
     showLocation: !activeFolderId,
-    canEdit: accessAtLeast(currentAccess, 'editor'),
+    canEdit: canEditCurrent,
     canDelete: accessAtLeast(currentAccess, 'manager'),
     sort: params.sort,
     dir: params.dir,
@@ -257,9 +269,9 @@ export async function loadDocuments(
           canManage: accessAtLeast(openFileAccess, 'manager'),
         }
       : null,
-    folderDrawerCreateOpen: folderParam === 'new' && canManage,
+    folderDrawerCreateOpen: folderParam === 'new' && canCreateFolder,
     folderDrawerCreate:
-      folderParam === 'new' && canManage
+      folderParam === 'new' && canCreateFolder
         ? {
             remountKey: 'new-folder',
             mode: 'create',
@@ -304,7 +316,7 @@ export function documentsSpec(data: DocumentsData): PageSpec {
             pageHeader({
               title: f('title'),
               description: f('description'),
-              actions: [widget('documents-actions', actionsProps, f('canManage'))],
+              actions: [widget('documents-actions', actionsProps, f('canWrite'))],
             }),
             grid('mt-2 flex flex-wrap items-center gap-2', [
               widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
@@ -332,8 +344,8 @@ export function documentsSpec(data: DocumentsData): PageSpec {
                 ...widgetBlock('empty-state', {
                   title: data.emptyTitle,
                   description: data.emptyDescription,
-                  action: data.canManage ? 'documents-actions' : null,
-                  actionProps: data.canManage ? actionsProps : null,
+                  action: data.canWrite ? 'documents-actions' : null,
+                  actionProps: data.canWrite ? actionsProps : null,
                 }),
                 when: f('isEmpty'),
               },
