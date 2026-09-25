@@ -4,8 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-// Setup resources are server-only. Shim that marker so this focused
-// PostgreSQL boundary test can import the resource under node's test runner.
+// Server-only shim so this DB test can import the resource under node.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') {
@@ -41,23 +40,11 @@ test(
     const functionName = `${triggerName}_fn`
 
     try {
-      // Force the audit leg to fail. The row write must be rolled back to its
-      // savepoint, leaving neither configuration nor audit evidence behind.
-      await db.execute(
-        sql.raw(`
-      create function ${functionName}() returns trigger
-      language plpgsql as $$ begin
-        if NEW.table_name = 'segment_definitions' then
-          raise exception 'forced setup import audit failure';
-        end if;
-        return NEW;
-      end $$`),
-      )
-      await db.execute(
-        sql.raw(`
-      create trigger ${triggerName}
-      before insert on audit_log for each row execute function ${functionName}()`),
-      )
+      // Forced audit failure must roll the row back to its savepoint.
+      await db.execute(sql.raw(`create function ${functionName}() returns trigger language plpgsql as $$ begin
+        if NEW.table_name = 'segment_definitions' then raise exception 'forced setup import audit failure'; end if;
+        return NEW; end $$`))
+      await db.execute(sql.raw(`create trigger ${triggerName} before insert on audit_log for each row execute function ${functionName}()`))
 
       const rejected = await resource.write(
         [
@@ -78,8 +65,7 @@ test(
        where org_id = ${org.orgId} and key = ${rejectedKey}`)
       assert.equal(stranded.rows[0]?.count, 0)
 
-      // Exercise the import route's outer transaction seam: a failed nested row
-      // must roll back to its savepoint and still let the outer unit commit.
+      // A failed nested row rolls back without stranding the outer unit.
       const outerRejectedKey = `import_outer_${randomUUID().replaceAll('-', '').slice(0, 24)}`
       const outerRejected = await withOrgTransaction(org.orgId, () =>
         resource.write(
@@ -150,13 +136,8 @@ test(
       assert.equal(auditRows.rows[0]?.after.name, 'Imported setup')
       assert.equal(auditRows.rows[0]?.after.plural_name, 'Imported setups')
 
-      // The same atomicity applies to upserts: an audit outage cannot leave the
-      // updated configuration committed while the import reports a failed row.
-      await db.execute(
-        sql.raw(`
-      create trigger ${triggerName}
-      before insert on audit_log for each row execute function ${functionName}()`),
-      )
+      // Upsert atomicity: audit outage leaves neither commit nor false success.
+      await db.execute(sql.raw(`create trigger ${triggerName} before insert on audit_log for each row execute function ${functionName}()`))
       const rejectedUpdate = await resource.write(
         [
           {
@@ -181,3 +162,20 @@ test(
     }
   },
 )
+
+test('setup imports refuse tax codes that violate domain invariants', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  const actorId = await createScratchUser(org.orgId, 'Setup Import Admin', 'admin')
+  const entity = SETUP_ENTITY_BY_KEY.get('tax-codes')
+  assert.ok(entity)
+  const code = `WHT-${randomUUID().replaceAll('-', '').slice(0, 8)}`
+  try {
+    const outcome = await setupResource(entity, org.orgId).write(
+      [{ code, name: 'Import withholding', calculationType: 'withholding' }], 'insert', { orgId: org.orgId, actorId, dryRun: false })
+    assert.deepEqual([outcome.created, outcome.failed, outcome.errors[0]?.message], [0, 1, 'withholding-account-required'])
+    const stored = await db.execute(sql`select count(*)::int as count from tax_codes where org_id = ${org.orgId} and code = ${code}`)
+    assert.equal(stored.rows[0]?.count, 0)
+  } finally {
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
