@@ -2,7 +2,7 @@ import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
-import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -157,7 +157,7 @@ export interface SpendVelocityData {
     summary: { poVelocity: number; soVelocity: number; velocityGap: number; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: number; totalSO: number };
     months: { month: string; poAmount: number; soAmount: number }[];
   };
-  revenue: { hasData: boolean; totalRevenue: number; opexRatio: number };
+  revenue: { hasData: boolean; totalRevenue: string; opexRatio: number };
   insights: SVInsight[];
   periodComparison: {
     summary: { currentTotal: number; priorTotal: number; twoBackTotal: number; projectedTotal: number; changePct: number | null; priorLabel: string; twoBackLabel: string };
@@ -830,7 +830,7 @@ export async function spendVelocityData(
   // mixes a COGS account in and drops genuine expense (F-t09-001).
   const totalRevenue = plOpex.revenue;
   const revenue = {
-    hasData: totalRevenue > 0,
+    hasData: cmp(totalRevenue, "0") > 0,
     totalRevenue,
     opexRatio: operatingExpenseRatio(plOpex.opex, totalRevenue),
   };
