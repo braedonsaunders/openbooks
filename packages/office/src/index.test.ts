@@ -162,3 +162,20 @@ test('statement XLSX keeps safely representable decimal strings numeric', async 
   assert.ok(worksheet)
   assert.equal(worksheet.getCell(6, 2).value, 1234.5)
 })
+
+test('statement XLSX keeps adjacent large 4dp amounts distinct instead of collapsing', async () => {
+  const buffer = await statementSheetToXlsx({
+    company: 'Example Company', title: 'Balance Sheet', periodPhrase: 'Year ended 2026-12-31',
+    accountLabel: 'Account', columns: [{ label: 'Balance', kind: 'amount' }],
+    rows: [
+      { kind: 'account', label: 'First', values: ['600000000000.0002'] },
+      { kind: 'account', label: 'Second', values: ['600000000000.0003'] },
+    ],
+  })
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+  const worksheet = workbook.worksheets[0]
+  assert.ok(worksheet)
+  assert.equal(worksheet.getCell(6, 2).value, 600000000000.0002)
+  assert.equal(worksheet.getCell(7, 2).value, '600000000000.0003')
+})
