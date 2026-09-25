@@ -38,6 +38,7 @@ import {
   listFormats,
   markSeamConsumed,
   recordFinding,
+  resolveCertifiedEmployment,
   resolveFinding,
   resolveWage,
   voidEntry,
@@ -505,6 +506,24 @@ test("certified payroll does not offer generic US drafts as submission artifacts
       /pack declares no labor-compliance files/,
     );
     await db.execute(sql`update orgs set country = 'US' where id = ${org.orgId}`);
+  });
+});
+
+test("certified payroll resolves one employment per day and refuses history fan-out", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { org } = h;
+    const { employmentId: firstId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Certified Worker");
+    const resolve = (day: string) => resolveCertifiedEmployment(db, org.orgId, partyId, day);
+    assert.equal(await resolve("2026-09-08"), firstId);
+    await db.execute(sql`update worker_employment_versions set effective_to = '2026-01-01' where org_id = ${org.orgId} and employment_id = ${firstId}`);
+    const secondId = randomUUID();
+    await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${secondId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}, 1)`);
+    await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at) values (${org.orgId}, ${secondId}, 1, 'active', '2026-01-01', now())`);
+    assert.equal(await resolve("2026-09-08"), secondId);
+    const thirdId = randomUUID();
+    await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${thirdId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}, 1)`);
+    await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at) values (${org.orgId}, ${thirdId}, 1, 'active', '2026-01-01', now())`);
+    await assertConstructionRefusal(() => resolve("2026-09-08"), /2 employments effective 2026-09-08/);
   });
 });
 

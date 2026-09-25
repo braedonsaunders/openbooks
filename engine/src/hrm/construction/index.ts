@@ -69,6 +69,7 @@ export {
   listRuns,
   loadRun,
   projectComplianceSummary,
+  resolveCertifiedEmployment,
   submitRun,
 } from "./certified.ts";
 export { prevailingWageForTimeEntry } from "./labor-hook.ts";
