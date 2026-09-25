@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -25,6 +26,7 @@ import {
   cn,
 } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useAppAction } from '../../../../lib/use-app-action'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
@@ -1086,15 +1088,15 @@ function ToleranceDrawer({
   const [slotKey, setSlotKey] = useState('')
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
-  const [saving, setSaving] = useState(false)
+  const { busy, execute } = useAppAction()
+  const [failure, setFailure] = useState<string | null>(null)
 
   const selected = slots.find((slot) => `${slot.kind}/${slot.slot}` === slotKey) ?? null
 
   const save = async () => {
     if (!selected) return
-    setSaving(true)
-    try {
-      const response = await fetch('/api/payroll/parallel-run/tolerances', {
+    const fallbackMessage = text('toleranceSaveFailed', 'Could not save the tolerance.')
+    await execute(() => fetchAction<{ tolerances?: Tolerance[] }>('/api/payroll/parallel-run/tolerances', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -1103,35 +1105,33 @@ function ToleranceDrawer({
           tolerance: amount,
           reason,
         }),
+      }), {
+        fallbackMessage,
+        onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
+        onOk: (body) => {
+          setFailure(null)
+          onChange(body.tolerances ?? [])
+          setSlotKey('')
+          setAmount('')
+          setReason('')
+          toast.success(text('toleranceSaved', 'Tolerance saved.'))
+        },
       })
-      // The status is checked before the body is parsed (see compare above).
-      if (!response.ok) {
-        toast.error(await readApiErrorMessage(response, 'could not save the tolerance'))
-        return
-      }
-      const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
-      onChange(body.tolerances ?? [])
-      setSlotKey('')
-      setAmount('')
-      setReason('')
-      toast.success(text('toleranceSaved', 'Tolerance saved.'))
-    } finally {
-      setSaving(false)
-    }
   }
 
   const remove = async (tolerance: Tolerance) => {
-    const response = await fetch(
+    const fallbackMessage = text('toleranceRemoveFailed', 'Could not remove the tolerance.')
+    await execute(() => fetchAction<{ tolerances?: Tolerance[] }>(
       `/api/payroll/parallel-run/tolerances?kind=${tolerance.kind}&slot=${encodeURIComponent(tolerance.slot)}`,
       { method: 'DELETE' },
-    )
-    // The status is checked before the body is parsed (see compare above).
-    if (!response.ok) {
-      toast.error(await readApiErrorMessage(response, 'could not remove the tolerance'))
-      return
-    }
-    const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
-    onChange(body.tolerances ?? [])
+    ), {
+      fallbackMessage,
+      onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
+      onOk: (body) => {
+        setFailure(null)
+        onChange(body.tolerances ?? [])
+      },
+    })
   }
 
   return (
@@ -1146,6 +1146,7 @@ function ToleranceDrawer({
       )}
     >
       <div className="space-y-5">
+        {failure ? <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">{failure}</div> : null}
         <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <div>
             <Label
@@ -1210,13 +1211,13 @@ function ToleranceDrawer({
           <Button
             disabled={
               !selected
-              || saving
+              || busy
               || !reason.trim()
               || moneyFieldError(text('fields.tolerance', 'Allowance'), 'a money amount', amount, 4, { required: true }) !== null
             }
             onClick={save}
           >
-            {saving ? text('saving', 'Saving…') : text('addTolerance', 'Add tolerance')}
+            {busy ? text('saving', 'Saving…') : text('addTolerance', 'Add tolerance')}
           </Button>
         </div>
 
@@ -1239,7 +1240,7 @@ function ToleranceDrawer({
                     {tolerance.reason}
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" aria-label={tCommon('actions.delete')} onClick={() => void remove(tolerance)}>
+                    <Button variant="ghost" size="sm" aria-label={tCommon('actions.delete')} disabled={busy} onClick={() => void remove(tolerance)}>
                   <Trash2 size={14} aria-hidden />
                 </Button>
               </li>
