@@ -94,6 +94,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       existingCustom: existing.rows[0].custom,
       existingDocumentDate: existing.rows[0].document_date,
       existingPaymentCardId: existing.rows[0].payment_card_id,
+      // The report's locked subsidiary: an employee of another legal entity
+      // is refused below with the scope-opaque not-found refusal.
+      reportSubsidiaryId: existing.rows[0].subsidiaryId,
     })
   } catch (e) {
     if (e instanceof DocumentEditError) {

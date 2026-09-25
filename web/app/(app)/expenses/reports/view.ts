@@ -12,6 +12,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { canRecallExpenseReport, loadExpenseReport } from '../../../../lib/expenses'
@@ -101,6 +102,7 @@ export async function loadExpenseReports(
           select p.id, p.display_name from parties p
            where p.is_active and p.org_id = ${authz.user.orgId}
              and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
            order by p.display_name`),
         db.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`),
         cardOptions(authz.user.orgId),

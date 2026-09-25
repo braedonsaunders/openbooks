@@ -89,7 +89,20 @@ export interface PreparedExpenseEdit {
  */
 export async function prepareExpenseEdit(
   body: ExpenseEditBody,
-  ctx: { orgId: string; existingCustom: unknown; existingDocumentDate: string; existingPaymentCardId?: string | null },
+  ctx: {
+    orgId: string
+    existingCustom: unknown
+    existingDocumentDate: string
+    existingPaymentCardId?: string | null
+    /**
+     * Locked subsidiary of the report being edited (null = org-wide report).
+     * The expense PATCH route always passes it; when present, an employee of
+     * another legal entity is refused with the same opaque 404 as a foreign
+     * party. New callers must pass it — omitting it keeps the legacy
+     * org-only check.
+     */
+    reportSubsidiaryId?: string | null
+  },
 ): Promise<PreparedExpenseEdit> {
   const { orgId } = ctx
   // The document date reaches coalesce(document_date) uncast: a malformed
@@ -107,10 +120,23 @@ export async function prepareExpenseEdit(
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.partyId)) {
       throw new DocumentEditError(404, 'party not found in this organization')
     }
-    const owner = (await db.execute<{ id: string }>(
-      sql`select id from parties where id = ${body.partyId} and org_id = ${orgId}`,
+    const owner = (await db.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`select id, subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`,
     ))
     if (!owner.rows[0]) throw new DocumentEditError(404, 'party not found in this organization')
+    // Cross-entity assignment: an employee of another legal entity cannot be
+    // attached to this report. Org-wide (null-subsidiary) employees carry
+    // org-wide identity and stay assignable; a null report subsidiary means
+    // an org-wide report with no entity fence. Same opaque 404 either way.
+    const partySubsidiary = owner.rows[0].subsidiary_id ?? null
+    if (
+      ctx.reportSubsidiaryId !== undefined &&
+      ctx.reportSubsidiaryId !== null &&
+      partySubsidiary !== null &&
+      partySubsidiary !== ctx.reportSubsidiaryId
+    ) {
+      throw new DocumentEditError(404, 'party not found in this organization')
+    }
   }
   // The funding card backs every company-paid and personal line (0171). The
   // documents FK is global, so prove org ownership here like the party above;
