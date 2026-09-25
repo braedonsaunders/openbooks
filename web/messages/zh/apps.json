@@ -337,6 +337,7 @@
     "import": "导入包",
     "importing": "正在导入…",
     "tooLarge": "请选择小于 10 MB 的 ZIP 或 JSON 包。",
+    "invalidPackage": "软件包 JSON 无效。请更正语法后重试。",
     "importReason": "导入应用包以供审核",
     "failed": "无法导入应用包。",
     "discardEdits": "放弃应用包未保存的更改？"

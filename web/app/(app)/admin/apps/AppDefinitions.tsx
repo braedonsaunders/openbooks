@@ -173,8 +173,8 @@ export function AppDefinitions({
       setEdit(null)
       setError('')
       setKey('')
-    } catch (error) {
-      setError(error instanceof Error ? error.message : t('invalid'))
+    } catch (_error) {
+      setError(t('invalid'))
     }
   }
   return (

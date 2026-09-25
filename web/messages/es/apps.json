@@ -337,6 +337,7 @@
     "import": "Importar paquete",
     "importing": "Importando…",
     "tooLarge": "Elija un paquete ZIP o JSON de menos de 10 MB.",
+    "invalidPackage": "El JSON del paquete no es válido. Corrija la sintaxis e inténtelo de nuevo.",
     "importReason": "Importar el paquete de la aplicación para revisión",
     "failed": "No se pudo importar el paquete.",
     "discardEdits": "¿Descartar los cambios sin guardar del paquete?"

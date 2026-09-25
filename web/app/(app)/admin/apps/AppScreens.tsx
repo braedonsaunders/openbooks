@@ -117,8 +117,8 @@ export function AppScreens({
       setEdit(null)
       setKey('')
       setError('')
-    } catch (error) {
-      setError(error instanceof Error ? error.message : t('invalid'))
+    } catch (_error) {
+      setError(t('invalid'))
     }
   }
   return (

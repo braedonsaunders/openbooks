@@ -58,7 +58,14 @@ export function ExtensionRequest() {
       router.push(data.reviewUrl)
       router.refresh()
     } catch (error) {
-      setError(error instanceof Error ? error.message : ui('failed'))
+      setError(
+        error instanceof SyntaxError ||
+          (error instanceof Error && error.name === 'ZodError')
+          ? ui('invalidPackage')
+          : error instanceof Error
+            ? error.message
+            : ui('failed'),
+      )
     } finally {
       setBusy(false)
     }
