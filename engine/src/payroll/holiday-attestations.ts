@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import {
+  evidencedEntitledPayDays,
   loadHolidayOverrides,
   resolveObservedHolidays,
   statutoryHolidayPayRule,
@@ -18,13 +19,15 @@ import {
 /**
  * Stored statutory-holiday attestation facts (migration 0181).
  *
- * Two different kinds of fact, stored in two different places:
+ * Three facts, each with its own durable source:
  * - `paidOnCommission` is a STANDING employment attribute on
  *   employee_payroll_profiles (nullable: null = unanswered, and unanswered
  *   fails closed exactly like a missing per-request entry).
  * - the last-and-first-shift absence assertion is PER (run, employee,
  *   holiday) in pay_run_holiday_assertions, so a later period never inherits
  *   an earlier run's answer.
+ * - the complete entitlement-day assessment is PER (run, employee, holiday)
+ *   in append-only audit_log events, including actor, time and evidenced count.
  *
  * The per-request `holidayEligibility` map still wins where both exist: it is
  * the override, the stored value the fallback. The merge below is what the
@@ -38,6 +41,8 @@ export interface StoredHolidayFacts {
   commissions: Map<string, boolean>;
   /** employee party id → (`holidayKey|holidayDate` → asserted value). */
   assertions: Map<string, Map<string, boolean>>;
+  /** Latest audited complete-evidence count per employee and occurrence. */
+  entitledDays: Map<string, Map<string, number>>;
 }
 
 /** Inner key for one holiday occurrence. Both halves are needed: one period
@@ -48,8 +53,8 @@ export const holidayOccurrenceKey = (holidayKey: string, holidayDate: string): s
 /**
  * Load this run's stored facts for its roster. Commission answers come from
  * the standing profile column (answered rows only — null stays unanswered);
- * absence assertions come from this run's own rows (a later run cannot see
- * an earlier run's).
+ * absence assertions and audited entitlement-day assessments belong only to
+ * this run (a later run cannot see an earlier run's answer).
  */
 export async function loadStoredHolidayFacts(
   tx: Pick<typeof db, "execute">,
@@ -58,8 +63,9 @@ export async function loadStoredHolidayFacts(
   const { orgId, documentId, employeePartyIds } = args;
   const commissions = new Map<string, boolean>();
   const assertions = new Map<string, Map<string, boolean>>();
-  if (employeePartyIds.length === 0) return { commissions, assertions };
-  const [profileRows, assertionRows] = await Promise.all([
+  const entitledDays = new Map<string, Map<string, number>>();
+  if (employeePartyIds.length === 0) return { commissions, assertions, entitledDays };
+  const [profileRows, assertionRows, entitlementRows] = await Promise.all([
     tx.execute<{ employee_party_id: string; paid_on_commission: boolean }>(sql`
       select employee_party_id, paid_on_commission
         from employee_payroll_profiles
@@ -73,6 +79,12 @@ export async function loadStoredHolidayFacts(
       select employee_party_id, holiday_key, holiday_date::text as holiday_date, absent_without_consent
         from pay_run_holiday_assertions
        where org_id = ${orgId} and pay_run_document_id = ${documentId}`),
+    tx.execute<{ changes: Record<string, unknown>; actor_id: string | null }>(sql`
+      select changes, actor_id from audit_log
+       where org_id = ${orgId} and table_name = 'pay_run_holiday_assertions'
+         and row_id = ${documentId} and action = 'insert'
+         and changes->>'event' = 'entitled_pay_days_complete'
+       order by at, id`),
   ]);
   for (const row of profileRows.rows) {
     commissions.set(row.employee_party_id, assertStoredBoolean(row.paid_on_commission));
@@ -86,7 +98,28 @@ export async function loadStoredHolidayFacts(
     }
     perEmployee.set(holidayOccurrenceKey(row.holiday_key, date), row.absent_without_consent);
   }
-  return { commissions, assertions };
+  const roster = new Set(employeePartyIds);
+  for (const row of entitlementRows.rows) {
+    const event = row.changes;
+    const employeeId = event.employeePartyId;
+    const holidayKey = event.holidayKey;
+    const holidayDate = event.holidayDate;
+    const count = event.evidencedDayCount;
+    if (typeof employeeId !== "string" || typeof holidayKey !== "string"
+        || typeof holidayDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(holidayDate)
+        || typeof count !== "number" || !Number.isInteger(count) || count < 0
+        || event.complete !== true || row.actor_id === null) {
+      throw new PayrollError("stored statutory holiday entitlement-day attestation is unreadable — refile it on the pay run");
+    }
+    if (!roster.has(employeeId)) continue;
+    let perEmployee = entitledDays.get(employeeId);
+    if (!perEmployee) {
+      perEmployee = new Map<string, number>();
+      entitledDays.set(employeeId, perEmployee);
+    }
+    perEmployee.set(holidayOccurrenceKey(holidayKey, holidayDate), count);
+  }
+  return { commissions, assertions, entitledDays };
 }
 
 /** The loader's query already filters nulls, so a non-boolean here is a
@@ -120,6 +153,7 @@ export function mergeHolidayEligibility(
     ...Object.keys(perRequest ?? {}),
     ...stored.commissions.keys(),
     ...stored.assertions.keys(),
+    ...stored.entitledDays.keys(),
     ...demandingByEmployee.keys(),
   ]);
   for (const employeeId of employeeIds) {
@@ -140,7 +174,10 @@ export function mergeHolidayEligibility(
         if (values.every((value) => value === first)) entry.absentWithoutConsent = first;
       }
     }
-    if (entry.paidOnCommission !== undefined || entry.absentWithoutConsent !== undefined) {
+    const entitled = stored.entitledDays.get(employeeId);
+    if (entitled?.size) entry.entitledDayAttestations = Object.fromEntries(entitled);
+    if (entry.paidOnCommission !== undefined || entry.absentWithoutConsent !== undefined
+        || entry.entitledDayAttestations !== undefined) {
       merged[employeeId] = entry;
     }
   }
@@ -176,12 +213,39 @@ export async function recordHolidayAssertion(
   return { holidayKey, holidayDate };
 }
 
+/** Append-only evidence of an employer's complete day-count assessment. */
+export async function recordEntitledDaysAttestation(
+  tx: Pick<typeof db, "execute">,
+  args: {
+    orgId: string; documentId: string; employeePartyId: string; employeeName: string;
+    holidayKey: string; holidayDate: string; jurisdiction: string; actorId: string;
+  },
+): Promise<number> {
+  const count = await evidencedEntitledPayDays(tx, {
+    orgId: args.orgId, employeePartyId: args.employeePartyId,
+    employeeName: args.employeeName, excludeDocumentId: args.documentId,
+    jurisdiction: args.jurisdiction, holidayDate: args.holidayDate,
+  });
+  const changes = {
+    event: "entitled_pay_days_complete", complete: true,
+    employeePartyId: args.employeePartyId, holidayKey: args.holidayKey,
+    holidayDate: args.holidayDate, evidencedDayCount: count,
+  };
+  await tx.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${args.orgId}, 'pay_run_holiday_assertions', ${args.documentId},
+            'insert', ${JSON.stringify(changes)}::jsonb, ${args.actorId})`);
+  return count;
+}
+
 export interface DemandingHoliday {
   key: string;
   date: string;
   name: string;
+  jurisdiction: string;
   needsCommissionStatus: boolean;
   needsAbsenceAssertion: boolean;
+  needsEntitlementDayAssessment: boolean;
 }
 
 /**
@@ -233,10 +297,11 @@ export function demandingHolidaysForJurisdiction(
     const basis = holidayPayLookbackBasis(rule.basis);
     const needsCommissionStatus = basis.kind === "fixed_divisor" && basis.commission !== undefined;
     const needsAbsenceAssertion = rule.qualifying.lastAndFirstScheduledShift === true;
-    if (needsCommissionStatus || needsAbsenceAssertion) {
+    const needsEntitlementDayAssessment = rule.qualifying.minDaysWorkedInWindow?.counting === "entitled_to_pay";
+    if (needsCommissionStatus || needsAbsenceAssertion || needsEntitlementDayAssessment) {
       demanding.push({
-        key: holiday.key, date: holiday.date, name: holiday.name,
-        needsCommissionStatus, needsAbsenceAssertion,
+        key: holiday.key, date: holiday.date, name: holiday.name, jurisdiction,
+        needsCommissionStatus, needsAbsenceAssertion, needsEntitlementDayAssessment,
       });
     }
   }

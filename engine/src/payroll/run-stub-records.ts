@@ -228,6 +228,7 @@ export async function statutoryHolidayLinesForStub(
     hourlyRate: holidayRate,
     paidOnCommission: holidayEligibility?.[employeePartyId]?.paidOnCommission,
     absentWithoutConsent: holidayEligibility?.[employeePartyId]?.absentWithoutConsent,
+    entitledDayAttestations: holidayEligibility?.[employeePartyId]?.entitledDayAttestations,
   });
 }
 

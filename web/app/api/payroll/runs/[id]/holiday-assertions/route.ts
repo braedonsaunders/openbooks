@@ -5,11 +5,13 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import {
   demandingHolidays,
+  recordEntitledDaysAttestation,
   loadStoredHolidayFacts,
   mergeHolidayEligibility,
   recordHolidayAssertion,
   type DemandingHoliday,
 } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
+import { evidencedEntitledPayDays } from '@openbooks/engine/src/payroll/holidays.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -20,12 +22,12 @@ export const dynamic = 'force-dynamic'
  * Per-holiday statutory-holiday assertions for one pay run (migration 0181).
  *
  *  GET  → every roster employee's standing commission answer, the run's filed
- *         absence assertions, the holidays in the run's period that demand an
- *         explicit fact, and the server-merged `suggested` eligibility map.
+ *         assertions, demanding holidays, current entitlement-day counts,
+ *         and the server-merged `suggested` eligibility map.
  *  POST → file one answer: the standing commission status (stored on the
- *         employee's payroll profile, answered once) and/or one absence
- *         assertion (stored per run + holiday occurrence, never inherited by
- *         a later period).
+ *         employee's payroll profile, answered once), an absence assertion,
+ *         or a complete entitlement-day assessment scoped to this run and
+ *         holiday occurrence.
  *
  * The wizard's calculate action accepts a per-request `holidayEligibility`
  * map and nothing else, so the client sends `suggested` (plus anything the
@@ -95,17 +97,34 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       const stored = await loadStoredHolidayFacts(tx, {
         orgId: gate.user.orgId, documentId: id, employeePartyIds: employeeIds,
       })
-      const demanding = new Map<string, DemandingHoliday[]>()
+      const demanding = new Map<string, (DemandingHoliday & {
+        evidencedDayCount?: number; attestedDayCount?: number;
+      })[]>()
       for (const employee of roster) {
-        demanding.set(employee.employeePartyId, await demandingHolidays(tx, {
+        const holidays = await demandingHolidays(tx, {
           orgId: gate.user.orgId,
           country: employee.country, province: employee.province,
           labourJurisdiction: employee.labourJurisdiction,
           employeeName: employee.name,
           periodStart: run.periodStart, periodEnd: run.periodEnd,
-        }))
+        })
+        demanding.set(employee.employeePartyId, await Promise.all(holidays.map(async (holiday) => ({
+          ...holiday,
+          evidencedDayCount: holiday.needsEntitlementDayAssessment
+            ? await evidencedEntitledPayDays(tx, {
+                orgId: gate.user.orgId, employeePartyId: employee.employeePartyId,
+                employeeName: employee.name, excludeDocumentId: id,
+                jurisdiction: holiday.jurisdiction, holidayDate: holiday.date,
+              })
+            : undefined,
+          attestedDayCount: stored.entitledDays.get(employee.employeePartyId)
+            ?.get(`${holiday.key}|${holiday.date}`),
+        }))))
       }
       const suggested = mergeHolidayEligibility(undefined, stored, demanding)
+      // The day counts are server-owned audit facts. The client may answer only
+      // the two public booleans; calculation reloads the audited count itself.
+      for (const facts of Object.values(suggested)) delete facts.entitledDayAttestations
       return NextResponse.json({
         employees: roster.map((employee) => {
           const perEmployee = stored.assertions.get(employee.employeePartyId) ?? new Map<string, boolean>()
@@ -153,6 +172,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = parsedBody.data as {
     employeePartyId?: unknown; paidOnCommission?: unknown;
     holidayKey?: unknown; holidayDate?: unknown; absentWithoutConsent?: unknown;
+    entitlementEvidenceComplete?: unknown;
   }
   const { employeePartyId, paidOnCommission } = body
   if (typeof employeePartyId !== 'string' || !isUuid(employeePartyId)) {
@@ -167,7 +187,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (answersAbsence && typeof absentWithoutConsent !== 'boolean') {
     return NextResponse.json({ error: 'invalid absence assertion' }, { status: 422 })
   }
-  if (!answersCommission && !answersAbsence) {
+  const answersEntitlement = body.entitlementEvidenceComplete !== undefined
+  if (answersEntitlement && body.entitlementEvidenceComplete !== true) {
+    return NextResponse.json({ error: 'entitlement evidence must be explicitly confirmed complete' }, { status: 422 })
+  }
+  if (answersEntitlement && (answersCommission || answersAbsence)) {
+    return NextResponse.json({ error: 'file the entitlement-day assessment separately for its holiday' }, { status: 422 })
+  }
+  if (!answersCommission && !answersAbsence && !answersEntitlement) {
     return NextResponse.json({ error: 'nothing to file' }, { status: 422 })
   }
   // An explicit holiday identity must be well-formed; an omitted one is
@@ -188,6 +215,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!employee) return NextResponse.json({ error: 'employee is not on this run' }, { status: 422 })
       const employeeDenied = guardSubsidiaryScope(gate, employee.subsidiaryId)
       if (employeeDenied) return employeeDenied
+
+      if (answersEntitlement) {
+        const candidates = (await demandingHolidays(db, {
+          orgId: gate.user.orgId,
+          country: employee.country, province: employee.province,
+          labourJurisdiction: employee.labourJurisdiction,
+          employeeName: employee.name,
+          periodStart: run.periodStart, periodEnd: run.periodEnd,
+        })).filter((holiday) => holiday.needsEntitlementDayAssessment)
+        const target = candidates.find((holiday) => holiday.key === holidayKey && holiday.date === holidayDate)
+        if (!target) return NextResponse.json({ error: 'no entitlement-day holiday matches' }, { status: 422 })
+        const evidencedDayCount = await recordEntitledDaysAttestation(db, {
+          orgId: gate.user.orgId, documentId: id,
+          employeePartyId, employeeName: employee.name, actorId: gate.user.id,
+          holidayKey: target.key, holidayDate: target.date, jurisdiction: target.jurisdiction,
+        })
+        return NextResponse.json({ ok: true, filed: {
+          holidayKey: target.key, holidayDate: target.date, evidencedDayCount,
+        } })
+      }
 
       if (answersCommission) {
         await db.execute(sql`
