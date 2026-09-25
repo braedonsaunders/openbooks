@@ -2,7 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, extname } from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { getS3Blob, putS3Blob, refuseMaskedStorageKind, s3Enabled } from "../platform/file-storage.ts";
+import { fileCabinetObjectKey, getS3Blob, putS3Blob, refuseMaskedStorageKind, s3Enabled } from "../platform/file-storage.ts";
+import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
 import {
   netsuiteRestlet,
   netsuiteSoapFileGet,
@@ -506,6 +507,11 @@ async function persistFile(input: {
   const hash = createHash("sha256").update(input.bytes).digest("hex");
   const filename = safeFilename(input.source.name, input.source.id);
   const sourceModifiedAtIso = input.sourceModifiedAt?.toISOString() ?? null;
+  // I5-platform-41: the S3 object staged inside the row transaction cannot
+  // roll back with it. Track the staged key so a later failure records a
+  // durable cleanup intent instead of stranding the blob.
+  let stagedVersionId: string | null = null;
+  let stagedFileId: string | null = null;
   return db.transaction(async (tx) => {
     const existing = (await tx.execute<{
       id: string;
@@ -564,6 +570,8 @@ async function persistFile(input: {
                 ${hash}, ${input.actorId}, now())
       `);
       await putS3Blob(versionId, input.bytes, input.contentType);
+      stagedVersionId = versionId;
+      stagedFileId = fileId;
       await tx.execute(sql`
         update files set current_version_id = ${versionId}, name = ${filename}, extension = ${extension(filename)},
                          file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
@@ -595,6 +603,16 @@ async function persistFile(input: {
       createdLinks += linked.rows.length;
     }
     return { fileId, created, versioned, unchanged: !created && unchanged, stale, createdLinks };
+  }).catch(async (error) => {
+    if (stagedVersionId) {
+      await enqueueStorageCleanupStandalone({
+        orgId: input.orgId,
+        objectKey: fileCabinetObjectKey(stagedVersionId),
+        ownerKind: "file_version",
+        ownerId: stagedFileId ?? stagedVersionId,
+      });
+    }
+    throw error;
   });
 }
 

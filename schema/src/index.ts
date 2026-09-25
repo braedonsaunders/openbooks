@@ -47,6 +47,7 @@ export * from "./recurring-occurrences";
 export * from "./insights";
 export * from "./views";
 export * from "./file-cabinet";
+export * from "./storage-cleanup";
 export * from "./ai";
 export * from "./customization";
 export * from "./pdf-templates";

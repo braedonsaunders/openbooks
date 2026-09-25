@@ -42,6 +42,7 @@ import {
 import { writeNotification } from "../engine/src/inbox/adapters/notification.ts";
 import { recoverStaleApCaptureClaims } from "../engine/src/payables/ap-capture-service.ts";
 import { recoverUnenqueuedApCaptures } from "../engine/src/payables/ap-capture-dispatch.ts";
+import { drainStorageCleanupOutbox } from "../engine/src/platform/storage-cleanup.ts";
 import {
   deriveEmailDeliveryKey,
   hrmSignatureRequestEmail,
@@ -270,6 +271,13 @@ async function runReminderDuty(): Promise<void> {
 }
 
 export function registerWorkerDuties(): void {
+  console.log("[worker] duty registered: storage-cleanup");
+  registerWorkerDuty({
+    key: "storage-cleanup",
+    run: async () => {
+      await drainStorageCleanupOutbox();
+    },
+  });
   console.log("[worker] duty registered: ap-capture-stale-claims");
   registerWorkerDuty({
     key: "ap-capture-stale-claims",
