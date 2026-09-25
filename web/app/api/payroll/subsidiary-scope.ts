@@ -135,7 +135,7 @@ export async function guardPayrollFilingData(
 
 /**
  * Which ownership proves a filing's rows, from the filing's declared deadline
- * class — annual slips by their pay runs, quarterly aggregates by their
+ * class — annual slips by their pay runs, monthly/quarterly aggregates by their
  * filing accounts, separation events by current employment plus sources.
  * Null for anything the registry does not declare: the guard fails closed.
  * A sixth filing routes itself by declaring itself; no pair is enumerated.
@@ -143,7 +143,7 @@ export async function guardPayrollFilingData(
 export function filingGuardKind(
   country: string,
   filing: string,
-): 'annual' | 'quarterly' | 'separation' | null {
+): 'annual' | 'quarterly' | 'monthly' | 'separation' | null {
   try {
     return yearEndFiling(country, filing).cadence
   } catch {
@@ -183,7 +183,8 @@ export async function guardPayrollFilingRowIds(
   // ROE's, loudly documented here, rather than to a wrong one silently.
   const kind = filingGuardKind(country, filing)
   if (kind === null) return notFound()
-  if (kind === 'quarterly') return guardPayroll941Rows(gate, country, rowIds, taxYear)
+  // monthly periodic returns (e.g. ES Modelo 111 mensual) aggregate by filing account exactly like quarterly ones
+  if (kind === 'quarterly' || kind === 'monthly') return guardPayroll941Rows(gate, country, rowIds, taxYear)
   const employees = parsed.flatMap((row) => row!.employees)
   if (kind === 'separation') return guardPayrollRoeEmployees(gate, employees)
   const employeeDenied = await guardPayrollFilingEmployees(gate, country, employees, taxYear)
