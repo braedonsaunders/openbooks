@@ -75,7 +75,7 @@ describe('denomination flags are enforceable', () => {
       'pensionable',
       'insurable',
     ],
-    pay_stub_lines: ['amount', 'ytd_amount'],
+    pay_stub_lines: ['rate', 'amount', 'ytd_amount'],
     payroll_parallel_findings: ['prior_amount', 'our_amount', 'difference', 'tolerance_applied'],
     // entitlements/allocations lanes
     entitlement_balances: ['balance', 'max_balance', 'notify_balance', 'headroom', 'owed_to_employer'],
