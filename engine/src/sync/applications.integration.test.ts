@@ -754,6 +754,11 @@ test(
         },
       );
 
+      // Stage the interleaving deterministically: the mirror starts only
+      // after the manual row is in and its endpoint locks are held, so the
+      // contention below is arranged, never won by speed. The mirror must
+      // still arrive blocked (asserted) and converge on the manual win.
+      await inserted.promise;
       const mirror = reconcileApplications(org.orgId, "sourceId", [
         { paymentRef: "payment-race", appliedRef: "invoice-race", amount: "100", currency: "CAD" },
       ]).then(
@@ -762,7 +767,6 @@ test(
       );
 
       try {
-        await inserted.promise;
         // The mirror cannot finish while the manual transaction holds the
         // endpoints: it must arrive blocked on this backend, whether at its
         // hydration-time endpoint lock or at its insert. Poll for that
