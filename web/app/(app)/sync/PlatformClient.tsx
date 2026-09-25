@@ -208,8 +208,13 @@ export function PlatformClient() {
   const fmt = (ts: string | null) => ts ? dateTime(new Date(ts)) : "—";
   const t = useTranslations("sync");
   const tHub = useTranslations("admin.hub");
+  const tCommon = useTranslations("common");
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
+  // A refused or unreachable list load renders here, never as the empty
+  // state: a 403 names its grant instead of reading "No connections yet",
+  // and a transport failure offers a retry instead of spinning forever.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // `${id}:${action}`
   const [drawer, setDrawer] = useState<{ editing: Connection | null } | null>(
     null,
@@ -223,19 +228,35 @@ export function PlatformClient() {
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   const load = useCallback(() => {
+    // load() never re-arms loading, so the 2.5s live poll refreshes
+    // silently; only the mount and an explicit retry show it.
+    setLoadError(null);
     return fetch("/api/platform/connections")
-      .then((res) => {
+      .then(async (res) => {
+        // The status is checked before the body is parsed: a 403 carries
+        // the named grant ("missing permission: sync.run") and lands in
+        // the error panel below, never in the empty state.
         if (!res.ok) {
-          toast.error(t("toast.loadFailed", { status: res.status }));
+          setLoadError(await readApiErrorMessage(res, t("toast.loadFailed", { status: res.status })));
           setLoading(false);
           return;
         }
-        return res.json().then((payload) => {
-          setData(payload);
-          setLoading(false);
-        });
+        const payload = (await res.json()) as Payload;
+        setData(payload);
+        setLoading(false);
+      })
+      .catch(() => {
+        // A transport failure rejects the fetch: without this catch the
+        // loading state spins forever with nothing to retry.
+        setLoadError(t("toast.loadFailed", { status: "network" }));
+        setLoading(false);
       });
   }, [t]);
+
+  function retryLoad() {
+    setLoading(true);
+    void load();
+  }
 
   useEffect(() => {
     void load();
@@ -697,6 +718,21 @@ export function PlatformClient() {
         <p className="mt-4 text-sm text-slate-500">
           {t("connections.loading")}
         </p>
+      ) : loadError ? (
+        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+          <Plug className="mx-auto mb-2 text-slate-400" size={22} />
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {loadError}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={retryLoad}
+          >
+            {tCommon("actions.retry")}
+          </Button>
+        </div>
       ) : !data || data.connections.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <Plug className="mx-auto mb-2 text-slate-400" size={22} />
