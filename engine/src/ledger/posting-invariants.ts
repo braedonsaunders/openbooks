@@ -1,5 +1,6 @@
 /** Pure document-to-ledger projection rules. Transaction orchestration remains in posting.ts. */
-import { isZero, sum, toUnits } from "../money/money.ts";
+import { isZero, toUnits } from "../money/money.ts";
+import { sumMoney } from "../money/brands.ts";
 import { type Doc, PostingError } from "./posting-contracts.ts";
 /**
  * Application-layer proof immediately before a ledger write. PostgreSQL
@@ -12,7 +13,7 @@ export function assertFinalKernelBalance(
 ): void {
   if (lines.length < 2)
     throw new PostingError("posting produced fewer than 2 lines");
-  const total = sum(lines.map((line) => line.amount));
+  const total = sumMoney(lines.map((line) => line.amount));
   if (!isZero(total))
     throw new PostingError(
       `functional-currency journal does not balance (sum=${total})`,
@@ -24,7 +25,7 @@ export function assertFinalKernelBalance(
     bySubsidiary.set(line.subsidiaryId, amounts);
   }
   for (const [subsidiaryId, amounts] of bySubsidiary) {
-    const subsidiaryTotal = sum(amounts);
+    const subsidiaryTotal = sumMoney(amounts);
     if (!isZero(subsidiaryTotal)) {
       throw new PostingError(
         `functional-currency journal does not balance for subsidiary ${subsidiaryId} (sum=${subsidiaryTotal})`,
