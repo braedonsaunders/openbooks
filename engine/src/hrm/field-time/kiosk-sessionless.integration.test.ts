@@ -1,31 +1,22 @@
-/**
- * HR-20 kiosk sessionless resolution (DB-owned — gated remotely).
- *
- * Kiosk devices carry no session: resolveKioskByToken and identifyByPin run
- * with no ambient org context. Under FORCE RLS an unscoped read resolves
- * nothing, so the token must be resolved under a narrow bypass and every
- * subsequent read scoped to the resolved org — otherwise every device meets
- * kiosk_unknown / pin_not_set. These tests call the service exactly as the
- * device does (no withOrg wrapper) and prove the happy path resolves plus
- * unknown tokens still refuse.
- */
+/** DB-owned sessionless kiosk contract under production RLS and no org context. */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { currentRequestOrgResolver, db, registerRequestOrgResolver, withOrg } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
-import { identifyByPin, registerKiosk, resolveKioskByToken, setWorkerPin } from "./kiosk.ts";
+import { identifyByPin, registerKiosk, resolveKioskByToken, revokeKiosk, setWorkerPin } from "./kiosk.ts";
+import { lockActiveKioskToken } from "./kiosk-token-lock.ts";
 import { FieldTimeError } from "./errors.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function enableFieldTime(orgId: string): Promise<void> {
-  await db.execute(sql`
+  await withOrg(orgId, () => db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
       || '{"projects": true, "timeTracking": true, "fieldTime": true, "fieldTimeKiosk": true}'::jsonb)
-     where id = ${orgId}`);
+     where id = ${orgId}`));
 }
 
 /**
@@ -80,12 +71,14 @@ test("a sessionless device resolves its kiosk and identifies by PIN with no org 
   }
 });
 
-test("an unknown device token refuses without org context", { skip: !DB }, async () => {
+test("a revoked token cannot pass the mutation-time kiosk lock", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await enableFieldTime(org.orgId);
-    await withoutTestBypass(async () => {
-      assert.equal(await refusesCode(() => resolveKioskByToken("not-a-real-device-token")), "kiosk_unknown");
+    await withOrg(org.orgId, async () => {
+      const registered = await registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Retired Gate", allowedSubsidiaryIds: null });
+      await revokeKiosk({ orgId: org.orgId, kioskId: registered.kiosk.id, actorUserId: randomUUID(), allowedSubsidiaryIds: null });
+      assert.equal(await refusesCode(() => lockActiveKioskToken({ orgId: org.orgId, kioskId: registered.kiosk.id, deviceToken: registered.token })), "kiosk_unknown");
     });
   } finally {
     await dropScratchOrg(org.orgId);

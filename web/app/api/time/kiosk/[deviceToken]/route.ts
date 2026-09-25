@@ -5,6 +5,7 @@ import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { identifyByPin, kioskClockEvent, resolveKioskByToken } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { lockActiveKioskToken } from '@openbooks/engine/src/hrm/field-time/kiosk-token-lock.ts'
 
 export const runtime = 'nodejs'
 
@@ -99,6 +100,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ deviceToken: st
     // scoped to the kiosk's org, or under FORCE RLS the folder lookup
     // resolves nothing and every upload fails.
     const meta = await withOrgTransaction(found.orgId, async () => {
+      await lockActiveKioskToken({ orgId: found.orgId, kioskId: found.id, deviceToken })
       const folderId = await ensureOrgClockPhotoFolder(found.orgId)
       return createFile({
         orgId: found.orgId,
@@ -145,6 +147,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ deviceToken: s
       }
       const result = await kioskClockEvent({
         kiosk: found,
+        deviceToken,
         employeePartyId: event.employeePartyId,
         kind: event.kind,
         occurredAt: event.occurredAt,
@@ -165,4 +168,3 @@ export async function POST(req: Request, ctx: { params: Promise<{ deviceToken: s
     throw error
   }
 }
-
