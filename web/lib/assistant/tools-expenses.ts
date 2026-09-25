@@ -146,7 +146,7 @@ const getExpenseReport: AssistantToolDef = {
     // loadExpenseReport is the drawer/route loader; the route's strict
     // subsidiary guard is applied here so an out-of-scope report reads as
     // missing, exactly like the route.
-    const loaded = await loadExpenseReport(a.reportId, authz.user.orgId);
+    const loaded = await loadExpenseReport(a.reportId, authz.user.orgId, authz.allowedSubsidiaryIds);
     const doc = loaded?.doc as Record<string, unknown> | undefined;
     if (!doc || (authz.allowedSubsidiaryIds !== null
       && (doc.subsidiary_id == null || !authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id))))) {

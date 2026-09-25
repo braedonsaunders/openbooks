@@ -93,9 +93,10 @@ export async function loadExpenseReports(
   const expenseId = pickString(sp.expense)
 
   // Flyout + pickers + form layout resolve only when a report is open.
-  // loadExpenseReport is already org-scoped (d.org_id = orgId), so a foreign
-  // id yields null and the drawer stays shut — same guard as the native page.
-  const openReport = expenseId && isUuid(expenseId) ? await loadExpenseReport(expenseId, authz.user.orgId) : null
+  // The shared reader scopes the document to the caller before its
+  // correlated line query, so a foreign id yields null and the drawer stays
+  // shut — same guard as the native page.
+  const openReport = expenseId && isUuid(expenseId) ? await loadExpenseReport(expenseId, authz.user.orgId, authz.allowedSubsidiaryIds) : null
   const pickers = openReport
     ? await Promise.all([
         db.execute<{ id: string; display_name: string }>(sql`

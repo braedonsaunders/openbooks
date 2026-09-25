@@ -253,7 +253,7 @@ export async function loadRelatedTransactionDrawerData({
 
   if (kind === 'expense_report') {
     if (!can(authz, 'expenses.read')) return null
-    const report = await loadExpenseReport(id, authz.user.orgId)
+    const report = await loadExpenseReport(id, authz.user.orgId, authz.allowedSubsidiaryIds)
     if (!report || !canSeeDocument((report.doc), partyId, authz)) return null
     const [employees, accounts, taxCodes, taxGroups, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
       listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: 'employee', activeOnly: true }).then((rows) => ({ rows })),
