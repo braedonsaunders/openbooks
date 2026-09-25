@@ -1249,7 +1249,7 @@ export async function patchFolder(
   updatedBy: string,
   audit: FileMutationAudit,
 ): Promise<FolderPatchResult> {
-  const hasParent = Object.prototype.hasOwnProperty.call(patch, 'parentId')
+  let hasParent = Object.prototype.hasOwnProperty.call(patch, 'parentId')
   const hasName = patch.name !== undefined
   const hasFlags = patch.isPrivate !== undefined
   return runMutation(audit.executor, async (tx) => {
@@ -1282,6 +1282,9 @@ export async function patchFolder(
       return { ok: false as const, reason: 'cannot update system folder' as const }
     }
 
+    // A move to the already-stored parent is a rename with a redundant key,
+    // not a relocation: skip the destination gates and the move evidence.
+    if (hasParent && (patch.parentId ?? null) === before.parentId) hasParent = false
     if (hasParent) {
       const parentId = patch.parentId ?? null
       if (parentId === id) return { ok: false as const, reason: 'cannot move folder' as const }
@@ -1304,6 +1307,12 @@ export async function patchFolder(
           select 1 from ancestors where parent_folder_id = ${id} limit 1
         `)
         if (cycle.rows.length > 0) return { ok: false as const, reason: 'cannot move folder' as const }
+      } else if (audit.viewer && !(audit.viewer.isAdmin || audit.viewer.baseline === 'manager')) {
+        // Moving to the cabinet root publishes the subtree to every
+        // documents.read user: the same bar as creating a top-level folder
+        // (documents.manage baseline). A viewer-less audit is a trusted
+        // internal caller and keeps the historical allow.
+        return { ok: false as const, reason: 'forbidden' as const }
       }
     }
 
