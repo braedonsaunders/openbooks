@@ -10,6 +10,7 @@ import {
   pageHeader,
   panel,
   ref,
+  spanRow,
   statTile,
   table,
   text,
@@ -94,6 +95,21 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                   variant: 'app',
                   rows: f('findings'),
                   rowKey: item('id'),
+                  // The tiles count the full finding list while the table
+                  // caps at 200: a truncation note rides trailing, never
+                  // a silent slice beside full counts.
+                  ...(data.findingsTruncatedNote
+                    ? {
+                        trailing: [
+                          spanRow({
+                            label: f('findingsTruncatedNote'),
+                            labelColSpan: 6,
+                            labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
+                            cells: [],
+                          }),
+                        ],
+                      }
+                    : {}),
                   columns: [
                     column(f('labels.columns.kind'), text(item('kindLabel'))),
                     column(f('labels.columns.project'), text(item('projectLabel'))),
@@ -161,6 +177,18 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                   variant: 'app',
                   rows: f('runs'),
                   rowKey: item('id'),
+                  ...(data.runsTruncatedNote
+                    ? {
+                        trailing: [
+                          spanRow({
+                            label: f('runsTruncatedNote'),
+                            labelColSpan: 5,
+                            labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
+                            cells: [],
+                          }),
+                        ],
+                      }
+                    : {}),
                   columns: [
                     column(f('labels.columns.project'), text(item('projectLabel'))),
                     column(f('labels.columns.week'), text(item('weekLabel'))),
@@ -231,6 +259,18 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                   variant: 'app',
                   rows: f('entries'),
                   rowKey: item('id'),
+                  ...(data.entriesTruncatedNote
+                    ? {
+                        trailing: [
+                          spanRow({
+                            label: f('entriesTruncatedNote'),
+                            labelColSpan: 4,
+                            labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
+                            cells: [],
+                          }),
+                        ],
+                      }
+                    : {}),
                   columns: [
                     column(f('labels.columns.day'), text(item('dayLabel'))),
                     column(f('labels.columns.amount'), text(item('amountLabel')), {

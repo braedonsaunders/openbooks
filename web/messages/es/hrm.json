@@ -1537,6 +1537,7 @@
     "unknownFormat": "Formato desconocido",
     "empty": "Nada aquí todavía.",
     "emptyAction": "Configúrelo en Ajustes abajo.",
+    "truncatedNote": "Se muestran las primeras {limit} de {total} filas.",
     "sectionOffTitle": "Esta sección está desactivada",
     "sectionOffMessage": "Active la función correspondiente en Configuración de la empresa → Funciones.",
     "active": "Activo",

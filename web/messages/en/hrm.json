@@ -1593,6 +1593,7 @@
     "unknownFormat": "Unknown format",
     "empty": "Nothing here yet.",
     "emptyAction": "Configure it in Setup below.",
+    "truncatedNote": "Showing the first {limit} of {total} rows.",
     "sectionOffTitle": "This section is turned off",
     "sectionOffMessage": "Enable its feature in Company Settings → Features.",
     "active": "Active",

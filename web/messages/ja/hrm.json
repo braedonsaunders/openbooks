@@ -1537,6 +1537,7 @@
     "unknownFormat": "不明な形式",
     "empty": "まだ何もありません。",
     "emptyAction": "下の設定で構成してください。",
+    "truncatedNote": "{total}件中最初の{limit}件を表示しています。",
     "sectionOffTitle": "このセクションは無効です",
     "sectionOffMessage": "会社設定 → 機能で該当する機能を有効にしてください。",
     "active": "有効",
