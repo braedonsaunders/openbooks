@@ -1065,7 +1065,11 @@ test("storage refuses event edits, event deletes, and template deletes with hist
 // service's return value alone.
 
 async function enableRecruitingDepth(orgId: string): Promise<void> {
+  // The depth keys ride the registry's parent chain (hrmRecruiting requires
+  // the hrm parent): enabling only the children leaves every gate refusing
+  // by name, so the parent goes on first.
   for (const key of [
+    "hrm",
     "hrmRecruiting",
     "hrmStructuredInterviews",
     "hrmInterviewScheduling",
