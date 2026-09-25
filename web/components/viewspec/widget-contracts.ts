@@ -208,7 +208,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-facts': { props: ['empty', 'facts'] },
   'hrm-feedback-dialog': { props: ['bodyLabel', 'bodyPlaceholder', 'cancelLabel', 'closeHref', 'failed', 'kindLabel', 'kinds', 'openLabel', 'requestId', 'requestedFromPartyId', 'subjectEmploymentId', 'subjectLabel', 'submitLabel', 'visibilities', 'visibilityLabel'] },
   'hrm-feedback-settings': { props: ['settings'] },
-  'hrm-field-time-setup': { props: ['chains', 'initialSettings', 'kioskLinkBase', 'kiosks'] },
+  'hrm-field-time-setup': { props: ['canEditPolicy', 'canManageKiosks', 'chains', 'initialSettings', 'kioskLinkBase', 'kiosks'] },
   'hrm-goal-dialog': { props: ['closeHref', 'dialog'] },
   'hrm-leave-balances': { props: ['balances', 'empty', 'timeKindLabel', 'unlimitedLabel', 'valueKindLabel'] },
   'hrm-leave-calendar': { props: ['days', 'empty'] },

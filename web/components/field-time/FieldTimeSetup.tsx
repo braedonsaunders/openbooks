@@ -46,11 +46,28 @@ export function FieldTimeSetup({
   kiosks,
   chains,
   kioskLinkBase,
+  // Optional for direct renders (which stay fully editable, as before);
+  // the widget adapter resolves a missing flag to false, so only an
+  // explicit loader grant opens these sections in production.
+  canManageKiosks = true,
+  canEditPolicy = true,
 }: {
   initialSettings: FieldTimeRuleSettings
   kiosks: KioskRow[]
   chains: StageChain[]
   kioskLinkBase: string
+  /**
+   * Loader-resolved from the kiosks API's own authority (time.kiosk.manage
+   * plus the fieldTimeKiosk feature): without it the kiosk section hides
+   * instead of offering register/revoke calls that would only 403.
+   */
+  canManageKiosks?: boolean
+  /**
+   * Loader-resolved from subsidiary scope: the settings and chain PUTs
+   * need unrestricted scope, so a restricted manager reads the policy
+   * with disabled forms instead of failing saves.
+   */
+  canEditPolicy?: boolean
 }) {
   const t = useTranslations('timesheets')
   const approvalSubjects = {
@@ -168,6 +185,7 @@ export function FieldTimeSetup({
           <Field label={t('field.roundingIncrement')}>
             <Select
               value={settings.roundingIncrement == null ? '' : String(settings.roundingIncrement)}
+              disabled={!canEditPolicy}
               onChange={(event) => setSettings((prev) => ({ ...prev, roundingIncrement: event.target.value === '' ? null : Number(event.target.value) }))}
             >
               <option value="">{t('field.notDeclared')}</option>
@@ -177,36 +195,39 @@ export function FieldTimeSetup({
             </Select>
           </Field>
           <Field label={t('field.roundingMode')}>
-            <Select value={settings.roundingMode ?? 'nearest'} onChange={(event) => setSettings((prev) => ({ ...prev, roundingMode: event.target.value }))}>
+            <Select value={settings.roundingMode ?? 'nearest'} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, roundingMode: event.target.value }))}>
               <option value="nearest">{t('field.roundNearest')}</option>
               <option value="up">{t('field.roundUp')}</option>
               <option value="down">{t('field.roundDown')}</option>
             </Select>
           </Field>
           <Field label={t('field.unpaidBreak')}>
-            <Input value={settings.unpaidBreakMinutes == null ? '' : String(settings.unpaidBreakMinutes)} onChange={(event) => setSettings((prev) => ({ ...prev, unpaidBreakMinutes: num(event.target.value) }))} inputMode="numeric" placeholder="30" />
+            <Input value={settings.unpaidBreakMinutes == null ? '' : String(settings.unpaidBreakMinutes)} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, unpaidBreakMinutes: num(event.target.value) }))} inputMode="numeric" placeholder="30" />
           </Field>
           <Field label={t('field.autoClose')}>
-            <Input value={settings.autoCloseHours == null ? '' : String(settings.autoCloseHours)} onChange={(event) => setSettings((prev) => ({ ...prev, autoCloseHours: num(event.target.value) }))} inputMode="decimal" placeholder="16" />
+            <Input value={settings.autoCloseHours == null ? '' : String(settings.autoCloseHours)} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, autoCloseHours: num(event.target.value) }))} inputMode="decimal" placeholder="16" />
           </Field>
           <Field label={t('field.equipmentTolerance')}>
-            <Input value={settings.equipmentToleranceHours ?? ''} onChange={(event) => setSettings((prev) => ({ ...prev, equipmentToleranceHours: event.target.value.trim() || null }))} inputMode="decimal" placeholder="0.5" />
+            <Input value={settings.equipmentToleranceHours ?? ''} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, equipmentToleranceHours: event.target.value.trim() || null }))} inputMode="decimal" placeholder="0.5" />
           </Field>
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={settings.signatureRequired} onChange={(event) => setSettings((prev) => ({ ...prev, signatureRequired: event.target.checked }))} />
+          <input type="checkbox" checked={settings.signatureRequired} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, signatureRequired: event.target.checked }))} />
           {t('field.signatureRequired')}
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={settings.photoRequired} onChange={(event) => setSettings((prev) => ({ ...prev, photoRequired: event.target.checked }))} />
+          <input type="checkbox" checked={settings.photoRequired} disabled={!canEditPolicy} onChange={(event) => setSettings((prev) => ({ ...prev, photoRequired: event.target.checked }))} />
           {t('field.photoRequiredSetting')}
         </label>
-        <Button disabled={busy} onClick={saveSettings}>
-          {busy ? t('field.working') : t('field.saveRules')}
-        </Button>
+        {canEditPolicy ? (
+          <Button disabled={busy} onClick={saveSettings}>
+            {busy ? t('field.working') : t('field.saveRules')}
+          </Button>
+        ) : null}
         {saved ? <p className="text-sm text-teal-700">{t('field.rulesSaved')}</p> : null}
       </section>
 
+      {canManageKiosks ? (
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">{t('field.kiosksTitle')}</h2>
         {kiosks.length === 0 ? <p className="text-sm text-slate-500">{t('field.noKiosks')}</p> : null}
@@ -246,6 +267,7 @@ export function FieldTimeSetup({
           </Button>
         </div>
       </section>
+      ) : null}
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">{t('field.stagesTitle')}</h2>
