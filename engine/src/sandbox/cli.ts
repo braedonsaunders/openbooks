@@ -5,7 +5,7 @@
  *   npx tsx engine/src/sandbox/cli.ts refresh <sandboxId> [--reset]
  *   npx tsx engine/src/sandbox/cli.ts delete <sandboxId>
  *   npx tsx engine/src/sandbox/cli.ts promote <sandboxId> "My change set" --actor=<userId>
- *   npx tsx engine/src/sandbox/cli.ts apply <changeSetId>
+ *   npx tsx engine/src/sandbox/cli.ts apply <changeSetId> --actor=<userId>
  *
  * The production org defaults to the first org row; pass --org=<uuid> to target
  * a specific production org.
@@ -86,7 +86,7 @@ async function main() {
     }
     case "promote": {
       const [id, name] = positional;
-      if (!id) throw new Error("usage: promote <sandboxId> [name] --actor <userId>");
+      if (!id) throw new Error("usage: promote <sandboxId> [name] --actor=<userId>");
       const actorId = await resolveCliActor(rest);
       const { changeSetId, itemCount } = await buildChangeSet(id, name ?? "Change set", actorId);
       console.log(`✓ change set ${changeSetId} with ${itemCount} item(s). Apply with: apply ${changeSetId}`);
@@ -94,8 +94,9 @@ async function main() {
     }
     case "apply": {
       const id = positional[0];
-      if (!id) throw new Error("usage: apply <changeSetId>");
-      await applyChangeSet(id);
+      if (!id) throw new Error("usage: apply <changeSetId> --actor=<userId>");
+      const actorId = await resolveCliActor(rest);
+      await applyChangeSet(id, actorId);
       console.log(`✓ applied change set ${id} to production`);
       break;
     }
