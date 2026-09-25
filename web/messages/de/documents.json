@@ -189,7 +189,11 @@
     "restored": "Wiederhergestellt",
     "restoreFailed": "Konnte nicht wiederhergestellt werden",
     "purged": "Endgültig gelöscht",
-    "purgeFailed": "Konnte nicht gelöscht werden"
+    "purgeFailed": "Konnte nicht gelöscht werden",
+   "purgeRetained": "Diese Datei wird als Nachweis für einen gebuchten Vorgang aufbewahrt und kann nicht endgültig gelöscht werden.",
+   "purgeAttached": "Dieser Ordner enthält Dateien, die an Vorgänge angehängt sind, und kann nicht endgültig gelöscht werden.",
+   "purgeSystem": "Systemordner können nicht endgültig gelöscht werden.",
+   "alreadyGone": "Dieses Element ist nicht mehr vorhanden."
   },
   "activity": {
     "title": "Aktivität",

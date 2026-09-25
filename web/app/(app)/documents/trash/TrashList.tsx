@@ -26,6 +26,14 @@ export interface TrashRow {
   modifiedLabel: string
 }
 
+/** Named purge/restore refusals the file-cabinet routes return, mapped to catalog keys. */
+const TRASH_REFUSAL_KEYS = {
+  retained_evidence_cannot_be_purged: 'purgeRetained',
+  'has attached files': 'purgeAttached',
+  system: 'purgeSystem',
+  'not found': 'alreadyGone',
+} as const
+
 export function TrashList({ items }: { items: TrashRow[] }) {
   const t = useTranslations('documents.trash')
   const router = useRouter()
@@ -43,7 +51,9 @@ export function TrashList({ items }: { items: TrashRow[] }) {
         toast.success(t('restored'))
         router.refresh()
       } else {
-        toast.error(t('restoreFailed'))
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        const key = (err.error && TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ?? 'restoreFailed'
+        toast.error(t(key))
       }
     } catch {
       toast.error(t('restoreFailed'))
@@ -67,7 +77,8 @@ export function TrashList({ items }: { items: TrashRow[] }) {
         router.refresh()
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? t('purgeFailed'))
+        const key = (err.error && TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ?? 'purgeFailed'
+        toast.error(t(key))
       }
     } catch {
       toast.error(t('purgeFailed'))

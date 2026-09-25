@@ -189,7 +189,11 @@
     "restored": "Restauré",
     "restoreFailed": "Impossible de restaurer",
     "purged": "Supprimé définitivement",
-    "purgeFailed": "Impossible de supprimer"
+    "purgeFailed": "Impossible de supprimer",
+   "purgeRetained": "Ce fichier est conservé comme preuve d'une écriture comptabilisée et ne peut pas être supprimé définitivement.",
+   "purgeAttached": "Ce dossier contient des fichiers joints à des enregistrements et ne peut pas être supprimé définitivement.",
+   "purgeSystem": "Les dossiers système ne peuvent pas être supprimés définitivement.",
+   "alreadyGone": "Cet élément n'existe plus."
   },
   "activity": {
     "title": "Activité",
