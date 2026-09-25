@@ -168,9 +168,16 @@ export function perDiemAmountForDay(
 export function applyWeeklyRule(
   dailyAmounts: readonly string[],
   weeklyRule: { worked_days: number; paid_days: number } | null,
+  /**
+   * Distinct dates with a positive amount. Day rows arrive per (project,
+   * day), so counting rows double-counts multi-project days and overpays
+   * the top-up; callers pass the distinct-date count. Omitted keeps the
+   * legacy row count (pure unit callers without dates).
+   */
+  workedDays?: number,
 ): readonly string[] {
   if (!weeklyRule) return dailyAmounts;
-  const worked = dailyAmounts.filter((amount) => compareDecimal(amount, "0") > 0).length;
+  const worked = workedDays ?? dailyAmounts.filter((amount) => compareDecimal(amount, "0") > 0).length;
   if (worked < weeklyRule.worked_days) return dailyAmounts;
   if (dailyAmounts.length === 0 || weeklyRule.paid_days <= dailyAmounts.length) return dailyAmounts;
   const extra = weeklyRule.paid_days - dailyAmounts.length;

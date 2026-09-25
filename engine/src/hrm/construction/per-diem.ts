@@ -505,9 +505,18 @@ export async function computeForWeek(
     }
     // Weekly top-up: 5 worked days paid as 7 writes the two missing days of
     // the same week at the last daily amount — same table, same policy, the
-    // basis_inputs say what produced them.
+    // basis_inputs say what produced them. The threshold counts distinct
+    // dates with a positive row amount: day rows arrive per (project, day),
+    // so counting rows would treat one multi-project day as several worked
+    // days — and the per-date map above keeps only the last-listed row,
+    // which would make the count depend on row order.
+    const workedDayCount = new Set(
+      days
+        .filter((_, index) => cmp(dailyAmounts[index] ?? "0", "0") > 0)
+        .map((day) => day.workedOn),
+    ).size;
     const workedDateAmounts = [...dailyAmountByDate.values()];
-    const topped = applyWeeklyRule(workedDateAmounts, policy.weeklyRule);
+    const topped = applyWeeklyRule(workedDateAmounts, policy.weeklyRule, workedDayCount);
     if (topped.length > workedDateAmounts.length) {
       const existingDays = new Set(days.map((day) => day.workedOn));
       const missing = weekDates(weekStart).filter((date) => !existingDays.has(date));
