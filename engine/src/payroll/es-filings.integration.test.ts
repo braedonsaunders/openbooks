@@ -12,11 +12,13 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEm
 /**
  * The ES 190/111 populations over committed pay runs.
  *
- * Fixture: one ES org, two employees (Ana, Bruno; provincia MD), two
- * COMMITTED 2026 runs (Q1 pay 2026-01-31 with both employees; Q3 pay
- * 2026-09-30 with Ana only — across the 10-September edition split, so the
- * annual box proves the sum-across-editions shape) plus one DRAFT Q2 run
- * (Bruno, 9999.99) that must never appear on a statutory filing.
+ * Fixture: one ES org, two employees (Ana, Bruno; stub/work provincia MD;
+ * domiciles 28 Madrid and 08 Barcelona — the 190 must file the domicile,
+ * never the stub province), two COMMITTED 2026 runs (Q1 pay 2026-01-31 with
+ * both employees; Q3 pay 2026-09-30 with Ana only — across the 10-September
+ * edition split, so the annual box proves the sum-across-editions shape)
+ * plus one DRAFT Q2 run (Bruno, 9999.99) that must never appear on a
+ * statutory filing.
  *
  * Amounts are exact decimals carried as text; the tie-out asserts the
  * populations equal the stub lines to the cent — a filing that does not tie
@@ -50,16 +52,14 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
 
   const scheduleId = randomUUID();
   await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Mensual', 'monthly', 12, '2026-01-31', 0, true,
-            ${actorId}, ${actorId})`);
+    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, is_active, created_by, updated_by)
+    values (${scheduleId}, ${org.orgId}, 'Mensual', 'monthly', 12, '2026-01-31', 0, true, ${actorId}, ${actorId})`);
 
   // pay_stubs.employment_id is NOT NULL and the run refuses stubs without
   // an HRM employment: every stub employee carries one, and the profile
   // points at it (the run reads emp.employment_id).
   const employments = new Map<string, string>();
-  const employee = async (name: string): Promise<string> => {
+  const employee = async (name: string, domicilio: string): Promise<string> => {
     const id = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -70,14 +70,15 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
       insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${id})`);
     await db.execute(sql`
       insert into employee_payroll_profiles
-        (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, pay_basis, is_active,
-         created_by, updated_by)
-      values (${org.orgId}, ${id}, ${employmentId}, ${scheduleId}, 'ES', 'MD', 'salary', true,
-              ${actorId}, ${actorId})`);
+        (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, pay_basis, is_active, created_by, updated_by)
+      values (${org.orgId}, ${id}, ${employmentId}, ${scheduleId}, 'ES', 'MD', 'salary', true, ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key, answers, created_by, updated_by)
+      values (${randomUUID()}, ${org.orgId}, ${id}, 'ES', 'es_domicilio', ${JSON.stringify({ provincia_domicilio: domicilio })}::jsonb, ${actorId}, ${actorId})`);
     return id;
   };
-  const anaId = await employee("Ana Trabajadora");
-  const brunoId = await employee("Bruno Trabajador");
+  const anaId = await employee("Ana Trabajadora", "28");
+  const brunoId = await employee("Bruno Trabajador", "08");
 
   const run = async (
     payDate: string, status: "committed" | "calculated",
@@ -90,29 +91,19 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
       values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
               ${org.subsidiaryId}, ${payDate}, 'EUR', 'approved', ${actorId}, ${actorId})`);
     await db.execute(sql`
-      insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
-                            tax_year, run_status, calculated_at, created_by, updated_by)
-      values (${documentId}, ${org.orgId}, ${scheduleId}, ${payDate}, ${payDate}, ${payDate},
-              2026, ${status}, now(), ${actorId}, ${actorId})`);
+      insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date, tax_year, run_status, calculated_at, created_by, updated_by)
+      values (${documentId}, ${org.orgId}, ${scheduleId}, ${payDate}, ${payDate}, ${payDate}, 2026, ${status}, now(), ${actorId}, ${actorId})`);
     for (const line of lines) {
       const stubId = randomUUID();
       await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                               periods_per_year, pay_date, tax_year, country, country_source,
-                               currency_code, gross, net_pay, created_by, updated_by)
-        values (${stubId}, ${org.orgId}, ${documentId}, ${line.employeeId}, ${employments.get(line.employeeId)!}, 'MD',
-                12, ${payDate}, 2026, 'ES', 'calculation',
-                'EUR', ${line.gross}, ${line.gross}, ${actorId}, ${actorId})`);
+        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year, pay_date, tax_year, country, country_source, currency_code, gross, net_pay, created_by, updated_by)
+        values (${stubId}, ${org.orgId}, ${documentId}, ${line.employeeId}, ${employments.get(line.employeeId)!}, 'MD', 12, ${payDate}, 2026, 'ES', 'calculation', 'EUR', ${line.gross}, ${line.gross}, ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount,
-                                    sequence, created_by, updated_by)
-        values (${org.orgId}, ${stubId}, ${baseId}, 'earning', 'Base pay',
-                null, ${line.gross}, 10, ${actorId}, ${actorId})`);
+        insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount, sequence, created_by, updated_by)
+        values (${org.orgId}, ${stubId}, ${baseId}, 'earning', 'Base pay', null, ${line.gross}, 10, ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount,
-                                    sequence, created_by, updated_by)
-        values (${org.orgId}, ${stubId}, ${irpfId}, 'deduction', 'IRPF withholding',
-                null, ${line.irpf}, 110, ${actorId}, ${actorId})`);
+        insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount, sequence, created_by, updated_by)
+        values (${org.orgId}, ${stubId}, ${irpfId}, 'deduction', 'IRPF withholding', null, ${line.irpf}, 110, ${actorId}, ${actorId})`);
     }
   };
 
@@ -141,6 +132,9 @@ test(
       assert.equal(slips.length, 2);
       const ana = slips.find((s) => s.employeePartyId === fx.anaId)!;
       const bruno = slips.find((s) => s.employeePartyId === fx.brunoId)!;
+      // Domicile, never the stub's MD work province: Ana files 28, Bruno 08.
+      assert.equal(ana.province, "28");
+      assert.equal(bruno.province, "08");
       // Ana: two months across the edition split; Bruno: one month. The Q2
       // draft (9999.99) appears in neither — a draft on a filing is a wrong filing.
       assert.equal(cmp(String(ana.percepcionIntegra), "4000.00"), 0);
@@ -215,7 +209,7 @@ test(
       }
       // Both directions: foreign ids parse to null through the declarations.
       assert.equal(byKey.get("190")!.parseRowId("Q1"), null);
-      assert.equal(byKey.get("111")!.parseRowId(`${fx.anaId}:MD`), null);
+      assert.equal(byKey.get("111")!.parseRowId(`${fx.anaId}:28`), null);
       assert.equal(byKey.get("190")!.parseRowId(fx.anaId), null);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -229,7 +223,7 @@ test(
   async () => {
     const fx = await seedEsFilingFixture();
     try {
-      const slip = await es190Slip(fx.orgId, 2026, `${fx.anaId}:MD`);
+      const slip = await es190Slip(fx.orgId, 2026, `${fx.anaId}:28`);
       assert.equal(slip.formCode, "ES_CERT_RET");
       const byCode = new Map(slip.boxes.map((b) => [b.code, b]));
       assert.equal(cmp(String(byCode.get("dinerarias-integro")?.value), "4000.00"), 0);
