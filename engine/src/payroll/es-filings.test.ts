@@ -15,12 +15,12 @@ import {
 const EMP = "11111111-1111-1111-8111-111111111111";
 const FOREIGN = "22222222-2222-2222-8222-222222222222";
 
-test("ES declares the certificado (190, annual) and the 111 (quarterly)", () => {
+test("ES declares the certificado (190, annual), the 111 (quarterly) and the IRNR 216/296", () => {
   const filings = esPackFilings();
   assert.equal(filings.country, "ES");
   assert.deepEqual(
     filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["190", "annual"], ["111", "quarterly"]],
+    [["190", "annual"], ["111", "quarterly"], ["216", "quarterly"], ["296", "annual"]],
   );
   for (const filing of filings.yearEnd) {
     assert.equal(typeof filing.population, "function");

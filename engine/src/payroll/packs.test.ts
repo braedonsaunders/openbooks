@@ -188,11 +188,16 @@ test("the register social-insurance key set derives from the pack declarations",
   // pack's employee social insurance is present, and nothing that is not
   // withheld from the employee is.
   assert.deepEqual(employeeSocialInsuranceSystemKeys(), [
-    "arrco", "av", "ceg", "cet", "cpf_ee", "cpp", "cpp2", "crds",
-    "csg", "ei", "health", "inps", "inss", "kv", "medicare",
-    "medicare_addl", "nic", "pension", "prsi", "pv", "qpip", "rv",
-    "ss", "ss_cc", "ss_des", "ss_for", "ss_mei", "usc", "vieillesse",
-    "zus_chor", "zus_emeryt", "zus_rent", "zus_zdr",
+    "arrco", "av", "ceg", "cet", "child_support", "co_famli_employee",
+    "cpf_ee", "cpp", "cpp2", "crds", "csg", "ct_pl_employee", "ei",
+    "health", "inps", "inss", "irnr", "kv", "medicare", "medicare_addl",
+    "mn_paid_leave_employee", "nic", "or_statewide_transit_tax",
+    "pa_uc_employee", "pension", "postgraduate_loan", "prsi", "pv",
+    "qpip", "rv", "sostitutiva_premi", "sostitutiva_rinnovi",
+    "sostitutiva_turni", "ss", "ss_cc", "ss_des", "ss_for", "ss_hex_fm",
+    "ss_hex_resto", "ss_mei", "ss_solidaridad", "student_loan", "usc",
+    "vieillesse", "vt_child_care_contribution_employee", "zus_chor",
+    "zus_emeryt", "zus_rent", "zus_zdr",
   ]);
   // QPIP is the named reason this set exists: the old register buckets
   // dropped Québec parental insurance entirely — real withheld money with
