@@ -8,18 +8,21 @@
  * and server timeouts for exactly this class of work. Unlike pool.connect,
  * longPool has no org-context wrapper, so the bypass GUCs are applied
  * explicitly: migration backfills must see every row, exactly as they did
- * through the wrapped request pool under withBypassContext. Callers must
- * return the client via releaseMigrationClient so the deny-by-default
- * posture is restored before the session is reused.
+ * through the wrapped request pool under withBypassContext. Since 0399 gates
+ * that GUC by session role, callers that must see tenant rows opt into the
+ * bypass long pool instead; the default stays the installer path so
+ * production bootstrap behavior is unchanged. Callers must return the client
+ * via releaseMigrationClient so the deny-by-default posture is restored
+ * before the session is reused.
  *
  * Lives in its own module (rather than inline in bootstrap.ts) because
  * bootstrap.ts runs main() on import; tests import this module directly.
  */
 import pg from "pg";
-import { longPool } from "../engine/src/platform/db.ts";
+import { connectBypassLongClient, longPool } from "../engine/src/platform/db.ts";
 
-export async function connectMigrationClient(): Promise<pg.PoolClient> {
-  const client = await longPool.connect();
+export async function connectMigrationClient(options?: { bypass?: boolean }): Promise<pg.PoolClient> {
+  const client = options?.bypass ? await connectBypassLongClient() : await longPool.connect();
   try {
     await client.query(
       "select set_config('app.current_org', '', false), set_config('app.bypass_rls', 'on', false)",

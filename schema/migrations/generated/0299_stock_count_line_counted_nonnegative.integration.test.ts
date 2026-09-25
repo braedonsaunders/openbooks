@@ -101,7 +101,7 @@ async function openCount(org: ScratchOrg): Promise<string> {
 
 test("posted and cancelled negatives upgrade cleanly, keep their values, and stay marked", async () => {
   const org = await createScratchOrg();
-  const rollback = await connectMigrationClient();
+  const rollback = await connectMigrationClient({ bypass: true });
   try {
     await receiveTen(org);
     const postedId = await openCount(org);
@@ -224,7 +224,7 @@ test("posted and cancelled negatives upgrade cleanly, keep their values, and sta
 
 test("open negatives refuse with the re-record remedy and mark nothing", async () => {
   const org = await createScratchOrg();
-  const rollback = await connectMigrationClient();
+  const rollback = await connectMigrationClient({ bypass: true });
   try {
     await receiveTen(org);
     const countId = await openCount(org);

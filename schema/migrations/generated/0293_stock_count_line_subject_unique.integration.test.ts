@@ -112,7 +112,7 @@ async function setCountStatus(orgId: string, countId: string, status: string): P
 }
 
 async function runStagedFile(): Promise<void> {
-  const client = await connectMigrationClient();
+  const client = await connectMigrationClient({ bypass: true });
   try {
     await executeMigrationAttempt(client, {
       filename: PROBE_FILENAME,
