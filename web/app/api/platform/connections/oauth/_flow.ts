@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
 import { sealJson, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
 import { secureCookiesEnabled } from "../../../../../lib/auth-policy";
+import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 
 /**
  * Connection OAuth CSRF follows the house OIDC cookie+nonce pattern
@@ -22,6 +23,13 @@ export type ConnectionOauthState = {
   nonce: string;
   exp: number;
 };
+
+/** Recheck the initiating actor after the provider round-trip, before storing its credentials. */
+export async function connectionOauthActorStillAuthorized(orgId: string, userId: string): Promise<boolean> {
+  const gate = await guardPermission("admin.setup.manage");
+  if (!gate || gate instanceof NextResponse || gate.user.id !== userId || gate.user.orgId !== orgId) return false;
+  return guardUnrestrictedScope(gate) === null;
+}
 
 export function connectionAppOrigin(): string {
   return appBaseUrl();

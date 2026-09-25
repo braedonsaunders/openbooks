@@ -40,9 +40,7 @@ const mockSources = new Map<string, string>([
     "mock:authz",
     `
       export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
-      export async function guardPermission() {
-        return { user: { orgId: "org-1", id: "user-1" }, permissions: new Set(), allowedSubsidiaryIds: null }
-      }
+      export async function guardPermission() { const state = globalThis[Symbol.for("openbooks.xero-oauth-callback-test")]; return state.connection.status === "revoked" && state.exchangeRedirectUri !== null ? null : { user: { orgId: "org-1", id: "user-1" }, permissions: new Set(), allowedSubsidiaryIds: null } }
     `,
   ],
   [
@@ -50,7 +48,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for("openbooks.xero-oauth-callback-test")]
       export async function getConnection() {
-        if (state.identityError) {
+        if (state.identityError === "22P02") {
           const error = new Error("invalid input syntax for type uuid")
           error.code = state.identityError
           throw error
@@ -115,6 +113,7 @@ const hooks = registerHooks({
     }
     const mocks: Record<string, string> = {
       "../../../../../../../lib/authz": "mock:authz",
+      "../../../../../lib/authz": "mock:authz",
       "@openbooks/engine/src/sync/connection.ts": "mock:connection",
       "@openbooks/engine/src/connectors/xero.ts": "mock:xero",
       "@openbooks/engine/src/platform/db.ts": "mock:db",
@@ -195,15 +194,14 @@ test("a matching cookie is required; replay after the cookie is cleared is badst
   assert.equal(replay.headers.get("location"), "https://books.example/sync?oauth=badstate");
 });
 
-test("Xero token exchange uses the configured callback URI", async () => {
+test("Xero callback rechecks setup authority after the provider round-trip", async () => {
   reset();
-  state.tenants = [{ tenantId: "only", tenantName: "Only" }];
+  state.connection = { ...state.connection, config: { tenantId: "stored-tenant" }, status: "revoked" };
   const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
 
   const response = await callback({ state: sealed, cookie: nonce });
 
-  assert.equal(response.headers.get("location"), "https://books.example/sync?oauth=connected");
-  assert.equal(state.exchangeRedirectUri, "https://books.example/api/platform/connections/oauth/xero/callback");
+  assert.deepEqual([response.headers.get("location"), state.updated], ["https://books.example/sync?oauth=error", null]);
 });
 
 test("Xero callback refuses an ambiguous first-tenant bind by name", async () => {

@@ -10,6 +10,7 @@ import { guardPermission, guardUnrestrictedScope } from '../../../../../../../li
 import { storageIdentityError } from '../../../_storage-identity'
 import {
   acceptConnectionOauthState,
+  connectionOauthActorStillAuthorized,
   connectionOauthBounce,
   connectionOauthCookieValue,
   connectionOauthRedirectUri,
@@ -63,6 +64,7 @@ export async function GET(req: Request) {
     const pinned = pinProviderChoice(companies, cfg.companyId, (company) => company.id, 'nocompany')
     if (!pinned.ok) return connectionOauthBounce(pinned.status)
     const company = pinned.item
+    if (!(await connectionOauthActorStillAuthorized(st.orgId, gate.user.id))) return connectionOauthBounce('error')
 
     const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
     const displayName = `${company.displayName ?? company.name} (Business Central)`

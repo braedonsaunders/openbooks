@@ -10,6 +10,7 @@ import { guardPermission, guardUnrestrictedScope } from '../../../../../../../li
 import { storageIdentityError } from '../../../_storage-identity'
 import {
   acceptConnectionOauthState,
+  connectionOauthActorStillAuthorized,
   connectionOauthBounce,
   connectionOauthCookieValue,
   connectionOauthRedirectUri,
@@ -71,6 +72,7 @@ export async function GET(req: Request) {
     } else if (!info[0]) {
       return connectionOauthBounce('realm')
     }
+    if (!(await connectionOauthActorStillAuthorized(st.orgId, gate.user.id))) return connectionOauthBounce('error')
     const displayName = info[0]?.CompanyName
       ? `${info[0].CompanyName} (${realmId})`
       : conn.displayName
