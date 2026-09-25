@@ -228,7 +228,7 @@ function LeaseCreateForm({
       title={parent ? t("leases.createTitleSeparate") : t("leases.createTitle")}
       size="2xl"
     >
-      <div className="space-y-4">
+      <fieldset disabled={busy} className="min-w-0 space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("leases.fieldEntity")}>
             <SearchSelect
@@ -428,7 +428,7 @@ function LeaseCreateForm({
             {tCommon("actions.cancel")}
           </Button>
         </div>
-      </div>
+      </fieldset>
     </Drawer>
   );
 }
@@ -574,7 +574,7 @@ function ChangeLease({
         </Button>
       }
     >
-      <div className="max-h-[75vh] w-96 space-y-3 overflow-y-auto p-4">
+      <fieldset disabled={busy} className="max-h-[75vh] w-96 space-y-3 overflow-y-auto p-4">
         <Field label={t("leases.changeType")}>
           <Select
             value={operation}
@@ -729,7 +729,7 @@ function ChangeLease({
         <Button disabled={busy} onClick={propose}>
           {t("leases.createProposal")}
         </Button>
-      </div>
+      </fieldset>
     </Popover>
   );
 }
