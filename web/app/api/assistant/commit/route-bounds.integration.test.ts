@@ -51,6 +51,10 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  // lib/application/context imports the server-only marker, which throws
+  // outside a React Server Component runtime; the route under test needs
+  // only its context builder, so stub the marker like the route tests do.
+  ['mock:server-only', `export {}`],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -66,6 +70,7 @@ registerHooks({
     }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
+    if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
@@ -192,7 +197,10 @@ test(
       commitState.authz = authzFor(fx)
       const body = commitBody(fx, '10.00')
       body.preview.lines[1]!.accountId = randomUUID()
-      await assert.rejects(post(body))
+      const failed = await post(body)
+      const failedJson = (await failed.json().catch(() => null)) as { error?: string } | null
+      assert.equal(failed.status, 404, JSON.stringify(failedJson))
+      assert.deepEqual(failedJson, { error: 'not found' })
       assert.equal(await journalCount(fx.org.orgId), 0)
 
       body.preview.lines[1]!.accountId = fx.org.accounts.revenue

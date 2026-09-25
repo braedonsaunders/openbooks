@@ -174,7 +174,7 @@ export async function POST(req: Request) {
         `)).rows;
         if (
           lockedAccounts.length !== accountIds.length
-          || lockedAccounts.some((account) => !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, account.subsidiary_id))
+          || lockedAccounts.some((account) => !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, account.subsidiary_id, { orgWideNull: true }))
         ) {
           throw new AccountScopeChangedError("not found");
         }
