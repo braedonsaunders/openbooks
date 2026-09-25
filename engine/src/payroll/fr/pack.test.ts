@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { certificateDeclarationProblem } from "../certificates.ts";
-import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { EMPTY_EMPLOYER_LEVY_FACTORS, type PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { FR_PAYROLL_PACK } from "./pack.ts";
 import {
@@ -47,16 +47,8 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
     certificateFor: () => null,
     bool: () => false,
     assertRegionSupported: () => {},
-    employerLevies: {
-      wcbAmount: "0",
-      wcbAssessable: "0",
-      ehtAmount: "0",
-      ehtEarnings: "0",
-      hsfAmount: "0",
-      hsfEarnings: "0",
-      cntAmount: "0",
-      cntEarnings: "0",
-    },
+    // Zero levies: the shared empty factors (same eight "0" legs as before).
+    employerLevies: { ...EMPTY_EMPLOYER_LEVY_FACTORS },
   };
 }
 

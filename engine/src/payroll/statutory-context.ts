@@ -65,27 +65,34 @@ export type PushStatutoryFn = (
   options?: { allocations?: readonly StatutoryAllocation[] },
 ) => void;
 
-/** Phase-8 employer levy factors consumed by the pack's statutory pass. */
+/**
+ * Phase-8 employer levy factors consumed by the pack's statutory pass.
+ * Amounts are Money: every producer emits kernel-exact decimals (sum / add /
+ * mulPercent outputs, or the exact zero). The struct carries NO rates — its
+ * rate inputs arrive as tenant DB text (fail-closed at rateUnits/mulPercent)
+ * or the already-Rate quebecHsfRateForPayroll, so there is no Rate field
+ * to brand here.
+ */
 export interface PayrollEmployerLevyFactors {
-  wcbAmount: string;
-  wcbAssessable: string;
-  ehtAmount: string;
-  ehtEarnings: string;
-  hsfAmount: string;
-  hsfEarnings: string;
-  cntAmount: string;
-  cntEarnings: string;
+  wcbAmount: Money;
+  wcbAssessable: Money;
+  ehtAmount: Money;
+  ehtEarnings: Money;
+  hsfAmount: Money;
+  hsfEarnings: Money;
+  cntAmount: Money;
+  cntEarnings: Money;
 }
 
 export const EMPTY_EMPLOYER_LEVY_FACTORS: PayrollEmployerLevyFactors = {
-  wcbAmount: "0",
-  wcbAssessable: "0",
-  ehtAmount: "0",
-  ehtEarnings: "0",
-  hsfAmount: "0",
-  hsfEarnings: "0",
-  cntAmount: "0",
-  cntEarnings: "0",
+  wcbAmount: "0" as Money,
+  wcbAssessable: "0" as Money,
+  ehtAmount: "0" as Money,
+  ehtEarnings: "0" as Money,
+  hsfAmount: "0" as Money,
+  hsfEarnings: "0" as Money,
+  cntAmount: "0" as Money,
+  cntEarnings: "0" as Money,
 };
 
 /** Phase 8 — pack-declared earnings-assessed employer levies (WCB/EHT/HSF for CA). */

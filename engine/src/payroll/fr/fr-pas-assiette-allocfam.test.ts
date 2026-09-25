@@ -17,7 +17,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "../../money/money.ts";
-import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { EMPTY_EMPLOYER_LEVY_FACTORS, type PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { buildResolution } from "../statutory-rates.ts";
 import type { StatutoryRateRow } from "../statutory-rates.ts";
@@ -90,16 +90,8 @@ function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): 
     bool: () => false,
     assertRegionSupported: () => {},
     employerEmployeeCount: 10,
-    employerLevies: {
-      wcbAmount: "0",
-      wcbAssessable: "0",
-      ehtAmount: "0",
-      ehtEarnings: "0",
-      hsfAmount: "0",
-      hsfEarnings: "0",
-      cntAmount: "0",
-      cntEarnings: "0",
-    },
+    // Zero levies: the shared empty factors (same eight "0" legs as before).
+    employerLevies: { ...EMPTY_EMPLOYER_LEVY_FACTORS },
   };
 }
 
