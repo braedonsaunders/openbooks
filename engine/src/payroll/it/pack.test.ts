@@ -229,7 +229,7 @@ function fakeCtx(overrides: {
       IT_PAYROLL_PACK.deductionTreatments,
     ),
     periodsPerYear: 12,
-    region: overrides.region ?? "03",
+    region: overrides.region ?? "01",
     country: "IT",
     orgId: "org",
     documentId: "doc",

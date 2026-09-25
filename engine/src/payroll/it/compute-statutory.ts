@@ -19,8 +19,10 @@
  * not transcribed is refused by name before any rate is touched.
  *
  * What the engine assumes (stated, not hidden): a full-year worker at this
- * pay (no presumption data beyond the dichiarazione's reddito presunto,
- * which raises the complessivo thresholds when higher); ctx.region is read
+ * pay unless taxYearWorkDays carries the actual employment days, in which
+ * case the art. 13 and c. 6 detrazioni rapportano; no presumption data beyond
+ * the dichiarazione's reddito presunto (which raises the complessivo
+ * thresholds when higher); ctx.region is read
  * as the fiscal domicile region (surcharges follow the domicile, never the
  * workplace — withholding.ts); the c. 4 somma band is read off the
  * theoretical gross annual while the percentage applies to the net lavoro
@@ -38,8 +40,8 @@
  * 200.000 (L. 199/2025 c. 4) reduces only the art. 16-ter oneri detrazioni
  * the engine does not carry, so high incomes compute normally (pinned); the
  * 2026-only 5%/15% substitute regimes price components the engine has no
- * inputs for, so they are refused by name in IT_REFUSED_2026 rather than
- * computed.
+ * inputs for, so pay carrying those facts is refused by name under
+ * IT_REFUSED_2026 rather than computed (enforceIt2026SubstituteRegimes).
  *
  * Declining the callback is NOT a reason to empty `regions.supported`: Link 4
  * of resolveEmployeePayrollContext gates every employee on that list whatever
@@ -222,11 +224,38 @@ function marginalTax(
   return tax;
 }
 
+/**
+ * Progressive addizionale from deliberated scaglioni (I6-payroll-18): the
+ * same marginal walk, but bracket rates are percent numbers like the scalar
+ * slot ("1.23" for 1,23%), not fractions.
+ */
+function marginalPctTax(baseUnits: bigint, brackets: readonly ItSurtaxBracket[]): bigint {
+  let tax = ZERO;
+  let lower = ZERO;
+  for (const band of brackets) {
+    if (baseUnits <= lower) break;
+    const upper = band.upTo === null ? baseUnits : bmin(baseUnits, U(band.upTo));
+    tax += mulPct(upper - lower, band.rate);
+    lower = band.upTo === null ? baseUnits : U(band.upTo);
+  }
+  return tax;
+}
+
 export interface It2025SurtaxInput {
   /** Percent number as the tenant typed it ("0.8" for 0,8%). */
   rate: string;
   /** EUR exemption threshold, when the comune deliberates one. */
   exemption?: string | null;
+}
+
+/**
+ * One deliberated surtax bracket (I6-payroll-18): `{ upTo, rate }`, where —
+ * unlike the IRPEF bands — `rate` is a percent number like the scalar slot
+ * ("1.23" for 1,23%). A null `upTo` is the open top bracket.
+ */
+export interface ItSurtaxBracket {
+  readonly upTo: string | null;
+  readonly rate: string;
 }
 
 /** 2026 input: identical shape — one engine, two table years. */
@@ -251,8 +280,61 @@ export interface It2025Input {
   comuneCode: string | null;
   /** Declared regionale rate; null refuses (never guessed). */
   regionalRate: string | null;
+  /**
+   * Deliberated regionale scaglioni (I6-payroll-18): for domiciles whose
+   * region publishes a progressive schedule (e.g. Lombardia), the scalar
+   * slot cannot represent it and the engine refuses without these. Supplying
+   * both a scalar and brackets refuses as ambiguous.
+   */
+  regionalBrackets?: readonly ItSurtaxBracket[] | null;
   /** Declared comunale rate/exemption; null refuses (never guessed). */
   municipalSurtax: It2025SurtaxInput | null;
+  /**
+   * Deliberated comunale scaglioni (I6-payroll-18): same progressive
+   * treatment for comuni that deliberate by bracket; the soglia exemption
+   * still zeroes at-or-below-threshold imponibili first.
+   */
+  municipalBrackets?: readonly ItSurtaxBracket[] | null;
+  /**
+   * Days of employment in the tax year (I6-payroll-19): the art. 13
+   * detrazione lavoro and the c. 6 ulteriore detrazione are rapportate al
+   * periodo di lavoro (730 istruzioni, Table 6). Null/undefined keeps the
+   * documented full-year assumption; partial-year payrolls must carry this.
+   */
+  taxYearWorkDays?: number | null;
+  /**
+   * Annual eligible fringe benefits within the art. 51 exclusion
+   * (I6-payroll-227): excluded up to EUR 1,000, or EUR 2,000 with a
+   * dependent child (L. 207/2024 art. 1 c. 390, tax years 2025–2027).
+   * Above the cap the whole amount is taxable, so nothing is excluded.
+   * Null/undefined prices the whole gross as taxable.
+   */
+  excludedFringeAnnual?: string | null;
+  /** Dependent child for the EUR 2,000 fringe cap (art. 51 only, not art. 12). */
+  fringeDependentChild?: boolean;
+  /**
+   * 2026 CCNL contractual-renewal increases in pay (I6-payroll-51): L.
+   * 199/2025 art. 1 c. 7 prices them under a 5% imposta sostitutiva, which
+   * the engine does not compute — any positive amount refuses by name.
+   */
+  renewalIncrease2026?: string | null;
+  /**
+   * 2026 night/holiday/rest-day/shift allowances in pay: L. 199/2025 art. 1
+   * c. 10–11 prices them under a 15% imposta sostitutiva (cap 1.500/year),
+   * which the engine does not compute — any positive amount refuses by name.
+   */
+  shiftAllowances2026?: string | null;
+  /**
+   * 2026 tourism/hospitality/food-service night and festive work pay
+   * (I6-payroll-123): L. 199/2025 art. 1 c. 18–21 grants a 15% trattamento
+   * integrativo speciale for prestazioni 1 Jan–30 Sep 2026, which the engine
+   * does not compute — any positive amount refuses by name.
+   */
+  tourismSpecialPay2026?: {
+    readonly amount: string;
+    readonly sector?: string | null;
+    readonly workDate?: string | null;
+  } | null;
   /**
    * Theoretical annual lavoro base for the c. 4 somma band (rapportato
    * all'intero anno); defaults to annualGrossEmployment. Circ. 4/E
@@ -305,6 +387,52 @@ export interface It2025Result {
 
 function refuse(message: string): never {
   throw new ItPayrollRefusal(message);
+}
+
+/** Days in the tax year for the rapportatura divisor (I6-payroll-19). */
+function daysInTaxYear(year: number): number {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
+}
+
+/**
+ * Give IT_REFUSED_2026 arms (I6-payroll-51, I6-payroll-123): the 2026-only
+ * substitute regimes are declared in the refusal list, and any pay carrying
+ * the facts refuses here before ordinary IRPEF prices it at the wrong rate.
+ */
+function enforceIt2026SubstituteRegimes(input: It2025Input): void {
+  const refused = "IT_REFUSED_2026";
+  const positive = (value: string | null | undefined, what: string): bigint => {
+    if (value == null || value === "") return ZERO;
+    return needNonNegative(value, what, 2026);
+  };
+  if (positive(input.renewalIncrease2026, "renewalIncrease2026") > ZERO) {
+    refuse(
+      `IT 2026 refuses ${input.renewalIncrease2026} of contractual-renewal increases in ordinary pay: L. 199/2025 `
+      + "art. 1 c. 7 prices them under a 5% imposta sostitutiva (private-sector, 2025 lavoro income ≤ 33.000; "
+      + `AdE Circ. 2/E/2026), which the engine does not compute — see ${refused}. Price renewal increases `
+      + "outside ordinary IRPEF (pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
+    );
+  }
+  if (positive(input.shiftAllowances2026, "shiftAllowances2026") > ZERO) {
+    refuse(
+      `IT 2026 refuses ${input.shiftAllowances2026} of night/holiday/rest-day/shift allowances in ordinary pay: `
+      + "L. 199/2025 art. 1 c. 10–11 prices them under a 15% imposta sostitutiva (cap 1.500/year; AdE FAQ Circ. "
+      + `3/E/2026), which the engine does not compute — see ${refused}. Price qualifying allowances outside `
+      + "ordinary IRPEF (pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
+    );
+  }
+  const special = input.tourismSpecialPay2026;
+  if (special != null && positive(special.amount, "tourismSpecialPay2026.amount") > ZERO) {
+    const sector = special.sector ?? "(sector unstated)";
+    const date = special.workDate ?? "(date unstated)";
+    refuse(
+      `IT 2026 refuses ${special.amount} of tourism/hospitality/food-service night and festive pay (${sector}, `
+      + `${date}): L. 199/2025 art. 1 c. 18–21 grants a 15% trattamento integrativo speciale for prestazioni `
+      + `1 January–30 September 2026, which the engine does not compute — see ${refused}. Verify the sector, `
+      + "night/festive character, and work date, then price the credit outside ordinary IRPEF (pay-run "
+      + "adjustment, engine/src/payroll/run-adjustments.ts)",
+    );
+  }
 }
 
 function needNonNegative(value: string, what: string, year: number): bigint {
@@ -366,7 +494,16 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + `${IT_REGION_CODES.join(", ")}`,
     );
   }
-  const gross = needNonNegative(input.annualGrossEmployment, "annualGrossEmployment", year);
+  if (year === 2026) enforceIt2026SubstituteRegimes(input);
+  // Art. 51 fringe exclusion (I6-payroll-227): eligible benefits within the
+  // 1.000 / 2.000 cap never enter employment taxable income; above the cap
+  // the whole amount is taxable (L. 207/2024 art. 1 c. 390).
+  const fringeRaw = input.excludedFringeAnnual == null || input.excludedFringeAnnual === "" ? ZERO : needNonNegative(input.excludedFringeAnnual, "excludedFringeAnnual", year);
+  let gross = needNonNegative(input.annualGrossEmployment, "annualGrossEmployment", year);
+  if (fringeRaw > ZERO) {
+    const fringeCap = U(input.fringeDependentChild ? "2000" : "1000");
+    if (fringeRaw <= fringeCap) gross = max0(gross - fringeRaw);
+  }
   const oneOff = needNonNegative(input.nonPeriodicAnnual ?? "0", "nonPeriodicAnnual", year);
   const annualPensionable = needNonNegative(input.annualPensionable, "annualPensionable", year);
   const pensBase = annualPensionable + oneOff;
@@ -435,7 +572,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   detC1 = r2(detC1);
   const C2 = tables.detrazioneC2;
   const detC2 = R > U(C2.fromExclusive) && R <= U(C2.toInclusive) ? U(C2.amount) : ZERO;
-  const detLavoro = input.hasDetrazioniDeclaration ? detC1 + detC2 : ZERO;
+  let detLavoro = input.hasDetrazioniDeclaration ? detC1 + detC2 : ZERO;
 
   // L. 207/2024 c. 6 ulteriore detrazione (automatic per Circ. 4/E c. 7;
   // the comma carries no sunset, so it governs every later year unchanged).
@@ -447,6 +584,23 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     ulteriore = (U(UD.amount) * truncRatio4(U(UD.bandB_toExclusive) - R, U(UD.bandB_span), tables.ratioDecimals)) / 10_000n;
   }
   ulteriore = r2(ulteriore);
+
+  // Rapportatura al periodo di lavoro (I6-payroll-19): the art. 13
+  // detrazione lavoro and the c. 6 ulteriore detrazione scale with days of
+  // employment in the tax year (730 istruzioni, Table 6). Absent work-days
+  // keep the documented full-year assumption.
+  if (input.taxYearWorkDays != null) {
+    const yearDays = daysInTaxYear(year);
+    if (!Number.isInteger(input.taxYearWorkDays) || input.taxYearWorkDays <= 0 || input.taxYearWorkDays > yearDays) {
+      refuse(`IT ${year} rapportatura needs taxYearWorkDays as whole days of employment from 1 to ${yearDays}, got ${input.taxYearWorkDays}`);
+    }
+    if (input.taxYearWorkDays < yearDays) {
+      const workDays = input.taxYearWorkDays;
+      const factor = (amount: bigint): bigint => r2(roundDiv(amount * BigInt(workDays), BigInt(yearDays)));
+      detLavoro = factor(detLavoro);
+      ulteriore = factor(ulteriore);
+    }
+  }
 
   // Capienza: detrazioni reduce the imposta lorda, never below zero (AdE:
   // "Deductions are generally applied up to the amount of the tax due").
@@ -487,7 +641,9 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   // Addizionali from declared rates on the IRPEF imponibile. No configured
   // rate is a refusal naming the scope point — never a guessed rate, never
   // a lookup by address.
-  if (input.regionalRate == null || input.regionalRate === "") {
+  const hasRegionalBrackets = (input.regionalBrackets?.length ?? 0) > 0;
+  const hasMunicipalBrackets = (input.municipalBrackets?.length ?? 0) > 0;
+  if (!hasRegionalBrackets && (input.regionalRate == null || input.regionalRate === "")) {
     refuse(
       `no it_addizionale_regionale rate is configured for regione ${input.regionCode} in ${year} — `
       + "the domicile region's deliberated rate must be entered; the pack computes no surtax without it",
@@ -505,19 +661,65 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + "digits, e.g. H501) — the pack looks no rate up by address",
     );
   }
-  if (input.municipalSurtax == null || input.municipalSurtax.rate === "") {
+  if (!hasMunicipalBrackets && (input.municipalSurtax == null || input.municipalSurtax.rate === "")) {
     refuse(
       `no it_addizionale_comunale rate is configured for comune ${input.comuneCode} (regione `
       + `${input.regionCode}) in ${year} — the domicile comune's deliberated rate must be entered`,
     );
   }
-  const addRegionale = r2(mulPct(imponibile, input.regionalRate));
-  const exemption = input.municipalSurtax.exemption == null || input.municipalSurtax.exemption === ""
+  // Bracketed deliberations (I6-payroll-18): a domicile whose region or
+  // comune deliberates scaglioni cannot be priced from the scalar slot.
+  // Lombardia (03) publishes a progressive regionale schedule (1.23% /
+  // 1.58% / 1.72% by bracket:
+  // https://www.regione.lombardia.it/bollo-auto-e-tributi-regionali/red-addizionale-regionale-irpef),
+  // so a scalar Lombardia computation refuses until the deliberated
+  // brackets are entered; region 04 has no region-wide schedule at all —
+  // Trento and Bolzano deliberate separately, and Bolzano's 2026 EUR 430.50
+  // credit through EUR 90,000 (https://finanze.provincia.bz.it/it/addizionale-regionale-irpef-imposta-sul-reddito-delle-persone-fisiche)
+  // is not transcribed — so 04 always refuses (I6-payroll-56).
+  if (input.regionalRate != null && input.regionalRate !== "" && hasRegionalBrackets) {
+    refuse(
+      `IT ${year} regionale computation is ambiguous for regione ${input.regionCode}: both a scalar rate `
+      + `(${input.regionalRate}) and ${input.regionalBrackets?.length} deliberated brackets were supplied — `
+      + `enter one schedule, never both; see ${refused}`,
+    );
+  }
+  if (input.municipalSurtax?.rate != null && input.municipalSurtax.rate !== "" && hasMunicipalBrackets) {
+    refuse(
+      `IT ${year} comunale computation is ambiguous for comune ${input.comuneCode}: both a scalar rate `
+      + `(${input.municipalSurtax.rate}) and ${input.municipalBrackets?.length} deliberated brackets were supplied — `
+      + `enter one schedule, never both; see ${refused}`,
+    );
+  }
+  if (input.regionCode === "04") {
+    refuse(
+      `IT ${year} refuses regione 04 (Trentino-Alto Adige/Südtirol) from the scalar slot: the addizionale `
+      + "regionale is deliberated separately by the autonomous provinces of Trento and Bolzano, never region-wide, "
+      + "and Bolzano's 2026 EUR 430.50 credit through EUR 90,000 of regional taxable income is not transcribed — "
+      + `a single 04 computation cannot be correct; see ${refused}. Price the province's schedule outside the pack `
+      + "(pay-run adjustment, engine/src/payroll/run-adjustments.ts) until province-level inputs exist",
+    );
+  }
+  if (input.regionCode === "03" && !hasRegionalBrackets) {
+    refuse(
+      `IT ${year} refuses a scalar addizionale regionale for Lombardia domicile: the region deliberates a `
+      + "progressive scaglioni schedule (1.23% / 1.58% / 1.72% by bracket), which no single rate can represent — "
+      + `a scalar silently misprices every Lombardia payroll; see ${refused}. Enter the deliberated brackets as `
+      + "regionalBrackets, or price the surtax outside the pack "
+      + "(pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
+    );
+  }
+  const addRegionale = hasRegionalBrackets
+    ? r2(marginalPctTax(imponibile, input.regionalBrackets ?? []))
+    : r2(mulPct(imponibile, input.regionalRate ?? ""));
+  const exemption = input.municipalSurtax?.exemption == null || input.municipalSurtax.exemption === ""
     ? null
     : needNonNegative(input.municipalSurtax.exemption, "municipalExemption", year);
   const addComunale = exemption !== null && imponibile <= exemption
     ? ZERO
-    : r2(mulPct(imponibile, input.municipalSurtax.rate));
+    : hasMunicipalBrackets
+      ? r2(marginalPctTax(imponibile, input.municipalBrackets ?? []))
+      : r2(mulPct(imponibile, input.municipalSurtax?.rate ?? ""));
 
   const P = BigInt(input.periodsPerYear);
   const per = (annual: bigint): string => D(r2(roundDiv(annual, P * CENT) * CENT));
