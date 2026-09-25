@@ -1,6 +1,6 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
-import { decimalNullCause, decimalNullRefusal } from "../money/decimal-refusal.ts";
+import { decimalNullCause, decimalNullRefusal, type DecimalNullCause } from "../money/decimal-refusal.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
 
@@ -68,9 +68,18 @@ export type CaptureIssue = {
   expected?: string;
   actual?: string;
   /**
-   * The operator-facing refusal naming the remedy, when the code alone does
-   * not carry it. The review drawer renders this verbatim when present and
-   * falls back to its translated code text otherwise.
+   * Stable catalog interpolation data. For invalid_amount issues `cause`
+   * carries the decimalNullCause discriminant and `expected`/`detail` its
+   * remedy tokens (rewrite, separator/symbol, or counts); `actual` always
+   * carries the raw supplied value. The review drawer renders these through
+   * the active locale catalog.
+   */
+  cause?: string;
+  detail?: string;
+  /**
+   * The operator-facing refusal naming the remedy, in server English. Kept
+   * for non-UI consumers and as the fallback for codes (or causes) a client
+   * bundle does not know yet; the review drawer prefers its catalog text.
    */
   message?: string;
 };
@@ -250,13 +259,28 @@ function isCanonicalMoney(value: string): boolean {
 }
 
 function invalidMoneyIssue(fieldLabel: string, noun: string, raw: string, extra: Partial<CaptureIssue> = {}): CaptureIssue {
+  const cause = decimalNullCause(raw);
   return {
     code: "invalid_amount",
     severity: "blocking",
     actual: raw,
+    cause: cause.cause,
+    ...causeRemedyTokens(cause),
     message: decimalNullRefusal(fieldLabel, noun, raw, 4),
     ...extra,
   };
+}
+
+/** Catalog remedy tokens for one decimal refusal, keyed by its cause. */
+function causeRemedyTokens(cause: DecimalNullCause): Partial<CaptureIssue> {
+  switch (cause.cause) {
+    case "scale": return { expected: String(cause.decimals), detail: "4" };
+    case "separator": return { expected: cause.separator };
+    case "decimal-comma": return { expected: cause.dotted };
+    case "ambiguous-comma": return { expected: cause.grouped, detail: cause.dotted };
+    case "currency": return { expected: cause.symbol };
+    default: return {};
+  }
 }
 
 function normalizeLine(item: AzureField, index: number, evidence: CaptureEvidence[]): CaptureLine | null {

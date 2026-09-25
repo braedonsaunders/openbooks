@@ -279,6 +279,43 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
     }
   }
 
+  /**
+   * Localized label for an issue's engine field id, for interpolation into
+   * catalog issue text. Line-amount fields reuse the lines column headers;
+   * header fields reuse the form labels; anything unknown stays an id.
+   */
+  const issueFieldLabel = (field?: string): string => {
+    if (!field) return ''
+    const lineKey = `lines.${field === 'taxAmount' ? 'tax' : field}`
+    if (t.has(lineKey)) return t(lineKey)
+    if (t.has(`fields.${field}`)) return t(`fields.${field}`)
+    return field
+  }
+  /**
+   * Stable issue codes render through the active locale catalog with the
+   * server-supplied interpolation data (line, expected/actual, decimal cause
+   * tokens); the raw supplied value stays visible as {actual} so a decimal
+   * refusal names exactly what the operator typed. The server English
+   * message is the fallback for codes or causes this bundle does not know.
+   */
+  const issueText = (value: CaptureIssue): string => {
+    const line = (value.lineIndex ?? 0) + 1
+    const params = { line, expected: value.expected ?? '', actual: value.actual ?? '' }
+    if (value.code === 'invalid_amount' && value.cause) {
+      const key = `issues.invalid_amount_${value.cause.replace(/-/g, '_')}`
+      if (t.has(key)) {
+        return t(key, {
+          ...params,
+          detail: value.detail ?? '',
+          field: issueFieldLabel(value.field),
+          noun: value.field === 'quantity' ? t('issues.nounQuantity') : t('issues.nounAmount'),
+        })
+      }
+    } else if (t.has(`issues.${value.code}`)) {
+      return t(`issues.${value.code}`, params)
+    }
+    return value.message ?? t(`issues.${value.code}`, params)
+  }
   const confidence = (fieldKey: string, lineIndex: number | null = null) => {
     const fieldEvidence = evidence.get(`${fieldKey}:${lineIndex ?? ''}`)
     const value = fieldEvidence?.confidence
@@ -322,7 +359,7 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
         <section className="app-scroll min-h-0 overflow-y-auto p-4 sm:p-5">
           {['queued', 'extracting'].includes(status) ? <div className="flex h-full min-h-72 items-center justify-center gap-3 text-slate-500"><Loader2 className="animate-spin" />{t('processing')}</div> : status === 'failed' ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{t('processingFailed')}</div> : (
             <div className="space-y-5">
-              {issues.length ? <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">{issues.map((value, index) => <div key={`${value.code}-${value.lineIndex ?? ''}-${index}`} className="flex items-start gap-2 text-sm text-amber-900 dark:text-amber-200"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>{value.message ?? t(`issues.${value.code}`, { line: (value.lineIndex ?? 0) + 1, expected: value.expected ?? '', actual: value.actual ?? '' })}</span></div>)}</div> : null}
+              {issues.length ? <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">{issues.map((value, index) => <div key={`${value.code}-${value.lineIndex ?? ''}-${index}`} className="flex items-start gap-2 text-sm text-amber-900 dark:text-amber-200"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>{issueText(value)}</span></div>)}</div> : null}
               {initial.document_id ? <Button variant="outline" asChild><Link href={`/ap/bills?doc=${initial.document_id}`}>{t('openDraft')}</Link></Button> : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label={t('fields.kind')}>{editable ? <Select value={documentKind} onChange={(event) => { setDocumentKind(event.target.value === 'vendor_credit' ? 'vendor_credit' : 'vendor_bill'); markEdited() }}><option value="vendor_bill">{t('bill')}</option><option value="vendor_credit">{t('credit')}</option></Select> : <ReadOnlyValue value={documentKind === 'vendor_credit' ? t('credit') : t('bill')} />}</Field>
