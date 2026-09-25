@@ -279,6 +279,20 @@ export async function computeAuStatutory(
       + "legislation before calculating",
     );
   }
+  // Schedule 5 is not transcribed, and the Schedule 1 engine below prices
+  // the periodic leg only — so a taxable one-off (bonus, back-pay) would be
+  // paid with no withholding at all. Refuse it by name instead (see
+  // AU_REFUSED_2027), the same shape as the NL pack's bijzondere-beloningen
+  // refusal.
+  const oneOff = ctx.nonPeriodic ?? "";
+  if (oneOff !== "" && toUnits(oneOff) > 0n) {
+    throw new PayrollPackError(
+      `AU PAYG withholding on a non-periodic one-off of $${oneOff} is refused by name: bonuses and `
+      + "back payments withhold under ATO Schedule 5 (averaging and rebate), which the pack does "
+      + "not transcribe — see AU_REFUSED_2027. Pay the one-off through payroll software that "
+      + "prices Schedule 5; do not run it here unwithheld",
+    );
+  }
   const tfn = certificateFor("au_tfn_declaration");
   const answers = tfn?.answers ?? {};
   const residency = answers["residency"] ?? "australian_resident";

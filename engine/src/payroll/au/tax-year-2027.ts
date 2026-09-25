@@ -221,6 +221,7 @@ export const AU_REFUSED_2027: readonly string[] = [
   "Medicare levy adjustment (WLA) and Withholding-declaration tax offsets (neither declaration is carried, so both adjustments are nil by the instrument's own conditions)",
   "ATO Schedule 15 working-holiday-maker withholding (the y = ax formula turns on registered-employer status and year-to-date payments the pack cannot see)",
   "ATO Schedules 2, 3, 4, 6, 7, 9, 10, 11, 12, 13 and 14 (horticultural/shearing, actors and entertainers, return to work, annuities, unused leave on termination, seniors and pensioners, voluntary agreements, employment termination payments, superannuation lump sums, superannuation income streams, additional withholding agreements)",
+  "ATO Schedule 5 back payments and lump sums in arrears (averaging and rebate method the pack does not compute — any taxable non-periodic one-off refuses by name instead of pricing through Schedule 1)",
   "Medicare levy surcharge tiers 1–3 (thresholds live in the Private Health Insurance Act 2007 and liability turns on daily private patient hospital cover the pack cannot see)",
   "Medicare levy family reduction s8 (needs spouse income and dependant counts not on the TFN declaration)",
   "Medicare levy section-160AAAA rebate thresholds (no such question on the TFN declaration)",
