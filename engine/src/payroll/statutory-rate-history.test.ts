@@ -19,6 +19,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { seedHiredEmployee } from "./filing-test-fixtures.ts";
 
 /**
  * Statutory rate HISTORY (0183).
@@ -224,25 +225,14 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`);
 
-  const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${employeeId}, ${org.orgId}, 'person', 'Harriet History', true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, '2020-01-06', true, ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
-                                  is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2020-01-01', true,
-            ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
-            '4', 'accrue', true, ${actorId}, ${actorId})`);
+  const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
+    scheduleId, subsidiaryId: org.subsidiaryId, name: "Harriet History", country: "CA",
+    province: "ON", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
+    rateEffectiveFrom: "2020-01-01", federalClaimCode: 1, provincialClaimCode: 1,
+    vacationPercent: "4", vacationMethod: "accrue", hiredOn: "2020-01-06",
+    timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
+      .map((workedOn) => ({ workedOn })),
+  });
 
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
@@ -250,13 +240,6 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
     values: { rate: "1.95", annualExemption: "1000" },
   });
 
-  for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
-    await db.execute(sql`
-      insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
-                                billing_status, costing_basis, created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${workedOn}, 20, 'approved', false,
-              'unbilled', 'actual', ${actorId}, ${actorId})`);
-  }
   const payDate = "2026-07-21";
   const run = await createPayRun({
     orgId: org.orgId, actorId, payScheduleId: scheduleId,

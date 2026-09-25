@@ -7,6 +7,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -25,6 +26,8 @@ test("a stale assignment under a prior employment is not paid twice", { skip: !D
       features: { payroll: true },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
+  // The ON hire calculates, so its EHT leg needs the rate (never asserted here).
+  await seedOntarioEhtFixture(org.orgId, actorId);
 
   const employeeId = randomUUID();
   const scheduleId = randomUUID();

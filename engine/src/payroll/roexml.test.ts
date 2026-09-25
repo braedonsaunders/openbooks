@@ -7,7 +7,7 @@ import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { buildRoeXml, isRoeReasonCode, renderRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
 import { sealSecret } from "../platform/secrets.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import type { RoeRecord } from "./yearend.ts";
 
 /**
@@ -162,6 +162,7 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
       values (${employeeId}, ${org.orgId}, 'person', 'Grace Hopper', true, ${org.subsidiaryId}, '{}'::jsonb)`);
+    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active, created_by, updated_by)
@@ -187,12 +188,21 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18', '2026-07-21',
               2026, 'committed', now(), ${actorId}, ${actorId})`);
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
-                             periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                             pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, 'ON', 26, '2026-07-21',
-              2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '2000.0000',
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+                             province, periods_per_year, pay_date, tax_year, currency_code, gross,
+                             net_pay, pensionable_earnings, insurable_earnings, factors, created_by,
+                             updated_by)
+      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON',
+              26, '2026-07-21', 2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '2000.0000',
               '{}'::jsonb, ${actorId}, ${actorId})`);
+
+    // Confirmed separation facts: the ROE refuses by name without them.
+    await db.execute(sql`
+      insert into payroll_roe_separation_events
+        (id, org_id, employee_party_id, interruption_on, last_insurable_earnings_on,
+         salary_continuance_end_on, status, change_reason)
+      values (${randomUUID()}, ${org.orgId}, ${employeeId}, '2026-07-22', '2026-07-21',
+              null, 'confirmed', 'fixture separation')`);
 
     // 13:00Z on Jun 15 is already Jun 16 in Auckland. UTC today and wall-clock
     // today must not leak into a Service Canada upload filename.

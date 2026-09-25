@@ -1242,6 +1242,18 @@ test(
         insert into document_lines (org_id, document_id, line_number, account_id, description, amount)
         values (${fixture.org.orgId}, ${entityless.runDocumentId}, 1, ${fixture.org.accounts.cogs}, 'Wages', '5.00'),
                (${fixture.org.orgId}, ${entityless.runDocumentId}, 2, ${fixture.liabilityAccountId}, 'Withholding', '-5.00')`);
+      // The whole entry already books into a second entity: the document is
+      // scoped there BEFORE posting, so the posted lines name it through the
+      // governed path — never by rewriting posted history. Moving the run
+      // would silently rewrite live books elsewhere.
+      const second = (await db.execute<{ id: string }>(sql`
+        insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+        select org_id, id, 'Second entity', base_currency, country
+          from subsidiaries where org_id = ${fixture.org.orgId} limit 1
+        returning id::text as id`)).rows[0]!;
+      await db.execute(sql`
+        update documents set subsidiary_id = ${second.id}
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`);
       await submitAndReleaseIfUngated("pay_run", entityless.runDocumentId, fixture.actorId);
       await postDocument(entityless.runDocumentId, {
         control: {
@@ -1250,27 +1262,12 @@ test(
           bank: fixture.org.accounts.bank,
         },
       });
-      // The whole posted entry already books into a second entity: moving
-      // the run would silently rewrite live books elsewhere. The full entry
-      // moves together (a single leg alone would unbalance both entities).
-      const second = (await db.execute<{ id: string }>(sql`
-        insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-        select org_id, id, 'Second entity', base_currency, country
-          from subsidiaries where org_id = ${fixture.org.orgId} limit 1
-        returning id::text as id`)).rows[0]!;
-      // A direct-DB divergence, so it runs through the governed amend path
-      // an out-of-band writer would have needed — the point is what the
-      // attribution refuses, not how the divergence got there.
-      await db.transaction(async (tx) => {
-        await tx.execute(sql`set local openbooks.amend = on`);
-        await tx.execute(sql`
-          update journal_lines l set subsidiary_id = ${second.id}
-            from journal_entries e
-           where l.entry_id = e.id and l.org_id = e.org_id
-             and l.org_id = ${fixture.org.orgId}
-             and e.source_document_id = ${entityless.runDocumentId}
-             and e.status = 'posted'`);
-      });
+      // Reset only the header to the unattributed state: the posted BOOKS
+      // keep naming the second entity (no posted row is rewritten), which is
+      // exactly the legacy divergence under test.
+      await db.execute(sql`
+        update documents set subsidiary_id = null
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`);
       await assert.rejects(
         attributePayRunEntity({
           orgId: fixture.org.orgId, documentId: entityless.runDocumentId,

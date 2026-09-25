@@ -92,7 +92,7 @@ async function seedPaidVacationBeforeCanadaDay(options: {
       // Day-resolved like the engine's own producers emit: the $900 June
       // week counts its 5 weekdays as earned days in the lookback.
       for (const [day, amount] of [["2026-06-01", "180.00"], ["2026-06-02", "180.00"],
-           ["2026-06-03", "180.00"], ["2026-06-04", "180.00"], ["2026-06-05", "180.00"]]) {
+           ["2026-06-03", "180.00"], ["2026-06-04", "180.00"], ["2026-06-05", "180.00"]] as const) {
         await insertLine(amount, day, day);
       }
     } else await insertLine("2000.00", null, null);
