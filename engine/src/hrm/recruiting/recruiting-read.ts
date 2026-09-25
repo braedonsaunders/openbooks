@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
-import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import {
   actorHoldsRecruitingRead,
   actorOnInterviewPanel,
@@ -703,9 +703,10 @@ export async function loadRecruitingOverview(query: LoadRecruitingOverviewQuery)
   } catch {
     return null;
   }
-  const scope = allowed
-    ? sql`and r.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`
-    : sql``;
+  // An explicitly empty allowlist is a valid scope that sees nothing: the
+  // shared filter renders it as an always-false predicate instead of an
+  // empty IN () list, which PostgreSQL rejects as a syntax error.
+  const scope = subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed);
   const today = await businessToday(orgId);
   const open = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_requisitions r
