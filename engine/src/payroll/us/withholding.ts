@@ -55,6 +55,7 @@ import { PayrollError } from "../error.ts";
 import type { PayrollTaxBases } from "../packs.ts";
 import { D, mulRateCents, rate6, U } from "../canada/decimal.ts";
 import type { UsSupplementalWageAmount, UsSupplementalWageCategory } from "../supplemental-wages.ts";
+import type { UsStatutoryExemptionAmount } from "../statutory-exemptions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES, ratesForPayDate } from "./rates.ts";
 import {
   miCityWithholding,
@@ -433,6 +434,8 @@ export interface UsWithholdingInput {
   supplemental?: string;
   /** Per-category taxable supplemental amounts, sourced from earning components. */
   supplementalWageAmounts?: readonly UsSupplementalWageAmount[];
+  /** Per-class federally exempt earning amounts, sourced from earning components. */
+  statutoryExemptionAmounts?: readonly UsStatutoryExemptionAmount[];
   /** Whether supplemental wages were paid with regular wages or separately. */
   supplementalPaymentTiming?: "combined" | "separate";
   /** Committed same-year regular-wage withholding history for conditional flat methods. */
@@ -767,6 +770,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         residentWithholdingFacts,
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
+        statutoryExemptionAmounts: input.statutoryExemptionAmounts,
         ytd: input.ytd,
       });
       return {
@@ -901,6 +905,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         residentWithholdingFacts,
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
+        statutoryExemptionAmounts: input.statutoryExemptionAmounts,
         ytd: input.ytd,
       };
       const regular = engine.compute({ ...aggregateBase, wages: input.wages });
@@ -947,6 +952,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         residentWithholdingFacts,
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
+        statutoryExemptionAmounts: input.statutoryExemptionAmounts,
         ytd: input.ytd,
       });
       const rawSupplementalTax = separateCategoryAmounts
@@ -1026,6 +1032,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         residentWithholdingFacts,
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
+        statutoryExemptionAmounts: input.statutoryExemptionAmounts,
         ytd: input.ytd,
       });
       const exempt = combinedFlatHonorsCertificateExemption
@@ -1071,6 +1078,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       residentWithholdingFacts,
       regionTax: input.regionTax,
       socialInsuranceDeducted: input.socialInsuranceDeducted,
+      statutoryExemptionAmounts: input.statutoryExemptionAmounts,
       ytd: input.ytd,
     });
     // Guide-prescribed work-region schedule: a Maryland resident working
@@ -1180,6 +1188,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         residentWithholdingFacts,
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
+        statutoryExemptionAmounts: input.statutoryExemptionAmounts,
         ytd: input.ytd,
         detroitOtherCities,
       });

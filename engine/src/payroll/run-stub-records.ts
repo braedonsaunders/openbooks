@@ -16,6 +16,7 @@ import { planMovementsForStub, recordEntitlementMovements } from "./entitlements
 import { type EarningsAssessedLine } from "./limits.ts";
 import { divideMoney } from "./run-allocation.ts";
 import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
+import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
 /**
  * One line of a stub under construction — earnings, deductions, and employer
  * contributions alike, in the order phases append them. Hoisted to module
@@ -84,6 +85,8 @@ export interface Line {
   programApplicability?: Record<string, boolean>;
   vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
+  /** Federal exemption class once the earning-component classification lands; absent until then. */
+  statutoryExemptionCategory?: UsStatutoryExemptionCategory | null;
   statutoryReportingCategory?: string | null;
   statutoryReportingCode?: { formCode: string; boxCode: string; code: string; label: string } | null;
   accrualOnly?: boolean;

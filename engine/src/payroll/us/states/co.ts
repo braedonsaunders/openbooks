@@ -185,7 +185,25 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
+  // Federal carrier preemptions exclude qualifying pay from NONRESIDENT
+  // Colorado wages only: 49 USC 11502 (rail) and 14503 (motor) exempt
+  // regularly assigned multistate carrier pay outright. (Air-carrier pay
+  // rides the us_co_air_carrier attestation above, never this path.) A
+  // Colorado resident's carrier pay stays taxable here. Only affirmatively
+  // classified component dollars are excluded — unclassified pay is ordinary
+  // wages, never assumed exempt.
+  const exemptionAmount = (...classes: readonly string[]): bigint =>
+    (input.statutoryExemptionAmounts ?? [])
+      .filter((item) => item.category !== null && classes.includes(item.category))
+      .reduce((total, item) => total + U(item.amount), 0n);
   let wages = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    const carrierExempt = exemptionAmount("rail_carrier", "motor_carrier");
+    if (carrierExempt > 0n) {
+      wages -= carrierExempt;
+      trace("CO_EXEMPT_CARRIER_WAGES", carrierExempt);
+    }
+  }
   if (input.basis === "nonresident") {
     const allocation = requireUsWageAllocation(input.wageAllocations, "CO", null);
     wages = mulRateCents(wages, allocation.workShare);
@@ -246,6 +264,7 @@ export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CO_FAMLI_EMPLOYEE: "Colorado FAMLI employee premium",
   CO_FAMLI_EMPLOYER: "Colorado FAMLI employer contribution",
   CO_AIR_CARRIER_EXEMPT: "Colorado air-carrier wages exempt under 49 U.S.C. §40116(f) (≤50% earned in Colorado)",
+  CO_EXEMPT_CARRIER_WAGES: "Colorado federally exempt nonresident rail/motor carrier wages",
   CO_NONRESIDENT_WAGES: "Colorado apportioned nonresident wages",
   CO_ANNUAL_WAGES: "Colorado annualized wages",
   CO_ANNUAL_ALLOWANCE: "Colorado annual allowance",

@@ -267,7 +267,7 @@ export async function computeUsStatutory(
   const {
     tx, orgId, documentId, employeePartyId, employeeName, taxYear, country, region,
     run, emp, filingAccountId, periodsPerYear: P, income, nonPeriodic, pensionable,
-    supplementalWageAmounts,
+    supplementalWageAmounts, statutoryExemptionAmounts,
     insurable, employerEmployeeCount, reducedBases, pushStatutory, storedCertificates, certificateFor, bool,
     assertRegionSupported,
   } = ctx;
@@ -535,6 +535,7 @@ export async function computeUsStatutory(
       federalAdditionalPerPeriod,
       supplemental: nonPeriodic,
       supplementalWageAmounts,
+      statutoryExemptionAmounts,
       supplementalPaymentTiming,
       regularWageTaxWithheldThisYear: ytd.regularWageTaxWithheldThisYear,
       regularWageTaxWithheldFor: ytd.regularWageTaxWithheldKeys,

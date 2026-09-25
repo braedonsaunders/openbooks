@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
+import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
 import { add, cmp, mulRatio, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
 import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
@@ -510,6 +511,7 @@ export async function calculateStub(
       workAllocations,
       income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,
       supplementalWageAmounts: aggregateUsSupplementalWageAmounts(lines),
+      statutoryExemptionAmounts: aggregateUsStatutoryExemptionAmounts(lines),
       programBases,
       reducedBases: reducedBases(),
       deduction,
