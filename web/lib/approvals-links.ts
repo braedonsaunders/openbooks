@@ -33,6 +33,10 @@ const ORDER_HREF: Record<string, (id: string) => string> = {
   // — the engine adapter lands on the hub for the same reason, and so
   // does this resolver rather than a second, party-less drawer.
   party_bank_account: () => `/inbox`,
+  // Migration mapping sets pin a CLI-side file by digest, not a module
+  // record — the engine adapter lands on the hub for the same reason,
+  // and so does this resolver rather than a second, digest-less drawer.
+  hrm_employment_migration_mapping: () => `/inbox`,
 }
 
 /**

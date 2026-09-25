@@ -49,7 +49,10 @@
  *   native party id. They attach as resolution evidence with
  *   kind operator-employer-date-mapping; the classifier judges completeness.
  *   A mapping naming a party this run did not collect is refused, never
- *   silently dropped.
+ *   silently dropped. A mapping naming an approval gate has that gate
+ *   re-resolved from flow_gates in this same transaction (see
+ *   ./migration-approval.ts): caller-claimed snapshots are overwritten,
+ *   never trusted.
  * - existingBinding is always null: the executor rebuilds idempotency
  *   bindings from stored employment_changes evidence itself, and a caller
  *   binding that diverges from stored evidence throws there.
@@ -65,6 +68,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { resolveMappingApprovalSnapshots } from "./migration-approval.ts";
 import type {
   EmployerInventory,
   ObservationEvidence,
@@ -117,15 +121,25 @@ export function assertScheduleObservable(
   );
 }
 
-/** One operator employer/date override, keyed by native party id. */
+/**
+ * One operator employer/date override, keyed by native party id.
+ *
+ * Free-text approvedBy/approvedAt/rationale are non-authoritative record
+ * context only: a mapping is applicable only under a verified Flows
+ * approval named by approvalGateId (see ./migration-approval.ts; the subject
+ * kind lives in @openbooks/schema/src/hrm.ts). The collector re-resolves
+ * that gate from the
+ * database inside its own transaction before attaching it.
+ */
 export interface OperatorEmploymentMapping {
   readonly partyId: string;
   readonly employerSubsidiaryId: string | null;
   readonly hiredOn: string | null;
   readonly terminatedOn: string | null;
-  readonly approvedBy: string;
-  readonly approvedAt: string;
-  readonly rationale: string;
+  readonly approvedBy?: string;
+  readonly approvedAt?: string;
+  readonly rationale?: string;
+  readonly approvalGateId?: string;
 }
 
 export interface CollectLegacyEmploymentsOptions {
@@ -357,7 +371,16 @@ export async function collectLegacyEmployments(
         );
       }
     }
-    return { orgId, rows, evidenceHash: hashCollectedInput(rows) };
+    // Authority is re-resolved here, inside the collection transaction:
+    // any approval snapshot the caller claims is overwritten with the
+    // stored truth (or an explicit null), so forged authority never flows
+    // downstream. Status, decider, and digest verdicts belong to the
+    // classifier's report; unobservable gates throw here.
+    let resolved = rows;
+    if (rows.some((row) => (row.resolution?.approvalGateId ?? "") !== "")) {
+      resolved = await resolveMappingApprovalSnapshots(orgId, rows);
+    }
+    return { orgId, rows: resolved, evidenceHash: hashCollectedInput(resolved) };
   });
 }
 
@@ -550,9 +573,12 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
       employerSubsidiaryId: input.mapping.employerSubsidiaryId,
       hiredOn: input.mapping.hiredOn,
       terminatedOn: input.mapping.terminatedOn,
-      approvedBy: input.mapping.approvedBy,
-      approvedAt: input.mapping.approvedAt,
-      rationale: input.mapping.rationale,
+      approvedBy: input.mapping.approvedBy ?? "",
+      approvedAt: input.mapping.approvedAt ?? "",
+      rationale: input.mapping.rationale ?? "",
+      approvalGateId: input.mapping.approvalGateId ?? "",
+      // Authority is re-resolved from flow_gates below, never accepted here.
+      approval: null,
     };
   }
 

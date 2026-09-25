@@ -2,15 +2,60 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   fingerprintSourceRow,
+  hashOperatorMappingSet,
   preflightEmploymentMigration,
   type PreflightReport,
+  type ResolutionEvidence,
   type SourcePersonRow,
 } from "./migration-preflight.ts";
+import { HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND } from "@openbooks/schema/src/hrm.ts";
 
 const ORG = "org-test-001";
 const NS = "legacy-extract";
 const SUB_A = "sub-active-001";
 const SUB_B = "sub-active-002";
+
+// Flows approval fixture: the gate the mapping claims, decided by an
+// authenticated approver distinct from the applier, over exactly the
+// fixture's mapping set (digest computed with the real function, never
+// hand-pinned). Free text alone never authorizes — every ready-via-mapping
+// test below carries this snapshot plus { appliedBy: APPLIER }.
+const GATE_ID = "11111111-1111-4111-8111-111111111111";
+const APPROVER = "approver-1";
+const APPLIER = "applier-9";
+
+function approvedResolution(
+  overrides: {
+    employerSubsidiaryId?: string | null;
+    hiredOn?: string | null;
+    terminatedOn?: string | null;
+  } = {},
+  decidedBy: string = APPROVER,
+): ResolutionEvidence {
+  const entry = {
+    partyId: "party-001",
+    employerSubsidiaryId: overrides.employerSubsidiaryId ?? null,
+    hiredOn: overrides.hiredOn ?? null,
+    terminatedOn: overrides.terminatedOn ?? null,
+  };
+  return {
+    kind: "operator-employer-date-mapping",
+    employerSubsidiaryId: entry.employerSubsidiaryId,
+    hiredOn: entry.hiredOn,
+    terminatedOn: entry.terminatedOn,
+    approvedBy: "op-7",
+    approvedAt: "2026-09-10T12:00:00Z",
+    rationale: "transfer letter filed",
+    approvalGateId: GATE_ID,
+    approval: {
+      gateId: GATE_ID,
+      status: "approved",
+      decidedBy,
+      subjectKind: HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND,
+      subjectDigest: hashOperatorMappingSet([entry]),
+    },
+  };
+}
 
 function facts() {
   return [
@@ -66,6 +111,11 @@ function onlyRow(report: PreflightReport) {
   return report.rows[0]!;
 }
 
+/** Single-row preflight as the CLI applies it: every mapping row carries the applier. */
+function runOne(row: SourcePersonRow): ReturnType<typeof onlyRow> {
+  return onlyRow(preflightEmploymentMigration([row], { appliedBy: APPLIER }));
+}
+
 test("ready via role service dates with valid employer; candidate null without observation", () => {
   const row = onlyRow(preflightEmploymentMigration([baseRow()]));
   assert.equal(row.classification, "ready");
@@ -109,21 +159,11 @@ test("unknown employer refuses; null subsidiary is UNKNOWN never org root", () =
 });
 
 test("operator mapping resolves unknown employer to ready", () => {
-  const row = onlyRow(
-    preflightEmploymentMigration([
-      baseRow({
-        employer: { ...baseRow().employer, assertedSubsidiaryId: null },
-        resolution: {
-          kind: "operator-employer-date-mapping",
-          employerSubsidiaryId: SUB_A,
-          hiredOn: null,
-          terminatedOn: null,
-          approvedBy: "op-7",
-          approvedAt: "2026-09-10T12:00:00Z",
-          rationale: "transfer letter filed",
-        },
-      }),
-    ]),
+  const row = runOne(
+    baseRow({
+      employer: { ...baseRow().employer, assertedSubsidiaryId: null },
+      resolution: approvedResolution({ employerSubsidiaryId: SUB_A }),
+    }),
   );
   assert.equal(row.classification, "ready");
 });
@@ -565,23 +605,13 @@ test("terminated observation without a termination date needs review with or wit
 });
 
 test("role-less terminated observation with a mapped termination date readies", () => {
-  const row = onlyRow(
-    preflightEmploymentMigration([
-      baseRow({
-        role: null,
-        payroll: null,
-        observation: { status: "terminated", observedAt: "2026-08-15T00:00:00Z", provenance: "op-9" },
-        resolution: {
-          kind: "operator-employer-date-mapping",
-          employerSubsidiaryId: null,
-          hiredOn: null,
-          terminatedOn: "2026-08-10",
-          approvedBy: "op-7",
-          approvedAt: "2026-09-10T12:00:00Z",
-          rationale: "release record",
-        },
-      }),
-    ]),
+  const row = runOne(
+    baseRow({
+      role: null,
+      payroll: null,
+      observation: { status: "terminated", observedAt: "2026-08-15T00:00:00Z", provenance: "op-9" },
+      resolution: approvedResolution({ terminatedOn: "2026-08-10" }),
+    }),
   );
   assert.equal(row.classification, "ready");
   assert.equal(row.historicalCoverage, "unknown");
@@ -669,20 +699,10 @@ test("blocked rows with observations emit no candidate", () => {
 });
 
 test("source-versus-mapping date conflict refuses instead of preferring a side", () => {
-  const row = onlyRow(
-    preflightEmploymentMigration([
-      baseRow({
-        resolution: {
-          kind: "operator-employer-date-mapping",
-          employerSubsidiaryId: null,
-          hiredOn: "2021-01-05",
-          terminatedOn: null,
-          approvedBy: "op-7",
-          approvedAt: "2026-09-10T12:00:00Z",
-          rationale: "signed offer letter",
-        },
-      }),
-    ]),
+  const row = runOne(
+    baseRow({
+      resolution: approvedResolution({ hiredOn: "2021-01-05" }),
+    }),
   );
   assert.equal(row.classification, "ambiguous");
   assert.ok(row.issues.some((issue) => issue.code === "conflicting_service_dates"));
@@ -690,21 +710,11 @@ test("source-versus-mapping date conflict refuses instead of preferring a side",
 });
 
 test("mapped terminated_on is consumed: mapped end before source start contradicts", () => {
-  const row = onlyRow(
-    preflightEmploymentMigration([
-      baseRow({
-        role: { ...baseRow().role!, hiredOn: "2022-03-14", terminatedOn: null },
-        resolution: {
-          kind: "operator-employer-date-mapping",
-          employerSubsidiaryId: null,
-          hiredOn: null,
-          terminatedOn: "2021-12-31",
-          approvedBy: "op-7",
-          approvedAt: "2026-09-10T12:00:00Z",
-          rationale: "release record",
-        },
-      }),
-    ]),
+  const row = runOne(
+    baseRow({
+      role: { ...baseRow().role!, hiredOn: "2022-03-14", terminatedOn: null },
+      resolution: approvedResolution({ terminatedOn: "2021-12-31" }),
+    }),
   );
   assert.equal(row.classification, "ambiguous");
   assert.ok(row.issues.some((issue) => issue.code === "contradictory_service_dates"));
@@ -838,24 +848,13 @@ test("whitespace-only hire-date provenance needs review instead of anchoring his
 });
 
 test("mapped service dates are preserved without a role", () => {
-  const mapping = {
-    kind: "operator-employer-date-mapping",
-    employerSubsidiaryId: null,
-    hiredOn: "2022-01-01",
-    terminatedOn: null,
-    approvedBy: "op-7",
-    approvedAt: "2026-09-10T12:00:00Z",
-    rationale: "signed offer letter",
-  } as const;
-  const bare = onlyRow(
-    preflightEmploymentMigration([
-      baseRow({
-        role: null,
-        payroll: null,
-        observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "op-1" },
-        resolution: { ...mapping },
-      }),
-    ]),
+  const bare = runOne(
+    baseRow({
+      role: null,
+      payroll: null,
+      observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "op-1" },
+      resolution: approvedResolution({ hiredOn: "2022-01-01" }),
+    }),
   );
   assert.equal(bare.classification, "ready");
   assert.equal(bare.serviceStart, "2022-01-01");
@@ -863,14 +862,12 @@ test("mapped service dates are preserved without a role", () => {
   assert.equal(bare.candidate?.serviceStart, "2022-01-01");
   assert.equal(bare.historicalCoverage, "unknown");
 
-  const withPayroll = onlyRow(
-    preflightEmploymentMigration([
-      baseRow({
-        role: null,
-        observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "op-1" },
-        resolution: { ...mapping },
-      }),
-    ]),
+  const withPayroll = runOne(
+    baseRow({
+      role: null,
+      observation: { status: "active", observedAt: "2026-09-01T00:00:00Z", provenance: "op-1" },
+      resolution: approvedResolution({ hiredOn: "2022-01-01" }),
+    }),
   );
   assert.equal(withPayroll.classification, "ready");
   assert.equal(withPayroll.serviceStart, "2022-01-01");
