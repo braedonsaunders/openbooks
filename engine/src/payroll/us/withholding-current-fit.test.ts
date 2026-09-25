@@ -323,6 +323,22 @@ test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () =>
   assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0625')
 })
 
+test('Missouri separately paid bonus uses 4.7% while regular withholding is in effect', () => {
+  // Missouri DOR Form 4282 (Rev. 03-2026), §7.A: https://dor.mo.gov/forms/4282_2026.pdf
+  const result = computeUsWithholding({
+    levy: levy('MO', 'us_mo_mow4'),
+    payDate: '2026-03-15', periodEnd: PERIOD_END, periodsPerYear: 24,
+    wages: '0.0000', supplemental: '1000.0000',
+    supplementalPaymentTiming: 'separate',
+    regularWageTaxWithheldThisYear: true,
+    certificateFor: () => certificate('us_mo_mow4', { filing_status: 'single' }),
+    tenantRates: () => undefined, federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0])
+  assert.equal(result?.tax, '47.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.047')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '47.0000')
+})
+
 test('Montana separately paid supplemental wages use the guide’s 5% option', () => {
   // Montana Employer and Information Agent Guide with Tax Tables – 2026, p. 3
   // allows a separately paid supplemental to be withheld at 5% of that wage.
