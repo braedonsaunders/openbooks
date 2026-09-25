@@ -243,6 +243,17 @@ test("a template with no scale labels offers no potential options", async () => 
       insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
       values (${h.org.orgId}, 'Labelless', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
       returning id`)).rows[0]!.id;
+    // openCycle requires a required question on the template; a text
+    // question keeps the scale label-less, which is what this test probes.
+    const labellessSection = (await db.execute<{ id: string }>(sql`
+      insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
+      values (${h.org.orgId}, ${templateId}, 0, 'Notes', 'competency', ${h.hrId}, ${h.hrId})
+      returning id`)).rows[0]!.id;
+    await db.execute(sql`
+      insert into hrm_review_template_questions
+        (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
+      values (${h.org.orgId}, ${labellessSection}, 0, 'General notes', 'text', true, ${h.hrId}, ${h.hrId})
+    `);
     const cycle = await createCycle({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -251,6 +262,9 @@ test("a template with no scale labels offers no potential options", async () => 
       periodStartOn: "2026-01-01",
       periodEndOn: "2026-12-31",
     });
+    // I3-people-114 requires a live cycle for calibration sessions: the
+    // label-less probe runs on an opened cycle, as the editor would.
+    await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const session = await createCalibrationSession({
       orgId: h.org.orgId,
       actorId: h.hrId,
