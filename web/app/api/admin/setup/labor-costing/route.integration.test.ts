@@ -311,6 +311,16 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
     const afterAudit = Number((await db.execute(sql`
       select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
     assert.equal(afterAudit, beforeAudit);
+
+    // I1-refix-89: a department-anchored rate ends for its own restricted setup actor.
+    const departmentId = (await db.execute<{ id: string }>(sql`
+      insert into departments (org_id, name, is_active, subsidiary_id)
+      values (${f.orgId}, 'Field crew', true, ${f.subsidiaryId}) returning id`)).rows[0]!.id;
+    const departmentCreated = await POST(postRequest(saveRateBody({ departmentId, rate: 140 })));
+    assert.equal(departmentCreated.status, 200);
+    const departmentRateId = (await storedRates(f.orgId)).find((rate) => rate.rate === "140.0000")!.id;
+    const departmentEnd = await POST(postRequest({ action: "end-rate", id: departmentRateId, effectiveTo: "2026-06-30" }));
+    assert.equal(departmentEnd.status, 200, "end-rate admits the department subsidiary save-rate admits");
   } finally {
     routeState.authz = null;
     const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
