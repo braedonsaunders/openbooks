@@ -34,6 +34,26 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
   const [testing, setTesting] = useState(false)
 
   const spec = useMemo(() => EMAIL_PROVIDER_SPECS.find((s) => s.value === v.provider), [v.provider])
+  const providerCopy = {
+    resend: { label: t('email.providers.resend.label'), secretLabel: t('email.providers.resend.secretLabel'), keyHint: t('email.providers.resend.keyHint') },
+    sendgrid: { label: t('email.providers.sendgrid.label'), secretLabel: t('email.providers.sendgrid.secretLabel'), keyHint: t('email.providers.sendgrid.keyHint') },
+    mailgun: { label: t('email.providers.mailgun.label'), secretLabel: t('email.providers.mailgun.secretLabel'), keyHint: t('email.providers.mailgun.keyHint') },
+    postmark: { label: t('email.providers.postmark.label'), secretLabel: t('email.providers.postmark.secretLabel'), keyHint: t('email.providers.postmark.keyHint') },
+    smtp: { label: t('email.providers.smtp.label'), secretLabel: t('email.providers.smtp.secretLabel'), keyHint: t('email.providers.smtp.keyHint'), docsHint: t('email.providers.smtp.docsHint') },
+  }
+  const fieldCopy = {
+    mailgunDomain: { label: t('email.providers.fields.mailgunDomain.label'), placeholder: t('email.providers.fields.mailgunDomain.placeholder') },
+    mailgunRegion: { label: t('email.providers.fields.mailgunRegion.label') },
+    smtpHost: { label: t('email.providers.fields.smtpHost.label'), placeholder: t('email.providers.fields.smtpHost.placeholder'), help: t('email.providers.fields.smtpHost.help') },
+    smtpPort: { label: t('email.providers.fields.smtpPort.label'), placeholder: t('email.providers.fields.smtpPort.placeholder'), help: t('email.providers.fields.smtpPort.help') },
+    smtpSecure: { label: t('email.providers.fields.smtpSecure.label') },
+    smtpUsername: { label: t('email.providers.fields.smtpUsername.label'), placeholder: t('email.providers.fields.smtpUsername.placeholder') },
+  }
+  // Every entry carries label/placeholder/help as optional: entries without a
+  // placeholder or help must still resolve, and a spec key missing here (a new
+  // provider field without catalog copy) renders its key instead of crashing.
+  const copyFor = (key: string): { label: string; placeholder?: string; help?: string } =>
+    (fieldCopy as Record<string, { label: string; placeholder?: string; help?: string }>)[key] ?? { label: key }
   const set = (patch: Partial<View>) => setV((prev) => ({ ...prev, ...patch }))
 
   async function save() {
@@ -107,10 +127,10 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         <Select value={v.provider ?? ''} onChange={(e) => set({ provider: e.target.value ? e.target.value as EmailProvider : null })}>
           <option value="">{t('email.selectProvider')}</option>
           {EMAIL_PROVIDER_SPECS.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
+            <option key={s.value} value={s.value}>{providerCopy[s.value].label}</option>
           ))}
         </Select>
-        {spec?.docsHint ? <p className="text-xs text-slate-500 dark:text-slate-400">{spec.docsHint}</p> : null}
+        {spec?.value === 'smtp' ? <p className="text-xs text-slate-500 dark:text-slate-400">{providerCopy.smtp.docsHint}</p> : null}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -133,13 +153,13 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         <div className="grid grid-cols-2 gap-3">
           {spec.fields.map((f) => (
             <div key={f.key} className={field}>
-              <Label>{f.label}</Label>
+              <Label>{copyFor(f.key).label}</Label>
               {f.kind === 'select' ? (
                 <Select
                   value={(v as Record<string, unknown>)[f.key] as string | undefined ?? ''}
                   onChange={(e) => set({ [f.key]: e.target.value || undefined } as Partial<View>)}
                 >
-                  {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {f.options?.map((o) => <option key={o.value} value={o.value}>{o.value.toUpperCase()}</option>)}
                 </Select>
               ) : f.kind === 'boolean' ? (
                 <label className="flex h-9 items-center gap-2 text-sm">
@@ -149,17 +169,17 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
                     onChange={(e) => set({ [f.key]: e.target.checked } as Partial<View>)}
                     className="h-4 w-4"
                   />
-                  {f.label}
+                  {copyFor(f.key).label}
                 </label>
               ) : (
                 <Input
                   type={f.kind === 'number' ? 'number' : 'text'}
                   value={(v as Record<string, unknown>)[f.key] as string | number | undefined ?? ''}
                   onChange={(e) => set({ [f.key]: f.kind === 'number' ? (e.target.value ? Number(e.target.value) : undefined) : e.target.value || undefined } as Partial<View>)}
-                  placeholder={f.placeholder}
+                  placeholder={copyFor(f.key).placeholder}
                 />
               )}
-              {f.help ? <p className="text-xs text-slate-500 dark:text-slate-400">{f.help}</p> : null}
+              {copyFor(f.key).help ? <p className="text-xs text-slate-500 dark:text-slate-400">{copyFor(f.key).help}</p> : null}
             </div>
           ))}
         </div>
@@ -169,7 +189,7 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
       {spec?.hasSecret ? (
         <div className={field}>
           <Label>
-            {spec.secretLabel}
+            {providerCopy[spec.value].secretLabel}
             {v.hasSecret && !replaceSecret ? <Badge variant="secondary" className="ml-2">{t('email.secretSet')}</Badge> : null}
           </Label>
           {v.hasSecret && !replaceSecret ? (
@@ -179,7 +199,7 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
             </div>
           ) : (
             <>
-              <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={spec.keyHint} autoComplete="off" />
+              <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={providerCopy[spec.value].keyHint} autoComplete="off" />
               {v.hasSecret ? (
                 <button type="button" className="text-xs text-slate-500 hover:underline" onClick={() => { setReplaceSecret(false); setSecret('') }}>
                   {t('email.keepExisting')}

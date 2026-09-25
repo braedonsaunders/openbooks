@@ -5529,7 +5529,61 @@
     "sendTest": "Envoyer le test",
     "sending": "Envoi en cours…",
     "testSent": "Test envoyé via {provider} ({messageId})",
-    "testFailed": "Impossible d'envoyer l'e-mail de test"
+    "testFailed": "Impossible d'envoyer l'e-mail de test",
+    "providers":     {
+      "resend": {
+        "label": "Resend",
+        "secretLabel": "Clé API",
+        "keyHint": "re_…"
+      },
+      "sendgrid": {
+        "label": "SendGrid",
+        "secretLabel": "Clé API",
+        "keyHint": "SG.…"
+      },
+      "mailgun": {
+        "label": "Mailgun",
+        "secretLabel": "Clé API",
+        "keyHint": "Votre clé d’envoi Mailgun"
+      },
+      "postmark": {
+        "label": "Postmark",
+        "secretLabel": "Jeton serveur",
+        "keyHint": "Votre jeton de serveur Postmark"
+      },
+      "smtp": {
+        "label": "SMTP (personnalisé)",
+        "secretLabel": "Mot de passe",
+        "keyHint": "Mot de passe SMTP (laisser vide pour un relais sans authentification)",
+        "docsHint": "Un nom DNS public est requis et le certificat TLS doit correspondre à ce nom. Les adresses IP sont bloquées."
+      },
+      "fields": {
+        "mailgunDomain": {
+          "label": "Domaine d’envoi",
+          "placeholder": "mg.votreentreprise.com"
+        },
+        "mailgunRegion": {
+          "label": "Région"
+        },
+        "smtpHost": {
+          "label": "Hôte",
+          "placeholder": "smtp.votrefournisseur.com",
+          "help": "Nom DNS public couvert par le certificat du fournisseur. Les adresses IP sont bloquées."
+        },
+        "smtpPort": {
+          "label": "Port",
+          "placeholder": "Automatique (465 ou 587)",
+          "help": "Vide : 465 avec TLS implicite, ou 587 avec STARTTLS obligatoire."
+        },
+        "smtpSecure": {
+          "label": "Utiliser TLS implicite (port 465)"
+        },
+        "smtpUsername": {
+          "label": "Nom d’utilisateur",
+          "placeholder": "apikey ou adresse e-mail complète"
+        }
+      }
+    }
   },
   "aiLedger": {
     "title": "Gouvernance IA",

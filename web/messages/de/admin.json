@@ -5529,7 +5529,61 @@
     "sendTest": "Test senden",
     "sending": "Wird gesendet…",
     "testSent": "Test über {provider} gesendet ({messageId})",
-    "testFailed": "Die Test-E-Mail konnte nicht gesendet werden"
+    "testFailed": "Die Test-E-Mail konnte nicht gesendet werden",
+    "providers":     {
+      "resend": {
+        "label": "Resend",
+        "secretLabel": "API-Schlüssel",
+        "keyHint": "re_…"
+      },
+      "sendgrid": {
+        "label": "SendGrid",
+        "secretLabel": "API-Schlüssel",
+        "keyHint": "SG.…"
+      },
+      "mailgun": {
+        "label": "Mailgun",
+        "secretLabel": "API-Schlüssel",
+        "keyHint": "Ihr Mailgun-Versandschlüssel"
+      },
+      "postmark": {
+        "label": "Postmark",
+        "secretLabel": "Server-Token",
+        "keyHint": "Ihr Postmark-Server-Token"
+      },
+      "smtp": {
+        "label": "SMTP (benutzerdefiniert)",
+        "secretLabel": "Passwort",
+        "keyHint": "SMTP-Passwort (leer lassen für ein Relay ohne Authentifizierung)",
+        "docsHint": "Erfordert einen öffentlich auflösbaren DNS-Host, dessen TLS-Zertifikat zu diesem Namen passt. IP-Adressen sind gesperrt."
+      },
+      "fields": {
+        "mailgunDomain": {
+          "label": "Versanddomain",
+          "placeholder": "mg.ihrefirma.de"
+        },
+        "mailgunRegion": {
+          "label": "Region"
+        },
+        "smtpHost": {
+          "label": "Host",
+          "placeholder": "smtp.ihranbieter.de",
+          "help": "Öffentlicher DNS-Name auf dem Zertifikat des Anbieters. IP-Adressen sind gesperrt."
+        },
+        "smtpPort": {
+          "label": "Port",
+          "placeholder": "Automatisch (465 oder 587)",
+          "help": "Leer verwendet 465 mit implizitem TLS oder 587 mit erforderlichem STARTTLS."
+        },
+        "smtpSecure": {
+          "label": "Implizites TLS verwenden (Port 465)"
+        },
+        "smtpUsername": {
+          "label": "Benutzername",
+          "placeholder": "apikey oder vollständige E-Mail-Adresse"
+        }
+      }
+    }
   },
   "aiLedger": {
     "title": "KI-Governance",
