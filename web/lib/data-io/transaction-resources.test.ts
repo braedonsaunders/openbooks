@@ -658,14 +658,15 @@ test('transaction import preserves XLSX cell provenance at the write boundary', 
   assert.ok(nestedFormulaRow)
   assert.ok(sharedNestedFormulaRow)
 
-  await t.test('accepts a numeric amount parsed from XLSX', async () => {
+  await t.test('refuses a numeric amount parsed from XLSX', async () => {
     resetImportState(false)
 
     const outcome = await importCardCharge(mappedTransactionRow(numericRow, 'amount'))
 
-    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-    assert.equal(importState.transactionCalls, 1)
-    assert.equal(importState.lines[0]?.amount, '999999999999999.0000')
+    assert.equal(outcome.created, 0)
+    assert.equal(outcome.failed, 1)
+    assert.match(outcome.errors[0]?.message ?? '', /spreadsheet number/)
+    assert.equal(importState.transactionCalls, 0)
   })
 
   await t.test('rejects a numeric formula result before writing', async () => {

@@ -422,8 +422,9 @@ async function writeTransactions(
         }
         const amount = exactLineAmount(l.amount)
         if (amount === null) {
-          lineErr =
-            `line amount "${String(l.amount ?? '')}" must be an exact decimal string with at most 4 decimal places`
+          lineErr = typeof l.amount === 'number'
+            ? `line amount ${String(l.amount)} arrived as a spreadsheet number, which cannot preserve exact decimals — format the amount cell as text and provide a literal decimal string`
+            : `line amount "${String(l.amount ?? '')}" must be an exact decimal string with at most 4 decimal places`
           break
         }
         let taxCodeId: string | null = null
@@ -583,14 +584,16 @@ async function writeTransactions(
 }
 
 function exactLineAmount(value: unknown): string | null {
-  // A JSON number has already crossed IEEE-754 before it reaches this
-  // boundary. Even `Number.isSafeInteger` cannot recover the source token:
-  // 999999999999998.99 arrives here as the safe integer 999999999999999.
-  // Require the import representation to retain the original decimal text.
-  if (typeof value === 'number') {
-    if (!Number.isSafeInteger(value)) return null
-    return normalizeMoney(String(value))
-  }
+  // A JS number has already crossed IEEE-754 before it reaches this
+  // boundary: the only production producer is an XLSX number cell, whose
+  // source lexeme is unrecoverable here (ExcelJS hands back a double).
+  // Even `Number.isSafeInteger` cannot prove the source was exact:
+  // 1.0000000000000001 arrives as the safe integer 1, and
+  // 999999999999998.99 arrives as 999999999999999. Refuse every number and
+  // require literal decimal text (an XLSX amount cell formatted as text).
+  // JSON and CSV amounts always arrive as strings (parseImportJson keeps
+  // number-token source text), so no text path is affected.
+  if (typeof value === 'number') return null
   if (typeof value !== 'string' || value.trim() === '') return null
   const exact = canonicalDecimal(value, 4)
   if (exact === null) return null
