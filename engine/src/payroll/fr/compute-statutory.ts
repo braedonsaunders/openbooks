@@ -328,6 +328,23 @@ export async function computeFrStatutory(
     factKey: "fr_ags_employer_type",
     asOf: payDate,
   }) : null;
+  // The taxe d'apprentissage regime is a required legal-employer fact: absent
+  // refuses by name (Payroll Setup → Employer facts, payroll country France),
+  // never falls through to the 0,68 % mainland rate.
+  const apprentissageRegime = U(base) > 0n ? await resolveStoredEmployerFact({
+    tx: ctx.tx,
+    orgId: ctx.orgId,
+    subsidiaryId: ctx.subsidiaryId,
+    country: "FR",
+    factKey: "fr_apprentissage_regime",
+    asOf: payDate,
+  }) : null;
+  // The CDD flag has no producer channel yet: absent reads as CDI (the
+  // es_contrato_temporal precedent) and only a present-but-foreign value
+  // refuses, through the shared employee-fact gate.
+  const contratCdd = resolveEmployeeFact(
+    "FR", "fr_contrat_cdd", empFact("FR", ctx.emp ?? {}, "fr_contrat_cdd"),
+  ) === "true";
   // The stub's earnings figure is the brut. PAS prices on the net imposable
   // derived from it (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10) —
   // never on the brut. Cotisations price on the brut below.
@@ -381,6 +398,8 @@ export async function computeFrStatutory(
     agsInterim: agsEmployerType === "temporary_work_agency",
     atmpRatePct: atmpRate,
     versementMobilitePct: versementMobiliteRate,
+    apprentissageAlsaceMoselle: apprentissageRegime === "alsace_moselle",
+    contratCdd,
   });
   if (ctx.gross == null) {
     throw new PayrollPackError("FR RGDU cannot calculate because the payroll engine did not supply this stub's contributory gross.");
@@ -455,6 +474,9 @@ export async function computeFrStatutory(
   pushStatutory("chomage_er", "employer_contribution", "Assurance chômage (employeur)", cots.chomageEr, 225);
   pushStatutory("ags_er", "employer_contribution", "Cotisation AGS (employeur)", cots.agsEr, 226);
   pushStatutory("cdn_er", "employer_contribution", "FNAL, CSA et dialogue social (employeur)", cots.cdnEr, 230);
+  pushStatutory("cfp_er", "employer_contribution", "Contribution à la formation professionnelle (employeur)", cots.cfpEr, 227);
+  pushStatutory("apprentissage_er", "employer_contribution", "Taxe d'apprentissage (employeur)", cots.apprentissageEr, 228);
+  pushStatutory("cpf_cdd_er", "employer_contribution", "Contribution CPF-CDD (employeur)", cots.cpfCddEr, 229);
   pushStatutory("atmp", "employer_contribution", "Accidents du travail et maladies professionnelles (employeur)", cots.atmpEr, 220);
   pushStatutory("versement_mobilite_er", "employer_contribution", "Versement mobilité (employeur)", cots.versementMobiliteEr, 221);
   pushStatutory("arrco", "deduction", "Retraite complémentaire (salariale)", cots.arrcoSal, 140);

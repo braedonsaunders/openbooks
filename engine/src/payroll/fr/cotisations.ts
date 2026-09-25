@@ -58,7 +58,10 @@ import {
   FR_AGS_ER_2026,
   FR_ALLOC_FAM_ER_2026,
   FR_ALLOC_FAM_SEUIL_2026,
+  FR_APPRENTISSAGE_ER_2026,
+  FR_CFP_ER_2026,
   FR_CHOMAGE_ER_2026,
+  FR_CPF_CDD_ER_2026,
   FR_CRDS_SAL_2026,
   FR_CSA_ER_2026,
   FR_CSG_SAL_2026,
@@ -159,6 +162,19 @@ export interface FrCotisations2026Input {
   atmpRatePct?: string | null;
   /** Tenant-declared versement mobilité rate as a percent; null = undeclared. */
   versementMobilitePct?: string | null;
+  /**
+   * Establishment under the Alsace-Moselle apprentissage regime (0,44 %
+   * instead of 0,68 %). Absent prices the mainland 0,68 % rate; the
+   * adapter always passes the resolved required employer fact, so only
+   * history-free direct callers see the default.
+   */
+  apprentissageAlsaceMoselle?: boolean;
+  /**
+   * Fixed-term (CDD) contract versement — prices the 1 % CPF-CDD levy.
+   * Absent reads as CDI (the es_contrato_temporal precedent) until the
+   * contract-type channel lands; the adapter passes the resolved flag.
+   */
+  contratCdd?: boolean;
 }
 
 export interface FrCotisations2026Result {
@@ -191,6 +207,10 @@ export interface FrCotisations2026Result {
   atmpEr: string;
   /** 0.0000 unless a tenant rate was declared. */
   versementMobiliteEr: string;
+  cfpEr: string;
+  apprentissageEr: string;
+  /** 0.0000 unless the contract is declared CDD. */
+  cpfCddEr: string;
   // Retraite complémentaire AGIRC-ARRCO (all 4dp).
   /** T1 assiette (capped at the PASS) and T2 assiette (0 above 8×PASS). */
   t1Base: string;
@@ -317,6 +337,27 @@ export function calculateFrCotisations2026(
     ? lineOf(brut, rate6(FR_FNAL_ER_2026.cinquanteEtPlus.rate))
     : lineOf(plafPer, rate6(FR_FNAL_ER_2026.moins50.rate));
 
+  // CFP (CUFPA): 0,55 % under 11 salariés, 1 % at 11 and above, on the
+  // brut with no ceiling — so no regularization, flat on the versement.
+  // Read off the same declared effectif as FNAL.
+  const cfpEr = lineOf(
+    brut,
+    rate6(effectif >= U("11") ? FR_CFP_ER_2026.onzeEtPlus.rate : FR_CFP_ER_2026.moins11.rate),
+  );
+  // Taxe d'apprentissage: 0,68 % mainland, 0,44 % Alsace-Moselle, on the
+  // brut with no ceiling.
+  const apprentissageEr = lineOf(
+    brut,
+    rate6(
+      input.apprentissageAlsaceMoselle === true
+        ? FR_APPRENTISSAGE_ER_2026.alsaceMoselle.rate
+        : FR_APPRENTISSAGE_ER_2026.droitCommun.rate,
+    ),
+  );
+  // CPF-CDD: 1 % of fixed-term gross wages only. Absent contract input
+  // reads as CDI and prices nothing (es_contrato_temporal precedent).
+  const cpfCddEr = input.contratCdd === true ? lineOf(brut, rate6(FR_CPF_CDD_ER_2026.rate)) : 0n;
+
   // Tenant-declared: priced when declared, zero and pushed nowhere when not.
   const atmpPct = input.atmpRatePct ?? null;
   const atmpEr = atmpPct === null || atmpPct === ""
@@ -382,6 +423,9 @@ export function calculateFrCotisations2026(
     cdnEr: D(add(fnalEr, csaEr, dialogueEr)),
     atmpEr: D(atmpEr),
     versementMobiliteEr: D(vmEr),
+    cfpEr: D(cfpEr),
+    apprentissageEr: D(apprentissageEr),
+    cpfCddEr: D(cpfCddEr),
     t1Base: D(t1Base),
     t2Base: D(t2Base),
     arrcoSalT1: D(arrcoSalT1),
