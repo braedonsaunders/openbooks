@@ -12,7 +12,8 @@
     "pie": "Kreis",
     "empty": {
       "noData": "Keine Daten für diese Abfrage.",
-      "pickFields": "Wählen Sie eine Dimension und mindestens eine Kennzahl, um dies darzustellen."
+      "pickFields": "Wählen Sie eine Dimension und mindestens eine Kennzahl, um dies darzustellen.",
+      "unsupportedMoneyPrecision": "Dieses Diagramm kann die Genauigkeit dieser Geldbeträge nicht bewahren. Sehen Sie die Ergebnisse als Tabelle an."
     },
     "noRows": "Keine Zeilen.",
     "values": {

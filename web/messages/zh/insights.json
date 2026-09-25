@@ -12,7 +12,8 @@
     "pie": "饼图",
     "empty": {
       "noData": "此查询无数据。",
-      "pickFields": "选择一个维度和至少一个度量以生成图表。"
+      "pickFields": "选择一个维度和至少一个度量以生成图表。",
+      "unsupportedMoneyPrecision": "此图表无法保留这些金额的精度。请以表格查看结果。"
     },
     "noRows": "无行。",
     "values": {

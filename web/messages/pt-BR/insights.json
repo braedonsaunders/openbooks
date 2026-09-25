@@ -12,7 +12,8 @@
     "pie": "Pizza",
     "empty": {
       "noData": "Nenhum dado para esta consulta.",
-      "pickFields": "Escolha uma dimensão e pelo menos uma medida para plotar isto."
+      "pickFields": "Escolha uma dimensão e pelo menos uma medida para plotar isto.",
+      "unsupportedMoneyPrecision": "Este gráfico não consegue preservar a precisão destes valores monetários. Veja os resultados em uma tabela."
     },
     "noRows": "Nenhuma linha.",
     "values": {

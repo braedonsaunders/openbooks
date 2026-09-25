@@ -12,7 +12,8 @@
     "pie": "Pie",
     "empty": {
       "noData": "No data for this query.",
-      "pickFields": "Pick a dimension and at least one measure to chart this."
+      "pickFields": "Pick a dimension and at least one measure to chart this.",
+      "unsupportedMoneyPrecision": "This chart cannot preserve the precision of these money values. View the results as a table."
     },
     "noRows": "No rows.",
     "values": {

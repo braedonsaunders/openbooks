@@ -12,7 +12,8 @@
     "pie": "Secteurs",
     "empty": {
       "noData": "Aucune donnée pour cette requête.",
-      "pickFields": "Choisissez une dimension et au moins une mesure pour tracer ce graphique."
+      "pickFields": "Choisissez une dimension et au moins une mesure pour tracer ce graphique.",
+      "unsupportedMoneyPrecision": "Ce graphique ne peut pas préserver la précision de ces montants. Consultez les résultats sous forme de tableau."
     },
     "noRows": "Aucune ligne.",
     "values": {

@@ -16,7 +16,7 @@ export type VizSpec =
   | { kind: 'table'; columns: ResultColumn[]; rows: Record<string, unknown>[] }
   | { kind: 'chart'; chartType: Exclude<VizType, 'table'>; option: EChartsOption }
   /** `reason` is a stable code the renderer translates. */
-  | { kind: 'empty'; reason: 'noData' | 'pickFields' }
+  | { kind: 'empty'; reason: 'noData' | 'pickFields' | 'unsupportedMoneyPrecision' }
 
 /** Locale hook for dimension VALUES baked into a chart (category axis, pie
  *  slice names): return a display string for fixed-vocabulary columns
@@ -67,6 +67,39 @@ function isCurrency(col: ResultColumn | undefined): boolean {
   return col?.type === 'currency'
 }
 
+/** ECharts needs a Number coordinate. Accept currency only when that Number
+ * round-trips to the same ledger units; otherwise refuse the chart instead of
+ * drawing a different amount. Tooltips continue to use the original string. */
+function exactCurrencyCoordinate(value: unknown): number | null {
+  if (typeof value !== 'string') return null
+  const units = (raw: string): bigint | null => {
+    const match = /^([+-]?)(\d+)(?:\.(\d*))?$/.exec(raw.trim())
+    if (!match || (match[3]?.length ?? 0) > 4) return null
+    const magnitude = BigInt(match[2]!) * 10_000n + BigInt((match[3] ?? '').padEnd(4, '0') || '0')
+    return match[1] === '-' ? -magnitude : magnitude
+  }
+  const expected = units(value)
+  if (expected === null) return null
+  const coordinate = Number(value)
+  if (!Number.isFinite(coordinate) || Math.abs(coordinate) >= 1e21) return null
+  return units(coordinate.toFixed(4)) === expected ? coordinate : null
+}
+
+function exactTooltip(params: unknown): string {
+  const points = Array.isArray(params) ? params : [params]
+  return points.map((point) => {
+    if (typeof point !== 'object' || point === null) return String(point)
+    const item = point as { name?: unknown; axisValueLabel?: unknown; seriesName?: unknown; data?: unknown; value?: unknown }
+    const data = typeof item.data === 'object' && item.data !== null
+      ? item.data as { exactValue?: unknown }
+      : null
+    const exact = typeof data?.exactValue === 'string' ? formatCell(data.exactValue, 'currency') : String(item.value ?? '')
+    const label = item.seriesName ?? item.name ?? ''
+    const category = item.axisValueLabel == null ? '' : `${String(item.axisValueLabel)} — `
+    return `${category}${String(label)}: ${exact}`
+  }).join('<br/>')
+}
+
 /** Pick the category (dimension) column and the value (measure) columns to plot,
  *  honoring explicit settings and falling back to result roles. */
 function resolveFields(result: QueryResult, settings: VizSettings) {
@@ -102,6 +135,20 @@ export function buildVizSpec(
     return { kind: 'empty', reason: 'pickFields' }
   }
 
+  const currencyData = new Map<string, Array<{ value: number; exactValue: string }>>()
+  for (const measure of values) {
+    if (!isCurrency(measure)) continue
+    const points: Array<{ value: number; exactValue: string }> = []
+    for (const row of result.rows) {
+      const raw = row[measure.key]
+      const exactValue = raw == null ? '0.0000' : typeof raw === 'string' ? raw : null
+      const value = exactCurrencyCoordinate(exactValue)
+      if (exactValue === null || value === null) return { kind: 'empty', reason: 'unsupportedMoneyPrecision' }
+      points.push({ value, exactValue })
+    }
+    currencyData.set(measure.key, points)
+  }
+
   const categories = result.rows.map(
     (r) => formatValue?.(category, r[category.key]) ?? formatCategory(category, r[category.key]),
   )
@@ -109,13 +156,18 @@ export function buildVizSpec(
   if (vizType === 'pie') {
     // Pie uses a single measure (the first) over the category.
     const measure = values[0]!
-    const data = result.rows.map((r, i) => ({ name: categories[i], value: num(r[measure.key]) }))
+    const data = result.rows.map((r, i) => ({
+      name: categories[i],
+      ...(isCurrency(measure)
+        ? currencyData.get(measure.key)![i]
+        : { value: num(r[measure.key]) }),
+    }))
     return {
       kind: 'chart',
       chartType: 'pie',
       option: {
         color: PALETTE,
-        tooltip: { trigger: 'item' },
+        tooltip: { trigger: 'item', formatter: isCurrency(measure) ? exactTooltip : undefined },
         legend: settings.hideLegend ? undefined : { type: 'scroll', bottom: 0, textStyle: { color: AXIS_TEXT } },
         series: [
           {
@@ -152,7 +204,9 @@ export function buildVizSpec(
     const base: Record<string, unknown> = {
       name: v.label,
       type: vizType === 'bar' ? 'bar' : 'line',
-      data: result.rows.map((r) => num(r[v.key])),
+      data: isCurrency(v)
+        ? currencyData.get(v.key)!
+        : result.rows.map((r) => num(r[v.key])),
       itemStyle: { color: PALETTE[i % PALETTE.length] },
       label: { show: settings.showValues === true, color: AXIS_TEXT },
     }
@@ -177,7 +231,7 @@ export function buildVizSpec(
     option: {
       color: PALETTE,
       grid: { left: 12, right: 16, top: 24, bottom: settings.hideLegend ? 28 : 44, containLabel: true },
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: values.some(isCurrency) ? exactTooltip : undefined },
       legend:
         settings.hideLegend || series.length <= 1
           ? undefined
