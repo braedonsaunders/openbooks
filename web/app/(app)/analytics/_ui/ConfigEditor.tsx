@@ -29,6 +29,7 @@ export function ConfigEditor({
   values,
   defaults,
   onDirtyChange,
+  canEdit,
 }: {
   dashboard: string
   fields: EditorField[]
@@ -36,6 +37,10 @@ export function ConfigEditor({
   defaults: Record<string, string | number>
   /** Reports unsaved-edit state so hosts (drawers) can guard dismissal. */
   onDirtyChange?: (dirty: boolean) => void
+  /** admin.setup.manage with unrestricted scope (the PUT's gate). Without
+   * it the thresholds render read-only: showing an editor that can only
+   * 403 invites edits that can never save. */
+  canEdit: boolean
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, String(values[f.key] ?? defaults[f.key])])))
@@ -117,7 +122,10 @@ export function ConfigEditor({
           )
           router.refresh()
         } else if (r.status === 403) {
-          setMsg('Saving requires the Setup permission.')
+          // The PUT needs admin.setup.manage AND unrestricted scope: a
+          // scoped admin holds the permission yet is still refused, so the
+          // server's reason leads and the generic line is only the fallback.
+          setMsg(await readApiErrorMessage(r, 'Saving requires the Setup permission.'))
         } else {
           setMsg(await readApiErrorMessage(r, 'Save failed'))
         }
@@ -151,33 +159,40 @@ export function ConfigEditor({
               min={f.min}
               max={f.max}
               step={f.step}
+              disabled={!canEdit}
               onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-              className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             />
             <span className="mt-0.5 block text-[11px] leading-snug text-slate-400 dark:text-slate-500">{f.help}</span>
           </label>
         ))}
       </div>
       <div className="mt-4 flex items-center gap-2">
-        <button
-          type="button"
-          disabled={busy || !dirty}
-          onClick={() => save(Object.fromEntries(fields.map((f) => [f.key, draft[f.key]!])))}
-          className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700"
-        >
-          Save configuration
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            setDraft(Object.fromEntries(fields.map((f) => [f.key, String(defaults[f.key])])))
-            void save(Object.fromEntries(fields.map((f) => [f.key, defaults[f.key]!])))
-          }}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          Reset to defaults
-        </button>
+        {canEdit ? (
+          <>
+            <button
+              type="button"
+              disabled={busy || !dirty}
+              onClick={() => save(Object.fromEntries(fields.map((f) => [f.key, draft[f.key]!])))}
+              className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700"
+            >
+              Save configuration
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setDraft(Object.fromEntries(fields.map((f) => [f.key, String(defaults[f.key])])))
+                void save(Object.fromEntries(fields.map((f) => [f.key, defaults[f.key]!])))
+              }}
+              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Reset to defaults
+            </button>
+          </>
+        ) : (
+          <span className="text-xs text-slate-400 dark:text-slate-500">Read-only — changing these needs the Setup permission with full company scope.</span>
+        )}
         {msg ? <span className="text-xs text-slate-400 dark:text-slate-500">{msg}</span> : null}
       </div>
     </Panel>

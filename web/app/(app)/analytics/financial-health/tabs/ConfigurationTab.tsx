@@ -10,7 +10,7 @@ import { ConfigEditor } from '../../_ui/ConfigEditor'
  * tab and the composite health score, editable per organization. Saving
  * recomputes every grade and the score with the new targets.
  */
-export function ConfigurationTab({ data }: { data: HealthData }) {
+export function ConfigurationTab({ data, canEdit }: { data: HealthData; canEdit: boolean }) {
   const b = data.benchmarks
   const forecastDefaults: { label: string; value: string }[] = [
     { label: 'Default method', value: 'Exponential Smoothing (ETS)' },
@@ -23,6 +23,7 @@ export function ConfigurationTab({ data }: { data: HealthData }) {
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <ConfigEditor
         dashboard="financialHealth"
+        canEdit={canEdit}
         fields={[
           { key: 'grossMarginTarget', label: 'Gross margin target (%)', help: 'Benchmark for the Gross Margin grade', min: 0, max: 100, step: 1 },
           { key: 'operatingMarginTarget', label: 'Operating margin target (%)', help: 'Benchmark for the Operating Margin grade', min: 0, max: 100, step: 1 },

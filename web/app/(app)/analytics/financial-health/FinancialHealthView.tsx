@@ -28,10 +28,12 @@ export function FinancialHealthView({
   data,
   defs,
   budgetsEnabled = true,
+  canConfigure,
 }: {
   data: HealthData
   defs: Record<string, RatioDef>
   budgetsEnabled?: boolean
+  canConfigure?: boolean
 }) {
   const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth')
@@ -112,7 +114,7 @@ export function FinancialHealthView({
         {tab === 'budget' && budgetsEnabled ? <BudgetTab data={data} /> : null}
         {tab === 'drivers' ? <DriversTab data={data} onDrill={openAccount} /> : null}
         {tab === 'ratios' ? <RatiosTab data={data} defs={defs} /> : null}
-        {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
+        {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />

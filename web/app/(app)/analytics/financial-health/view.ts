@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
@@ -36,6 +36,9 @@ export interface FinancialHealthData {
   defs: ViewProps['defs']
   budgetsEnabled: boolean
   data: ViewProps['data']
+  /** Threshold editing needs admin.setup.manage with unrestricted scope (the
+   * config PUT's gate); reports.read-only and scoped callers get read-only. */
+  canConfigure: boolean
 }
 
 export async function loadFinancialHealth(sp: Record<string, string | undefined>): Promise<FinancialHealthData> {
@@ -63,6 +66,7 @@ export async function loadFinancialHealth(sp: Record<string, string | undefined>
     defs: localizedRatioDefs(boundT),
     budgetsEnabled,
     data,
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }
 
@@ -77,6 +81,6 @@ export function financialHealthSpec(data: FinancialHealthData): PageSpec {
         backLabel: data.backLabel,
       }),
     ],
-    body: [widgetBlock('financial-health-view', { data: data.data, defs: data.defs, budgetsEnabled: data.budgetsEnabled })],
+    body: [widgetBlock('financial-health-view', { data: data.data, defs: data.defs, budgetsEnabled: data.budgetsEnabled, canConfigure: data.canConfigure })],
   })
 }

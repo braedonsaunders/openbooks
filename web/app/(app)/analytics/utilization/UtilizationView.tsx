@@ -342,7 +342,7 @@ type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: strin
 
 /* ------------------------------------------------------------------- shell */
 
-export function UtilizationView({ data }: { data: UtilizationData }) {
+export function UtilizationView({ data, canConfigure }: { data: UtilizationData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
@@ -380,7 +380,7 @@ export function UtilizationView({ data }: { data: UtilizationData }) {
         {tab === 'items' ? <ItemsTab data={data} onDrill={setFlyout} /> : null}
         {tab === 'titles' ? <TitlesTab data={data} /> : null}
         {tab === 'employees' ? <EmployeesTab data={data} onDrill={setFlyout} /> : null}
-        {tab === 'config' ? <ConfigTab data={data} /> : null}
+        {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
 
       {flyout ? (
@@ -1566,7 +1566,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
 
 /* ------------------------------------------------------------ Configuration */
 
-function ConfigTab({ data }: { data: UtilizationData }) {
+function ConfigTab({ data, canEdit }: { data: UtilizationData; canEdit: boolean }) {
   const t = useTranslations('analytics.utilization')
   const items = [
     { label: t('config.priorRange'), value: `${data.prior.from} → ${data.prior.to}`, note: t('config.priorRangeNote') },
@@ -1577,6 +1577,7 @@ function ConfigTab({ data }: { data: UtilizationData }) {
       <div className="space-y-5">
         <ConfigEditor
           dashboard="utilization"
+          canEdit={canEdit}
           fields={[
             { key: 'targetBillablePct', label: t('config.fields.targetBillable.label'), help: t('config.fields.targetBillable.help'), min: 10, max: 100, step: 1 },
             { key: 'costSpikeThreshold', label: t('config.fields.costSpike.label'), help: t('config.fields.costSpike.help'), min: 0, max: 1_000_000, step: 100 },

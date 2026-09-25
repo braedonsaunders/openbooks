@@ -82,6 +82,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
             startingCash={data.payPlan.startingCash}
             restrictToSafe={data.payPlan.restrictToSafe}
             deferredThisWeek={data.payPlan.deferredThisWeek}
+            canPay={canPay}
           />
         </CockpitPanel>
 
@@ -164,6 +165,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
           restrictToSafe={data.payPlan.restrictToSafe}
           dpo={data.dpo}
           currencyCode={currency}
+          canEdit={canConfigure}
         />
       ) : null}
     </div>

@@ -57,7 +57,10 @@ export async function loadApCockpit(): Promise<ApCockpitData> {
     title: t('cockpit.title'),
     description: t('cockpit.description'),
     canCreate,
-    canConfigure: can(authz, 'admin.setup.manage'),
+    // The selection config writes org-wide cashflow settings (the cashflow
+    // config PUT's gate): a scoped admin holds the permission yet is still
+    // refused, so the gear needs unrestricted scope too.
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
     canPay: can(authz, 'ap.pay'),
     captureHref: '/ap/capture',
     captureLabel: t('actions.capture'),

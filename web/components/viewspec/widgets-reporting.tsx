@@ -198,13 +198,20 @@ export const REPORTING_WIDGETS = {
       data={props.data as ComponentProps<typeof FinancialHealthView>['data']}
       defs={props.defs as ComponentProps<typeof FinancialHealthView>['defs']}
       budgetsEnabled={props.budgetsEnabled === true}
+      canConfigure={props.canConfigure === true}
     />
   ),
   'utilization-view': (props) => (
-    <UtilizationView data={props.data as ComponentProps<typeof UtilizationView>['data']} />
+    <UtilizationView
+      data={props.data as ComponentProps<typeof UtilizationView>['data']}
+      canConfigure={props.canConfigure === true}
+    />
   ),
   'spend-velocity-view': (props) => (
-    <SpendVelocityView data={props.data as ComponentProps<typeof SpendVelocityView>['data']} />
+    <SpendVelocityView
+      data={props.data as ComponentProps<typeof SpendVelocityView>['data']}
+      canConfigure={props.canConfigure === true}
+    />
   ),
   'vendor-view': (props) => (
     <VendorView data={props.data as ComponentProps<typeof VendorView>['data']} />
@@ -214,13 +221,17 @@ export const REPORTING_WIDGETS = {
       data={props.data as ComponentProps<typeof CustomerView>['data']}
       profitability={props.profitability as ComponentProps<typeof CustomerView>['profitability']}
       projectsEnabled={props.projectsEnabled === true}
+      canConfigure={props.canConfigure === true}
     />
   ),
   'true-cost-view': (props) => (
     <TrueCostView data={props.data as ComponentProps<typeof TrueCostView>['data']} />
   ),
   'sentinel-view': (props) => (
-    <SentinelView data={props.data as ComponentProps<typeof SentinelView>['data']} />
+    <SentinelView
+      data={props.data as ComponentProps<typeof SentinelView>['data']}
+      canConfigure={props.canConfigure === true}
+    />
   ),
 
   /* --- project profitability -------------------------------------------------- */

@@ -60,6 +60,7 @@ export function HealthHero({
   ratios,
   ratioLabels,
   fullAnalysisLabel,
+  showFullAnalysisLink,
 }: {
   gaugeValue: number
   gaugeLabel: string
@@ -67,6 +68,9 @@ export function HealthHero({
   ratios: HealthRatioRow[]
   ratioLabels: { ratio: string; value: string; benchmark: string; grade: string }
   fullAnalysisLabel: string
+  /** financial-health requires reports.read: without it the footer link is a
+   * dead end, so it stays hidden (the tab bar hides it the same way). */
+  showFullAnalysisLink: boolean
 }) {
   return (
     <>
@@ -120,14 +124,16 @@ export function HealthHero({
           ))}
         </tbody>
       </table>
-      <div className="border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
-        <Link
-          href={'/analytics/financial-health' as never}
-          className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400"
-        >
-          {fullAnalysisLabel} <ArrowUpRight size={12} />
-        </Link>
-      </div>
+      {showFullAnalysisLink ? (
+        <div className="border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
+          <Link
+            href={'/analytics/financial-health' as never}
+            className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400"
+          >
+            {fullAnalysisLabel} <ArrowUpRight size={12} />
+          </Link>
+        </div>
+      ) : null}
     </>
   )
 }

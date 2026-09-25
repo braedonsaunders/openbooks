@@ -168,7 +168,7 @@ function useConformLabel() {
 
 /* ------------------------------------------------------------------- shell */
 
-export function SentinelView({ data }: { data: SentinelData }) {
+export function SentinelView({ data, canConfigure }: { data: SentinelData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
   const fmtMoney = useAnalyticsMoney()
@@ -217,7 +217,7 @@ export function SentinelView({ data }: { data: SentinelData }) {
         {tab === 'detection' ? <DetectionTab data={data} /> : null}
         {tab === 'vendors' ? <VendorsTab data={data} onDrill={setDrill} /> : null}
         {tab === 'audit' ? <AuditTab data={data} /> : null}
-        {tab === 'config' ? <ConfigTab data={data} /> : null}
+        {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
@@ -913,7 +913,7 @@ function AuditTab({ data }: { data: SentinelData }) {
 
 /* ----------------------------------------------------------- Configuration */
 
-function ConfigTab({ data }: { data: SentinelData }) {
+function ConfigTab({ data, canEdit }: { data: SentinelData; canEdit: boolean }) {
   const t = useTranslations('analytics.sentinel')
   const num = useNum()
   const fmtMoney = useAnalyticsMoney()
@@ -933,6 +933,7 @@ function ConfigTab({ data }: { data: SentinelData }) {
       <div className="space-y-5">
         <ConfigEditor
           dashboard="sentinel"
+          canEdit={canEdit}
           fields={[
             { key: 'duplicateDays', label: t('config.fields.duplicateDays.label'), help: t('config.fields.duplicateDays.help'), min: 1, max: 90, step: 1 },
             { key: 'duplicateMinAmount', label: t('config.fields.duplicateMinAmount.label'), help: t('config.fields.duplicateMinAmount.help'), min: 0, max: 100_000, step: 50 },

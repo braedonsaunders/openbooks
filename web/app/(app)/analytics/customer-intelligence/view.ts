@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
@@ -34,6 +34,9 @@ export interface CustomerIntelligenceData {
   profitability: ViewProps['profitability']
   projectsEnabled: boolean
   data: ViewProps['data']
+  /** Threshold editing needs admin.setup.manage with unrestricted scope (the
+   * config PUT's gate); reports.read-only and scoped callers get read-only. */
+  canConfigure: boolean
 }
 
 export async function loadCustomerIntelligence(sp: Record<string, string | undefined>): Promise<CustomerIntelligenceData> {
@@ -60,6 +63,7 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
     profitability,
     projectsEnabled,
     data,
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }
 
@@ -74,6 +78,6 @@ export function customerIntelligenceSpec(data: CustomerIntelligenceData): PageSp
         backLabel: data.backLabel,
       }),
     ],
-    body: [widgetBlock('customer-view', { data: data.data, profitability: data.profitability, projectsEnabled: data.projectsEnabled })],
+    body: [widgetBlock('customer-view', { data: data.data, profitability: data.profitability, projectsEnabled: data.projectsEnabled, canConfigure: data.canConfigure })],
   })
 }

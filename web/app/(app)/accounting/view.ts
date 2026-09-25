@@ -74,6 +74,9 @@ export interface AccountingData {
   ratios: HealthRatioRow[]
   ratioLabels: { ratio: string; value: string; benchmark: string; grade: string }
   fullAnalysisLabel: string
+  /** financial-health needs reports.read: close.read/gl.read callers get the
+   * ratios without the deep link, exactly as the tab bar already hides it. */
+  showFullAnalysisLink: boolean
   directoryTitle: string
   hasDirectory: boolean
   directory: DirectoryItem[]
@@ -119,9 +122,12 @@ export async function loadAccounting(): Promise<AccountingData> {
     ),
   ])
 
+  // close.read/gl.read callers see the ratios but must never be deep-linked
+  // into financial-health, which requires reports.read.
+  const canReadReports = can(authz, 'reports.read')
   const groupItems = navGroups.find((g) => g.id === 'accounting')?.items ?? []
   const tabs = await groupTabs('accounting', '/accounting', {
-    exclude: can(authz, 'reports.read') ? [] : ['/analytics/financial-health'],
+    exclude: canReadReports ? [] : ['/analytics/financial-health'],
     orgId: authz.user.orgId,
   })
 
@@ -170,7 +176,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     attention.push({ tone: 'warning', text: t('home.attention.draftJournals', { count: data.draftJournals }), href: '/journal' })
   }
   for (const r of gradedRatios.slice(0, 3)) {
-    if (r.score < 40) {
+    if (r.score < 40 && canReadReports) {
       attention.push({
         tone: 'warning',
         text: t('home.attention.weakRatio', { ratio: ratioDefs[r.id]?.label ?? r.id }),
@@ -231,6 +237,7 @@ export async function loadAccounting(): Promise<AccountingData> {
       grade: t('home.hero.grade'),
     },
     fullAnalysisLabel: t('home.hero.fullAnalysis'),
+    showFullAnalysisLink: canReadReports,
     directoryTitle: t('home.directory.title'),
     hasDirectory: directory.length > 0,
     directory,
@@ -320,6 +327,7 @@ export function accountingSpec(data: AccountingData): PageSpec {
                 ratios: data.ratios,
                 ratioLabels: data.ratioLabels,
                 fullAnalysisLabel: data.fullAnalysisLabel,
+                showFullAnalysisLink: data.showFullAnalysisLink,
               }),
             ],
           }),
