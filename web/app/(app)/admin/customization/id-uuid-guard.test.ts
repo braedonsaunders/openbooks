@@ -263,15 +263,13 @@ for (const [label, handlers] of [
 
 test('admin loader never binds a malformed form/view/from id into a uuid column', async () => {
   resetQueries()
-  const data = await loadCustomization({
-    recordType: 'vendor_bill',
-    form: 'not-a-uuid',
-    view: '-'.repeat(36),
-    from: 'not-a-uuid',
-  })
+  const data = await loadCustomization({ recordType: 'vendor_bill', form: 'not-a-uuid', view: '-'.repeat(36), from: 'not-a-uuid' })
   for (const bad of MALFORMED) {
     assert.equal(boundValues().includes(bad), false, `loader bound ${bad}`)
   }
   assert.equal(data.formDrawerOpen, false)
   assert.equal(data.viewDrawerOpen, false)
+  for (const key of ['form', 'view'] as const) {
+    await assert.rejects(() => loadCustomization({ recordType: 'vendor_bill', [key]: CANONICAL }), /NOT_FOUND/)
+  }
 })
