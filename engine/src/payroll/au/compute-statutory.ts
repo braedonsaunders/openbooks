@@ -43,6 +43,7 @@
  * discipline as canada/decimal.ts. Coefficients stay decimal strings.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import type { Money } from "../../money/brands.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
@@ -115,10 +116,10 @@ export interface Au2027Input {
 }
 
 export interface Au2027Result {
-  /** Period PAYG withholding (income tax + Medicare + STSL), 4dp string. */
-  payg: string;
-  /** Period Super Guarantee accrual (employer), 4dp string. */
-  sg: string;
+  /** Period PAYG withholding (income tax + Medicare + STSL), canonical 4dp Money. */
+  payg: Money;
+  /** Period Super Guarantee accrual (employer), canonical 4dp Money. */
+  sg: Money;
 }
 
 /** The Schedule 1 table for this payee, or a named refusal. */
@@ -252,7 +253,8 @@ export function calculateAu2027(input: Au2027Input): Au2027Result {
   const pensionable = U(input.pensionable);
   const cappedBase = pensionable > headroom ? headroom : pensionable;
   const sg = r2(mulRate(cappedBase, AU_SUPER_2027.chargeRate));
-  return { payg: D(period * DOLLAR), sg: D(sg) };
+  // Kernel-closed: D() is fromUnits, canonical numeric(19,4) — proven Money.
+  return { payg: D(period * DOLLAR) as Money, sg: D(sg) as Money };
 }
 
 /**

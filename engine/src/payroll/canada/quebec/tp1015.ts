@@ -54,6 +54,7 @@
  * services fund employer contribution.
  */
 import { PayrollError } from "../../error.ts";
+import type { Money } from "../../../money/brands.ts";
 import {
   bmin, D, divIntCents, max0, mulInt, mulRateCents, mulRatioCents, rate6, U,
 } from "../decimal.ts";
@@ -115,11 +116,11 @@ export interface Tp1015Result {
   /** The TP-1015.F-V version the calculation used ("2026-01"). */
   version: string;
   /** A — income tax to withhold on the periodic remuneration (includes L). */
-  periodicTax: string;
+  periodicTax: Money;
   /** Income tax to withhold on this period's lump sum (s. 2.1.2 Method 2). */
-  bonusTax: string;
+  bonusTax: Money;
   /** periodicTax + bonusTax. */
-  totalTax: string;
+  totalTax: Money;
   /** Every intermediate variable, QC_-prefixed so the stub's factors jsonb
    *  can hold them beside the T4127 factors without a key collision. */
   factors: Record<string, string>;
@@ -292,11 +293,14 @@ export function calculateTp1015(input: Tp1015Input): Tp1015Result {
   }
   trace("AB", bonusTax);
 
+  // Kernel-closed: D() is fromUnits, canonical numeric(19,4). The factors
+  // trace stays Record<string, string>: it mixes money legs with non-money
+  // intermediates (annual incomes I/I2, credit E), like the T4127 trace.
   return {
     version: rates.version,
-    periodicTax: D(periodicTax),
-    bonusTax: D(bonusTax),
-    totalTax: D(periodicTax + bonusTax),
+    periodicTax: D(periodicTax) as Money,
+    bonusTax: D(bonusTax) as Money,
+    totalTax: D(periodicTax + bonusTax) as Money,
     factors,
   };
 }
