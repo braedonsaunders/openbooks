@@ -311,6 +311,7 @@ export async function loadLeaveQueue(
   // Department calendar: absence days in the window, grouped by date. The
   // engine scopes every member row; an empty window reads empty, never all.
   let calendarDays: LeaveQueueData['calendarDays'] = []
+  let calendarRefusal: LeaveRefusal | null = null
   const departmentId = sp.department ?? ''
   const from = sp.from ?? today
   const to = sp.to ?? today
@@ -326,15 +327,17 @@ export async function loadLeaveQueue(
       calendarDays = [...byDate.entries()]
         .sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([date, entries]) => ({ date, entries }))
-    } catch {
+    } catch (error) {
+      if (!(error instanceof HrmAuthorizationError) && !(error instanceof LeaveError)) throw error
+      calendarRefusal = { title: t('leave.refusedTitle'), message: error.message }
       calendarDays = []
     }
   }
 
   return {
     ...base,
-    refusal: null,
-    hasContent: true,
+    refusal: calendarRefusal,
+    hasContent: calendarRefusal === null,
     counts,
     total: listed.length,
     truncated,
