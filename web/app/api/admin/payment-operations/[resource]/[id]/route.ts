@@ -10,6 +10,7 @@ import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../../lib/countries'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { subsidiaryVisibleFilter } from '../../../../../../lib/subsidiaries'
 import { auditConfigChange } from '../../_lib'
 
 export const runtime = 'nodejs'
@@ -193,10 +194,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       // or other-org id must answer 404, never {ok:true} for work no read can
       // observe.
       const mandateWrite = await db.transaction(async (tx) => {
+        const candidate = (await tx.execute<{ party_id: string }>(sql`
+          select party_id from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
+        `)).rows[0]
+        if (!candidate) return 'missing' as const
+        // Mandates follow their counterparty's legal-entity ownership. Lock
+        // the party before the mandate, matching party rehome lock order.
+        const party = (await tx.execute(sql`
+          select p.id from parties p
+           where p.id = ${candidate.party_id} and p.org_id = ${gate.user.orgId} and p.is_active
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+           for update
+        `)).rows[0]
+        if (!party) return 'missing' as const
         const before = (await tx.execute<Record<string, unknown>>(sql`
           select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId} for update
-        `))
-        if (!before.rows[0]) return 'missing' as const
+        `)).rows[0]
+        if (!before || before.party_id !== candidate.party_id) return 'missing' as const
         const updated = (await tx.execute<Record<string, unknown>>(sql`
           update payment_mandates set
             status = coalesce(${body.status ?? null}, status),
@@ -209,7 +223,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         `))
         if (!updated.rows[0]) return 'missing' as const
         await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', id, 'update',
-          { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
+          { before, after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
         return 'updated' as const
       })
       if (mandateWrite === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })

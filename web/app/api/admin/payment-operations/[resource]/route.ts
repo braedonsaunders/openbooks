@@ -186,15 +186,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     if (!isUuid(body.partyId ?? '') || !isUuid(body.partyBankAccountId ?? '') || !body.mandateReference?.trim()) {
       return NextResponse.json({ error: 'partyId, partyBankAccountId, and mandateReference are required' }, { status: 400 })
     }
-    const mandateBank = (await db.execute(sql`
-      select 1 from party_bank_accounts b join parties p on p.id = b.party_id and p.org_id = b.org_id
-       where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
-         and p.org_id = ${gate.user.orgId} and p.is_active and b.is_active and b.approved_at is not null
-    `))
-    if (!mandateBank.rows[0]) return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
     const scheme = body.scheme === 'nacha' || body.scheme === 'sepa_core' || body.scheme === 'sepa_b2b' || body.scheme === 'custom' ? body.scheme : 'custom'
     const mandateStatus = body.status === 'pending' || body.status === 'active' || body.status === 'suspended' || body.status === 'revoked' || body.status === 'expired' ? body.status : 'pending'
-    const row = await db.transaction(async (tx) => {
+    const creation = await db.transaction(async (tx) => {
+      // Mandates are owned by their counterparty. Hold that party row across
+      // scope validation and insert so a concurrent rehome cannot create a
+      // mandate for a party the operator no longer owns.
+      const party = (await tx.execute(sql`
+        select p.id from parties p
+         where p.id = ${body.partyId} and p.org_id = ${gate.user.orgId}
+           and p.is_active
+           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         for update
+      `)).rows[0]
+      if (!party) return { kind: 'not-found' as const }
+      const mandateBank = (await tx.execute(sql`
+        select 1 from party_bank_accounts b
+         where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
+           and b.org_id = ${gate.user.orgId} and b.is_active and b.approved_at is not null
+         for update
+      `))
+      if (!mandateBank.rows[0]) return { kind: 'invalid-bank' as const }
       const created = (await tx.insert(schema.paymentMandates).values({
         orgId: gate.user.orgId,
         partyId: body.partyId!,
@@ -211,9 +223,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       }).returning())[0]!
       await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', created.id, 'insert',
         { after: created }, gate.user.id, req.headers.get('X-Request-Id'))
-      return created
+      return { kind: 'created' as const, row: created }
     })
-    return NextResponse.json({ id: row.id }, { status: 201 })
+    if (creation.kind === 'not-found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (creation.kind === 'invalid-bank') return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
+    return NextResponse.json({ id: creation.row.id }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'request failed'
     return NextResponse.json({ error: message }, { status: 422 })

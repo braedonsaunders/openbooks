@@ -54,8 +54,10 @@ const mockSources = new Map<string, string>([
           if (text.includes('update payment_mandates')) state.updates.push('mandates')
           if (text.includes('update payment_schedules')) state.updates.push('schedules')
           if (text.includes('select * from payment_mandates')) {
-            return { rows: [{ id: 'mandate-1', status: 'active' }] }
+            return { rows: [{ id: 'mandate-1', party_id: 'party-1', status: 'active' }] }
           }
+          if (text.includes('select party_id from payment_mandates')) return { rows: [{ party_id: 'party-1' }] }
+          if (text.includes('select p.id from parties')) return { rows: [{ id: 'party-1' }] }
           if (text.includes('select cron, timezone')) {
             return { rows: [{ cron: '0 9 * * *', timezone: 'UTC' }] }
           }
@@ -71,7 +73,7 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }`],
+  ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }`],
   ['mock:features', `export async function isFeatureEnabled() { return true }`],
   ['mock:list-params', `export function isUuid() { return true }`],
   ['mock:countries', `export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }`],
