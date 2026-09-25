@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
+import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 
 /**
@@ -104,8 +105,16 @@ import type {
 } from "../statutory-context.ts";
 
 /**
+ * 2026 CNT constants (Revenu Québec, Contribution Related to Labour
+ * Standards; LE-39.0.2-V): 0.06% of remuneration to $103,000 per employee.
+ */
+const CNT_RATE_2026 = "0.06";
+const CNT_MAX_2026 = "103000";
+
+/**
  * Phase 8 — CA pack earnings-assessed employer levies: WCB/WSIB, provincial
- * EHT, and the Québec health services fund (TP-1015.F-V s. 5).
+ * EHT, the Québec health services fund (TP-1015.F-V s. 5), and the Québec
+ * contribution related to labour standards (CNT).
  */
 export async function applyCaEmployerLevies(
   ctx: PayrollEmployerLevyContext,
@@ -361,5 +370,54 @@ export async function applyCaEmployerLevies(
     }
   }
 
-  return { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings };
+  // Québec contribution related to labour standards (CNT): 0.06% of the
+  // remuneration subject to $103,000 per employee per year for 2026, minus
+  // the statutory exemption classes (LE-39.0.2-V; RQ contribution page).
+  // Employment income is generally subject, so the stub's gross earnings.
+  // The cap binds committed stubs plus the run being calculated (WCB shape:
+  // committed-only counting lets two drafts each claim the full room).
+  // Pre-adoption remuneration has no CNT carry-in column yet: a mid-year
+  // adopter re-opens the full $103,000 room on the first stub (bounded
+  // over-accrual, high earners only) until the column lands.
+  let cntAmount = "0";
+  let cntEarnings = "0";
+  if (region === "QC") {
+    if (taxYear !== 2026) {
+      throw new PayrollPackError(
+        `Québec CNT has no transcribed rate for ${taxYear}: 2026 prices 0.06% to $103,000 per employee `
+        + "(Revenu Québec). Transcribe the year's rate and maximum before calculating.",
+      );
+    }
+    const runSubsidiary = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from documents where org_id = ${orgId} and id = ${documentId}
+    `)).rows[0]?.subsidiary_id ?? null;
+    const cntExemption = await resolveStoredEmployerFact({
+      tx,
+      orgId,
+      subsidiaryId: runSubsidiary,
+      country: "CA",
+      factKey: "cnt_exemption",
+      asOf: ctx.payDate ?? `${taxYear}-12-31`,
+    });
+    if (cntExemption === "none") {
+      const priorCnt = ((await tx.execute<{ prior: string }>(sql`
+        select coalesce(sum((s.factors->>'CNT_EARN')::numeric), 0) as prior
+          from pay_stubs s
+          join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+         where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+           and s.tax_year = ${taxYear}
+           and (r.run_status = 'committed'
+                or s.pay_run_document_id = ${documentId})
+      `))).rows[0]!.prior;
+      const gross = grossEarnings();
+      const room = cmp(CNT_MAX_2026, priorCnt) > 0 ? add(CNT_MAX_2026, neg(priorCnt)) : "0";
+      cntEarnings = cmp(gross, room) <= 0 ? gross : room;
+      if (cmp(cntEarnings, "0") > 0) {
+        cntAmount = mulPercent(cntEarnings, CNT_RATE_2026, 2);
+        pushStatutory("cnt", "employer_contribution", "Contribution related to labour standards (CNT)", cntAmount, 285);
+      }
+    }
+  }
+
+  return { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings, cntAmount, cntEarnings };
 }

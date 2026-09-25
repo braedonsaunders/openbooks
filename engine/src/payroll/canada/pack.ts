@@ -262,6 +262,18 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "cnt",
+      // Québec employment only: the 0.06% contribution related to labour
+      // standards on remuneration to $103,000 per employee per year, minus
+      // the statutory exemption classes (CA cnt_exemption employer fact).
+      // Remitted to Revenu Québec like the HSF — declared per region for
+      // the same reason, so the declaration stays on the component.
+      regions: ["QC"],
+      components: [
+        { code: "CNT", name: "Contribution related to labour standards (CNT)", systemKey: "cnt", kind: "employer_contribution", sequence: 285, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+      ],
+    },
+    {
       key: "hsf",
       // Québec employment only, mirroring the ca_hsf rate slot: inert
       // elsewhere — no line, no account demand.

@@ -318,6 +318,8 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
       ehtEarnings: "0",
       hsfAmount: "0",
       hsfEarnings: "0",
+      cntAmount: "0",
+      cntEarnings: "0",
     },
   };
   const factors = await FR_PAYROLL_PACK.computeStatutory(ctx);
@@ -375,6 +377,8 @@ test("adapter refuses without a known effectif, naming FNAL", async () => {
       ehtEarnings: "0",
       hsfAmount: "0",
       hsfEarnings: "0",
+      cntAmount: "0",
+      cntEarnings: "0",
     },
   };
   await assert.rejects(() => FR_PAYROLL_PACK.computeStatutory(ctx), /Effectif salarié annuel de l'employeur.*effectif_moyen_annuel/);
