@@ -5,7 +5,7 @@ import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 export interface AdoptionFixture {
   orgId: string;
@@ -35,7 +35,7 @@ export async function seedCanadianPayrollComponentsForTest(
 }
 
 async function seedEmployee(
-  fx: { orgId: string; actorId: string; scheduleId: string },
+  fx: { orgId: string; actorId: string; scheduleId: string; subsidiaryId: string },
   options: { name: string; hiredOn?: string } = { name: "Terry Worker" },
 ): Promise<string> {
   const employeeId = randomUUID();
@@ -46,17 +46,20 @@ async function seedEmployee(
     insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, ${options.hiredOn ?? "2020-01-06"}, true,
             ${fx.actorId}, ${fx.actorId})`);
+  // Stub calculation refuses employees without an HRM employment, so the hire
+  // carries one and the profile points at it.
+  const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                   is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2020-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           province, pay_basis, country, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
+    values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
             '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
   return employeeId;
 }
@@ -122,7 +125,7 @@ export async function seedAdoption(
 
   const employeeName = "Terry Worker";
   const employeeId = await seedEmployee(
-    { orgId: org.orgId, actorId, scheduleId },
+    { orgId: org.orgId, actorId, scheduleId, subsidiaryId: org.subsidiaryId },
     { name: employeeName, hiredOn: options.hiredOn },
   );
 

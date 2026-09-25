@@ -30,6 +30,7 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedWorkerEmployment,
 } from "../../../engine/src/testing/fixtures.ts";
 import {
   connectMigrationClient,
@@ -207,13 +208,16 @@ async function seedAccrual(
        tax_year, run_status, run_type, created_by, updated_by)
     values (${runId}, ${fx.orgId}, ${scheduleId}, '2026-07-21', '2026-07-21',
             '2026-07-21', 2026, 'committed', 'regular', ${fx.actor}, ${fx.actor})`);
+  // pay_stubs.employment_id is NOT NULL: the stub carries the employee's own
+  // HRM employment.
+  const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
   await db.execute(sql`
     insert into pay_stubs
-      (id, org_id, pay_run_document_id, employee_party_id, province,
+      (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
        periods_per_year, pay_date, tax_year, currency_code, gross,
        pensionable_earnings, insurable_earnings, net_pay, employer_cost,
        vacation_accrued, factors, created_by, updated_by)
-    values (${stubId}, ${fx.orgId}, ${runId}, ${employeeId}, ${overrides.province ?? "ON"}, 12,
+    values (${stubId}, ${fx.orgId}, ${runId}, ${employeeId}, ${employmentId}, ${overrides.province ?? "ON"}, 12,
             '2026-07-21', 2026, 'USD', '100.00', '100.00', '100.00', '100.00',
             '100.00', '0', '{}'::jsonb, ${fx.actor}, ${fx.actor})`);
   await db.execute(sql`

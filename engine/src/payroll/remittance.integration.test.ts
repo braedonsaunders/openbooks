@@ -21,7 +21,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -107,14 +107,17 @@ async function addCommittedRemittanceAccrual(
     values
       (${documentId}, ${org.orgId}, ${scheduleId}, ${input.payDate}, ${input.payDate},
        ${input.payDate}, 2026, 'committed', 'regular', ${actorId}, ${actorId})`);
+  // pay_stubs.employment_id is NOT NULL: the stub carries the employee's own
+  // HRM employment.
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   await db.execute(sql`
     insert into pay_stubs
-      (id, org_id, pay_run_document_id, employee_party_id, province,
+      (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
        periods_per_year, pay_date, tax_year, currency_code, gross,
        pensionable_earnings, insurable_earnings, net_pay, employer_cost,
        vacation_accrued, factors, created_by, updated_by)
     values
-      (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, 'ON', 12,
+      (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 12,
        ${input.payDate}, 2026, 'CAD', ${input.amount}, ${input.amount},
        ${input.amount}, ${input.amount}, ${input.amount}, '0', '{}'::jsonb,
        ${actorId}, ${actorId})`);
@@ -553,6 +556,9 @@ test(
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'person', 'Remi Trent', true, '{}'::jsonb)`);
+      // Stub calculation refuses employees without an HRM employment, so the
+      // hire carries one and the profile points at it.
+      const remiEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
         insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                       effective_from, is_active, created_by, updated_by)
@@ -565,11 +571,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${remiEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       const run = await createPayRun({
@@ -1535,6 +1541,9 @@ test(
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'person', 'Dues Dora', true, '{}'::jsonb)`);
+      // Stub calculation refuses employees without an HRM employment, so the
+      // hire carries one and the profile points at it.
+      const duesEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
         insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                       effective_from, is_active, created_by, updated_by)
@@ -1547,11 +1556,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${duesEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -1652,6 +1661,9 @@ test(
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'person', 'Liability Larry', true, '{}'::jsonb)`);
+      // Stub calculation refuses employees without an HRM employment, so the
+      // hire carries one and the profile points at it.
+      const liabilityEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
         insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                       effective_from, is_active, created_by, updated_by)
@@ -1664,11 +1676,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${liabilityEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
       const postRun = async (periodStart: string, periodEnd: string) => {
         const run = await createPayRun({

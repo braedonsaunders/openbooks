@@ -10,7 +10,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -62,6 +62,11 @@ async function usPayrollOrg(): Promise<Fixture> {
         // unconfigured SUI refuses by name at calculate, and these tests
         // assert W-2 boxes, never SUI amounts.
         us: {
+          // Presence-only FUTA the same way: the 2026 Schedule A is not
+          // transcribed, so an unconfigured FUTA refuses by name; the
+          // ordinary 0.6% full-credit figure is the TEST entering a number
+          // as an employer would, and no expectation asserts a FUTA amount.
+          futaRate: "0.006",
           sui: Object.fromEntries(
             ["NY", "AZ", "CA", "TX"].map((state) => [
               state, { rate: "0.03", wageBase: "7000" },
@@ -120,11 +125,14 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
                                   effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, 'USD', '52000', 'year', 2080, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
+  // Stub calculation refuses employees without an HRM employment, so the hire
+  // carries one and the profile points at it.
+  const employmentId = await seedWorkerEmployment(fx.orgId, id, subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                           province, pay_basis, filing_status,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, filing_status,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'US', ${opts.state},
+    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'US', ${opts.state},
             'salary', 'single', true, ${fx.actorId}, ${fx.actorId})`);
   for (const certificate of opts.certificates ?? []) {
     await db.execute(sql`
@@ -135,6 +143,16 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
               null, ${JSON.stringify(certificate.answers ?? {})}::jsonb, '2026-01-01',
               ${fx.actorId}, ${fx.actorId})`);
   }
+  // The federal calculation refuses payroll without a tax-residency status
+  // (Pub. 15-T nonresident-alien rules), so every synthetic employee states
+  // one — U.S. person, like the single filing status above.
+  await db.execute(sql`
+    insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                           region, sub_region, answers, effective_from,
+                                           created_by, updated_by)
+    values (${fx.orgId}, ${id}, 'US', 'us_w4_tax_residency', null, null,
+            '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+            ${fx.actorId}, ${fx.actorId})`);
   return id;
 }
 
