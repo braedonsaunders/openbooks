@@ -321,21 +321,20 @@ export async function computeUsStatutory(
     (levy) => levy.region === "MI" && levy.level === "sub_region"
       && levy.subRegion === "DETROIT" && levy.reach === "resident",
   );
-  const detroitOtherWorkCity = hasDetroitResidentLevy
-    ? resolution.levies.find(
-      (levy) => levy.region === "MI" && levy.level === "sub_region"
-        && levy.side === "work" && levy.subRegion !== "DETROIT" && levy.subRegion !== null,
-    )
-    : undefined;
-  const detroitOtherCity = detroitOtherWorkCity?.subRegion
-    ? {
-      code: detroitOtherWorkCity.subRegion,
-      nonresidentRate: (() => {
-        const rates = config.subRegionRates("us_mi_city", "MI", detroitOtherWorkCity.subRegion!);
-        return rates?.nonresidentRate ?? rates?.rate ?? null;
-      })(),
-    }
-    : null;
+  // Every other Michigan taxing city this Detroit resident works in: the
+  // resident rate prices per work-city allocation (2.4% minus THAT city's
+  // nonresident rate), so first-match `.find` would price every allocation
+  // at one city's credit. Rate lookup stays here, beside the tenant rates.
+  const detroitOtherCities = hasDetroitResidentLevy
+    ? [...new Set(resolution.levies
+      .filter((levy) => levy.region === "MI" && levy.level === "sub_region"
+        && levy.side === "work" && levy.subRegion !== "DETROIT" && levy.subRegion !== null)
+      .map((levy) => levy.subRegion!))]
+      .map((code) => {
+        const rates = config.subRegionRates("us_mi_city", "MI", code);
+        return { code, nonresidentRate: rates?.nonresidentRate ?? rates?.rate ?? null };
+      })
+    : [];
   const supplementalPaymentTiming = U(income) === 0n && U(nonPeriodic) > 0n
     ? "separate" as const
     : "combined" as const;
@@ -490,7 +489,7 @@ export async function computeUsStatutory(
       },
       tenantRates: (rateKey, subRegion) =>
         config.subRegionRates(rateKey, levy.region, subRegion),
-      detroitOtherCity,
+      detroitOtherCities,
     });
     if (!withheld) continue;
     if (levy.level === "region" && levy.side === "work") {

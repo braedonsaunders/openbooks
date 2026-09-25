@@ -549,8 +549,12 @@ export interface UsStateWithholdingInput {
     yearToDate?: string;
   };
   ytd?: UsStateYtd;
-  /** Michigan Form 5469 resident rate after the other work city's nonresident offset. */
-  detroitResidentRateOverride?: string;
+  /**
+   * Michigan Form 5469 other work cities for a Detroit resident: wages
+   * allocated to each price at 2.4% minus that city's nonresident rate.
+   * Absent or empty prices everything at the full resident rate.
+   */
+  detroitOtherCities?: { code: string; nonresidentRate: string | null }[];
   /**
    * The employer's reasonable expectation of the employee's annual earnings in
    * THIS state, when the employer asserts one. Wisconsin reads it for the
