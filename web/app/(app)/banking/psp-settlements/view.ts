@@ -21,7 +21,7 @@ import type { PspAccountOption, PspSettlementRow, PspSubsidiaryOption } from './
  * all run browser-side. The spec path cannot fetch (specs bind
  * loader-resolved data), so the loader performs the GET contract itself —
  * same permission gate (`banking.read`), same feature flag (`banking`),
- * same subsidiary scoping, same `order by settlement_date desc` + limit 50
+ * same subsidiary scoping, same `order by settlement_date desc` ordering
  * — and hands the rows to the shared `PspSettlementsWorkspace`, which owns
  * every interactive branch the native page owns (import form, reversal
  * form, per-row Post/Reverse with the reason-length rule).
@@ -126,7 +126,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
            settlement_date as "settlementDate"
       from psp_settlement_batches
      where org_id = ${authz.user.orgId}${subsidiaryFilter}
-     order by settlement_date desc, created_at desc limit 50
+     order by settlement_date desc, created_at desc
   `)
   // The import form's subsidiary picker: same flag gate and caller scope as
   // the document drawers (F-t06-004). Empty keeps all subsidiary UI hidden
