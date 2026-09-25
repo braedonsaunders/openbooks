@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardApiKey } from "../../../../lib/api-auth";
 import { generateOpenApiSpec } from "../../../../lib/api/openapi-server";
+import { emitV1ExecutionEvent } from "../../../../lib/api/v1-request";
 
 export const runtime = "nodejs";
 
@@ -16,5 +17,7 @@ export async function GET(req: Request) {
     `${proto}://${host}`,
     gate.user.roles.map(({ key }) => key),
   );
+  const auditFailure = await emitV1ExecutionEvent("v1.openapi", 200, gate);
+  if (auditFailure) return auditFailure;
   return NextResponse.json(spec);
 }
