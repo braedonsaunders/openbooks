@@ -359,7 +359,8 @@
     "leveling": {
       "heading": "Nivellement des ressources",
       "description": "Retardez des activités pour qu’aucune équipe, machine ou sous-traitant ne dépasse sa capacité journalière. Vérifiez les déplacements proposés avant de les appliquer."
-    }
+    },
+    "readOnly": "Ce planning est en lecture seule. Toute modification nécessite un accès de gestion de projet."
   },
   "invoicing": {
     "rateCardLapse": "Lorsque la grille tarifaire a expiré",

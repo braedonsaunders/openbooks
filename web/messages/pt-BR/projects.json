@@ -359,7 +359,8 @@
     "leveling": {
       "heading": "Nivelamento de recursos",
       "description": "Atrase atividades para que nenhuma equipe, máquina ou subcontratada ultrapasse sua capacidade diária. Revise as movimentações propostas antes de aplicá-las."
-    }
+    },
+    "readOnly": "Este cronograma é somente leitura. Alterações exigem acesso de gerenciamento de projetos."
   },
   "invoicing": {
     "rateCardLapse": "Quando a tabela de preços expirou",

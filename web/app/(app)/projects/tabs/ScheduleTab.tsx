@@ -57,7 +57,13 @@ export function ScheduleTab({
   /** One mutation call; refreshes on success, surfaces the server's reason otherwise. */
   const mutate = useCallback(
     async (action: string, payload: Record<string, unknown>) => {
-      if (!canManage) return false
+      // A reader's edit must name its refusal up front: the adapter rolls a
+      // `false` back into the plan, so silence here reads as a silently
+      // dropping Gantt.
+      if (!canManage) {
+        setError(t('schedule.readOnly'))
+        return false
+      }
       setError(null)
       const res = await fetch('/api/project-schedule', {
         method: 'POST',
@@ -72,7 +78,7 @@ export function ScheduleTab({
       await refresh()
       return true
     },
-    [canManage, projectId, refresh, tCommon],
+    [canManage, projectId, refresh, t, tCommon],
   )
 
   const adapter: ScheduleAdapter = useMemo(
@@ -132,6 +138,11 @@ export function ScheduleTab({
       {error ? (
         <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
           {error}
+        </p>
+      ) : null}
+      {!canManage ? (
+        <p className="rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-400">
+          {t('schedule.readOnly')}
         </p>
       ) : null}
       <SchedulingProvider labels={labels} locale={locale}>
