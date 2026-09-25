@@ -845,7 +845,7 @@ export async function runScript(
                 ctx.org.id,
                 ctx.user?.id ?? null,
                 input,
-                { post, allowedSubsidiaryIds, idempotencyKey, deadlineMs: deadline },
+                { post, allowedSubsidiaryIds, idempotencyKey, deadlineMs: deadline, requireScriptsFeature: true },
               );
               return { kind: "created" as const, created };
             })();
