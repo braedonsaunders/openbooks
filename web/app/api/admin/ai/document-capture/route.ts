@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 
 export function createDeleteDocumentCaptureHandler(
-  requirePermission: typeof guardPermission = guardPermission,
+  checkPermission: typeof guardPermission = guardPermission,
   clearOrgDocumentCaptureKey: (orgId: string, userId: string) => Promise<void> = async (orgId, userId) => {
     const { clearOrgDocumentCaptureKey } = await import('../../../../../lib/assistant/ai-config')
     await clearOrgDocumentCaptureKey(orgId, userId)
   },
 ) {
   return async function DELETE() {
-    const gate = await requirePermission('admin.ai.manage')
+    const gate = await checkPermission('admin.ai.manage')
     if (gate instanceof NextResponse) return gate
     const scopeDenied = guardUnrestrictedScope(gate)
     if (scopeDenied) return scopeDenied
