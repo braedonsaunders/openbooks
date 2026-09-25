@@ -79,22 +79,30 @@ export function FxProviderForm({
   const formatDateTime = (value: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 
   async function persist(): Promise<boolean> {
-    const res = await fetch('/api/admin/fx-provider', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...form,
-        apiKey: clearSecret ? null : apiKey.trim() || undefined,
-      }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      toast.error(data.error ?? tc('feedback.saveFailed'))
+    // Every caller awaits this before its own try/finally begins, so a
+    // rejected PUT must surface here as a reported false — never as an
+    // escaping rejection that wedges busy on with no toast.
+    try {
+      const res = await fetch('/api/admin/fx-provider', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          apiKey: clearSecret ? null : apiKey.trim() || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error ?? tc('feedback.saveFailed'))
+        return false
+      }
+      setApiKey('')
+      setClearSecret(false)
+      return true
+    } catch {
+      toast.error(tc('feedback.saveFailed'))
       return false
     }
-    setApiKey('')
-    setClearSecret(false)
-    return true
   }
 
   async function save() {
