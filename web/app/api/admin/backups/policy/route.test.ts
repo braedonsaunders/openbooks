@@ -37,6 +37,11 @@ const mockSources = new Map<string, string>([
       state.calls.push(text)
       if (text.includes('insert into audit_log')) state.auditWasTransactional.push(state.transactionDepth > 0)
       if (state.auditGate && text.includes('insert into audit_log')) await state.auditGate
+      // The route re-reads the upserted row and refuses on a zero-row
+      // match, so the double answers the policy read with the stored row.
+      if (text.includes('from backup_policies')) {
+        return { rows: [{ enabled: true, frequency: 'weekly', hour_utc: 3, day_of_week: 2, day_of_month: 15, max_keep: 4 }] }
+      }
       return { rows: [] }
     } }
     export async function withOrgTransaction(_orgId, fn) {
