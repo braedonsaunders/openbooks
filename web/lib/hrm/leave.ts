@@ -271,7 +271,6 @@ export async function loadLeaveQueue(
   // actor's allowed employers like the request list above — the
   // today-count must not leak org-wide totals to a restricted reader.
   const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds)
-  const onLeaveEmploymentIds = new Set(onLeave.map((entry) => entry.employmentId))
 
   const counts: Record<string, number> = { pending: 0, upcoming: 0, today: onLeave.length, history: 0 }
   for (const row of listed) counts[segmentOf(row, today)] = (counts[segmentOf(row, today)] ?? 0) + 1
@@ -285,7 +284,10 @@ export async function loadLeaveQueue(
   if (segmentParam === 'pending' || segmentParam === 'upcoming' || segmentParam === 'history') {
     rows = listed.filter((row) => segmentOf(row, today) === segmentParam)
   } else if (segmentParam === 'today') {
-    rows = listed.filter((row) => row.status === 'approved' && onLeaveEmploymentIds.has(row.employmentId))
+    // On leave TODAY is the absence fact, not the request file: an
+    // approved future range belongs to Upcoming even when its employment
+    // is also on leave today under another request.
+    rows = listed.filter((row) => row.status === 'approved' && row.startsOn <= today && row.endsOn >= today)
   }
 
   const { workerByEmployment } = await loadQueueLabels(
