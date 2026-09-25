@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { businessToday, calendarQuarterBounds, startOfMonth } from "../platform/business-date.ts";
+import { businessToday, calendarQuarterBounds, formatInZone, startOfMonth } from "../platform/business-date.ts";
+import { now } from "../platform/clock.ts";
 import { db, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { appBaseUrl } from "./render-client.ts";
 
@@ -127,6 +128,17 @@ export function periodStartFor(cadence: "monthly" | "quarterly", today: string):
   return cadence === "quarterly" ? calendarQuarterBounds(today).start : startOfMonth(today);
 }
 
+/**
+ * Period label when the org calendar day itself could not be resolved (the
+ * C-55 notice needs an effectiveFrom and there is none yet). Falls back to
+ * the UTC day — never a guess at the org's zone — so the notice names an
+ * approximate period honestly rather than blocking the refusal. Pure and
+ * sim-clock aware, like businessToday.
+ */
+export function utcPeriodFallback(cadence: "monthly" | "quarterly"): string {
+  return periodStartFor(cadence, formatInZone(now(), "UTC"));
+}
+
 export function startOverheadScheduler(): void {
   if (timer) return;
   timer = setInterval(() => void tick(), TICK_INTERVAL_MS);
@@ -158,9 +170,35 @@ export async function tick(): Promise<void> {
          -- the default instead of throwing 22P02).
          and case (settings->'features'->>'projects') when 'true' then true when 'false' then false else true end`));
     for (const org of orgs.rows) {
+      // Per-org isolation: one tenant's failure (an unreadable time zone, a
+      // discovery row deleted mid-tick) is recorded by name and the loop
+      // continues — a bad org never aborts every org behind it. Resolving
+      // the business day reads orgs under FORCE RLS, so it runs inside the
+      // org's own context like the publish below; outside any context the
+      // lookup matches zero rows and every scheduled publish silently dies.
+      // Either failure is a C-55 publish failure (the rate card stays stale
+      // until a later tick succeeds), so it raises the named notice instead
+      // of only a console line.
       const cadence = org.cadence === "quarterly" ? "quarterly" : "monthly";
-      const today = await businessToday(org.id);
-      await publishForOrg(org.id, periodStartFor(cadence, today));
+      let effectiveFrom: string | null = null;
+      try {
+        const today = await withOrgContext(org.id, () => businessToday(org.id));
+        effectiveFrom = periodStartFor(cadence, today);
+        await publishForOrg(org.id, effectiveFrom);
+      } catch (e) {
+        const message = (e as Error).message;
+        console.error(`[overhead-scheduler] org ${org.id} tick failed:`, message);
+        try {
+          await withOrgContext(org.id, () =>
+            ensureOverheadPublishFailedNotice(org.id, effectiveFrom ?? utcPeriodFallback(cadence), message),
+          );
+        } catch (noticeError) {
+          console.error(
+            `[overhead-scheduler] org ${org.id}: failure notice could not be stored:`,
+            noticeError instanceof Error ? noticeError.message : noticeError,
+          );
+        }
+      }
     }
   } catch (e) {
     console.error("[overhead-scheduler] tick failed:", (e as Error).message);
