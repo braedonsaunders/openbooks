@@ -116,7 +116,7 @@ function setupScopeRefusal(actor: SetupActor, entity: SetupEntity): SetupWriteRe
     : null
 }
 
-async function savePayComponentEarningClassification(
+export async function savePayComponentEarningClassification(
   tx: Pick<typeof db, 'execute'>,
   orgId: string,
   componentId: string,
