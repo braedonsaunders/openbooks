@@ -388,6 +388,7 @@ const SUB_REGION_ENGINE_CODE: Readonly<Record<string, string>> = {
   "NY:YONKERS": "NY-YONKERS",
   "PA:PHILADELPHIA": "PA-PHILA",
   "MI:DETROIT": "MI-DETROIT",
+  "DE:WILMINGTON": "DE-WILM",
 };
 
 export interface UsWithholdingInput {

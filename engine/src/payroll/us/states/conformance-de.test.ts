@@ -27,7 +27,7 @@ test("DE certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(DE_CERTIFICATE), null);
   assert.equal(DE_REGION.implemented, true);
   assert.equal(DE_REGION.certificateKey, "us_de_sdw4a");
-  assert.equal(DE_REGION.subRegions.length, 0);
+  assert.equal(DE_REGION.subRegions.length, 1);
 });
 
 test("DE printed percents and addends are the table's own figures", () => {
