@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Ban, Bolt, Eye, Plus, Trash2, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { useDirtyClose } from '@/lib/use-dirty-close'
 import { Button, Drawer, Input, Label, Select, SearchSelect, UrlDrawer, cn } from '@openbooks/ui'
 import { ConditionBuilder } from '../../../../components/conditions/ConditionBuilder'
 import { SplitLinesEditor, type AllocationLine, type CodingConfig } from '../../../../components/allocations/SplitLinesEditor'
@@ -219,6 +220,10 @@ export function RuleDrawer({
   const [scopeOpen, setScopeOpen] = useState(initial.accountScope.length > 0)
   const [scopeFilter, setScopeFilter] = useState('')
   const [busy, setBusy] = useState(false)
+  const closeGuard = useDirtyClose({
+    dirty: false, busy, onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   const scopeMatches = useMemo(
     () => (scopeFilter ? reconAccounts.filter((a) => a.label.toLowerCase().includes(scopeFilter.toLowerCase())) : reconAccounts),
@@ -301,6 +306,7 @@ export function RuleDrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
+      beforeClose={closeGuard.beforeClose}
       size="2xl"
       title={creating ? t('newTitle') : rule!.name}
       description={t('drawerDescription')}
@@ -321,6 +327,7 @@ export function RuleDrawer({
           <input
             type="checkbox"
             checked={isActive}
+            disabled={busy}
             onChange={(e) => setIsActive(e.target.checked)}
             className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
           />
@@ -328,7 +335,7 @@ export function RuleDrawer({
         </label>
       }
     >
-      <div className="grid gap-6 p-1 lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <fieldset disabled={busy} className="grid min-w-0 gap-6 p-1 lg:grid-cols-[minmax(0,1fr)_19rem]">
         {/* ---- builder column ---- */}
         <div className="min-w-0 space-y-5">
           <div className="grid gap-4 sm:grid-cols-3">
@@ -551,7 +558,7 @@ export function RuleDrawer({
             <p className="px-1 text-[11px] text-slate-400 dark:text-slate-500">{t('preview.healthHint')}</p>
           ) : null}
         </div>
-      </div>
+      </fieldset>
     </UrlDrawer>
   )
 }
