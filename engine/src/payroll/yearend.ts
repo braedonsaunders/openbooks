@@ -205,6 +205,8 @@ export interface OpeningYearEndYtd {
    * committed stubs, never at another program's.
    */
   programBasesYtd: Record<string, string>;
+  /** Federal filing-account carry-ins, kept separate from employee-only legacy balances. */
+  accountBasesYtd?: Record<string, { filingAccountId: string; insurableYtd: string }[]>;
 }
 
 /**
@@ -259,6 +261,40 @@ export function carryOpeningYearEndYtd<S extends { employeePartyId: string }>(
     carried.add(slip.employeePartyId);
     return into(slip, opening);
   });
+}
+
+/** A legacy employee-only opening cannot be placed on one of several EIN slips. */
+export function assertUsOpeningYtdEinAttribution(
+  slips: readonly Pick<W2Slip, "employeePartyId" | "filingAccountId">[],
+  openings: ReadonlyMap<string, OpeningYearEndYtd>,
+): void {
+  const accountsByEmployee = new Map<string, Set<string>>();
+  for (const slip of slips) {
+    const accounts = accountsByEmployee.get(slip.employeePartyId) ?? new Set<string>();
+    accounts.add(slip.filingAccountId ?? "");
+    accountsByEmployee.set(slip.employeePartyId, accounts);
+  }
+  for (const [employeePartyId, opening] of openings) {
+    const accounts = accountsByEmployee.get(employeePartyId);
+    const hasAmounts = [
+      opening.pensionableYtd, opening.insurableYtd, opening.taxableYtd,
+      opening.taxYtd, opening.ficaWithheldYtd,
+    ].some((amount) => cmp(amount, "0") !== 0);
+    if (hasAmounts && accounts && accounts.size > 1) {
+      throw new PayrollError(
+        `W-2 opening carry-in for employee ${employeePartyId} has no EIN attribution, but committed wages exist under ${accounts.size} federal accounts. Reconcile the prior-provider W-2 wage and withholding amounts by EIN before generating W-2 slips; they cannot be assigned to the first slip safely.`,
+      );
+    }
+    for (const [field, bases] of Object.entries(opening.accountBasesYtd ?? {})) {
+      for (const base of bases) {
+        if (accounts && !accounts.has(base.filingAccountId)) {
+          throw new PayrollError(
+            `${field} opening carry-in for employee ${employeePartyId} names an EIN with no W-2 slip. Reconcile the employee's filing-account assignment and create the matching committed payroll history before filing.`,
+          );
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -348,7 +384,23 @@ async function openingYearEndYtdByEmployee(
        )
   `));
   const programs = await openingProgramBasesByEmployee(orgId, taxYear);
-  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+  const accountRows = (await db.execute<{
+    employee_party_id: string; program_key: string; filing_account_id: string; insurable_ytd: unknown;
+  }>(sql`
+    select ab.employee_party_id, ab.program_key, ab.filing_account_id, ab.insurable_ytd
+      from payroll_opening_account_bases ab
+      join employee_payroll_profiles prof
+        on prof.org_id = ab.org_id and prof.employee_party_id = ab.employee_party_id and prof.country = ${country}
+     where ab.org_id = ${orgId} and ab.tax_year = ${taxYear}
+  `)).rows;
+  const accountBasesByEmployee = new Map<string, Record<string, { filingAccountId: string; insurableYtd: string }[]>>();
+  for (const row of accountRows) {
+    const bases = accountBasesByEmployee.get(row.employee_party_id) ?? {};
+    bases[row.program_key] ??= [];
+    bases[row.program_key]!.push({ filingAccountId: row.filing_account_id, insurableYtd: normalizeMoney(String(row.insurable_ytd)) });
+    accountBasesByEmployee.set(row.employee_party_id, bases);
+  }
+  const legacy = new Map<string, OpeningYearEndYtd>(rows.rows.map((row) => [row.employee_party_id, {
     pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
     insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
     cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
@@ -363,7 +415,16 @@ async function openingYearEndYtdByEmployee(
     employerEiYtd: normalizeMoney(String(row.employer_ei_ytd ?? "0")),
     unionDuesYtd: normalizeMoney(String(row.union_dues_ytd ?? "0")),
     programBasesYtd: programs.get(row.employee_party_id) ?? {},
-  }]));
+  } satisfies OpeningYearEndYtd]));
+  for (const [employeePartyId, accountBasesYtd] of accountBasesByEmployee) {
+    const current = legacy.get(employeePartyId) ?? {
+      pensionableYtd: "0.0000", insurableYtd: "0.0000", cppYtd: "0.0000", cpp2Ytd: "0.0000",
+      eiYtd: "0.0000", qpipYtd: "0.0000", taxableYtd: "0.0000", taxYtd: "0.0000",
+      ficaWithheldYtd: "0.0000", programBasesYtd: programs.get(employeePartyId) ?? {},
+    };
+    legacy.set(employeePartyId, { ...current, accountBasesYtd });
+  }
+  return legacy;
 }
 
 async function openingEmployeeProfiles(
@@ -1405,6 +1466,31 @@ export function openingYtdIntoW2Slip(
   };
 }
 
+export function openingAccountYtdIntoW2Slip(
+  slip: W2Slip,
+  opening: OpeningYearEndYtd,
+  ficaRates: UsFicaSplitRates | null = null,
+): W2Slip {
+  const values = opening.accountBasesYtd ?? {};
+  const byAccount = (key: string) => values[key]?.find((base) => base.filingAccountId === slip.filingAccountId)?.insurableYtd ?? "0";
+  const taxableYtd = byAccount("us_w2_taxable");
+  const taxYtd = byAccount("us_w2_tax");
+  const ficaWages = byAccount("us_w2_fica_wages");
+  const ficaWithheld = byAccount("us_w2_fica_withheld");
+  const split = ficaRates && cmp(ficaWithheld, "0") !== 0
+    ? splitFicaWithheld(ficaWithheld, ficaWages, ficaRates)
+    : null;
+  return {
+    ...slip,
+    box1Wages: add(slip.box1Wages, taxableYtd),
+    box2FederalIncomeTax: add(slip.box2FederalIncomeTax, taxYtd),
+    box3SsWages: add(slip.box3SsWages, ficaWages),
+    box4SsTax: split ? add(slip.box4SsTax, split.ssTax) : slip.box4SsTax,
+    box5MedicareWages: add(slip.box5MedicareWages, ficaWages),
+    box6MedicareTax: split ? add(slip.box6MedicareTax, split.medicareTax) : slip.box6MedicareTax,
+  };
+}
+
 /**
  * One employee's boxes 15–20 from their per-state stub groups — pure, so the
  * multi-state assembly is verifiable without a database.
@@ -1611,7 +1697,8 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // state attribution, so pre-adoption state wages and withholding stay in the
   // federal boxes (the slip says so).
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
-  const ficaRates = [...openings.values()].some((o) => cmp(o.ficaWithheldYtd, "0") !== 0)
+  const ficaRates = [...openings.values()].some((o) => cmp(o.ficaWithheldYtd, "0") !== 0
+    || (o.accountBasesYtd?.us_w2_fica_withheld ?? []).some((base) => cmp(base.insurableYtd, "0") !== 0))
     ? usFicaSplitRates(taxYear)
     : null;
   type StateGroup = {
@@ -1643,6 +1730,13 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     });
     groupsBySlip.set(key, slip);
   }
+  assertUsOpeningYtdEinAttribution(
+    [...groupsBySlip.values()].map((slip) => ({
+      employeePartyId: slip.employeePartyId,
+      filingAccountId: slip.filingAccountId,
+    })),
+    openings,
+  );
   // A stub that withheld state income tax with a blank work state names no
   // revenue department: its tax would vanish from every state entry (the
   // state-line builder drops blank-province groups first) while box 17
@@ -1715,7 +1809,11 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       stateLines: [],
     };
   });
-  return carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));
+  const carried = carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));
+  return carried.map((slip) => {
+    const opening = openings.get(slip.employeePartyId);
+    return opening ? openingAccountYtdIntoW2Slip(slip, opening, ficaRates) : slip;
+  });
 }
 
 // ---------------------------------------------------------------------------

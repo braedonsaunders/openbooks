@@ -328,6 +328,26 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   // Withheld FICA dollars the Massachusetts retirement-contribution
   // subtraction reads for a mid-year adopter.
   openingYtdFields: () => US_OPENING_YTD_FIELDS,
+  accountOpeningBases: [
+    {
+      key: "us_futa",
+      label: "FUTA wages per federal EIN",
+      help: "FUTA-insurable wages paid before OpenBooks adoption under this EIN this tax year.",
+      filingProgramType: "us_ein",
+      requiresRegion: false,
+    },
+    {
+      key: "us_sui",
+      label: "SUI wages per state account",
+      help: "State-unemployment-insurable wages paid before OpenBooks adoption under this state account this tax year.",
+      filingProgramType: "us_state_sui",
+      requiresRegion: true,
+    },
+    { key: "us_w2_taxable", label: "W-2 wages per federal EIN", help: "Federal taxable wages reported under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "taxableYtd" },
+    { key: "us_w2_tax", label: "Federal income tax per EIN", help: "Federal income tax withheld under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "taxYtd" },
+    { key: "us_w2_fica_wages", label: "FICA wages per federal EIN", help: "Social Security and Medicare wages under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "pensionableYtd" },
+    { key: "us_w2_fica_withheld", label: "FICA withheld per federal EIN", help: "Social Security and Medicare tax withheld under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "ficaWithheldYtd" },
+  ],
   statutorySlots: [
     {
       key: "fit",

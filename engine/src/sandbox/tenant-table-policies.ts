@@ -392,6 +392,7 @@ export const TENANT_TABLE_POLICIES = {
   "payroll_filing_submissions": "clone:catalog-uuid-rebase",
   "payroll_holidays": "clone:catalog-uuid-rebase",
   "payroll_opening_balance_components": "clone:catalog-uuid-rebase",
+  "payroll_opening_account_bases": "clone:catalog-uuid-rebase",
   "payroll_opening_balances": "clone:catalog-uuid-rebase",
   "payroll_opening_program_bases": "clone:catalog-uuid-rebase",
   "payroll_opening_sui_wages": "clone:catalog-uuid-rebase",

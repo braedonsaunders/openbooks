@@ -317,6 +317,64 @@ export function normalizeOpeningSuiStates(
   }
   return amounts;
 }
+export interface OpeningAccountBase {
+  programKey: string;
+  filingAccountId: string;
+  region: string | null;
+  insurableYtd: string;
+}
+
+export interface DeclaredAccountOpeningBaseField {
+  country: string;
+  programKey: string;
+  label: string;
+  help: string;
+  filingProgramType: string;
+  requiresRegion: boolean;
+  replacesLegacyField?: string;
+}
+
+export async function declaredAccountOpeningBaseFields(): Promise<DeclaredAccountOpeningBaseField[]> {
+  const { PAYROLL_COUNTRY_PACKS } = await import("./packs.ts");
+  return Object.entries(PAYROLL_COUNTRY_PACKS).flatMap(([country, pack]) =>
+    (pack.accountOpeningBases ?? []).map((field) => ({
+      country, programKey: field.key, label: field.label, help: field.help,
+      filingProgramType: field.filingProgramType, requiresRegion: field.requiresRegion,
+      replacesLegacyField: field.replacesLegacyField,
+    })))
+    .sort((a, b) => a.country.localeCompare(b.country) || a.programKey.localeCompare(b.programKey));
+}
+
+export function normalizeOpeningAccountBases(
+  input: readonly Record<string, unknown>[],
+  country: string,
+  declared: readonly DeclaredAccountOpeningBaseField[],
+): OpeningAccountBase[] {
+  const fields = new Map(declared.filter((field) => field.country === country).map((field) => [field.programKey, field]));
+  const seen = new Set<string>();
+  return input.map((raw) => {
+    const programKey = String(raw.programKey ?? "").trim();
+    const field = fields.get(programKey);
+    if (!field) throw new PayrollError(`"${programKey}" is not an account-scoped opening base declared by the ${country} payroll pack`);
+    const filingAccountId = String(raw.filingAccountId ?? "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(filingAccountId)) {
+      throw new PayrollError(`${field.label} requires a valid filing account id`);
+    }
+    const region = raw.region == null || raw.region === "" ? null : String(raw.region).trim().toUpperCase();
+    if (field.requiresRegion !== (region !== null) || (region !== null && !/^[A-Z]{2}$/.test(region))) {
+      throw new PayrollError(`${field.label} ${field.requiresRegion ? "requires the account's two-letter state" : "is federal and cannot carry a state"}`);
+    }
+    const key = `${programKey}\u001f${filingAccountId}\u001f${region ?? ""}`;
+    if (seen.has(key)) throw new PayrollError(`${field.label} is duplicated for this filing account and jurisdiction`);
+    seen.add(key);
+    const rawAmount = String(raw.insurableYtd ?? "").trim();
+    const exact = canonicalDecimal(rawAmount, 4);
+    if (exact === null) throw new PayrollError(decimalNullRefusal(field.label, "an amount", raw.insurableYtd, 4));
+    const insurableYtd = normalizeMoney(exact);
+    if (cmp(insurableYtd, "0") < 0) throw new PayrollError(`${field.label} cannot be negative`);
+    return { programKey, filingAccountId, region, insurableYtd };
+  });
+}
 
 export interface OpeningBalanceRow {
   employeePartyId: string;
@@ -334,6 +392,7 @@ export interface OpeningBalanceRow {
   programAmounts: OpeningProgramAmounts;
   /** US state code → SUI-insurable carry-in; empty when none was entered. */
   suiStateAmounts: OpeningSuiStateAmounts;
+  accountBases: OpeningAccountBase[];
   /**
    * A run has committed for this employee in this tax year, so the carry-in is
    * already inside withholding that has been paid out. Read-only from here.
@@ -513,10 +572,12 @@ export function isEmptyOpeningBalance(
   components: OpeningComponentAmounts = {},
   programs: OpeningProgramAmounts = {},
   suiStates: OpeningSuiStateAmounts = {},
+  accountBases: readonly OpeningAccountBase[] = [],
 ): boolean {
   if (Object.values(components).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
   if (Object.values(programs).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
   if (Object.values(suiStates).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
+  if (accountBases.some((base) => cmp(base.insurableYtd, "0") !== 0)) return false;
   return OPENING_BALANCE_FIELDS.every((f) => cmp(amounts[f.key] ?? "0", "0") === 0);
 }
 
@@ -734,6 +795,27 @@ export async function openingBalancesForYear(
     amounts[row.state] = normalizeMoney(String(row.insurable_ytd));
     suiStatesByRow.set(row.opening_balance_id, amounts);
   }
+  const accountBaseRows = await db.execute<{
+    employee_party_id: string; program_key: string; filing_account_id: string;
+    region: string | null; insurable_ytd: string;
+  }>(sql`
+    select ab.employee_party_id, ab.program_key, ab.filing_account_id, ab.region, ab.insurable_ytd
+      from payroll_opening_account_bases ab
+      left join parties p on p.id = ab.employee_party_id and p.org_id = ab.org_id
+     where ab.org_id = ${orgId} and ab.tax_year = ${year}
+       ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+  `);
+  const accountBasesByEmployee = new Map<string, OpeningAccountBase[]>();
+  for (const row of accountBaseRows.rows) {
+    const bases = accountBasesByEmployee.get(row.employee_party_id) ?? [];
+    bases.push({
+      programKey: row.program_key,
+      filingAccountId: row.filing_account_id,
+      region: row.region,
+      insurableYtd: normalizeMoney(String(row.insurable_ytd)),
+    });
+    accountBasesByEmployee.set(row.employee_party_id, bases);
+  }
 
   const locks = await openingBalanceLocks(orgId, year, db, allowedSubsidiaryIds);
   const toRow = (raw: Record<string, unknown>): OpeningBalanceRow => {
@@ -750,6 +832,7 @@ export async function openingBalancesForYear(
       componentAmounts: (rowId && componentsByRow.get(rowId)) || {},
       programAmounts: programsByEmployee.get(employeePartyId) ?? {},
       suiStateAmounts: (rowId && suiStatesByRow.get(rowId)) || {},
+      accountBases: accountBasesByEmployee.get(employeePartyId) ?? [],
       employeeName: String(raw.employee_name ?? ""),
       employeeNumber: raw.employee_number == null ? null : String(raw.employee_number),
       country: raw.country == null ? null : String(raw.country),
@@ -803,6 +886,8 @@ export interface OpeningBalanceWrite {
    * instruction to delete an employee's transfer determination.
    */
   suiStates?: Record<string, unknown>;
+  /** Account bases; undefined keeps stored values and [] clears them. */
+  accountBases?: readonly Record<string, unknown>[];
 }
 
 export interface OpeningBalanceSaveResult {
@@ -872,8 +957,13 @@ export async function saveOpeningBalances(input: {
 
     // Employees must belong to this org. Resolving names in one pass also
     // gives every error message something a human can act on.
-    const names = (await tx.execute<{ id: string; display_name: string; subsidiary_id: string | null }>(sql`
-      select p.id, p.display_name, p.subsidiary_id from parties p
+    const names = (await tx.execute<{
+      id: string; display_name: string; subsidiary_id: string | null; country: string | null;
+    }>(sql`
+      select p.id, p.display_name, p.subsidiary_id, prof.country
+        from parties p
+        left join employee_payroll_profiles prof
+          on prof.org_id = p.org_id and prof.employee_party_id = p.id
        where p.org_id = ${input.orgId} and p.id in (
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
@@ -881,6 +971,7 @@ export async function saveOpeningBalances(input: {
     `));
     const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
     const subsidiaryById = new Map(names.rows.map((r) => [r.id, r.subsidiary_id]));
+    const countryById = new Map(names.rows.map((r) => [r.id, r.country]));
 
     const existing = (await tx.execute<{ id: string; employee_party_id: string; updated_at: string | null }>(sql`
       select id, employee_party_id, updated_at::text as updated_at from payroll_opening_balances
@@ -922,6 +1013,48 @@ export async function saveOpeningBalances(input: {
       amounts[row.program_key] = normalizeMoney(String(row.insurable_ytd));
       storedProgramsByEmployee.set(row.employee_party_id, amounts);
     }
+    const storedAccountBases = await tx.execute<{
+      employee_party_id: string; program_key: string; filing_account_id: string;
+      region: string | null; insurable_ytd: string;
+    }>(sql`
+      select employee_party_id, program_key, filing_account_id, region, insurable_ytd
+        from payroll_opening_account_bases
+       where org_id = ${input.orgId} and tax_year = ${year}
+    `);
+    const storedAccountBasesByEmployee = new Map<string, OpeningAccountBase[]>();
+    for (const row of storedAccountBases.rows) {
+      const bases = storedAccountBasesByEmployee.get(row.employee_party_id) ?? [];
+      bases.push({
+        programKey: row.program_key,
+        filingAccountId: row.filing_account_id,
+        region: row.region,
+        insurableYtd: normalizeMoney(String(row.insurable_ytd)),
+      });
+      storedAccountBasesByEmployee.set(row.employee_party_id, bases);
+    }
+    const declaredAccountBases = await declaredAccountOpeningBaseFields();
+    const accountInfo = new Map<string, {
+      country: string; program_type: string; state_code: string | null;
+      subsidiary_id: string | null; is_active: boolean;
+    }>();
+    const accountIds = new Set([
+      ...input.rows.flatMap((row) => row.accountBases ?? []).map((base) =>
+        typeof base.filingAccountId === "string" ? base.filingAccountId : ""),
+      ...storedAccountBases.rows.map((base) => base.filing_account_id),
+    ]);
+    for (const accountId of accountIds) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(accountId)
+        || accountInfo.has(accountId)) continue;
+      const found = await tx.execute<{
+        country: string; program_type: string; state_code: string | null;
+        subsidiary_id: string | null; is_active: boolean;
+      }>(sql`
+        select country, program_type, state_code, subsidiary_id, is_active
+          from payroll_filing_accounts
+         where org_id = ${input.orgId} and id = ${accountId}::uuid
+      `);
+      if (found.rows[0]) accountInfo.set(accountId, found.rows[0]);
+    }
 
     // Stored per-state SUI carry-ins ride the same keep-on-silence contract:
     // keyed by parent row, like the components above.
@@ -945,6 +1078,7 @@ export async function saveOpeningBalances(input: {
       components: OpeningComponentAmounts;
       programs: OpeningProgramAmounts;
       suiStates: OpeningSuiStateAmounts;
+      accountBases: OpeningAccountBase[];
     }[] = [];
     for (const row of input.rows) {
       const employeeName = nameById.get(row.employeePartyId);
@@ -1026,12 +1160,50 @@ export async function saveOpeningBalances(input: {
         const suiStates = row.suiStates === undefined
           ? storedSuiStates
           : normalizeOpeningSuiStates(row.suiStates);
+        const accountBases = row.accountBases === undefined
+          ? storedAccountBasesByEmployee.get(row.employeePartyId) ?? []
+          : normalizeOpeningAccountBases(
+            row.accountBases,
+            countryById.get(row.employeePartyId) ?? "",
+            declaredAccountBases,
+          );
+        const storedAccountBasesForEmployee = storedAccountBasesByEmployee.get(row.employeePartyId) ?? [];
+        for (const base of accountBases) {
+          const declared = declaredAccountBases.find((field) =>
+            field.country === (countryById.get(row.employeePartyId) ?? "") && field.programKey === base.programKey);
+          const account = accountInfo.get(base.filingAccountId);
+          const unchangedStored = storedAccountBasesForEmployee.some((storedBase) =>
+            storedBase.programKey === base.programKey
+            && storedBase.filingAccountId === base.filingAccountId
+            && storedBase.region === base.region
+            && cmp(storedBase.insurableYtd, base.insurableYtd) === 0);
+          if (!declared || !account || account.country !== declared.country
+            || account.program_type !== declared.filingProgramType
+            || account.subsidiary_id !== (subsidiaryById.get(row.employeePartyId) ?? null)
+            || (!account.is_active && !unchangedStored)
+            || (declared.requiresRegion ? account.state_code !== base.region : base.region !== null)) {
+            throw new PayrollError(
+              `${declared?.label ?? base.programKey} must reference a ${declared?.filingProgramType ?? "declared"} filing account${declared?.requiresRegion ? ` for ${base.region}` : ""} belonging to this employee's legal employer; inactive accounts can only retain an unchanged stored carry-in`,
+            );
+          }
+        }
+        for (const base of accountBases) {
+          const declared = declaredAccountBases.find((field) =>
+            field.country === (countryById.get(row.employeePartyId) ?? "") && field.programKey === base.programKey);
+          const legacyField = declared?.replacesLegacyField as keyof OpeningBalanceAmounts | undefined;
+          if (legacyField && cmp(amounts[legacyField] ?? "0", "0") !== 0) {
+            throw new PayrollError(
+              `${base.programKey} and employee-only ${legacyField} both carry amounts. Move the prior-provider amount into the filing-account-scoped column to avoid reporting it twice.`,
+            );
+          }
+        }
         planned.push({
           employeePartyId: row.employeePartyId,
-          amounts: isEmptyOpeningBalance(amounts, components, programs, suiStates) ? null : amounts,
+          amounts: isEmptyOpeningBalance(amounts, components, programs, suiStates, accountBases) ? null : amounts,
           components,
           programs,
           suiStates,
+          accountBases,
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "invalid amounts");
@@ -1067,6 +1239,7 @@ export async function saveOpeningBalances(input: {
               beforeComponents: storedByEmployee.get(row.employeePartyId) ?? {},
               beforePrograms: storedProgramsByEmployee.get(row.employeePartyId) ?? {},
               beforeSuiStates: storedSuiByRow.get(deleted.rows[0]!.id) ?? {},
+              beforeAccountBases: storedAccountBasesByEmployee.get(row.employeePartyId) ?? [],
             },
           });
         }
@@ -1176,6 +1349,27 @@ export async function saveOpeningBalances(input: {
              where payroll_opening_sui_wages.org_id = ${input.orgId}`);
         }
       }
+      // Filing-account bases are a complete replacement set under the same
+      // employee/year fence. They cannot be merged by employee: the account
+      // and state are part of the statutory wage-base key.
+      await tx.execute(sql`
+        delete from payroll_opening_account_bases
+         where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
+           and tax_year = ${year}
+      `);
+      for (const base of row.accountBases) {
+        const inserted = await tx.execute<{ id: string }>(sql`
+          insert into payroll_opening_account_bases
+            (org_id, employee_party_id, tax_year, program_key, filing_account_id, region,
+             insurable_ytd, created_by, updated_by)
+          values (${input.orgId}, ${row.employeePartyId}, ${year}, ${base.programKey},
+            ${base.filingAccountId}::uuid, ${base.region}, ${base.insurableYtd}, ${input.actorId}, ${input.actorId})
+          returning id
+        `);
+        if (!inserted.rows[0]) {
+          throw new PayrollError(`${base.programKey} account opening was not saved — insert returned no row`);
+        }
+      }
 
       const wasThere = hasRow.has(row.employeePartyId);
       if (wasThere) result.updated++;
@@ -1187,6 +1381,7 @@ export async function saveOpeningBalances(input: {
           employeePartyId: row.employeePartyId, taxYear: year,
           after: row.amounts, afterComponents: row.components,
           afterPrograms: row.programs, afterSuiStates: row.suiStates,
+          afterAccountBases: row.accountBases,
         },
       });
     }

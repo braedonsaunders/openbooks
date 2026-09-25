@@ -35,6 +35,7 @@ import { ctPaidLeaveWithholding } from "./states/ct.ts";
 export type UsYtdRow = {
   fica: string;
   futa: string;
+  futaCurrentAccount: string;
   suiCurrentRegion: string;
   suiOtherRegions: string;
   suiOpeningUnscoped: boolean;
@@ -46,6 +47,8 @@ export type UsYtdRow = {
   suiOpeningCurrentRegion: string;
   /** Covered Minnesota Paid Leave base priced on committed stubs this year. */
   mnPaidLeaveWages: string;
+  suiAccountId: string | null;
+  futaOpeningUnscoped: boolean;
   supplemental: string;
   regularWageTaxWithheldThisYear: boolean;
   regularWageTaxWithheldKeys: string[];
@@ -194,8 +197,31 @@ export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
 export async function usEmployeeYtd(
   ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
   region: string,
+  filingAccountId: string | null = null,
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
+  const suiAccountRows = await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    with employer as (
+      select coalesce(ein.subsidiary_id, p.subsidiary_id) as subsidiary_id
+        from parties p
+        left join payroll_filing_accounts ein
+          on ein.org_id = p.org_id and ein.id = ${filingAccountId}::uuid
+       where p.org_id = ${orgId} and p.id = ${employeePartyId}
+    )
+    select sui.id, sui.subsidiary_id
+      from payroll_filing_accounts sui
+      cross join employer
+     where sui.org_id = ${orgId} and sui.country = 'US' and sui.program_type = 'us_state_sui'
+       and sui.state_code = ${region} and sui.is_active
+       and (sui.subsidiary_id = employer.subsidiary_id or sui.subsidiary_id is null)
+     order by (sui.subsidiary_id is not null) desc
+  `);
+  const bestSubsidiary = suiAccountRows.rows[0]?.subsidiary_id ?? null;
+  const bestSuiAccounts = suiAccountRows.rows.filter((account) => account.subsidiary_id === bestSubsidiary);
+  if (bestSuiAccounts.length > 1) {
+    throw new PayrollError(`US SUI account is ambiguous for ${region}; resolve the employee's legal-employer state account before calculating.`);
+  }
+  const suiAccountId = bestSuiAccounts[0]?.id ?? null;
   const ficaWithheldColumn = US_OPENING_YTD_FIELDS.find((field) => field.key === "ficaWithheldYtd")!.column;
   const r = (await tx.execute<UsYtdRow>(sql`
     select
@@ -204,7 +230,9 @@ export async function usEmployeeYtd(
       + coalesce(sum(s.pensionable_earnings), 0) as fica,
       coalesce((select insurable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum(s.insurable_earnings), 0) as futa,
+      + 0 as futa,
+      coalesce((select insurable_ytd from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0) > 0 as "futaOpeningUnscoped",
       coalesce((select insurable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0) > 0 as "suiOpeningUnscoped",
       coalesce(sum(s.insurable_earnings) filter (where s.province = ${region}), 0)::text as "suiCurrentRegion",
@@ -238,6 +266,14 @@ export async function usEmployeeYtd(
          where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
            and sw.state = ${region}
       ), '0') as "suiOpeningCurrentRegion",
+      coalesce((select insurable_ytd from payroll_opening_account_bases
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+                   and tax_year = ${taxYear} and program_key = 'us_futa'
+                   and filing_account_id is not distinct from ${filingAccountId}
+                   and region is null), 0)
+      + coalesce(sum(s.insurable_earnings) filter (
+          where s.filing_account_id is not distinct from ${filingAccountId}
+        ), 0) as "futaCurrentAccount",
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
@@ -298,10 +334,12 @@ export async function usEmployeeYtd(
     join documents d on d.id = r.document_id and d.org_id = r.org_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
+      and s.filing_account_id is not distinct from ${filingAccountId}
       and r.run_status = 'committed'
       and d.status <> 'voided'
   `));
-  return r.rows[0]!;
+  const row = r.rows[0]!;
+  return { ...row, suiAccountId, futa: row.futaOpeningUnscoped ? row.futa : row.futaCurrentAccount };
 }
 
 /** Phase 9 — US pack statutory pass (Pub 15-T + state/local withholding). */
@@ -324,8 +362,8 @@ export async function computeUsStatutory(
   // (the AU salary-sacrifice shape: PAYG moves, superannuation does not).
   const fitWages = reducedBases.income;
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
-  const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region);
-  const sui = config.sui(region, filingAccountId);
+  const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region, filingAccountId);
+  const sui = config.sui(region, ytd.suiAccountId);
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
   const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, taxYear, ytd, suiExempt) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
