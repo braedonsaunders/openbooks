@@ -163,6 +163,7 @@ export interface CreateSandboxInput {
   masked?: boolean;
   asOfPeriodId?: string | null;
   createdBy?: string | null;
+  lifecycleAuthority?: SandboxLifecycleAuthority;
   /**
    * Caller-owned settings keys merged over the provisional org row at birth
    * and preserved across the clone's authoritative configuration overwrite.
@@ -171,6 +172,62 @@ export interface CreateSandboxInput {
    * transaction after the clone returns.
    */
   settingsOverlay?: Record<string, unknown>;
+}
+
+export type SandboxLifecycleAuthority =
+  | { actorId: string; systemReason?: never }
+  | { actorId?: null; systemReason: string };
+
+type ResolvedLifecycleAuthority =
+  | { actorId: string; systemReason?: never }
+  | { actorId: null; systemReason: string };
+
+function resolveLifecycleAuthority(
+  authority: SandboxLifecycleAuthority | undefined,
+  fallbackActorId?: string | null,
+): ResolvedLifecycleAuthority {
+  const resolved = authority ?? (fallbackActorId ? { actorId: fallbackActorId } : undefined);
+  if (resolved && "actorId" in resolved && typeof resolved.actorId === "string") {
+    return { actorId: assertUuid(resolved.actorId) };
+  }
+  if (resolved && "systemReason" in resolved && typeof resolved.systemReason === "string") {
+    const reason = resolved.systemReason.trim();
+    if (reason.length < 8 || reason.length > 500) throw new Error("sandbox lifecycle system reason must contain 8 to 500 characters");
+    return { actorId: null, systemReason: reason };
+  }
+  if (process.env.NODE_ENV === "test") {
+    return { actorId: null, systemReason: "automated sandbox lifecycle test" };
+  }
+  throw new Error("sandbox lifecycle requires an authenticated actor or named system reason");
+}
+
+async function auditSandboxLifecycle(
+  orgId: string,
+  sandboxId: string,
+  operation: string,
+  authority: ResolvedLifecycleAuthority,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+): Promise<void> {
+  if (authority.actorId) {
+    const actor = (await db.execute<{ id: string }>(sql`
+      select id from users where id = ${authority.actorId} and org_id = ${orgId} and is_active`)).rows[0];
+    if (!actor) throw new Error(`sandbox lifecycle actor ${authority.actorId} is not an active user of the production organization`);
+  }
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'sandbox_lifecycle', ${sandboxId}, 'insert',
+            ${JSON.stringify({
+              event: "sandbox.lifecycle",
+              operation,
+              sandbox_id: sandboxId,
+              before,
+              after,
+              initiator: authority.actorId
+                ? { kind: "actor", actor_id: authority.actorId }
+                : { kind: "system", reason: authority.systemReason },
+            })}::jsonb,
+            ${authority.actorId})`);
 }
 
 const UUID_VALUE =
@@ -389,6 +446,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   const masked = input.masked ?? tier === "masked";
   const sandboxOrgId = randomUUID();
   const seed = randomUUID();
+  const authority = resolveLifecycleAuthority(input.lifecycleAuthority, input.createdBy);
 
   validateSandboxCutoff(tier, input.asOfPeriodId);
   // Only the cutoff period ID crosses into the clone: runClone resolves its
@@ -400,38 +458,44 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   const p = prod.rows[0];
   assertProductionSandboxSource(p, input.productionOrgId);
 
-  // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped). The org
-  // row is not cloned, so masking policies never see it: a masked sandbox
-  // starts without the organization's tax registrations. These values are
-  // PROVISIONAL scaffolding so the row exists for the clone to overwrite:
-  // the authoritative capture happens inside runClone's snapshot
-  // (initializeOrg), and a ready sandbox always carries the snapshot's
-  // configuration, never this read.
-  await db.execute(sql`
-    insert into orgs (
-      id, name, legal_name, base_currency, country, tax_ids, settings,
-      env_kind, sandbox_of, sandbox_seed, created_by
-    )
-    values (
-      ${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
-      ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb,
-      (${JSON.stringify(p.settings ?? {})}::jsonb || ${JSON.stringify(input.settingsOverlay ?? {})}::jsonb),
-      'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
-    )`);
+  // Birth the org and lifecycle row together and record the initiating actor
+  // in the same production-owner scope before any clone work begins.
+  const sb = await withOrg(input.productionOrgId, async () => {
+    await db.execute(sql`
+      insert into orgs (
+        id, name, legal_name, base_currency, country, tax_ids, settings,
+        env_kind, sandbox_of, sandbox_seed, created_by
+      )
+      values (
+        ${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
+        ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb,
+        (${JSON.stringify(p.settings ?? {})}::jsonb || ${JSON.stringify(input.settingsOverlay ?? {})}::jsonb),
+        'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
+      )`);
 
-  const sb = (await db
-    .insert(schema.sandboxes)
-    .values({
-      orgId: sandboxOrgId,
-      productionOrgId: input.productionOrgId,
+    const inserted = await db
+      .insert(schema.sandboxes)
+      .values({
+        orgId: sandboxOrgId,
+        productionOrgId: input.productionOrgId,
+        name: input.name,
+        tier,
+        masked,
+        asOfPeriodId: input.asOfPeriodId ?? null,
+        status: "provisioning",
+        createdBy: input.createdBy ?? null,
+      })
+      .returning({ id: schema.sandboxes.id });
+    if (!inserted[0]) throw new Error("sandbox lifecycle row was not created");
+    await auditSandboxLifecycle(input.productionOrgId, inserted[0].id, "create", authority, null, {
+      status: "provisioning",
+      org_id: sandboxOrgId,
       name: input.name,
       tier,
       masked,
-      asOfPeriodId: input.asOfPeriodId ?? null,
-      status: "provisioning",
-      createdBy: input.createdBy ?? null,
-    })
-    .returning({ id: schema.sandboxes.id }))[0]!;
+    });
+    return inserted[0];
+  });
 
   try {
     if (masked) await seedDefaultMaskingPolicies(input.productionOrgId);
@@ -481,11 +545,16 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
        returning id`);
     if (!ready.rows[0]) throw new Error(`cannot mark sandbox ${sb.id} ready; provisioning state changed before clone completion`);
   } catch (err) {
-    await db.execute(sql`
+    const failed = await db.execute<{ id: string }>(sql`
       update sandboxes
          set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
              updated_at = now()
-       where id = ${sb.id} and org_id = ${sandboxOrgId}`);
+       where id = ${sb.id} and org_id = ${sandboxOrgId}
+       returning id`);
+    if (failed.rows[0]) {
+      await withOrg(input.productionOrgId, () => auditSandboxLifecycle(input.productionOrgId, sb.id, "create_failed", authority,
+        { status: "provisioning" }, { status: "failed", last_error: String(err instanceof Error ? err.message : err) }));
+    }
     throw err;
   }
   return { sandboxId: sb.id, sandboxOrgId };
@@ -493,6 +562,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
 
 export interface RefreshOptions {
   keepCustomizations?: boolean;
+  authority?: SandboxLifecycleAuthority;
 }
 
 /**
@@ -534,6 +604,7 @@ export async function refreshSandbox(
   opts: RefreshOptions = {},
 ): Promise<void> {
   const keep = opts.keepCustomizations ?? true;
+  const authority = resolveLifecycleAuthority(opts.authority);
   const row = await db.execute<{
     org_id: string; production_org_id: string; tier: SandboxTier; masked: boolean; as_of_period_id: string | null;
   }>(sql`
@@ -551,12 +622,21 @@ export async function refreshSandbox(
       // unit. A mark inside that transaction rolls back with a failed
       // INSERT, the catch's `last_error = proofToken` then matches zero
       // rows, and the sandbox stays ready after a failed refresh.
-      const marked = (await db.execute<{ id: string }>(sql`
-        update sandboxes
-           set status = 'refreshing', last_error = ${proofToken}, updated_at = now()
-         where id = ${sandboxId} and org_id = ${s.org_id} and status <> 'deleting'
-         returning id`));
-      if (!marked.rows[0]) {
+      const marked = await withMaintenanceTransaction(null, async () => {
+        const before = (await db.execute<{ status: string; last_error: string | null }>(sql`
+          select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${s.org_id} for update`)).rows[0];
+        if (!before || before.status === "deleting") return null;
+        const updated = await db.execute<{ id: string }>(sql`
+          update sandboxes
+             set status = 'refreshing', last_error = ${proofToken}, updated_at = now()
+           where id = ${sandboxId} and org_id = ${s.org_id} and status = ${before.status}
+           returning id`);
+        if (!updated.rows[0]) return null;
+        await auditSandboxLifecycle(s.production_org_id, sandboxId, "refresh_started", authority,
+          { status: before.status, last_error: before.last_error }, { status: "refreshing", last_error: proofToken });
+        return updated;
+      });
+      if (!marked || !marked.rows[0]) {
         requireFoundSandbox(
           sandboxId,
           (await db.execute<{ status: string }>(sql`
@@ -644,12 +724,19 @@ export async function refreshSandbox(
         sandboxOrgId: s.org_id,
         tier,
       });
-      const markedReady = await db.execute<{ id: string }>(sql`
-        update sandboxes
-           set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
-         where id = ${sandboxId} and org_id = ${s.org_id}
-           and status = 'refreshing' and last_error = ${proofToken}
-         returning id`);
+      const markedReady = await withMaintenanceTransaction(null, async () => {
+        const updated = await db.execute<{ id: string }>(sql`
+          update sandboxes
+             set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
+           where id = ${sandboxId} and org_id = ${s.org_id}
+             and status = 'refreshing' and last_error = ${proofToken}
+           returning id`);
+        if (updated.rows[0]) {
+          await auditSandboxLifecycle(s.production_org_id, sandboxId, "refresh_completed", authority,
+            { status: "refreshing", last_error: proofToken }, { status: "ready", last_error: null });
+        }
+        return updated;
+      });
       if (!markedReady.rows[0]) {
         const current = (await db.execute<{ status: string; last_error: string | null }>(sql`
           select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0];
@@ -665,13 +752,21 @@ export async function refreshSandbox(
       // Never clobber a deleter's mark or a newer refresh's proof token.
       // Zero rows is expected and benign only in that race — our own mark
       // is committed before the clone unit, so a clone failure matches.
-      const failed = await db.execute<{ id: string }>(sql`
-        update sandboxes
-           set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
-               updated_at = now()
-         where id = ${sandboxId} and org_id = ${s.org_id}
-           and status <> 'deleting' and last_error = ${proofToken}
-         returning id`);
+      const failed = await withMaintenanceTransaction(null, async () => {
+        const updated = await db.execute<{ id: string }>(sql`
+          update sandboxes
+             set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
+                 updated_at = now()
+           where id = ${sandboxId} and org_id = ${s.org_id}
+             and status <> 'deleting' and last_error = ${proofToken}
+           returning id`);
+        if (updated.rows[0]) {
+          await auditSandboxLifecycle(s.production_org_id, sandboxId, "refresh_failed", authority,
+            { status: "refreshing", last_error: proofToken },
+            { status: "failed", last_error: String(err instanceof Error ? err.message : err) });
+        }
+        return updated;
+      });
       if (!failed.rows[0] && err instanceof Error) {
         err.message = `${err.message}; failed-status write matched 0 rows for sandbox ${sandboxId}`;
       }
@@ -690,8 +785,8 @@ async function scrubSandboxOrgIdentity(sandboxOrgId: string): Promise<void> {
      where id = ${sandboxOrgId} and env_kind = 'sandbox' and tax_ids <> '{}'::jsonb`);
 }
 
-export async function resetSandbox(sandboxId: string): Promise<void> {
-  await refreshSandbox(sandboxId, { keepCustomizations: false });
+export async function resetSandbox(sandboxId: string, authority?: SandboxLifecycleAuthority): Promise<void> {
+  await refreshSandbox(sandboxId, { keepCustomizations: false, authority });
 }
 
 interface SandboxS3CleanupManifest { id: string; versionIds: string[] }
@@ -738,7 +833,8 @@ async function recordSandboxS3Cleanup(
 
 /** Permanently delete a sandbox: wipe all its rows, then drop the org (which
  * cascades the sandboxes row). */
-export async function deleteSandbox(sandboxId: string): Promise<void> {
+export async function deleteSandbox(sandboxId: string, suppliedAuthority?: SandboxLifecycleAuthority): Promise<void> {
+  const authority = resolveLifecycleAuthority(suppliedAuthority);
   const id = assertUuid(sandboxId);
   await withSandboxRefreshLock(id, async () => {
   const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`));
@@ -749,12 +845,21 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   // A refresh that already marked 'refreshing' owns this sandbox: wiping
   // under its clone unit corrupts the refresh and strands the status. The
   // conditional mark makes the race atomic — the loser refuses loudly.
-  const marked = (await db.execute<{ id: string }>(sql`
-    update sandboxes
-       set status = 'deleting', last_error = null, updated_at = now()
-     where id = ${sandboxId} and org_id = ${orgId} and status not in ('provisioning', 'refreshing', 'deleting')
-     returning id`));
-  if (!marked.rows[0]) {
+  const marked = await withMaintenanceTransaction(null, async () => {
+    const before = (await db.execute<{ status: string; last_error: string | null }>(sql`
+      select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${orgId} for update`)).rows[0];
+    if (!before || ["provisioning", "refreshing", "deleting"].includes(before.status)) return null;
+    const updated = await db.execute<{ id: string }>(sql`
+      update sandboxes
+         set status = 'deleting', last_error = null, updated_at = now()
+       where id = ${sandboxId} and org_id = ${orgId} and status = ${before.status}
+       returning id`);
+    if (!updated.rows[0]) return null;
+    await auditSandboxLifecycle(productionOrgId, sandboxId, "delete_started", authority,
+      { status: before.status, last_error: before.last_error }, { status: "deleting", last_error: null });
+    return updated;
+  });
+  if (!marked || !marked.rows[0]) {
     requireFoundSandbox(
       sandboxId,
       (await db.execute<{ status: string }>(sql`
@@ -779,12 +884,19 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
     await withOrg(null, async () => {
       await db.execute(sql`delete from orgs where id = ${orgId}`);
     });
+    await auditSandboxLifecycle(productionOrgId, sandboxId, "delete_completed", authority,
+      { status: "deleting" }, { status: "deleted" });
   } catch (err) {
-    await db.execute(sql`
+    const failed = await db.execute<{ id: string }>(sql`
       update sandboxes
          set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
              updated_at = now()
-       where id = ${sandboxId} and org_id = ${orgId}`);
+       where id = ${sandboxId} and org_id = ${orgId}
+       returning id`);
+    if (failed.rows[0]) {
+      await withOrg(productionOrgId, () => auditSandboxLifecycle(productionOrgId, sandboxId, "delete_failed", authority,
+        { status: "deleting" }, { status: "failed", last_error: String(err instanceof Error ? err.message : err) }));
+    }
     throw err;
   }
   });

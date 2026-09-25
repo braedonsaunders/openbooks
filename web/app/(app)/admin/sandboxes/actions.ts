@@ -74,6 +74,7 @@ export async function createSandboxAction(input: {
       masked: tier === "masked",
       asOfPeriodId,
       createdBy: authz.user.id,
+      initiator: { actorId: authz.user.id },
     },
     { jobId: sandboxOpJobId("create", `${authz.user.productionOrgId}|${name}|${tier}|${asOfPeriodId ?? ""}`, clientOpKey) },
   );
@@ -92,7 +93,7 @@ export async function refreshSandboxAction(sandboxId: string, keepCustomizations
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   await enqueueSandboxOp(
-    { op: "refresh", sandboxId, keepCustomizations },
+    { op: "refresh", sandboxId, keepCustomizations, initiator: { actorId: authz.user.id } },
     { jobId: sandboxOpJobId("refresh", `${sandboxId}|${keepCustomizations}`, assertClientOpKey(clientOpKey)) },
   );
   revalidatePath("/admin/sandboxes");
@@ -103,7 +104,7 @@ export async function resetSandboxAction(sandboxId: string, clientOpKey: string)
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   await enqueueSandboxOp(
-    { op: "reset", sandboxId },
+    { op: "reset", sandboxId, initiator: { actorId: authz.user.id } },
     { jobId: sandboxOpJobId("reset", sandboxId, assertClientOpKey(clientOpKey)) },
   );
   revalidatePath("/admin/sandboxes");
@@ -114,7 +115,7 @@ export async function deleteSandboxAction(sandboxId: string, clientOpKey: string
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   await enqueueSandboxOp(
-    { op: "delete", sandboxId },
+    { op: "delete", sandboxId, initiator: { actorId: authz.user.id } },
     { jobId: sandboxOpJobId("delete", sandboxId, assertClientOpKey(clientOpKey)) },
   );
   revalidatePath("/admin/sandboxes");

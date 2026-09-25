@@ -1,9 +1,9 @@
 /**
  * Sandbox CLI. Examples:
  *   npx tsx engine/src/sandbox/cli.ts list
- *   npx tsx engine/src/sandbox/cli.ts create "QA sandbox" --tier=masked
- *   npx tsx engine/src/sandbox/cli.ts refresh <sandboxId> [--reset]
- *   npx tsx engine/src/sandbox/cli.ts delete <sandboxId>
+ *   npx tsx engine/src/sandbox/cli.ts create "QA sandbox" --tier=masked --actor=<userId>
+ *   npx tsx engine/src/sandbox/cli.ts refresh <sandboxId> --actor=<userId> [--reset]
+ *   npx tsx engine/src/sandbox/cli.ts delete <sandboxId> --actor=<userId>
  *   npx tsx engine/src/sandbox/cli.ts promote <sandboxId> "My change set" --actor=<userId>
  *   npx tsx engine/src/sandbox/cli.ts apply <changeSetId> --actor=<userId>
  *
@@ -85,6 +85,7 @@ async function main() {
       const name = positional[0] ?? "Sandbox";
       const tier = validateSandboxTier(flag(rest, "tier") ?? "masked");
       const masked = resolveCreateMasking(tier, flag(rest, "masked"));
+      const actorId = await resolveCliActor(rest);
       console.log(`Creating ${tier} sandbox "${name}" from org ${orgId}…`);
       const t0 = Date.now();
       const { sandboxId, sandboxOrgId } = await createSandbox({
@@ -93,6 +94,8 @@ async function main() {
         tier,
         masked,
         asOfPeriodId: flag(rest, "period") ?? null,
+        createdBy: actorId,
+        lifecycleAuthority: { actorId },
       });
       console.log(`✓ sandbox ${sandboxId} (org ${sandboxOrgId}) ready in ${Date.now() - t0}ms`);
       break;
@@ -101,16 +104,18 @@ async function main() {
       const id = positional[0];
       if (!id) throw new Error("usage: refresh <sandboxId> [--reset]");
       const keep = !rest.includes("--reset");
+      const actorId = await resolveCliActor(rest);
       console.log(`Refreshing ${id} (keepCustomizations=${keep})…`);
       const t0 = Date.now();
-      await refreshSandbox(id, { keepCustomizations: keep });
+      await refreshSandbox(id, { keepCustomizations: keep, authority: { actorId } });
       console.log(`✓ refreshed in ${Date.now() - t0}ms`);
       break;
     }
     case "delete": {
       const id = positional[0];
       if (!id) throw new Error("usage: delete <sandboxId>");
-      await deleteSandbox(id);
+      const actorId = await resolveCliActor(rest);
+      await deleteSandbox(id, { actorId });
       console.log(`✓ deleted ${id}`);
       break;
     }
