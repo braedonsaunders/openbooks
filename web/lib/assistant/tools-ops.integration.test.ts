@@ -98,11 +98,15 @@ test('assistant sync connections list runs with last-run evidence, isolated per 
 test('assistant environments list sandboxes with refresh status, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const orgA = await withBypassContext(() => (createScratchOrg()))
   const orgB = await withBypassContext(() => (createScratchOrg()))
+  const sbId = randomUUID()
+  const sbOrgId = randomUUID()
   try {
-    const sbId = randomUUID()
+    await withBypassContext(() => db.execute(sql`
+      insert into orgs (id, name, base_currency, country, settings, env_kind, sandbox_of)
+      values (${sbOrgId}, 'Probe Sandbox Org', 'CAD', 'CA', '{}'::jsonb, 'sandbox', ${orgA.orgId})`))
     await withOrgContext(orgA.orgId, async () => {
       await db.execute(sql`insert into sandboxes (id, org_id, production_org_id, name, status)
-        values (${sbId}, ${orgA.orgId}, ${orgA.orgId}, 'Probe Sandbox', 'ready')`)
+        values (${sbId}, ${sbOrgId}, ${orgA.orgId}, 'Probe Sandbox', 'ready')`)
     })
     await withOrgContext(orgB.orgId, async () => {
       const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_environments', {})
@@ -122,6 +126,8 @@ test('assistant environments list sandboxes with refresh status, isolated per or
       assert.deepEqual(bare, { ok: false, error: 'forbidden' })
     })
   } finally {
+    await withBypassContext(() => db.execute(sql`delete from sandboxes where id = ${sbId}`))
+    await withBypassContext(() => db.execute(sql`delete from orgs where id = ${sbOrgId}`))
     await dropScratchOrg(orgA.orgId)
     await dropScratchOrg(orgB.orgId)
   }
