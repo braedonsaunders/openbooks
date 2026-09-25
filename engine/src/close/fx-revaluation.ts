@@ -119,7 +119,24 @@ export interface RevaluationRunResult {
   /** Journal entries posted (period-end adjustment + its next-period reversal), by subsidiary. */
   posted: { subsidiaryId: string; entryId: string; reversalEntryId: string | null; netDelta: string }[];
   skipped: { subsidiaryId: string; reason: string }[];
+  /** English display strings (wire compatibility — pinned by tests, do not reword). */
   problems: string[];
+  /** The same failures with stable codes and structured parameters for the
+   *  close UI to translate at the client boundary. */
+  problemDetails: RevaluationProblem[];
+}
+
+/** Stable revaluation problem codes. `problems` keeps the English display
+ *  strings for wire compatibility; these carry the same failures with
+ *  structured parameters. */
+export type RevaluationProblemCode = 'subsidiary_missing' | 'entity_failed'
+
+export interface RevaluationProblem {
+  code: RevaluationProblemCode
+  subsidiaryId: string
+  subsidiaryName?: string
+  /** Raw engine refusal text (untranslated detail inside a translated frame). */
+  detail?: string
 }
 
 export class RevaluationError extends Error {
@@ -458,11 +475,12 @@ export async function runRevaluation(
     const activeBookId = bookId ?? (await primaryBookId(orgId));
     await unrealizedAccount(orgId);
     const ctx = await loadSubsidiaryContext(db, orgId);
-    const result: RevaluationRunResult = { posted: [], skipped: [], problems: [] };
+    const result: RevaluationRunResult = { posted: [], skipped: [], problems: [], problemDetails: [] };
     for (const subsidiaryId of [...new Set(allowedSubsidiaryIds ?? [...ctx.byId.keys()])]) {
       const subsidiary = ctx.byId.get(subsidiaryId);
       if (!subsidiary) {
         result.problems.push(`subsidiary ${subsidiaryId} does not exist`);
+        result.problemDetails.push({ code: 'subsidiary_missing', subsidiaryId });
         continue;
       }
       try {
@@ -474,6 +492,7 @@ export async function runRevaluation(
         }
       } catch (err) {
         result.problems.push(`${subsidiary.name}: ${(err as Error).message}`);
+        result.problemDetails.push({ code: 'entity_failed', subsidiaryId, subsidiaryName: subsidiary.name, detail: (err as Error).message });
       }
     }
     return result;

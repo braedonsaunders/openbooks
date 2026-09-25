@@ -691,8 +691,28 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         periodId: props.run.period_id,
         bookId: props.run.book_id,
       });
+      // Partial problems arrive with stable codes plus structured subsidiary
+      // parameters and render through the close catalog; the legacy English
+      // strings stay as the fallback when details are absent.
+      const problemDetails = (Array.isArray(result.problemDetails) ? result.problemDetails : []) as Array<{
+        code?: string
+        subsidiaryId?: unknown
+        subsidiaryName?: unknown
+        detail?: unknown
+      }>
+      const problemMessages =
+        problemDetails.length > 0
+          ? problemDetails.map((problem) =>
+              problem.code === "subsidiary_missing"
+                ? t("problems.subsidiaryMissing", { subsidiaryId: String(problem.subsidiaryId ?? "") })
+                : t("problems.entityFailed", {
+                    name: String(problem.subsidiaryName ?? problem.subsidiaryId ?? ""),
+                    detail: String(problem.detail ?? ""),
+                  }),
+            )
+          : (result.problems as string[])
       if (result.problems.length > 0) {
-        toast.error(result.problems.join("\n"), {
+        toast.error(problemMessages.join("\n"), {
           description: result.posted.length > 0
             ? t("messages.revaluationPosted")
             : undefined,
