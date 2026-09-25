@@ -157,6 +157,7 @@ const EXCLUDED_TABLES: Record<string, string> = {
   payroll_employer_facts: "employee statutory facts that drive payroll calculations, not a generic reporting surface.",
   payroll_opening_program_bases: "employee opening YTD bases for statutory wage limits, not a generic reporting surface.",
   payroll_opening_sui_wages: "employee opening SUI wage bases for statutory wage limits, not a generic reporting surface.",
+  payroll_opening_account_bases: "employee opening wage bases scoped by filing account for statutory wage limits, not a generic reporting surface.",
   pay_component_earning_classifications: "payroll earning policy inputs are controlled setup data, not a generic reporting surface.",
   project_geofences: "project operations config.",
   recurring_occurrence_documents: "recurring scheduler runtime.",
