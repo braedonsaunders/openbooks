@@ -53,9 +53,9 @@ const mockSources = new Map<string, string>([
     'mock:features',
     `
       const state = globalThis[Symbol.for('openbooks.field-ticket-sign-gate-test')]
-      export async function acquireFeatureGateLock() {
-        state.featureCalls.push('gate-lock')
-      }
+      export async function acquireFeatureGateLock() { state.featureCalls.push('gate-lock') }
+      // Checker-only: the mock-surface scan models the page's isFeatureEnabled edge against this first pair (at runtime the page resolves mock:page-features).
+      export async function isFeatureEnabled(_orgId, key) { state.featureCalls.push(key); return state.featureEnabled }
     `,
   ],
   [
