@@ -333,15 +333,18 @@ function ScheduleForm({
 }) {
   const t = useTranslations('payroll.workSchedules')
   const today = useBusinessToday()
-  const scope = scopeOf(draft)
+  const [scope, setScopeKind] = useState<ScopeKind>(() => scopeOf(draft))
   const patch = (next: Partial<Schedule>) => onChange({ ...draft, ...next })
 
   /** Switching scope clears every other key: exactly one may be set, and the
    *  engine's resolution order depends on that being true. */
-  const setScope = (kind: ScopeKind) => patch({
-    employeePartyId: null, jobTitle: null, tradeId: null, departmentId: null, subsidiaryId: null,
-    ...(kind === 'jobTitle' ? { jobTitle: '' } : {}),
-  })
+  const setScope = (kind: ScopeKind) => {
+    setScopeKind(kind)
+    patch({
+      employeePartyId: null, jobTitle: null, tradeId: null, departmentId: null, subsidiaryId: null,
+      ...(kind === 'jobTitle' ? { jobTitle: '' } : {}),
+    })
+  }
 
   const hoursAt = (dayIndex: number) =>
     draft.days.find((day) => day.dayIndex === dayIndex)?.hours ?? ''
