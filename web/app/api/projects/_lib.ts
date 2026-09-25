@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { loadFieldDefs, type CustomFieldDef } from '../../../lib/custom-fields'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
@@ -78,8 +79,12 @@ export async function loadProject(
       const customer = await partyName(row.customer_id)
       const foreman = await partyName(row.foreman_id)
       const manager = await partyName(row.manager_id)
+      // updated_at doubles as the optimistic-concurrency token: project it
+      // in the lossless six-digit revision form, never raw, so the editor
+      // can echo it back as expectedUpdatedAt (a 3-digit ISO round-trip
+      // fails the revision pattern and every edit 422s).
       const tasks = await db.execute<ProjectTaskRow>(sql`
-        select id, code, name, status, estimated_hours, estimated_cost, updated_at
+        select id, code, name, status, estimated_hours, estimated_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
           from project_tasks
          where project_id = ${id} and org_id = ${orgId}
          order by code nulls last, name
