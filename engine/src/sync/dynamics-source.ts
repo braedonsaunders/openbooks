@@ -1,6 +1,7 @@
 import { businessToday } from "../platform/business-date.ts";
 import { DynamicsClient } from "../connectors/dynamics.ts";
 import { formatMoney, fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import type { Rate } from "../money/brands.ts";
 import { buildNativeFromBC, type BCBuildOpts, type BCDoc } from "./dynamics-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -62,7 +63,7 @@ interface BCFxRate {
  * IEEE-754 boundary. API amounts arrive as JSON numbers, but String() keeps
  * the decimal literal exact and every operation below is BigInt.
  */
-export function dividePositiveDecimals(numer: string, denom: string, places = 10): string {
+export function dividePositiveDecimals(numer: string, denom: string, places = 10): Rate {
   const parse = (s: string): { digits: bigint; scale: number } => {
     const t = String(s).trim();
     if (!/^\d+(\.\d+)?$/.test(t)) throw new Error(`not a positive decimal number: "${s}"`);
@@ -77,7 +78,8 @@ export function dividePositiveDecimals(numer: string, denom: string, places = 10
     d.digits * 10n ** BigInt(n.scale),
   );
   const text = scaled.toString().padStart(places + 1, "0");
-  return `${text.slice(0, -places)}.${text.slice(-places)}`;
+  // Fixed-places exact decimal at rate scale: an exchange-rate quotient.
+  return `${text.slice(0, -places)}.${text.slice(-places)}` as Rate;
 }
 
 /**
