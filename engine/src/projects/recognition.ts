@@ -7,6 +7,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, mul, neg, sum, isZero } from "../money/money.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
 /**
@@ -239,48 +240,43 @@ export async function postProjectGlEntryWithinTransaction(
       throw new Error(`unbalanced project GL entry for subsidiary ${lineSubId} (${subtotal})`);
     }
   }
-  const entry = (await tx.execute<{ id: string }>(sql`
-    insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-    values (${orgId}, ${bookId}, ${subId}, ${entryNumber}, ${postingDate}, ${periodId}, ${memo},
-            'draft', ${origin}, ${actorId}, ${actorId})
-    returning id`)).rows[0];
-  if (!entry) throw new Error("project journal insert returned no entry");
-  const eid = entry.id;
-  let n = 1;
-  for (const l of lines) {
-    const lineSubId = l.subsidiaryId ?? subId;
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-         project_id, party_id, department_id, location_id, class_id, extra_dims,
-         contributor_kind, contributor_ref, memo)
-      values (${orgId}, ${eid}, ${n}, ${l.accountId}, ${lineSubId}, ${l.amount}, ${currency}, ${l.amount}, 1,
-              ${l.projectId ?? null}, ${l.partyId ?? null},
-              ${l.departmentId ?? null}, ${l.locationId ?? null}, ${l.classId ?? null},
-              ${JSON.stringify(l.extraDims ?? {})}::jsonb,
-              ${l.contributorKind ?? null}, ${l.contributorRef ?? null}, ${l.memo ?? memo})`);
-    n++;
-  }
-  await tx.execute(sql`
-    update journal_entries
-       set status = 'posted', posted_at = now(), posted_by = ${actorId},
-           updated_at = now(), updated_by = ${actorId}
-     where id = ${eid} and org_id = ${orgId}`);
-  await tx.execute(sql`
-    insert into audit_log
-      (org_id, table_name, row_id, action, changes, actor_id, request_id)
-    values (
-      ${orgId}, 'journal_entries', ${eid}, 'insert',
-      ${JSON.stringify({
-        mode: "project_gl_post",
-        origin,
-        entryNumber,
-        postingDate,
-      })}::jsonb,
-      ${actorId}, 'project_gl_post'
-    )
-  `);
+  // Every journal write routes through the ONE ledger API: the project audit
+  // payload travels with the posting instead of a second insert.
+  const postedProject = await postEntry(tx, {
+    orgId,
+    bookId,
+    subsidiaryId: subId,
+    entryNumber,
+    postingDate,
+    periodId,
+    memo,
+    origin,
+    actorId,
+    currency,
+    auditAction: "insert",
+    requestId: "project_gl_post",
+    auditChanges: {
+      mode: "project_gl_post",
+      origin,
+      entryNumber,
+      postingDate,
+    },
+    lines: lines.map((l) => ({
+      accountId: l.accountId,
+      subsidiaryId: l.subsidiaryId ?? subId,
+      amount: l.amount,
+      projectId: l.projectId,
+      partyId: l.partyId,
+      departmentId: l.departmentId,
+      locationId: l.locationId,
+      classId: l.classId,
+      extraDims: l.extraDims,
+      contributorKind: l.contributorKind,
+      contributorRef: l.contributorRef,
+      memo: l.memo ?? memo,
+    })),
+  });
+  const eid = postedProject.entryId;
   return eid;
 }
 
@@ -370,40 +366,57 @@ export async function reverseProjectGlEntryWithinTransaction(
   const lines = await tx.select().from(schema.journalLines)
     .where(and(eq(schema.journalLines.entryId, entryId), eq(schema.journalLines.orgId, orgId)))
     .orderBy(schema.journalLines.lineNumber);
-  const rev = (await tx.execute<{ id: string }>(sql`
-    insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
-    values (${orgId}, ${h.book_id}, ${h.subsidiary_id}, ${h.entry_number + "-R"}, ${reversalDate}, ${period.id},
-            ${`Reversal of ${h.entry_number} — ${reason}`}, 'draft', ${h.origin}, ${entryId}, ${actorId}, ${actorId})
-    returning id`)).rows[0]!;
   // Preserve the exact original FX and dimensional evidence. Losing location
   // (or any other dimension) leaves an un-reversed balance in that subledger.
-  if (lines.length) await tx.insert(schema.journalLines).values(
-    reversalJournalLines(lines, { entryId: rev.id, orgId }),
-  );
-  await tx.execute(sql`
-    update journal_entries
-       set status = 'posted', posted_at = now(), posted_by = ${actorId},
-           updated_at = now(), updated_by = ${actorId}
-     where id = ${rev.id} and org_id = ${orgId}`);
-  await tx.execute(sql`
-    update journal_entries
-       set status = 'reversed', updated_at = now(), updated_by = ${actorId}
-     where id = ${entryId} and org_id = ${orgId}`);
-  await tx.execute(sql`
-    insert into audit_log
-      (org_id, table_name, row_id, action, changes, actor_id, request_id)
-    values (
-      ${orgId}, 'journal_entries', ${entryId}, 'update',
-      ${JSON.stringify({
-        mode: "project_gl_reversal",
-        reason,
-        reversalDate,
-      })}::jsonb,
-      ${actorId}, 'project_gl_reversal'
-    )
-  `);
-  return { status: "reversed", reversalId: rev.id };
+  // The reversal posts through the ONE ledger API; the source entry is then
+  // marked reversed — never edited.
+  const mirror = reversalJournalLines(lines, { entryId: "", orgId });
+  const postedReversal = await postEntry(tx, {
+    orgId,
+    bookId: h.book_id,
+    subsidiaryId: h.subsidiary_id,
+    entryNumber: h.entry_number + "-R",
+    postingDate: reversalDate,
+    periodId: period.id,
+    memo: `Reversal of ${h.entry_number} — ${reason}`,
+    origin: h.origin,
+    reversesEntryId: entryId,
+    actorId,
+    auditAction: "update",
+    requestId: "project_gl_reversal",
+    auditChanges: {
+      mode: "project_gl_reversal",
+      reversedEntryId: entryId,
+      reason,
+      reversalDate,
+    },
+    lines: mirror.map((line) => ({
+      accountId: line.accountId,
+      subsidiaryId: line.subsidiaryId,
+      amount: line.amount,
+      currency: line.currency,
+      txnAmount: line.txnAmount,
+      fxRate: line.fxRate,
+      memo: line.memo,
+      partyId: line.partyId,
+      departmentId: line.departmentId,
+      projectId: line.projectId,
+      locationId: line.locationId,
+      classId: line.classId,
+      equipmentUnitId: line.equipmentUnitId,
+      extraDims: line.extraDims ?? {},
+      paymentCardId: line.paymentCardId,
+      taxCodeId: line.taxCodeId,
+      quantity: line.quantity,
+      unit: line.unit,
+      custom: (line.custom ?? {}) as Record<string, unknown>,
+      contributorKind: line.contributorKind,
+      contributorRef: line.contributorRef,
+      lineNumber: line.lineNumber,
+    })),
+  });
+  await markEntryReversed(tx, { orgId, entryId, actorId });
+  return { status: "reversed", reversalId: postedReversal.entryId };
 }
 
 /** Reverse a posted origin-tagged entry (negated mirror, reverses_entry_id). */

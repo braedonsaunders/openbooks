@@ -3,6 +3,7 @@ import { db, schema, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { evaluateBillsForRelease, recordReleaseCheck } from "../compliance/compliance.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
@@ -464,38 +465,34 @@ export async function postPaymentWithApplications(
       if (!gainLossAccountId) {
         throw new PaymentError("realized FX gain/loss account is not configured");
       }
-      const [fxEntry] = await db
-        .insert(schema.journalEntries)
-        .values({
-          orgId: doc.orgId,
-          bookId: source.book_id,
-          subsidiaryId: source.subsidiary_id,
-          entryNumber: `${doc.documentNumber}-FX`,
-          postingDate: source.posting_date,
-          periodId: source.period_id,
-          memo: `Realized FX settlement — ${doc.documentNumber}`,
-          status: "draft",
-          sourceDocumentId: doc.id,
-          origin: "fx_settlement",
-          createdBy: userId ?? doc.createdBy,
-        })
-        .returning({ id: schema.journalEntries.id });
-      fxEntryId = fxEntry!.id;
-      await db.insert(schema.journalLines).values([
-        {
-          orgId: doc.orgId, entryId: fxEntryId!, lineNumber: 1, accountId: source.account_id,
-          subsidiaryId: source.subsidiary_id, amount: fxAdjustment, currency: source.functional_currency,
-          txnAmount: fxAdjustment, fxRate: "1", partyId: doc.partyId, isOpenItem: false,
-          memo: `Realized FX settlement — ${doc.documentNumber}`,
-        },
-        {
-          orgId: doc.orgId, entryId: fxEntryId!, lineNumber: 2, accountId: gainLossAccountId,
-          subsidiaryId: source.subsidiary_id, amount: neg(fxAdjustment), currency: source.functional_currency,
-          txnAmount: neg(fxAdjustment), fxRate: "1", isOpenItem: false,
-          memo: `Realized FX settlement — ${doc.documentNumber}`,
-        },
-      ]);
-      await db.update(schema.journalEntries).set({ status: "posted", postedAt: new Date(), postedBy: userId ?? doc.createdBy }).where(and(eq(schema.journalEntries.id, fxEntryId!), eq(schema.journalEntries.orgId, doc.orgId)));
+      // The FX adjustment posts through the ONE ledger API.
+      const postedFx = await postEntry(db, {
+        orgId: doc.orgId,
+        bookId: source.book_id,
+        subsidiaryId: source.subsidiary_id,
+        entryNumber: `${doc.documentNumber}-FX`,
+        postingDate: source.posting_date,
+        periodId: source.period_id,
+        memo: `Realized FX settlement — ${doc.documentNumber}`,
+        sourceDocumentId: doc.id,
+        origin: "fx_settlement",
+        actorId: userId ?? doc.createdBy,
+        currency: source.functional_currency,
+        lines: [
+          {
+            accountId: source.account_id,
+            amount: fxAdjustment,
+            partyId: doc.partyId,
+            memo: `Realized FX settlement — ${doc.documentNumber}`,
+          },
+          {
+            accountId: gainLossAccountId,
+            amount: neg(fxAdjustment),
+            memo: `Realized FX settlement — ${doc.documentNumber}`,
+          },
+        ],
+      });
+      fxEntryId = postedFx.entryId;
     }
 
     // `controlAdjustment` clears in the FX entry above; the applications table

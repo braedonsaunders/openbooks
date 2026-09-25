@@ -25,6 +25,7 @@ import {
 
 export { MAX_RECOGNITION_TERM_MONTHS };
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
 /**
@@ -2005,39 +2006,40 @@ export async function runRevenueRecognition(
         if (!isZero(balance)) throw new RevenueRecognitionError(`unbalanced (${balance})`);
         const postingDate = row.recognition_on ?? (row.method === "percent_complete" && asOfDate < row.period_ends_on
           ? asOfDate : row.period_ends_on);
-        const entryRes = (await tx.execute<{ id: string }>(sql`
-          insert into journal_entries
-            (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-          values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
-                  ${revenueRecognitionEntryNumber({
-                    contractNumber: row.contract_number,
-                    periodName: row.period_name,
-                    obligationId: row.obligation_id,
-                    bookId: row.book_id,
-                    sequence: row.sequence,
-                    lineId: row.line_id,
-                  })},
-                  ${postingDate}, ${row.period_id},
-                  ${`Revenue recognition — ${row.obligation_desc} (${row.period_name})`},
-                  'draft', 'revenue_recognition', ${actorId}, ${actorId})
-          returning id`));
-        const eid = entryRes.rows[0]!.id;
-
-        for (let i = 0; i < lines.length; i++) {
-          const l = lines[i]!;
-          await tx.execute(sql`
-            insert into journal_lines
-              (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-               department_id, project_id, location_id, class_id, equipment_unit_id, extra_dims, memo)
-            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${row.subsidiary_id}, ${l.amount}, ${row.recognition_currency ?? row.base_currency}, ${l.txnAmount}, ${row.recognition_fx_rate},
-                    ${row.department_id}, ${row.project_id}, ${row.location_id}, ${row.class_id},
-                    ${row.equipment_unit_id}, ${JSON.stringify(row.extra_dims ?? {})}::jsonb,
-                    ${`Revenue recognition ${row.period_name}`})`);
-        }
-
-        const committed=await tx.execute(sql`
-          update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${eid} and org_id = ${orgId} and status='draft' returning id`);
-        if(committed.rows.length!==1)throw new RevenueRecognitionError('recognition journal could not be posted');
+        // Every journal write routes through the ONE ledger API.
+        const postedRecognition = await postEntry(tx, {
+          orgId,
+          bookId: row.book_id,
+          subsidiaryId: row.subsidiary_id,
+          entryNumber: revenueRecognitionEntryNumber({
+            contractNumber: row.contract_number,
+            periodName: row.period_name,
+            obligationId: row.obligation_id,
+            bookId: row.book_id,
+            sequence: row.sequence,
+            lineId: row.line_id,
+          }),
+          postingDate,
+          periodId: row.period_id,
+          memo: `Revenue recognition — ${row.obligation_desc} (${row.period_name})`,
+          origin: "revenue_recognition",
+          actorId,
+          currency: row.recognition_currency ?? row.base_currency,
+          lines: lines.map((l) => ({
+            accountId: l.accountId,
+            amount: l.amount,
+            txnAmount: l.txnAmount,
+            fxRate: row.recognition_fx_rate,
+            departmentId: row.department_id,
+            projectId: row.project_id,
+            locationId: row.location_id,
+            classId: row.class_id,
+            equipmentUnitId: row.equipment_unit_id,
+            extraDims: row.extra_dims ?? {},
+            memo: `Revenue recognition ${row.period_name}`,
+          })),
+        });
+        const eid = postedRecognition.entryId;
         const linked=await tx.execute(sql`
           update recognition_schedule_lines
              set recognized_amount = ${posting}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
@@ -2385,52 +2387,74 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           throw error;
         }
 
-        const inserted = (await tx.execute<{ id: string }>(sql`
-          insert into journal_entries
-            (org_id, book_id, subsidiary_id, entry_number, posting_date,
-             period_id, memo, status, origin, reverses_entry_id,
-             created_by, updated_by)
-          values
-            (${input.orgId}, ${source.book_id}, ${source.subsidiary_id},
-             ${`${source.entry_number}-CANCEL`}, ${reversalDate},
-             ${period.rows[0].id}, ${`Revenue recognition cancellation — ${reason}`},
-             'draft', 'revenue_recognition', ${source.journal_entry_id},
-             ${input.actorId}, ${input.actorId})
-          returning id
-        `));
-        const reversalId = inserted.rows[0]!.id;
-
-        await tx.execute(sql`
-          insert into journal_lines
-            (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-             currency, txn_amount, fx_rate, memo, party_id, department_id,
-             project_id, location_id, class_id, equipment_unit_id,
-             payment_card_id, extra_dims, tax_code_id, quantity, unit,
-             due_date, is_open_item, custom)
-          select org_id, ${reversalId}, line_number, account_id, subsidiary_id,
-                 -amount, currency, -txn_amount, fx_rate,
-                 ${`Revenue recognition cancellation — ${reason}`},
+        // The cancellation mirrors the source lines exactly through the ONE
+        // ledger API; the source entry is then marked reversed — never edited.
+        const mirrorSource = (await tx.execute<{
+          line_number: number;
+          account_id: string;
+          subsidiary_id: string;
+          amount: string;
+          currency: string | null;
+          txn_amount: string;
+          fx_rate: string;
+          party_id: string | null;
+          department_id: string | null;
+          project_id: string | null;
+          location_id: string | null;
+          class_id: string | null;
+          equipment_unit_id: string | null;
+          payment_card_id: string | null;
+          extra_dims: unknown;
+          tax_code_id: string | null;
+          quantity: string | null;
+          unit: string | null;
+          custom: unknown;
+        }>(sql`
+          select line_number, account_id, subsidiary_id, amount::text as amount,
+                 currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate,
                  party_id, department_id, project_id, location_id, class_id,
                  equipment_unit_id, payment_card_id, extra_dims, tax_code_id,
-                 case when quantity is null then null else -quantity end,
-                 unit, null, false, custom
+                 quantity::text as quantity, unit, custom
             from journal_lines
            where entry_id = ${source.journal_entry_id} and org_id = ${input.orgId}
            order by line_number
-        `);
-        await tx.execute(sql`
-          update journal_entries
-             set status = 'posted', posted_at = now(),
-                 posted_by = ${input.actorId}, updated_at = now(),
-                 updated_by = ${input.actorId}
-           where id = ${reversalId} and org_id = ${input.orgId}
-        `);
-        await tx.execute(sql`
-          update journal_entries
-             set status = 'reversed', updated_at = now(),
-                 updated_by = ${input.actorId}
-           where id = ${source.journal_entry_id} and org_id = ${input.orgId}
-        `);
+        `)).rows;
+        const postedCancel = await postEntry(tx, {
+          orgId: input.orgId,
+          bookId: source.book_id,
+          subsidiaryId: source.subsidiary_id,
+          entryNumber: `${source.entry_number}-CANCEL`,
+          postingDate: reversalDate,
+          periodId: period.rows[0].id,
+          memo: `Revenue recognition cancellation — ${reason}`,
+          origin: "revenue_recognition",
+          reversesEntryId: source.journal_entry_id,
+          actorId: input.actorId,
+          lines: mirrorSource.map((line) => ({
+            accountId: line.account_id,
+            subsidiaryId: line.subsidiary_id,
+            amount: neg(line.amount),
+            currency: line.currency,
+            txnAmount: neg(line.txn_amount),
+            fxRate: line.fx_rate,
+            memo: `Revenue recognition cancellation — ${reason}`,
+            partyId: line.party_id,
+            departmentId: line.department_id,
+            projectId: line.project_id,
+            locationId: line.location_id,
+            classId: line.class_id,
+            equipmentUnitId: line.equipment_unit_id,
+            paymentCardId: line.payment_card_id,
+            extraDims: (line.extra_dims ?? {}) as Record<string, unknown>,
+            taxCodeId: line.tax_code_id,
+            quantity: line.quantity == null ? null : neg(line.quantity),
+            unit: line.unit,
+            custom: (line.custom ?? {}) as Record<string, unknown>,
+            lineNumber: line.line_number,
+          })),
+        });
+        const reversalId = postedCancel.entryId;
+        await markEntryReversed(tx, { orgId: input.orgId, entryId: source.journal_entry_id, actorId: input.actorId });
         await tx.execute(sql`
           update recognition_schedule_lines
              set reversal_journal_entry_id = ${reversalId},

@@ -27,6 +27,7 @@ import {
 import { addCalendarDays, civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { apportion } from "./recognition.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import {
   accreteToZero,
   periodRateFromAnnualPercent,
@@ -1296,30 +1297,31 @@ export async function postLeaseEntry(
     bookId: ctx.bookId,
     subsidiaryId: args.lease.subsidiary_id,
   });
-  const entry = await tx.execute<{ id: string }>(sql`
-    insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-    values (${args.orgId}, ${ctx.bookId}, ${args.lease.subsidiary_id}, ${args.entryNumber}, ${args.date},
-            ${ctx.periodId}, ${args.memo}, 'draft', 'lease', ${args.actorId}, ${args.actorId})
-    returning id`);
-  const entryId = entry.rows[0]!.id;
-  let lineNumber = 1;
-  for (const line of args.lines) {
-    if (isZero(line.amount)) continue;
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-         department_id, project_id, location_id, memo)
-      values (${args.orgId}, ${entryId}, ${lineNumber}, ${line.accountId}, ${args.lease.subsidiary_id},
-              ${line.amount}, ${ctx.currency}, ${line.amount}, 1,
-              ${args.lease.department_id}, ${args.lease.project_id}, ${args.lease.location_id}, ${args.memo})`);
-    lineNumber++;
-  }
-  const posted = await tx.execute(sql`
-    update journal_entries set status = 'posted', posted_at = now(), posted_by = ${args.actorId}
-     where id = ${entryId} and org_id = ${args.orgId} returning id`);
-  if (posted.rows.length !== 1)
-    throw new LeaseError("lease journal could not be posted");
+  // Every journal write routes through the ONE ledger API. Zero-amount legs
+  // are skipped exactly as before.
+  const postedLease = await postEntry(tx, {
+    orgId: args.orgId,
+    bookId: ctx.bookId,
+    subsidiaryId: args.lease.subsidiary_id,
+    entryNumber: args.entryNumber,
+    postingDate: args.date,
+    periodId: ctx.periodId,
+    memo: args.memo,
+    origin: "lease",
+    actorId: args.actorId,
+    currency: ctx.currency,
+    lines: args.lines
+      .filter((line) => !isZero(line.amount))
+      .map((line) => ({
+        accountId: line.accountId,
+        amount: line.amount,
+        departmentId: args.lease.department_id,
+        projectId: args.lease.project_id,
+        locationId: args.lease.location_id,
+        memo: args.memo,
+      })),
+  });
+  const entryId = postedLease.entryId;
   return entryId;
 }
 

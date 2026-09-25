@@ -7,6 +7,7 @@ import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
+import { markEntryReversed, postEntry } from "./post-entry.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import {
@@ -988,48 +989,57 @@ export async function completeRequestedDocumentVoid(
             .select()
             .from(schema.journalLines)
             .where(and(eq(schema.journalLines.entryId, sourceEntryId), eq(schema.journalLines.orgId, orgId)));
-          const reversal = (await tx
-            .insert(schema.journalEntries)
-            .values({
+          // The reversal posts through the ONE ledger API; the source entry
+          // is then marked reversed — never edited.
+          const mirror = reversalJournalLines(lines, { entryId: "", orgId });
+          const posted = await postEntry(tx, {
+            orgId,
+            bookId: String(source.book_id),
+            subsidiaryId: String(source.subsidiary_id),
+            entryNumber: await nextFreeEntryNumber(
+              tx,
               orgId,
-              bookId: String(source.book_id),
-              subsidiaryId: String(source.subsidiary_id),
-              entryNumber: await nextFreeEntryNumber(
-                tx,
-                orgId,
-                `${String(source.entry_number)}-${suffix}`,
-              ),
-              postingDate: reversalDate,
-              periodId: period.id,
-              memo: `Reversal: ${String(doc.void_reason)}`,
-              status: "draft",
-              sourceDocumentId: documentId,
-              origin: source.origin as typeof schema.journalEntries.$inferInsert["origin"],
-              reversesEntryId: sourceEntryId,
-              createdBy: String(doc.void_requested_by),
-              updatedBy: String(doc.void_requested_by),
-            })
-            .returning({ id: schema.journalEntries.id }))[0]!;
-          await tx.insert(schema.journalLines).values(
-            reversalJournalLines(lines, { entryId: reversal.id, orgId }),
-          );
-          await tx
-            .update(schema.journalEntries)
-            .set({
-              status: "posted",
-              postedAt: new Date(),
-              postedBy: String(doc.void_requested_by),
-            })
-            .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, orgId)));
-          await tx
-            .update(schema.journalEntries)
-            .set({
-              status: "reversed",
-              updatedAt: new Date(),
-              updatedBy: String(doc.void_requested_by),
-            })
-            .where(and(eq(schema.journalEntries.id, sourceEntryId), eq(schema.journalEntries.orgId, orgId)));
-          return reversal.id;
+              `${String(source.entry_number)}-${suffix}`,
+            ),
+            postingDate: reversalDate,
+            periodId: period.id,
+            memo: `Reversal: ${String(doc.void_reason)}`,
+            sourceDocumentId: documentId,
+            origin: String(source.origin),
+            reversesEntryId: sourceEntryId,
+            actorId: String(doc.void_requested_by),
+            closeModules: [closeModuleForDocument(String(doc.kind))],
+            lines: mirror.map((line) => ({
+              accountId: line.accountId,
+              subsidiaryId: line.subsidiaryId,
+              amount: line.amount,
+              currency: line.currency,
+              txnAmount: line.txnAmount,
+              fxRate: line.fxRate,
+              memo: line.memo,
+              partyId: line.partyId,
+              departmentId: line.departmentId,
+              projectId: line.projectId,
+              locationId: line.locationId,
+              classId: line.classId,
+              equipmentUnitId: line.equipmentUnitId,
+              extraDims: line.extraDims ?? {},
+              paymentCardId: line.paymentCardId,
+              taxCodeId: line.taxCodeId,
+              quantity: line.quantity,
+              unit: line.unit,
+              custom: (line.custom ?? {}) as Record<string, unknown>,
+              contributorKind: line.contributorKind,
+              contributorRef: line.contributorRef,
+              lineNumber: line.lineNumber,
+            })),
+          });
+          await markEntryReversed(tx, {
+            orgId,
+            entryId: sourceEntryId,
+            actorId: String(doc.void_requested_by),
+          });
+          return posted.entryId;
         };
 
         reversalEntryId = await reverseEntry(entryId, "VOID");

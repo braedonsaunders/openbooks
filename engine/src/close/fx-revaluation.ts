@@ -8,6 +8,7 @@ import { loadControlAccounts } from "../records/control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "./period-policy.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.
@@ -605,6 +606,9 @@ async function postRevaluationEntry(
       throw error;
     }
 
+    // Every journal write routes through the ONE ledger API: it owns balance
+    // validation, the open-period check, the posting lock, the single
+    // multi-row line insert, and the audit record.
     const insertEntry = async (
       entryNumber: string,
       memo: string,
@@ -612,27 +616,31 @@ async function postRevaluationEntry(
       periodIdForEntry: string,
       reversesEntryId: string | null,
       entryLines: RevaluationLine[],
+      auditChanges: Record<string, unknown>,
     ): Promise<string> => {
-      const entryRes = (await tx.execute<{ id: string }>(sql`
-        insert into journal_entries
-          (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo,
-           status, origin, reverses_entry_id, created_by, updated_by)
-        values (${orgId}, ${bookId}, ${subsidiaryId}, ${entryNumber}, ${postingDate}, ${periodIdForEntry},
-                ${memo}, 'draft', 'fx_revaluation', ${reversesEntryId}, ${actorId}, ${actorId})
-        returning id`));
-      const eid = entryRes.rows[0]!.id;
-      for (let i = 0; i < entryLines.length; i++) {
-        const l = entryLines[i]!;
-        await tx.execute(sql`
-          insert into journal_lines
-            (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-          values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${subsidiaryId}, ${l.amount},
-                  ${functionalCurrency}, ${l.amount}, 1, ${`Unrealized FX revaluation ${periodName}`})`);
-      }
-      await tx.execute(sql`
-        update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId}
-         where id = ${eid} and org_id = ${orgId}`);
-      return eid;
+      const posted = await postEntry(tx, {
+        orgId,
+        bookId,
+        subsidiaryId,
+        entryNumber,
+        postingDate,
+        periodId: periodIdForEntry,
+        memo,
+        origin: "fx_revaluation",
+        reversesEntryId,
+        actorId,
+        currency: functionalCurrency,
+        closeModules: ["gl"],
+        auditAction: "insert",
+        requestId: "fx_revaluation",
+        auditChanges,
+        lines: entryLines.map((l) => ({
+          accountId: l.accountId,
+          amount: l.amount,
+          memo: `Unrealized FX revaluation ${periodName}`,
+        })),
+      });
+      return posted.entryId;
     };
 
     // Every subsidiary and correction generation needs a distinct org-wide
@@ -646,6 +654,19 @@ async function postRevaluationEntry(
       periodId,
       null,
       lines,
+      {
+        mode: "fx_revaluation_incremental",
+        bookId,
+        subsidiaryId,
+        periodId,
+        asOfDate,
+        nextPeriodId,
+        basis: "assigned_period_open_item_residuals_and_nonopen_gl_less_effective_fx_by_account",
+        positions,
+        effectiveAdjustments: effective,
+        lines,
+        netDelta,
+      },
     );
 
     const reversalEntryId = await insertEntry(
@@ -655,16 +676,15 @@ async function postRevaluationEntry(
       nextPeriodId,
       entryId,
       lines.map((l) => ({ accountId: l.accountId, amount: neg(l.amount) })),
+      {
+        mode: "fx_revaluation_reversal",
+        bookId,
+        subsidiaryId,
+        periodId: nextPeriodId,
+        reversedEntryId: entryId,
+      },
     );
 
-    await tx.execute(sql`insert into audit_log
-      (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values (${orgId}, 'journal_entries', ${entryId}, 'insert', ${JSON.stringify({
-        mode: "fx_revaluation_incremental", bookId, subsidiaryId, periodId,
-        asOfDate, reversalEntryId, nextPeriodId,
-        basis: "assigned_period_open_item_residuals_and_nonopen_gl_less_effective_fx_by_account",
-        positions, effectiveAdjustments: effective, lines, netDelta,
-      })}::jsonb, ${actorId}, 'fx_revaluation')`);
     return { entryId, reversalEntryId, netDelta };
   }));
 }

@@ -14,6 +14,7 @@ import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter, wit
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 
@@ -1497,27 +1498,42 @@ export async function levelLeaseRentStraightLine(
 
       const amount = fromUnits(deltaUnits < 0n ? -deltaUnits : deltaUnits);
       const memo = `Straight-line rent levelling — ${lease.leaseNumber} (as of ${asOf})`;
-      const entry = (await db.execute<{ id: string }>(sql`
-        insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,custom,created_by,updated_by)
-        values(${orgId},${ctx.rows[0].book_id},${lease.subsidiaryId},
-               ${`SLR-${lease.leaseNumber}-${asOf}-${crypto.randomUUID().slice(0, 8)}`},${asOf},${levelPeriodId},
-               ${memo},'draft','lease',
-               ${JSON.stringify({ propertyManagement: { levellingLeaseId: lease.id, asOf } })}::jsonb,
-               ${actorId},${actorId}) returning id`));
-      const eid = entry.rows[0]!.id;
       // delta > 0: income levelled ABOVE billing → DR accrual / CR income.
       // delta < 0: billing ran ahead (or the accrual releases) → reverse.
       const accrualLeg = deltaUnits > 0n ? amount : neg(amount);
       const incomeLeg = neg(accrualLeg);
-      await db.execute(sql`
-        insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
-        values(${orgId},${eid},1,${straightLineRentAccountId},${lease.subsidiaryId},${accrualLeg},${lease.currency},${accrualLeg},1,${lease.locationId},${lease.tenantId},false,${memo})`);
-      await db.execute(sql`
-        insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
-        values(${orgId},${eid},2,${lease.rentIncomeAccountId},${lease.subsidiaryId},${incomeLeg},${lease.currency},${incomeLeg},1,${lease.locationId},${lease.tenantId},false,${memo})`);
-      await db.execute(sql`
-        update journal_entries set status='posted',posted_at=now(),posted_by=${actorId},updated_at=now(),updated_by=${actorId}
-         where org_id=${orgId} and id=${eid}`);
+      // Every journal write routes through the ONE ledger API.
+      const postedLevel = await postEntry(db, {
+        orgId,
+        bookId: levelBookId,
+        subsidiaryId: lease.subsidiaryId,
+        entryNumber: `SLR-${lease.leaseNumber}-${asOf}-${crypto.randomUUID().slice(0, 8)}`,
+        postingDate: asOf,
+        periodId: levelPeriodId,
+        memo,
+        origin: "lease",
+        custom: { propertyManagement: { levellingLeaseId: lease.id, asOf } },
+        actorId,
+        currency: lease.currency,
+        closeModules: ["gl"],
+        lines: [
+          {
+            accountId: straightLineRentAccountId,
+            amount: accrualLeg,
+            locationId: lease.locationId,
+            partyId: lease.tenantId,
+            memo,
+          },
+          {
+            accountId: lease.rentIncomeAccountId,
+            amount: incomeLeg,
+            locationId: lease.locationId,
+            partyId: lease.tenantId,
+            memo,
+          },
+        ],
+      });
+      const eid = postedLevel.entryId;
       result.entryId = eid;
       return result;
     });
@@ -1872,26 +1888,51 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     }
 
     const entryNumber = `DEP-${occurredOn}-${input.leaseId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
-    const entry = (await tx.execute<{ id: string }>(sql`insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,custom,created_by,updated_by)
-      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${depositPeriodId},
-        ${input.memo ?? `Security deposit ${input.kind}`},'draft','manual',${JSON.stringify({ propertyManagement: { leaseId: input.leaseId, kind: input.kind } })}::jsonb,
-        ${input.actorId},${input.actorId}) returning id`));
-    const entryId = entry.rows[0]!.id;
     const debitAccount = increase ? offsetId : row.deposit_liability_account_id;
     const creditAccount = increase ? row.deposit_liability_account_id : offsetId;
     // Party belongs on the deposit-liability leg. Cash/expense offsets do not
     // carry the tenant; an AR application additionally carries it on AR.
     const debitParty = increase ? null : row.tenant_id;
     const creditParty = increase || applied ? row.tenant_id : null;
-    await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
-      values(${input.orgId},${entryId},1,${debitAccount},${row.subsidiary_id},${amount},${row.currency},${amount},1,${row.location_id},${debitParty},false,${input.memo ?? "Security deposit"})`);
-    const credit = (await tx.execute<{ id: string }>(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
-      values(${input.orgId},${entryId},2,${creditAccount},${row.subsidiary_id},${neg(amount)},${row.currency},${neg(amount)},1,${row.location_id},${creditParty},${applied},${input.memo ?? "Security deposit"}) returning id`));
-    await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${input.actorId},updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and id=${entryId}`);
+    // Every journal write routes through the ONE ledger API. Leg order is
+    // preserved, so the credit leg keeps input position 2 for the
+    // application below.
+    const postedDeposit = await postEntry(tx, {
+      orgId: input.orgId,
+      bookId: row.book_id,
+      subsidiaryId: row.subsidiary_id,
+      entryNumber,
+      postingDate: occurredOn,
+      periodId: depositPeriodId,
+      memo: input.memo ?? `Security deposit ${input.kind}`,
+      origin: "manual",
+      custom: { propertyManagement: { leaseId: input.leaseId, kind: input.kind } },
+      actorId: input.actorId,
+      currency: row.currency,
+      lines: [
+        {
+          accountId: debitAccount,
+          amount,
+          locationId: row.location_id,
+          partyId: debitParty,
+          memo: input.memo ?? "Security deposit",
+        },
+        {
+          accountId: creditAccount,
+          amount: neg(amount),
+          locationId: row.location_id,
+          partyId: creditParty,
+          isOpenItem: applied,
+          memo: input.memo ?? "Security deposit",
+        },
+      ],
+    });
+    const entryId = postedDeposit.entryId;
+    const creditLineId = postedDeposit.lines[1]!.id;
     if (applied && targetLineId) {
       await tx.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,
         target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
-        values(${input.orgId},${credit.rows[0]!.id},${targetLineId},${amount},${amount},${amount},${row.currency},${amount},${row.currency},1,'same_currency','Security deposit application',${occurredOn},${input.actorId},${input.actorId})`);
+        values(${input.orgId},${creditLineId},${targetLineId},${amount},${amount},${amount},${row.currency},${amount},${row.currency},1,'same_currency','Security deposit application',${occurredOn},${input.actorId},${input.actorId})`);
     }
     const inserted = (await tx.execute<{ id: string }>(sql`insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,applied_document_id,journal_entry_id,import_key,memo,created_by,updated_by)
       values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${importKey},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`));
@@ -1966,18 +2007,76 @@ export async function reverseSecurityDepositTransaction(input: {
     if (cmp(balance, "0") < 0) throw new PropertyManagementError("Later deposit activity must be corrected before this transaction can be reversed");
 
     const entryNumber = `DEP-REV-${occurredOn}-${input.transactionId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
-    const entry = (await tx.execute<{ id: string }>(sql`
-      insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,custom,created_by,updated_by)
-      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${reversalPeriodId},${`Deposit reversal: ${reason}`},'draft','manual',${row.journal_entry_id},
-        ${JSON.stringify({ propertyManagement: { leaseId: row.lease_id, reversalOfId: input.transactionId, kind } })}::jsonb,${input.actorId},${input.actorId}) returning id
-    `));
-    const entryId = entry.rows[0]!.id;
-    await tx.execute(sql`
-      insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo,party_id,department_id,project_id,location_id,class_id,equipment_unit_id,payment_card_id,extra_dims,quantity,unit,due_date,is_open_item,tax_code_id,custom)
-      select org_id,${entryId},line_number,account_id,subsidiary_id,-amount,currency,-txn_amount,fx_rate,${`Deposit reversal: ${reason}`},party_id,department_id,project_id,location_id,class_id,equipment_unit_id,payment_card_id,extra_dims,
-        case when quantity is null then null else -quantity end,unit,due_date,is_open_item,tax_code_id,custom
+    // The reversal mirrors the source lines exactly through the ONE ledger
+    // API. Reversal line ids come back keyed by line number for the
+    // application re-linking below.
+    const mirrorSource = (await tx.execute<{
+      line_number: number;
+      account_id: string;
+      subsidiary_id: string;
+      amount: string;
+      currency: string | null;
+      txn_amount: string;
+      fx_rate: string;
+      party_id: string | null;
+      department_id: string | null;
+      project_id: string | null;
+      location_id: string | null;
+      class_id: string | null;
+      equipment_unit_id: string | null;
+      payment_card_id: string | null;
+      extra_dims: unknown;
+      quantity: string | null;
+      unit: string | null;
+      due_date: string | null;
+      is_open_item: boolean;
+      tax_code_id: string | null;
+      custom: unknown;
+    }>(sql`
+      select line_number,account_id,subsidiary_id,amount::text as amount,currency,txn_amount::text as txn_amount,fx_rate::text as fx_rate,
+        party_id,department_id,project_id,location_id,class_id,equipment_unit_id,payment_card_id,extra_dims,
+        quantity::text as quantity,unit,due_date::text as due_date,is_open_item,tax_code_id,custom
       from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id} order by line_number
-    `);
+    `)).rows;
+    const postedDepReversal = await postEntry(tx, {
+      orgId: input.orgId,
+      bookId: row.book_id,
+      subsidiaryId: row.subsidiary_id,
+      entryNumber,
+      postingDate: occurredOn,
+      periodId: reversalPeriodId,
+      memo: `Deposit reversal: ${reason}`,
+      origin: "manual",
+      reversesEntryId: row.journal_entry_id,
+      custom: { propertyManagement: { leaseId: row.lease_id, reversalOfId: input.transactionId, kind } },
+      actorId: input.actorId,
+      lines: mirrorSource.map((line) => ({
+        accountId: line.account_id,
+        subsidiaryId: line.subsidiary_id,
+        amount: neg(line.amount),
+        currency: line.currency,
+        txnAmount: neg(line.txn_amount),
+        fxRate: line.fx_rate,
+        memo: `Deposit reversal: ${reason}`,
+        partyId: line.party_id,
+        departmentId: line.department_id,
+        projectId: line.project_id,
+        locationId: line.location_id,
+        classId: line.class_id,
+        equipmentUnitId: line.equipment_unit_id,
+        paymentCardId: line.payment_card_id,
+        extraDims: (line.extra_dims ?? {}) as Record<string, string>,
+        quantity: line.quantity == null ? null : neg(line.quantity),
+        unit: line.unit,
+        dueDate: line.due_date,
+        isOpenItem: line.is_open_item,
+        taxCodeId: line.tax_code_id,
+        custom: (line.custom ?? {}) as Record<string, unknown>,
+        lineNumber: line.line_number,
+      })),
+    });
+    const entryId = postedDepReversal.entryId;
+    const reversalLineByNumber = new Map(postedDepReversal.lines.map((line) => [line.lineNumber, line.id]));
 
     const applications = (await tx.execute(sql`
       select a.*,source.line_number
@@ -1991,19 +2090,17 @@ export async function reverseSecurityDepositTransaction(input: {
           (select id from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id})
       `);
       for (const application of applications.rows) {
-        const reversalLine = (await tx.execute<{ id: string }>(sql`
-          select id from journal_lines where org_id=${input.orgId} and entry_id=${entryId} and line_number=${application.line_number}
-        `));
+        const reversalLineId = reversalLineByNumber.get(application.line_number);
+        if (!reversalLineId) throw new PropertyManagementError("Security deposit reversal is missing its mirrored line");
         await tx.execute(sql`
           insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,
             target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
-          values(${input.orgId},${application.from_line_id},${reversalLine.rows[0]!.id},${application.amount},${application.source_amount},
+          values(${input.orgId},${application.from_line_id},${reversalLineId},${application.amount},${application.source_amount},
             ${application.source_transaction_amount},${application.source_transaction_currency},${application.target_transaction_amount},${application.target_transaction_currency},
             ${application.settlement_rate},${application.settlement_rate_source},'Security deposit reversal',${occurredOn},${input.actorId},${input.actorId})
         `);
       }
     }
-    await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${input.actorId},updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and id=${entryId}`);
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,journal_entry_id,reversal_of_id,memo,created_by,updated_by)
       values(${input.orgId},${row.lease_id},${kind},${occurredOn},${row.amount},${["received", "refunded"].includes(kind) ? row.bank_account_id : null},

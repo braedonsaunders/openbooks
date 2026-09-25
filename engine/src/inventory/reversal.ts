@@ -7,6 +7,7 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import { assertInventoryAccountsPostable } from "./journal.ts";
 import { lockInventoryPosition, assertInventoryDate } from "./position.ts";
 
@@ -290,47 +291,46 @@ export async function reverseInventoryJournal(
     throw error;
   }
 
-  const reversal = (await tx.execute<{ id: string }>(sql`
-    insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
-       memo, status, origin, reverses_entry_id, created_by, updated_by)
-    values
-      (${orgId}, ${source.book_id}, ${source.subsidiary_id},
-       ${`${source.entry_number}-REV`}, ${reversalDate}, ${period.id},
-       ${`Inventory reversal: ${reason}`}, 'draft', 'inventory', ${sourceEntryId},
-       ${actorId}, ${actorId})
-    returning id
-  `));
-  const reversalEntryId = reversal.rows[0]!.id;
-  for (const line of lines.rows) {
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-         currency, txn_amount, fx_rate, memo, party_id, department_id,
-         project_id, location_id, class_id, equipment_unit_id, payment_card_id,
-         extra_dims, quantity, unit, tax_code_id, custom)
-      values
-        (${orgId}, ${reversalEntryId}, ${line.line_number}, ${line.account_id},
-         ${line.subsidiary_id}, ${neg(String(line.amount))}, ${line.currency},
-         ${neg(String(line.txn_amount))}, ${String(line.fx_rate)}, ${line.memo},
-         ${line.party_id}, ${line.department_id}, ${line.project_id},
-         ${line.location_id}, ${line.class_id}, ${line.equipment_unit_id},
-         ${line.payment_card_id}, ${JSON.stringify(line.extra_dims ?? {})}::jsonb,
-         ${line.quantity == null ? null : neg(String(line.quantity))}, ${line.unit},
-         ${line.tax_code_id}, ${JSON.stringify(line.custom ?? {})}::jsonb)
-    `);
-  }
-  await tx.execute(sql`
-    update journal_entries
-       set status = 'posted', posted_at = now(), posted_by = ${actorId},
-           updated_at = now(), updated_by = ${actorId}
-     where id = ${reversalEntryId} and org_id = ${orgId}
-  `);
-  await tx.execute(sql`
-    update journal_entries
-       set status = 'reversed', updated_at = now(), updated_by = ${actorId}
-     where id = ${sourceEntryId} and org_id = ${orgId}
-  `);
+  // The reversal is an ordinary correction through the ONE ledger API; the
+  // source entry is then marked reversed through the governed lifecycle
+  // marker — its financial content is never edited.
+  const posted = await postEntry(tx, {
+    orgId,
+    bookId: source.book_id,
+    subsidiaryId: source.subsidiary_id,
+    entryNumber: `${source.entry_number}-REV`,
+    postingDate: reversalDate,
+    periodId: period.id,
+    memo: `Inventory reversal: ${reason}`,
+    origin: "inventory",
+    reversesEntryId: sourceEntryId,
+    actorId,
+    closeModules: [],
+    lines: lines.rows.map((line) => ({
+      accountId: String(line.account_id),
+      subsidiaryId: String(line.subsidiary_id),
+      amount: neg(String(line.amount)),
+      currency: line.currency == null ? null : String(line.currency),
+      txnAmount: neg(String(line.txn_amount)),
+      fxRate: String(line.fx_rate),
+      memo: line.memo == null ? null : String(line.memo),
+      partyId: line.party_id == null ? null : String(line.party_id),
+      departmentId: line.department_id == null ? null : String(line.department_id),
+      projectId: line.project_id == null ? null : String(line.project_id),
+      locationId: line.location_id == null ? null : String(line.location_id),
+      classId: line.class_id == null ? null : String(line.class_id),
+      equipmentUnitId: line.equipment_unit_id == null ? null : String(line.equipment_unit_id),
+      paymentCardId: line.payment_card_id == null ? null : String(line.payment_card_id),
+      extraDims: (line.extra_dims ?? {}) as Record<string, string>,
+      quantity: line.quantity == null ? null : neg(String(line.quantity)),
+      unit: line.unit == null ? null : String(line.unit),
+      taxCodeId: line.tax_code_id == null ? null : String(line.tax_code_id),
+      custom: (line.custom ?? {}) as Record<string, unknown>,
+      lineNumber: Number(line.line_number),
+    })),
+  });
+  const reversalEntryId = posted.entryId;
+  await markEntryReversed(tx, { orgId, entryId: sourceEntryId, actorId });
   return reversalEntryId;
 }
 

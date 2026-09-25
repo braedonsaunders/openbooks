@@ -10,6 +10,7 @@ import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./deprec
 import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 
@@ -2225,33 +2226,32 @@ async function runConfirmBatch(
       }
       continue;
     }
-    const entryRes = await outer.execute<{ id: string }>(sql`
-      insert into journal_entries
-        (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-      values (${orgId}, ${claimed.book_id}, ${claimed.subsidiary_id},
-              ${`DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`},
-              ${line.postDate}, ${claimed.period_id},
-              ${`Depreciation — ${claimed.asset_name} (${claimed.period_name})`},
-              'draft', 'depreciation', ${actorId}, ${actorId})
-      returning id`);
-    const eid = entryRes.rows[0]!.id;
+    // Every journal write routes through the ONE ledger API.
     const postings = [
       { accountId: accounts.depreciationExpenseAccountId, amount: planned },
       { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
     ];
-    for (let i = 0; i < postings.length; i++) {
-      const posting = postings[i]!;
-      await outer.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-           department_id, project_id, location_id, memo)
-        values (${orgId}, ${eid}, ${i + 1}, ${posting.accountId}, ${claimed.subsidiary_id}, ${posting.amount}, ${claimed.base_currency}, ${posting.amount}, 1,
-                ${claimed.department_id}, ${claimed.project_id}, ${claimed.location_id},
-                ${`Depreciation ${claimed.period_name}`})`);
-    }
-    await outer.execute(sql`
-      update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId}
-       where id = ${eid} and org_id = ${orgId}`);
+    const postedEntry = await postEntry(outer, {
+      orgId,
+      bookId: claimed.book_id,
+      subsidiaryId: claimed.subsidiary_id,
+      entryNumber: `DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`,
+      postingDate: line.postDate,
+      periodId: claimed.period_id,
+      memo: `Depreciation — ${claimed.asset_name} (${claimed.period_name})`,
+      origin: "depreciation",
+      actorId,
+      currency: claimed.base_currency,
+      lines: postings.map((posting) => ({
+        accountId: posting.accountId,
+        amount: posting.amount,
+        departmentId: claimed.department_id,
+        projectId: claimed.project_id,
+        locationId: claimed.location_id,
+        memo: `Depreciation ${claimed.period_name}`,
+      })),
+    });
+    const eid = postedEntry.entryId;
     await outer.execute(sql`
       update depreciation_schedule_lines
          set posted_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
@@ -2544,31 +2544,28 @@ export async function runDepreciation(
 
         // Corrections create another line for the same asset and period, so the
         // schedule-line id distinguishes every physical journal generation.
-        const entryRes = (await tx.execute<{ id: string }>(sql`
-          insert into journal_entries
-            (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-          values (${orgId}, ${claimed.book_id}, ${claimed.subsidiary_id},
-                  ${`DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`},
-                  ${scope?.postingDate ?? claimed.period_ends_on}, ${claimed.period_id},
-                  ${`Depreciation — ${claimed.asset_name} (${claimed.period_name})`},
-                  'draft', 'depreciation', ${actorId}, ${actorId})
-          returning id`));
-        const eid = entryRes.rows[0]!.id;
-
-        for (let i = 0; i < lines.length; i++) {
-          const l = lines[i]!;
-          await tx.execute(sql`
-            insert into journal_lines
-              (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-               department_id, project_id, location_id, memo)
-            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${claimed.subsidiary_id}, ${l.amount}, ${claimed.base_currency}, ${l.amount}, 1,
-                    ${claimed.department_id}, ${claimed.project_id}, ${claimed.location_id},
-                    ${`Depreciation ${claimed.period_name}`})`);
-        }
-
-        await tx.execute(sql`
-          update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId}
-           where id = ${eid} and org_id = ${orgId}`);
+        // Every journal write routes through the ONE ledger API.
+        const postedEntry = await postEntry(tx, {
+          orgId,
+          bookId: claimed.book_id,
+          subsidiaryId: claimed.subsidiary_id,
+          entryNumber: `DEP-${claimed.asset_number}-${claimed.period_name}-${claimed.line_id}`,
+          postingDate: scope?.postingDate ?? claimed.period_ends_on,
+          periodId: claimed.period_id,
+          memo: `Depreciation — ${claimed.asset_name} (${claimed.period_name})`,
+          origin: "depreciation",
+          actorId,
+          currency: claimed.base_currency,
+          lines: lines.map((l) => ({
+            accountId: l.accountId,
+            amount: l.amount,
+            departmentId: claimed.department_id,
+            projectId: claimed.project_id,
+            locationId: claimed.location_id,
+            memo: `Depreciation ${claimed.period_name}`,
+          })),
+        });
+        const eid = postedEntry.entryId;
 
         await tx.execute(sql`
           update depreciation_schedule_lines

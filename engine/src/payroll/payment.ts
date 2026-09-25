@@ -6,6 +6,7 @@ import { PayrollError } from "./error.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../close/period-policy.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {
@@ -263,7 +264,6 @@ export async function recordPayRunPayment(input: {
       }
     }
 
-    let lineNumber = 1;
     // `txn_amount` is the pay-run currency (the currency the bank actually
     // leaves). `amount` is each employee subsidiary's functional amount, so it
     // cannot be summed across entities when their base currencies differ.
@@ -309,16 +309,61 @@ export async function recordPayRunPayment(input: {
     }
 
     const entryNumber = `PAYD-${run.document_number}-${randomUUID().slice(0, 6)}`;
-    const entry = (await tx.execute<{ id: string }>(sql`
-      insert into journal_entries (org_id, book_id, subsidiary_id, entry_number, posting_date,
-                                   period_id, memo, status, origin, source_document_id,
-                                   created_by, updated_by)
-      values (${orgId}, ${run.book_id}, ${run.subsidiary_id}, ${entryNumber}, ${paidOn},
-              ${period.id}, ${`Net pay ${run.document_number}`}, 'draft', 'payroll',
-              ${documentId}, ${actorId}, ${actorId})
-      returning id
-    `));
-    const entryId = entry.rows[0]!.id;
+    // Every journal write routes through the ONE ledger API. The debit legs
+    // keep input order, so the returned line ids attach the settlement
+    // applications to the same legs as before.
+    const debitLegs = openItems.map((item) => {
+      const paid = rail.get(item.party_id);
+      return {
+        accountId: netPayable,
+        subsidiaryId: item.subsidiary_id,
+        amount: neg(item.amount),
+        currency: item.currency,
+        txnAmount: neg(item.txn_amount),
+        fxRate: item.fx_rate,
+        partyId: item.party_id,
+        isOpenItem: true,
+        memo: paid?.cheque_number
+          ? `Net pay ${run.document_number} · cheque ${paid.cheque_number}`
+          : `Net pay ${run.document_number}`,
+        item,
+      };
+    });
+    const postedPayment = await postEntry(tx, {
+      orgId,
+      bookId: run.book_id,
+      subsidiaryId: run.subsidiary_id,
+      entryNumber,
+      postingDate: paidOn,
+      periodId: period.id,
+      memo: `Net pay ${run.document_number}`,
+      origin: intercompanyLegs.length > 0 ? "intercompany" : "payroll",
+      sourceDocumentId: documentId,
+      actorId,
+      closeModules: [closeModuleForDocument("pay_run")],
+      lines: [
+        ...debitLegs,
+        {
+          accountId: input.bankAccountId,
+          subsidiaryId: run.subsidiary_id,
+          amount: bankAmount,
+          currency: runCurrency,
+          txnAmount: neg(total),
+          fxRate: originFxRate,
+          memo: `Net pay ${run.document_number}`,
+        },
+        ...intercompanyLegs.map((leg) => ({
+          accountId: leg.accountId,
+          subsidiaryId: leg.subsidiaryId,
+          amount: leg.amount,
+          currency: leg.currency,
+          txnAmount: leg.txnAmount,
+          fxRate: leg.fxRate,
+          memo: leg.memo,
+        })),
+      ],
+    });
+    const entryId = postedPayment.entryId;
 
     const settlements: {
       fromLineId: string; toLineId: string; amount: string;
@@ -326,60 +371,18 @@ export async function recordPayRunPayment(input: {
     }[] = [];
     let eft = "0";
     let cheque = "0";
-    for (const item of openItems) {
-      const debit = neg(item.amount); // positive
-      const txnDebit = neg(item.txn_amount);
-      const paid = rail.get(item.party_id);
-      if (paid?.payment_method === "cheque") cheque = add(cheque, txnDebit);
-      else if (paid?.payment_method === "eft") eft = add(eft, txnDebit);
-      const memo = paid?.cheque_number
-        ? `Net pay ${run.document_number} · cheque ${paid.cheque_number}`
-        : `Net pay ${run.document_number}`;
-      const line = (await tx.execute<{ id: string }>(sql`
-        insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
-                                   amount, currency, txn_amount, fx_rate, party_id, is_open_item, memo)
-        values (${orgId}, ${entryId}, ${lineNumber++}, ${netPayable}, ${item.subsidiary_id},
-                ${debit}, ${item.currency}, ${txnDebit}, ${item.fx_rate}, ${item.party_id}, true,
-                ${memo})
-        returning id
-      `));
+    debitLegs.forEach((leg, index) => {
+      const paid = rail.get(leg.item.party_id);
+      if (paid?.payment_method === "cheque") cheque = add(cheque, neg(leg.item.txn_amount));
+      else if (paid?.payment_method === "eft") eft = add(eft, neg(leg.item.txn_amount));
       settlements.push({
-        fromLineId: line.rows[0]!.id,
-        toLineId: item.id,
-        amount: debit,
-        txnAmount: txnDebit,
-        currency: item.currency,
+        fromLineId: postedPayment.lines[index]!.id,
+        toLineId: leg.item.id,
+        amount: leg.amount,
+        txnAmount: leg.txnAmount!,
+        currency: leg.currency!,
       });
-    }
-    await tx.execute(sql`
-      insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
-                                 amount, currency, txn_amount, fx_rate, is_open_item, memo)
-      values (${orgId}, ${entryId}, ${lineNumber++}, ${input.bankAccountId}, ${run.subsidiary_id},
-              ${bankAmount}, ${runCurrency}, ${neg(total)}, ${originFxRate}, false,
-              ${`Net pay ${run.document_number}`})
-    `);
-    for (const leg of intercompanyLegs) {
-      await tx.execute(sql`
-        insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
-                                   amount, currency, txn_amount, fx_rate, is_open_item, memo)
-        values (${orgId}, ${entryId}, ${lineNumber++}, ${leg.accountId}, ${leg.subsidiaryId},
-                ${leg.amount}, ${leg.currency}, ${leg.txnAmount}, ${leg.fxRate}, false,
-                ${leg.memo})
-      `);
-    }
-    if (intercompanyLegs.length > 0) {
-      await tx.execute(sql`
-        update journal_entries set origin = 'intercompany', updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${entryId}
-      `);
-    }
-
-    // The kernel requires both entries posted before applications connect them.
-    await tx.execute(sql`
-      update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId},
-             updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${entryId}
-    `);
+    });
     for (const settlement of settlements) {
       await tx.execute(sql`
         insert into applications (org_id, from_line_id, to_line_id, amount, source_amount,

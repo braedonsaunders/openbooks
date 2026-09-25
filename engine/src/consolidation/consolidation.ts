@@ -17,6 +17,7 @@ import {
   toUnits,
 } from "../money/money.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
+import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 
 /**
@@ -384,32 +385,29 @@ export async function runOwnershipConsolidationIn(
     // run ids are uuidv7 (time-ordered): their LEADING bytes repeat for
     // every run inside a ~50-day window, so the whole id must salt the
     // entry number to keep reruns unique under journal_entries_org_number.
-    const inserted = await tx.execute<{ id: string }>(sql`
-      insert into journal_entries
-        (org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by)
-      values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId}-${sequence}`},
-              ${postingDate},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
-      returning id
-    `);
-    const entryId = inserted.rows[0]!.id;
-    for (let index = 0; index < material.length; index++) {
-      const line = material[index]!;
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo)
-        values (${orgId},${entryId},${index + 1},${line.accountId},${elimination.id},${line.amount},
-                ${elimination.baseCurrency},${line.amount},1,${line.memo})
-      `);
-    }
-    await tx.execute(
-      sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId} and org_id=${orgId}`,
-    );
+    // Every journal write routes through the ONE ledger API; the reversal
+    // marker goes through the governed lifecycle marker — never an edit.
+    const postedEntry = await postEntry(tx, {
+      orgId,
+      bookId,
+      subsidiaryId: elimination.id,
+      entryNumber: `OWN-${period.name}-${runId}-${sequence}`,
+      postingDate,
+      periodId,
+      memo: `Ownership consolidation ${kind}`,
+      origin: "translation",
+      reversesEntryId: reverses,
+      actorId: userId,
+      currency: elimination.baseCurrency,
+      lines: material.map((line) => ({
+        accountId: line.accountId,
+        amount: line.amount,
+        memo: line.memo,
+      })),
+    });
+    const entryId = postedEntry.entryId;
     if (reverses) {
-      await tx.execute(sql`
-        update journal_entries
-           set status='reversed', updated_at=now(), updated_by=${userId}
-         where id=${reverses} and org_id=${orgId} and status='posted'
-      `);
+      await markEntryReversed(tx, { orgId, entryId: reverses, actorId: userId });
     }
     await tx.execute(sql`
       insert into ownership_consolidation_entries (org_id,run_id,interest_id,kind,journal_entry_id,created_by,updated_by)
@@ -1291,29 +1289,46 @@ async function runAutoEliminationIn(
   }
 
   for (const p of prior.rows) {
-    const rev = await tx.execute<{ id: string }>(sql`
-      insert into journal_entries
-        (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
-         memo, status, origin, reverses_entry_id, created_by)
-      values (${orgId}, ${book.id}, ${elim.id}, ${`${p.entryNumber}-R`}, ${period.ends_on},
-              ${periodId}, ${`Reversal of ${p.entryNumber}`}, 'draft', 'intercompany', ${p.id}, ${userId ?? null})
-      returning id`);
-    const reversalId = rev.rows[0]!.id;
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-         currency, txn_amount, fx_rate, memo)
-      select org_id, ${reversalId}, line_number, account_id, subsidiary_id, -amount,
-             currency, -txn_amount, fx_rate, ${`Reversal of ${p.entryNumber}`}
-        from journal_lines where entry_id = ${p.id} and org_id = ${orgId}`);
-    await tx.execute(sql`
-      update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
-       where id = ${reversalId} and org_id = ${orgId}`);
-    await tx.execute(sql`
-      update journal_entries
-         set status = 'reversed', updated_at = now(), updated_by = ${userId}
-       where id = ${p.id} and org_id = ${orgId} and status = 'posted'
-    `);
+    // The reversal mirrors the prior elimination exactly through the ONE
+    // ledger API; the prior entry is then marked reversed — never edited.
+    const mirrorLines = (await tx.execute<{
+      line_number: number;
+      account_id: string;
+      subsidiary_id: string;
+      amount: string;
+      currency: string | null;
+      txn_amount: string;
+      fx_rate: string;
+    }>(sql`
+      select line_number, account_id, subsidiary_id, amount::text as amount,
+             currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate
+        from journal_lines where entry_id = ${p.id} and org_id = ${orgId}
+        order by line_number`)).rows;
+    const postedReversal = await postEntry(tx, {
+      orgId,
+      bookId: book.id,
+      subsidiaryId: elim.id,
+      entryNumber: `${p.entryNumber}-R`,
+      postingDate: period.ends_on,
+      periodId,
+      memo: `Reversal of ${p.entryNumber}`,
+      origin: "intercompany",
+      reversesEntryId: p.id,
+      actorId: userId,
+      currency: elim.baseCurrency,
+      lines: mirrorLines.map((line) => ({
+        accountId: line.account_id,
+        subsidiaryId: line.subsidiary_id,
+        amount: neg(line.amount),
+        currency: line.currency,
+        txnAmount: neg(line.txn_amount),
+        fxRate: line.fx_rate,
+        memo: `Reversal of ${p.entryNumber}`,
+        lineNumber: line.line_number,
+      })),
+    });
+    const reversalId = postedReversal.entryId;
+    await markEntryReversed(tx, { orgId, entryId: p.id, actorId: userId });
     reversalIds.push(reversalId);
   }
   if (translatedActivity.length === 0) {
@@ -1347,43 +1362,34 @@ async function runAutoEliminationIn(
   const genN = (generations.rows[0]?.n ?? 0) + 1;
   const elimEntryNumber =
     genN === 1 ? `ELIM-${period.name}` : `ELIM-${period.name}-${genN}`;
-  const ins = await tx.execute<{ id: string }>(sql`
-    insert into journal_entries
-      (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
-       memo, status, origin, created_by)
-    values (${orgId}, ${book.id}, ${elim.id}, ${elimEntryNumber}, ${period.ends_on},
-            ${periodId}, ${`Auto-elimination ${period.name}`}, 'draft', 'intercompany', ${userId ?? null})
-    returning id`);
-  const entryId = ins.rows[0]!.id;
-
-  let n = 0;
-  for (const row of translatedActivity) {
-    n++;
-    await tx.execute(sql`
-      insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
-         currency, txn_amount, fx_rate, memo)
-      values (${orgId}, ${entryId}, ${n}, ${row.accountId}, ${elim.id}, ${neg(row.total)},
-              ${elim.baseCurrency}, ${neg(row.total)}, 1,
-              ${`Eliminates ${ctx.byId.get(row.subsidiaryId)?.name ?? row.subsidiaryId}`})`);
-  }
-  await tx.execute(sql`
-    update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
-     where id = ${entryId} and org_id = ${orgId}`);
-  await tx.execute(sql`
-    insert into audit_log
-      (org_id, table_name, row_id, action, changes, actor_id, request_id)
-    values (
-      ${orgId}, 'journal_entries', ${entryId}, 'insert',
-      ${JSON.stringify({
-        mode: "auto_elimination",
-        periodId,
-        lineCount: translatedActivity.length,
-      })}::jsonb,
-      ${userId}, 'auto_elimination'
-    )
-  `);
-  return finishElimination(entryId, n);
+  // Every journal write routes through the ONE ledger API: the elimination
+  // audit payload travels with the posting instead of a second insert.
+  const postedElim = await postEntry(tx, {
+    orgId,
+    bookId: book.id,
+    subsidiaryId: elim.id,
+    entryNumber: elimEntryNumber,
+    postingDate: period.ends_on,
+    periodId,
+    memo: `Auto-elimination ${period.name}`,
+    origin: "intercompany",
+    actorId: userId,
+    currency: elim.baseCurrency,
+    auditAction: "insert",
+    requestId: "auto_elimination",
+    auditChanges: {
+      mode: "auto_elimination",
+      periodId,
+      lineCount: translatedActivity.length,
+    },
+    lines: translatedActivity.map((row) => ({
+      accountId: row.accountId,
+      amount: neg(row.total),
+      memo: `Eliminates ${ctx.byId.get(row.subsidiaryId)?.name ?? row.subsidiaryId}`,
+    })),
+  });
+  const entryId = postedElim.entryId;
+  return finishElimination(entryId, translatedActivity.length);
 }
 
 /**

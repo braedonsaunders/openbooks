@@ -1,7 +1,8 @@
 import { sql, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { PoolClient } from "pg";
-import { db, pool } from "../platform/db.ts";
+import { db, pool, type SqlExecutor } from "../platform/db.ts";
+import { postEntry } from "../ledger/post-entry.ts";
 import { divRate, fromUnits, mulRate, toUnits } from "../money/money.ts";
 import { lockApplicationEvidenceWithQuery } from "../records/application-lock.ts";
 import type { SourceApplicationLink } from "./source.ts";
@@ -602,50 +603,44 @@ export async function reconcileApplications(
         orgId,
         `${first.sourceDocumentId}-FX`,
       );
-      const fxEntry = await client.query<{ id: string }>(
-        `insert into journal_entries
-          (org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-         values ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, 'fx_settlement')
-         returning id`,
-        [
-          orgId,
-          first.bookId,
-          first.subsidiaryId,
-          entryNumber,
-          first.date,
-          first.periodId,
-          `Realized FX settlement — ${first.sourceDocumentId}`,
-          first.sourceDocumentId,
+      // The FX entry posts through the ONE ledger API on this same
+      // connection and transaction: drizzle statements are rendered to
+      // text/params through the file's PgDialect, so the posting lock,
+      // guards, line insert, and flip all share the batch's unit.
+      const runner = {
+        execute: (async (statement: SQL) => {
+          const rendered = applicationLockDialect.sqlToQuery(statement);
+          const result = await client.query(rendered.sql, rendered.params);
+          return { rows: result.rows };
+        }) as unknown as SqlExecutor["execute"],
+      };
+      const postedFx = await postEntry(runner, {
+        orgId,
+        bookId: first.bookId,
+        subsidiaryId: first.subsidiaryId,
+        entryNumber,
+        postingDate: first.date,
+        periodId: first.periodId,
+        memo: `Realized FX settlement — ${first.sourceDocumentId}`,
+        sourceDocumentId: first.sourceDocumentId,
+        origin: "fx_settlement",
+        actorId: null,
+        currency: first.functionalCurrency,
+        lines: [
+          {
+            accountId: first.accountId,
+            amount: fromUnits(adjustment),
+            partyId: first.partyId,
+            memo: `Realized FX settlement — ${first.sourceDocumentId}`,
+          },
+          {
+            accountId: fxAccountId,
+            amount: fromUnits(-adjustment),
+            memo: `Realized FX settlement — ${first.sourceDocumentId}`,
+          },
         ],
-      );
-      const fxEntryId = fxEntry.rows[0]!.id;
-      await client.query(
-        `insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item, memo)
-         values
-          ($1, $2, 1, $3, $4, $5, $6, $5, 1, $7, false, $8),
-          ($1, $2, 2, $9, $4, $10, $6, $10, 1, null, false, $8)`,
-        [
-          orgId,
-          fxEntryId,
-          first.accountId,
-          first.subsidiaryId,
-          fromUnits(adjustment),
-          first.functionalCurrency,
-          first.partyId,
-          `Realized FX settlement — ${first.sourceDocumentId}`,
-          fxAccountId,
-          fromUnits(-adjustment),
-        ],
-      );
-      await client.query(
-        `update journal_entries
-            set status = 'posted', posted_at = now()
-          where id = $1 and org_id = $2`,
-        [fxEntryId, orgId],
-      );
+      });
+      const fxEntryId = postedFx.entryId;
       for (const row of group) row.fxGainLossEntryId = fxEntryId;
     }
 
