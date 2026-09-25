@@ -12,6 +12,7 @@ import {
   missingPayrollControlAccounts,
   type MissingPayrollControlAccount,
 } from '../payroll-setup-checklist.ts'
+import { payrollYtdMoneyAmounts } from './payroll-money.ts'
 
 /**
  * Payroll module home — one light round trip for the /payroll landing cockpit:
@@ -84,9 +85,9 @@ export interface PayrollHome {
   /** Committed runs in the current tax year (Harmony's "30 of 52"). */
   runsThisYear: number
   defaultPeriodsPerYear: number | null
-  ytdGross: number
-  ytdNet: number
-  ytdEmployerCost: number
+  ytdGross: string
+  ytdNet: string
+  ytdEmployerCost: string
   nextPayDate: string | null
   schedules: PayrollScheduleCard[]
   previousRun: PreviousRun | null
@@ -285,6 +286,7 @@ export async function payrollHome(
   const prev = prevRes.rows[0]
   const stats = statsRes.rows[0] ?? {}
   const ytd = ytdRes.rows[0] ?? {}
+  const ytdMoney = payrollYtdMoneyAmounts(ytd as { gross?: string | null; net?: string | null; employer_cost?: string | null })
   const defaultSchedule = schedules.find((s) => s.isDefault) ?? schedules[0]
 
   // Setup checklist (F-t08-016): the same packSlotState walk the run
@@ -314,9 +316,9 @@ export async function payrollHome(
     activeEmployees: Number(stats.active_employees ?? 0),
     runsThisYear: Number(stats.runs_this_year ?? 0),
     defaultPeriodsPerYear: defaultSchedule?.periodsPerYear ?? null,
-    ytdGross: Number(ytd.gross ?? 0),
-    ytdNet: Number(ytd.net ?? 0),
-    ytdEmployerCost: Number(ytd.employer_cost ?? 0),
+    ytdGross: ytdMoney.gross,
+    ytdNet: ytdMoney.net,
+    ytdEmployerCost: ytdMoney.employerCost,
     nextPayDate: schedules.reduce<string | null>(
       (min, s) => (min === null || s.payDate < min ? s.payDate : min),
       null,
