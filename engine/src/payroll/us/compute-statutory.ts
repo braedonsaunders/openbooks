@@ -25,6 +25,7 @@ import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
 import { caEttWithholding } from "./states/ca.ts";
+import { coFamliWithholding } from "./states/co.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -320,6 +321,20 @@ export async function computeUsStatutory(
   let sequence = 140;
   // State withholding consumes the pack-declared reduced bases below;
   // Nebraska's special minimum therefore uses that same statutory wage base.
+  // Colorado FAMLI (2026: 0.44% employee plus 0.44% employer on covered
+  // wages) posts beside DR 1098 income tax, never inside it — posted here,
+  // ahead of the levy loop, because it is region-priced rather than
+  // levy-routed. Same base the CO levy priced (periodic plus supplemental).
+  if (region === "CO") {
+    const famli = coFamliWithholding(run.pay_date!, sum([income, nonPeriodic]));
+    pushStatutory("co_famli_employee", "deduction", "Colorado FAMLI (employee)", famli.employee, 149);
+    pushStatutory("co_famli_employer", "employer_contribution", "Colorado FAMLI (employer)", famli.employer, 252);
+    factors = {
+      ...factors,
+      CO_FAMLI_EMPLOYEE: famli.employee,
+      CO_FAMLI_EMPLOYER: famli.employer,
+    };
+  }
   // Employer-pocket levies post below the deduction loop's sequence range:
   // federal employer lines take 210–250, so transit starts at 260.
   let transitSequence = 260;

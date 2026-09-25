@@ -393,6 +393,24 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "co_famli_employee",
+      regions: ["CO"],
+      components: [
+        // Colorado FAMLI employee premium (2026: 0.44% of covered wages): an
+        // EMPLOYEE deduction beside DR 1098 income tax, never inside it.
+        { code: "CO-FAMLI", name: "Colorado FAMLI (employee)", systemKey: "co_famli_employee", kind: "deduction", sequence: 149, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
+      key: "co_famli_employer",
+      regions: ["CO"],
+      components: [
+        // The matching 0.44% employer contribution: employer expense plus a
+        // liability to the state, never out of the cheque.
+        { code: "CO-FAMLI-ER", name: "Colorado FAMLI (employer)", systemKey: "co_famli_employer", kind: "employer_contribution", sequence: 252, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
       key: "transit_payroll_tax",
       regions: ["OR"],
       components: [

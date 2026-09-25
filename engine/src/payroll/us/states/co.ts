@@ -54,6 +54,13 @@ export interface CoYearRates {
   year: number;
   status: "published" | "draft";
   rate: string;
+  /**
+   * Family and Medical Leave Insurance premium halves for the year (2026:
+   * 0.88% split equally). Private-plan and small-employer treatments ride
+   * a later employer-fact channel; the split itself is statutory.
+   */
+  famliEmployeeRate: string;
+  famliEmployerRate: string;
   /** DR 1098 line 2a — married filing jointly or qualifying surviving spouse. */
   jointAllowance: string;
   /** DR 1098 line 2a — every other W-4 Step 1(c) status. */
@@ -69,6 +76,10 @@ export const CO_RATES_2026: CoYearRates = {
   rate: "0.044",
   jointAllowance: "11000",
   otherAllowance: "5500",
+  // CDLE FY 2025-26 Performance Plan + December 2025 employer brief:
+  // 2026 FAMLI premium 0.88%, split equally between employee and employer.
+  famliEmployeeRate: "0.0044",
+  famliEmployerRate: "0.0044",
 };
 
 const CO_EDITIONS_BY_YEAR: Record<number, CoYearRates> = {
@@ -176,8 +187,25 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * Trace-factor labels for the stub calculation trace, keyed by the trace
  * keys above. Terms are the DR 1098 worksheet's own — see the module header.
  */
+/**
+ * Family and Medical Leave Insurance premium — the 0.44% employee share
+ * withheld and the matching 0.44% employer contribution, on covered wages.
+ * Computed beside DR 1098 income tax, never folded into it.
+ */
+export function coFamliWithholding(
+  payDate: string, coveredWages: string,
+): { employee: string; employer: string } {
+  const rates = coRatesForPayDate(payDate);
+  return {
+    employee: D(mulRateCents(U(coveredWages), rates.famliEmployeeRate)),
+    employer: D(mulRateCents(U(coveredWages), rates.famliEmployerRate)),
+  };
+}
+
 export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CO_MILITARY_SPOUSE_EXEMPT: "Colorado qualifying military-spouse wages exempt from withholding",
+  CO_FAMLI_EMPLOYEE: "Colorado FAMLI employee premium",
+  CO_FAMLI_EMPLOYER: "Colorado FAMLI employer contribution",
   CO_NONRESIDENT_WAGES: "Colorado apportioned nonresident wages",
   CO_ANNUAL_WAGES: "Colorado annualized wages",
   CO_ANNUAL_ALLOWANCE: "Colorado annual allowance",
