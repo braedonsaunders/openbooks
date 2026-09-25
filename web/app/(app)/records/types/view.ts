@@ -21,7 +21,7 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { requirePermission } from '../../../../lib/authz'
 import { loadRecordTypeById, subsidiaryDeclaredTypeIds, type RecordTypeRow } from '../../../../lib/records'
@@ -108,7 +108,10 @@ export async function loadRecordTypes(
   const t = await getTranslations('records')
   const tc = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
-  const typeId = typeof sp.type === 'string' ? sp.type : undefined
+  // A malformed ?type= must resolve like an unknown id (no drawer), never
+  // reach the loader to 500 on the uuid cast. 'new' is the create affordance.
+  const typeId =
+    typeof sp.type === 'string' && (sp.type === 'new' || isUuid(sp.type)) ? sp.type : undefined
   // Unsaved create: `?type=new` renders the builder drawer over a blank form.
   // Nothing is read or written for the id itself — the type exists only after
   // an explicit Save POSTs /api/records/types.

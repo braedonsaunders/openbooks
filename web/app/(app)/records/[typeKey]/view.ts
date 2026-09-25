@@ -23,7 +23,7 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { pgTextArrayLiteral } from '../../../../lib/pg-array'
 import { can, requirePermission } from '../../../../lib/authz'
@@ -185,7 +185,9 @@ export async function loadRecordWorkspace(
   })
   const status = pickString(sp.status)
   const showInactive = pickString(sp.showInactive) === 'true'
-  const recId = typeof sp.rec === 'string' ? sp.rec : undefined
+  // A malformed ?rec= must resolve like an unknown id (no drawer), never
+  // reach the loader to 500 on the uuid cast.
+  const recId = typeof sp.rec === 'string' && isUuid(sp.rec) ? sp.rec : undefined
 
   const activeFieldFilters = filterFields
     .map((f) => ({ field: f, value: pickString(sp[`f_${f.id}`]) }))
