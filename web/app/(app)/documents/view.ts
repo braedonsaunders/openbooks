@@ -20,6 +20,7 @@ import {
   fileAccessLevel,
   folderAccessLevel,
   getFile,
+  getFolder,
   getFolderPath,
   getFolderTree,
   listFolderContents,
@@ -162,12 +163,24 @@ export async function loadDocuments(
     name: localizeName(folder.name, folder.systemKind),
   }))
 
-  const [openFile, openFolder] = await Promise.all([
+  const [openFile, treeOpenFolder] = await Promise.all([
     fileId && isUuid(fileId) ? getFile(orgId, fileId, viewer) : null,
     folderParam && folderParam !== 'new' && isUuid(folderParam)
       ? localizedTree.find((f) => f.id === folderParam) ?? null
       : null,
   ])
+  // Record-attachment folders never appear in the sidebar tree, but row
+  // menus link their Properties / Manage access drawers here: resolve those
+  // ids with the same scoped single-folder read, so a hidden folder still
+  // reads as not found and existence never leaks.
+  const recordOpenFolder =
+    !treeOpenFolder && folderParam && folderParam !== 'new' && isUuid(folderParam)
+      ? await getFolder(orgId, folderParam, viewer)
+      : null
+  const openFolder = treeOpenFolder ??
+    (recordOpenFolder
+      ? { ...recordOpenFolder, name: localizeName(recordOpenFolder.name, recordOpenFolder.systemKind) }
+      : null)
 
   // Effective access tiers for UI affordances (the server re-checks every
   // mutation). The current folder's tier is inherited by the items it contains;
