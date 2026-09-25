@@ -65,6 +65,7 @@ import {
   frPasEditionForVersement,
 } from "./tables-2026.ts";
 import { calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
+import { frAllocFamReducedEligible } from "./statutory-rates.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import "./employee-facts.ts";
@@ -366,11 +367,17 @@ export async function computeFrStatutory(
     versementMobiliteRate = configured;
   }
   // Cotisations price on the brut using rates resolved at the run's pay date.
+  // The reduced 3.45% family rate keys off the filing account's declared
+  // eligibility — an eligible employer must not over-accrue at 5.25%.
+  const allocFamReducedEligible = rateResolution
+    ? frAllocFamReducedEligible(rateResolution, "FR", ctx.filingAccountId)
+    : false;
   const cots = calculateFrCotisations2026({
     brut: base,
     payDate,
     periodsPerYear,
     employerEffectif,
+    allocFamReducedEligible,
     agsInterim: agsEmployerType === "temporary_work_agency",
     atmpRatePct: atmpRate,
     versementMobilitePct: versementMobiliteRate,
