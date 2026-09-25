@@ -80,6 +80,11 @@ export function ChargesSection({
   const [costRate, setCostRate] = useState('')
   const [billRate, setBillRate] = useState('')
 
+  function closeForm() {
+    setItemId(''); setEquipmentUnitId(''); setEmployeeId(''); setQuantity('1'); setCostRate(''); setBillRate('')
+    onFormOpenChange(false)
+  }
+
   const itemOptions = useMemo(() => items.map((i) => ({ value: i.id, label: i.name })), [items])
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const equipmentOptions = useMemo(() => equipment.map((e) => ({ value: e.id, label: `${e.unitNumber} · ${e.name}` })), [equipment])
@@ -129,8 +134,7 @@ export function ChargesSection({
       const data = await res.json().catch(() => null) as { postRefusal?: unknown } | null
       if (typeof data?.postRefusal === 'string') toast.warning(data.postRefusal)
       else toast.success(t('created'))
-      setItemId(''); setEquipmentUnitId(''); setEmployeeId(''); setQuantity('1'); setCostRate(''); setBillRate('')
-      onFormOpenChange(false)
+      closeForm()
       router.refresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('failed'))
@@ -159,14 +163,14 @@ export function ChargesSection({
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('addTitle')}</h3>
-              <Button variant="ghost" size="sm" onClick={() => onFormOpenChange(false)}>{tCommon('actions.cancel')}</Button>
+              <Button variant="ghost" size="sm" onClick={closeForm} disabled={busy}>{tCommon('actions.cancel')}</Button>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('addHint')}</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
               {equipmentEnabled ? (
                 <div className={`${field} lg:col-span-2`}>
                   <Label>{t('equipmentUnit')}</Label>
-                  <SearchSelect value={equipmentUnitId} onChange={(v) => pickEquipment(v ?? '')} options={equipmentOptions} clearable placeholder={t('selectEquipment')} sheetTitle={t('equipmentUnit')} ariaLabel={t('equipmentUnit')} />
+                  <SearchSelect value={equipmentUnitId} onChange={(v) => pickEquipment(v ?? '')} options={equipmentOptions} disabled={busy} clearable placeholder={t('selectEquipment')} sheetTitle={t('equipmentUnit')} ariaLabel={t('equipmentUnit')} />
                 </div>
               ) : null}
               {/* Operator — only for an equipment line, because that is the only
@@ -182,7 +186,7 @@ export function ChargesSection({
                     value={employeeId}
                     onChange={(v) => setEmployeeId(v ?? '')}
                     options={operatorOptions}
-                    disabled={!equipmentUnitId}
+                    disabled={busy || !equipmentUnitId}
                     clearable
                     placeholder={equipmentUnitId ? tOr('selectOperator', 'Select an operator…') : tOr('operatorNeedsEquipment', 'Equipment lines only')}
                     sheetTitle={tOr('operator', 'Operator')}
@@ -192,19 +196,19 @@ export function ChargesSection({
               ) : null}
               <div className={`${field} lg:col-span-2`}>
                 <Label>{t('item')}</Label>
-                <SearchSelect value={itemId} onChange={(v) => pickItem(v ?? '')} options={itemOptions} disabled={!!equipmentUnitId} placeholder={t('selectItem')} sheetTitle={t('item')} ariaLabel={t('item')} />
+                <SearchSelect value={itemId} onChange={(v) => pickItem(v ?? '')} options={itemOptions} disabled={busy || !!equipmentUnitId} placeholder={t('selectItem')} sheetTitle={t('item')} ariaLabel={t('item')} />
               </div>
               <div className={field}>
                 <Label>{t('quantity')}</Label>
-                <Input inputMode="decimal" className="text-right tabular-nums" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                <Input disabled={busy} inputMode="decimal" className="text-right tabular-nums" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
               </div>
               <div className={field}>
                 <Label>{t('costRate')}</Label>
-                <Input disabled={!!equipmentUnitId} inputMode="decimal" className="text-right tabular-nums" value={costRate} onChange={(e) => setCostRate(e.target.value)} placeholder={equipmentUnitId ? t('automaticRate') : '0.00'} />
+                <Input disabled={busy || !!equipmentUnitId} inputMode="decimal" className="text-right tabular-nums" value={costRate} onChange={(e) => setCostRate(e.target.value)} placeholder={equipmentUnitId ? t('automaticRate') : '0.00'} />
               </div>
               <div className={field}>
                 <Label>{t('billRate')}</Label>
-                <Input disabled={!!equipmentUnitId} inputMode="decimal" className="text-right tabular-nums" value={billRate} onChange={(e) => setBillRate(e.target.value)} placeholder={equipmentUnitId ? t('automaticRate') : '0.00'} />
+                <Input disabled={busy || !!equipmentUnitId} inputMode="decimal" className="text-right tabular-nums" value={billRate} onChange={(e) => setBillRate(e.target.value)} placeholder={equipmentUnitId ? t('automaticRate') : '0.00'} />
               </div>
             </div>
             <Button onClick={submit} disabled={busy || !itemId}>{busy ? tCommon('actions.saving') : t('post')}</Button>
