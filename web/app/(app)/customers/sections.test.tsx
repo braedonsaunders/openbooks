@@ -18,11 +18,11 @@ const React = await import("react");
 const { renderToString } = await import("react-dom/server");
 const { ArPulse } = await import("./sections");
 
-// F-t12-012: the AR-pulse hero truncated large amounts at 390px — each
+// the AR-pulse hero truncated large amounts at 390px — each
 // third of the row is ~100px and the unbroken tabular figures overflowed
 // their grid cells. Value cells must shrink (min-w-0) and wrap
 // (break-words) instead of clipping; desktop padding is unchanged.
-test("F-t12-012: hero amounts wrap instead of truncating on narrow screens", () => {
+test("hero amounts wrap instead of truncating on narrow screens", () => {
   const html = renderToString(
     <ArPulse
       outstanding="$12,345,678.90"

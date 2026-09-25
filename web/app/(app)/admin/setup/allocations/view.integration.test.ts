@@ -97,7 +97,7 @@ test('loader 404s while the feature is off', { skip: !process.env.OPENBOOKS_DB_U
   t.after(() => dropScratchOrg(orgId))
   await assert.rejects(withOrgContext(orgId, () => loadAllocations({})), (error: unknown) => {
     assert.ok(error instanceof Error)
-    // next/navigation notFound() — any navigation throw counts as the 404 path.
+    // next/navigation notFound — any navigation throw counts as the 404 path.
     return /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND|not found/i.test(error.message) || 'digest' in error
   })
 })

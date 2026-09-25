@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../../../lib/auth';
 
-// F-t11-005: a URL-loaded free-text filter must not zero the KPI tiles —
+// a URL-loaded free-text filter must not zero the KPI tiles —
 // tiles keep global (query-independent) scope, the same count the UI-applied
 // filter shows. Same stubbed harness as the agents home loader test.
 process.env.SESSION_SECRET ??= "b06-lane-test-secret-must-be-32+chars!!!!";
@@ -47,7 +47,7 @@ async function asReader(orgId: string) {
   state.user = { id: actor, orgId, name: 'Reader', email: 't11tiles@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor };
 }
 
-test('F-t11-005: URL search filter leaves the KPI tiles at global scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('URL search filter leaves the KPI tiles at global scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   // Scratch bootstrap + fixture seeds run under bypass (cluster-safe fixture
   // path); the loader under test runs org-scoped like production.
   const org = await withBypassContext(() => createScratchOrg());

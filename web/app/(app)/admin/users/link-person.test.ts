@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
 // The Admin Users -> linked person workflow renders its drawer, reason and
 // attestation copy from the shared en/admin labels. Every locale must carry
@@ -10,7 +11,7 @@ import test from "node:test";
 // audit — is proved through the real route in
 // web/app/api/admin/users/route-party.test.ts.)
 const MESSAGES = join(import.meta.dirname, "..", "..", "..", "..", "messages");
-const LOCALES = ["en", "fr", "de", "es", "pt-BR", "ja", "zh"];
+
 const KEYS = [
   "linkPersonButton",
   "linkPersonTitle",

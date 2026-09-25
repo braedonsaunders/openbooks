@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 // CardStudio E45 (preview ~159 plus publish ~325): both fetched and called
-// res.json() before checking res.ok, so a non-JSON error body threw a
+// res.json before checking res.ok, so a non-JSON error body threw a
 // SyntaxError that lost the server's named refusal. The status is checked
 // first through the shared helper; busy always releases in finally.
 const { JSDOM } = await import('jsdom')

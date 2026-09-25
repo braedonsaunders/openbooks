@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../../../lib/auth';
 
-// F-t11-006: triaged findings must stay discoverable — the Status filter
+// triaged findings must stay discoverable — the Status filter
 // offers every lifecycle state (not just the open ones), while the default
 // inbox still shows actionable (open + in review) findings.
 process.env.SESSION_SECRET ??= "b06-lane-test-secret-must-be-32+chars!!!!";

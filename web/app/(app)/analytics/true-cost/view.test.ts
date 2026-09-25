@@ -70,7 +70,7 @@ test('the open-report copy exists in every locale catalog', () => {
 })
 
 /**
- * F-t09-003: the Categories tab Assign picker is fed by `burden`-dimension
+ * the Categories tab Assign picker is fed by `burden`-dimension
  * account groups, so a group created in any other dimension leaves the
  * picker empty with no explanation. The empty state must name the
  * `burden`-dimension requirement in every locale, or true-cost setup cannot

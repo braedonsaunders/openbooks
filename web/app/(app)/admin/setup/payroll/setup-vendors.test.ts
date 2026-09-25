@@ -16,7 +16,7 @@ const { sql } = await import('drizzle-orm')
 const { PgDialect } = await import('drizzle-orm/pg-core')
 const { subsidiaryVisibleFilter } = await import('../../../../../lib/subsidiaries')
 
-// F-t08-015: the remittance vendor picker offered only None despite active
+// the remittance vendor picker offered only None despite active
 // vendors. Its query mapped org-wide vendors (NULL subsidiary) onto the org
 // root, hiding them from subsidiary-scoped operators — while every other
 // vendor surface treats a NULL subsidiary as org-wide visible

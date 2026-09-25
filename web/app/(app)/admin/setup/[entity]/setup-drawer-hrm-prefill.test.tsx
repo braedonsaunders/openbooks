@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// OM-17c: the review-template edit drawer rendered Scale minimum, Scale
+// the review-template edit drawer rendered Scale minimum, Scale
 // maximum and Scale labels ALL BLANK for a stored row, so a Save cleared
 // or rewrote rating_scale. The read path now projects the stored jsonb
 // into the drawer slot fields (projectRuleSlotPrefills, driven by the
@@ -150,7 +150,7 @@ function inputByLabel(label: string): HTMLInputElement {
   return el
 }
 
-test('OM-17c: the review-template edit drawer prefills the stored rating scale', async () => {
+test('the review-template edit drawer prefills the stored rating scale', async () => {
   const m = await renderEditDrawer('hrm-review-templates', storedReviewRow)
   try {
     assert.equal(inputByLabel('Scale minimum').value, '1', 'the stored min prefills')
@@ -166,7 +166,7 @@ test('OM-17c: the review-template edit drawer prefills the stored rating scale',
   }
 })
 
-test('OM-17c: saving the prefilled drawer without edits keeps the stored scale JSON', async () => {
+test('saving the prefilled drawer without edits keeps the stored scale JSON', async () => {
   const m = await renderEditDrawer('hrm-review-templates', storedReviewRow, () => ({}))
   try {
     const save = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Save')
@@ -185,7 +185,7 @@ test('OM-17c: saving the prefilled drawer without edits keeps the stored scale J
   }
 })
 
-test('OM-17c: the document-template edit drawer prefills signer checkboxes from signer_roles', async () => {
+test('the document-template edit drawer prefills signer checkboxes from signer_roles', async () => {
   const m = await renderEditDrawer('hrm-document-templates', storedDocumentRow)
   try {
     const box = (label: string): boolean => {

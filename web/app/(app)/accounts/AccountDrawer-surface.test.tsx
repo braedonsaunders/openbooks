@@ -149,7 +149,7 @@ function createButton(): HTMLButtonElement {
   return button;
 }
 
-/** F-t06-004: a duplicate account number must surface the typed server message. */
+/** : a duplicate account number must surface the typed server message. */
 test("a duplicate account number surfaces the already-in-use message", async (t) => {
   const { calls } = await mountDrawer(t, {
     response: () => Response.json({ error: "number_in_use", field: "number" }, { status: 422 }),
@@ -173,7 +173,7 @@ test("a duplicate account number surfaces the already-in-use message", async (t)
   await tick();
   assert.equal(calls[0]?.method, "POST", "the duplicate must reach the API");
   // A transient toast alone reads as "nothing happened" once it dismisses:
-  // the failure must also persist as a form-level alert (F-t06-018 precedent).
+  // the failure must also persist as a form-level alert ( precedent).
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the duplicate must persist as a form-level alert");
   assert.match(alert.textContent ?? "", /already in use/i);

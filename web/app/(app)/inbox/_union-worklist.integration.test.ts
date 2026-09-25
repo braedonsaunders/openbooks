@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// F-t01-007 — the dashboard tile counts the unified approval worklist
+// the dashboard tile counts the unified approval worklist
 // (Flows gates + gateless document approvals + pay runs) while the
 // approvals center mine/all tabs read gates-only queries: 97 gateless
 // pending documents on a live tenant show as tile 97 vs empty tabs. The center
@@ -152,7 +152,7 @@ function budgetAuthzFor(orgId: string, userId: string, name: string): Authz {
 
 for (const tab of ["mine", "all", "submitted"] as const) {
   test(`approvals ${tab} tab lists a directly submitted pending budget`, { skip: !DB }, async () => {
-    // F-t13-005: the direct submit creates no flow run, so the inbox tabs
+    // the direct submit creates no flow run, so the inbox tabs
     // showed nothing while the budget waited for a checker.
     const org = await withBypass(() => createScratchOrg());
     try {

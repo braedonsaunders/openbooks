@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F-t04-004: the flow Runs tab is read-only — a failed run shows its error
+// the flow Runs tab is read-only — a failed run shows its error
 // but offers no path to re-drive it. Failed rows must offer a Retry that
 // POSTs the runs retry endpoint and toasts the outcome.
 const { JSDOM } = await import('jsdom')
@@ -120,7 +120,7 @@ function retryButtons() {
   ) as HTMLButtonElement[]
 }
 
-test('only failed runs offer retry, and retry re-drives the run (F-t04-004)', async (t) => {
+test('only failed runs offer retry, and retry re-drives the run', async (t) => {
   script.retryStatus = 200
   const { host, root } = await mount()
   t.after(async () => {
@@ -142,7 +142,7 @@ test('only failed runs offer retry, and retry re-drives the run (F-t04-004)', as
   )
 })
 
-test('a refused retry surfaces the typed reason (F-t04-004)', async (t) => {
+test('a refused retry surfaces the typed reason', async (t) => {
   script.retryStatus = 422
   const { host, root } = await mount()
   t.after(async () => {

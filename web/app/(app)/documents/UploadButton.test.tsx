@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// UX-07: Documents Upload with no folder selected must show a visible,
+// Documents Upload with no folder selected must show a visible,
 // accessible reason (not an unreachable toast) and a folder-selection
 // action. With a folder, the button stays bare and enabled.
 

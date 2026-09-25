@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// OM-18: /hrm/change-requests?reasons=1, Reason codes → New navigated to
+// /hrm/change-requests?reasons=1, Reason codes → New navigated to
 // ?reasons=1&row=new and nothing opened — the queue loader built
 // currentParams with `status` only, dropping sp.row, so the embedded
 // setup-section widget received no rowParam and SetupDrawer never
@@ -14,7 +14,7 @@ import test from "node:test";
 // The seams below stub I/O only (feature switches, group tabs, engine
 // list reads, the departments lookup, translations backed by the REAL
 // en catalog). Grants ride a fabricated Authz through the stubbed `can`
-// — permission logic itself is proven by the existing scope DB tests,
+// permission logic itself is proven by the existing scope DB tests,
 // not doubled here.
 const hrmCatalog = JSON.parse(
   readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),

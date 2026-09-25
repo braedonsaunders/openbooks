@@ -145,7 +145,7 @@ test('workbench loader serves the list source sort, filters, and row shape', { s
       // (doesNotMatch /href: '\/admin\/setup\/agents\/activity'/), and this
       // test still demanded the removed door, so the two contradicted each
       // other. Pinning the whole key set makes a future re-add fail here
-      // rather than silently satisfying a find() that returns undefined.
+      // rather than silently satisfying a find that returns undefined.
       assert.deepEqual(ranked.tabs.map((tab) => tab.key), ['inbox', 'proposals', 'briefing']);
 
       // Column sort through the URL flips the order.

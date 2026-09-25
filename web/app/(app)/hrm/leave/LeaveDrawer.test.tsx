@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// OM-11: managers could not file leave on an employee's behalf — the drawer
+// managers could not file leave on an employee's behalf — the drawer
 // posted without onBehalf and offered no manager mode, while the engine
 // refusal named a remedy the UI could not perform. The drawer now renders
 // an explicit on-behalf mode (visible only when the actor holds manageable
@@ -196,7 +196,7 @@ function setSelect(el: HTMLSelectElement, value: string): void {
 
 // The shared Select renders a visible trigger (carrying the id) plus a
 // hidden native <select> proxying the change event. Drive the native leg —
-// the component's own pick() path — rather than the dropdown sheet.
+// the component's own pick path — rather than the dropdown sheet.
 function nativeSelectFor(id: string): HTMLSelectElement {
   const trigger = document.getElementById(id);
   assert.ok(trigger, `expected a select trigger with id ${id}`);

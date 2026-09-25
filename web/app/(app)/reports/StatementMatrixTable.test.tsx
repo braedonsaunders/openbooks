@@ -23,7 +23,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../components/money-provider')
 const { StatementMatrixTable } = await import('./StatementMatrixTable')
 
-// F-t07-008: at 390px the amount cells clipped mid-number past the viewport
+// at 390px the amount cells clipped mid-number past the viewport
 // with no reachable scroll. The table must render inside a real horizontal
 // scroll container so every amount stays reachable on phones.
 function matrixHtml(): string {

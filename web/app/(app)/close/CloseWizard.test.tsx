@@ -238,7 +238,7 @@ async function mountReviewStage() {
   return { host, root };
 }
 
-/** F-t01-002: a Ready review task must be actionable — Start, evidence, and
+/** : a Ready review task must be actionable — Start, evidence, and
  * Complete reach the engine like any manual task, or the run strands short
  * of sign-off with no path forward. */
 test("a ready approval review task offers start and evidence controls", async (t) => {
@@ -278,7 +278,7 @@ test("a reversed-only consolidation toasts the reversal, not a posting", async (
   assert.doesNotMatch(successes[0]!.message, /posted/i);
 });
 
-/** F-t06-026: a refused consolidation must persist its reason inline on the task. */
+/** : a refused consolidation must persist its reason inline on the task. */
 test("a 422 consolidation refusal persists inline on the task", async (t) => {
   const calls: string[] = [];
   const prior = globalThis.fetch;

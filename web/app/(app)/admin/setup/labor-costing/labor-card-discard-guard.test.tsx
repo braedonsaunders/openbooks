@@ -196,7 +196,7 @@ async function clickX() {
 
 /**
  * Whether the drawer shell still holds the page open. The shell locks body
- * scroll while open and releases it the moment close() proceeds past the
+ * scroll while open and releases it the moment close proceeds past the
  * guard — a synchronous, animation-independent signal, unlike the deferred
  * close navigation (which waits for the exit animation that never
  * completes under jsdom).

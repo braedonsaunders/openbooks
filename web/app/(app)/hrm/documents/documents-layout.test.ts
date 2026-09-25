@@ -20,7 +20,7 @@ registerHooks({
 const { documentsSpec } = await import('./view.ts')
 
 /**
- * CK-32/CK-32b: the signed-document rows were visually overlapped by the
+ * /CK-32b: the signed-document rows were visually overlapped by the
  * Document templates section — elementFromPoint at a row-link centre hit
  * the templates TH/TD. The first fix removed the register grid's own
  * h-full, but the served build still failed: the real compressor is the
@@ -87,7 +87,7 @@ test('CK-32b: the page body is not a viewport-locked flex column', () => {
   assert.ok(!names.includes('flex-col'), 'the page body must stack sections in normal block flow, not as flex items')
 })
 
-test('CK-32: the register grid sizes to content, never to the viewport', () => {
+test('the register grid sizes to content, never to the viewport', () => {
   const className = String(registerGrid().className ?? '')
   for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'max-h-']) {
     assert.ok(!className.includes(clamp), `the register grid must not clamp height (${clamp} overflows rows under the sections)`)
@@ -97,7 +97,7 @@ test('CK-32: the register grid sizes to content, never to the viewport', () => {
   assert.ok(!names.includes('min-h-0'), 'the register grid must not opt into shrinking below its content (min-h-0 overflows rows under the sections)')
 })
 
-test('CK-32: the templates section stacks after the register as a sibling', () => {
+test('the templates section stacks after the register as a sibling', () => {
   const body = bodyBlocks()
   const registerIndex = body.findIndex(
     (block) => block.kind === 'grid' && findBlocks(block.blocks ?? [], 'table').length > 0,
@@ -113,7 +113,7 @@ test('CK-32: the templates section stacks after the register as a sibling', () =
   assert.ok(templatesIndex > registerIndex, 'the templates section must stack after the register, never over it')
 })
 
-test('CK-32: no block positions itself out of flow', () => {
+test('no block positions itself out of flow', () => {
   const outOfFlow: string[] = []
   const walk = (blocks: Block[], path: string) => {
     for (const block of blocks) {

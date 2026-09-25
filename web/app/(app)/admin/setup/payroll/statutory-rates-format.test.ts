@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { formatRateFieldValue } from './statutory-rates-format.ts'
 
-// F-t08-008: the rates table rendered the raw decimal ("Effective rate
+// the rates table rendered the raw decimal ("Effective rate
 // 0.0060") instead of a human percent. Decimal-rate fields render as
 // percents; percent and amount fields render as entered.
 test('decimal rates render as percents', () => {

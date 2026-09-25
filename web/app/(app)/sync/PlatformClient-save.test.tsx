@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F4T-2 (the connection drawer save() parsed the body before checking the
+// F4T-2 (the connection drawer save parsed the body before checking the
 // status, so a non-JSON error body hid the failure behind a SyntaxError):
 // the status is checked first through the shared helper, the server's named
 // refusal wins, and busy always releases.

@@ -25,7 +25,7 @@ function sqlText(query: unknown): string {
     .join('')
 }
 
-// --- forecasts half -------------------------------------------------------
+// -- forecasts half -------------------------------------------------------
 
 const forecastStateKey = Symbol.for('openbooks.forecast-undated-scope-test')
 interface ForecastState {
@@ -187,7 +187,7 @@ test('the unscoped undated link stays exactly as before', async () => {
   assert.equal(data.excludedUndatedHref, '/crm/opportunities?view=board&undated=1')
 })
 
-// --- opportunities half ---------------------------------------------------
+// -- opportunities half ---------------------------------------------------
 
 const boardStateKey = Symbol.for('openbooks.opportunity-board-scope-test')
 interface BoardState {

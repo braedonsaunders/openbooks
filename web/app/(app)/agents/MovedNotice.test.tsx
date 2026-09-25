@@ -73,8 +73,8 @@ async function mount() {
   };
 }
 
-// F-t13-007: the redirect landing must explain the move on the record.
-test("F-t13-007: moved notice renders title, description and dismiss", async () => {
+// the redirect landing must explain the move on the record.
+test("moved notice renders title, description and dismiss", async () => {
   const { host, unmount } = await mount();
   try {
     const notice = host.querySelector('[role="status"]');
@@ -90,7 +90,7 @@ test("F-t13-007: moved notice renders title, description and dismiss", async () 
   }
 });
 
-test("F-t13-007: dismissing the notice removes it", async () => {
+test("dismissing the notice removes it", async () => {
   const { host, unmount } = await mount();
   try {
     const dismiss = [...host.querySelectorAll("button")].find(

@@ -137,11 +137,11 @@ test("F-x6-003: starter Duplicate opens the name prompt", async () => {
   }
 });
 
-// F-t13-001: the offered duplicate default must not collide — the org may
+// the offered duplicate default must not collide — the org may
 // already hold a template with the starter's name (unique index org + type +
 // name), and saving a colliding default died on a storage 500. The prompt
 // must pre-fill the first free name instead.
-test("F-t13-001: starter Duplicate pre-fills a non-colliding name", async () => {
+test("starter Duplicate pre-fills a non-colliding name", async () => {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);

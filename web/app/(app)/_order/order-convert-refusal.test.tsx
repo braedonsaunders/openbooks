@@ -23,7 +23,7 @@ const PO_ID = '33333333-3333-4333-8333-333333333333'
 // stock and is billed on a two-way match, not received") and the drawer only
 // toasted — no toast survives attention, and the PO just sits Approved. A
 // convert refusal must pin as a record-level alert until the next action,
-// carrying the server's typed reason. (Was F-t03-001.)
+// carrying the server's typed reason. (Was .)
 function approvedExpensePo(): OrderPayload {
   return {
     doc: {

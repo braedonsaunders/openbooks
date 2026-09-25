@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 
-// F-t02-007: dashboard money tiles and the AR open-receivables tile exclude
+// dashboard money tiles and the AR open-receivables tile exclude
 // future-dated documents (as-of readers) but carried no as-of caption, so a
 // clerk who posts sees headline numbers ignore the posting with no visible
 // cut-off. The tiles must read the shared cut-off date and label it.
@@ -23,7 +23,7 @@ const arCockpit = readFileSync(
   'utf8',
 )
 
-test('dashboard money tiles label the shared as-of cut-off (F-t02-007)', () => {
+test('dashboard money tiles label the shared as-of cut-off', () => {
   assert.match(
     dashboardViews,
     /data\.asOfDate/,
@@ -46,7 +46,7 @@ test('dashboard money tiles label the shared as-of cut-off (F-t02-007)', () => {
   }
 })
 
-test('the AR open-receivables tile labels the position as-of date (F-t02-007)', () => {
+test('the AR open-receivables tile labels the position as-of date', () => {
   assert.match(
     arCockpit,
     /data\.asOf/,

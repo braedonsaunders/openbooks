@@ -157,11 +157,11 @@ function discardButton(): HTMLButtonElement {
   return found as HTMLButtonElement;
 }
 
-// F-t10-007: Discard draft deleted a fresh (unedited) draft with one click —
+// Discard draft deleted a fresh (unedited) draft with one click —
 // the confirm only fired when the drawer had unsaved edits. Discarding the
 // draft itself must always confirm first, and must not call the API before
 // the user confirms.
-test("F-t10-007: Discard draft confirms before deleting", async () => {
+test("Discard draft confirms before deleting", async () => {
   const { unmount } = await mount();
   try {
     await act(async () => {

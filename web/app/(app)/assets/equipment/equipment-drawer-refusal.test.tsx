@@ -247,7 +247,7 @@ test("a refused capitalize pins the generic copy, never a kernel code", async (t
   assert.doesNotMatch(alert.textContent ?? "", /already_capitalized/, "a kernel code must never reach the user verbatim");
 });
 
-test("a charge-item refusal still pins translated copy and flags its field (F-t07-006)", async (t) => {
+test("a charge-item refusal still pins translated copy and flags its field", async (t) => {
   freshGlobals();
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/equipment/${UNIT_ID}` && init?.method === "PATCH") {

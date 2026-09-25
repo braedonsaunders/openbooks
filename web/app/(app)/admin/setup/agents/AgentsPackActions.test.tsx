@@ -61,7 +61,7 @@ const { AgentsPackActions } = await import("./AgentsPackActions");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-/** F-t11-007: a rejected run must explain why instead of failing silently. */
+/** : a rejected run must explain why instead of failing silently. */
 test("a 409 claimed_elsewhere run explains that a scan is already running", async (t) => {
   const refreshes: string[] = [];
   globalThis.__agentsTestRouter = {

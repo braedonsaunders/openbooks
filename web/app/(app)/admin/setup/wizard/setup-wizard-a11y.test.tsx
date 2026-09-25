@@ -7,7 +7,7 @@ declare global {
   var __wizardPath: string | undefined;
 }
 
-// UX-19: the setup wizard pre-selects consequential defaults and renders
+// the setup wizard pre-selects consequential defaults and renders
 // Country/Currency/Fiscal selects whose current values an accessibility
 // snapshot could not expose. The company step now states its selections as
 // live text, fiscal months localize, and the review step badges every value
@@ -160,7 +160,7 @@ async function cont() {
   await tick(STEP_WAIT);
 }
 
-/** UX-19: the company step states its combobox selections as live text, so
+/** : the company step states its combobox selections as live text, so
  * the selected values survive an accessibility snapshot that cannot expose
  * a native select's current option. */
 test("company selections are stated as announced text and track changes", async (t) => {
@@ -199,7 +199,7 @@ test("company selections are stated as announced text and track changes", async 
   );
 });
 
-/** UX-17: Skip is a deferral — the wizard lands on the canonical home and
+/** : Skip is a deferral — the wizard lands on the canonical home and
  * names where setup resumes, instead of detouring into Setup. */
 test("skipping lands on the canonical home naming the resume", async (t) => {
   const { host, root } = mount();
@@ -325,7 +325,7 @@ test("apply sends the chosen business time zone", async (t) => {
   );
 });
 
-/** UX-19: option cards expose their selection through aria-pressed, and are
+/** : option cards expose their selection through aria-pressed, and are
  * keyboard-operable native buttons — the industry gate proves it. */
 test("industry cards announce selection through aria-pressed", async (t) => {
   const { host, root } = mount();
@@ -352,7 +352,7 @@ test("industry cards announce selection through aria-pressed", async (t) => {
   assert.equal(card.getAttribute("aria-pressed"), "true", "selecting the card announces pressed");
 });
 
-/** UX-19: the review step badges every value still on its pre-selected
+/** : the review step badges every value still on its pre-selected
  * default, while a deliberately changed value carries no badge. */
 test("review badges click-through defaults and spares deliberate choices", async (t) => {
   const { host, root } = mount();

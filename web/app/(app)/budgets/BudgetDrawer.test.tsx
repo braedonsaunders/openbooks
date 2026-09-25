@@ -140,7 +140,7 @@ async function cleanupDrawer(host: HTMLDivElement, root: ReturnType<typeof creat
   await act(async () => root.unmount()); host.remove(); globalThis.fetch = priorFetch;
 }
 
-/** F-t13-006: a refused submit must pin its typed reason on the record, not
+/** a refused submit must pin its typed reason on the record, not
  * vanish behind a transient toast. */
 test("a line-less submit pins the typed refusal on the drawer", async (t) => {
   const priorFetch = globalThis.fetch;
@@ -306,7 +306,7 @@ async function mountCreateDrawer(options?: {
   };
 }
 
-/** OM-05: the total follows a typed annual figure immediately — no blur needed. */
+/** the total follows a typed annual figure immediately — no blur needed. */
 test("typing an annual amount updates the slice total live, with zero writes", async (t) => {
   const mounted = await mountCreateDrawer();
   t.after(() => mounted.cleanup());
@@ -334,7 +334,7 @@ test("typing an annual amount updates the slice total live, with zero writes", a
   );
 });
 
-/** OM-05: Save without a name pins the remedy and still writes nothing. */
+/** Save without a name pins the remedy and still writes nothing. */
 test("saving a nameless budget pins the remedy instead of persisting", async (t) => {
   const mounted = await mountCreateDrawer();
   t.after(() => mounted.cleanup());

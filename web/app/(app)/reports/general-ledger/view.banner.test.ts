@@ -19,7 +19,7 @@ registerHooks({
 
 const { generalLedgerSpec } = await import('./view')
 
-// F-t06-027: enabling Multi-subsidiary crashed the GL report with React
+// enabling Multi-subsidiary crashed the GL report with React
 // error 441 — the loader converts the typed rates refusal into a banner with
 // a derive link instead of throwing it out of SSR. These tests pin the spec
 // half of that contract: given blocked data, the page shows the banner and

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
 const { registerHooks } = await import('node:module')
 registerHooks({
@@ -22,10 +23,8 @@ Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { PartyLinkCell } = await import('./sections.tsx')
 
-const LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
-
 /**
- * OM-06: synthetic opening-balance JE lines render as bare no-party amounts
+ * synthetic opening-balance JE lines render as bare no-party amounts
  * that read like operating items missing a counterparty. The partyless cell
  * must carry provenance (what is proven: no counterparty recorded — never
  * an assertion that every such row is an opening balance, which would mask

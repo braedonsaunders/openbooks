@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// OM-09b: the expense drawer filtered splits and the save payload through an
+// the expense drawer filtered splits and the save payload through an
 // account-plus-positive-amount predicate, so a row with a description and an
 // amount but no account never reached the server: the save succeeded and the
 // line vanished. Only truly blank rows may drop; a contentful account-less
@@ -107,7 +107,7 @@ test('only a truly blank expense row is blank', () => {
   assert.equal(isBlankExpenseLine({ ...blankExpenseRow(), settlementType: 'company_paid' }), false)
 })
 
-test('any expense content makes the row non-blank — even without an account (OM-09b)', () => {
+test('any expense content makes the row non-blank — even without an account', () => {
   for (const content of [
     { accountId: 'a' },
     { description: 'taxi' },
@@ -135,7 +135,7 @@ test('the missing-account probe names the first contentful account-less expense 
   )
 })
 
-test('a contentful account-less expense row survives to the save payload (OM-09b guard)', () => {
+test('a contentful account-less expense row survives to the save payload ( guard)', () => {
   const rows = [
     { ...blankExpenseRow(), accountId: 'a', amount: '500' },
     { ...blankExpenseRow(), description: 'taxi', amount: '200' },
@@ -228,7 +228,7 @@ async function click(button: HTMLButtonElement): Promise<void> {
   })
 }
 
-test('OM-09b expense: saving with a contentful account-less line refuses by line name and keeps the row', async (t) => {
+test(' expense: saving with a contentful account-less line refuses by line name and keeps the row', async (t) => {
   const { requests } = await mountDraftReport(t)
   const edit = findButton('Edit')
   assert.ok(edit, 'a draft must offer Edit')

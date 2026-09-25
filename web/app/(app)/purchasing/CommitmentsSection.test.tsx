@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// UX-20 (purchasing): the empty commitments hero names its prerequisite and
+// (purchasing): the empty commitments hero names its prerequisite and
 // offers the create action only when the caller holds it; readers without
 // creation access keep the honest zero with no misleading button.
 

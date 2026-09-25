@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F-t04-016: an approved PO's drawer Approvals tab rendered a completely
+// an approved PO's drawer Approvals tab rendered a completely
 // blank panel (tab bar → totals footer, nothing between). The tab mounts
 // the element below — the exact JSX OrderDrawer.tsx uses as its Approvals
 // detailTab content. These tests render it under jsdom with a scripted

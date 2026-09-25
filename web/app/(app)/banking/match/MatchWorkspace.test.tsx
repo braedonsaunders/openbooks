@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F-t05-017 (rule-suggestion chip) + F-t05-019 (add-journal dialog): both
+// (rule-suggestion chip) + (add-journal dialog): both
 // refusal paths 422 with zero user feedback. The routes answer typed
-// { error } bodies, but MatchWorkspace.call() read the body with a bare
+// { error } bodies, but MatchWorkspace.call read the body with a bare
 // res.json: an unreadable error body threw, the toast never fired, and the
 // failure went silent. The helper now mirrors the documents row-action
 // hardening — the read can never throw and a refusal always toasts.
@@ -119,7 +119,7 @@ async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch, dataOverr
   // The picker dropdown portals to document.body, outside any host div —
   // and React only hears events that bubble through its root container — so
   // the root IS the body here. Portaled option clicks would otherwise never
-  // reach React (the F-t05-019 dialog peccadillo).
+  // reach React (the dialog peccadillo).
   const rootHandle = createRoot(document.body)
   t.after(async () => {
     await act(async () => {
@@ -185,7 +185,7 @@ function addJournalButton(): HTMLButtonElement {
   return found as HTMLButtonElement
 }
 
-test('a refused rule suggestion surfaces the server reason (F-t05-017)', async (t) => {
+test('a refused rule suggestion surfaces the server reason', async (t) => {
   await mountWorkspace(t, scriptedFetch({
     '/rules/preview': previewOk,
     '/rules/apply-line': () => Response.json({ error: 'rule requires a mapped offset account' }, { status: 422 }),
@@ -202,7 +202,7 @@ test('a refused rule suggestion surfaces the server reason (F-t05-017)', async (
   )
 })
 
-test('an unreadable rule refusal still toasts (F-t05-017)', async (t) => {
+test('an unreadable rule refusal still toasts', async (t) => {
   await mountWorkspace(t, scriptedFetch({
     '/rules/preview': previewOk,
     '/rules/apply-line': () => new Response('', { status: 422 }),
@@ -219,7 +219,7 @@ test('an unreadable rule refusal still toasts (F-t05-017)', async (t) => {
   )
 })
 
-test('a refused add-journal surfaces the server reason (F-t05-019)', async (t) => {
+test('a refused add-journal surfaces the server reason', async (t) => {
   await mountWorkspace(t, scriptedFetch({
     '/rules/preview': () => Response.json({ matches: [] }),
     '/create-match': () => Response.json({ error: 'offset account is not postable' }, { status: 422 }),
@@ -262,7 +262,7 @@ test('a refused add-journal surfaces the server reason (F-t05-019)', async (t) =
   )
 })
 
-test('a refused add-journal persists the reason inline and releases busy (F-t05-019)', async (t) => {
+test('a refused add-journal persists the reason inline and releases busy', async (t) => {
   await mountWorkspace(t, scriptedFetch({
     '/rules/preview': () => Response.json({ matches: [] }),
     '/create-match': () => Response.json({ error: 'offset account is not postable' }, { status: 422 }),
@@ -299,7 +299,7 @@ test('a refused add-journal persists the reason inline and releases busy (F-t05-
     await tick()
   })
   // The dialog stays open (nothing matched) — but the typed refusal must
-  // persist inline, not vanish with a transient toast (F-t05-019).
+  // persist inline, not vanish with a transient toast .
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the refused dialog must persist a role=alert')
   assert.ok(

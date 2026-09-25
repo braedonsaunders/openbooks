@@ -73,7 +73,7 @@ globalThis.fetch = (async (url: unknown, init?: { method?: string; body?: unknow
 }) as typeof fetch
 
 /**
- * F-t10-001 — saving an existing form PATCHed the COLLECTION url
+ * saving an existing form PATCHed the COLLECTION url
  * (/api/customization/form-layouts), which only serves GET+POST, so every
  * edit died with a silent 405. Updates belong on the member route, which
  * implements PATCH.

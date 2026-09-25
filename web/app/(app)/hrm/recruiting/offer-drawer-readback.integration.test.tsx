@@ -5,7 +5,7 @@ import test from "node:test";
 import type { CandidateDrawerData, OfferDrawerData } from "./sections.tsx";
 
 /**
- * CK-23b / H-OFFER-ENTITY read-back: a saved offer is a legal instrument,
+ * CK-23b / read-back: a saved offer is a legal instrument,
  * so the drawer must show the persisted legal entity after save. This test
  * persists a real offer through the real services, resolves the employer
  * name with the loader's own query, server-renders the REAL drawer bodies,

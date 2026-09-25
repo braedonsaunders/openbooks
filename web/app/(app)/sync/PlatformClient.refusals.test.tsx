@@ -6,9 +6,9 @@ declare global {
 }
 
 // F4-10: POST /api/platform/connections/[id]/test refusing with 404/409/422
-// — or any non-JSON error body (500 HTML, gateway) — threw out of
-// `await res.json()` before the status was ever checked, so the operator saw
-// a parse error instead of the refusal. test() must check the status first
+// or any non-JSON error body (500 HTML, gateway) — threw out of
+// `await res.json` before the status was ever checked, so the operator saw
+// a parse error instead of the refusal. test must check the status first
 // and name the refusal through readApiErrorMessage.
 
 // jsdom first: the client reads browser globals at render.

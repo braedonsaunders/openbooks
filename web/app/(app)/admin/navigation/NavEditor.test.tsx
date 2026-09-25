@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // B3-NAV-01: the nav editor's save parsed the error body before checking
-// the status, so a non-JSON 500 threw out of res.json() — no error toast,
+// the status, so a non-JSON 500 threw out of res.json — no error toast,
 // and setBusy(false) was skipped, wedging the editor. A dead network
 // wedged it the same way (no try/catch at all). The refusal must surface
 // and busy must always release.

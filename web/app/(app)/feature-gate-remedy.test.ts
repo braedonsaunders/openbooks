@@ -6,7 +6,7 @@ import test from 'node:test'
 /**
  * F4/F6: every route that gates on a Features switch must render the
  * feature-required remedy (requireFeatureEnabled) instead of a bare
- * notFound() — an admin who switches HR, field time, or any module off saw
+ * notFound — an admin who switches HR, field time, or any module off saw
  * a generic "Page not found" with no path to turn it back on. Permission
  * denial stays separate: requirePermission (or the nullable-authz 404)
  * still owns the no-grant case, never the feature remedy.
@@ -38,7 +38,7 @@ function featureCheck(line: string): boolean {
   return line.includes('isFeatureEnabled(') || line.includes('isDocKindEnabled(')
 }
 
-test('no view calls notFound() directly after a feature check', () => {
+test('no view calls notFound directly after a feature check', () => {
   const violations: string[] = []
   for (const file of viewFiles(APP)) {
     const lines = readFileSync(file, 'utf8').split('\n')
@@ -80,7 +80,7 @@ test('route-gate loaders refuse by remedy, never by silent null', () => {
 
 test('permission denial stays separate from the feature remedy', () => {
   // Every converted view still decides the grant first: requirePermission
-  // throws the access denial, getAuthz-null keeps its 404, and can() keeps
+  // throws the access denial, getAuthz-null keeps its 404, and can keeps
   // narrowing rows. None of that may ride the feature redirect.
   const violations: string[] = []
   for (const file of viewFiles(APP)) {

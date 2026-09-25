@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// F-t09-008: the PO→goods-receipt 422 names a missing received-not-billed
+// the PO→goods-receipt 422 names a missing received-not-billed
 // account the operator cannot see — the item costing read view renders every
 // other offset account but omits the RNB row even when set. The read view
 // must show it so the fix is discoverable.

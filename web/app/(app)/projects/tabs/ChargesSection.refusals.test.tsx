@@ -6,7 +6,7 @@ declare global {
 }
 
 // B2-PRJ-1: POST /api/project-charges failing with a non-JSON 500 (proxy or
-// gateway HTML) threw out of `await res.json()` before any toast, and
+// gateway HTML) threw out of `await res.json` before any toast, and
 // setBusy(false) never ran — the operator saw a stuck spinner instead of the
 // refusal. The submit path must check the status first (naming the refusal
 // through the translated fallback) and always release the button.

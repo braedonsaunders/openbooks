@@ -4,8 +4,9 @@ import { join } from 'node:path'
 import test from 'node:test'
 import type { ComponentType, ReactNode } from 'react'
 import type { LeaseRow, WorkspaceOptions } from './types'
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
-// F-t09-010: lease Add-charge always 422d ('Charge tax code is invalid') and
+// lease Add-charge always 422d ('Charge tax code is invalid') and
 // failed silently on a missing toast key. The form state carries an empty
 // taxCodeId with no tax field, and the submit spread it verbatim while the
 // server rejects '' as a non-uuid — so no CAM/parking/storage charge could
@@ -14,7 +15,7 @@ import type { LeaseRow, WorkspaceOptions } from './types'
 // property-management namespace is tracked English fallback), so the source
 // block plus manifest-declared fallbacks cover all seven locales.
 const MESSAGES = join(import.meta.dirname, '..', '..', '..', 'messages')
-const LOCALES = ['fr', 'de', 'es', 'pt-BR', 'ja', 'zh']
+
 const TOAST_KEYS = [
   'actionFailed', 'camPoolCreated', 'camPoolReopened', 'camPoolUpdated',
   'chargeAdded', 'couldNotLoad', 'depositPosted', 'depositReversed',

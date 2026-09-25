@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F-t05-018: sign-off blocked by unmatched lines 422s with zero user
+// sign-off blocked by unmatched lines 422s with zero user
 // feedback. The route answers a typed { error } body, but the workspace's
-// call() does `await res.json()` bare: when the error body is not JSON
+// call does `await res.json` bare: when the error body is not JSON
 // (empty body, proxy 5xx page) the READ itself throws, the toast never
 // fires, and the failure goes silent with an unhandled rejection. The fix
 // mirrors the documents row-action hardening: never let the read throw,

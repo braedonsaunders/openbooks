@@ -14,7 +14,7 @@ registerHooks({
 const { automationsSpec } = await import('./view')
 import type { AutomationsData } from './view'
 
-// UX-20: the automations page repeated its empty state — the empty-state
+// the automations page repeated its empty state — the empty-state
 // card AND the table's own empty copy rendered together. The spec gives the
 // single empty card to `isEmpty` and the table to `hasRows` (the loader sets
 // exactly one), so an empty page is one card and never a table.

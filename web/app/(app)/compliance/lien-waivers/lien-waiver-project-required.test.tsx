@@ -7,7 +7,7 @@ declare global {
   var __waiverPosts: unknown[] | undefined;
 }
 
-// F-t03-006: creating a lien waiver without a project fired no request and
+// creating a lien waiver without a project fired no request and
 // (as filed) showed no message — indistinguishable from a dead button. The
 // validation message exists in current code; what was missing is the
 // fleet-wide contract for user-triggerable refusals: the message must pin

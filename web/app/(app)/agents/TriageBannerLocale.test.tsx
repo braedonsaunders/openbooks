@@ -75,10 +75,10 @@ const { AgentsTriageKeys } = await import("./AgentsTriageKeys");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-// F-t11-010(b): the inbox "new since" banner rendered its date with the
+// (b): the inbox "new since" banner rendered its date with the
 // BROWSER locale ("…Sep 16, 2026, 8:52 PM" inside a French sentence) instead
 // of the app locale ("16 sept. 2026, 20:55").
-test("F-t11-010: triage banner date follows the app locale", async () => {
+test("triage banner date follows the app locale", async () => {
   document.body.innerHTML = "";
   window.localStorage.setItem("agents-last-seen-test-org", "2026-09-16T20:55:00.000Z");
   const host = document.createElement("div");

@@ -3,17 +3,17 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 
-// F-t11-008: a/d open the finding drawer to complete apply/dismiss (there is
+// a/d open the finding drawer to complete apply/dismiss (there is
 // no instant write path) — the legend must say so in EVERY locale, not promise
 // that the keys apply/dismiss directly. The drawer word differs per locale
 // ((drawer), (tiroir), (panel), (Seitenbereich), (painel), （ドロワー）, （抽屉）),
 // so the rule is structural, not a word pin: the hint splits into one segment
 // per key, and both the a-action segment and the d-action segment carry a
 // parenthetical qualifier (half- or full-width parens).
-const LOCALES = ["en", "fr", "es", "de", "ja", "pt-BR", "zh"] as const;
 
 const hint = (locale: string): string => {
   const catalog = JSON.parse(

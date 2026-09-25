@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// UX-16 (export half): the data export must announce completion tied to the
+// (export half): the data export must announce completion tied to the
 // actual file (real filename, real column count) and must name its disabled
 // reasons instead of sitting silent.
 

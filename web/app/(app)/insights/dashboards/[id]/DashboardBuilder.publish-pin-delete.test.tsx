@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 // DashboardBuilder F4T2-3: publish, pin and delete fetched and called
-// res.json() before checking res.ok, so a non-JSON error body threw a
+// res.json before checking res.ok, so a non-JSON error body threw a
 // SyntaxError that lost the server's named refusal (and delete had no
 // catch, so no toast at all). The status is checked first through the
 // shared helper; busy always releases in finally.

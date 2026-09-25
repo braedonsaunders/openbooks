@@ -128,7 +128,7 @@ test("without the setup key the activity redirects", { skip: !DB }, async () => 
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
     loaderState.permissions = new Set(["assistant.use"]);
-    await assert.rejects(withBypassContext(() => loadAgentsActivity()), /NEXT_REDIRECT:\//);
+    await assert.rejects(withBypassContext(() => loadAgentsActivity()), /NEXT_REDIRECT:\// );
   } finally {
     await dropScratchOrg(org.orgId);
   }

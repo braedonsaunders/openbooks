@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 
-// UX-17: the setup aliases must explain themselves on arrival. These are
+// the setup aliases must explain themselves on arrival. These are
 // real pages with only the navigation primitives scripted — a mistyped
 // destination or a dropped param redirects wrong at runtime where tsc
 // stays silent.

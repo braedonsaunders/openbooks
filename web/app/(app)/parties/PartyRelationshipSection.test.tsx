@@ -9,7 +9,7 @@ declare global {
 // Customer drawer -> Relationship -> Start tracking answered 200 but the
 // empty state and its button stayed until the drawer remounted, so
 // operators clicked again and sent duplicate POSTs. The section now
-// refreshes its own state from a re-read after the POST (router.refresh()
+// refreshes its own state from a re-read after the POST (router.refresh
 // never touches its local state), drops a second click landing before
 // busy flips, and disables the button for the whole flight.
 

@@ -176,7 +176,7 @@ test('a failed assign toasts the server refusal, never a parse error', async () 
   }
 })
 
-// F-t09-003: with no `burden`-dimension category the Assign picker is empty,
+// with no `burden`-dimension category the Assign picker is empty,
 // so the Categories tab must name the dimension requirement outright.
 test('the Categories tab renders the burden-dimension guidance when no category exists', () => {
   const data = fixture()

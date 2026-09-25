@@ -7,7 +7,7 @@ declare global {
   var __journalRouter: { push(url: string): void; refresh(): void } | undefined;
 }
 
-// UX-18: journal Memo and Reference sat adjacently with bare labels, so entry
+// journal Memo and Reference sat adjacently with bare labels, so entry
 // text landed in the wrong field. Each field now carries its own hint naming
 // what belongs there and where it surfaces.
 

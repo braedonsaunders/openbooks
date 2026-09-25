@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// OM-17: /admin/setup/hrm-review-templates "New" crashed the page with React
+// /admin/setup/hrm-review-templates "New" crashed the page with React
 // #301. The New drawer mounts a TagInput for the ref-less ratingScaleLabels
 // field with zero suggestion rows, and TagInput's render-phase setHighlight
 // looped forever on that state. This renders the real SetupDrawer for
@@ -115,7 +115,7 @@ async function renderNewDrawer() {
   }
 }
 
-test('the hrm-review-templates New drawer renders with a usable scale-labels control (OM-17)', async () => {
+test('the hrm-review-templates New drawer renders with a usable scale-labels control', async () => {
   // Pre-fix this render threw "Too many re-renders" twice through the error
   // boundary: the ratingScaleLabels TagInput mounted with zero rows.
   const { unmount } = await renderNewDrawer()

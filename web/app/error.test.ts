@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// F-t05-001: /banking/cash?horizon=26 intermittently served a raw
+// /banking/cash?horizon=26 intermittently served a raw
 // "Internal Server Error" text page — no shell, no retry, back-nav to
 // recover. A throw in (app)/layout.tsx (a dozen concurrent queries behind a
 // ten-connection pool over a slow link) cannot be caught by

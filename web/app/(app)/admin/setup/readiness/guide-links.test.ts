@@ -6,7 +6,7 @@ import test from 'node:test'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// F-t11-008: the readiness guide linked area 5 at /admin/setup/accounts,
+// the readiness guide linked area 5 at /admin/setup/accounts,
 // which never existed (the chart of accounts lives at /accounts). Guide
 // hrefs rot silently — no type or test covers them — so every href the
 // loader emits is pinned here against the route tree: a static segment, a

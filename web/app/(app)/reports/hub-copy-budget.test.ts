@@ -7,20 +7,20 @@ import { BUILT_IN_REPORT_DEFINITIONS, BUILT_IN_REPORT_DEFINITION_MAP } from '@op
 /**
  * UX-12b: hub card copy must fit the card — no mid-word clipping at 1280px.
  *
- * Budgets are derived from the 1280px card width measured in the UX-12
+ * Budgets are derived from the 1280px card width measured in the
  * persona-lane screenshot (shot-ux12-hub-1280.png): at `lg` the hub is three
  * columns, so a card is ~395px and the text column — after the 40px icon,
  * gaps, padding and the arrow — is ~290px.
  *
- * - Description (12px, two lines): an 89-character description
- *   ("GAAP indirect method … working-capital detail") renders in full on two
- *   lines, while a 95-character one ("Income statement … custom layouts")
- *   clips mid-word ("custo…"). Budget: 90 characters.
- * - Title (14px semibold, one tidy line): "Expense detail by department
- *   (this FY)" at 38 characters already truncates ("(this…"), so titles stay
- *   at or under 36 characters. Titles additionally WRAP (ReportsHub renders
- *   no `truncate`), so the budget keeps new cards to one short line while
- *   wrapping — not clipping — is the safety net.
+ * Description (12px, two lines): an 89-character description
+ *  ("GAAP indirect method … working-capital detail") renders in full on two
+ *  lines, while a 95-character one ("Income statement … custom layouts")
+ *  clips mid-word ("custo…"). Budget: 90 characters.
+ * Title (14px semibold, one tidy line): "Expense detail by department
+ *  (this FY)" at 38 characters already truncates ("(this…"), so titles stay
+ *  at or under 36 characters. Titles additionally WRAP (ReportsHub renders
+ *  no `truncate`), so the budget keeps new cards to one short line while
+ *  wrapping — not clipping — is the safety net.
  *
  * The test reads the real copy sources: the `en` reports messages (static
  * hub cards) and the built-in report registry (definition cards, including

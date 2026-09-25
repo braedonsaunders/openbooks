@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// CK-09: three setup sections share one page URL (?row=new opened all three
+// three setup sections share one page URL (?row=new opened all three
 // drawers at once). Each section now reads its own drawer key.
 const { JSDOM } = await import("jsdom");
 const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
@@ -203,7 +203,7 @@ async function renderSections(sp: Record<string, string>): Promise<{ counts: num
   return { counts, bodies };
 }
 
-// -- spec wiring: one URL addresses one section ------------------------------
+// - spec wiring: one URL addresses one section ------------------------------
 
 interface SpecNode {
   widget?: string;
@@ -248,7 +248,7 @@ test("the documents spec gives each setup section its own drawer key", async () 
   );
 });
 
-// -- render: exactly one drawer opens ------------------------------------------
+// - render: exactly one drawer opens ------------------------------------------
 
 test("?template=new opens only the templates drawer", async () => {
   const { counts } = await renderSections({ template: "new" });
@@ -333,7 +333,7 @@ test("document generation keeps the named API refusal in the dialog", async () =
   }
 });
 
-// -- render: direct links read the saved record back ----------------------------
+// - render: direct links read the saved record back ----------------------------
 
 test("a direct link to a saved template reads the record back", async () => {
   script.readBackRow = {

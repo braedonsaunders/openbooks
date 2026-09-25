@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// F-t01-007 — the dashboard "Pending approvals" widget lists the top-5
+// the dashboard "Pending approvals" widget lists the top-5
 // pending FLOW GATES while the tile counts the unified worklist, so the
 // widget reads "—" next to a 97 tile. Both lists must read the union.
 registerHooks({
@@ -111,7 +111,7 @@ function budgetAuthzFor(orgId: string, userId: string): Authz {
 }
 
 test("dashboard approval widgets list pending budgets with their checker target", { skip: !DB }, async () => {
-  // F-t13-005: the tile counts the unified worklist (budgets included), so
+  // the tile counts the unified worklist (budgets included), so
   // the widget rows must map budget items to a linkable target too — not
   // the gate-shaped fallthrough.
   const org = await withBypass(() => createScratchOrg());

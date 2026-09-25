@@ -3,7 +3,7 @@ import test from 'node:test'
 import { tickInterval } from './charts'
 
 /**
- * F-t05-010 — the cash-trend x-axis must thin out deterministically (fewer
+ * the cash-trend x-axis must thin out deterministically (fewer
  * ticks) instead of letting ECharts' width-dependent auto stride swap which
  * labels render ("Aug 24" one width, "Aug 4" the next).
  */

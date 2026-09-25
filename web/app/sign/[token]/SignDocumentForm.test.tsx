@@ -104,7 +104,7 @@ async function signAs(name: string) {
 }
 
 /**
- * OM-07: after a successful sign the server-rendered status and timeline
+ * after a successful sign the server-rendered status and timeline
  * still showed the pre-sign state until a manual reload. The form must
  * refresh the server parts on success so Status, timeline and thank-you
  * agree immediately — while the confirmation itself stays put.

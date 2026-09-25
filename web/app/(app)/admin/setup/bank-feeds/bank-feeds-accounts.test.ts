@@ -19,14 +19,14 @@ registerHooks({
 
 const { bankFeedsSpec } = (await import('./view')) as typeof import('./view')
 import type { BankFeedsData } from './view'
+import { LOCALE_CODES as LOCALES } from "../../../../../i18n/config"
 
-// F-t11-005: the connection form's GL picker was empty with no explanation
+// the connection form's GL picker was empty with no explanation
 // on tenants without a reconcilable bank account, so no feed could ever be
 // connected. Pinned here: the empty picker explains the missing precondition
 // and links to the Chart of Accounts, in every locale.
 const dir = dirname(fileURLToPath(import.meta.url))
 const messagesDir = join(dir, '..', '..', '..', '..', '..', 'messages')
-const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'zh', 'pt-BR'] as const
 
 const configure = (locale: string): Record<string, unknown> => {
   const catalog = JSON.parse(

@@ -4,13 +4,14 @@
 // directly; everything else below drives the component the way an operator
 // does: opening tabs, switching modes, and reading what renders.
 //
-// Defects covered: F-t08-003 (visited compensation tabs unmounted, discarding
-// edits), F-t05-002 (kind control vocabulary vs stored kinds), F-t02-015
+// Defects covered: (visited compensation tabs unmounted, discarding
+// edits), (kind control vocabulary vs stored kinds),
 // (drawer-namespace keys leaking untranslated), HR-1/2 (payroll edit gate),
-// HR-9 (confidential tabs need their own grants), OM-16 (role tabs need the
+// HR-9 (confidential tabs need their own grants), (role tabs need the
 // role row, kind falls back without one).
 import assert from "node:assert/strict";
 import test from "node:test";
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
 declare global {
   var __partyToasts: { kind: string; message: string }[] | undefined;
@@ -354,7 +355,7 @@ test("credit-limit display rounds fractional cents with exact decimal arithmetic
   assert.equal(formatCreditLimit(null), "");
 });
 
-// F-t08-003: switching employee drawer tabs unmounted the payroll/wage
+// switching employee drawer tabs unmounted the payroll/wage
 // panels, silently discarding unsaved profile edits. Visited compensation
 // tabs must stay mounted (hidden) so their local edits survive a switch.
 test("remembering a visited drawer tab keeps it without mutating the set", () => {
@@ -368,7 +369,7 @@ test("remembering an already kept tab returns the same set", () => {
   assert.equal(rememberDrawerTab(kept, "payroll"), kept);
 });
 
-// F-t05-002: the Kind control offered only company|person while parties store
+// the Kind control offered only company|person while parties store
 // customer/vendor/employee kinds, so the control misread the record and the
 // PATCH it echoed back 422'd. The control must offer the stored vocabulary.
 test("the kind control offers every stored kind", async (t) => {
@@ -432,7 +433,7 @@ function payrollPanel(): HTMLElement {
   return strip.parentElement as HTMLElement;
 }
 
-// F-t08-003 behaviourally: a typed-but-unsaved wage survives a round trip to
+// behaviourally: a typed-but-unsaved wage survives a round trip to
 // the payroll tab and back, because the visited panel stays mounted hidden.
 test("a visited compensation tab stays mounted while another shows", async (t) => {
   const routes = employeeRoutes();
@@ -675,7 +676,7 @@ test("general and tax share one profile editor", async (t) => {
   );
 });
 
-// OM-16: a party showing "Kind: Vendor" with no vendor_roles row left the
+// a party showing "Kind: Vendor" with no vendor_roles row left the
 // Compliance tab unreachable while a ?role=vendor URL faked it (and wages,
 // payroll, employment the same way) into existence. Every role tab needs its
 // role ROW — never the role filter or the kind column — and the Kind label
@@ -716,12 +717,11 @@ test("a vendor kind without a vendor row hides compliance and reads as company",
   );
 });
 
-// F-t02-015: the blank-name guard and the statement link rendered raw
+// the blank-name guard and the statement link rendered raw
 // `parties.drawer.drawer.*` keys in every locale, because the drawer called
 // t('drawer.nameRequired') / t('drawer.viewStatement') under the
 // parties.drawer namespace instead of the bare keys that exist in all 7
 // catalogs. Every locale must render translated text — never a key path.
-const LOCALES = ["en", "de", "es", "fr", "ja", "pt-BR", "zh"] as const;
 
 for (const locale of LOCALES) {
   test(`the drawer renders translated text with no key paths in ${locale}`, async (t) => {
@@ -903,7 +903,7 @@ test("compliance class selection survives a tab round-trip", async (t) => {
   assert.equal(revived?.value, "c1", "the chosen class must survive the tab round-trip");
 });
 
-// OM-16c: a stored company-kind party with no role rows is repaired by
+// a stored company-kind party with no role rows is repaired by
 // choosing a role-bearing kind. The server refuses an unbacked kind by name
 // ("turn on the role"), and the overview tab offers no role control — so the
 // kind choice itself must carry the role enablement in the same save.

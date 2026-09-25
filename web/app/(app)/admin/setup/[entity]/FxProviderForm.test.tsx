@@ -94,7 +94,7 @@ function testButton(host: HTMLElement): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
-/** F-t06-020: testing with no currencies must explain itself without a 422 round-trip. */
+/** : testing with no currencies must explain itself without a 422 round-trip. */
 test("test provider with no currencies warns before any network call", async (t) => {
   const calls: string[] = [];
   const prior = globalThis.fetch;

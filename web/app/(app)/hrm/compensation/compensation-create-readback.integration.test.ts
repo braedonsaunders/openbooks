@@ -6,7 +6,7 @@ import test from "node:test";
 import { resolveAppModule } from "../../../../lib/test-module-hooks";
 import type { SessionUser } from "../../../../lib/auth";
 
-// OM-15 readback: the PlanCreateForm and CycleCreateForm post the dialog's
+// readback: the PlanCreateForm and CycleCreateForm post the dialog's
 // payloads to /api/hrm/headcount-plans and /api/hrm/comp-cycles, whose
 // routes validate the bodies (route.test.ts) and call createPlan /
 // createCycle. This test proves the second half against live Postgres with

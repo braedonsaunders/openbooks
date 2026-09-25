@@ -6,7 +6,7 @@ declare global {
   var __taxSetupRouter: { push(url: string): void; refresh(): void } | undefined;
 }
 
-// TaxSetupGuide used to throw bare Error() on a !ok provision response, so
+// TaxSetupGuide used to throw bare Error on a !ok provision response, so
 // POST /api/tax/provision's named 422 (e.g. an unknown selection) was
 // dropped and the operator read a generic saveFailed. The guide now surfaces
 // the server's message through readApiErrorMessage. Render-proved: the named

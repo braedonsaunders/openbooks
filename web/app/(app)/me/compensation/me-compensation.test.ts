@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
 // Behaviour contract for the compensation page (/me/compensation). The
 // spec builder runs over hand-built data: a refused read renders its
@@ -57,7 +58,7 @@ test("the empty state carries its next step with content gated on its resolver",
 // copy a locale renders when the login has no linked person must stay
 // word-for-word identical to the SelfServiceError NO_LINK message the
 // engine throws, or the two renderings drift.
-const LOCALES = ["en", "fr", "es", "de", "ja", "zh", "pt-BR"] as const;
+
 const REFUSAL_KEYS = ["myComp.emptyTitle", "myComp.emptyDescription", "myComp.notLinked"] as const;
 
 function catalogAt(catalog: Record<string, unknown>, path: string): unknown {

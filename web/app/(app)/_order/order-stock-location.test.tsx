@@ -23,7 +23,7 @@ const LOC_2 = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaa2'
 
 // The order drawer must offer a line-level warehouse picker exactly when the
 // choice is real (several active locations) and only on stocked rows — and
-// persist the choice through the draft writer. (Was F-t07-003 pickers.)
+// persist the choice through the draft writer. (Was pickers.)
 const ITEMS = [
   { id: 'item-stocked', display_name: 'Widget', has_inventory_profile: true },
   { id: 'item-expense', display_name: 'Consulting' },

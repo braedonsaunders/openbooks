@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F1T-4 (save() used the native prompt() and toasted the generic saveFailed,
+// F1T-4 (save used the native prompt and toasted the generic saveFailed,
 // dropping the server's named refusal): the house prompt dialog collects the
 // name and the refusal surfaces through the shared helper.
 const { JSDOM } = await import('jsdom')

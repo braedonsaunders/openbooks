@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
-// F-t03-008: the party drawer's "Open balance" sums document open balances
+// the party drawer's "Open balance" sums document open balances
 // across ALL documents (any status, any posting date) while the /ap
 // "Payables by vendor" panel groups the shared as-of open-items reader. The
 // ruling keeps both figures and labels each: the drawer card states its
 // all-time basis on screen, in every locale, so a reader comparing it with
 // the dashboard no longer assumes one of them is broken.
-const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'pt-BR', 'zh'] as const
 
 function summaryLabel(locale: string): unknown {
   const catalog = JSON.parse(

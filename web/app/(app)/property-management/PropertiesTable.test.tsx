@@ -9,7 +9,7 @@ import { PropertiesTable } from "./PropertiesTable";
 import type { PropertyWorkspace } from "./types";
 import type { ListViewConfig } from "@openbooks/customization";
 
-// F-t09-017: the property buildings table rendered hardcoded English
+// the property buildings table rendered hardcoded English
 // headers (PROPERTY/CODE/ENTITY/LOCATION/TYPE/OCCUPANCY/STATUS) and raw
 // enum cells (Residential/active) under fr. Render the table under the fr
 // catalog and prove every chrome string resolves to French.
@@ -147,7 +147,7 @@ function renderFr(): string {
   return renderFrTable(data);
 }
 
-test("property buildings table headers render French, never English (F-t09-017)", () => {
+test("property buildings table headers render French, never English", () => {
   const html = renderFr();
   for (const header of [
     "Immeuble",
@@ -178,7 +178,7 @@ test("property buildings table headers render French, never English (F-t09-017)"
   assert.ok(!html.includes("list.columns"), "no raw key path may leak");
 });
 
-test("property type and status cells resolve through the catalog (F-t09-017)", () => {
+test("property type and status cells resolve through the catalog", () => {
   const html = renderFr();
   // F-v4-001: each row describes a building (un immeuble, masculine — the
   // "Immeuble"/"Type"/"Statut" headers), so the type/status adjectives agree
@@ -228,7 +228,7 @@ test("spanish type and status cells agree masculine with the building noun (F-v4
   }
 });
 
-test("property buildings empty state renders French (F-t09-017)", () => {
+test("property buildings empty state renders French", () => {
   const html = renderFrTable({ ...data, properties: [] });
   assert.ok(
     html.includes("Aucun immeuble pour le moment"),

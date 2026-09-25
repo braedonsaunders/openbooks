@@ -7,7 +7,7 @@ declare global {
   var __payRouter: { push(url: string): void; refresh(): void } | undefined;
 }
 
-// UX-18: receipt/payment Save lived inside the Actions menu, so routine
+// receipt/payment Save lived inside the Actions menu, so routine
 // operators could not discover persistence. Save is now a primary header
 // button in edit mode, beside Cancel — no Actions menu at all.
 

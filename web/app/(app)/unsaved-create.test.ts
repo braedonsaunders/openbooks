@@ -117,7 +117,7 @@ test('create saves send one idempotent POST and check status before parsing', ()
 })
 
 test('the custom-report Save names its missing name instead of disabling silently', () => {
-  // UX-16: the create-mode Save disables on a blank name; the header must
+  // the create-mode Save disables on a blank name; the header must
   // say a name is required (visible copy, described to assistive tech) and
   // the disabled button must point at that reason.
   assert.match(reportBuilder, /t\('nameRequired'\)/, 'ReportBuilder must render the missing-name reason')

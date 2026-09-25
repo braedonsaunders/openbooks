@@ -207,7 +207,7 @@ async function chooseAccount(triggerId: string, optionLabel: string) {
   await tick();
 }
 
-/** UX-18: the import form offers named house account pickers, not raw UUID
+/** : the import form offers named house account pickers, not raw UUID
  * text inputs, with each account's posting role explained beside it. */
 test("settlement accounts render as labelled pickers with posting hints", async (t) => {
   const { host, root } = await mount();
@@ -256,7 +256,7 @@ test("settlement accounts render as labelled pickers with posting hints", async 
   );
 });
 
-/** UX-18: a Stripe object payload is refused by name before any POST — the
+/** : a Stripe object payload is refused by name before any POST — the
  * provider settles an array, and the operator learns the expected shape. */
 test("a stripe object payload is refused by name without posting", async (t) => {
   let fetched = 0;
@@ -284,7 +284,7 @@ test("a stripe object payload is refused by name without posting", async (t) => 
   assert.equal(fetched, 0, "a mis-shaped payload must never reach the API");
 });
 
-/** UX-18: a well-shaped import posts the same stored body as before — UUID
+/** : a well-shaped import posts the same stored body as before — UUID
  * account references, provider payload keying, no new fields. */
 test("a well-shaped stripe array posts the unchanged stored body", async (t) => {
   // The successful import reloads the list (a bodyless GET): only POSTed
