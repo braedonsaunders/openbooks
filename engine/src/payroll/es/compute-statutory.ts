@@ -28,7 +28,7 @@ import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { requireEsFiscalResidence } from "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
-import { calculateEsIrpf2026 } from "./irpf-2026.ts";
+import { calculateEsIrpf2026, type EsContrato } from "./irpf-2026.ts";
 import type { EsSituacionFamiliar } from "./rates.ts";
 import { calculateEsSeguridadSocial2026 } from "./seguridad-social-2026.ts";
 
@@ -43,6 +43,29 @@ const ES_AEAT_REGIONS = [
 
 function fail(message: string): never {
   throw new PayrollPackError(`ES payroll 2026: ${message}`);
+}
+
+/**
+ * A treaty percent ("10.00" = 10%) to rate hundredths. A treaty can only
+ * reduce Spanish taxation, never price above a percent — and an unanswered
+ * or malformed rate refuses rather than falling back to 19%/24%.
+ */
+function treatyRateHundredths(raw: string | null | undefined): bigint {
+  if (raw == null || raw.trim() === "") {
+    fail(
+      "residencia is no_residente_convenio but tasa_convenio is unanswered: the treaty rate "
+      + "prices this run — record the applicable percent (0.00 when the treaty exempts "
+      + "employment income)",
+    );
+  }
+  const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(raw.trim());
+  const hundredths = match == null
+    ? -1n
+    : BigInt(match[1]!) * 100n + BigInt((match[2] ?? "0").padEnd(2, "0"));
+  if (hundredths < 0n || hundredths > 10000n) {
+    fail(`tasa_convenio "${raw}" is not a percent 0–100 with at most two decimals`);
+  }
+  return hundredths;
 }
 
 function dec(value: string, what: string): bigint {
@@ -104,6 +127,7 @@ export const ES_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ES_TIPO_IRPF: "Tipo IRPF aplicado",
   ES_IMPORTE_ANUAL: "Importe anual IRPF",
   ES_IRPF_MES: "IRPF del mes",
+  ES_IRNR_MES: "Retención IRNR del mes",
   ES_SS_EE: "Seguridad Social (trabajador)",
   ES_SS_ER: "Seguridad Social (empresa)",
   ES_EDITION: "Edition priced",
@@ -142,7 +166,25 @@ export async function computeEsStatutory(
     fail("the run has no pay date, so no 2026 edition resolves (1 January–9 September vs 10 September+)");
   }
 
-  const answers = certificateFor("es_145")?.answers ?? {};
+  // Fiscal residence gates everything below, including the Modelo 145 reads:
+  // a nonresident's Spanish-source wages fall under the IRNR (LIRNR), never
+  // the IRPF retention algorithm — and "no certificate on file" is not a
+  // statutory resident, so an unrecorded status refuses rather than pricing
+  // IRNR wages as IRPF. Nonresidents skip the IRPF personal/family machinery
+  // entirely: the IRNR rate hits the full period gross.
+  const residenciaAnswers = certificateFor("es_residencia_fiscal")?.answers ?? {};
+  const residencia = requireEsFiscalResidence(residenciaAnswers.residencia);
+  const irnrRateHundredths = residencia === "residente"
+    ? null
+    : residencia === "no_residente_ue_eee"
+      ? 1900n
+      : residencia === "no_residente_otros"
+        ? 2400n
+        : treatyRateHundredths(residenciaAnswers.tasa_convenio);
+
+  // Modelo 145 is an IRPF instrument: residents only. A nonresident's file
+  // is never read for personal/family data the IRNR does not price.
+  const answers = irnrRateHundredths === null ? certificateFor("es_145")?.answers ?? {} : {};
   const situacion = answers["situacion_familiar"] ?? "3";
   if (situacion !== "1" && situacion !== "2" && situacion !== "3") {
     fail(`es_145 situacion_familiar "${situacion}" is not 1, 2 or 3`);
@@ -167,7 +209,11 @@ export async function computeEsStatutory(
     );
   }
 
-  const zoneAnswers = certificateFor("es_zona_irpf")?.answers;
+  // es_zona_irpf prices the IRPF zona reduction: residents only. The IRNR
+  // leg never reads it, so nonresident runs carry the neutral answers.
+  const zoneAnswers = irnrRateHundredths === null
+    ? certificateFor("es_zona_irpf")?.answers
+    : { zona_residencia: "ninguna", rendimientos_en_zona: "false" };
   const zona = zoneAnswers?.["zona_residencia"];
   if (zona !== "ninguna" && zona !== "ceuta-melilla" && zona !== "la-palma") {
     fail("es_zona_irpf zona_residencia is missing or invalid; certify the employee's residence zone");
@@ -310,42 +356,32 @@ export async function computeEsStatutory(
     );
   }
 
-  // Fiscal residence gates the math below: a nonresident's Spanish-source
-  // wages fall under the IRNR (LIRNR), never the IRPF retention algorithm —
-  // and "no certificate on file" is not a statutory resident, so an
-  // unrecorded status refuses rather than pricing IRNR wages as IRPF.
-  const residencia = requireEsFiscalResidence(
-    certificateFor("es_residencia_fiscal")?.answers.residencia,
-  );
-  if (residencia !== "residente") {
-    fail(
-      `employee residencia fiscal "${residencia}": Spanish-source wages of a nonresident are taxed `
-      + "under the IRNR (LIRNR, RD Legislativo 5/2004) at the general 19%/24% rates (art. 25), "
-      + "or under the applicable double-taxation treaty — and this pack computes neither. Pay this "
-      + "employee outside the system until IRNR pricing exists, or correct the es_residencia_fiscal "
-      + "certificate if the status is wrong",
-    );
-  }
-
   const periodPay = dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (periodPay < 0n) fail("period pay must be non-negative");
 
-  const retribucionAnualCert = certificateFor("es_retribucion_anual");
-  if (!retribucionAnualCert) {
-    fail("es_retribucion_anual is missing; certify remuneration expected from this payer this calendar year");
-  }
-  const retribucionAnualRaw = certificateAmount(retribucionAnualCert, "importe_anual_previsto");
-  if (retribucionAnualRaw == null) {
-    fail("es_retribucion_anual importe_anual_previsto is missing; certify the calendar-year total");
-  }
-  const retribucionAnualUnits = dec(retribucionAnualRaw, "es_retribucion_anual importe_anual_previsto");
-  if (retribucionAnualUnits <= 0n) fail("es_retribucion_anual importe_anual_previsto must be positive");
-  if (retribucionAnualUnits < periodPay) {
-    fail("es_retribucion_anual expected annual remuneration is below the current pay period total");
-  }
-  const periodosAnuales = certificateCount(retribucionAnualCert, "periodos_recurrentes_esperados");
-  if (periodosAnuales == null || periodosAnuales < 1 || periodosAnuales > 12) {
-    fail("es_retribucion_anual periodos_recurrentes_esperados must be 1–12 monthly periods");
+  // es_retribucion_anual forecasts the IRPF calendar year (RIRPF art. 83.2.1ª):
+  // residents only. The IRNR leg prices flat on period gross and never reads it.
+  let retribucionAnualUnits = 0n;
+  let periodosAnuales = 12;
+  if (irnrRateHundredths === null) {
+    const retribucionAnualCert = certificateFor("es_retribucion_anual");
+    if (!retribucionAnualCert) {
+      fail("es_retribucion_anual is missing; certify remuneration expected from this payer this calendar year");
+    }
+    const retribucionAnualRaw = certificateAmount(retribucionAnualCert, "importe_anual_previsto");
+    if (retribucionAnualRaw == null) {
+      fail("es_retribucion_anual importe_anual_previsto is missing; certify the calendar-year total");
+    }
+    retribucionAnualUnits = dec(retribucionAnualRaw, "es_retribucion_anual importe_anual_previsto");
+    if (retribucionAnualUnits <= 0n) fail("es_retribucion_anual importe_anual_previsto must be positive");
+    if (retribucionAnualUnits < periodPay) {
+      fail("es_retribucion_anual expected annual remuneration is below the current pay period total");
+    }
+    const periodos = certificateCount(retribucionAnualCert, "periodos_recurrentes_esperados");
+    if (periodos == null || periodos < 1 || periodos > 12) {
+      fail("es_retribucion_anual periodos_recurrentes_esperados must be 1–12 monthly periods");
+    }
+    periodosAnuales = periodos;
   }
 
   const currentGross = dec(ctx.gross ?? D(periodPay), "gross");
@@ -416,41 +452,59 @@ export async function computeEsStatutory(
       + U(ss.trabajadorTotal) - U(ssRecurrente.trabajadorTotal),
   );
 
+  // IRNR: the flat rate hits the full period gross — no annualisation, no
+  // tipo, no personal or family minimums. Resident runs skip this leg.
+  const irnrMes = irnrRateHundredths === null
+    ? null
+    : roundDiv(currentGross * irnrRateHundredths, 10000n * 100n) * 100n;
+
   // RIRPF art. 83.2.1ª prices the calendar-year amount normally expected,
-  // not twelve copies of a check whose employee may have started midyear.
+  // not twelve copies of a check whose employee may have started midyear
+  // (residents only — the IRNR leg above replaces the whole IRPF block).
   const retribAnual = D(retribucionAnualUnits);
   // The calculator prices sub-one-year (2%) and special-relationship (15%)
   // minimum rates from its contrato input; the adapter never leaves it at the
   // general default. The category is copied off the signed contrato onto
-  // es_contrato, and an unidentifiable category refuses by name.
-  const contratoCert = certificateFor("es_contrato");
-  if (!contratoCert) {
-    fail("es_contrato is missing; declare the contract category copied off the signed contrato so the IRPF minimum rate can be identified");
+  // es_contrato, and an unidentifiable category refuses by name — residents
+  // only. The IRNR leg prices a flat rate and never reads it.
+  let categoria: EsContrato = "general";
+  if (irnrRateHundredths === null) {
+    const contratoCert = certificateFor("es_contrato");
+    if (!contratoCert) {
+      fail("es_contrato is missing; declare the contract category copied off the signed contrato so the IRPF minimum rate can be identified");
+    }
+    const read = certificateChoice(contratoCert, "categoria_contrato");
+    if (read !== "general" && read !== "inferiorAno" && read !== "especial") {
+      fail("es_contrato categoria_contrato cannot be identified; declare general, inferiorAno (duration under one year), or especial (special employment relationship) copied off the signed contrato");
+    }
+    categoria = read;
   }
-  const categoria = certificateChoice(contratoCert, "categoria_contrato");
-  if (categoria !== "general" && categoria !== "inferiorAno" && categoria !== "especial") {
-    fail("es_contrato categoria_contrato cannot be identified; declare general, inferiorAno (duration under one year), or especial (special employment relationship) copied off the signed contrato");
-  }
-  const irpf = calculateEsIrpf2026({
-    payDate,
-    retribuciones: retribAnual,
-    cotizaciones: cotizacionesAnual,
-    situacionFamiliar: situacion as EsSituacionFamiliar,
-    birthYear: ano,
-    pensionista: situacionLaboral === "pensionista",
-    desempleado: situacionLaboral === "desempleado",
-    zona,
-    rendimientosZona: rendimientosEnZona,
-    contrato: categoria,
-  });
+  const irpf = irnrMes === null
+    ? calculateEsIrpf2026({
+      payDate,
+      retribuciones: retribAnual,
+      cotizaciones: cotizacionesAnual,
+      situacionFamiliar: situacion as EsSituacionFamiliar,
+      birthYear: ano,
+      pensionista: situacionLaboral === "pensionista",
+      desempleado: situacionLaboral === "desempleado",
+      zona,
+      rendimientosZona: rendimientosEnZona,
+      contrato: categoria,
+    })
+    : null;
 
   // The annual tipo hits the month's pay, rounded half-up to the cent.
   // The tipo is exactly two decimals, parsed without floats.
-  const [tipoEntero = "0", tipoDec = "00"] = irpf.tipo.split(".");
+  const [tipoEntero = "0", tipoDec = "00"] = (irpf?.tipo ?? "0.00").split(".");
   const tipoHundredths = BigInt(tipoEntero) * 100n + BigInt(tipoDec.padEnd(2, "0").slice(0, 2));
   const irpfMes = roundDiv(periodPay * tipoHundredths, 10000n * 100n) * 100n;
 
-  pushStatutory("irpf", "deduction", "IRPF withholding", D(irpfMes), 110);
+  if (irnrMes === null) {
+    pushStatutory("irpf", "deduction", "IRPF withholding", D(irpfMes), 110);
+  } else {
+    pushStatutory("irnr", "deduction", "IRNR withholding", D(irnrMes), 111);
+  }
   pushStatutory("ss_cc", "deduction", "Seguridad Social (employee)", ss.ccTrabajador, 120);
   pushStatutory("ss_des", "deduction", "Desempleo (employee)", ss.desempleoTrabajador, 121);
   pushStatutory("ss_for", "deduction", "Formación profesional (employee)", ss.formacionTrabajador, 122);
@@ -473,12 +527,22 @@ export async function computeEsStatutory(
   if (U(ss.horasExtraFMTrabajador) !== 0n) pushStatutory("ss_hex_fm", "deduction", "Horas extraordinarias fuerza mayor (employee)", ss.horasExtraFMTrabajador, 125);
   if (U(ss.horasExtraRestoEmpresa) !== 0n) pushStatutory("ss_hex_resto_er", "employer_contribution", "Horas extraordinarias (employer)", ss.horasExtraRestoEmpresa, 217);
   if (U(ss.horasExtraFMEmpresa) !== 0n) pushStatutory("ss_hex_fm_er", "employer_contribution", "Horas extraordinarias fuerza mayor (employer)", ss.horasExtraFMEmpresa, 218);
+  // Seguridad Social is shared: employment in Spain is TGSS-insured whatever
+  // the fiscal residence (detachment regimes aside). Only the withholding leg
+  // and its factors differ — IRNR runs carry no tipo, no importe, no edition.
+  if (irnrMes !== null) {
+    return {
+      ES_IRNR_MES: D(irnrMes),
+      ES_SS_EE: ss.trabajadorTotal,
+      ES_SS_ER: ss.empresaTotal,
+    };
+  }
   return {
-    ES_TIPO_IRPF: irpf.tipo,
-    ES_IMPORTE_ANUAL: irpf.importeAnual,
+    ES_TIPO_IRPF: irpf!.tipo,
+    ES_IMPORTE_ANUAL: irpf!.importeAnual,
     ES_IRPF_MES: D(irpfMes),
     ES_SS_EE: ss.trabajadorTotal,
     ES_SS_ER: ss.empresaTotal,
-    ES_EDITION: irpf.edition,
+    ES_EDITION: irpf!.edition,
   };
 }

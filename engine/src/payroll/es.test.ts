@@ -56,14 +56,14 @@ test("ES slots name IRPF withholding and Seguridad Social, every pushed key decl
   const systems = ES_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
     slot.components.map((component) => component.systemKey),
   );
-  // Exactly the sixteen keys compute-statutory.ts pushes — one slot for
+  // Exactly the seventeen keys compute-statutory.ts pushes — one slot for
   // all SS lines, so no new slot labels were needed. The engine pushes
   // ss_cc_er, never employer-side ss_cc, hence the distinct employer keys.
   // ss_atep_er and ss_corta_er push only when the establishment tariff is
   // on file and the short-contract charge applies; the four ss_hex_* keys
   // push only when classified overtime pay is priced.
   assert.deepEqual(systems, [
-    "irpf",
+    "irpf", "irnr",
     "ss_cc", "ss_des", "ss_for", "ss_mei", "ss_hex_resto", "ss_hex_fm",
     "ss_cc_er", "ss_des_er", "ss_fogasa_er", "ss_for_er", "ss_mei_er",
     "ss_atep_er", "ss_corta_er", "ss_hex_resto_er", "ss_hex_fm_er",
@@ -72,7 +72,7 @@ test("ES slots name IRPF withholding and Seguridad Social, every pushed key decl
     slot.components.map((component) => component.kind),
   );
   assert.deepEqual(kinds, [
-    "deduction",
+    "deduction", "deduction",
     "deduction", "deduction", "deduction", "deduction", "deduction", "deduction",
     "employer_contribution", "employer_contribution", "employer_contribution",
     "employer_contribution", "employer_contribution", "employer_contribution",
@@ -293,19 +293,26 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
     () => computeEsStatutory({ ...base, certificateFor: () => null }),
     /cannot calculate without the employee's fiscal residence/,
   );
-  await assert.rejects(
-    () => computeEsStatutory({
-      ...base,
-      certificateFor: () => ({
-        certificate: ES_CERTIFICATES.certificates.find((item) => item.key === "es_residencia_fiscal")!,
-        onFile: true,
-        effectiveFrom: null,
-        answers: { residencia: "no_residente_sin_convenio" },
-        missing: [],
-      }),
+  // IRNR prices flat on gross with no personal/family machinery: €2,000 at
+  // 19% is €380.00, pushed on the declared irnr component — never as IRPF.
+  const irnrPushed: Array<{ key: string; amount: string }> = [];
+  const irnr = await computeEsStatutory({
+    ...base,
+    pushStatutory: (key: string, _kind: string, _label: string, amount: string) => {
+      irnrPushed.push({ key, amount });
+    },
+    certificateFor: () => ({
+      certificate: ES_CERTIFICATES.certificates.find((item) => item.key === "es_residencia_fiscal")!,
+      onFile: true,
+      effectiveFrom: null,
+      answers: { residencia: "no_residente_ue_eee" },
+      missing: [],
     }),
-    /IRNR.*art\. 25/,
-  );
+  });
+  assert.equal(irnr["ES_IRNR_MES"], "380.0000");
+  assert.ok(irnrPushed.some((line) => line.key === "irnr" && line.amount === "380.0000"));
+  assert.ok(!irnrPushed.some((line) => line.key === "irpf"));
+  assert.equal(irnr["ES_TIPO_IRPF"], undefined);
 });
 
 test("ES employee facts refuse absence as missing and bad values as out-of-band", async () => {

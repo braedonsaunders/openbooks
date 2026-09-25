@@ -306,22 +306,36 @@ const ES_RESIDENCIA_FISCAL: PayrollCertificate = {
             + "the AEAT retention algorithm prices the withholding.",
         },
         {
-          value: "no_residente_sin_convenio",
-          label: "No residente sin convenio aplicable — tributa por el IRNR",
-          help: "LIRNR: Spanish-source employment income is taxed under the IRNR at the "
-            + "general rates (19% qualifying EU/EEA residents, 24% otherwise — art. 25), "
-            + "which this pack does not compute.",
+          value: "no_residente_ue_eee",
+          label: "No residente UE/EEE con intercambio efectivo de información — IRNR 19%",
+          help: "LIRNR art. 25.1.a: Spanish-source employment income withheld at the "
+            + "flat 19% rate, with no personal or family minimums.",
         },
         {
-          value: "no_residente_con_convenio",
+          value: "no_residente_otros",
+          label: "No residente (resto) — IRNR 24%",
+          help: "LIRNR art. 25.1.a: Spanish-source employment income withheld at the "
+            + "flat 24% rate, with no personal or family minimums.",
+        },
+        {
+          value: "no_residente_convenio",
           label: "No residente con convenio de doble imposición aplicable",
-          help: "The applicable treaty may exempt or limit Spanish taxation; this pack "
-            + "computes no treaty relief, so the run refuses until IRNR pricing exists.",
+          help: "The applicable treaty sets the withholding rate on Spanish-source "
+            + "employment income: record it in tasa_convenio below. The engine "
+            + "prices the treaty rate, never the 19%/24% general rates.",
         },
       ],
       required: true,
       help: "IRPF taxes residents; the IRNR taxes nonresidents' Spanish-source wages. "
         + "The two are different levies — recording the wrong one withholds the wrong tax.",
+    },
+    {
+      key: "tasa_convenio", label: "Tipo de retención del convenio (%)", kind: "amount",
+      decimals: 2,
+      help: "Treaty withholding rate as a percent (10.00 = 10%, 0.00 = treaty-exempt): "
+        + "the rate the applicable double-taxation treaty sets on Spanish-source "
+        + "employment income. Required when residencia is no_residente_convenio, "
+        + "ignored otherwise.",
     },
   ],
 };

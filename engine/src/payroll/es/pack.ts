@@ -132,6 +132,11 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         // LESS pre-tax minoraciones — a protected pre-tax deduction moves it,
         // so taxable_income, re-derived every fixpoint pass like T4127-T/FIT.
         { code: "IRPF", name: "IRPF withholding", systemKey: "irpf", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        // IRNR withholding for nonresidents (LIRNR art. 25 flat rate on gross):
+        // computed from earnings, never from income after pre-tax deductions,
+        // so `earnings` — a protected pre-tax order must not move it. Same
+        // AEAT remittance as IRPF; the 216/296 populations aggregate this key.
+        { code: "IRNR", name: "IRNR withholding", systemKey: "irnr", kind: "deduction", sequence: 111, assessedOn: "earnings", remittance: "tax_authority" },
       ],
     },
     {

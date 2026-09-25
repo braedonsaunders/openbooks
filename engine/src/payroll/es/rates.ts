@@ -293,6 +293,18 @@ export const ES_TIPO_MINIMO_2026 = {
 /** Ceuta/Melilla(/La Palma) reduction factor applied to CUOTA. */
 export const ES_CEUMELI_FACTOR = "0.40";
 
+/**
+ * IRNR flat withholding rates on employment income (LIRNR art. 25.1.a):
+ * 19% for EU/EEA residents with effective exchange of tax information,
+ * 24% otherwise (AEAT "Tipos de gravamen IRNR sin establecimiento
+ * permanente"). No personal or family minimums apply under the IRNR —
+ * the rate hits the full Spanish-source gross.
+ */
+export const ES_IRNR_TIPOS_2026 = {
+  unionEuropea: "19",
+  resto: "24",
+} as const;
+
 /** Monthly/daily base regime for a grupo de cotización. */
 export type EsGrupoRegimen = "mensual" | "diaria";
 
