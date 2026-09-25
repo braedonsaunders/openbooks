@@ -15,6 +15,7 @@ import {
   type PayrollHolidayPayEdition,
   type PayrollHolidayPayRule,
   type PayrollHolidayRule,
+  type PayrollWorkTriggeredHoliday,
 } from "./packs.ts";
 import {
   describeWorkSchedule,
@@ -964,6 +965,51 @@ export function computeStatutoryHolidayPay(
   return { ...shell, qualified: true, holidayPay, premiumPay, basis };
 }
 
+/** Compute a separate statutory payment whose trigger is working a dated event. */
+export function computeWorkTriggeredHolidayPay(
+  rule: PayrollHolidayPayRule,
+  event: PayrollWorkTriggeredHoliday,
+  context: HolidayPayContext,
+): HolidayPayResult {
+  if (cmp(context.hoursWorked, "0") <= 0) {
+    throw new PayrollHolidayError(`${context.employee}: ${event.name} payment requires hours worked on the date`);
+  }
+  const result = computeStatutoryHolidayPay({
+    ...rule,
+    qualifying: {
+      ...rule.qualifying,
+      ...event.qualifying,
+    },
+  }, { ...context, hoursWorked: "0", absentWithoutConsent: false });
+  if (!result.qualified || event.payment.kind === "alternate_paid_day") return result;
+  if (!context.schedule) {
+    throw new PayrollHolidayError(
+      `${context.employee}: ${event.name} needs the employee's normal daily hours to apply its half-day work minimum — record the work schedule`,
+    );
+  }
+  const normalHours = normalWorkdayHours(context.schedule);
+  if (normalHours === null) {
+    throw new PayrollHolidayError(
+      `${context.employee}: ${event.name} needs a regular workday to apply its half-day work minimum — record the normal schedule or resolve the statutory hours`,
+    );
+  }
+  const halfNormalDay = mulRatio(normalHours, 1n, 2n);
+  const overtimeHours = cmp(context.hoursWorked, halfNormalDay) >= 0
+    ? context.hoursWorked : halfNormalDay;
+  const requiredOvertimeWages = mulDecimal(
+    mul(context.hourlyRate, overtimeHours), event.payment.overtimeRate,
+  );
+  const ordinaryWagesAlreadyPaid = mul(context.hourlyRate, context.hoursWorked);
+  const premiumPay = cmp(requiredOvertimeWages, ordinaryWagesAlreadyPaid) > 0
+    ? roundMoney(add(requiredOvertimeWages, fromUnits(-toUnits(ordinaryWagesAlreadyPaid))), 2)
+    : "0";
+  return {
+    ...result,
+    premiumPay,
+    basis: `${result.basis}; work-triggered overtime minimum ${event.payment.overtimeRate}× ${overtimeHours} hours (the greater of hours worked and half a normal day)`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Pay-run input: phase 2 of the pipeline contract
 // ---------------------------------------------------------------------------
@@ -1047,12 +1093,13 @@ export async function resolveStatutoryHolidayPay(
   tx: Pick<typeof db, "execute">,
   input: StatutoryHolidayPayInput,
 ): Promise<StatutoryHolidayEarningLine[]> {
+  const jurisdiction = payrollJurisdiction(input.jurisdiction);
   // Whether a jurisdiction mandates holiday pay AT ALL is date-independent, so
   // it is asked once and before anything is loaded. WHICH formula is in force
   // is a per-holiday question and is asked below, against the holiday's date.
-  const declaration = payrollJurisdiction(input.jurisdiction);
-  if (declaration.holidayPay === null) return [];
-  if (declaration.holidayPay.length === 0) {
+  const workTriggeredHolidays = jurisdiction.workTriggeredHolidays ?? [];
+  if (jurisdiction.holidayPay === null && workTriggeredHolidays.length === 0) return [];
+  if (jurisdiction.holidayPay !== null && jurisdiction.holidayPay.length === 0) {
     statutoryHolidayPayRule(input.jurisdiction, input.periodStart);
   }
 
@@ -1060,9 +1107,9 @@ export async function resolveStatutoryHolidayPay(
   const observedIn = (from: string, to: string) =>
     resolveObservedHolidays({ jurisdiction: input.jurisdiction, from, to, overrides });
 
-  const holidays = observedIn(input.periodStart, input.periodEnd)
+  const holidays = jurisdiction.holidayPay === null ? [] : observedIn(input.periodStart, input.periodEnd)
     .filter((holiday) => holiday.paid);
-  if (holidays.length === 0) return [];
+  if (holidays.length === 0 && workTriggeredHolidays.length === 0) return [];
 
   const hire = (await tx.execute<{ hired_on: string | Date | null }>(sql`
     select hired_on from employee_roles
@@ -1231,6 +1278,70 @@ export async function resolveStatutoryHolidayPay(
         holidayKey: holiday.key, holidayDate: holiday.date,
         basis: `${rule.premium.multiplier}× the regular rate for hours worked on the holiday`,
       });
+    }
+  }
+  for (const event of workTriggeredHolidays) {
+    const firstYear = Number(input.periodStart.slice(0, 4));
+    const lastYear = Number(input.periodEnd.slice(0, 4));
+    for (let year = firstYear; year <= lastYear; year += 1) {
+      const date = resolveHolidayRule(event.rule, year);
+      if (date < input.periodStart || date > input.periodEnd
+        || (event.effectiveFrom !== null && date < event.effectiveFrom)
+        || (event.effectiveTo !== null && date > event.effectiveTo)) continue;
+      const hoursWorked = await hoursOn(tx, input, date);
+      if (cmp(hoursWorked, "0") <= 0) continue;
+      if (event.employerExemptionFact) {
+        if (!input.country || !input.subsidiaryId) {
+          throw new PayrollHolidayError(
+            `${input.employeeName}: ${event.name} needs the legal employer's exemption status — assign the payroll run to its legal employer and record the exemption in Payroll Setup → Employer facts`,
+          );
+        }
+        const exempt = await resolveStoredEmployerFact({
+          tx, orgId: input.orgId, subsidiaryId: input.subsidiaryId,
+          country: input.country, factKey: event.employerExemptionFact, asOf: date,
+        });
+        if (exempt === null) {
+          throw new PayrollHolidayError(
+            `${input.employeeName}: ${event.name} needs the employer's statutory exemption status — record it in Payroll Setup → Employer facts`,
+          );
+        }
+        if (exempt === "true") continue;
+      }
+      const rule = statutoryHolidayPayRule(input.jurisdiction, date);
+      if (!rule) {
+        throw new PayrollHolidayError(
+          `${input.employeeName}: ${event.name} has no holiday-pay formula in force on ${date}`,
+        );
+      }
+      const holiday: ObservedHoliday = {
+        jurisdiction: input.jurisdiction, key: event.key, name: event.name,
+        statutoryDate: date, date, source: "pack", elected: false, paid: true,
+      };
+      const window = lookbackWindow(rule, date);
+      const earnings = await lookbackEarnings(tx, input, window);
+      const schedule = await resolveWorkSchedule(tx, input.orgId, input.employeePartyId, date);
+      const result = computeWorkTriggeredHolidayPay(rule, event, {
+        employee: input.employeeName, holiday, earnings, daysWorked: 0,
+        employmentDays: hiredOn ? daysBetween(hiredOn, date) : null,
+        hoursWorked, hourlyRate: input.hourlyRate, schedule,
+      });
+      if (!result.qualified) continue;
+      if (cmp(result.holidayPay, "0") !== 0) {
+        lines.push({
+          componentId: input.holidayComponentId, kind: "earning",
+          description: `${event.name} — statutory holiday pay`,
+          amount: result.holidayPay, sequence: sequence++,
+          holidayKey: event.key, holidayDate: date, basis: result.basis,
+        });
+      }
+      if (cmp(result.premiumPay, "0") !== 0) {
+        lines.push({
+          componentId: input.premiumComponentId, kind: "earning",
+          description: `${event.name} — work-triggered overtime minimum`,
+          amount: result.premiumPay, sequence: sequence++,
+          holidayKey: event.key, holidayDate: date, basis: result.basis,
+        });
+      }
     }
   }
   return lines;

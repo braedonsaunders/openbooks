@@ -5,6 +5,7 @@ import type {
   PayrollHolidayPayRule,
   PayrollHolidayRule,
   PayrollJurisdiction,
+  PayrollWorkTriggeredHoliday,
 } from "../packs.ts";
 
 /**
@@ -610,6 +611,21 @@ const YT_HOLIDAY_PAY: PayrollHolidayPayRule = {
   lookbackEnds: ENDS_WEEK_BEFORE,
 };
 
+const MB_REMEMBRANCE_DAY: PayrollWorkTriggeredHoliday = {
+  key: "remembrance_day_worked",
+  name: "Remembrance Day",
+  rule: { kind: "fixed", month: 11, day: 11 },
+  effectiveFrom: null,
+  effectiveTo: null,
+  employerExemptionFact: "mb_remembrance_day_act_exempt",
+  qualifying: { lastAndFirstScheduledShift: false },
+  payment: {
+    kind: "holiday_pay_plus_overtime",
+    overtimeRate: "1.5",
+    minimumHours: "half_normal_day",
+  },
+};
+
 // --- Canadian jurisdictions ------------------------------------------------
 
 export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
@@ -738,19 +754,14 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       // engine will not catch.
       { ...TRUTH_AND_RECONCILIATION, name: "Orange Shirt Day (National Day for Truth and Reconciliation)", from: 2024 },
       THANKSGIVING_CA, CHRISTMAS,
-      // Remembrance Day is deliberately ABSENT. It is not a general holiday
-      // under the Code; The Remembrance Day Act, CCSM c R80 s. 3.4 governs it
-      // and inverts the usual rule — an employee who does NOT work November 11
-      // gets nothing, and one who DOES gets the general-holiday pay that would
-      // have been payable plus the overtime rate on the greater of the hours
-      // worked or half a normal day. No `holidayPay` shape can say that, and
-      // declaring the day as an ordinary Manitoba general holiday would pay
-      // every employee who stayed home a day's wages the law does not require.
-      // An employer that closes may add it as a company holiday.
+      // Remembrance Day is not a Code general holiday. Its separate, work-
+      // triggered entitlement is declared below and never enters the general
+      // holiday calendar (employees who stay home receive no statutory pay).
       // Not general holidays in Manitoba: Boxing Day, Easter Monday, and the
       // first Monday in August.
     ],
     holidayPay: onlyEdition(MB_HOLIDAY_PAY),
+    workTriggeredHolidays: [MB_REMEMBRANCE_DAY],
   },
   {
     key: "CA-NB",
