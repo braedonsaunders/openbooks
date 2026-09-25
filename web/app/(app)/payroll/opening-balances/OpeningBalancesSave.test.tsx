@@ -120,7 +120,7 @@ async function mountWith(
   responder: () => Response | Promise<Response>,
   initial: (typeof props)['initial'],
   fields: (typeof props)['fields'] = props.fields,
-): Promise<void> {
+): Promise<(year: number) => Promise<void>> {
   toasts.length = 0
   posted.length = 0
   ;(globalThis as Record<string, unknown>).__openingsTestToasts = toasts
@@ -135,22 +135,14 @@ async function mountWith(
   const host = document.createElement('div')
   document.body.appendChild(host)
   const rootHandle = createRoot(host)
-  t.after(async () => {
-    await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const node of [...document.body.children]) node.remove()
-  })
+  t.after(async () => { await act(async () => rootHandle.unmount()); host.remove(); for (const node of [...document.body.children]) node.remove() })
+  const renderYear = (year: number) => <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><OpeningBalancesView {...props} year={year} fields={fields} initial={initial} /></NextIntlClientProvider>
   await act(async () => {
-    rootHandle.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <OpeningBalancesView {...props} fields={fields} initial={initial} />
-      </NextIntlClientProvider>,
-    )
+    rootHandle.render(renderYear(props.year))
     await tick()
     await tick()
   })
+  return async (year) => act(async () => { rootHandle.render(renderYear(year)); await tick() })
 }
 
 async function mount(t: TestContext, responder: () => Response | Promise<Response>): Promise<void> {
@@ -183,7 +175,7 @@ async function click(button: HTMLButtonElement): Promise<void> {
 }
 
 test('a named 422 refusal lands in the error panel with its per-row reasons', async (t) => {
-  await mount(t, () =>
+  const changeYear = await mountWith(t, () =>
     Response.json(
       {
         error: 'opening-balance amounts must be exact decimals',
@@ -194,8 +186,9 @@ test('a named 422 refusal lands in the error panel with its per-row reasons', as
       },
       { status: 422 },
     ),
+    props.initial,
   )
-  await editCell('100.00')
+  await editCell('100.00'); await changeYear(2027); assert.equal((document.querySelector('input[aria-label="Ada — Gross"]') as HTMLInputElement).value, '', 'a year change discards the prior year draft'); await changeYear(2026); await editCell('100.00')
   const save = findSave()
   assert.ok(save && !save.disabled, 'Save must enable once a cell is edited')
   await click(save)
