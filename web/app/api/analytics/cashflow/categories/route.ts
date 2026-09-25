@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
+import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
 import {
   BANK_ACCOUNT_TYPE,
@@ -127,8 +128,20 @@ async function clean(
     if (refError) return bad(refError);
     out.cardAccountIds = ids;
     out.historyMonths = clampNum(c.historyMonths, 1, 24, 6);
-    const threshold = Number(c.significantPaymentThreshold);
-    if (Number.isFinite(threshold) && threshold > 0) out.significantPaymentThreshold = Math.min(1e9, threshold);
+    if (c.significantPaymentThreshold !== undefined) {
+      if (typeof c.significantPaymentThreshold !== "string") {
+        return bad("significantPaymentThreshold must be a decimal string; reload the category and enter an exact amount.");
+      }
+      const exactThreshold = canonicalDecimal(c.significantPaymentThreshold, 4);
+      if (exactThreshold === null) {
+        return bad("significantPaymentThreshold must be a valid amount with no more than four decimal places; correct the amount and save again.");
+      }
+      const threshold = normalizeMoney(exactThreshold);
+      if (compareMoney(threshold, "0.0000") < 0 || compareMoney(threshold, "1000000000.0000") > 0) {
+        return bad("significantPaymentThreshold must be between 0 and 1000000000.0000; enter a supported amount and save again.");
+      }
+      out.significantPaymentThreshold = threshold;
+    }
   } else if (method === "formula_expression") {
     const formula = typeof c.formula === "string" ? c.formula.trim().slice(0, 500) : "";
     if (!formula) return bad(GENERIC_CATEGORY_ERROR);
