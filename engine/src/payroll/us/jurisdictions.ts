@@ -731,6 +731,25 @@ const OH_MUNICIPAL_RECORD: PayrollCertificate = {
         + "jurisdiction, because Ohio publishes no municipal rate table a payroll release could "
         + "carry: a municipality with no rate on file refuses the run rather than withholding zero.",
     },
+    {
+      key: "annual_days_in_municipality", label: "Days performing services in this municipality this year",
+      kind: "count", min: "0", max: "366",
+      help: "Calendar-day count for R.C. 718.011's 20-day occasional-entrant threshold. "
+        + "Leave blank when the count is not tracked: withholding then prices normally and the "
+        + "threshold cannot be applied.",
+    },
+    {
+      key: "principal_work_outside_municipality", label: "Principal place of work is outside this municipality",
+      kind: "flag",
+      help: "R.C. 718.011(B)(1) excuses the occasional entrant only when the principal place of "
+        + "work is outside the municipality.",
+    },
+    {
+      key: "non_small_employer_qualifying_wages", label: "Employer is not small and pays qualifying wages",
+      kind: "flag",
+      help: "R.C. 718.011(B)(1) excuses the occasional entrant only for qualifying wages paid by "
+        + "an employer that is not a small employer under that section.",
+    },
   ],
 };
 
