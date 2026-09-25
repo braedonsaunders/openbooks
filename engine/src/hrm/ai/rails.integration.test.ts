@@ -484,7 +484,11 @@ test("flag reads and transitions see only the flag employment's employer", { ski
         returning id::text as id`)).rows;
       return rows[0]!.id;
     };
-    const flagA = await seedFlag(empA, "retro_spike", "warn");
+    // I3-people-63 splits flag visibility by family and capability: the
+    // scoped time/HR readers below hold time authority only, so the
+    // in-scope probe flag must be a time-family kind (retro_spike is
+    // payroll-family and correctly invisible to them now).
+    const flagA = await seedFlag(empA, "hours_spike", "warn");
     const flagB = await seedFlag(empB, "terminated_with_pay", "block");
     const flagNull = await seedFlag(null, "duplicate_entry", "warn");
 
@@ -527,8 +531,10 @@ test("flag reads and transitions see only the flag employment's employer", { ski
       transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: missingId, to: "acknowledged", reason: "reviewed" }),
       /matched no row/,
     );
+    // Transitions need time authority (not just HR read): the time approver
+    // acknowledges the in-scope time flag.
     const done = await transitionFlag(db, {
-      orgId: org.orgId, actorId: scopedHr, flagId: flagA, to: "acknowledged", reason: "confirmed with payroll",
+      orgId: org.orgId, actorId: scopedTime, flagId: flagA, to: "acknowledged", reason: "confirmed with timekeeping",
     });
     assert.equal(done.status, "acknowledged");
 
