@@ -98,7 +98,7 @@ export function ehtExemptionConsumedByRunStatus(status: CaExemptionRunStatus): b
 import {
   add, cmp, mulPercent, mulRatio, neg, roundMoney, sum, toUnits,
 } from "../../money/money.ts";
-import type { Rate } from "../../money/brands.ts";
+import type { Money, Rate } from "../../money/brands.ts";
 import { caPayrollConfig } from "./config.ts";
 import type {
   PayrollEmployerLevyContext,
@@ -129,12 +129,14 @@ export async function applyCaEmployerLevies(
   const grossEarnings = () =>
     sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
 
-  let wcbAmount = "0";
-  let wcbAssessable = "0";
-  let ehtAmount = "0";
-  let ehtEarnings = "0";
-  let hsfAmount = "0";
-  let hsfEarnings = "0";
+  // Kernel-exact legs throughout (sum / add / mulPercent outputs, or zero):
+  // typed Money so the factors struct is proven at every assignment.
+  let wcbAmount: Money = "0" as Money;
+  let wcbAssessable: Money = "0" as Money;
+  let ehtAmount: Money = "0" as Money;
+  let ehtEarnings: Money = "0" as Money;
+  let hsfAmount: Money = "0" as Money;
+  let hsfEarnings: Money = "0" as Money;
 
   const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
     select g.rate_percent, g.max_assessable
@@ -172,9 +174,9 @@ export async function applyCaEmployerLevies(
     const room = wcb.max_assessable
       ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
       : gross;
-    wcbAssessable = cmp(gross, room) <= 0 ? gross : room;
+    wcbAssessable = (cmp(gross, room) <= 0 ? gross : room) as Money;
     if (cmp(wcbAssessable, "0") > 0) {
-      wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2);
+      wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2) as Money;
       // Aggregate tagged earning lines by costing target (project + department):
       // hourly earnings post one line per DAY since dated lookbacks, but WSIB
       // assesses earnings and the stub allocates the premium by project — one
@@ -229,7 +231,7 @@ export async function applyCaEmployerLevies(
 
   const eht = config.eht(region);
   if (eht) {
-    ehtEarnings = grossEarnings();
+    ehtEarnings = grossEarnings() as Money;
     if (cmp(ehtEarnings, "0") > 0) {
       // Committed runs only (see `ehtExemptionConsumedByRunStatus`, which
       // this literal mirrors — SQL cannot call it): a calculated run is a
@@ -286,7 +288,7 @@ export async function applyCaEmployerLevies(
         ? add(ehtEarnings, neg(exemptionLeft))
         : "0";
       if (cmp(taxableRemuneration, "0") > 0) {
-        ehtAmount = mulPercent(taxableRemuneration, eht.rate, 2);
+        ehtAmount = mulPercent(taxableRemuneration, eht.rate, 2) as Money;
         pushStatutory("eht", "employer_contribution", "Employer Health Tax", ehtAmount, 270);
       }
     }
@@ -303,7 +305,7 @@ export async function applyCaEmployerLevies(
   if (region === "QC") {
     const hsf = config.hsf(region);
     if (hsf) {
-      hsfEarnings = grossEarnings();
+      hsfEarnings = grossEarnings() as Money;
       if (cmp(hsfEarnings, "0") > 0) {
         const classes = (hsf.sectorOther ? 1 : 0)
           + (hsf.sectorPublic ? 1 : 0)
@@ -338,7 +340,7 @@ export async function applyCaEmployerLevies(
               + "exemption or transcribe the year's rule before pricing",
             );
           }
-          hsfAmount = "0";
+          hsfAmount = "0" as Money;
         } else {
           // Committed runs plus the run being calculated (own-document arm,
           // same sequencing doctrine as the EHT exemption above): a recalc
@@ -363,7 +365,7 @@ export async function applyCaEmployerLevies(
           const ytdBase = add(ytd.remuneration, hsfEarnings);
           const rate = quebecHsfRateForPayroll(sector, ytdBase, taxYear);
           const cumulative = mulPercent(ytdBase, rate, 2);
-          hsfAmount = cmp(cumulative, ytd.booked) > 0 ? add(cumulative, neg(ytd.booked)) : "0";
+          hsfAmount = (cmp(cumulative, ytd.booked) > 0 ? add(cumulative, neg(ytd.booked)) : "0") as Money;
         }
         if (cmp(hsfAmount, "0") > 0) {
           pushStatutory("hsf", "employer_contribution", "Health Services Fund", hsfAmount, 280);
@@ -381,8 +383,8 @@ export async function applyCaEmployerLevies(
   // Pre-adoption remuneration has no CNT carry-in column yet: a mid-year
   // adopter re-opens the full $103,000 room on the first stub (bounded
   // over-accrual, high earners only) until the column lands.
-  let cntAmount = "0";
-  let cntEarnings = "0";
+  let cntAmount: Money = "0" as Money;
+  let cntEarnings: Money = "0" as Money;
   if (region === "QC") {
     if (taxYear !== 2026) {
       throw new PayrollPackError(
@@ -413,9 +415,9 @@ export async function applyCaEmployerLevies(
       `))).rows[0]!.prior;
       const gross = grossEarnings();
       const room = cmp(CNT_MAX_2026, priorCnt) > 0 ? add(CNT_MAX_2026, neg(priorCnt)) : "0";
-      cntEarnings = cmp(gross, room) <= 0 ? gross : room;
+      cntEarnings = (cmp(gross, room) <= 0 ? gross : room) as Money;
       if (cmp(cntEarnings, "0") > 0) {
-        cntAmount = mulPercent(cntEarnings, CNT_RATE_2026, 2);
+        cntAmount = mulPercent(cntEarnings, CNT_RATE_2026, 2) as Money;
         pushStatutory("cnt", "employer_contribution", "Contribution related to labour standards (CNT)", cntAmount, 285);
       }
     }

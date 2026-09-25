@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { add } from "../../money/money.ts";
 import { toUnits } from "../../money/money.ts";
-import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { EMPTY_EMPLOYER_LEVY_FACTORS, type PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { calculateFrCotisations2026 } from "./cotisations.ts";
 import {
@@ -311,16 +311,8 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
     })) as never,
     bool: () => false,
     assertRegionSupported: () => {},
-    employerLevies: {
-      wcbAmount: "0",
-      wcbAssessable: "0",
-      ehtAmount: "0",
-      ehtEarnings: "0",
-      hsfAmount: "0",
-      hsfEarnings: "0",
-      cntAmount: "0",
-      cntEarnings: "0",
-    },
+    // Zero levies: the shared empty factors (same eight "0" legs as before).
+    employerLevies: { ...EMPTY_EMPLOYER_LEVY_FACTORS },
   };
   const factors = await FR_PAYROLL_PACK.computeStatutory(ctx);
   assert.equal(factors.FR_RGDU_COEFFICIENT, "0.3178");
@@ -370,16 +362,8 @@ test("adapter refuses without a known effectif, naming FNAL", async () => {
     })) as never,
     bool: () => false,
     assertRegionSupported: () => {},
-    employerLevies: {
-      wcbAmount: "0",
-      wcbAssessable: "0",
-      ehtAmount: "0",
-      ehtEarnings: "0",
-      hsfAmount: "0",
-      hsfEarnings: "0",
-      cntAmount: "0",
-      cntEarnings: "0",
-    },
+    // Zero levies: the shared empty factors (same eight "0" legs as before).
+    employerLevies: { ...EMPTY_EMPLOYER_LEVY_FACTORS },
   };
   await assert.rejects(() => FR_PAYROLL_PACK.computeStatutory(ctx), /Effectif salarié annuel de l'employeur.*effectif_moyen_annuel/);
 });
