@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { receiveInventory } from "./movements.ts";
@@ -50,4 +51,20 @@ export async function openCountingLine(org: StockCountSeedOrg): Promise<{ countI
   const lineId = (await db.execute<{ id: string }>(sql`
     select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
   return { countId: count.id, lineId };
+}
+
+export async function deactivateItem(orgId: string, itemId: string): Promise<void> {
+  const r = await db.execute<{ id: string }>(sql`
+    update items set is_active = false, updated_at = now()
+     where org_id = ${orgId} and id = ${itemId}
+    returning id`);
+  assert.equal(r.rows.length, 1, "deactivation must match exactly one row");
+}
+
+export async function postedCounts(orgId: string): Promise<{ movements: number; entries: number; layers: number }> {
+  return (await db.execute<{ movements: number; entries: number; layers: number }>(sql`
+    select (select count(*)::int from inventory_movements where org_id = ${orgId}) as movements,
+           (select count(*)::int from journal_entries where org_id = ${orgId}) as entries,
+           (select count(*)::int from cost_layers where org_id = ${orgId}) as layers
+  `)).rows[0]!;
 }
