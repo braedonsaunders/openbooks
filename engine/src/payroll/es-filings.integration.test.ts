@@ -7,7 +7,7 @@ import { add, cmp } from "../money/money.ts";
 import { es111Quarters, es111Slip, es190Slips, es190Slip } from "./es/yearend.ts";
 import { esPackFilings } from "./es/filings.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * The ES 190/111 populations over committed pay runs.
@@ -55,18 +55,24 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
     values (${scheduleId}, ${org.orgId}, 'Mensual', 'monthly', 12, '2026-01-31', 0, true,
             ${actorId}, ${actorId})`);
 
+  // pay_stubs.employment_id is NOT NULL and the run refuses stubs without
+  // an HRM employment: every stub employee carries one, and the profile
+  // points at it (the run reads emp.employment_id).
+  const employments = new Map<string, string>();
   const employee = async (name: string): Promise<string> => {
     const id = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
       values (${id}, ${org.orgId}, 'person', ${name}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
+    const employmentId = await seedWorkerEmployment(org.orgId, id, org.subsidiaryId);
+    employments.set(id, employmentId);
     await db.execute(sql`
       insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${id})`);
     await db.execute(sql`
       insert into employee_payroll_profiles
-        (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
+        (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, pay_basis, is_active,
          created_by, updated_by)
-      values (${org.orgId}, ${id}, ${scheduleId}, 'ES', 'MD', 'salary', true,
+      values (${org.orgId}, ${id}, ${employmentId}, ${scheduleId}, 'ES', 'MD', 'salary', true,
               ${actorId}, ${actorId})`);
     return id;
   };
@@ -91,10 +97,10 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
     for (const line of lines) {
       const stubId = randomUUID();
       await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                                periods_per_year, pay_date, tax_year, country, country_source,
                                currency_code, gross, net_pay, created_by, updated_by)
-        values (${stubId}, ${org.orgId}, ${documentId}, ${line.employeeId}, 'MD',
+        values (${stubId}, ${org.orgId}, ${documentId}, ${line.employeeId}, ${employments.get(line.employeeId)!}, 'MD',
                 12, ${payDate}, 2026, 'ES', 'calculation',
                 'EUR', ${line.gross}, ${line.gross}, ${actorId}, ${actorId})`);
       await db.execute(sql`
