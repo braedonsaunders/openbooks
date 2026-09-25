@@ -516,34 +516,72 @@ export function ProfileEditor(props: {
       })
       // The status is checked before the body is parsed: a non-JSON error body
       // must surface the failure, never a SyntaxError from res.json().
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to save the payroll profile'))
-      // Row-backed certificates file through the certificates API — one POST
-      // per certificate the operator answered, each superseding the previous
-      // filing rather than overwriting it. Certificates with nothing entered
-      // file nothing: an empty filing would read as "on file" downstream.
-      for (const certificate of applicableCertificates) {
-        if (certificate.storage !== 'certificate_rows') continue
-        const answers: Record<string, string> = {}
-        for (const field of certificate.fields) {
-          const value = (rowAnswers[certificate.key]?.[field.key] ?? '').trim()
-          if (value !== '') answers[field.key] = value
+      //
+      // One save spans two resources — the profile, then each answered
+      // row-backed certificate as its own filing — so outcomes are tracked per
+      // resource, never thrown as one failure for the combined action. A
+      // refused profile files nothing further: certificates validate against
+      // the employee's own profile, so filing them after a failed profile
+      // save would commit answers under jurisdiction facts the operator just
+      // tried to change. Once the profile is saved, every answered
+      // certificate is attempted even after a refusal — each filing
+      // supersedes only its own form's history — and every committed resource
+      // is refreshed before any failure is reported, so the panel shows what
+      // stuck alongside what did not.
+      const failures: string[] = []
+      let committed = false
+      if (!res.ok) {
+        failures.push(await readApiErrorMessage(res, 'failed to save the payroll profile'))
+      } else {
+        committed = true
+        // Row-backed certificates file through the certificates API — one POST
+        // per certificate the operator answered, each superseding the previous
+        // filing rather than overwriting it. Certificates with nothing entered
+        // file nothing: an empty filing would read as "on file" downstream.
+        for (const certificate of applicableCertificates) {
+          if (certificate.storage !== 'certificate_rows') continue
+          const answers: Record<string, string> = {}
+          for (const field of certificate.fields) {
+            const value = (rowAnswers[certificate.key]?.[field.key] ?? '').trim()
+            if (value !== '') answers[field.key] = value
+          }
+          if (Object.keys(answers).length === 0) continue
+          let certRes: Response
+          try {
+            certRes = await fetch('/api/payroll/certificates', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                employeePartyId: p.employee_party_id,
+                country,
+                certificateKey: certificate.key,
+                answers,
+              }),
+            })
+          } catch (e) {
+            // A dead connection fails every filing after it the same way, so
+            // one refusal is recorded and the rest are not attempted — the
+            // committed profile below is still refreshed before reporting.
+            failures.push(
+              `payroll profile saved, but ${certificate.form} · ${certificate.label} was not filed: ${(e as Error).message}`,
+            )
+            break
+          }
+          // The status is checked before the body is parsed (see above).
+          if (!certRes.ok) {
+            const reason = await readApiErrorMessage(certRes, 'failed to save the certificate')
+            failures.push(`payroll profile saved, but ${certificate.form} · ${certificate.label} was not saved: ${reason}`)
+          }
         }
-        if (Object.keys(answers).length === 0) continue
-        const certRes = await fetch('/api/payroll/certificates', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            employeePartyId: p.employee_party_id,
-            country,
-            certificateKey: certificate.key,
-            answers,
-          }),
-        })
-        // The status is checked before the body is parsed (see above).
-        if (!certRes.ok) throw new Error(await readApiErrorMessage(certRes, 'failed to save the certificate'))
       }
-      toast.success(t('saved'))
-      props.onSaved()
+      // Refresh every committed resource before reporting failure: the panel
+      // re-reads the profile and filings, so a partial save is visible.
+      if (committed) props.onSaved()
+      if (failures.length === 0) {
+        toast.success(t('saved'))
+      } else {
+        for (const failure of failures) toast.error(failure)
+      }
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
