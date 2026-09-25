@@ -57,6 +57,18 @@ async function makeFixture(): Promise<Fixture> {
   });
 }
 
+/** The invocation fence (I5-platform-170) matches the invoked version
+ * against the app's active version: publish and activate it, or the call
+ * is refused. Versions are real app_versions rows (the FK requires it);
+ * the label is the shared release line, the row id the per-app install. */
+async function activateVersion(orgId: string, appId: string, versionId: string, label: string): Promise<void> {
+  await withBypass(async () => {
+    await db.execute(sql`insert into app_versions (id, org_id, app_id, version, manifest, status)
+      values (${versionId}, ${orgId}, ${appId}, ${label}, '{}'::jsonb, 'active')`);
+    await db.execute(sql`update apps set active_version_id = ${versionId} where org_id = ${orgId} and id = ${appId}`);
+  });
+}
+
 /** Stage one material draft row inside whatever transaction owns this call. */
 async function stageEffect(orgId: string, actorId: string): Promise<string> {
   const id = randomUUID();
@@ -443,6 +455,7 @@ test(
       const key = randomUUID();
       const v1 = randomUUID();
       const v2 = randomUUID();
+      await activateVersion(fx.orgId, fx.appId, v1, "1.0.0");
       const first = await invoke(fx.appId, v1, key);
       assert.equal(first.replayed, false);
       // Same app, same version, same key: the lost result replays.
@@ -458,12 +471,16 @@ test(
           insert into apps (id, org_id, key, name, icon_key, status, granted_permissions, created_by)
           values (${otherAppId}, ${fx.orgId}, ${"inv-" + otherAppId.slice(0, 8)}, ${"Other Invoked App"}, 'box', 'installed', '[]'::jsonb, ${fx.actorId})`),
       );
-      const otherApp = await invoke(otherAppId, v1, key);
+      // Same caller key and input, different app — still no replay.
+      const v1other = randomUUID();
+      await activateVersion(fx.orgId, otherAppId, v1other, "1.0.0");
+      const otherApp = await invoke(otherAppId, v1other, key);
       assert.equal(otherApp.replayed, false);
       assert.equal(executions, 2);
       assert.notDeepEqual(otherApp.attempt.response, first.attempt.response);
       // Same key and input after an UPGRADE: the new version runs fresh
       // instead of replaying the old version's stored response.
+      await activateVersion(fx.orgId, fx.appId, v2, "2.0.0");
       const upgraded = await invoke(fx.appId, v2, key);
       assert.equal(upgraded.replayed, false);
       assert.equal(executions, 3);
@@ -483,6 +500,7 @@ test(
       const audits: AppInvocationAuditRow[] = [];
       let executions = 0;
       const versionId = randomUUID();
+      await activateVersion(fx.orgId, fx.appId, versionId, "1.0.0");
       const invoke = (key: string) =>
         executeAppInvocation({
           ...invocationAuthority(fx, fx.appId, versionId),
