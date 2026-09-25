@@ -194,6 +194,7 @@ export const BANKING_WIDGETS = {
    *  the selection from the actions it drives. */
   'match-workspace': (props) => (
     <MatchWorkspace
+      key={str(props, 'selectionKey') ?? ''}
       accounts={(props.accounts as ComponentProps<typeof MatchWorkspace>['accounts']) ?? []}
       offsetAccounts={
         (props.offsetAccounts as ComponentProps<typeof MatchWorkspace>['offsetAccounts']) ?? []

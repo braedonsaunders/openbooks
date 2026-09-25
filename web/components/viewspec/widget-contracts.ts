@@ -284,7 +284,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'live-directory': { props: ['items'] },
   'manage-books-button': { props: ['href', 'label'] },
   'manage-quotas-button': { props: ['ariaLabel', 'href', 'label'] },
-  'match-workspace': { props: ['account', 'accounts', 'currentParams', 'data', 'offsetAccounts', 'session', 'tab', 'totals'] },
+  'match-workspace': { props: ['account', 'accounts', 'currentParams', 'data', 'offsetAccounts', 'selectionKey', 'session', 'tab', 'totals'] },
   'matrix-filters': { props: ['classId', 'classes', 'state'] },
   'metric-tile': { props: ['label', 'locale', 'tone', 'value'] },
   'module-home-tabs': { props: ['tabs'] },
