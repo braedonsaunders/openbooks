@@ -97,7 +97,7 @@ test('accounting journal tiles read the primary book only', { skip: !env.OPENBOO
       }
     })
 
-    const home = await withBypass(() => accountingHome(scratch.orgId, null))
+    const home = await withBypass(() => accountingHome(scratch.orgId, null, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true }))
     assert.equal(home.draftJournals, 2, 'draft tile counts draft journal documents like the /journal list')
     assert.equal(home.postedJournals7d, 1, 'posted tile excludes the secondary-book posting')
   } finally {

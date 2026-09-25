@@ -81,7 +81,7 @@ for (const boundary of ["service", "completed month", "page", "assistant", "acco
         await withOrgContext(org.orgId, async () => {
           const authz = await getAuthz(); assert.ok(authz);
           if (boundary === "accounting budgets") {
-            const data = await accountingHome(org.orgId, authz.allowedSubsidiaryIds);
+            const data = await accountingHome(org.orgId, authz.allowedSubsidiaryIds, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true });
             assert.equal(data.badges.budgets, mode === 'all' ? 3 : mode === 'empty' ? 0 : 1);
             return;
           }

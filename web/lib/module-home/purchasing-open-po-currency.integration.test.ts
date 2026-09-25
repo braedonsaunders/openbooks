@@ -51,7 +51,7 @@ test('open purchase-order value converts each order currency before summing', { 
 
     // purchasing.ts reads through org-scope: unscoped the org lookup itself
     // throws 'has no base currency', so the FX math under test never runs.
-    const home = await withOrgContext(org.orgId, () => purchasingHome(org.orgId))
+    const home = await withOrgContext(org.orgId, () => purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true }))
     assert.equal(home.ordersEnabled, true, 'orders feature must be on for PO vitals')
     assert.equal(home.openPos, 2)
     assert.equal(home.openPoValue, 235, 'CAD 100 + USD 100 at 1.35 spot')

@@ -65,6 +65,8 @@ export interface PurchasingData {
   /** ordersEnabled AND apAllowed: the open-PO tile carries PO money, so it
    * needs both the feature and the AP grant (`when` takes a single ref). */
   posAllowed: boolean
+  /** Per-section grants from the loader: tiles hide where the grant is missing. */
+  grants: { ap: boolean; orders: boolean; expenses: boolean; parties: boolean }
   subsidiaryLabel: string
   subsidiaryPicker: SubsidiaryPicker
   subsidiaryValue: string
@@ -121,7 +123,7 @@ export async function loadPurchasing(
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  if (!['ap.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ap.read')
+  if (!['ap.read', 'parties.read', 'expenses.read'].some((p) => can(authz, p))) assertCan(authz, 'ap.read')
   const t = await getTranslations('purchasing')
   const locale = await getLocale()
   const tNav = await getTranslations('nav')
@@ -162,7 +164,12 @@ export async function loadPurchasing(
   // (ap.read): either opens the page, but every AP-derived figure keeps only
   // its own family's grant — a vendor-directory clerk loads no AP rows and
   // sees no AP vitals.
-  const grants = { ap: can(authz, 'ap.read') }
+  const grants = {
+    ap: can(authz, 'ap.read'),
+    orders: can(authz, 'ap.read'),
+    expenses: can(authz, 'expenses.read'),
+    parties: can(authz, 'parties.read'),
+  }
   const [data, navGroups] = await Promise.all([
     purchasingHome(
       authz.user.orgId,
@@ -242,6 +249,7 @@ export async function loadPurchasing(
     description: t('home.description'),
     apAllowed: data.apAllowed,
     posAllowed: data.ordersEnabled && grants.ap,
+    grants,
     subsidiaryLabel: t('home.subsidiary'),
     subsidiaryPicker: subView?.picker ?? [],
     subsidiaryValue: subView?.picker.find((p) => p.id === sp.sub)?.id ?? subView?.picker[0]?.id ?? '',
@@ -361,7 +369,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
         // Vitals strip. Two tiles are feature-gated; `when` expresses that
         // without the spec gaining a conditional.
         grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
-          statTile({ iconKey: 'building', accent: 'teal', label: f('vendorsLabel'), value: f('vendorsValue') }),
+          statTile({ iconKey: 'building', accent: 'teal', label: f('vendorsLabel'), value: f('vendorsValue'), when: f('grants.parties') }),
           statTile({
             iconKey: 'clipboard',
             accent: 'violet',
@@ -438,7 +446,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
                   overdueIsNegative: data.apOverdueIsNegative,
                   labels: data.pulseLabels,
                   href: data.apHref,
-                }),
+                }, f('grants.ap')),
               ],
             }),
             panel({
@@ -453,7 +461,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
                   series: data.trendSeries,
                   height: 170,
                   area: true,
-                }),
+                }, f('grants.ap')),
               ],
             }),
             widgetBlock('directory-section', { items: data.directory, title: data.directoryTitle }),
@@ -462,6 +470,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
               iconKey: 'triangle-alert',
               bodyClassName: 'p-0',
               className: 'shrink-0',
+              when: f('grants.ap'),
               blocks: [
                 widgetBlock('attention-list', {
                   items: data.attention,

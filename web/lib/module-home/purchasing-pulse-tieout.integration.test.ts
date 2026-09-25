@@ -135,7 +135,7 @@ test('payment pulse open ties to AP open payables across time boundaries', { ski
       })
 
       await withOrgContext(org.orgId, async () => {
-        const home = await purchasingHome(org.orgId)
+        const home = await purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true })
         const grid = buildWeekGrid('2026-09-17', 4)
         const items = await openItems(org.orgId, 'ap', '2026-09-17')
         const house = summariseSide(items, grid.asOf, '0', 0)

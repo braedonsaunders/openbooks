@@ -16,6 +16,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
  */
 
 export interface AccountingHome {
+  access: AccountingHomeAccess
   close: {
     runId: string | null
     periodName: string | null
@@ -33,6 +34,15 @@ export interface AccountingHome {
     budgets: number
     assets: number
   }
+}
+
+export interface AccountingHomeAccess {
+  gl: boolean
+  close: boolean
+  findings: boolean
+  accounts: boolean
+  budgets: boolean
+  assets: boolean
 }
 
 type AccountingSubsidiaryScope = ReadonlySet<string> | null
@@ -120,6 +130,7 @@ function workItemScope(orgId: string, allowed: AccountingSubsidiaryScope) {
 export async function accountingHome(
   orgId: string,
   allowedSubsidiaryIds?: AccountingSubsidiaryScope,
+  access: AccountingHomeAccess = { gl: false, close: false, findings: false, accounts: false, budgets: false, assets: false },
 ): Promise<AccountingHome> {
   // The accounting page historically supplied only orgId. Resolve the same
   // request authz here when that argument is omitted so direct callers cannot
@@ -133,7 +144,7 @@ export async function accountingHome(
     const authz = await getAuthz()
     scope = authz?.user.orgId === orgId ? authz.allowedSubsidiaryIds : new Set<string>()
   }
-  const ago7 = addCalendarDays(await businessToday(orgId), -7)
+  const ago7 = access.gl ? addCalendarDays(await businessToday(orgId), -7) : null
   // Ledger hygiene counts read the primary posting book, like bank
   // reconciliation and the banking cockpit — a secondary book's postings
   // must not inflate the primary ledger's tiles. Drafts are documents, not
@@ -142,7 +153,7 @@ export async function accountingHome(
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
   const [closeRes, countsRes, workRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
-    db.execute<{ id: string; status: string; period_name: string; tasks_total: string; tasks_done: string }>(sql`
+    access.close ? db.execute<{ id: string; status: string; period_name: string; tasks_total: string; tasks_done: string }>(sql`
       select r.id, r.status, p.name as period_name,
              coalesce(t.total, 0) as tasks_total,
              coalesce(t.done, 0) as tasks_done
@@ -156,30 +167,30 @@ export async function accountingHome(
          ${closeRunScope(scope)}
        order by r.created_at desc
        limit 1
-    `),
-    db.execute(sql`
+    `) : Promise.resolve({ rows: [] }),
+    (access.gl || access.accounts || access.budgets || access.assets) ? db.execute(sql`
       select
-        (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'journal' and d.status = 'draft'
+        ${access.gl ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'journal' and d.status = 'draft'
           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}) as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
-          and je.posting_date >= ${ago7}
-          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as posted_7d,
-        (select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active
+          and je.posting_date >= ${ago7!}
+          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as posted_7d` : sql`0 as draft_journals, 0 as posted_7d`},
+        ${access.accounts ? sql`(select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active
           ${scope === null ? sql`` : [...scope].length
             ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[]))`
-            : sql` and false`}) as accounts,
-        (select count(*) from budget_scenarios b where b.org_id = ${orgId}
-          ${budgetScope(orgId, scope, sql.raw('b.id'))}) as budgets,
-        (select count(*) from fixed_assets f where f.org_id = ${orgId}
-          ${subsidiaryVisibleFilter(sql`f.subsidiary_id`, scope)}) as assets
-    `),
+            : sql` and false`})` : sql`0`} as accounts,
+        ${access.budgets ? sql`(select count(*) from budget_scenarios b where b.org_id = ${orgId}
+          ${budgetScope(orgId, scope, sql.raw('b.id'))})` : sql`0`} as budgets,
+        ${access.assets ? sql`(select count(*) from fixed_assets f where f.org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`f.subsidiary_id`, scope)})` : sql`0`} as assets
+    `) : Promise.resolve({ rows: [] }),
     // Continuous-close open findings by severity.
-    db.execute(sql`
+    access.findings ? db.execute(sql`
       select severity, count(*) as n from ai_work_items w
        where w.org_id = ${orgId} and w.status = 'open'
          ${workItemScope(orgId, scope)}
        group by severity
-    `),
+    `) : Promise.resolve({ rows: [] }),
   ]))
 
   const close = closeRes.rows[0]
@@ -193,6 +204,7 @@ export async function accountingHome(
   }
 
   return {
+    access,
     close: close
       ? {
           runId: close.id,
