@@ -1505,6 +1505,8 @@
     "unknownFormat": "Formato desconhecido",
     "empty": "Nada aqui ainda.",
     "emptyAction": "Configure em Ajustes abaixo.",
+    "sectionOffTitle": "Esta seção está desativada",
+    "sectionOffMessage": "Ative o recurso correspondente em Configurações da empresa → Recursos.",
     "active": "Ativo",
     "retired": "Aposentado",
     "sections": {

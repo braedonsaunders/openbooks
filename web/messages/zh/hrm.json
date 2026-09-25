@@ -1505,6 +1505,8 @@
     "unknownFormat": "未知格式",
     "empty": "此处暂无内容。",
     "emptyAction": "请在下方“设置”中配置。",
+    "sectionOffTitle": "此部分已关闭",
+    "sectionOffMessage": "请在公司设置 → 功能中启用对应功能。",
     "active": "启用",
     "retired": "停用",
     "sections": {

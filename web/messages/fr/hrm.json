@@ -1505,6 +1505,8 @@
     "unknownFormat": "Format inconnu",
     "empty": "Rien ici pour le moment.",
     "emptyAction": "Configurez ci-dessous dans Paramètres.",
+    "sectionOffTitle": "Cette section est désactivée",
+    "sectionOffMessage": "Activez la fonctionnalité correspondante dans Paramètres de l’entreprise → Fonctionnalités.",
     "active": "Actif",
     "retired": "Retiré",
     "sections": {
