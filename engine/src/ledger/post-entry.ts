@@ -166,12 +166,18 @@ export async function postEntry(
     throw error;
   }
 
-  // Serialize postings at the organization aggregate root: the idempotency
-  // read below and the entry-number insert are atomic against another
-  // posting in the same organization while this lock is held.
-  await executor.execute(sql`select id from orgs where id = ${orgId} for update`);
-
+  // Serialize idempotent postings at the organization aggregate root: the
+  // idempotency read below is check-then-insert with no unique index behind
+  // it, so two identical keys racing without this lock both read empty and
+  // post twice. Entry numbers need no such lock — nextFreeEntryNumber takes
+  // a fine-grained per-candidate lock precisely so other posts are not
+  // serialized — and every other guard here reads shared state, so ordinary
+  // postings take no organization lock at all. Holding it for every posting
+  // serializes unrelated periods onto one row and deadlocks concurrent
+  // multi-post flows (two first-use consolidations abort with 40P01 instead
+  // of converging on exactly one acquisition).
   if (input.idempotencyKey) {
+    await executor.execute(sql`select id from orgs where id = ${orgId} for update`);
     const prior = (await executor.execute<{ id: string }>(sql`
       select id from journal_entries
        where org_id = ${orgId} and custom->>'idempotencyKey' = ${input.idempotencyKey}
@@ -267,19 +273,34 @@ export async function postEntry(
   // commit: a concurrent close either waits behind this posting or this
   // check re-reads its commit. GL is always implied.
   await executor.execute(sql`select period_posting_fence(${orgId}, ${input.periodId}, ${input.bookId})`);
-  try {
-    await assertPeriodModulesOpen(executor, {
-      orgId,
-      periodId: input.periodId,
-      bookId: input.bookId,
-      subsidiaryIds,
-      modules: input.closeModules ?? [],
-      allowImportedLocks: input.allowImportedLocks,
-    });
-  } catch (error) {
-    if (error instanceof CloseError)
-      throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`);
-    throw error;
+  // Authenticated connector historical replay carries a transaction-local
+  // token the DATABASE validates (connector_historical_replay_authorized:
+  // active sync run, owning connection, attributable automatic policy). The
+  // trigger guards honor that token through period_module_blocks_write, so
+  // this application-level companion must honor it too — otherwise it
+  // refuses a write the kernel allows, and authorized upstream history can
+  // never be mirrored into a preserved closed period. The token is
+  // re-validated here by calling the same function (never trusted from the
+  // caller), and the triggers re-validate it again at write time.
+  const replayAuthorized = (
+    await executor.execute<{ allowed: boolean }>(sql`
+      select connector_historical_replay_authorized(${orgId}) as allowed`)
+  ).rows[0]?.allowed === true;
+  if (!replayAuthorized) {
+    try {
+      await assertPeriodModulesOpen(executor, {
+        orgId,
+        periodId: input.periodId,
+        bookId: input.bookId,
+        subsidiaryIds,
+        modules: input.closeModules ?? [],
+        allowImportedLocks: input.allowImportedLocks,
+      });
+    } catch (error) {
+      if (error instanceof CloseError)
+        throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`);
+      throw error;
+    }
   }
 
   const custom =
