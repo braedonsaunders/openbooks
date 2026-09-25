@@ -103,9 +103,9 @@ export const DE_PAP_2026_SOURCE = {
 } as const;
 
 /** PAP cents: integer Euro-cent amounts. All money in/out of the engine. */
-type Cents = number;
+type Cents = bigint;
 /** PAP whole Euro: integer Euro amounts. */
-type Euro = number;
+type Euro = bigint;
 
 /** Lohnzahlungszeitraum codes (PAP 3.1 LZZ): 1 Jahr, 2 Monat, 3 Woche, 4 Tag. */
 export type DePapLzz = 1 | 2 | 3 | 4;
@@ -193,17 +193,17 @@ export interface DePapLaufendResult {
 }
 
 /* 2026 constants: MPARA + ceilings, all in Cent for integer math. */
-const BBGRVALV = 10140000;
-const BBGKVPV = 6975000;
-const GFB = 1234800;
-const SOLZFREI_EURO = 20350;
-const W1STKL5 = 1407100;
-const W2STKL5 = 3493900;
-const W3STKL5 = 22226000;
-const VSPHB_CAP = 190000;
-const ANP_CAP = 1230;
-const EFA_II = 4260;
-const SONDERAUSGABEN_PAUSCHBETRAG = 36;
+const BBGRVALV = 10140000n;
+const BBGKVPV = 6975000n;
+const GFB = 1234800n;
+const SOLZFREI_EURO = 20350n;
+const W1STKL5 = 1407100n;
+const W2STKL5 = 3493900n;
+const W3STKL5 = 22226000n;
+const VSPHB_CAP = 190000n;
+const ANP_CAP = 1230n;
+const EFA_II = 4260n;
+const SONDERAUSGABEN_PAUSCHBETRAG = 36n;
 
 function fail(what: string): never {
   throw new PayrollPackError(
@@ -216,18 +216,22 @@ function isInt(n: number): boolean {
   return Number.isInteger(n);
 }
 
-function needCent(name: string, v: number): void {
-  if (!isInt(v) || v < 0) fail(`${name} must be a non-negative integer Cent amount, got ${v}`);
+function needCent(name: string, v: bigint): void {
+  if (v < 0n) fail(`${name} must be a non-negative integer Cent amount, got ${v}`);
 }
 
 /** Round-up (PAP ↑) of non-negative cents to whole Euro. */
-function ceilEuro(cents: number): Euro {
-  return Math.floor((cents + 99) / 100);
+function ceilEuro(cents: bigint): Euro {
+  return (cents + 99n) / 100n;
 }
 
 /** Floor division for non-negative BigInt dividends. */
 function divFloor(n: bigint, d: bigint): bigint {
   return n / d;
+}
+
+function minBigInt(a: bigint, b: bigint): bigint {
+  return a < b ? a : b;
 }
 
 /**
@@ -239,8 +243,7 @@ function divFloor(n: bigint, d: bigint): bigint {
  * Exact integer math (PAP Gleitkommafelder RW/Y need no rounding); ST
  * floored to whole Euro per "auf volle Euro abrunden", then × KZTAB.
  */
-export function papUptab26(xEuro: Euro, kztab: 1 | 2): Euro {
-  const x = BigInt(xEuro);
+export function papUptab26(x: Euro, kztab: 1 | 2): Euro {
   let st: bigint;
   if (x < 12349n) {
     st = 0n;
@@ -258,17 +261,17 @@ export function papUptab26(xEuro: Euro, kztab: 1 | 2): Euro {
   } else {
     st = divFloor(45n * x - 1947038n, 100n);
   }
-  return Number(st * BigInt(kztab));
+  return st * BigInt(kztab);
 }
 
 /** UP5-6 — 1,25/0,75-fache ZX Besteuerung für STKL V/VI. ZX in whole Euro. */
 function papUp56(zxEuro: Euro): Euro {
-  const x1 = Math.floor((zxEuro * 125) / 100); // X = ZX * 1,25, Euro ↓
+  const x1 = (zxEuro * 125n) / 100n; // X = ZX * 1,25, Euro ↓
   const st1 = papUptab26(x1, 1);
-  const x2 = Math.floor((zxEuro * 75) / 100); // X = ZX * 0,75, Euro ↓
+  const x2 = (zxEuro * 75n) / 100n; // X = ZX * 0,75, Euro ↓
   const st2 = papUptab26(x2, 1);
-  const diff = (st1 - st2) * 2;
-  const mist = Math.floor((zxEuro * 14) / 100); // MIST = ZX * 0,14, Euro ↓
+  const diff = (st1 - st2) * 2n;
+  const mist = (zxEuro * 14n) / 100n; // MIST = ZX * 0,14, Euro ↓
   return mist > diff ? mist : diff;
 }
 
@@ -277,25 +280,25 @@ function papUp56(zxEuro: Euro): Euro {
  * Final choice is the MINIMUM: "HOCH < VERGL ? ST = HOCH : ST = VERGL".
  */
 export function papMst56(xEuro: Euro): Euro {
-  const w1 = Math.floor(W1STKL5 / 100);
-  const w2 = Math.floor(W2STKL5 / 100);
-  const w3 = Math.floor(W3STKL5 / 100);
+  const w1 = W1STKL5 / 100n;
+  const w2 = W2STKL5 / 100n;
+  const w3 = W3STKL5 / 100n;
   const zzx = xEuro;
   let st: Euro;
   if (zzx > w2) {
     st = papUp56(w2);
     if (zzx > w3) {
-      st += Math.floor(((w3 - w2) * 42) / 100); // Euro ↓
-      st += Math.floor(((zzx - w3) * 45) / 100); // Euro ↓
+      st += ((w3 - w2) * 42n) / 100n; // Euro ↓
+      st += ((zzx - w3) * 45n) / 100n; // Euro ↓
     } else {
-      st += Math.floor(((zzx - w2) * 42) / 100); // Euro ↓
+      st += ((zzx - w2) * 42n) / 100n; // Euro ↓
     }
   } else {
     st = papUp56(zzx);
     if (zzx > w1) {
       const vergl = st;
       const atW1 = papUp56(w1);
-      const hoch = atW1 + Math.floor(((zzx - w1) * 42) / 100); // Euro ↓
+      const hoch = atW1 + ((zzx - w1) * 42n) / 100n; // Euro ↓
       st = hoch < vergl ? hoch : vergl;
     }
   }
@@ -331,9 +334,9 @@ export function dePapSonstigeBezuegeRefusal(): PayrollPackError {
 
 function assertLaufendScope(input: DePapLaufendInput): void {
   if (
-    (input.vbez ?? 0) !== 0 || (input.vbezm ?? 0) !== 0 || (input.vbezs ?? 0) !== 0
-    || (input.vbs ?? 0) !== 0 || (input.vjahr ?? 0) !== 0 || (input.zmbv ?? 0) !== 0
-    || (input.sterbe ?? 0) !== 0
+    (input.vbez ?? 0n) !== 0n || (input.vbezm ?? 0n) !== 0n || (input.vbezs ?? 0n) !== 0n
+    || (input.vbs ?? 0n) !== 0n || (input.vjahr ?? 0) !== 0 || (input.zmbv ?? 0) !== 0
+    || (input.sterbe ?? 0n) !== 0n
   ) {
     throw dePapVersorgungsbezuegeRefusal();
   }
@@ -341,9 +344,9 @@ function assertLaufendScope(input: DePapLaufendInput): void {
     throw dePapAltersentlastungsbetragRefusal();
   }
   if (
-    (input.sonstb ?? 0) !== 0 || (input.sonstent ?? 0) !== 0 || (input.jre4 ?? 0) !== 0
-    || (input.jre4ent ?? 0) !== 0 || (input.jvbez ?? 0) !== 0 || (input.jfreib ?? 0) !== 0
-    || (input.jhinzu ?? 0) !== 0 || (input.mbv ?? 0) !== 0
+    (input.sonstb ?? 0n) !== 0n || (input.sonstent ?? 0n) !== 0n || (input.jre4 ?? 0n) !== 0n
+    || (input.jre4ent ?? 0n) !== 0n || (input.jvbez ?? 0n) !== 0n || (input.jfreib ?? 0n) !== 0n
+    || (input.jhinzu ?? 0n) !== 0n || (input.mbv ?? 0n) !== 0n
   ) {
     throw dePapSonstigeBezuegeRefusal();
   }
@@ -379,14 +382,14 @@ export function computePapLaufend2026(input: DePapLaufendInput): DePapLaufendRes
   }
   if (af !== 0 && af !== 1) fail(`AF must be 0|1, got ${af}`);
   if (af === 1 && stkl !== 4) fail(`Faktorverfahren (AF = 1) only in Steuerklasse IV, got STKL ${stkl}`);
-  if (af === 1 && lzzfreib !== 0) {
+  if (af === 1 && lzzfreib !== 0n) {
     fail(`no Freibetrag beside the Faktor (AF = 1 with LZZFREIB ${lzzfreib})`);
   }
-  if (stkl === 6 && lzzhinzu !== 0) fail(`STKL VI admits no Hinzurechnungsbetrag, got ${lzzhinzu}`);
+  if (stkl === 6 && lzzhinzu !== 0n) fail(`STKL VI admits no Hinzurechnungsbetrag, got ${lzzhinzu}`);
   if (!Number.isFinite(f) || f <= 0 || Math.round(f * 1000) !== f * 1000) {
     fail(`F must be positive with three decimals, got ${f}`);
   }
-  const fThousandths = af === 0 ? 1000 : Math.round(f * 1000);
+  const fThousandths = BigInt(af === 0 ? 1000 : Math.round(f * 1000));
   for (const [name, v] of [["ALV", alv], ["KRV", krv], ["PKV", pkv], ["PVS", pvs], ["PVZ", pvz]] as const) {
     if (v !== 0 && v !== 1) fail(`${name} must be 0|1, got ${v}`);
   }
@@ -397,11 +400,11 @@ export function computePapLaufend2026(input: DePapLaufendInput): DePapLaufendRes
   if (!isInt(r) || r < 0) fail(`R must be a non-negative key, got ${r}`);
 
   /* --- MPARA --- */
-  const kvzHundredths = Math.round(kvz * 100);
+  const kvzHundredths = BigInt(Math.round(kvz * 100));
   // PVSATZAN × 1e4: 180 base, 230 in Sachsen; +60 childless surcharge or −25/PVA-child.
-  const pv1e4 = (pvs === 1 ? 230 : 180) + (pvz === 1 ? 60 : -25 * pva);
+  const pv1e4 = BigInt((pvs === 1 ? 230 : 180) + (pvz === 1 ? 60 : -25 * pva));
   // KVSATZAN + PVSATZAN over 20000: KVZ/20000 + 7/100 + PV/10000.
-  const kvPvRateNum = kvzHundredths + 1400 + 2 * pv1e4;
+  const kvPvRateNum = kvzHundredths + 1400n + 2n * pv1e4;
 
   /* --- MRE4JL: annualise RE4/Freibeträge (unmarked fields: §3 drop) --- */
   let zre4j: Cents;
@@ -412,123 +415,123 @@ export function computePapLaufend2026(input: DePapLaufendInput): DePapLaufendRes
     jlfreib = lzzfreib;
     jlhinzu = lzzhinzu;
   } else if (lzz === 2) {
-    zre4j = re4 * 12;
-    jlfreib = lzzfreib * 12;
-    jlhinzu = lzzhinzu * 12;
+    zre4j = re4 * 12n;
+    jlfreib = lzzfreib * 12n;
+    jlhinzu = lzzhinzu * 12n;
   } else if (lzz === 3) {
-    zre4j = Math.floor((re4 * 360) / 7);
-    jlfreib = Math.floor((lzzfreib * 360) / 7);
-    jlhinzu = Math.floor((lzzhinzu * 360) / 7);
+    zre4j = (re4 * 360n) / 7n;
+    jlfreib = (lzzfreib * 360n) / 7n;
+    jlhinzu = (lzzhinzu * 360n) / 7n;
   } else {
-    zre4j = re4 * 360;
-    jlfreib = lzzfreib * 360;
-    jlhinzu = lzzhinzu * 360;
+    zre4j = re4 * 360n;
+    jlfreib = lzzfreib * 360n;
+    jlhinzu = lzzhinzu * 360n;
   }
 
   /* --- MRE4 (ZVBEZJ = 0 path) + MRE4ALTE (ALTER1 = 0): all zeros --- */
   /* --- MRE4ABZ --- */
   let zre4 = zre4j - jlfreib + jlhinzu;
-  if (zre4 < 0) zre4 = 0;
+  if (zre4 < 0n) zre4 = 0n;
   const zre4vp = zre4j;
 
   /* --- MZTABFB --- */
-  let anp: Euro = 0;
-  if (stkl < 6 && zre4 > 0) {
-    anp = zre4 < 123000 ? ceilEuro(zre4) : ANP_CAP; // Euro ↑
+  let anp: Euro = 0n;
+  if (stkl < 6 && zre4 > 0n) {
+    anp = zre4 < 123000n ? ceilEuro(zre4) : ANP_CAP; // Euro ↑
   }
   let kztab: 1 | 2 = 1;
-  let efa: Euro = 0;
-  let sap: Euro = 0;
-  let kfb: Euro = 0;
+  let efa: Euro = 0n;
+  let sap: Euro = 0n;
+  let kfb: Euro = 0n;
   if (stkl === 1) {
     sap = SONDERAUSGABEN_PAUSCHBETRAG;
-    kfb = Math.floor((zkfTenths * 9756) / 10);
+    kfb = (BigInt(zkfTenths) * 9756n) / 10n;
   } else if (stkl === 2) {
     efa = EFA_II;
     sap = SONDERAUSGABEN_PAUSCHBETRAG;
-    kfb = Math.floor((zkfTenths * 9756) / 10);
+    kfb = (BigInt(zkfTenths) * 9756n) / 10n;
   } else if (stkl === 3) {
     kztab = 2;
     sap = SONDERAUSGABEN_PAUSCHBETRAG;
-    kfb = Math.floor((zkfTenths * 9756) / 10);
+    kfb = (BigInt(zkfTenths) * 9756n) / 10n;
   } else if (stkl === 4) {
     sap = SONDERAUSGABEN_PAUSCHBETRAG;
-    kfb = Math.floor((zkfTenths * 4878) / 10);
+    kfb = (BigInt(zkfTenths) * 4878n) / 10n;
   } else if (stkl === 5) {
     sap = SONDERAUSGABEN_PAUSCHBETRAG;
-    kfb = 0;
+    kfb = 0n;
   } else {
-    kfb = 0;
+    kfb = 0n;
   }
   const ztabfb = efa + anp + sap;
 
   /* --- UPEVP (Vorsorgepauschale) --- */
   const vspr = krv === 1
-    ? 0
-    : Math.floor((Math.min(zre4vp, BBGRVALV) * 930) / 10000);
-  const capKv = Math.min(zre4vp, BBGKVPV);
+    ? 0n
+    : (minBigInt(zre4vp, BBGRVALV) * 930n) / 10000n;
+  const capKv = minBigInt(zre4vp, BBGKVPV);
   let vspkvpv: Cents;
   if (pkv === 0) {
-    vspkvpv = Math.floor((capKv * kvPvRateNum) / 20000);
+    vspkvpv = (capKv * kvPvRateNum) / 20000n;
   } else if (stkl === 6) {
-    vspkvpv = 0;
+    vspkvpv = 0n;
   } else {
-    const pkpvagzj = Math.floor((pkpvagz * 12) / 100);
-    vspkvpv = Math.floor((pkpv * 12) / 100) - pkpvagzj;
-    if (vspkvpv < 0) vspkvpv = 0;
+    const pkpvagzj = (pkpvagz * 12n) / 100n;
+    vspkvpv = (pkpv * 12n) / 100n - pkpvagzj;
+    if (vspkvpv < 0n) vspkvpv = 0n;
   }
-  let vsp = ceilEuro(vspkvpv + vspr) * 100; // VSP, Euro ↑
+  let vsp = ceilEuro(vspkvpv + vspr) * 100n; // VSP, Euro ↑
   if (alv === 0 && stkl !== 6) {
     // MVSPHB
-    const vspalv = Math.floor((Math.min(zre4vp, BBGRVALV) * 130) / 10000);
+    const vspalv = (minBigInt(zre4vp, BBGRVALV) * 130n) / 10000n;
     let vsphb = vspalv + vspkvpv;
     if (vsphb > VSPHB_CAP) vsphb = VSPHB_CAP;
-    const vspn = ceilEuro(vspr + vsphb) * 100; // VSPN, Euro ↑
+    const vspn = ceilEuro(vspr + vsphb) * 100n; // VSPN, Euro ↑
     if (vspn > vsp) vsp = vspn;
   }
 
   /* --- MLSTJAHR --- */
   const mlstjahr = (tabfb: Euro): { zve: Cents; st: Euro } => {
-    const zve = zre4 - tabfb * 100 - vsp;
-    if (zve < 100) return { zve: 0, st: 0 };
-    const x = Math.floor(zve / kztab / 100); // X = ZVE / KZTAB, Euro ↓
+    const zve = zre4 - tabfb * 100n - vsp;
+    if (zve < 100n) return { zve: 0n, st: 0n };
+    const x = zve / BigInt(kztab) / 100n; // X = ZVE / KZTAB, Euro ↓
     const st = stkl < 5 ? papUptab26(x, kztab) : papMst56(x);
     return { zve, st };
   };
   const first = mlstjahr(ztabfb);
 
   /* --- MBERECH head: VFRB, WVFRB, LSTJAHR, UPLSTLZZ --- */
-  const vfrb = anp * 100;
-  const wvfrb = first.zve - GFB < 0 ? 0 : first.zve - GFB;
-  const lstjahr = Math.floor((first.st * fThousandths) / 1000);
+  const vfrb = anp * 100n;
+  const wvfrb = first.zve - GFB < 0n ? 0n : first.zve - GFB;
+  const lstjahr = (first.st * fThousandths) / 1000n;
   const anteil = (jw: Cents): Cents => {
     if (lzz === 1) return jw;
-    if (lzz === 2) return Math.floor(jw / 12);
-    if (lzz === 3) return Math.floor((jw * 7) / 360);
-    return Math.floor(jw / 360); // Ergebnis abrunden
+    if (lzz === 2) return jw / 12n;
+    if (lzz === 3) return (jw * 7n) / 360n;
+    return jw / 360n; // Ergebnis abrunden
   };
-  const lstlzz = anteil(lstjahr * 100);
+  const lstlzz = anteil(lstjahr * 100n);
 
   /* --- ZKF second pass for JBMG (KiSt/SolZ base with Kinderfreibeträge) --- */
   let jbmg: Euro;
   if (zkfTenths > 0) {
     const second = mlstjahr(ztabfb + kfb);
-    jbmg = Math.floor((second.st * fThousandths) / 1000); // JBMG = ST * F
+    jbmg = (second.st * fThousandths) / 1000n; // JBMG = ST * F
   } else {
     jbmg = lstjahr;
   }
 
   /* --- MSOLZ --- */
-  const solzfrei = SOLZFREI_EURO * kztab;
-  let solzj: Cents = 0;
-  let solzlzz: Cents = 0;
+  const solzfrei = SOLZFREI_EURO * BigInt(kztab);
+  let solzj: Cents = 0n;
+  let solzlzz: Cents = 0n;
   if (jbmg > solzfrei) {
-    solzj = Math.floor((jbmg * 55) / 10); // SOLZJ, Cent ↓
-    const solzmin = Math.floor(((jbmg - solzfrei) * 119) / 10); // Cent ↓
+    solzj = (jbmg * 55n) / 10n; // SOLZJ, Cent ↓
+    const solzmin = ((jbmg - solzfrei) * 119n) / 10n; // Cent ↓
     if (solzmin < solzj) solzj = solzmin;
-    solzlzz = anteil(solzj * 100);
+    solzlzz = anteil(solzj * 100n);
   }
-  const bk = r > 0 ? anteil(jbmg * 100) : 0;
+  const bk = r > 0 ? anteil(jbmg * 100n) : 0n;
 
   return {
     lstlzz, solzlzz, bk, lstjahr, jbmg, solzj,
