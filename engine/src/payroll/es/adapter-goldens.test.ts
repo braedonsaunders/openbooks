@@ -128,7 +128,10 @@ test("adapter counts a pensionable one-off contribution once in annual COTIZACIO
   assert.equal(result["ES_TIPO_IRPF"], expected.tipo);
   const december = esAdapterContext("2026-12-15", false, "ninguna", false, "3000.00", "1");
   Object.assign(december.ctx, { income: "3000.00", pensionable: "3000.00", insurable: "3000.00" });
-  assert.equal((await computeEsStatutory(december.ctx)).ES_IMPORTE_ANUAL, "3000.00");
+  // A December starter's certified year is one month's pay (3.000), which is
+  // TABLA-1 exento for sit.3 (cell 15.876) — so the annual WITHHOLDING is
+  // zero, not the 3.000 gross the I6-payroll-117 golden asserted.
+  assert.equal((await computeEsStatutory(december.ctx)).ES_IMPORTE_ANUAL, "0.0000");
 });
 
 test("adapter refuses when committed same-year ordinary pay changed without Article 87 inputs", async () => {
