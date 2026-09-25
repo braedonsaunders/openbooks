@@ -130,6 +130,20 @@ export function BillingSection({
   const [backupType, setBackupType] = useState(invoicing.backupType)
   const [selectedFieldTicketIds, setSelectedFieldTicketIds] = useState<Set<string>>(new Set())
 
+  function closeForm() {
+    setInvoiceType('progress')
+    setBasis(invoicing.defaultBasis)
+    setDrawAmount('')
+    setStartDate('')
+    setCutoffDate('')
+    setInvoiceDescription('')
+    setCustomerPo('')
+    setBackupRequired(invoicing.backupRequired)
+    setBackupType(invoicing.backupType)
+    setSelectedFieldTicketIds(new Set())
+    onFormOpenChange(false)
+  }
+
   // The project type constrains which backup formats are offered; fall back to the
   // full catalog if it didn't restrict them. 'none' is handled by the required toggle.
   const ALL_BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only']
@@ -187,8 +201,7 @@ export function BillingSection({
         fallbackMessage: t('requestFailed'),
         successMessage: t('requestCreated'),
         onOk: () => {
-          setSelectedFieldTicketIds(new Set())
-          onFormOpenChange(false)
+          closeForm()
           router.refresh()
         },
       },
@@ -307,19 +320,19 @@ export function BillingSection({
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('requestBilling')}</h3>
-              <Button variant="ghost" size="sm" onClick={() => onFormOpenChange(false)} disabled={busy}>{tCommon('actions.cancel')}</Button>
+              <Button variant="ghost" size="sm" onClick={closeForm} disabled={busy}>{tCommon('actions.cancel')}</Button>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className={field}>
                 <Label>{t('invoiceType')}</Label>
-                <Select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value)}>
+                <Select value={invoiceType} disabled={busy} onChange={(e) => setInvoiceType(e.target.value)}>
                   <option value="progress">{t('type.progress')}</option>
                   <option value="final">{t('type.final')}</option>
                 </Select>
               </div>
               <div className={field}>
                 <Label>{t('basis')}</Label>
-                <Select value={basis} onChange={(e) => setBasis(e.target.value)}>
+                <Select value={basis} disabled={busy} onChange={(e) => setBasis(e.target.value)}>
                   {basisOptions.map((b) => (
                     <option key={b} value={b}>{t(`basisOpt.${b}`)}</option>
                   ))}
@@ -328,18 +341,18 @@ export function BillingSection({
               {basis === 'draw_amount' ? (
                 <div className={field}>
                   <Label>{t('drawAmount')}</Label>
-                  <Input inputMode="decimal" className="text-right tabular-nums" value={drawAmount} onChange={(e) => setDrawAmount(e.target.value)} />
+                  <Input disabled={busy} inputMode="decimal" className="text-right tabular-nums" value={drawAmount} onChange={(e) => setDrawAmount(e.target.value)} />
                 </div>
               ) : null}
               {basis === 'date_range' ? (
                 <>
                   <div className={field}>
                     <Label>{t('startDate')}</Label>
-                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    <Input type="date" disabled={busy} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                   </div>
                   <div className={field}>
                     <Label>{t('cutoffDate')}</Label>
-                    <Input type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
+                    <Input type="date" disabled={busy} value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
                   </div>
                 </>
               ) : null}
@@ -355,6 +368,7 @@ export function BillingSection({
                         type="button"
                         size="sm"
                         variant="ghost"
+                        disabled={busy}
                         onClick={() => setSelectedFieldTicketIds(
                           selectedFieldTicketIds.size === fieldTickets.length
                             ? new Set()
@@ -378,6 +392,7 @@ export function BillingSection({
                           <input
                             type="checkbox"
                             checked={selectedFieldTicketIds.has(ticket.id)}
+                            disabled={busy}
                             onChange={() => toggleFieldTicket(ticket.id)}
                             className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                           />
@@ -400,15 +415,15 @@ export function BillingSection({
               ) : null}
               <div className={`${field} lg:col-span-2`}>
                 <Label>{t('description')}</Label>
-                <Input value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} />
+                <Input disabled={busy} value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} />
               </div>
               <div className={field}>
                 <Label>{t('customerPo')}</Label>
-                <Input value={customerPo} onChange={(e) => setCustomerPo(e.target.value)} />
+                <Input disabled={busy} value={customerPo} onChange={(e) => setCustomerPo(e.target.value)} />
               </div>
               <div className={field}>
                 <Label>{t('backupRequired')}</Label>
-                <Select value={backupRequired ? 'yes' : 'no'} onChange={(e) => setBackupRequired(e.target.value === 'yes')}>
+                <Select value={backupRequired ? 'yes' : 'no'} disabled={busy} onChange={(e) => setBackupRequired(e.target.value === 'yes')}>
                   <option value="yes">{tCommon('labels.yes')}</option>
                   <option value="no">{tCommon('labels.no')}</option>
                 </Select>
@@ -416,7 +431,7 @@ export function BillingSection({
               {backupRequired ? (
                 <div className={field}>
                   <Label>{t('backupType')}</Label>
-                  <Select value={backupType} onChange={(e) => setBackupType(e.target.value)}>
+                  <Select value={backupType} disabled={busy} onChange={(e) => setBackupType(e.target.value)}>
                     {backupTypeOptions.map((bt) => (
                       <option key={bt} value={bt}>{t(`backup.${bt}`)}</option>
                     ))}
