@@ -14,6 +14,8 @@ import {
   Textarea,
 } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { useDirtyClose } from "@/lib/use-dirty-close";
+import { useTranslations } from "next-intl";
 type Option = { value: string; label: string };
 type Setup = {
   subsidiaries: {
@@ -37,6 +39,7 @@ export function AssetChangeButton({
 }) {
   const router = useRouter(),
     today = useBusinessToday();
+  const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [setup, setSetup] = useState<Setup | null>(null);
@@ -68,10 +71,26 @@ export function AssetChangeButton({
     Record<string, { date: string; amount: string }[]>
   >({});
   const [key, setKey] = useState(() => crypto.randomUUID());
+  const [initialKey, setInitialKey] = useState(key);
   const set = (name: string, value: string) => {
     setValues((v) => ({ ...v, [name]: value }));
     setKey(crypto.randomUUID());
   };
+  const closeDrawer = () => {
+    setOpen(false);
+    setOperation("partial_disposal");
+    setMode("percent");
+    setValues({ effectiveOn: today, percent: "", proceeds: "", buyerAmount: "", buyerSalvage: "", sellerToGroupRate: "", buyerToGroupRate: "", taxRatePercent: "" });
+    setComponents({});
+    setPlans({});
+    const freshKey = crypto.randomUUID();
+    setInitialKey(freshKey);
+    setKey(freshKey);
+  };
+  const closeGuard = useDirtyClose({
+    dirty: key !== initialKey, busy, onClose: closeDrawer,
+    message: tCommon("feedback.unsavedChanges"), confirmLabel: tCommon("confirm.discardChanges"),
+  });
   async function show() {
     setBusy(true);
     try {
@@ -95,6 +114,7 @@ export function AssetChangeButton({
       <Label htmlFor={`asset-change-${name}`}>{label}</Label>
       <Input
         id={`asset-change-${name}`}
+        disabled={busy}
         type={type}
         value={values[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
@@ -105,6 +125,7 @@ export function AssetChangeButton({
     <div className="space-y-1.5" key={name}>
       <Label>{label}</Label>
       <SearchSelect
+        disabled={busy}
         value={values[name] ?? ""}
         onChange={(v) => set(name, v)}
         options={options}
@@ -117,6 +138,7 @@ export function AssetChangeButton({
       <Label htmlFor={`asset-change-${name}`}>{label}</Label>
       <Textarea
         id={`asset-change-${name}`}
+        disabled={busy}
         value={values[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
       />
@@ -214,7 +236,7 @@ export function AssetChangeButton({
       <Drawer
         stacked
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeGuard.close}
         title="Change asset ownership or dispose a component"
         description="Review the book-specific impact, then submit the proposal for independent approval."
         size="2xl"
@@ -224,7 +246,7 @@ export function AssetChangeButton({
           </Button>
         }
       >
-        <div className="space-y-5">
+        <fieldset disabled={busy} className="min-w-0 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Change type</Label>
@@ -514,7 +536,7 @@ export function AssetChangeButton({
               </details>
             </>
           ) : null}
-        </div>
+        </fieldset>
       </Drawer>
     </>
   );
