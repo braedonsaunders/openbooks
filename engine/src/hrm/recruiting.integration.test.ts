@@ -279,6 +279,7 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
     await seedFlow(orgId, h.approverId);
+    await disableOfferSigning(orgId);
     // The interviewer sits on panels, so they hold an employment row.
     await seedEmploymentForParty(orgId, h.org.subsidiaryId, h.interviewerPartyId);
     const position = await createPosition({
@@ -702,6 +703,7 @@ test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }
 test("hire without an approval flow rolls back whole: no party, no draft, no fill", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
+    await disableOfferSigning(orgId);
     // Deliberately no seedFlow: submission finds no gate and refuses.
     const requisition = await createRequisition({
       orgId,
@@ -773,6 +775,7 @@ test("hire refuses off an unopened requisition and off a position filled under u
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
     await seedFlow(orgId, h.approverId);
+    await disableOfferSigning(orgId);
     const position = await createPosition({
       orgId,
       actorId: h.recruiterId,
@@ -1083,6 +1086,20 @@ async function enableRecruitingDepth(orgId: string): Promise<void> {
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
        where id = ${orgId}`);
   }
+}
+
+/**
+ * These funnel tests predate the HR-18 signing gate and prove hire
+ * mechanics orthogonal to signing (funnel flow, no-flow rollback,
+ * requisition gating). The shared harness enables every depth feature, so
+ * they run under the product default — signing off — while the dedicated
+ * signing test (below) keeps proving the gate with the feature on.
+ */
+async function disableOfferSigning(orgId: string): Promise<void> {
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmOfferSigning}', 'false'::jsonb, true)
+     where id = ${orgId}`);
 }
 
 async function seedSentOffer(h: Harness): Promise<{ applicationId: string; candidateId: string; offerId: string }> {
