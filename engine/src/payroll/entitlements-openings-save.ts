@@ -18,6 +18,7 @@ import {
 } from "./entitlements-openings.ts";
 import { type EntitlementPlan } from "./entitlements-types.ts";
 import type { PayrollSubsidiaryScope } from "./scope.ts";
+import { requirePayrollFeature } from "./feature-gate.ts";
 
 export interface EntitlementOpeningWrite {
   employeePartyId: string;
@@ -118,6 +119,7 @@ export async function saveEntitlementOpenings(input: {
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
+    await requirePayrollFeature(tx, input.orgId)
     // The route's preliminary check cannot protect this later write. Hold the
     // same employee rows that a rehome updates, and authorize the locked value.
     await lockScopeRows(tx, input.orgId, input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })), input.allowedSubsidiaryIds ?? null, "share");
