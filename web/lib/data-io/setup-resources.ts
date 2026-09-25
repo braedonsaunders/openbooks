@@ -474,9 +474,11 @@ async function writeSetup(
         }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
         const statutoryReportingCategory = built.cols.find((column) => column.column === 'statutory_reporting_category')?.value
+        const statutoryExemptionCategory = built.cols.find((column) => column.column === 'statutory_exemption_category')?.value
         const storageCols = entity.key === 'pay-components'
           ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
-            && column.column !== 'statutory_reporting_category')
+            && column.column !== 'statutory_reporting_category'
+            && column.column !== 'statutory_exemption_category')
           : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
@@ -501,10 +503,11 @@ async function writeSetup(
                    where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
                   returning *`)) as { rows: Record<string, unknown>[] }
                 if (!updated.rows[0]) throw new Error('row no longer exists')
-                if (entity.key === 'pay-components' && (src.supplementalWageCategory !== undefined || src.statutoryReportingCategory !== undefined)) {
+                if (entity.key === 'pay-components' && (src.supplementalWageCategory !== undefined || src.statutoryReportingCategory !== undefined || src.statutoryExemptionCategory !== undefined)) {
                   await savePayComponentEarningClassification(tx, ctx.orgId, existingId, {
                     supplementalWageCategory,
                     statutoryReportingCategory,
+                    statutoryExemptionCategory,
                   })
                 }
                 await audit(
@@ -563,9 +566,11 @@ async function writeSetup(
         }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
         const statutoryReportingCategory = built.cols.find((column) => column.column === 'statutory_reporting_category')?.value
+        const statutoryExemptionCategory = built.cols.find((column) => column.column === 'statutory_exemption_category')?.value
         const storageCols = entity.key === 'pay-components'
           ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
-            && column.column !== 'statutory_reporting_category')
+            && column.column !== 'statutory_reporting_category'
+            && column.column !== 'statutory_exemption_category')
           : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
@@ -590,10 +595,11 @@ async function writeSetup(
               const inserted = ins.rows[0]
               const rowId = String(inserted?.[idColumn(entity)] ?? '')
               if (!inserted || !rowId) throw new Error('insert did not return a row')
-              if (entity.key === 'pay-components' && (supplementalWageCategory !== undefined || statutoryReportingCategory !== undefined)) {
+              if (entity.key === 'pay-components' && (supplementalWageCategory !== undefined || statutoryReportingCategory !== undefined || statutoryExemptionCategory !== undefined)) {
                 await savePayComponentEarningClassification(tx, ctx.orgId, rowId, {
                   supplementalWageCategory,
                   statutoryReportingCategory,
+                  statutoryExemptionCategory,
                 })
               }
               await audit(

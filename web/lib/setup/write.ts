@@ -120,7 +120,7 @@ export async function savePayComponentEarningClassification(
   tx: Pick<typeof db, 'execute'>,
   orgId: string,
   componentId: string,
-  classification: { supplementalWageCategory?: unknown; statutoryReportingCategory?: unknown },
+  classification: { supplementalWageCategory?: unknown; statutoryReportingCategory?: unknown; statutoryExemptionCategory?: unknown },
 ): Promise<void> {
   const result = await tx.execute(sql`
     update pay_component_earning_classifications
@@ -129,7 +129,10 @@ export async function savePayComponentEarningClassification(
              else supplemental_wage_category end,
            statutory_reporting_category = case when ${classification.statutoryReportingCategory !== undefined}
              then ${classification.statutoryReportingCategory == null ? null : String(classification.statutoryReportingCategory)}
-             else statutory_reporting_category end
+             else statutory_reporting_category end,
+           statutory_exemption_category = case when ${classification.statutoryExemptionCategory !== undefined}
+             then ${classification.statutoryExemptionCategory == null ? null : String(classification.statutoryExemptionCategory)}
+             else statutory_exemption_category end
      where org_id = ${orgId} and pay_component_id = ${componentId}
     returning pay_component_id`)
   if (!result.rows.length) throw new Error('pay component classification is missing')
@@ -703,7 +706,7 @@ export async function validateEntityIntegrity(
     const currentComponent = rowId
       ? (((await executor.execute(sql`
           select c.country, c.tax_treatment, c.kind, c.non_periodic,
-                 ec.supplemental_wage_category, ec.statutory_reporting_category
+                 ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
             from pay_components c
             join pay_component_earning_classifications ec
               on ec.org_id = c.org_id and ec.pay_component_id = c.id
@@ -722,6 +725,9 @@ export async function validateEntityIntegrity(
     const statutoryReportingCategory = body.statutoryReportingCategory !== undefined
       ? (body.statutoryReportingCategory ? String(body.statutoryReportingCategory) : null)
       : ((currentComponent?.statutory_reporting_category as string | null) ?? null)
+    const statutoryExemptionCategory = body.statutoryExemptionCategory !== undefined
+      ? (body.statutoryExemptionCategory ? String(body.statutoryExemptionCategory) : null)
+      : ((currentComponent?.statutory_exemption_category as string | null) ?? null)
     const componentKind = String(body.kind ?? currentComponent?.kind ?? '')
     const nonPeriodic = body.nonPeriodic === undefined
       ? currentComponent?.non_periodic === true
@@ -737,6 +743,14 @@ export async function validateEntityIntegrity(
       }
       if (!['bonus_or_stock_option', 'other'].includes(supplementalWageCategory)) {
         return 'invalid-supplemental-wage-category'
+      }
+    }
+    if (statutoryExemptionCategory !== null && statutoryExemptionCategory !== '') {
+      if (componentKind !== 'earning') {
+        return 'statutory-exemption-category-requires-earning'
+      }
+      if (!['military_pay', 'rail_carrier', 'motor_carrier', 'air_carrier', 'seafarer'].includes(statutoryExemptionCategory)) {
+        return 'invalid-statutory-exemption-category'
       }
     }
     if (statutoryReportingCategory) {
@@ -1838,12 +1852,14 @@ export async function createSetupRecord(
   if ('error' in slotted) return { status: 400, body: { error: slotted.error } }
   const supplementalWageCategory = slotted.cols.find((column) => column.column === 'supplemental_wage_category')?.value
   const statutoryReportingCategory = slotted.cols.find((column) => column.column === 'statutory_reporting_category')?.value
+  const statutoryExemptionCategory = slotted.cols.find((column) => column.column === 'statutory_exemption_category')?.value
   let cols = entity.key === 'fx-rates'
     ? slotted.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : [...slotted.cols]
   if (entity.key === 'pay-components') {
     cols = cols.filter((column) => column.column !== 'supplemental_wage_category'
-      && column.column !== 'statutory_reporting_category')
+      && column.column !== 'statutory_reporting_category'
+      && column.column !== 'statutory_exemption_category')
   }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
@@ -1971,6 +1987,7 @@ export async function createSetupRecord(
         ? { earningClassification: {
           supplementalWageCategory: supplementalWageCategory ?? null,
           statutoryReportingCategory: statutoryReportingCategory ?? null,
+          statutoryExemptionCategory: statutoryExemptionCategory ?? null,
         } }
         : {}),
     })
@@ -1994,9 +2011,10 @@ export async function createSetupRecord(
       }
       const id = String(insertedRow.id)
       if (entity.key === 'pay-components'
-        && (supplementalWageCategory !== undefined || statutoryReportingCategory !== undefined)) {
+        && (supplementalWageCategory !== undefined || statutoryReportingCategory !== undefined
+          || statutoryExemptionCategory !== undefined)) {
         await savePayComponentEarningClassification(tx, orgId, id, {
-          supplementalWageCategory, statutoryReportingCategory,
+          supplementalWageCategory, statutoryReportingCategory, statutoryExemptionCategory,
         })
       }
       if (members && Array.isArray(body[members.key])) {
@@ -2460,12 +2478,14 @@ export async function updateSetupRecord(
   if ('error' in slottedUpdate) return { status: 400, body: { error: slottedUpdate.error } }
   const supplementalWageCategoryUpdate = slottedUpdate.cols.find((column) => column.column === 'supplemental_wage_category')?.value
   const statutoryReportingCategoryUpdate = slottedUpdate.cols.find((column) => column.column === 'statutory_reporting_category')?.value
+  const statutoryExemptionCategoryUpdate = slottedUpdate.cols.find((column) => column.column === 'statutory_exemption_category')?.value
   let updateCols = entity.key === 'fx-rates'
     ? slottedUpdate.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : slottedUpdate.cols
   if (entity.key === 'pay-components') {
     updateCols = updateCols.filter((column) => column.column !== 'supplemental_wage_category'
-      && column.column !== 'statutory_reporting_category')
+      && column.column !== 'statutory_reporting_category'
+      && column.column !== 'statutory_exemption_category')
   }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
@@ -2528,10 +2548,12 @@ export async function updateSetupRecord(
         return false
       }
       if (entity.key === 'pay-components'
-        && (body.supplementalWageCategory !== undefined || body.statutoryReportingCategory !== undefined)) {
+        && (body.supplementalWageCategory !== undefined || body.statutoryReportingCategory !== undefined
+          || body.statutoryExemptionCategory !== undefined)) {
         await savePayComponentEarningClassification(tx, orgId, id, {
           supplementalWageCategory: supplementalWageCategoryUpdate,
           statutoryReportingCategory: statutoryReportingCategoryUpdate,
+          statutoryExemptionCategory: statutoryExemptionCategoryUpdate,
         })
       }
       const members = multirefField(entity)

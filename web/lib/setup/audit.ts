@@ -27,8 +27,9 @@ export async function loadSetupAuditRow(
   if (entity.key === 'pay-components') {
     const classification = await runner.execute<{
       supplemental_wage_category: string | null; statutory_reporting_category: string | null;
+      statutory_exemption_category: string | null;
     }>(sql`
-      select supplemental_wage_category, statutory_reporting_category
+      select supplemental_wage_category, statutory_reporting_category, statutory_exemption_category
         from pay_component_earning_classifications
        where org_id = ${orgId} and pay_component_id = ${rowId}`)
     const value = classification.rows[0]
@@ -36,6 +37,7 @@ export async function loadSetupAuditRow(
     return { ...row, earningClassification: {
       supplementalWageCategory: value.supplemental_wage_category,
       statutoryReportingCategory: value.statutory_reporting_category,
+      statutoryExemptionCategory: value.statutory_exemption_category,
     } }
   }
   return row

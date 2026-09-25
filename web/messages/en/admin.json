@@ -2723,6 +2723,7 @@
       "programExclusions": "Program exclusions",
       "supplementalWageCategory": "Supplemental wage category",
       "statutoryReportingCategory": "Statutory reporting category",
+      "statutoryExemptionCategory": "Statutory exemption category",
       "taxTreatment": "Tax treatment",
       "expenseAccountId": "Expense account",
       "liabilityAccountId": "Liability account",

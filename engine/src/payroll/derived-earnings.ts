@@ -5,6 +5,7 @@ import {
   add, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
 } from "../money/money.ts";
 import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
+import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
 
 /**
  * Derived earnings — money produced by operational facts rather than typed in.
@@ -180,6 +181,7 @@ export interface DerivedComponent {
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
   statutoryReportingCategory?: string | null;
+  statutoryExemptionCategory?: UsStatutoryExemptionCategory | null;
 }
 
 /** An earning line shaped for calculateStub's line set. */
@@ -200,6 +202,7 @@ export interface DerivedEarningLine {
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
   statutoryReportingCategory?: string | null;
+  statutoryExemptionCategory?: UsStatutoryExemptionCategory | null;
   /** Provenance: which rule paid this, for the stub trace and the preview. */
   ruleId: string;
   ruleCode: string;
@@ -860,6 +863,7 @@ export function applyDerivedRule(
       nonPeriodic: component.nonPeriodic,
       supplementalWageCategory: component.supplementalWageCategory ?? null,
       statutoryReportingCategory: component.statutoryReportingCategory ?? null,
+      statutoryExemptionCategory: component.statutoryExemptionCategory ?? null,
       ruleId: rule.id,
       ruleCode: rule.code,
     });
@@ -931,9 +935,10 @@ async function loadComponents(
       taxable: boolean; pensionable: boolean; insurable: boolean;
       vacationable: boolean; non_periodic: boolean; supplemental_wage_category: string | null;
       statutory_reporting_category: string | null;
+      statutory_exemption_category: string | null;
     }>(sql`
     select c.id, c.name, c.value, c.kind, c.taxable, c.pensionable, c.insurable, c.vacationable, c.non_periodic,
-           ec.supplemental_wage_category, ec.statutory_reporting_category
+           ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_components c
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
@@ -953,6 +958,7 @@ async function loadComponents(
       nonPeriodic: row.non_periodic === true,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       statutoryReportingCategory: row.statutory_reporting_category,
+      statutoryExemptionCategory: row.statutory_exemption_category as UsStatutoryExemptionCategory | null,
     });
   }
   return map;

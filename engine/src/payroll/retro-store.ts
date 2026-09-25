@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, sum } from "../money/money.ts";
 import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
+import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
 import { payrollTaxYear } from "./packs.ts";
 import { calculatePayRun, type CapturedStub } from "./run-calculation.ts";
 import type { PayRunCalculationError } from "./run-calculation-evidence.ts";
@@ -806,6 +807,7 @@ export interface RetroStubEarningLine {
   nonPeriodic: boolean;
   supplementalWageCategory: UsSupplementalWageCategory | null;
   statutoryReportingCategory?: string | null;
+  statutoryExemptionCategory: UsStatutoryExemptionCategory | null;
   sequence: number;
 }
 
@@ -843,12 +845,13 @@ export async function retroEarningLinesForStub(
       vacationable: boolean | null; is_active: boolean | null; component_name: string | null;
       supplemental_wage_category: string | null;
       statutory_reporting_category: string | null;
+      statutory_exemption_category: string | null;
       source_period_start: string; source_period_end: string; delta: string;
     }>(sql`
     select st.id as settlement_id,
            a.component_id, a.description, a.project_id, a.department_id, a.amount,
            c.vacationable, c.is_active, c.name as component_name, ec.supplemental_wage_category,
-           ec.statutory_reporting_category,
+           ec.statutory_reporting_category, ec.statutory_exemption_category,
            st.source_period_start::text as source_period_start,
            st.source_period_end::text as source_period_end,
            st.delta
@@ -890,6 +893,7 @@ export async function retroEarningLinesForStub(
       nonPeriodic: input.nonPeriodic,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       statutoryReportingCategory: row.statutory_reporting_category,
+      statutoryExemptionCategory: row.statutory_exemption_category as UsStatutoryExemptionCategory | null,
       sequence: sequence++,
     });
   }

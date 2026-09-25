@@ -1,0 +1,1 @@
+The migration adds one nullable column to the existing pay-component earning classification relation; existing rows read NULL (unclassified ordinary pay) and no tenant data shape requires operator remediation.
