@@ -37,15 +37,6 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
@@ -115,7 +106,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
+  ['@/lib/api/json', new URL('../../../../lib/api/json.ts', import.meta.url).href],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-run'],
   ['@openbooks/engine/src/payroll/run-lifecycle.ts', 'mock:payroll-run'],
@@ -183,6 +174,9 @@ test('POST keeps unrestricted callers unrestricted', async () => {
 
 
 test('POST refuses malformed dates and employee selections before entering payroll', async () => {
+  const malformedBody = await POST(new Request('http://openbooks.test/api/payroll/runs', { method: 'POST', body: 'null' }))
+  assert.equal(malformedBody.status, 400)
+  assert.equal((await malformedBody.json()).error, 'invalid request body')
   for (const fields of [
     { periodStart: '2026-02-30', periodEnd: '2026-03-07' },
     { payDate: '2026-02-30' },
