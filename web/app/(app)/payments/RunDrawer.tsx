@@ -192,6 +192,17 @@ export function RunDrawer({
     }
   }
 
+  // Transport/response failures share one mapping: unlike openDeliver()
+  // and postRun(), these handlers had finally without catch, so a rejected
+  // request cleared busy with no outcome shown. Completion may be uncertain
+  // (the server can commit before the response is lost, e.g. SFTP
+  // delivery), so the failure toast always pairs with a refresh back to
+  // authoritative run state.
+  function reportTransportFailed(message: string) {
+    toast.error(message)
+    router.refresh()
+  }
+
   async function deliver() {
     if (!sftpServerId) return
     setBusy(true)
@@ -209,7 +220,7 @@ export function RunDrawer({
       toast.success(t('runDrawer.toasts.delivered', { path: data.path }))
       setDeliverOpen(false)
       router.refresh()
-    } finally { setBusy(false) }
+    } catch { reportTransportFailed(t('runDrawer.toasts.deliverFailed')) } finally { setBusy(false) }
   }
   const runStatusLabel = (status: string) => {
     if (['confirmed', 'generated', 'delivered', 'settled', 'returned', 'partially_failed', 'rejected', 'rolled_back'].includes(status)) return t(`runs.status.${status}`)
@@ -237,7 +248,7 @@ export function RunDrawer({
       if (success) toast.success(success)
       router.refresh()
       return true
-    } finally { setBusy(false) }
+    } catch { reportTransportFailed(t('runDrawer.toasts.actionFailed')); return false } finally { setBusy(false) }
   }
 
   async function generateFile() {
@@ -307,7 +318,7 @@ export function RunDrawer({
       toast.success(t('runDrawer.toasts.cancelled'))
       router.refresh()
       return true
-    } finally { setBusy(false) }
+    } catch { reportTransportFailed(t('runDrawer.toasts.cancelFailed')); return false } finally { setBusy(false) }
   }
 
   async function saveOutcome() {
@@ -323,7 +334,7 @@ export function RunDrawer({
       toast.success(t('runDrawer.toasts.outcomeSaved'))
       setOutcomeInstruction(null)
       router.refresh()
-    } finally { setBusy(false) }
+    } catch { reportTransportFailed(t('runDrawer.toasts.outcomeFailed')) } finally { setBusy(false) }
   }
 
   return (
