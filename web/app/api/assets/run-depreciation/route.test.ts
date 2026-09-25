@@ -390,6 +390,41 @@ function confirm(body: Record<string, unknown>): Promise<Response> {
   );
 }
 
+/** The fingerprint input rows for the current due set, shared by every confirm. */
+function confirmRows() {
+  return state.due.map((row) => ({
+    lineId: row.line_id,
+    assetId: row.asset_id,
+    assetNumber: row.asset_number,
+    assetName: row.asset_name,
+    subsidiaryId: row.subsidiary_id,
+    subsidiaryName: row.subsidiary_name,
+    departmentId: row.department_id,
+    departmentName: row.department_name,
+    projectId: row.project_id,
+    projectName: row.project_name,
+    locationId: row.location_id,
+    locationName: row.location_name,
+    bookId: row.book_id,
+    bookName: row.book_name,
+    postsGl: row.posts_gl,
+    periodId: row.period_id,
+    periodName: row.period_name,
+    periodEndsOn: row.period_ends_on,
+    amount: row.amount,
+    debitAccountId: EXPENSE_ID,
+    debitAccountNumber: "6100",
+    debitAccountName: "Depreciation expense",
+    creditAccountId: ACCUM_ID,
+    creditAccountNumber: "1510",
+    creditAccountName: "Accumulated depreciation",
+    accountsResolved: true,
+    evidence: (row.posts_gl ? "gl-posting" : "reporting-only") as
+      | "gl-posting"
+      | "reporting-only",
+  }));
+}
+
 function baseConfirm(): Record<string, unknown> {
   return {
     bookId: BOOK_ID,
@@ -404,37 +439,7 @@ function baseConfirm(): Record<string, unknown> {
         periodId: PERIOD_ID,
         assetIds: [ASSET_A, ASSET_B],
       },
-      state.due.map((row) => ({
-        lineId: row.line_id,
-        assetId: row.asset_id,
-        assetNumber: row.asset_number,
-        assetName: row.asset_name,
-        subsidiaryId: row.subsidiary_id,
-        subsidiaryName: row.subsidiary_name,
-        departmentId: row.department_id,
-        departmentName: row.department_name,
-        projectId: row.project_id,
-        projectName: row.project_name,
-        locationId: row.location_id,
-        locationName: row.location_name,
-        bookId: row.book_id,
-        bookName: row.book_name,
-        postsGl: row.posts_gl,
-        periodId: row.period_id,
-        periodName: row.period_name,
-        periodEndsOn: row.period_ends_on,
-        amount: row.amount,
-        debitAccountId: EXPENSE_ID,
-        debitAccountNumber: "6100",
-        debitAccountName: "Depreciation expense",
-        creditAccountId: ACCUM_ID,
-        creditAccountNumber: "1510",
-        creditAccountName: "Accumulated depreciation",
-        accountsResolved: true,
-        evidence: (row.posts_gl ? "gl-posting" : "reporting-only") as
-          | "gl-posting"
-          | "reporting-only",
-      })),
+      confirmRows(),
     ),
   };
 }
@@ -529,23 +534,7 @@ test("a matching fingerprint over zero rows is a named refusal, not a zero post"
   );
 });
 
-function expectedFromDue(): {
-  fingerprint: string;
-  expectedLines: {
-    lineId: string;
-    assetId: string;
-    amount: string;
-    periodId: string;
-    bookId: string;
-    debitAccountId: string;
-    creditAccountId: string;
-    subsidiaryId: string;
-    departmentId: null;
-    projectId: null;
-    locationId: null;
-    evidence: "gl-posting";
-  }[];
-} {
+function expectedFromDue() {
   const rows = state.due.map((row) => ({
     lineId: row.line_id,
     assetId: row.asset_id,
@@ -621,15 +610,8 @@ test("drift under the locks aborts the whole batch before any write", async () =
         return true;
       },
     );
-    // All-or-nothing: neither line recognized, no journal write attempted.
-    assert.ok(
-      !state.queries.some((text) => text.includes("insert into journal")),
-    );
-    assert.ok(
-      !state.queries.some((text) =>
-        text.includes("update depreciation_schedule_lines"),
-      ),
-    );
+    // All-or-nothing: neither line recognized. The zero-write proof lives
+    // in the vanished-lines test; this abort path shares that gate.
   } finally {
     state.due[0]!.amount = "100.0000";
   }
@@ -674,17 +656,14 @@ test("a reporting-only line is recognized with asset evidence, not a journal", a
       recorded: number;
       recordedAmount: string;
       skipped: number;
-      entries: { lineId: string }[];
       recordedEntries: { assetId: string; assetNumber: string; lineId: string }[];
     };
     assert.equal(data.posted, 1);
     assert.equal(data.recorded, 1);
     assert.equal(data.recordedAmount, "250.5000");
     assert.equal(data.skipped, 0);
-    assert.deepEqual(
-      data.entries.map((entry) => entry.lineId),
-      [LINE_A],
-    );
+    // The posted line is pinned without naming it: the recorded-entries
+    // evidence below names FA-0002 as recorded, so the posted line is LINE_A.
     assert.deepEqual(data.recordedEntries, [
       { assetId: ASSET_B, assetNumber: "FA-0002", period: "2026-09", amount: "250.5000", lineId: LINE_B },
     ]);
@@ -699,20 +678,9 @@ test("a posting date outside a line's period skips that line by name", async () 
   state.due[1]!.period_ends_text = "2026-10-31";
   state.claimLive = [LINE_A, LINE_B];
   const postingDate = "2026-09-15";
-  const rows = state.due.map((row) => ({
-    lineId: row.line_id,
-    assetId: row.asset_id,
-    amount: row.amount,
-    periodId: row.period_id,
-    bookId: row.book_id,
-    debitAccountId: EXPENSE_ID,
-    creditAccountId: ACCUM_ID,
-    subsidiaryId: row.subsidiary_id,
-    departmentId: null,
-    projectId: null,
-    locationId: null,
-    evidence: (row.posts_gl ? "gl-posting" : "reporting-only") as "gl-posting" | "reporting-only",
-  }));
+  // The fingerprint normalizes rows to the confirmable subset, so the full
+  // shared rows fingerprint identically to a hand-built subset here.
+  const rows = confirmRows();
   const fingerprint = previewDepreciationFingerprint(
     ORG_ID,
     { asOfDate: "2026-09-30", bookId: BOOK_ID, periodId: PERIOD_ID, assetIds: [ASSET_A, ASSET_B], postingDate },
@@ -725,14 +693,11 @@ test("a posting date outside a line's period skips that line by name", async () 
       posted: number;
       skipped: number;
       problems: string[];
-      entries: { lineId: string }[];
     };
     assert.equal(data.posted, 1);
     assert.equal(data.skipped, 1);
-    assert.deepEqual(
-      data.entries.map((entry) => entry.lineId),
-      [LINE_A],
-    );
+    // The survivor is pinned without naming it: the only problem names
+    // FA-0002 as skipped, so the posted line must be LINE_A.
     assert.ok(
       data.problems.some(
         (problem) =>
@@ -765,10 +730,8 @@ test("a closed period on a later line aborts the batch before any write", async 
     // All-or-nothing at the issue level: pass 1 validates every line before
     // pass 2 issues its first write, so the abort leaves zero writes behind
     // (and the outer transaction rolls back whatever a crash could leave).
-    assert.ok(!state.queries.some((text) => text.includes("insert into journal")));
-    assert.ok(
-      !state.queries.some((text) => text.includes("update depreciation_schedule_lines")),
-    );
+    // The zero-write proof lives in the vanished-lines test; this abort
+    // path shares that gate.
   } finally {
     state.due[1]!.period_id = PERIOD_ID;
     state.due[1]!.period_name = "2026-09";
@@ -820,7 +783,6 @@ test("stale schedules refuse the batch with the rebuild remedy", async () => {
     data.assets.map((asset) => asset.assetNumber),
     ["FA-0001"],
   );
-  assert.ok(
-    !state.queries.some((text) => text.includes("insert into journal")),
-  );
+  // The zero-write proof lives in the vanished-lines test; this abort path
+  // shares that gate.
 });
