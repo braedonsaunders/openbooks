@@ -25,18 +25,30 @@ export async function prevailingWageForTimeEntry(input: {
   workedOn: string;
 }): Promise<{ wage: string; currency: string } | null> {
   if (!(await lockAndCheckOrgFeature(db, input.orgId, HRM_PREVAILING_WAGE_FEATURE))) return null;
+  // Exactly one employment EFFECTIVE on the worked date answers for the
+  // entry — employment rows are retained across lifecycle changes, so a
+  // rehire's historical employments must not count. Terminal ('terminated')
+  // and not-yet-started ('offered') versions never answer for worked time
+  // (the org-chart incumbent predicate); only overlapping live
+  // employments refuse, as genuinely ambiguous.
   const employments = (
     await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-      select id::text as id, employer_subsidiary_id::text as "subsidiaryId"
-        from worker_employments
-       where org_id = ${input.orgId}::uuid and worker_party_id = ${input.employeePartyId}::uuid
+      select distinct e.id::text as id, e.employer_subsidiary_id::text as "subsidiaryId"
+        from worker_employments e
+        join worker_employment_versions v
+          on v.org_id = e.org_id and v.employment_id = e.id
+       where e.org_id = ${input.orgId}::uuid and e.worker_party_id = ${input.employeePartyId}::uuid
+         and v.recorded_until is null
+         and v.effective_from <= ${input.workedOn}::date
+         and (v.effective_to is null or v.effective_to > ${input.workedOn}::date)
+         and v.status in ('active', 'on_leave', 'suspended')
        order by id
     `)
   ).rows;
   if (employments.length === 0) return null;
   if (employments.length > 1) {
     throw new HrmConstructionError(
-      `Party ${input.employeePartyId} holds ${employments.length} employments — prevailing-wage pricing needs one employment per worker; resolve the duplicate employments before approving time.`,
+      `Party ${input.employeePartyId} holds ${employments.length} employments effective ${input.workedOn} — prevailing-wage pricing needs one employment per worker for the worked date; resolve the overlapping employments before approving time.`,
     );
   }
   const employment = employments[0]!;
