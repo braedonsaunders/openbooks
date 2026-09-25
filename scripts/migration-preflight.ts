@@ -210,31 +210,73 @@ function stripSqlComments(source: string): string {
  * preflight tripped over, so the preflight runs at apply time instead.
  * Anything else (a genuinely absent object) is a real error, never a
  * silent skip: only a pending earlier migration can explain the absence.
+ *
+ * Postgres names a selected column through its range alias
+ * (`column a.employment_id does not exist`), which is neither the table
+ * nor — for a bare reference — anything resolvable from the message. That
+ * shape resolves through the tables the preflight itself queries
+ * (preflightSql): a deferral still evaluates the preflight at apply time,
+ * so an unrelated same-named column can only delay the verdict, never
+ * silence it.
  */
 export function earlierPendingCreatesObject(
   error: unknown,
   earlierContents: readonly string[],
+  preflightSql?: string,
 ): boolean {
   const raw = error instanceof Error ? error.message : String(error);
   const missingTable = /relation "([^"]+)" does not exist/.exec(raw)?.[1];
   const missingColumn = /column "([^"]+)" of relation "([^"]+)" does not exist/.exec(raw);
   const table = missingColumn?.[2] ?? missingTable;
   const column = missingColumn?.[1];
-  if (!table) return false;
-  const tablePattern = new RegExp(
-    `create\\s+(?:or\\s+replace\\s+)?(?:table|view|materialized\\s+view)\\b[^;]*?\\b${escapeRegExp(table)}\\b`,
-    "is",
-  );
-  const columnPattern = column
-    ? new RegExp(
-        `alter\\s+table\\b[^;]*?\\b${escapeRegExp(table)}\\b[^;]*?\\badd\\s+(?:column\\s+)?${escapeRegExp(column)}\\b`,
-        "is",
-      )
-    : null;
+  if (table) {
+    const tablePattern = new RegExp(
+      `create\\s+(?:or\\s+replace\\s+)?(?:table|view|materialized\\s+view)\\b[^;]*?\\b${escapeRegExp(table)}\\b`,
+      "is",
+    );
+    const columnPattern = column
+      ? new RegExp(
+          `alter\\s+table\\b[^;]*?\\b${escapeRegExp(table)}\\b[^;]*?\\badd\\s+(?:column\\s+)?${escapeRegExp(column)}\\b`,
+          "is",
+        )
+      : null;
+    return earlierContents.some((content) => {
+      const code = stripSqlComments(content);
+      return tablePattern.test(code) || (columnPattern !== null && columnPattern.test(code));
+    });
+  }
+  const aliasedColumn =
+    /column (?:"?([A-Za-z_][\w$]*)"?\.)?"?([A-Za-z_][\w$]*)"? does not exist/.exec(raw);
+  const aliasedColumnName = aliasedColumn?.[2];
+  if (!aliasedColumnName) return false;
+  const candidates = new Set<string>();
+  if (aliasedColumn?.[1]) candidates.add(aliasedColumn[1]);
+  for (const candidate of preflightQueryTables(preflightSql ?? "")) candidates.add(candidate);
+  if (candidates.size === 0) return false;
   return earlierContents.some((content) => {
     const code = stripSqlComments(content);
-    return tablePattern.test(code) || (columnPattern !== null && columnPattern.test(code));
+    return [...candidates].some((candidate) =>
+      new RegExp(
+        `alter\\s+table\\b[^;]*?\\b${escapeRegExp(candidate)}\\b[^;]*?\\badd\\s+(?:column\\s+)?${escapeRegExp(aliasedColumnName)}\\b`,
+        "is",
+      ).test(code),
+    );
   });
+}
+
+/**
+ * Tables a preflight query reads, from its FROM and JOIN clauses (aliases
+ * excluded: the caller resolves those). Used only to scope column
+ * deferrals to the query at hand.
+ */
+function preflightQueryTables(sqlText: string): string[] {
+  const tables = new Set<string>();
+  for (const match of stripSqlComments(sqlText).matchAll(
+    /\b(?:from|join)\s+(?:public\s*\.\s*)?"?([A-Za-z_][\w$]*)"?/gi,
+  )) {
+    tables.add(match[1]!);
+  }
+  return [...tables];
 }
 
 const PREFLIGHT_CODE_PATTERN = /^\d{4}\.[a-z][a-z0-9_]*$/;
