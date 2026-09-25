@@ -695,8 +695,37 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // Guide p. 5: no MW507 → withhold as if the employee claimed ONE exemption.
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 1;
 
+  // Guide p. 9: a separately paid lump-sum annual bonus is not annualized
+  // with regular wages — it takes the highest state rate plus the highest
+  // local for the county of residence. The supplementalPaymentTiming
+  // classification selects this election; combined supplements stay
+  // ordinary taxable wages (p. 5) below. A blank county refuses inside
+  // `mdLumpSumBonus` rather than pricing a zero local rate.
+  const supplementalAmount = U(input.supplemental ?? "0");
+  if (input.supplementalPaymentTiming === "separate" && supplementalAmount > 0n) {
+    const regular = compute({ ...input, supplemental: "0", supplementalPaymentTiming: undefined });
+    const lumpSum = U(mdLumpSumBonus({
+      payDate: input.payDate,
+      amount: input.supplemental!,
+      county: input.basis === "nonresident"
+        ? null
+        : requireCounty(input.certificate, "lump-sum annual bonus withholding"),
+      basis: input.basis,
+    }));
+    return {
+      state: "MD",
+      year: rates.year,
+      tax: D(U(regular.tax) + lumpSum),
+      taxSupplemental: D(lumpSum),
+      factors: {
+        ...regular.factors,
+        US_SUPPLEMENTAL_METHOD: "lump_sum",
+        US_SUPPLEMENTAL_TAX: D(lumpSum),
+      },
+    };
+  }
+
   // p. 5: bonuses, commissions, vacation pay are ordinary taxable wages.
-  // The p. 9 lump-sum rule is a separate election (`mdLumpSumBonus`).
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   const annualWages = mulInt(wages, P);
   trace("MD_ANNUAL_WAGES", annualWages);
