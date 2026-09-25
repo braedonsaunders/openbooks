@@ -219,7 +219,7 @@ test("ES 2026 is transcribed with two editions split at 10 September", () => {
   }
 });
 
-test("ES filings declare the TGSS account plus the 190 (annual) and 111 (quarterly)", () => {
+test("ES filings declare the TGSS account plus the 190/111 (IRPF) and 296/216 (IRNR)", () => {
   // Was "build no year-end return yet" while the 111/190 had no builders; the
   // populations now read committed stubs, so the declaration carries both.
   const filings = esPackFilings();
@@ -230,7 +230,7 @@ test("ES filings declare the TGSS account plus the 190 (annual) and 111 (quarter
   );
   assert.deepEqual(
     filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["190", "annual"], ["111", "quarterly"]],
+    [["190", "annual"], ["111", "quarterly"], ["216", "quarterly"], ["296", "annual"]],
   );
   assert.deepEqual(ES_PAYROLL_PACK.filings(), filings);
 });

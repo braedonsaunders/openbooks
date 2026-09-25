@@ -9,6 +9,10 @@
  * - Modelo 111 (trimestral autoliquidación, AEAT): one aggregate row per
  *   quarter off committed stubs (casillas 01/02/03). The US 941 is the shape
  *   copied: population + slip + amendment real, download refused by name.
+ * - Modelo 216 (trimestral autoliquidación IRNR, AEAT): the 111's shape over
+ *   committed stubs carrying IRNR lines — resident-only quarters file no 216.
+ * - Modelo 296 (resumen anual IRNR, AEAT): the 190's per-perceptor shape over
+ *   the same IRNR lines the quarterly 216s settled.
  * - Seguridad Social (monthly, TGSS): NO filing is declared. Settlement runs
  *   through Sistema RED / SILTRA (documentos RNT y RLC against the CCC), and
  *   no RNT/RLC file is built — settle through Sistema RED directly. The CCC
@@ -27,6 +31,10 @@ import {
   es190CorrectionSlip,
   es190Population,
   es190Slip,
+  es216Population,
+  es216Slip,
+  es296Population,
+  es296Slip,
 } from "./yearend.ts";
 
 /**
@@ -62,6 +70,25 @@ export function parseEs190RowId(rowId: string): PayrollFilingRowScope | null {
 export function parseEs111RowId(rowId: string): PayrollFilingRowScope | null {
   if (!/^Q[1-4]$/.test(rowId)) return null;
   return { employees: [], accounts: [] };
+}
+
+/**
+ * The 216 row grammar: quarterly IRNR aggregates file under the employer's
+ * NIF like the 111, so the shape matches — owned separately because the
+ * subsidiary-scope guard parses through each filing's own declaration.
+ */
+export function parseEs216RowId(rowId: string): PayrollFilingRowScope | null {
+  if (!/^Q[1-4]$/.test(rowId)) return null;
+  return { employees: [], accounts: [] };
+}
+
+/**
+ * The 296 row grammar: one annual row per nonresident perceptor, keyed by
+ * employee UUID — the inverse of es296Population's rowId construction.
+ */
+export function parseEs296RowId(rowId: string): PayrollFilingRowScope | null {
+  if (!ES_ROW_UUID_RE.test(rowId)) return null;
+  return { employees: [rowId], accounts: [] };
 }
 
 /**
@@ -148,6 +175,56 @@ function buildEsPackFilings(): PayrollPackFilings {
             + "complementaria through AEAT Sede — the quarter re-rendered from committed stubs "
             + "above carries the corrected figures; OpenBooks builds no AEAT correction vehicle "
             + "of its own",
+        },
+      },
+      {
+        key: "216",
+        label: "Modelo 216 — Retenciones IRNR (trimestral)",
+        cadence: "quarterly",
+        description:
+          "Quarterly IRNR withholding worksheet for the pack's nonresident employees: "
+          + "perceptores, rentas satisfechas sujetas a IRNR and retenciones practicadas per "
+          + "calendar quarter off committed stubs carrying IRNR lines. Resident-only quarters "
+          + "file no 216.",
+        emptyText: "No committed ES IRNR withholding for this year.",
+        population: (orgId, taxYear) => es216Population(orgId, taxYear),
+        parseRowId: parseEs216RowId,
+        slip: { build: (orgId, taxYear, rowId) => es216Slip(orgId, taxYear, rowId) },
+        downloadRefusal:
+          "the ES pack produces no Modelo 216 electronic transmission — the quarterly "
+          + "figures are complete on screen; file the autoliquidación through AEAT Sede directly",
+        amendment: {
+          supported: false,
+          refusal:
+            "a filed Modelo 216 is corrected outside the product by presenting a declaración "
+            + "complementaria through AEAT Sede — the quarter re-rendered from committed IRNR "
+            + "lines above carries the corrected figures; OpenBooks builds no AEAT correction "
+            + "vehicle of its own",
+        },
+      },
+      {
+        key: "296",
+        label: "Modelo 296 — Resumen anual de retenciones IRNR",
+        cadence: "annual",
+        description:
+          "Annual IRNR summary, one row per nonresident perceptor: percepción íntegra and "
+          + "retenciones practicadas off committed stubs carrying IRNR lines — the same lines "
+          + "the quarterly 216 autoliquidaciones settled.",
+        emptyText: "No committed ES IRNR withholding for this year.",
+        population: (orgId, taxYear) => es296Population(orgId, taxYear),
+        parseRowId: parseEs296RowId,
+        slip: { build: (orgId, taxYear, rowId) => es296Slip(orgId, taxYear, rowId) },
+        downloadRefusal:
+          "the ES pack produces no Modelo 296 electronic file (diseños lógicos registro) — "
+          + "the perceptor figures are complete on screen; transmit the resumen through "
+          + "AEAT Sede directly",
+        amendment: {
+          supported: false,
+          refusal:
+            "a filed Modelo 296 is corrected outside the product by presenting a declaración "
+            + "complementaria o sustitutiva through AEAT Sede — the perceptor row re-rendered "
+            + "from committed IRNR lines above carries the corrected figures; OpenBooks builds "
+            + "no AEAT correction vehicle of its own",
         },
       },
     ],
