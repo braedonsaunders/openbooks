@@ -267,6 +267,7 @@ export function LeaveDrawer({
             onSaved={onClose}
             onDirtyChange={setFilingDirty}
             onBusyChange={setFilingBusy}
+            askReason={askReason}
           />
         )
       ) : null}
@@ -279,11 +280,13 @@ function LeaveFileForm({
   onSaved,
   onDirtyChange,
   onBusyChange,
+  askReason,
 }: {
   onCancel: () => void | Promise<void>
   onSaved: () => void
   onDirtyChange: (dirty: boolean) => void
   onBusyChange: (busy: boolean) => void
+  askReason: (title: string) => Promise<string | null>
 }) {
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
@@ -293,6 +296,7 @@ function LeaveFileForm({
   const [typeOptions, setTypeOptions] = useState<{ value: string; label: string; requiresAttachment: boolean }[]>([])
   const [attachmentId, setAttachmentId] = useState('')
   const [draftId, setDraftId] = useState<string | null>(null)
+  const [draftSnapshot, setDraftSnapshot] = useState<string | null>(null)
   const [startsOn, setStartsOn] = useState('')
   const [endsOn, setEndsOn] = useState('')
   const [hours, setHours] = useState('')
@@ -427,6 +431,20 @@ function LeaveFileForm({
     }
   }, [t])
 
+  // The field values a draft POST carries. Snapshotted at creation: a
+  // retry after a refused attachment reuses the draft id, so without the
+  // snapshot edited hours, type or dates would post nothing and the
+  // drawer would still close as a success.
+  const draftValues = () =>
+    JSON.stringify({
+      employment: onBehalf ? onBehalfEmploymentId : employmentId,
+      leaveTypeId,
+      startsOn,
+      endsOn,
+      hours,
+      reason: reason || null,
+    })
+
   const save = async (): Promise<void> => {
     const selectedType = typeOptions.find((option) => option.value === leaveTypeId)
     if (selectedType?.requiresAttachment && !attachmentId && !draftId) {
@@ -441,12 +459,39 @@ function LeaveFileForm({
       setStatus(t('leave.fileEmploymentRequired'))
       return
     }
+    // The form moved on since the draft was saved: the stale draft is
+    // withdrawn first (with the operator's own reason, through the
+    // existing withdraw prompt) and re-filed below with the current
+    // values — never silently kept beside edited fields. A dismissed
+    // prompt abandons the save with the draft untouched.
+    let supersedeReason: string | null = null
+    if (draftId && draftSnapshot !== draftValues()) {
+      supersedeReason = await askReason(t('leave.withdrawReasonTitle'))
+      if (supersedeReason === null) {
+        setStatus(t('leave.fileFailed'))
+        return
+      }
+    }
     setStatus(undefined)
     onBusyChange(true)
     try {
       await execute(async () => {
       try {
         let currentDraftId = draftId
+        if (currentDraftId && supersedeReason !== null) {
+          const withdrawRes = await fetch(`/api/hrm/leave-requests/${currentDraftId}/withdraw`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ reason: supersedeReason }),
+          })
+          if (!withdrawRes.ok) {
+            setStatus(await readApiErrorMessage(withdrawRes, t('leave.fileFailed')))
+            return { ok: true as const, status: withdrawRes.status, data: null }
+          }
+          currentDraftId = null
+          setDraftId(null)
+          setDraftSnapshot(null)
+        }
         if (!currentDraftId) {
           const res = await fetch('/api/hrm/leave-requests', {
             method: 'POST',
@@ -474,6 +519,7 @@ function LeaveFileForm({
           }
           currentDraftId = payload.request.id
           setDraftId(currentDraftId)
+          setDraftSnapshot(draftValues())
         }
         if (selectedType?.requiresAttachment && attachmentId) {
           const attachmentRes = await fetch(`/api/hrm/leave-requests/${currentDraftId}/attachment`, {
