@@ -77,6 +77,21 @@ export function rowHashQuery(schema, table, columns) {
  order by 1`;
 }
 
+/**
+ * Per-org, per-column hash sums, so a changed row hash can NAME the columns
+ * that changed. Each column is hashed together with the row id, so moving a
+ * value between rows shows up too. Diagnostic only: parity refuses on the
+ * row hashes above.
+ */
+export function columnHashQuery(schema, table, columns) {
+  const aggs = columns.map((column, index) =>
+    `sum(('x' || substr(md5(row(t.id, t.${quoteIdent(assertIdentifier(column))})::text), 1, 15))::bit(60)::bigint::numeric)::text as c${index}`);
+  return `select t.org_id::text as org_id, ${aggs.join(", ")}
+  from ${quoteIdent(assertIdentifier(schema))}.${quoteIdent(assertIdentifier(table))} t
+ group by t.org_id
+ order by 1`;
+}
+
 async function tableExists(client, table) {
   const result = await client.query("select to_regclass($1) is not null as present", [table]);
   return result.rows[0].present === true;
@@ -160,7 +175,12 @@ export async function snapshotLedger(client, { schema = "public", columns = null
       const dropped = wanted.filter((column) => !present.includes(column));
       rowHashes[table] = dropped.length > 0
         ? { columns: wanted, dropped, perOrg: [] }
-        : { columns: wanted, dropped: [], perOrg: await rows(client, rowHashQuery(schema, table, wanted)) };
+        : {
+          columns: wanted,
+          dropped: [],
+          perOrg: await rows(client, rowHashQuery(schema, table, wanted)),
+          perColumn: await rows(client, columnHashQuery(schema, table, wanted)),
+        };
     }
 
     return {
@@ -243,7 +263,18 @@ export function compareSnapshots(before, after) {
       differences.push({ section: "rowHashes", key: `${table}: columns dropped by the upgrade`, before: now.dropped, after: null });
       continue;
     }
+    const first = differences.length;
     diffKeyed(`rowHashes.${table}`, was.perOrg, now.perOrg, ["org_id"], differences);
+    // Name the columns whose content moved, so a refusal says what changed.
+    if (was.perColumn && now.perColumn) {
+      const left = keyed(was.perColumn, ["org_id"]);
+      const right = keyed(now.perColumn, ["org_id"]);
+      for (const difference of differences.slice(first)) {
+        const x = left.get(difference.key);
+        const y = right.get(difference.key);
+        if (x && y) difference.columns = was.columns.filter((_, index) => x[`c${index}`] !== y[`c${index}`]);
+      }
+    }
   }
   for (const [side, snapshot] of [["before", before], ["after", after]]) {
     for (const entry of snapshot.unbalancedEntries ?? []) {
