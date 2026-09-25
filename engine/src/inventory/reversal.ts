@@ -363,6 +363,57 @@ export async function reverseInventoryMovement(
   assertInventoryDate(input.reversalDate, "reversal date");
 
   return db.transaction(async (tx) => {
+    // Canonical lock order: fence positions before the transaction takes
+    // any row lock. Source movements are immutable, so the legs peeked
+    // lock-free here cannot shrink; the locked reads below revalidate
+    // everything authoritatively before writing.
+    const positionKeys = (rows: ReversibleMovement[]): string[] => [
+      ...new Set(
+        rows.map((source) => `${source.item_id}:${source.stock_location_id}`),
+      ),
+    ].sort();
+    const fencePositions = async (rows: ReversibleMovement[]): Promise<void> => {
+      for (const key of positionKeys(rows)) {
+        const separator = key.indexOf(":");
+        await lockInventoryPosition(
+          tx,
+          key.slice(0, separator),
+          key.slice(separator + 1),
+        );
+      }
+    };
+    const peeked = (await tx.execute<ReversibleMovement>(sql`
+      select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+             serial_id, quantity, unit_cost, total_value, journal_entry_id,
+             paired_movement_id, status
+        from inventory_movements
+       where org_id = ${orgId} and id = ${input.movementId}
+    `));
+    const peekedRequested = peeked.rows[0];
+    if (peekedRequested) {
+      const peekedOutId =
+        peekedRequested.kind === "transfer_out"
+          ? peekedRequested.id
+          : peekedRequested.kind === "transfer_in"
+            ? peekedRequested.paired_movement_id
+            : null;
+      if (peekedRequested.kind === "transfer_out" || peekedRequested.kind === "transfer_in") {
+        const peekedPair = peekedOutId
+          ? (await tx.execute<ReversibleMovement>(sql`
+            select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+                   serial_id, quantity, unit_cost, total_value, journal_entry_id,
+                   paired_movement_id, status
+              from inventory_movements
+             where org_id = ${orgId}
+               and (id = ${peekedOutId} or paired_movement_id = ${peekedOutId})
+             order by case when kind = 'transfer_out' then 0 else 1 end
+          `)).rows
+          : [peekedRequested];
+        await fencePositions(peekedPair);
+      } else {
+        await fencePositions([peekedRequested]);
+      }
+    }
     const sourceResult = (await tx.execute<ReversibleMovement>(sql`
       select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
@@ -500,24 +551,10 @@ export async function reverseInventoryMovement(
       }
     }
 
-    // Every other multi-position path (transfers, builds, document applies,
-    // landed-cost vouchers) takes these position locks in sorted key order.
-    // A transfer reversal used to lock transfer-out before transfer-in, so a
-    // reversal racing an opposite-direction transfer deadlocked (40P01).
-    for (const key of [
-      ...new Set(
-        sources.map(
-          (source) => `${source.item_id}:${source.stock_location_id}`,
-        ),
-      ),
-    ].sort()) {
-      const separator = key.indexOf(":");
-      await lockInventoryPosition(
-        tx,
-        key.slice(0, separator),
-        key.slice(separator + 1),
-      );
-    }
+    // The peek above fenced these positions before any row lock; re-fence
+    // the authoritative sources here (already-held locks stack harmlessly)
+    // so the fenced set always matches the legs this attempt reverses.
+    await fencePositions(sources);
     const serialId =
       sources.find((source) => source.serial_id)?.serial_id ?? null;
     if (serialId) {

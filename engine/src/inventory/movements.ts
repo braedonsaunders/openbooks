@@ -107,9 +107,11 @@ export async function receiveInventory(
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
+    // Canonical lock order: fence the position before any row lock, or a
+    // peer holding the fence deadlocks against this transaction at posting.
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertInventoryFeature(tx, orgId);
     const bookId = await primaryBookId(orgId, tx);
-    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     // The GL location dimension defaults to the receiving stock location's
     // business location (transferInventoryTx resolves the same mapping), so
     // location-sliced statements tie to the subledger. Explicit dims win.
@@ -482,9 +484,11 @@ export async function issueInventory(
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
+    // Canonical lock order: fence the position before any row lock, or a
+    // peer holding the fence deadlocks against this transaction at posting.
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertInventoryFeature(tx, orgId);
     const bookId = await primaryBookId(orgId, tx);
-    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     // Same location default as receipts: the issuing stock location's
     // business location, so location-sliced statements tie to the subledger.
     const locDims = {
@@ -700,8 +704,10 @@ export async function adjustInventory(
   // delegated movement. Lock the position first to preserve the canonical
   // position → profile ordering used by receive/issue and avoid deadlocks.
   return db.transaction(async (tx) => {
-    await assertInventoryFeature(tx, orgId);
+    // Canonical lock order: fence the position before any row lock, or a
+    // peer holding the fence deadlocks against this transaction at posting.
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    await assertInventoryFeature(tx, orgId);
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     const offset = profile.adjustmentAccountId ?? profile.cogsAccountId;
     if (sign > 0) {

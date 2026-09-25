@@ -312,6 +312,9 @@ export async function writeDownInventoryToNrv(
   // Pure input boundary before any lock or journal opens.
   const nrvRate = persistNrvPerUnit(input.nrvPerUnit);
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    // Canonical lock order: fence the position before any row lock, or a
+    // peer holding the fence deadlocks against this transaction at posting.
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     if (!(await lockAndCheckOrgFeature(tx, orgId, "inventory"))) {
       throw new InventoryNrvError("inventory feature is disabled");
     }
@@ -322,7 +325,6 @@ export async function writeDownInventoryToNrv(
     // itself is enforced per plan by postingContext below.
     const requested = (await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId}`));
     if (!requested.rows.length) throw new InventoryNrvError("subsidiary not found");
-    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
     // Only the requesting entity's layers: another owner sharing the
     // warehouse is never remeasured by this call.
@@ -486,6 +488,9 @@ export async function reverseInventoryWritedown(
   if (!isIsoCalendarDate(input.date)) throw new InventoryNrvError("reversal date must be a valid YYYY-MM-DD date");
   const nrvRate = persistNrvPerUnit(input.nrvPerUnit);
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    // Canonical lock order: fence the position before any row lock, or a
+    // peer holding the fence deadlocks against this transaction at posting.
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     if (!(await lockAndCheckOrgFeature(tx, orgId, "inventory"))) {
       throw new InventoryNrvError("inventory feature is disabled");
     }
@@ -496,7 +501,6 @@ export async function reverseInventoryWritedown(
       );
     }
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
-    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
     const ctx = await postingContext(tx, orgId, input.subsidiaryId, input.date, accounts);
     const layers = await remainingLayers(
