@@ -12,17 +12,17 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE, OK_REGION, OK_RATES_2026, OK_WITHHOLDING, okPeriodTax,
+  OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE, OK_REGION, OK_RATES_2026, OK_SERVICE_CLASS_CERTIFICATE, OK_WITHHOLDING, okPeriodTax,
 } from "./ok.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
-  resolvedCertificate(OK_CERTIFICATE, answers);
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate => resolvedCertificate(OK_CERTIFICATE, answers);
 
 test("OK certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(OK_CERTIFICATE), null);
   assert.equal(certificateDeclarationProblem(OK_OW9MSE_CERTIFICATE), null);
+  assert.equal(certificateDeclarationProblem(OK_SERVICE_CLASS_CERTIFICATE), null);
   assert.equal(OK_REGION.implemented, true);
   assert.equal(OK_REGION.certificateKey, "us_ok_okw4");
 });
@@ -44,11 +44,8 @@ test("OK-W-4 line 8 requires the annual OW-9-MSE and employer evidence", () => {
     supportingCertificates: { us_ok_ow9mse: incomplete },
   }), /Oklahoma military-spouse withholding exemption requires proof that .*orders.*domicile.*same state.*Leave and Earnings Statement.*ID/);
 
-  const complete = resolvedCertificate(OK_OW9MSE_CERTIFICATE, Object.fromEntries([
-    "employee_is_not_servicemember", "spouse_is_servicemember", "current_orders_assign_ok",
-    "employee_domiciled_outside_ok", "spouses_share_tax_domicile", "latest_spouse_les_on_file",
-    "current_military_id_on_file",
-  ].map((key) => [key, "true"])));
+  const complete = resolvedCertificate(OK_OW9MSE_CERTIFICATE, Object.fromEntries(
+    ["employee_is_not_servicemember", "spouse_is_servicemember", "current_orders_assign_ok", "employee_domiciled_outside_ok", "spouses_share_tax_domicile", "latest_spouse_les_on_file", "current_military_id_on_file"].map((key) => [key, "true"])));
   const result = OK_WITHHOLDING.compute({
     ...wages,
     certificate: cert({ military_spouse_exempt: "true" }),
@@ -68,9 +65,7 @@ test("OK Packet OW-2 sample — $1,825 semi-monthly, married, 2 allowances: $37"
   // $41.67 × 2 = $83.34. $1,825.00 − $83.34 = $1,741.66.
   // Table 3 Married: $9.10 + 4.5% of ($1,741.66 − $1,129.00) = $36.67 → $37.00.
   const result = OK_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00",
-    basis: "resident",
-    certificate: cert({ filing_status: "married", allowances: "2" }),
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00", basis: "resident", certificate: cert({ filing_status: "married", allowances: "2" }),
   });
   assert.equal(result.factors.OK_ALLOWANCE, money("83.34"));
   assert.equal(result.factors.OK_TAXABLE, money("1741.66"));
@@ -80,12 +75,10 @@ test("OK Packet OW-2 sample — $1,825 semi-monthly, married, 2 allowances: $37"
 
 test("OK blank OK-W-4 withholds as single with zero allowances", () => {
   const empty = OK_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00",
-    basis: "resident", certificate: resolveCertificate({ certificate: OK_CERTIFICATE }),
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00", basis: "resident", certificate: resolveCertificate({ certificate: OK_CERTIFICATE }),
   });
   const singleZero = OK_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00",
-    basis: "resident", certificate: cert({ filing_status: "single", allowances: "0" }),
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00", basis: "resident", certificate: cert({ filing_status: "single", allowances: "0" }),
   });
   assert.equal(empty.tax, singleZero.tax);
   assert.equal(empty.factors.OK_ALLOWANCE, money("0"));
@@ -94,41 +87,48 @@ test("OK blank OK-W-4 withholds as single with zero allowances", () => {
 test("Oklahoma nonresident withholding uses only Oklahoma-source wages", () => {
   // Packet OW-2, semimonthly married/2 on $1,600 of Oklahoma-source wages: $27.
   const result = OK_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 24, wages: "4000.00", basis: "nonresident",
-    certificate: cert({ filing_status: "married", allowances: "2" }),
-    wageAllocations: [{
-      region: "OK", subRegion: null, workShare: "0.4", source: "adequate_records",
-      sourceWagesCurrentPeriod: "1600.00",
-    }],
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "4000.00", basis: "nonresident", certificate: cert({ filing_status: "married", allowances: "2" }),
+    wageAllocations: [{ region: "OK", subRegion: null, workShare: "0.4", source: "adequate_records", sourceWagesCurrentPeriod: "1600.00" }],
   });
   assert.equal(result.tax, money("27"));
 });
 
 test("OK extra withholding is added, exempt is zero, and an unpublished period is refused", () => {
   assert.equal(OK_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00",
-    basis: "resident",
-    certificate: cert({ filing_status: "married", allowances: "2", additional_per_period: "5.00" }),
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00", basis: "resident", certificate: cert({ filing_status: "married", allowances: "2", additional_per_period: "5.00" }),
   }).tax, money("42"));
   assert.equal(OK_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00",
-    basis: "resident", certificate: cert({ exempt: "true" }),
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00", basis: "resident", certificate: cert({ exempt: "true" }),
   }).tax, money("0"));
   assert.throws(
-    () => OK_WITHHOLDING.compute({
-      payDate: "2026-03-15", periodsPerYear: 13, wages: "1825",
-      basis: "resident", certificate: cert({ filing_status: "married", allowances: "2" }),
-    }),
+    () => OK_WITHHOLDING.compute({ payDate: "2026-03-15", periodsPerYear: 13, wages: "1825", basis: "resident", certificate: cert({ filing_status: "married", allowances: "2" }) }),
     /publishes withholding tables/,
   );
 });
 
 test("OK refuses a year it has not transcribed", () => {
   assert.throws(
-    () => OK_WITHHOLDING.compute({
-      payDate: "2027-01-15", periodsPerYear: 24, wages: "1825",
-      basis: "resident", certificate: cert({ filing_status: "married", allowances: "2" }),
-    }),
+    () => OK_WITHHOLDING.compute({ payDate: "2027-01-15", periodsPerYear: 24, wages: "1825", basis: "resident", certificate: cert({ filing_status: "married", allowances: "2" }) }),
     /2027 Oklahoma income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
+});
+
+test("OK excludes attested 68 O.S. 2385.1 service wages; over-threshold and inconsistent attestations withhold or refuse", () => {
+  // Packet OW-2 (Revised 11-2025), General Information p. 2: farm pay at
+  // $900 or less monthly, non-trade services below $200 quarterly, and
+  // qualifying domestic and minister service are not employment for
+  // withholding; anything else withholds as ordinary wages.
+  const service = (answers: Record<string, string>) => resolvedCertificate(OK_SERVICE_CLASS_CERTIFICATE, answers);
+  const base = { payDate: "2026-03-15", periodsPerYear: 24, basis: "resident" as const, certificate: cert() };
+  const farm = OK_WITHHOLDING.compute({ ...base, wages: "800.00", supportingCertificates: { us_ok_service_class: service({ service_class: "farm_service", period_qualifying_wages: "800", month_qualifying_wages: "800" }) } });
+  assert.equal(farm.tax, money("0"));
+  assert.equal(farm.factors.OK_EXEMPT_SERVICE_WAGES, money("800"));
+  const over = OK_WITHHOLDING.compute({ ...base, wages: "950.00", supportingCertificates: { us_ok_service_class: service({ service_class: "farm_service", period_qualifying_wages: "950", month_qualifying_wages: "950" }) } });
+  assert.equal(over.tax, OK_WITHHOLDING.compute({ ...base, wages: "950.00" }).tax);
+  assert.throws(() => OK_WITHHOLDING.compute({ ...base, wages: "800.00", supportingCertificates: { us_ok_service_class: service({ service_class: "farm_service", period_qualifying_wages: "800" }) } }), /farm-service exclusion needs the attested calendar-month total/);
+  const nontrade = OK_WITHHOLDING.compute({ ...base, wages: "150.00", supportingCertificates: { us_ok_service_class: service({ service_class: "nontrade_service", period_qualifying_wages: "150", quarter_qualifying_wages: "150" }) } });
+  assert.equal(nontrade.tax, money("0"));
+  const domestic = OK_WITHHOLDING.compute({ ...base, wages: "500.00", supportingCertificates: { us_ok_service_class: service({ service_class: "domestic_service", period_qualifying_wages: "500" }) } });
+  assert.equal(domestic.tax, money("0"));
+  assert.equal(domestic.factors.OK_EXEMPT_SERVICE_WAGES, money("500"));
 });

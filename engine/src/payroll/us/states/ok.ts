@@ -17,6 +17,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { PayrollError } from "../../error.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
@@ -204,6 +205,83 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "OK", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  // 68 O.S. §2385.1 employment exclusions: the employer attests the service
+  // class and the attested accumulations each period (farm pay at $900 or
+  // less monthly; domestic service in the qualifying contexts; non-trade
+  // services below $200 in the calendar quarter; ministers in ministry).
+  // Only attested qualifying dollars are excluded — anything else withholds
+  // as ordinary wages, and an inconsistent attestation refuses by name.
+  const serviceClassCert = input.supportingCertificates?.us_ok_service_class;
+  const readAttestedAmount = (
+    cert: NonNullable<typeof serviceClassCert>, key: string, what: string,
+  ): bigint | null => {
+    const raw = certificateAmount(cert, key);
+    if (raw == null) return null;
+    try {
+      return U(raw);
+    } catch {
+      throw new PayrollError(
+        `Oklahoma service-class ${what} "${raw}" is not a valid amount — `
+        + "attest exact decimal dollars before calculating; refused by name",
+      );
+    }
+  };
+  let exemptService = 0n;
+  if (serviceClassCert?.onFile) {
+    const serviceClass = certificateChoice(serviceClassCert, "service_class");
+    if (
+      serviceClass !== "farm_service" && serviceClass !== "domestic_service"
+      && serviceClass !== "nontrade_service" && serviceClass !== "minister_service"
+    ) {
+      throw new PayrollError(
+        "Oklahoma service-class attestation names no qualifying 68 O.S. §2385.1 class — "
+        + "attest farm, domestic, non-trade, or minister service before calculating; refused by name",
+      );
+    }
+    const periodQualifying = readAttestedAmount(serviceClassCert, "period_qualifying_wages", "period wages") ?? 0n;
+    const periodWages = U(input.wages) + U(input.supplemental ?? "0");
+    if (periodQualifying > periodWages) {
+      throw new PayrollError(
+        "Oklahoma service-class attested period wages exceed this period's pay — "
+        + "correct the attestation before calculating; refused by name",
+      );
+    }
+    const monthQualifying = readAttestedAmount(serviceClassCert, "month_qualifying_wages", "month wages");
+    if (monthQualifying !== null && periodQualifying > monthQualifying) {
+      throw new PayrollError(
+        "Oklahoma service-class attested period wages exceed the attested month total — "
+        + "correct the attestation before calculating; refused by name",
+      );
+    }
+    const quarterQualifying = readAttestedAmount(serviceClassCert, "quarter_qualifying_wages", "quarter wages");
+    if (quarterQualifying !== null && periodQualifying > quarterQualifying) {
+      throw new PayrollError(
+        "Oklahoma service-class attested period wages exceed the attested quarter total — "
+        + "correct the attestation before calculating; refused by name",
+      );
+    }
+    if (serviceClass === "farm_service") {
+      if (monthQualifying === null) {
+        throw new PayrollError(
+          "Oklahoma farm-service exclusion needs the attested calendar-month total — "
+          + "the $900 monthly test cannot run without it; refused by name",
+        );
+      }
+      if (monthQualifying <= U("900")) exemptService = periodQualifying;
+    } else if (serviceClass === "nontrade_service") {
+      if (quarterQualifying === null) {
+        throw new PayrollError(
+          "Oklahoma non-trade-service exclusion needs the attested calendar-quarter total — "
+          + "the $200 quarterly test cannot run without it; refused by name",
+        );
+      }
+      if (quarterQualifying < U("200")) exemptService = periodQualifying;
+    } else {
+      exemptService = periodQualifying;
+    }
+    if (exemptService > 0n) trace("OK_EXEMPT_SERVICE_WAGES", exemptService);
+  }
+
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as OkFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
@@ -212,6 +290,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     wages = U(requireUsSourceWages(input.wageAllocations, "OK", null));
     factors.OK_NONRESIDENT_SOURCE_WAGES = D(wages);
   }
+  // Attested exclusions leave the priced base; max0 keeps the trace honest
+  // when the attested period total exceeds a nonresident source slice.
+  wages = max0(wages - exemptService);
   trace("OK_WAGES", wages);
 
   const allowance = U(rates.periods[period].allowance) * BigInt(allowances);
@@ -242,6 +323,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const OK_FACTOR_LABELS: Readonly<Record<string, string>> = {
   OK_EXEMPT: "Exempt from Oklahoma withholding",
+  OK_EXEMPT_SERVICE_WAGES: "Oklahoma 68 O.S. 2385.1 excluded service wages",
   OK_WAGES: "Oklahoma wages this period",
   OK_NONRESIDENT_SOURCE_WAGES: "Oklahoma-source wages this period for a nonresident",
   OK_ALLOWANCE: "Oklahoma allowance",
@@ -257,7 +339,7 @@ export const OK_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: OK_TAX_YEAR_EDITIONS,
   printedPeriods: OK_PERIODS,
-  supportingCertificateKeys: ["us_ok_ow9mse"],
+  supportingCertificateKeys: ["us_ok_ow9mse", "us_ok_service_class"],
   compute,
 };
 
@@ -364,6 +446,60 @@ export const OK_OW9MSE_CERTIFICATE: PayrollCertificate = {
     { key: "spouses_share_tax_domicile", label: "Employee and spouse share the same state of domicile for tax purposes", kind: "flag", required: true, help: "OW-9-MSE question 5 must be YES." },
     { key: "latest_spouse_les_on_file", label: "Latest servicemember LES is on file and confirms Oklahoma assignment", kind: "flag", required: true, help: "OTC requires the employer to verify and retain the latest LES and match its assignment location to the form." },
     { key: "current_military_id_on_file", label: "Current military spouse ID is on file", kind: "flag", required: true, help: "OTC requires a current Military ID that identifies the employee as a military spouse." },
+  ],
+};
+
+/**
+ * Payer-held 68 O.S. §2385.1 service attestation (no state form exists —
+ * OW-2 states the exclusions and the employer applies them). Refiled as the
+ * accumulations change: the month and quarter totals always include the
+ * current period, so the $900 farm-monthly and $200 non-trade-quarterly
+ * tests run on complete totals.
+ */
+export const OK_SERVICE_CLASS_CERTIFICATE: PayrollCertificate = {
+  key: "us_ok_service_class",
+  form: "Service class attestation",
+  label: "Oklahoma excluded-service attestation",
+  scope: { level: "region", region: "OK" },
+  purpose: "withholding",
+  citation:
+    "Oklahoma Tax Commission, Packet OW-2 (Revised 11-2025), General Information p. 2, "
+    + "quoting 68 O.S. §2385.1",
+  summary:
+    "The employer attests the employee's qualifying service class and the attested "
+    + "period, month, and quarter qualifying-wage totals so only qualifying wages are excluded.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "service_class",
+      label: "Qualifying service class",
+      kind: "choice", required: true,
+      choices: [
+        { value: "farm_service", label: "Farm service ($900 or less monthly)" },
+        { value: "domestic_service", label: "Domestic service in a qualifying context" },
+        { value: "nontrade_service", label: "Non-trade service (below $200 quarterly)" },
+        { value: "minister_service", label: "Minister or religious-order service in ministry" },
+      ],
+      help: "68 O.S. §2385.1 classes only: farm pay, domestic service in the specified private/home/educational/club contexts, services outside the employer's trade or business, and ministers in ministry or religious-order duties.",
+    },
+    {
+      key: "period_qualifying_wages",
+      label: "This period's wages in the attested class",
+      kind: "amount", decimals: 4, min: "0", required: true,
+      help: "Must not exceed this period's pay; the excluded amount when the class test passes.",
+    },
+    {
+      key: "month_qualifying_wages",
+      label: "Calendar-month qualifying wages including this period",
+      kind: "amount", decimals: 4, min: "0", required: false,
+      help: "Required for farm service: the $900 monthly test runs on this total.",
+    },
+    {
+      key: "quarter_qualifying_wages",
+      label: "Calendar-quarter qualifying wages including this period",
+      kind: "amount", decimals: 4, min: "0", required: false,
+      help: "Required for non-trade service: the $200 quarterly test runs on this total.",
+    },
   ],
 };
 
