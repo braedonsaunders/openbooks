@@ -1285,10 +1285,10 @@ function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyou
   const target = data.config.target
   const [search, setSearch] = useState('')
   const items = useMemo(
-    () => data.items.filter((i) => (i.range.hours > 0 || compareMoney(String(i.range.nonBillableCost), '0') > 0) && i.name.toLowerCase().includes(search.toLowerCase())),
+    () => data.items.filter((i) => (i.range.hours > 0 || compareMoney(i.range.nonBillableCost, '0') > 0) && i.name.toLowerCase().includes(search.toLowerCase())),
     [data.items, search],
   )
-  const all = data.items.filter((i) => i.range.hours > 0 || compareMoney(String(i.range.nonBillableCost), '0') > 0)
+  const all = data.items.filter((i) => i.range.hours > 0 || compareMoney(i.range.nonBillableCost, '0') > 0)
   const totalHours = all.reduce((s, i) => s + i.range.hours, 0)
   const billableHours = all.reduce((s, i) => s + i.range.billableHours, 0)
   const avgBillable = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
@@ -1510,7 +1510,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
                     <span className={cn('text-lg font-bold tabular-nums', tone.text)}>{pct1(e.range.percentBilled, 0)}</span>
                     <span className="text-right text-[10px] leading-tight text-slate-400 dark:text-slate-500">
                       {hrs0(e.range.hours)}h
-                      {compareMoney(String(e.range.nonBillableCost), '0') > 0 ? <span className="block text-rose-500">{money(e.range.nonBillableCost)}</span> : null}
+                      {compareMoney(e.range.nonBillableCost, '0') > 0 ? <span className="block text-rose-500">{money(e.range.nonBillableCost)}</span> : null}
                     </span>
                   </div>
                 </button>

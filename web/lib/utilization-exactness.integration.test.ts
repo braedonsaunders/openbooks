@@ -47,9 +47,9 @@ test('utilization accumulates cost exactly and decides alerts on exact decimals'
     });
     await withOrgContext(org.orgId, async () => {
       const data = await utilizationData(org.orgId, { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, null);
-      assert.equal(data.company.range.nonBillableCost, 0.3, 'fractional legs must sum exactly');
+      assert.equal(data.company.range.nonBillableCost, '0.3000', 'fractional legs must sum exactly');
       assert.equal(data.employees.length, 3);
-      assert.equal(data.company.deltas.costDelta, 0.3);
+      assert.equal(data.company.deltas.costDelta, '0.3000');
       // 0% billed is below the 70% target (warning), but the 0.3 delta sits
       // exactly AT the spike threshold — an exact comparison raises no
       // danger alert, while float dust (0.30000000000000004) would.

@@ -50,11 +50,11 @@ test('utilization translates every cost-rate functional to presentation', { skip
   try {
     await withOrgContext(org.orgId, async () => {
       const data = await utilizationData(org.orgId, JULY, null)
-      assert.equal(data.company.range.nonBillableCost, 1175)
+      assert.equal(data.company.range.nonBillableCost, '1175.0000')
       const cad = data.employees.find((e) => e.id === cadEmp)!
       const us = data.employees.find((e) => e.id === usEmp)!
-      assert.equal(cad.range.nonBillableCost, 500)
-      assert.equal(us.range.nonBillableCost, 675)
+      assert.equal(cad.range.nonBillableCost, '500.0000')
+      assert.equal(us.range.nonBillableCost, '675.0000')
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

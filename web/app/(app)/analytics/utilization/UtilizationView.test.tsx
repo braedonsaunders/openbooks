@@ -21,9 +21,9 @@ function stat(hours: number) {
     billableHours: 0,
     nonBillableHours: hours,
     percentBilled: 0,
-    nonBillableCost: 0,
-    nonBillableCostPerDay: 0,
-    nonBillableCostPerHour: 0,
+    nonBillableCost: '0.0000',
+    nonBillableCostPerDay: '0.0000',
+    nonBillableCostPerHour: '0.0000',
   }
 }
 
@@ -35,7 +35,7 @@ function dataWithHours(hours: number): UtilizationData {
     company: {
       range: stat(hours),
       prior: stat(hours),
-      deltas: { pctDelta: 0, costDelta: 0 },
+      deltas: { pctDelta: 0, costDelta: '0.0000' },
       alerts: [],
     },
     departments: [],
