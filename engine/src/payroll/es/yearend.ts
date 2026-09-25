@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { payrollCertificate, resolveCertificate } from "../certificates.ts";
 import { assertPayrollCountryKnown } from "../country.ts";
-import { resolveEmployeeFact } from "../employee-facts.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import { PayrollError } from "../error.ts";
 import { assertPayrollFilingAccountKnown } from "../filing.ts";
 import type {
@@ -120,8 +120,13 @@ export async function es190Slips(orgId: string, taxYear: number): Promise<Es190S
       stored,
       asOf: `${taxYear}-12-31`,
     });
+    // Route the certificate-backed fact through the same declared-fact
+    // reader as profile-backed facts (see requireEsFiscalResidence in
+    // ./employee-facts.ts): the read resolves through the declaration.
     const province = resolveEmployeeFact(
-      "ES", "es_provincia_domicilio", resolved.answers.provincia_domicilio,
+      "ES",
+      "es_provincia_domicilio",
+      empFact("ES", { es_provincia_domicilio: resolved.answers.provincia_domicilio ?? null }, "es_provincia_domicilio"),
     );
     if (province == null) {
       throw new PayrollError(

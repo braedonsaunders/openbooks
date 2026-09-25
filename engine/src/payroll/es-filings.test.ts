@@ -15,12 +15,12 @@ import {
 const EMP = "11111111-1111-1111-8111-111111111111";
 const FOREIGN = "22222222-2222-2222-8222-222222222222";
 
-test("ES declares the certificado (190, annual), the 111 (quarterly) and the IRNR 216/296", () => {
+test("ES declares the certificado (190, annual), the 111 (quarterly plus mensual) and the IRNR 216/296", () => {
   const filings = esPackFilings();
   assert.equal(filings.country, "ES");
   assert.deepEqual(
     filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["190", "annual"], ["111", "quarterly"], ["216", "quarterly"], ["296", "annual"]],
+    [["190", "annual"], ["111", "quarterly"], ["111-mensual", "monthly"], ["216", "quarterly"], ["296", "annual"]],
   );
   for (const filing of filings.yearEnd) {
     assert.equal(typeof filing.population, "function");
@@ -34,15 +34,15 @@ test("ES declares the certificado (190, annual), the 111 (quarterly) and the IRN
   }
 });
 
-test("ES 190 rows are one employee plus province; 111 rows are one quarter", () => {
-  assert.deepEqual(parseEs190RowId(`${EMP}:MD`), {
+test("ES 190 rows are one employee plus domicile-province code; 111 rows are one quarter", () => {
+  assert.deepEqual(parseEs190RowId(`${EMP}:28`), {
     employees: [EMP], accounts: [],
   });
   assert.deepEqual(parseEs111RowId("Q3"), { employees: [], accounts: [] });
 });
 
 test("ES row grammars refuse what their populations never build", () => {
-  for (const bad of ["not-a-row", "", EMP, `${EMP}:MD:extra`, "MD", "Q5", "Q0", "q1", `${EMP}:Q1`]) {
+  for (const bad of ["not-a-row", "", EMP, `${EMP}:MD`, `${EMP}:MD:extra`, "MD", "Q5", "Q0", "q1", `${EMP}:Q1`]) {
     assert.equal(parseEs190RowId(bad), null, `190 must refuse ${bad}`);
   }
   for (const bad of ["not-a-row", "", EMP, `${EMP}:MD`, "Q5", "Q0", "q1", "1", "Trimestre 1"]) {
