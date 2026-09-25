@@ -8,6 +8,8 @@ import { US_PACK_RATES } from "./rates.ts";
 export interface UsPayrollConfig {
   futaRate(state: string): string | null;
   sui(state: string, filingAccountId: string | null): { rate: string; wageBase: string } | undefined;
+  /** The employer's UI reserve account balance for ETT eligibility, when entered. */
+  ettReserveBalance(state: string): string | null;
   subRegionRates(
     rateKey: string, region: string, subRegion: string,
   ): Record<string, string> | undefined;
@@ -26,6 +28,8 @@ export async function usPayrollConfig(
       const values = rates.values("us_sui", { region: state, filingAccountId });
       return values ? { rate: values.rate!, wageBase: values.wageBase! } : undefined;
     },
+    ettReserveBalance: (state) =>
+      rates.values("us_ca_ett", { region: state })?.reserveBalance ?? null,
     subRegionRates: (rateKey, region, subRegion) =>
       rates.values(rateKey, { region, subRegion }) ?? undefined,
   };

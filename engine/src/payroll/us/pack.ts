@@ -408,6 +408,17 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "ca_ett",
+      regions: ["CA"],
+      components: [
+        // California Employment Training Tax (2026: 0.1% on the first $7,000,
+        // positive UI-reserve-balance employers only): an EMPLOYER
+        // contribution remitted to the state, beside SUI rather than inside
+        // it — a deficit-balance account is exempt while still owing SUI.
+        { code: "CA-ETT", name: "CA employment training tax", systemKey: "ca_ett", kind: "employer_contribution", sequence: 251, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
       key: "local_income_tax",
       components: [
         // The taxing unit BELOW the state: New York City, Yonkers,

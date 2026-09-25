@@ -557,12 +557,43 @@ const US_PA_LOCAL_EIT_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * California Employment Training Tax. The 0.1% rate and the $7,000 wage base
+ * are statutory constants (transcribed on the CA edition); what varies is the
+ * employer's UI reserve account balance — a positive balance owes ETT, a
+ * deficit balance is exempt. Region scope like FUTA: one ETT account per
+ * employer per state in the common case.
+ */
+const US_CA_ETT_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_ca_ett",
+  label: "CA Employment Training Tax (UI reserve status)",
+  scope: "region",
+  systemKeys: ["ca_ett"],
+  regions: ["CA"],
+  // An unknown reserve balance must refuse, not accrue 0.00: ETT is always
+  // owed by a positive-balance employer, and 0.00 is indistinguishable from
+  // a genuinely exempt (deficit-balance) account.
+  whenUnconfigured: "refuse",
+  citation: "California EDD 2026 Employer's Guide (DE 44), payroll tax table",
+  variesBecause:
+    "ETT liability turns on the employer's own UI reserve account balance, which the state "
+    + "holds per account — no payroll system can carry it as a constant.",
+  fields: [
+    {
+      key: "reserveBalance", label: "UI reserve account balance", kind: "amount", decimals: 2,
+      min: "-100000000", max: "100000000", required: true,
+      help: "The employer's UI reserve account balance. Above zero the employer owes ETT; "
+        + "zero or below the account is exempt. Entered from the state's reserve-balance notice.",
+    },
+  ],
+};
+
 export const US_PACK_RATES: PayrollPackRates = {
   country: "US",
   // The local slots (Ohio's municipalities, Michigan's cities) are declared in
   // engine/src/payroll/us/states/local-rates.ts, beside the engines that read
   // them and the reasoning for why their rates cannot be pack constants.
-  slots: [US_FUTA_SLOT, US_SUI_SLOT, US_PA_LOCAL_EIT_SLOT, ...US_LOCAL_RATE_SLOTS],
+  slots: [US_FUTA_SLOT, US_SUI_SLOT, US_CA_ETT_SLOT, US_PA_LOCAL_EIT_SLOT, ...US_LOCAL_RATE_SLOTS],
   /**
    * The pre-scoping shape: `orgs.settings.payroll.us` held ONE FUTA rate for the
    * whole employer and ONE SUI entry per state for every account. Reproduced

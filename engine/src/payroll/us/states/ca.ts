@@ -49,7 +49,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
-import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { bmin, D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { PayrollError } from "../../error.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
@@ -118,6 +118,9 @@ export interface CaYearRates {
   exemptionAllowance: ByPeriod<readonly string[]>;
   /** Tables 5–28. */
   rateTables: ByPeriod<Readonly<Record<CaSchedule, readonly CaRateRow[]>>>;
+  /** Employment Training Tax employer rate and taxable wage base (2026: 0.1%, first $7,000). */
+  ettRate: string;
+  ettWageBase: string;
   /** DE 44 p. 18 — the flat rates for supplemental wages paid separately. */
   supplemental: { bonusesAndStockOptions: string; other: string };
 }
@@ -343,6 +346,10 @@ const RATE_TABLES_2026: ByPeriod<Readonly<Record<CaSchedule, readonly CaRateRow[
 export const CA_RATES_2026: CaYearRates = {
   year: 2026,
   status: "published",
+  // DE 44 payroll tax table: 2026 ETT employer rate 0.1% on the first $7,000
+  // of subject wages, owed only by positive UI-reserve-balance employers.
+  ettRate: "0.001",
+  ettWageBase: "7000",
   lowIncomeExemption: LOW_INCOME_2026,
   estimatedDeduction: ESTIMATED_DEDUCTION_2026,
   standardDeduction: STANDARD_DEDUCTION_2026,
@@ -607,7 +614,26 @@ export const CA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CA_CREDIT: "California exemption allowance credit (Table 4, Step 5)",
   CA_NET: "California net tax after credit",
   CA_TAX: "California tax withheld this period",
+  CA_ETT_EMPLOYEE: "California ETT employer contribution",
+  CA_ETT_EXEMPT: "California ETT-exempt deficit-balance account",
 };
+
+/**
+ * Employment Training Tax employer contribution — 0.1% of subject wages up
+ * to the year's wage base (2026: first $7,000), owed only by positive
+ * UI-reserve-balance employers (a deficit balance is exempt). The reserve
+ * posture is decided by the caller from the configured balance; this helper
+ * prices the capped base.
+ */
+export function caEttWithholding(
+  payDate: string, subjectWages: string, ytdSubjectWages: string,
+): string {
+  const rates = caRatesForPayDate(payDate);
+  return D(mulRateCents(
+    max0(bmin(U(subjectWages), U(rates.ettWageBase) - U(ytdSubjectWages))),
+    rates.ettRate,
+  ));
+}
 
 export const CA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CA",
