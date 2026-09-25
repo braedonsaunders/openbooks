@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Alert, Button, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { useAppAction } from '../../../../../lib/use-app-action'
 
 interface Fact {
   key: string
@@ -36,6 +37,7 @@ interface Payload { packs: Pack[]; rows: Row[]; subsidiaries: Employer[] }
 /** Pack-declared employer facts, audited and effective-dated in Payroll Setup. */
 export function EmployerFactsSection() {
   const t = useTranslations('payroll.settingsPage.employerFacts')
+  const tc = useTranslations('common')
   const today = useBusinessToday()
   const [data, setData] = useState<Payload | null>(null)
   const [country, setCountry] = useState('')
@@ -45,19 +47,19 @@ export function EmployerFactsSection() {
   const [value, setValue] = useState('')
   const [reason, setReason] = useState('')
   const [failure, setFailure] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const { execute: executeLoad, busy: loading } = useAppAction()
+  const saveAction = useAppAction()
 
   const load = useCallback(async () => {
-    return fetch('/api/payroll/settings/employer-facts').then(async (res) => {
-      if (!res.ok) {
-        setFailure(await readApiErrorMessage(res, t('loadFailed')))
-        return
-      }
-      const payload = await res.json() as Payload
-      setData(payload)
-      setFailure(null)
+    await executeLoad(() => fetchAction<Payload>('/api/payroll/settings/employer-facts'), {
+      fallbackMessage: t('loadFailed'),
+      onRefused: (error) => setFailure(error.displayMessage(t('loadFailed'))),
+      onOk: (payload) => {
+        setData(payload)
+        setFailure(null)
+      },
     })
-  }, [t])
+  }, [executeLoad, t])
 
   useEffect(() => { void load() }, [load])
 
@@ -72,28 +74,24 @@ export function EmployerFactsSection() {
 
   const save = async () => {
     if (!fact) return
-    setBusy(true)
-    try {
-      const res = await fetch('/api/payroll/settings/employer-facts', {
+    await saveAction.execute(() => fetchAction('/api/payroll/settings/employer-facts', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ country: selectedCountry, factKey: fact.key, subsidiaryId: selectedSubsidiaryId, effectiveFrom: fact.effectivePeriod === 'calendar_year' ? `${effectiveFrom.slice(0, 4)}-01-01` : effectiveFrom, value, changeReason: reason }),
+      }), {
+        fallbackMessage: t('saveFailed'),
+        onRefused: (error) => setFailure(error.displayMessage(t('saveFailed'))),
+        onOk: () => {
+          setFailure(null)
+          toast.success(t('saved'))
+          setValue('')
+          setReason('')
+          void load()
+        },
       })
-      if (!res.ok) {
-        setFailure(await readApiErrorMessage(res, t('saveFailed')))
-        return
-      }
-      setFailure(null)
-      toast.success(t('saved'))
-      setValue('')
-      setReason('')
-      await load()
-    } finally {
-      setBusy(false)
-    }
   }
 
-  if (!data && !failure) return <p role="status">{t('loading')}</p>
+  if (!data && !failure && loading) return <p role="status">{t('loading')}</p>
 
   const entityName = entity?.name ?? t('legalEmployer')
   return (
@@ -102,7 +100,7 @@ export function EmployerFactsSection() {
         <h2 id="employer-facts-heading" className="text-lg font-semibold">{t('heading')}</h2>
         <p className="text-sm text-muted-foreground">{t('description')}</p>
       </div>
-      {failure && <Alert variant="destructive">{failure}</Alert>}
+      {failure && <Alert variant="destructive">{failure} <Button variant="outline" onClick={() => void load()} disabled={loading}>{tc('actions.retry')}</Button></Alert>}
       {data && data.packs.length === 0 && <Alert>{t('noPacks')}</Alert>}
       {data && data.packs.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
@@ -138,7 +136,7 @@ export function EmployerFactsSection() {
               <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact?.label}</Label><Input id="employer-fact-value" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} placeholder={fact?.kind === 'decimal' ? t('decimalPlaces', { scale: fact.scale ?? 0 }) : t('wholeNumber')} /></div>
             )}
             <div className="space-y-1"><Label htmlFor="employer-fact-reason">{t('reason')}</Label><Input id="employer-fact-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required /></div>
-            <Button onClick={() => void save()} disabled={busy || !fact || !value || !reason.trim() || !selectedSubsidiaryId}>{busy ? t('saving') : t('save')}</Button>
+            <Button onClick={() => void save()} disabled={saveAction.busy || !fact || !value || !reason.trim() || !selectedSubsidiaryId}>{saveAction.busy ? t('saving') : t('save')}</Button>
           </div>
           <div className="space-y-3" aria-label={t('currentFacts', { name: entity?.name ?? t('employerFallback') })}>
             <h3 className="font-medium">{t('currentValues', { name: entityName })}</h3>

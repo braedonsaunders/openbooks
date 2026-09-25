@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
 import { countryName } from '../../../../../lib/countries'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { useAppAction } from '../../../../../lib/use-app-action'
 import { formatRateFieldValue } from './statutory-rates-format'
 import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 
@@ -150,28 +152,29 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
   }
   const [failure, setFailure] = useState<string | null>(null)
   const loadSequence = useRef(0)
+  const { execute: executeLoad, busy: loading } = useAppAction()
+  const loadFallback = label('failed', 'Failed')
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body.
+  // response), never synchronously in the effect body. The shared action path
+  // also catches transport rejections, so a dead initial or year-change GET
+  // pins a refusal with retry instead of dropping an unhandled rejection.
   const load = useCallback((forYear: number | null) => {
     const sequence = ++loadSequence.current
     const query = forYear ? `?year=${forYear}` : ''
-    return fetch(`/api/payroll/settings/rates${query}`).then(async (res) => {
-      // The status is checked before the body is parsed: a non-JSON error body
-      // (this route rethrows non-domain errors as an unhandled empty 500) must
-      // surface the failure, never a SyntaxError from res.json().
-      if (!res.ok) {
-        const message = await readApiErrorMessage(res, 'failed')
-        if (sequence === loadSequence.current) setFailure(message)
-        return
-      }
-      const payload: Payload & { error?: string } = await res.json()
-      if (sequence !== loadSequence.current) return
-      setFailure(null)
-      setData(payload)
-      if (forYear == null) setYear(payload.year)
+    return executeLoad(() => fetchAction<Payload>(`/api/payroll/settings/rates${query}`), {
+      fallbackMessage: loadFallback,
+      onRefused: (error) => {
+        if (sequence === loadSequence.current) setFailure(error.displayMessage(loadFallback))
+      },
+      onOk: (payload) => {
+        if (sequence !== loadSequence.current) return
+        setFailure(null)
+        setData(payload)
+        if (forYear == null) setYear(payload.year)
+      },
     })
-  }, [])
+  }, [executeLoad, loadFallback])
 
   useEffect(() => {
     void load(initialYear ?? null)
@@ -294,7 +297,8 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
         </p>
       </div>
 
-      {failure ? <Alert variant="destructive">{failure}</Alert> : null}
+      {failure ? <Alert variant="destructive">{failure} <Button variant="outline" onClick={() => void load(year)} disabled={loading}>{tc('actions.retry')}</Button></Alert> : null}
+      {loading && !data ? <p role="status">{label('rates.loading', 'Loading statutory rates…')}</p> : null}
 
       {data && data.packs.length === 0 ? (
         <Alert>
