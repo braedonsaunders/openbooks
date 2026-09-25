@@ -2162,10 +2162,15 @@ test("cancellation judges the run under its row lock, not the caller's stale rea
     // wire-fixture payments are demoted to plain draft documents (their
     // posting evidence removed under the amend kernel bypass) so every child
     // mutation a stale cancellation attempts is actually available to it.
+    // Append-only (0380) removed the amend bypass for posted-line deletes:
+    // demote through the sandbox-wipe path the teardown uses, on this
+    // scratch org only.
     await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
       await tx.execute(sql`
         select set_config('openbooks.amend', 'on', true),
+               set_config('openbooks.sandbox_wipe', 'on', true),
                set_config('app.bypass_rls', 'on', true)`);
+      await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`);
       await tx.execute(sql`
         update documents set status = 'draft', posted_entry_id = null
          where org_id = ${org.orgId}
