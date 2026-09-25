@@ -180,7 +180,9 @@ export function toAssistantToolDef(view: AppToolView): AssistantToolDef {
               title: view.title,
               destructive: view.destructive,
               input: parsed.value,
-              confirmToken: signApplicationCommand(view.name, parsed.value, authz),
+              confirmToken: signApplicationCommand(view.name, parsed.value, authz, {
+                appKey: view.appKey, toolKey: view.toolKey, activeVersionId: view.activeVersionId,
+              }),
             },
           },
           note: 'Awaiting explicit user confirmation. Nothing has been changed.',
@@ -232,7 +234,9 @@ export async function commitAppToolCommand(
   if (!canRunTool(authz, def, resolved)) return { ok: false, error: 'forbidden', status: 403 }
   const parsed = parseToolInput(view.zodSchema, input)
   if (!parsed.ok) return { ok: false, error: 'invalid_input', status: 422 }
-  if (!verifyApplicationCommand(view.name, parsed.value, confirmToken, authz)) {
+  if (!verifyApplicationCommand(view.name, parsed.value, confirmToken, authz, {
+    appKey: view.appKey, toolKey: view.toolKey, activeVersionId: view.activeVersionId,
+  })) {
     return { ok: false, error: 'confirmation_expired_or_modified', status: 422 }
   }
   // The token is the durable identity of this proposed write; committing

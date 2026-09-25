@@ -36,6 +36,7 @@ function signature(args: {
   userId: string;
   orgId: string;
   exp: number;
+  binding: unknown;
 }): string {
   return createHmac("sha256", commandKey()).update(canonicalJson(args)).digest("hex");
 }
@@ -45,6 +46,7 @@ export function signApplicationCommand(
   toolName: string,
   input: unknown,
   authz: Authz,
+  binding: unknown = null,
 ): string {
   const exp = Date.now() + TTL_MS;
   const body: TokenBody = {
@@ -55,6 +57,7 @@ export function signApplicationCommand(
       userId: authz.user.id,
       orgId: authz.user.orgId,
       exp,
+      binding,
     }),
   };
   return Buffer.from(JSON.stringify(body)).toString("base64url");
@@ -65,6 +68,7 @@ export function verifyApplicationCommand(
   input: unknown,
   token: string,
   authz: Authz,
+  binding: unknown = null,
 ): boolean {
   let body: TokenBody;
   try {
@@ -81,6 +85,7 @@ export function verifyApplicationCommand(
     userId: authz.user.id,
     orgId: authz.user.orgId,
     exp: body.exp,
+    binding,
   }), "hex");
   const received = Buffer.from(body.signature, "hex");
   return expected.length === received.length && timingSafeEqual(expected, received);
