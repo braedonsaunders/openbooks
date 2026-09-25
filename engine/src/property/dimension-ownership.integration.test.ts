@@ -68,14 +68,14 @@ test("property creation rejects a location owned by another subsidiary", { skip:
 
 test("property creation waits for a concurrent feature disable and then refuses", { skip: !process.env.OPENBOOKS_DB_URL, timeout: 180_000 }, async () => {
   const org = await createScratchOrg();
-  const holder = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  const holder = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL });
   let pending: Promise<{ id: string }> | undefined;
   try {
     await enablePropertyManagement(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await holder.connect();
     await holder.query("begin");
-    await holder.query("select set_config('app.bypass_rls','on',true)");
+    // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
     await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`openbooks:feature-gate:${org.orgId}`]);
     const staged = await holder.query(
       "update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"propertyManagement\":false}'::jsonb) where id=$1",

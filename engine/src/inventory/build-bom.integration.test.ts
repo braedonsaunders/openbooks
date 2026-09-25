@@ -26,7 +26,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const editor = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    const editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
     await editor.connect();
     let editorCommitted = false;
     let pendingBuild: ReturnType<typeof buildAssembly> | undefined;
@@ -42,7 +42,7 @@ test(
       });
 
       await editor.query("begin");
-      await editor.query("select set_config('app.bypass_rls', 'on', true)");
+      // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
       await editor.query("lock table bom_components in row exclusive mode");
       await editor.query(
         `update bom_components

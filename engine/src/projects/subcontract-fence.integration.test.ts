@@ -38,7 +38,7 @@ test("createSubcontract refuses by name while Subcontracts is disabled and write
 
 test("createSubcontract blocked on the fence loses to a committed Subcontracts disable", async () => {
   const org = await createScratchOrg();
-  const writer = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
   let pending: Promise<unknown> | undefined;
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -46,7 +46,7 @@ test("createSubcontract blocked on the fence loses to a committed Subcontracts d
       where id=${org.orgId}`);
     await writer.connect();
     await writer.query("begin");
-    await writer.query("select set_config('app.bypass_rls','on',true)");
+    // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
     // Stage the disable without committing: the uncommitted flag write holds
     // the org row exclusively, so a creator that checked the gate first must
     // wait on the fence instead of racing past it.

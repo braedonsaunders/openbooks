@@ -202,7 +202,7 @@ test("reversing a receipt stays possible after the item is deactivated", { skip:
 
 test("a deactivation racing a receipt serializes to one refusal with no partial post", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  const editor = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  const editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
   await editor.connect();
   let editorCommitted = false;
   let pendingReceipt: ReturnType<typeof receiveInventory> | undefined;
@@ -212,7 +212,7 @@ test("a deactivation racing a receipt serializes to one refusal with no partial 
     // Hold the deactivation's FOR UPDATE uncommitted — the same lock the
     // item PATCH takes — so the receipt must queue on the items row.
     await editor.query("begin");
-    await editor.query("select set_config('app.bypass_rls', 'on', true)");
+    // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
     await editor.query(`update items set is_active = false where id = '${org.items.fifo}'`);
 
     pendingReceipt = receiveInventory(org.orgId, null, {

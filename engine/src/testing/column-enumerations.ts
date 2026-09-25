@@ -65,6 +65,7 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     file: "engine/src/backup/restore.ts",
     sites: [
       { stance: "presence-probe", note: "which public tables carry org_id and belong in the archive" },
+      { stance: "key-members", note: "self-referencing FK member columns for the restore staging order; the names order the restore, never a write list" },
       { stance: "feeds-a-write", note: "the storable column list the spool insert names; generated columns are recomputed by the target row" },
       { stance: "key-members", note: "FK source members for post-restore validation" },
       { stance: "key-members", note: "FK target members for post-restore validation" },
