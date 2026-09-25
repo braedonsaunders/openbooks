@@ -41,6 +41,8 @@
     "pauseMirror": "ミラーを一時停止",
     "enableMirror": "ミラーを有効化",
     "edit": "編集",
+    "remove": "接続「{name}」を削除する",
+    "removing": "接続「{name}」を削除しています…",
     "downloadQwc": "Web Connector をダウンロード",
     "retainDeletion": "証跡付きで保持する",
     "voidDeletion": "振り戻して無効化する"

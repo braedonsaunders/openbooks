@@ -41,6 +41,8 @@
     "pauseMirror": "Spiegelung pausieren",
     "enableMirror": "Spiegelung aktivieren",
     "edit": "Bearbeiten",
+    "remove": "Verbindung „{name}“ entfernen",
+    "removing": "Verbindung „{name}“ wird entfernt…",
     "downloadQwc": "Web Connector herunterladen",
     "retainDeletion": "Mit Nachweis behalten",
     "voidDeletion": "Stornieren und ungültig machen"

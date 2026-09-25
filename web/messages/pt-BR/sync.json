@@ -41,6 +41,8 @@
     "pauseMirror": "Pausar espelhamento",
     "enableMirror": "Ativar espelhamento",
     "edit": "Editar",
+    "remove": "Remover a conexão \"{name}\"",
+    "removing": "Removendo a conexão \"{name}\"…",
     "downloadQwc": "Baixar Web Connector",
     "retainDeletion": "Manter com evidência",
     "voidDeletion": "Reverter e anular"

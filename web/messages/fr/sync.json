@@ -41,6 +41,8 @@
     "pauseMirror": "Suspendre le miroir",
     "enableMirror": "Activer le miroir",
     "edit": "Modifier",
+    "remove": "Supprimer la connexion « {name} »",
+    "removing": "Suppression de la connexion « {name} » en cours…",
     "downloadQwc": "Télécharger Web Connector",
     "retainDeletion": "Conserver avec preuve",
     "voidDeletion": "Contre-passer et annuler"

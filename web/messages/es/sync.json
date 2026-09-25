@@ -41,6 +41,8 @@
     "pauseMirror": "Pausar espejo",
     "enableMirror": "Activar espejo",
     "edit": "Editar",
+    "remove": "Eliminar la conexión «{name}»",
+    "removing": "Eliminando la conexión «{name}»…",
     "downloadQwc": "Descargar Web Connector",
     "retainDeletion": "Conservar con evidencia",
     "voidDeletion": "Revertir y anular"
