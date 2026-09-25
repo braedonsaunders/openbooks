@@ -9,7 +9,10 @@ interface RouteState {
   };
   subjectSubsidiaryId: string | null;
   status: string | null;
-  scopeChecks: Array<string | null>;
+  // I1-refix-107: scope is decided by the locking resolver (mock:lib), not
+  // the old check-then-read guard seam. The lock stub records every subject
+  // subsidiary it evaluates here.
+  lockChecks: Array<string | null>;
   statusCalls: string[];
   runRows: Array<Record<string, unknown>>;
   canRetry: boolean;
@@ -25,7 +28,7 @@ const routeState: RouteState = {
   },
   subjectSubsidiaryId: "sub-hidden",
   status: "pending_approval",
-  scopeChecks: [],
+  lockChecks: [],
   statusCalls: [],
   runRows: [],
   canRetry: false,
@@ -71,14 +74,6 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
       export function can() { return state.canRetry ?? false }
-      export function guardSubsidiaryScope(authz, subsidiaryId) {
-        state.scopeChecks.push(subsidiaryId ?? null)
-        if (authz.allowedSubsidiaryIds !== null &&
-            (subsidiaryId === null || !authz.allowedSubsidiaryIds.has(subsidiaryId))) {
-          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
-        }
-        return null
-      }
     `,
   ],
   [
@@ -89,6 +84,7 @@ const mockSources = new Map<string, string>([
       export async function requireFlowsSession() { return state.authz }
       export async function loadFlowSubjectSubsidiary() { return state.subjectSubsidiaryId }
       export async function lockFlowSubjectScope(_subjectKind, _subjectId, _orgId, allowedSubsidiaryIds) {
+        state.lockChecks.push(state.subjectSubsidiaryId ?? null)
         if (allowedSubsidiaryIds !== null &&
             (state.subjectSubsidiaryId === null || !allowedSubsidiaryIds.has(state.subjectSubsidiaryId))) {
           throw new ScopeNotFoundError()
@@ -149,7 +145,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.authz.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.subjectSubsidiaryId = "sub-hidden";
   routeState.status = "pending_approval";
-  routeState.scopeChecks = [];
+  routeState.lockChecks = [];
   routeState.statusCalls = [];
   routeState.runRows = [];
   routeState.canRetry = false;
@@ -169,7 +165,7 @@ test("a restricted caller cannot read approval state for another subsidiary", as
   const response = await GET(request());
 
   assert.equal(response.status, 404);
-  assert.deepEqual(routeState.scopeChecks, ["sub-hidden"]);
+  assert.deepEqual(routeState.lockChecks, ["sub-hidden"]);
   assert.deepEqual(routeState.statusCalls, []);
 });
 
@@ -179,7 +175,7 @@ test("an in-scope caller may read approval state", async () => {
   const response = await GET(request());
 
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.scopeChecks, ["sub-hidden"]);
+  assert.deepEqual(routeState.lockChecks, ["sub-hidden"]);
   assert.deepEqual(routeState.statusCalls, ["subject-1"]);
 });
 
@@ -192,7 +188,7 @@ test("a caller without the kind's read grant meets the missing-record answer", a
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "record not found" });
   assert.deepEqual(routeState.readChecks, ["vendor_bill"]);
-  assert.deepEqual(routeState.scopeChecks, [], "no subsidiary lookup may run");
+  assert.deepEqual(routeState.lockChecks, [], "no subsidiary lookup may run");
   assert.deepEqual(routeState.statusCalls, [], "no record read may run");
 });
 
