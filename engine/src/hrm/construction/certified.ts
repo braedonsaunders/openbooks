@@ -108,6 +108,50 @@ function weekStartOf(weekEnding: string): string {
   return addCalendarDays(weekEnding, -6);
 }
 
+/**
+ * The ONE employment a worker's certified hours belong to on a worked day.
+ *
+ * Time entries carry the worker party, not the employment, so a retained
+ * history row (an ended employment beside a rehire, concurrent employments)
+ * would fan every day's hours out once per employment — the weekly report
+ * then overstates hours and prices obsolete classifications. The live
+ * version (recorded_until is null) whose half-open effective window covers
+ * the worked day decides, with the kiosk's employed-status convention
+ * (active/on_leave — offered has not started, suspended is not active,
+ * terminated has ended). Exactly one such employment resolves; zero (hours
+ * against history only) or several (concurrent employments) fail closed
+ * by name instead of guessing whose hours they are.
+ */
+export async function resolveCertifiedEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  partyId: string,
+  workedOn: string,
+): Promise<string> {
+  const matches = (await exec.execute<{ id: string }>(sql`
+    select distinct w.id::text as id
+      from worker_employments w
+      join worker_employment_versions v
+        on v.org_id = w.org_id and v.employment_id = w.id and v.recorded_until is null
+     where w.org_id = ${orgId}::uuid and w.worker_party_id = ${partyId}::uuid
+       and v.effective_from <= ${workedOn}::date
+       and (v.effective_to is null or v.effective_to > ${workedOn}::date)
+       and v.status in ('active', 'on_leave')
+     order by w.id::text
+  `)).rows;
+  if (matches.length === 1) return matches[0]!.id;
+  if (matches.length === 0) {
+    throw new HrmConstructionError(
+      `The worker has no employment effective ${workedOn} — the approved time falls on history only. ` +
+        `Correct the employment history (rehire or termination dates) before generating the certified report.`,
+    );
+  }
+  throw new HrmConstructionError(
+    `The worker has ${matches.length} employments effective ${workedOn} — end or date the overlapping ` +
+      `employment versions so exactly one covers the day, then generate the certified report again.`,
+  );
+}
+
 interface PayloadBuild {
   rows: LaborComplianceReportRow[];
   runDocumentIds: string[];
@@ -160,25 +204,25 @@ async function buildPayload(
     `)
   ).rows;
   const stubByParty = new Map(stubs.map((stub) => [stub.partyId, stub]));
+  // One row per worker per day: the employment fan-out used to live here
+  // (joined every employment by party), doubling hours for rehired workers.
+  // The single covering employment resolves per row below, or refuses.
   const days = (
     await exec.execute<{
       partyId: string;
-      employmentId: string;
       displayName: string;
       workedOn: string;
       hours: string;
     }>(sql`
-      select te.employee_party_id::text as "partyId", w.id::text as "employmentId",
+      select te.employee_party_id::text as "partyId",
              coalesce(p.display_name, te.employee_party_id::text) as "displayName",
              te.worked_on::text as "workedOn", sum(te.hours)::text as hours
         from time_entries te
-        join worker_employments w
-          on w.org_id = te.org_id and w.worker_party_id = te.employee_party_id
         left join parties p on p.org_id = te.org_id and p.id = te.employee_party_id
        where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
          and te.worked_on >= ${weekStart}::date and te.worked_on <= ${weekEnding}::date
          and te.status = 'approved'
-       group by te.employee_party_id, w.id, p.display_name, te.worked_on
+       group by te.employee_party_id, p.display_name, te.worked_on
        order by p.display_name, te.worked_on
     `)
   ).rows;
@@ -193,10 +237,11 @@ async function buildPayload(
   const rows: LaborComplianceReportRow[] = [];
   const scheduleIds = new Set<string>();
   for (const day of days) {
-    const assignment = await classificationAsOf(exec, orgId, day.employmentId, day.workedOn);
+    const employmentId = await resolveCertifiedEmployment(exec, orgId, day.partyId, day.workedOn);
+    const assignment = await classificationAsOf(exec, orgId, employmentId, day.workedOn);
     if (!assignment) {
       throw new HrmConstructionError(
-        `Employment ${day.employmentId} has no work classification effective ${day.workedOn} — assign one before generating the certified report.`,
+        `Employment ${employmentId} has no work classification effective ${day.workedOn} — assign one before generating the certified report.`,
       );
     }
     const classification = (
@@ -204,7 +249,7 @@ async function buildPayload(
         select code, name from hrm_work_classifications
          where org_id = ${orgId}::uuid and id = (
            select classification_id from hrm_employment_classifications
-            where org_id = ${orgId}::uuid and employment_id = ${day.employmentId}::uuid
+            where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
               and effective_from <= ${day.workedOn}::date
               and (effective_to is null or effective_to >= ${day.workedOn}::date)
             order by effective_from desc limit 1)
@@ -212,20 +257,20 @@ async function buildPayload(
     ).rows[0];
     if (!classification) {
       throw new HrmConstructionError(
-        `Employment ${day.employmentId} has no work classification effective ${day.workedOn} — assign one before generating the certified report.`,
+        `Employment ${employmentId} has no work classification effective ${day.workedOn} — assign one before generating the certified report.`,
       );
     }
     const wage = await resolveWage(exec, {
       orgId,
       actorId,
-      employmentId: day.employmentId,
+      employmentId,
       projectId,
       workedOn: day.workedOn,
     });
     scheduleIds.add(wage.scheduleId);
     const stub = stubByParty.get(day.partyId);
     rows.push({
-      employmentId: day.employmentId,
+      employmentId,
       displayName: day.displayName,
       classificationCode: classification.code,
       classificationName: classification.name,
