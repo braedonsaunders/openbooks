@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { add, cmp, mulDecimal, mulPercent, neg, prorateDays, roundMoney, sum } from "../money/money.ts";
+import { negMoney, parseMoney, type Money } from "../money/brands.ts";
 import { payrollPack } from "./packs.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { componentYearToDate as openingComponentYtd } from "./opening-balances.ts";
@@ -179,7 +180,10 @@ export async function appendRetroSettlementLines(
         // per-hour component and union fringe on those hours, and carrying
         // them here would pay all of them a second time. The hours are on the
         // settlement rows as evidence instead.
-        amount: line.amount,
+        // Cross-struct boundary: retro lines carry their own amount shape,
+        // so the stub re-parses here (fail closed, like every persist
+        // boundary) instead of asserting a brand it cannot prove.
+        amount: parseMoney(line.amount),
         projectId: line.projectId,
         departmentId: line.departmentId,
         sequence: line.sequence,
@@ -253,7 +257,8 @@ export async function appendDerivedEarningLines(
           // hours, and hour-shaped derived quantities are already on the wage
           // lines, so carrying them here would pay per-hour components twice.
           rate: line.rate ?? undefined,
-          amount: line.amount,
+          // Cross-struct boundary, re-parsed like the retro lines above.
+          amount: parseMoney(line.amount),
           projectId: line.projectId,
           departmentId: line.departmentId,
           timeTypeId: line.timeTypeId,
@@ -326,7 +331,8 @@ export async function appendStatutoryHolidayEarningLines(
         // twice. The component's own flags (taxable, pensionable, insurable,
         // vacationable — all true) classify the amount: holiday pay is wages.
         description: line.description,
-        amount: line.amount,
+        // Cross-struct boundary, re-parsed like the retro lines above.
+        amount: parseMoney(line.amount),
         sequence: line.sequence,
       });
     }
@@ -399,11 +405,12 @@ export async function applyAssignedComponentLines(
             : "0",
         }
       : {};
-    let amount: string;
+    // All three branches close through roundMoney/mulPercent: canonical Money.
+    let amount: Money;
     if (c.basis === "per_hour") {
-      amount = roundMoney(mulDecimal(value, applyBasisCaps(capped, totalHours(lines), context)), 2);
+      amount = roundMoney(mulDecimal(value, applyBasisCaps(capped, totalHours(lines), context)), 2) as Money;
     } else if (c.basis === "percent_of_gross") {
-      amount = mulPercent(applyBasisCaps(capped, earningsBase(lines), context), value, 2);
+      amount = mulPercent(applyBasisCaps(capped, earningsBase(lines), context), value, 2) as Money;
     } else {
       // A fixed_amount row covering only part of the period — a mid-period
       // amendment stored as old-row-ends-15th / new-row-starts-16th, or a row
@@ -421,7 +428,7 @@ export async function applyAssignedComponentLines(
       const periodValue = assignmentCoversPeriod(window)
         ? value
         : prorateDays(value, coveredDays, periodDays);
-      amount = roundMoney(applyBasisCaps(capped, periodValue, context), 2);
+      amount = roundMoney(applyBasisCaps(capped, periodValue, context), 2) as Money;
     }
     if (cmp(amount, "0") === 0) continue;
     lines.push({
@@ -474,7 +481,8 @@ export async function applyRunLineAdjustments(
         if (lines[i]!.componentId === adj.id) lines.splice(i, 1);
       }
     }
-    const amount = roundMoney(String(adj.adj_amount), 2);
+    // Operator-entered adjustment, closed through roundMoney: canonical Money.
+    const amount = roundMoney(String(adj.adj_amount), 2) as Money;
     if (cmp(amount, "0") === 0) continue;
     lines.push({
       componentId: adj.id as string, kind: adj.kind as Line["kind"],
@@ -556,7 +564,7 @@ export async function appendUnionFringeLines(
         // and the identically-rated employee line disagree by a cent purely
         // because of how the hours fell across jobs.
         const hours = totalHours(lines);
-        const amount = roundMoney(mulDecimal(fringe.value, hours), 2);
+        const amount = roundMoney(mulDecimal(fringe.value, hours), 2) as Money;
         if (cmp(amount, "0") === 0) continue;
         const hourLines = lines.filter((l) => l.kind === "earning" && l.hours);
         const splits = jobCosted
@@ -581,7 +589,7 @@ export async function appendUnionFringeLines(
           });
         }
       } else {
-        const amount = mulPercent(earningsBase(lines), fringe.value, 2);
+        const amount = mulPercent(earningsBase(lines), fringe.value, 2) as Money;
         if (cmp(amount, "0") === 0) continue;
         // Percent-of-gross splits proportional to the earnings it is a percent
         // OF — including the untagged share, which stays untagged rather than
@@ -691,7 +699,7 @@ export function appendCashVacationPay(args: {
     const base = sum(lines
       .filter((l) => l.kind === "earning" && (l.vacationable ?? true) && !l.accrualOnly)
       .map((l) => l.amount));
-    const vacation = mulPercent(base, vacationPercent, 2);
+    const vacation = mulPercent(base, vacationPercent, 2) as Money;
     if (cmp(vacation, "0") > 0) {
       const c = need("vacation_payout", "earning");
       lines.push({
@@ -781,7 +789,7 @@ export async function applyEntitlementPlanMovements(
       } else if (movement.kind === "payout") {
         lines.push({
           componentId: movement.componentId, kind: "earning",
-          description: `${plan.name} payout`, amount: neg(money),
+          description: `${plan.name} payout`, amount: negMoney(money),
           sequence: 46, vacationable: false,
         });
       } else if (movement.kind === "repayment") {

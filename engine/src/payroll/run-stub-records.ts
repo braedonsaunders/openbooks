@@ -8,7 +8,8 @@ import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.t
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
-import { add, sum } from "../money/money.ts";
+import { sum } from "../money/money.ts";
+import { addMoney, sumMoney, type Money } from "../money/brands.ts";
 import { jurisdictionKey, labourJurisdictionProblem, PayrollJurisdictionError, payrollJurisdictionDeclared, payrollPack, resolvePayrollStatutoryReportingCode, type PayrollAssessedOn } from "./packs.ts";
 import { resolveStatutoryHolidayPay, undeclaredJurisdictionHolidayConflict, type StatutoryHolidayEligibilityFacts, type StatutoryHolidayEarningLine } from "./holidays.ts";
 import { planMovementsForStub, recordEntitlementMovements } from "./entitlements.ts";
@@ -47,7 +48,11 @@ export function programApplicabilityFromExclusions(
 export interface Line {
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
-  description: string; hours?: string; rate?: string; amount: string;
+  // Brand boundary: every stub amount is canonical ledger money by the time
+  // it lands on a line (divideMoney/allocateProportionally/entitlementMoneyValue
+  // outputs, or roundMoney/mulPercent-closed values). Hours and rates stay
+  // plain strings: they are quantities, not money.
+  description: string; hours?: string; rate?: string; amount: Money;
   /** Civil dates that substantiate when an earning amount was earned. */
   earnedFrom?: string | null; earnedTo?: string | null;
   projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
@@ -332,8 +337,8 @@ export async function persistEntitlementMovements(
 
 /** Gross earning base: every earning line that is real pay. Accrual-only
  * employer lines carry no employee money and stay out of every basis. */
-export const earningsBase = (lines: readonly Line[]): string =>
-    sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
+export const earningsBase = (lines: readonly Line[]): Money =>
+    sumMoney(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
 
 // Hours ACTUALLY WORKED — earning lines only, matching cappableHourLines and
 // the hourLines the per-hour fringe allocates across.
@@ -354,16 +359,16 @@ export const totalHours = (lines: readonly Line[]): string =>
  * instead of being pushed onto whichever jobs happen to be on the stub.
  */
 export const earningJobBuckets = (lines: readonly Line[]): {
-  projectId: string | null; departmentId: string | null; weight: string;
+  projectId: string | null; departmentId: string | null; weight: Money;
 }[] => {
     const byDimension = new Map<string, {
-      projectId: string | null; departmentId: string | null; weight: string;
+      projectId: string | null; departmentId: string | null; weight: Money;
     }>();
     for (const line of lines) {
       if (line.kind !== "earning" || line.accrualOnly) continue;
       const key = `${line.projectId ?? ""}|${line.departmentId ?? ""}`;
       const existing = byDimension.get(key);
-      if (existing) existing.weight = add(existing.weight, line.amount);
+      if (existing) existing.weight = addMoney(existing.weight, line.amount);
       else {
         byDimension.set(key, {
           projectId: line.projectId ?? null,

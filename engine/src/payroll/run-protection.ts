@@ -6,6 +6,7 @@
  */
 import { PayrollError } from "./error.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
+import { parseMoney } from "../money/brands.ts";
 import { type PayrollDeductionTreatment } from "./packs.ts";
 import { applyDeductionProtection, protectedBase, protectionConverged, protectionNeedsIteration, PROTECTION_MAX_PASSES, settleProtectionOscillation, totalShortfall, type DeductionShortfall, type ProtectionBase } from "./limits.ts";
 import { protectionTreatmentIterates } from "./treatment-bases.ts";
@@ -71,7 +72,9 @@ export async function settleDeductionProtection(args: {
   const applyPass = (entries: readonly { key: string; amount: string }[]) => {
     // Reducing the line IS the protection: the stub shows what was actually
     // taken, and the unpaid balance is reported, never silently dropped.
-    for (const entry of entries) protectedLines[Number(entry.key)]!.amount = entry.amount;
+    // Re-parsed at this cross-struct boundary: protection math carries its
+    // own amount shape, and the stub asserts the brand it pays.
+    for (const entry of entries) protectedLines[Number(entry.key)]!.amount = parseMoney(entry.amount);
   };
 
   let lastProtection: ReturnType<typeof protectionPass> | null = null;
@@ -92,7 +95,10 @@ export async function settleDeductionProtection(args: {
     lastProtection = protectionPass();
     applyPass(lastProtection.applied);
   } else {
-    let previous = protectedLines.map((l, index) => ({ key: String(index), amount: l.amount }));
+    // The fixpoint loop trades plain-decimal snapshots with protection math;
+    // the brand is asserted once, in applyPass, where lines are written.
+    let previous: { key: string; amount: string }[] =
+      protectedLines.map((l, index) => ({ key: String(index), amount: l.amount }));
     for (let pass = 1; pass <= PROTECTION_MAX_PASSES; pass++) {
       // Withholdings computed from what the previous pass settled on, then
       // re-capped against the net pay those withholdings leave.
