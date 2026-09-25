@@ -74,6 +74,19 @@ test("MT Example 1c — $1,375 semi-monthly: $17", () => {
   }).tax, money("17"));
 });
 
+test("Montana nonresident withholding uses only Montana-source wages", () => {
+  // 2026 guide weekly line 1a on $400 of Montana-source wages: 4.7% × ($400 − $310) = $4.23, nearest dollar $4.
+  const result = MT_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: cert({ filing_status: "single_or_both" }),
+    wageAllocations: [{
+      region: "MT", subRegion: null, workShare: "0.4", source: "approved_time_entries",
+      sourceWagesCurrentPeriod: "400.00",
+    }],
+  });
+  assert.equal(result.tax, money("4"));
+});
+
 test("MT no MW-4 withholds as line 1a single", () => {
   const empty = MT_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 24, wages: "1375.00",

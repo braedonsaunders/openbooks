@@ -33,6 +33,7 @@ import {
   roundUsFinalWithholding,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
+  requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -246,7 +247,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   // No MW-4: single filing status on line 1a.
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single_or_both") as MtFilingStatus;
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    wages = U(requireUsSourceWages(input.wageAllocations, "MT", null));
+    trace("MT_NONRESIDENT_SOURCE_WAGES", wages);
+  }
   trace("MT_GROSS", wages);
 
   const raw = mtPeriodTax(wages, published, status, rates);
@@ -274,6 +279,7 @@ export const MT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MT_EXEMPT: "Exempt from Montana withholding",
   MT_SPECIFIED_WITHHOLDING: "Montana specified withholding (MW-4 line 4)",
   MT_GROSS: "Montana gross wages this period",
+  MT_NONRESIDENT_SOURCE_WAGES: "Montana-source wages this period for a nonresident",
   MT_UNROUNDED: "Montana tax before rounding",
   MT_WITHHELD: "Montana tax withheld this period",
 };
