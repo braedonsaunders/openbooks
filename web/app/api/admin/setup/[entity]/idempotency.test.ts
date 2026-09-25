@@ -432,25 +432,19 @@ function firstInsertIndex(table: string): number {
     statement.text.trim().toLowerCase().startsWith(`insert into ${table}`));
 }
 
-test("missing key is refused before any write", async () => {
-  reset();
-  const before = harnessState.statements.length;
-  const res = await POST(postRequest("payment-terms", { name: "Net 30", netDays: 30 }), call("payment-terms"));
-  assert.equal(res.status, 400);
-  assert.equal((await res.json() as { code?: string }).code, "invalid");
-  assert.equal(harnessState.statements.length, before);
-  assert.equal(tableRows("payment_terms").length, 0);
-});
-
-test("malformed key is refused before any write", async () => {
-  reset();
-  const res = await POST(
-    postRequest("payment-terms", { name: "Net 30", netDays: 30 }, "not-a-uuid"),
-    call("payment-terms"),
-  );
-  assert.equal(res.status, 400);
-  assert.equal(harnessState.statements.length, 0);
-  assert.equal(tableRows("payment_terms").length, 0);
+test("missing and malformed keys are refused before any write", async () => {
+  for (const [name, key, code] of [
+    ["missing", undefined, "invalid"],
+    ["malformed", "not-a-uuid", undefined],
+  ] as const) {
+    reset();
+    const before = harnessState.statements.length;
+    const res = await POST(postRequest("payment-terms", { name: "Net 30", netDays: 30 }, key), call("payment-terms"));
+    assert.equal(res.status, 400, name);
+    if (code !== undefined) assert.equal((await res.json() as { code?: string }).code, code, name);
+    assert.equal(harnessState.statements.length, before, name);
+    assert.equal(tableRows("payment_terms").length, 0, name);
+  }
 });
 
 test("authentication precedes key and body handling", async () => {
