@@ -405,7 +405,7 @@ const hrmChangeRequests: AssistantToolDef = {
       if (appliedIds.length > 0) {
         const verbs = (await db.execute<{ id: string; verb: string }>(sql`
           select id::text as id, verb from employment_changes
-           where org_id = ${authz.user.orgId}::uuid and id = any(${appliedIds}::uuid[])
+           where org_id = ${authz.user.orgId}::uuid and id = any(${sql.param(appliedIds)}::uuid[])
         `)).rows;
         for (const v of verbs) verbByChange.set(v.id, v.verb);
       }

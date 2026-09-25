@@ -837,8 +837,8 @@ export async function listFlags(
        and (${input.status ?? null}::text is null or f.status = ${input.status ?? null}::text)
        and (${input.employmentId ?? null}::uuid is null or f.employment_id = ${input.employmentId ?? null}::uuid)
        and (
-         (f.kind = any(${[...TIME_ANOMALY_KINDS]}::text[]) and ${capabilities.time})
-         or (f.kind <> all(${[...TIME_ANOMALY_KINDS]}::text[]) and ${capabilities.payroll})
+         (f.kind = any(${sql.param([...TIME_ANOMALY_KINDS])}::text[]) and ${capabilities.time})
+         or (f.kind <> all(${sql.param([...TIME_ANOMALY_KINDS])}::text[]) and ${capabilities.payroll})
        )
        ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
      order by f.severity, f.pay_period_from desc, f.id`)).rows;
