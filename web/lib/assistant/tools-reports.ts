@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { db, withOrg } from "@openbooks/engine/src/platform/db.ts";
 import { can, type Authz } from "../authz";
 import { canSeeReportDefinition } from "../report-authz";
+import { canAccessReportArtifact } from "../report-execution-context";
 import {
   agingDetail,
   cashFlowIndirect,
@@ -388,10 +389,11 @@ const listReportSchedules: AssistantToolDef = {
       day_of_week: unknown; day_of_month: unknown; hour: unknown; minute: unknown;
       timezone: unknown; recipient_emails: unknown; next_run_at: unknown; active: unknown;
       report_type: string | null; entity: string | null; statement_kind: string | null;
+      authorization_snapshot: unknown;
     }>(sql`
       select s.id, s.definition_id, d.name as definition_name, s.cadence,
              s.day_of_week, s.day_of_month, s.hour, s.minute, s.timezone,
-             s.recipient_emails, s.next_run_at, s.active,
+             s.recipient_emails, s.next_run_at, s.active, s.authorization_snapshot,
              d.report_type as report_type, d.query->>'entity' as entity, d.statement->>'kind' as statement_kind
         from report_schedules s
         left join report_definitions d on d.id = s.definition_id and d.org_id = s.org_id
@@ -407,10 +409,12 @@ const listReportSchedules: AssistantToolDef = {
         entity: row.entity,
         statement_kind: row.statement_kind,
       }))) continue;
+      if (row.authorization_snapshot != null && !(await canAccessReportArtifact(authz, row.authorization_snapshot))) continue;
       const schedule: Record<string, unknown> = { ...row };
       delete schedule.report_type;
       delete schedule.entity;
       delete schedule.statement_kind;
+      delete schedule.authorization_snapshot;
       schedules.push(schedule);
     }
     return { ok: true, data: { schedules, href: "/reports" } };
