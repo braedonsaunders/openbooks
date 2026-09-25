@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '../platform/db.ts'
-import { add, mulRate, normalizeDecimal, roundMoney } from '../money/money.ts'
+import { add, cmp, mulRate, normalizeDecimal, roundMoney } from '../money/money.ts'
 import { IncomeTaxProvisionError, spotRateToPresentation } from './income-tax-provision.ts'
 import { uuidArray } from '../organization/subsidiaries.ts'
 import { evaluateUsNexus, thresholdForState, type NexusEvaluation, type StateNexusThreshold, type StateSales } from '../tax/us-nexus.ts'
@@ -284,9 +284,9 @@ export async function computeUsNexusStatus(
     const reference = thresholdForState(sale.state)
     thresholds.set(
       sale.state,
-      reference.measure === 'none' || reference.salesUsd === 0
+      reference.measure === 'none' || cmp(reference.salesUsd, '0') === 0
         ? reference
-        : { ...reference, salesUsd: Number(roundMoney(mulRate(String(reference.salesUsd), policyRate), 2)) },
+        : { ...reference, salesUsd: roundMoney(mulRate(reference.salesUsd, policyRate), 2) },
     )
   }
   return {

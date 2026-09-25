@@ -25,7 +25,8 @@ export type NexusMeasure = 'none' | 'sales_only' | 'sales_or_txn' | 'sales_and_t
 
 export interface StateNexusThreshold {
   state: string
-  salesUsd: number
+  /** Exact decimal string (whole USD for the statutory reference table; the working-currency translation of an entity ledger). Never a Number. */
+  salesUsd: string
   /** null when the state has no transaction-count trigger. */
   txnCount: number | null
   measure: NexusMeasure
@@ -33,7 +34,7 @@ export interface StateNexusThreshold {
 
 /** The prevailing pattern: $100k in sales OR 200 separate transactions. */
 export const US_NEXUS_DEFAULT: Omit<StateNexusThreshold, 'state'> = {
-  salesUsd: 100_000,
+  salesUsd: '100000',
   txnCount: 200,
   measure: 'sales_or_txn',
 }
@@ -46,24 +47,24 @@ const US_NEXUS_NO_STATEWIDE_SALES_TAX = new Set(['DE', 'MT', 'NH', 'OR'])
 
 /** No state-level sales-tax nexus trigger applies in these states. */
 const US_NEXUS_NOT_APPLICABLE: Omit<StateNexusThreshold, 'state'> = {
-  salesUsd: 0,
+  salesUsd: '0',
   txnCount: null,
   measure: 'none',
 }
 
 /** States whose threshold differs from the default. Verify before relying on it. */
 export const US_NEXUS_OVERRIDES: Record<string, Omit<StateNexusThreshold, 'state'>> = {
-  CA: { salesUsd: 500_000, txnCount: null, measure: 'sales_only' },
-  TX: { salesUsd: 500_000, txnCount: null, measure: 'sales_only' },
-  NY: { salesUsd: 500_000, txnCount: 100, measure: 'sales_and_txn' },
+  CA: { salesUsd: '500000', txnCount: null, measure: 'sales_only' },
+  TX: { salesUsd: '500000', txnCount: null, measure: 'sales_only' },
+  NY: { salesUsd: '500000', txnCount: 100, measure: 'sales_and_txn' },
   // Notable states that dropped the transaction-count trigger (sales-only):
-  TN: { salesUsd: 100_000, txnCount: null, measure: 'sales_only' },
-  WI: { salesUsd: 100_000, txnCount: null, measure: 'sales_only' },
-  WA: { salesUsd: 100_000, txnCount: null, measure: 'sales_only' },
-  CO: { salesUsd: 100_000, txnCount: null, measure: 'sales_only' },
-  IA: { salesUsd: 100_000, txnCount: null, measure: 'sales_only' },
-  ND: { salesUsd: 100_000, txnCount: null, measure: 'sales_only' },
-  NJ: { salesUsd: 100_000, txnCount: 200, measure: 'sales_or_txn' },
+  TN: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
+  WI: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
+  WA: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
+  CO: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
+  IA: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
+  ND: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
+  NJ: { salesUsd: '100000', txnCount: 200, measure: 'sales_or_txn' },
 }
 
 export function thresholdForState(state: string): StateNexusThreshold {
@@ -101,7 +102,7 @@ export interface NexusEvaluation {
 /** Whether the state's threshold is met by these figures. */
 function isMet(t: StateNexusThreshold, salesUsd: string, txnCount: number): boolean {
   if (t.measure === 'none') return false
-  const salesMet = cmp(salesUsd, String(t.salesUsd)) >= 0
+  const salesMet = cmp(salesUsd, t.salesUsd) >= 0
   const txnMet = t.txnCount != null && txnCount >= t.txnCount
   if (t.measure === 'sales_only') return salesMet
   if (t.measure === 'sales_and_txn') return salesMet && (t.txnCount == null ? true : txnMet)
@@ -112,7 +113,7 @@ function isMet(t: StateNexusThreshold, salesUsd: string, txnCount: number): bool
 function progressOf(t: StateNexusThreshold, salesUsd: string, txnCount: number): number {
   // The meter is UI. The status decision above is exact.
   if (t.measure === 'none') return 0
-  const salesPct = t.salesUsd > 0 ? Number(toUnits(salesUsd)) / Number(toUnits(String(t.salesUsd))) : 0
+  const salesPct = cmp(t.salesUsd, '0') > 0 ? Number(toUnits(salesUsd)) / Number(toUnits(t.salesUsd)) : 0
   const txnPct = t.txnCount && t.txnCount > 0 ? txnCount / t.txnCount : 0
   if (t.measure === 'sales_only' || t.txnCount == null) return salesPct
   if (t.measure === 'sales_and_txn') return Math.min(salesPct, txnPct)
