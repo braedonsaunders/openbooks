@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PayrollError } from "../error.ts";
+import { sealSecret } from "../../platform/secrets.ts";
 import {
   certificateDeclarationProblem,
   resolveCertificate,
@@ -189,9 +190,16 @@ function stubContext(
   };
   const storedCertificates = stubStored(stored);
   const ctx: PayrollStatutoryComputeContext = {
-    // No committed history in unit tests: the annual cap prices the
-    // declared opening alone.
-    tx: { execute: async () => ({ rows: [{ sv: "0" }] }) } as never,
+    // No committed history in unit tests: the annual cap prices the declared opening alone.
+    // The sealed profile BSN verifies (the suite always sets OPENBOOKS_DATA_KEY), so unit runs
+    // price the standard tables, never the anonymous rate.
+    tx: {
+      execute: (async (query: unknown) => {
+        const chunks = (query as { getSQL?: () => { queryChunks: { value?: unknown }[] } }).getSQL?.().queryChunks ?? [];
+        const text = chunks.map((c) => typeof c.value === "string" ? c.value : Array.isArray(c.value) ? c.value.join("") : "").join("");
+        return text.includes("sin_encrypted") ? { rows: [{ sin_encrypted: sealSecret("123456782") }] } : { rows: [{ sv: "0" }] };
+      }),
+    } as never,
     orgId: "org",
     documentId: "doc",
     employeePartyId: "emp",

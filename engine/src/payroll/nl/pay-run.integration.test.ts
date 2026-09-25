@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { sealSecret } from "../../platform/secrets.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
@@ -96,6 +97,7 @@ async function nlEmployee(
   fx: Fixture,
   name: string,
   certificates: { key: string; answers: Record<string, string> }[],
+  bsn: string,
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
@@ -113,9 +115,11 @@ async function nlEmployee(
   // certificates surface (web/app/api/payroll/certificates).
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                           province, pay_basis, is_active, created_by, updated_by)
+                                           province, pay_basis, is_active, created_by, updated_by,
+                                           sin_encrypted, sin_last3)
     values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'NL', 'NL',
-            'salary', true, ${fx.actorId}, ${fx.actorId})`);
+            'salary', true, ${fx.actorId}, ${fx.actorId},
+            ${sealSecret(bsn)}, ${bsn.slice(-3)})`);
   for (const certificate of certificates) {
     await db.execute(sql`
       insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
@@ -161,7 +165,7 @@ test(
         { key: "nl_premies", answers: { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25", sv_loon_ytd: "0" } },
         { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
         { key: "nl_contract", answers: { contract_start: "2025-01-01" } },
-      ]);
+      ], "123456782");
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: PERIOD_START, periodEnd: PERIOD_END,
@@ -214,7 +218,7 @@ test(
         { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
         { key: "nl_premies", answers: { sv_loon_ytd: "0" } },
         { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
-      ]);
+      ], "111222333");
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: PERIOD_START, periodEnd: PERIOD_END,

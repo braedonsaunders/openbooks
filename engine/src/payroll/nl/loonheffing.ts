@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { toCents } from "../../money/money.ts";
 import { daysInCivilMonth, isIsoCalendarDate } from "../../platform/business-date.ts";
+import { unsealSecret } from "../../platform/secrets.ts";
 import { PayrollError } from "../error.ts";
+import { isValidBsn } from "./bsn.ts";
 import {
   certificateAmount,
   certificateChoice,
@@ -166,6 +168,12 @@ export interface NlStatutoryInput {
   jgkEvidence?: string | null;
   /** Non-periodic (bonus) pay: always refused — the bijzondere tarieven are not transcribed. */
   nonPeriodic?: string | null;
+  /**
+   * Identity unknown (no verified BSN): prices the anonieme tarief — 52%
+   * of the gross period wage, uncapped, no kortingen — instead of the
+   * standard tables. The SV legs still price from their own declarations.
+   */
+  anonymous?: boolean;
 }
 
 export interface NlStatutoryResult {
@@ -336,6 +344,26 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
       + "beloningen is not transcribed (its row-selection rule, Handboek Loonheffingen 2026 §9.3.6, was not "
       + "obtainable from the Belastingdienst), and pricing a bonus through the regular table over-withholds",
     );
+  }
+
+  if (input.anonymous === true) {
+    // Anonieme tarief (Rekenvoorschriften §7.5, Tabel 9): without a
+    // verified identity the standard tables — and their arbeidskorting —
+    // must not price. 52% of the gross period wage, uncapped; sub-cent
+    // fractions truncate down, matching the voorschriften's
+    // naar-beneden rounding elsewhere in this file.
+    const anonCents = parseCents(input.income, "period wage");
+    const anonWithholding = (anonCents * 5200n) / 10000n;
+    return finishCalculation({
+      input: { ...input, applyKorting: false, aokApply: false, jgkApply: false },
+      F,
+      aow: ageClass !== "under_aow",
+      annualWage: null,
+      priced: { x1: 0n, ahk: 0n, ouk: 0n, ark: 0n, aok: 0n, x: 0n },
+      periodicCents: anonWithholding,
+      aboveMaxCents: 0n,
+      aboveMax: false,
+    });
   }
 
   const tvlCents = parseCents(input.income, "period wage");
@@ -538,11 +566,15 @@ function finishCalculation(args: {
  *
  * Every per-employee input arrives through the pack's own declared
  * certificates (`./certificates.ts`), read with the generic typed readers —
- * the same channel the DE ELStAM and FR PAS answers travel. Nothing is read
- * off `employee_payroll_profiles` columns: no column carries an NL fact, so
- * this wiring needs no profile migration, no API branch and no UI edit that
- * names the country:
+ * the same channel the DE ELStAM and FR PAS answers travel — with one
+ * deliberate exception: the identity gate reads the sealed BSN off
+ * `employee_payroll_profiles`, because no plaintext national identifier is
+ * ever stored anywhere else the engine could read. No column carries any
+ * other NL fact, so this wiring needs no profile migration, no API branch
+ * and no UI edit that names the country:
  *
+ * - identity: a verified (11-proef) sealed BSN prices the standard tables;
+ *   missing or malformed identity prices the anonieme tarief (52%);
  * - `nl_loonheffingen` (the opgaaf): `apply_loonheffingskorting` (absent form
  *   means not applied), `age_class` (required: "under_aow", "aow_1945" or
  *   "aow_1946"), `aok_apply` / `jgk_apply` (elected kortingen) with `jgk_basis`
@@ -550,8 +582,9 @@ function finishCalculation(args: {
  * - `nl_premies` (the employer's SV administration): `awf_laag` /
  *   `aof_hoog` (no defaults — required when the SV base prices above zero),
  *   `whk_percent` (the beschikking percentage, no lawful default — required
- *   when the SV base prices above zero), `sv_loon_ytd` (declared cumulative
- *   SV wage, default 0).
+ *   when the SV base prices above zero), `sv_loon_ytd` (verified opening
+ *   SV balance before this employer, no default — required when the SV
+ *   base prices above zero).
  *
  * The SV-loon (`insurable`) defaults to the loonheffing wage when the
  * pipeline supplies none; stated here, not guessed per employee.
@@ -627,6 +660,26 @@ function nlIsoDate(raw: string, what: string): string {
   return text;
 }
 
+/**
+ * The employee's verified BSN from the sealed payroll profile, or null
+ * when no usable identifier is on file. Plaintext national identifiers
+ * are never stored anywhere the engine could read them instead, so the
+ * sealed profile column is the only identity channel — and the standard
+ * tables price only on a BSN that passes the 11-proef.
+ */
+async function nlProfileBsn(args: Pick<
+  PayrollStatutoryComputeContext,
+  "tx" | "orgId" | "employeePartyId"
+>): Promise<string | null> {
+  const { tx, orgId, employeePartyId } = args;
+  const rows = await tx.execute<{ sin_encrypted: string | null }>(sql`
+    select prof.sin_encrypted
+      from employee_payroll_profiles prof
+     where prof.org_id = ${orgId} and prof.employee_party_id = ${employeePartyId}
+  `);
+  return unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
+}
+
 /** ISO date plus whole calendar months, clamping the day to the target month's length. */
 function addCalendarMonths(iso: string, months: number): string {
   const year = Number(iso.slice(0, 4));
@@ -666,6 +719,14 @@ export async function computeNlStatutory(
       + "transcribed. Complete this run in payroll software that implements the applicable table",
     );
   }
+
+  // Identity gates the rate: the standard tables (with arbeidskorting)
+  // price only for an employee whose BSN verifies (11-proef). Missing or
+  // malformed identity prices the anonieme tarief instead — 52% of gross,
+  // no kortingen — never the resident table by default.
+  const { tx: bsnTx, orgId: bsnOrg, employeePartyId: bsnEmployee } = ctx;
+  const bsn = await nlProfileBsn({ tx: bsnTx, orgId: bsnOrg, employeePartyId: bsnEmployee });
+  const anonymous = !isValidBsn(bsn);
 
   const opgaaf = certificateFor("nl_loonheffingen");
   const applyKorting = opgaaf === null ? false : certificateFlag(opgaaf, "apply_loonheffingskorting");
@@ -766,6 +827,7 @@ export async function computeNlStatutory(
     income,
     periodsPerYear: P,
     applyKorting,
+    anonymous,
     ageClass,
     svWage: insurable === "" ? null : insurable,
     svWageYtd: effectiveYtd,
