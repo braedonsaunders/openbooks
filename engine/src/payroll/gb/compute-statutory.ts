@@ -31,7 +31,8 @@
  */
 
 import { sql } from "drizzle-orm";
-import { sum } from "../../money/money.ts";
+import { mulPercent, sum } from "../../money/money.ts";
+import { D, max0, U } from "../canada/decimal.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
@@ -45,6 +46,7 @@ import {
   type GbStarterDeclaration,
 } from "./calculate.ts";
 import { gbTablesForTaxYear } from "./year-tables.ts";
+import { GB_AE_THRESHOLDS } from "./rates.ts";
 import { parseGbTaxCode } from "./tax-codes.ts";
 
 /** Regions whose income tax this engine computes end to end (rUK + Scotland). */
@@ -128,6 +130,8 @@ export const GB_FACTOR_LABELS: Readonly<Record<string, string>> = {
   GB_POSTGRADUATE_LOAN: "Postgraduate loan deduction this period",
   GB_LEVY: "Apprenticeship Levy this stub (report year-to-date on the EPS)",
   GB_LEVY_EARN: "Apprenticeship Levy paybill this stub",
+  GB_AE_EMPLOYEE: "Workplace pension employee contribution this period",
+  GB_AE_EMPLOYER: "Workplace pension employer contribution this period",
 };
 
 export async function computeGbStatutory(
@@ -164,11 +168,30 @@ export async function computeGbStatutory(
     throw new PayrollPackError(
       "GB workplace-pension assessment is required before payroll: record the worker's "
       + "effective-dated automatic-enrolment age, worker category and enrolment status "
-      + "in gb_workplace_pension; eligible or opted-in contributions must be calculated "
-      + "by AE-capable payroll software until this pack supports them.",
+      + "in gb_workplace_pension; an active member also needs scheme terms in "
+      + "gb_workplace_pension_assessment before minimum contributions can be priced.",
     );
   }
-  if (pensionAnswers.enrolment_status === "enrolled" || pensionAnswers.enrolment_status === "opted_in") {
+  // Scheme terms are read before the enrolled gate: an enrolled or opted-in
+  // worker who is an active member falls through to the minimums pricing
+  // below (unsupported bases and methods refuse there by name); every other
+  // enrolled case keeps this refusal. A missing terms assessment refuses here
+  // by fact name, never as an enrolled worker priced at zero.
+  const pensionAssessment = certificateFor("gb_workplace_pension_assessment");
+  const aeMembership = resolveEmployeeFact("GB", "gb_ae_membership_status", empFact("GB", {
+    gb_ae_membership_status: pensionAssessment?.answers.membership_status ?? null,
+  }, "gb_ae_membership_status"));
+  resolveEmployeeFact("GB", "gb_ae_age_band", empFact("GB", {
+    gb_ae_age_band: pensionAssessment?.answers.age_band ?? null,
+  }, "gb_ae_age_band"));
+  const aeBasis = resolveEmployeeFact("GB", "gb_ae_scheme_basis", empFact("GB", {
+    gb_ae_scheme_basis: pensionAssessment?.answers.scheme_basis ?? null,
+  }, "gb_ae_scheme_basis"));
+  const aeMethod = resolveEmployeeFact("GB", "gb_ae_deduction_method", empFact("GB", {
+    gb_ae_deduction_method: pensionAssessment?.answers.deduction_method ?? null,
+  }, "gb_ae_deduction_method"));
+  if (aeMembership !== "active_member"
+      && (pensionAnswers.enrolment_status === "enrolled" || pensionAnswers.enrolment_status === "opted_in")) {
     throw new PayrollPackError(
       "GB workplace-pension contributions are due for this enrolled or opted-in worker, "
       + "but the pack does not calculate employee and employer contributions on the "
@@ -176,8 +199,13 @@ export async function computeGbStatutory(
       + "finalise this run without both amounts.",
     );
   }
+  // Enrolled and opted-in workers satisfy the duty this gate protects, so
+  // they fall through to the minimums pricing when their scheme is priced
+  // (and keep the enrolled refusal above when it is not).
   if (pensionAnswers.worker_status === "eligible_jobholder"
-      && pensionAnswers.enrolment_status !== "opted_out") {
+      && pensionAnswers.enrolment_status !== "opted_out"
+      && pensionAnswers.enrolment_status !== "enrolled"
+      && pensionAnswers.enrolment_status !== "opted_in") {
     throw new PayrollPackError(
       "GB eligible jobholders must be enrolled in a qualifying workplace pension; "
       + "this pack cannot calculate the required employee and employer contributions. "
@@ -275,12 +303,56 @@ export async function computeGbStatutory(
     code = { ...code, nonCumulative: true };
   }
 
+  // Workplace-pension automatic enrolment: statutory minimum contributions
+  // (5% employee, 3% employer) on qualifying earnings within the published
+  // pay-reference band, for active members of qualifying-earnings-minimum
+  // net-pay schemes. Membership, basis, and method were resolved beside the
+  // enrolled gate above; an enrolled worker with any other scheme never
+  // reaches this block. Any other scheme basis or contribution method — and
+  // any pay with no assessment on file — refuses by name: the engine must not
+  // assume duties, bands, or methods. Net-pay employee contributions reduce
+  // taxable pay exactly like the pension_f deduction below.
+  let aeEmployee = "0.0000";
+  let aeEmployer = "0.0000";
+  if (aeMembership === "active_member") {
+    if (aeBasis !== "qualifying_earnings_minimum") {
+      throw new PayrollPackError(
+        "GB workplace pension prices statutory minimum contributions on qualifying earnings only: "
+        + "this scheme uses another certified basis, which this pack does not price — use payroll "
+        + "software that supports the scheme until this pack adds its rules",
+      );
+    }
+    if (aeMethod !== "net_pay") {
+      throw new PayrollPackError(
+        "GB workplace pension prices the employee share as a net-pay deduction only: this scheme "
+        + "uses relief at source or salary sacrifice, which change withholding and tax treatment — "
+        + "use payroll software that supports the method until this pack adds its rules",
+      );
+    }
+    const thresholds = GB_AE_THRESHOLDS[P];
+    if (!thresholds) {
+      throw new PayrollPackError(
+        `GB workplace pension has no published pay-reference thresholds for ${P} periods per year: `
+        + "the Pensions Regulator publishes thresholds per frequency and this pack never divides an "
+        + "annual figure by a guessed frequency",
+      );
+    }
+    const grossUnits = U(sum([income, nonPeriodic]));
+    const qualifying = max0(
+      (grossUnits < U(thresholds.upper) ? grossUnits : U(thresholds.upper)) - U(thresholds.lower),
+    );
+    aeEmployee = mulPercent(D(qualifying), "5", 2);
+    aeEmployer = mulPercent(D(qualifying), "3", 2);
+  }
+  // not_eligible and valid_opt_out price nothing; any other value was
+  // already refused by resolveEmployeeFact against the declared choices.
+
   // PAYE prices all taxable pay of the period (bonuses and back pay are taxed
   // as ordinary pay of the period they are PAID in — `retroactivePayTreatment:
   // "periodic"`), less pre-tax pension (net-pay arrangement, same treatment
   // the CA pack reads). NIC prices NIC-able earnings, which no deduction
   // reduces. The K-code 50% cap measures "pre-tax pay": income + nonPeriodic.
-  const periodPay = sum([income, nonPeriodic, `-${deduction("pension_f")}`]);
+  const periodPay = sum([income, nonPeriodic, `-${deduction("pension_f")}`, `-${aeEmployee}`]);
   const periodGross = sum([income, nonPeriodic]);
   const cumulative = code.kind !== "flat" && code.kind !== "none" && !code.nonCumulative;
 
@@ -324,6 +396,12 @@ export async function computeGbStatutory(
   pushStatutory("nic", "deduction", "National Insurance (employee, primary)", nic.employee, 120);
   pushStatutory("student_loan", "deduction", "Student loan repayment", loan.studentLoan, 130);
   pushStatutory("postgraduate_loan", "deduction", "Postgraduate loan repayment", loan.postgraduateLoan, 140);
+  // Zero-amount shares push no line: every existing stub shape is
+  // unchanged for workers with no contributions due.
+  if (U(aeEmployee) > 0n || U(aeEmployer) > 0n) {
+    pushStatutory("ae_employee", "deduction", "Workplace pension (employee)", aeEmployee, 150);
+    pushStatutory("ae_employer", "employer_contribution", "Workplace pension (employer)", aeEmployer, 220);
+  }
   pushStatutory(
     "nic", "employer_contribution", "National Insurance (employer, secondary)", nic.employer, 210,
   );
@@ -333,5 +411,7 @@ export async function computeGbStatutory(
     GB_TAX: paye.tax,
     GB_STUDENT_LOAN: loan.studentLoan,
     GB_POSTGRADUATE_LOAN: loan.postgraduateLoan,
+    GB_AE_EMPLOYEE: aeEmployee,
+    GB_AE_EMPLOYER: aeEmployer,
   };
 }

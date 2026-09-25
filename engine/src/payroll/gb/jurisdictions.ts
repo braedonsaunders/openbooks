@@ -6,9 +6,9 @@
  * the same arrangement `engine/src/payroll/us/jurisdictions.ts` uses. Nothing
  * in the generic layer names a nation, a starter checklist, or a tax code.
  *
- * Workplace-pension auto-enrolment has an effective-dated employee
- * assessment record. Eligible enrolments still refuse by name until the
- * scheme's qualifying-earnings basis and contribution calculation are wired.
+ * Workplace pension: the assessment certificate explicitly limits automatic
+ * computation to minimum qualifying-earnings schemes using net-pay deductions.
+ * Other bases and contribution methods refuse by name in compute-statutory.ts.
  */
 
 import type {
@@ -293,9 +293,68 @@ const GB_WORKPLACE_PENSION_ASSESSMENT: PayrollCertificate = {
   ],
 };
 
+/** Employer's scheme-terms record for auto-enrolment minimums pricing. Kept distinct
+ * from the eligibility assessment above: that gate decides WHO must be enrolled;
+ * this one carries the scheme basis and deduction method the minimums price from. */
+const GB_WORKPLACE_PENSION_SCHEME_TERMS: PayrollCertificate = {
+  key: "gb_workplace_pension_assessment",
+  form: "Workplace pension assessment",
+  label: "Workplace pension assessment and scheme terms",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "Pensions Regulator 2026/27 automatic-enrolment thresholds "
+    + "(https://www.thepensionsregulator.gov.uk/business-advisers/automatic-enrolment-guide-for-business-advisers/automatic-enrolment-earnings-threshold); "
+    + "DWP threshold review https://www.gov.uk/government/publications/review-of-the-automatic-enrolment-earnings-trigger-and-qualifying-earnings-band-for-202627/review-of-the-automatic-enrolment-earnings-trigger-and-qualifying-earnings-band-for-202627; "
+    + "minimum contributions https://www.gov.uk/workplace-pensions/what-you-your-employer-and-the-government-pay",
+  summary:
+    "Employer assessment for this pay reference period: worker age band, current membership status, "
+    + "and scheme terms. Reassess when the worker's age band or pension status changes.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "age_band", label: "Worker age band", kind: "choice", required: true,
+      choices: [
+        { value: "under_22", label: "Under age 22" },
+        { value: "22_to_state_pension_age", label: "Age 22 to State Pension age" },
+        { value: "state_pension_age_or_over", label: "State Pension age or over" },
+      ],
+      help: "Use the worker's age against State Pension age when assessing automatic-enrolment duties.",
+    },
+    {
+      key: "membership_status", label: "Current workplace pension status", kind: "choice", required: true,
+      choices: [
+        { value: "not_eligible", label: "Assessed as not eligible for automatic enrolment" },
+        { value: "active_member", label: "Enrolled or opted in; contributions are due" },
+        { value: "valid_opt_out", label: "Valid opt-out is in effect" },
+      ],
+      help: "Do not select not eligible for an age-eligible worker whose pay reaches the applicable earnings trigger.",
+    },
+    {
+      key: "scheme_basis", label: "Contribution basis", kind: "choice", required: true,
+      choices: [
+        { value: "not_applicable", label: "No contributions due" },
+        { value: "qualifying_earnings_minimum", label: "Statutory minimum on qualifying earnings" },
+        { value: "other_basis", label: "Another certified scheme basis" },
+      ],
+      help: "The engine prices only statutory minimum contributions on qualifying earnings.",
+    },
+    {
+      key: "deduction_method", label: "Employee contribution method", kind: "choice", required: true,
+      choices: [
+        { value: "not_applicable", label: "No contributions due" },
+        { value: "net_pay", label: "Net-pay arrangement" },
+        { value: "relief_at_source", label: "Relief at source" },
+        { value: "salary_sacrifice", label: "Salary sacrifice" },
+      ],
+      help: "The engine prices the 5% employee share as a net-pay deduction; other methods are refused by name.",
+    },
+  ],
+};
+
 export const GB_CERTIFICATES: PayrollPackCertificates = {
   country: "GB",
-  certificates: [GB_STARTER_CHECKLIST, GB_TAX_CODE_NOTICE, GB_NIC_CATEGORY_RECORD, GB_WORKPLACE_PENSION_ASSESSMENT],
+  certificates: [GB_STARTER_CHECKLIST, GB_TAX_CODE_NOTICE, GB_NIC_CATEGORY_RECORD, GB_WORKPLACE_PENSION_ASSESSMENT, GB_WORKPLACE_PENSION_SCHEME_TERMS],
 };
 
 // ===========================================================================

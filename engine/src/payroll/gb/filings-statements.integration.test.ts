@@ -205,6 +205,16 @@ test(
       await fileCertificate(org.orgId, larry, actorId, "gb_starter_checklist", {
         starter_declaration: "A", student_loan_plan: "plan_4", student_loan_postgraduate: "false",
       });
+      for (const person of [amy, hamish, larry]) {
+        await fileCertificate(org.orgId, person, actorId, "gb_workplace_pension", {
+          age_band: "22_to_state_pension_age", worker_status: "noneligible_jobholder",
+          enrolment_status: "not_enrolled",
+        });
+        await fileCertificate(org.orgId, person, actorId, "gb_workplace_pension_assessment", {
+          age_band: "22_to_state_pension_age", membership_status: "not_eligible",
+          scheme_basis: "not_applicable", deduction_method: "not_applicable",
+        });
+      }
 
       await payMonth(org.orgId, actorId, scheduleId, "2026-05-01", "2026-05-31", true);
       await payMonth(org.orgId, actorId, scheduleId, "2026-06-01", "2026-06-30", true);

@@ -163,6 +163,33 @@ export const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
       },
     ],
   },
+  {
+    key: "workplace-pension",
+    // Minimum auto-enrolment contributions remit to the pension scheme with
+    // the payroll, not to HMRC — external, beside the payroll-deductions
+    // account like every other payroll-collected amount.
+    liabilityAccountRole: "payrollDeductions",
+    components: [
+      {
+        code: "AE-EE",
+        name: "Workplace pension (employee)",
+        systemKey: "ae_employee",
+        kind: "deduction",
+        sequence: 150,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "AE-ER",
+        name: "Workplace pension (employer)",
+        systemKey: "ae_employer",
+        kind: "employer_contribution",
+        sequence: 220,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+    ],
+  },
 ];
 
 /**

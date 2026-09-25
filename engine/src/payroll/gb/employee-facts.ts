@@ -36,6 +36,48 @@ export const GB_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     required: true,
     producer: { kind: "certificate", certificate: "gb_nic_category", field: "category_letter" },
   },
+  {
+    key: "gb_ae_age_band",
+    kind: "choice",
+    choices: ["under_22", "22_to_state_pension_age", "state_pension_age_or_over"],
+    label: "worker age band for automatic enrolment",
+    refusalReason: "The employer's automatic-enrolment duties depend on the worker's age band.",
+    required: true,
+    producer: { kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "age_band" },
+  },
+  {
+    key: "gb_ae_membership_status",
+    kind: "choice",
+    choices: ["not_eligible", "active_member", "valid_opt_out"],
+    label: "workplace pension membership status",
+    refusalReason: "The engine must know whether automatic-enrolment contributions are due.",
+    required: true,
+    producer: {
+      kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "membership_status",
+    },
+  },
+  {
+    key: "gb_ae_scheme_basis",
+    kind: "choice",
+    choices: ["not_applicable", "qualifying_earnings_minimum", "other_basis"],
+    label: "workplace pension contribution basis",
+    refusalReason: "The qualifying-earnings band and contribution basis determine the amount due.",
+    required: true,
+    producer: {
+      kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "scheme_basis",
+    },
+  },
+  {
+    key: "gb_ae_deduction_method",
+    kind: "choice",
+    choices: ["not_applicable", "net_pay", "relief_at_source", "salary_sacrifice"],
+    label: "workplace pension employee contribution method",
+    refusalReason: "The method changes employee withholding and tax treatment.",
+    required: true,
+    producer: {
+      kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "deduction_method",
+    },
+  },
 ];
 
 registerEmployeeFacts("GB", GB_EMPLOYEE_FACTS);

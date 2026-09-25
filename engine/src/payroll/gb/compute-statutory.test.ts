@@ -52,7 +52,7 @@ const EMPTY_YTD = {
 };
 
 function certificateForCodes(
-  codes: Record<string, Record<string, string | null>>,
+  codes: Record<string, Record<string, string | null> | null>,
 ): PayrollStatutoryComputeContext["certificateFor"] {
   return ((key: string) => {
     const answers = key === "gb_nic_category"
@@ -76,7 +76,7 @@ function gbContext(overrides: {
   taxYear?: number;
   region?: string;
   tx?: Tx;
-  codes?: Record<string, Record<string, string | null>>;
+  codes?: Record<string, Record<string, string | null> | null>;
   income?: string;
   pensionable?: string;
   pushed?: Pushed[];
@@ -116,6 +116,12 @@ function gbContext(overrides: {
       gb_starter_checklist: {
         student_loan_plan: "none",
         student_loan_postgraduate: "false",
+      },
+      gb_workplace_pension_assessment: {
+        age_band: "22_to_state_pension_age",
+        membership_status: "not_eligible",
+        scheme_basis: "not_applicable",
+        deduction_method: "not_applicable",
       },
       ...(overrides.codes ?? {}),
     }),
@@ -302,6 +308,49 @@ test("a valid non-A NIC category refuses rather than applying category-A bands",
   await assert.rejects(() => computeGbStatutory(directorCtx), /CA44 requires cumulative annual or pro-rata/);
 });
 
+test("AE prices 5%/3% minimums on qualifying earnings; unassessed and unsupported schemes refuse", async () => {
+  // Monthly £3,000: qualifying £3,000 − £520 = £2,480; 5% = £124, 3% = £74.40.
+  // https://www.thepensionsregulator.gov.uk/business-advisers/automatic-enrolment-guide-for-business-advisers/automatic-enrolment-earnings-threshold
+  const active = {
+    age_band: "22_to_state_pension_age",
+    membership_status: "active_member",
+    scheme_basis: "qualifying_earnings_minimum",
+    deduction_method: "net_pay",
+  };
+  // A coherently enrolled worker prices THROUGH the narrowed enrolled gates,
+  // not around them: both certificates agree contributions are due.
+  const enrolled = { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" };
+  const { ctx, pushed } = gbContext({
+    tx: stubTx(EMPTY_YTD),
+    codes: { ...NOTICE_1257L, gb_workplace_pension: enrolled, gb_workplace_pension_assessment: active },
+    income: "3000",
+    pensionable: "3000",
+  });
+  const factors = await computeGbStatutory(ctx);
+  assert.equal(factors.GB_AE_EMPLOYEE, "124.0000");
+  assert.equal(factors.GB_AE_EMPLOYER, "74.4000");
+  assert.equal(pushed.find((line) => line.systemKey === "ae_employee")!.amount, "124.0000");
+  assert.equal(pushed.find((line) => line.systemKey === "ae_employer")!.amount, "74.4000");
+  const missing = gbContext({
+    codes: { ...NOTICE_1257L, gb_workplace_pension_assessment: null },
+  });
+  await assert.rejects(() => computeGbStatutory(missing.ctx), /gb_ae_membership_status/);
+  const otherBasis = gbContext({
+    codes: {
+      ...NOTICE_1257L,
+      gb_workplace_pension_assessment: { ...active, scheme_basis: "other_basis" },
+    },
+  });
+  await assert.rejects(() => computeGbStatutory(otherBasis.ctx), /another certified basis/);
+  const reliefAtSource = gbContext({
+    codes: {
+      ...NOTICE_1257L,
+      gb_workplace_pension_assessment: { ...active, deduction_method: "relief_at_source" },
+    },
+  });
+  await assert.rejects(() => computeGbStatutory(reliefAtSource.ctx), /relief at source or salary sacrifice/);
+});
+
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
   const { ctx, pushed } = gbContext({
     region: "ENG",
@@ -372,6 +421,8 @@ test("BR prices the whole period with no YTD read", async () => {
     GB_TAX: "640.0000",
     GB_STUDENT_LOAN: "0.0000",
     GB_POSTGRADUATE_LOAN: "0.0000",
+    GB_AE_EMPLOYEE: "0.0000",
+    GB_AE_EMPLOYER: "0.0000",
   });
 });
 
