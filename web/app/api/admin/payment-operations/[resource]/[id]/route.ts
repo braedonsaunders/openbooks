@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -215,7 +216,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
     }
     return NextResponse.json({ ok: true })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'request failed' }, { status: 422 })
+    return apiErrorResponse(error)
   }
 }
 

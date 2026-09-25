@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -63,7 +64,7 @@ export async function PUT(req: Request) {
     })
     return NextResponse.json({ id })
   } catch (error) {
-    if (error instanceof FxProviderError) return NextResponse.json({ error: error.message }, { status: 422 })
+    if (error instanceof FxProviderError) return apiErrorResponse(error, { safeStatus: 422 })
     throw error
   }
 }
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
     )
     return NextResponse.json({ ok: true, result })
   } catch (error) {
-    if (error instanceof FxProviderError) return NextResponse.json({ error: error.message }, { status: 422 })
+    if (error instanceof FxProviderError) return apiErrorResponse(error, { safeStatus: 422 })
     throw error
   }
 }

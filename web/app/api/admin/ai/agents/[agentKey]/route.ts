@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
@@ -35,6 +36,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ agen
     if ((error as Error).message === 'feature_disabled') {
       return NextResponse.json({ error: CONTINUOUS_CLOSE_DISABLED_REMEDY }, { status: 409 })
     }
-    return NextResponse.json({ error: (error as Error).message }, { status: 422 })
+    return apiErrorResponse(error)
   }
 }
