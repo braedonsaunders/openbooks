@@ -189,7 +189,11 @@
     "restored": "Restaurado",
     "restoreFailed": "No se pudo restaurar",
     "purged": "Eliminado permanentemente",
-    "purgeFailed": "No se pudo eliminar"
+    "purgeFailed": "No se pudo eliminar",
+   "purgeRetained": "Este archivo se conserva como evidencia de un registro contabilizado y no se puede eliminar permanentemente.",
+   "purgeAttached": "Esta carpeta contiene archivos adjuntos a registros y no se puede eliminar permanentemente.",
+   "purgeSystem": "Las carpetas del sistema no se pueden eliminar permanentemente.",
+   "alreadyGone": "Este elemento ya no existe."
   },
   "activity": {
     "title": "Actividad",

@@ -189,7 +189,11 @@
     "restored": "已恢复",
     "restoreFailed": "无法恢复",
     "purged": "已永久删除",
-    "purgeFailed": "无法删除"
+    "purgeFailed": "无法删除",
+   "purgeRetained": "此文件作为已过账记录的证据予以保留，无法永久删除。",
+   "purgeAttached": "此文件夹包含已关联到记录的文件，无法永久删除。",
+   "purgeSystem": "系统文件夹无法永久删除。",
+   "alreadyGone": "此项目已不存在。"
   },
   "activity": {
     "title": "活动",

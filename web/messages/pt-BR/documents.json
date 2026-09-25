@@ -189,7 +189,11 @@
     "restored": "Restaurado",
     "restoreFailed": "Não foi possível restaurar",
     "purged": "Excluído permanentemente",
-    "purgeFailed": "Não foi possível excluir"
+    "purgeFailed": "Não foi possível excluir",
+   "purgeRetained": "Este arquivo é mantido como evidência de um lançamento contabilizado e não pode ser excluído permanentemente.",
+   "purgeAttached": "Esta pasta contém arquivos anexados a registros e não pode ser excluída permanentemente.",
+   "purgeSystem": "Pastas do sistema não podem ser excluídas permanentemente.",
+   "alreadyGone": "Este item não existe mais."
   },
   "activity": {
     "title": "Atividade",
