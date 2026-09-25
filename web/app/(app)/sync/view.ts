@@ -8,9 +8,11 @@ import { page, widgetBlock, frame, type PageSpec } from '@braedonsaunders/appkit
  * This is the degenerate case, and the loader is honest about it: the native
  * page is `<PageContainer><PlatformClient /></PageContainer>` and nothing
  * else. There is no server-rendered header, no query, no gate in the page
- * itself (the `admin.setup.manage` gate lives in the API handlers both paths
- * hit identically). So the loader resolves nothing and the spec places one
- * widget inside the exact native shell.
+ * itself. The gates live in the API handlers both paths hit identically:
+ * `sync.run` reads the console and runs/probes syncs, while `admin.setup.manage`
+ * reconfigures connections (the payload's `canManage` hides those controls
+ * from run-only callers). So the loader resolves nothing and the spec places
+ * one widget inside the exact native shell.
  *
  * A first pass added a `pageHeader` here, on the reasonable-looking
  * assumption that a page like this has one. It does not — the console renders

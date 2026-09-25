@@ -61,7 +61,10 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const gate = await guardPermission("admin.setup.manage");
+  // Probing a connection exercises its credentials the way a run does, so
+  // it rides the `sync.run` grant beside the run route; reconfiguring the
+  // connection itself stays `admin.setup.manage`.
+  const gate = await guardPermission("sync.run");
   if (gate instanceof NextResponse) return gate;
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;
