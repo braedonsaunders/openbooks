@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
@@ -114,19 +114,28 @@ export function BankFilePanel({
     [t],
   )
 
-  const [state, setState] = useState<PanelState | null>(null)
+  // Loaded state carries its run id: navigating A → B with B's fetch still
+  // pending renders loading, never A's artifacts under B's route
+  // (I4-webui-236). The error below was already keyed the same way.
+  const [state, setState] = useState<{ documentId: string; data: PanelState } | null>(null)
   const [loadError, setLoadError] = useState<{ documentId: string; message: string } | null>(null)
   const [profileId, setProfileId] = useState('')
   const [busy, setBusy] = useState(false)
+  // The run id the latest fetch was sent for. A superseded run's late
+  // response applies nothing — otherwise A's arrival after B's would blank
+  // B's loaded panel back to loading.
+  const activeRequest = useRef(documentId)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body. Loading, error and
   // loaded are three distinct states: a failed fetch used to leave `state`
   // null, which rendered exactly like loading — forever. The error carries
   // its document id so a stale failure never shadows a newer document.
-  const load = useCallback(() => {
-    return fetch(`/api/payroll/runs/${documentId}/bank-file`)
+  const load = useCallback((signal?: AbortSignal) => {
+    const requestId = documentId
+    return fetch(`/api/payroll/runs/${documentId}/bank-file`, signal ? { signal } : undefined)
       .then(async (res) => {
+        if (activeRequest.current !== requestId) return
         // The status is checked before the body is parsed: a non-JSON error
         // body must surface the failure, never a SyntaxError from res.json().
         if (!res.ok) {
@@ -139,18 +148,24 @@ export function BankFilePanel({
           return
         }
         return (res.json() as Promise<PanelState>).then((data) => {
-          setState(data)
+          if (activeRequest.current !== requestId) return
+          setState({ documentId, data })
           setProfileId((current) => current || (data.profiles.find((p) => p.configured)?.id ?? ''))
         })
       })
       .catch((error: unknown) => {
+        // A superseded run's abort is silence, not a failure to display.
+        if (signal?.aborted || activeRequest.current !== requestId) return
         setLoadError({ documentId, message: error instanceof Error ? error.message : 'request failed' })
       })
   }, [documentId])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    activeRequest.current = documentId
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [load, documentId])
 
   const visibleError = loadError !== null && loadError.documentId === documentId ? loadError.message : null
   if (visibleError !== null) {
@@ -178,7 +193,10 @@ export function BankFilePanel({
     )
   }
 
-  if (!state) {
+  // Only this run's data renders: a superseded run's state reads as loading
+  // until the current run's fetch lands.
+  const visible = state !== null && state.documentId === documentId ? state.data : null
+  if (!visible) {
     return (
       <section
         aria-label={tx('wizard.bankFile.title', 'Direct deposit')}
@@ -192,7 +210,7 @@ export function BankFilePanel({
     )
   }
 
-  const { entitlement, population, profiles, artifacts, formats } = state
+  const { entitlement, population, profiles, artifacts, formats } = visible
   const live = artifacts.filter((a) => a.status !== 'superseded')
   const usable = profiles.filter((p) => formats[p.format]?.enabled)
   const disabledFormats = Object.entries(formats).filter(([, spec]) => !spec.enabled)
@@ -500,13 +518,13 @@ export function BankFilePanel({
           </div>
         )}
 
-        {state.audit.length > 0 && (
+        {visible.audit.length > 0 && (
           <details className="rounded-lg border border-slate-200 dark:border-slate-800">
             <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200">
               {tx('wizard.bankFile.auditTitle', 'Activity — who generated and who downloaded')}
             </summary>
             <ul className="space-y-1 border-t border-slate-100 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
-              {state.audit.map((entry) => (
+              {visible.audit.map((entry) => (
                 <li key={entry.id} className="flex flex-wrap justify-between gap-2">
                   <span>
                     {tx(`wizard.bankFile.event.${entry.event}`, entry.event)}
