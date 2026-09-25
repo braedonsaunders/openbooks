@@ -61,7 +61,7 @@ async function fixture() {
 test('custom-record export reimports unchanged through CSV, including small numeric values and repeated amounts', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    const value = { external_id: '00123', amount: 42.25, quantity: 1e-7, percent: 12.5, rating: 3, lines: [{ line_amount: 10.5, code: '0007' }] }
+    const value = { external_id: '00123', amount: '42.25', quantity: 1e-7, percent: 12.5, rating: 3, lines: [{ line_amount: '10.5', code: '0007' }] }
     assert.equal((await f.resource.write([value], 'insert', f.live)).created, 1)
     const before = await f.stored()
     const exported = await f.resource.read({ allowedSubsidiaryIds: null })
@@ -80,14 +80,14 @@ test('decimal strings obey field types and preserve zero, negatives, leading zer
   try {
     const result = await f.resource.write([{ external_id: '00123', amount: '-12.500', quantity: '0.00000000000000000001', percent: '0', rating: '3', lines: '[{"line_amount":"123.45","code":"007"}]' }], 'insert', f.live)
     assert.equal(result.failed, 0, JSON.stringify(result.errors))
-    assert.deepEqual(await f.stored(), [{ external_id: '00123', amount: -12.5, quantity: 1e-20, percent: 0, rating: 3, lines: [{ line_amount: 123.45, code: '007' }] }])
+    assert.deepEqual(await f.stored(), [{ external_id: '00123', amount: '-12.5', quantity: 1e-20, percent: 0, rating: 3, lines: [{ line_amount: '123.45', code: '007' }] }])
   } finally { await dropScratchOrg(f.org.orgId) }
 })
 
 test('precision loss and ambiguous separators refuse in preview and commit without records or audit', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    for (const [value, refusal] of [['123456.789012345678', /without changing its value.*text field/], ['0.10000000000000001', /without changing its value/], ['1,234', /ambiguous/]] as const) {
+    for (const [value, refusal] of [['123456.789012345678', /at most 4 decimal places.*got 12/], ['0.10000000000000001', /at most 4 decimal places.*got 17/], ['1,234', /ambiguous/]] as const) {
       const before = await f.auditCount()
       for (const dryRun of [true, false]) {
         const result = await f.resource.write([{ amount: value }], 'insert', { ...f.live, dryRun })
@@ -107,11 +107,11 @@ test('unquoted repeating JSON decimals retain source precision until validation'
     for (const dryRun of [true, false]) {
       const result = await f.resource.write([{ amount: 1.25, lines: '[{"line_amount":123456.789012345678}]' }], 'insert', { ...f.live, dryRun })
       assert.equal(result.failed, 1, 'repeating JSON rounded before numeric validation')
-      assert.match(result.errors[0]!.message, /Line amount.*without changing its value/)
+      assert.match(result.errors[0]!.message, /currency values must be decimal strings/)
     }
     assert.deepEqual(await f.stored(), [])
     assert.equal(await f.auditCount(), before)
-    const good = await f.resource.write([{ amount: 1.25, lines: '[{"line_amount":10.5}]' }], 'insert', f.live)
+    const good = await f.resource.write([{ amount: '1.25', lines: '[{"line_amount":"10.5"}]' }], 'insert', f.live)
     assert.equal(good.created, 1, JSON.stringify(good.errors))
   } finally { await dropScratchOrg(f.org.orgId) }
 })
