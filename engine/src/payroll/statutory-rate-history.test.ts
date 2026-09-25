@@ -208,7 +208,7 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                          rate_values, created_by, updated_by)
-    values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+    values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
             ${actorId}, ${actorId})`);
   await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}

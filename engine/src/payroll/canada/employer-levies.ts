@@ -33,6 +33,54 @@ function assertNeverStatus(status: never): never {
  * 'committed'` — SQL cannot call this function); the unit test pins the two
  * together, so a change here without the query fails loudly.
  */
+/**
+ * Québec HSF sector classes (TP-1015.F-V s. 5): the rate formula keys off
+ * the employer's sector, and the separately authorized 2026
+ * agriculture/forestry/fishing exemption zeroes it.
+ */
+export type QuebecHsfSector = "other" | "primary_manufacturing" | "public" | "exempt_2026";
+
+/**
+ * The statutory HSF rate for the employer's year-to-date total payroll
+ * (I6-payroll-243): 2026 formulae per Revenu Québec's "Total Payroll
+ * Threshold and Health Services Fund Contribution Rate" table — other-sector
+ * 1.65% at or under $1M rising by 1.2662 + (0.3838 × payroll ÷ $1M) to
+ * 4.26% past $7.8M; primary-and-manufacturing 1.25% rising by
+ * 0.8074 + (0.4426 × payroll ÷ $1M) to 4.26%; public sector flat 4.26%.
+ * Exact integer-cent arithmetic, half-up to four rate decimals. Only 2026
+ * is transcribed — any other year refuses rather than pricing a stale table.
+ */
+export function quebecHsfRateForPayroll(sector: QuebecHsfSector, totalPayroll: string, year: number): string {
+  if (year !== 2026) {
+    throw new PayrollPackError(
+      `QC HSF rate formula is transcribed for 2026 only — update the Revenu Québec table before pricing ${year}`,
+    );
+  }
+  // Year-to-date sums arrive at money scale; the formula keys off whole
+  // cents (Revenu Québec thresholds are dollar-exact).
+  const cents = toUnits(roundMoney(totalPayroll, 2)) / 100n;
+  if (cents < 0n) {
+    throw new PayrollPackError(`QC HSF total payroll must be non-negative, got "${totalPayroll}"`);
+  }
+  if (sector === "exempt_2026") return "0.0000";
+  if (sector === "public") return "4.2600";
+  const ONE_M = 100_000_000n;
+  const CAP = 780_000_000n;
+  const FULL = 42600n;
+  let rate: bigint;
+  if (cents <= ONE_M) {
+    rate = sector === "primary_manufacturing" ? 12500n : 16500n;
+  } else if (cents > CAP) {
+    rate = FULL;
+  } else if (sector === "primary_manufacturing") {
+    rate = 8074n + (4426n * cents + 50_000_000n) / 100_000_000n;
+  } else {
+    rate = 12662n + (3838n * cents + 50_000_000n) / 100_000_000n;
+  }
+  if (rate > FULL) rate = FULL;
+  return `${rate / 10000n}.${String(rate % 10000n).padStart(4, "0")}`;
+}
+
 export function ehtExemptionConsumedByRunStatus(status: CaExemptionRunStatus): boolean {
   switch (status) {
     case "committed":
@@ -233,18 +281,82 @@ export async function applyCaEmployerLevies(
     }
   }
 
-  // Québec health services fund (TP-1015.F-V s. 5): the tenant-entered
-  // rate times the remuneration subject — employment income is generally
-  // subject, so the stub's gross earnings, with no exemption and no cap.
-  // QC-gated twice: the region check below, and the ca_hsf slot which
-  // refuses a rate row for any other province at the write boundary.
+  // Québec health services fund (TP-1015.F-V s. 5): employment income is
+  // generally subject, so the stub's gross earnings, with no exemption and
+  // no cap. QC-gated twice: the region check below, and the ca_hsf slot
+  // which refuses a rate row for any other province at the write boundary.
+  // The statutory formula prices the employer's year-to-date rate and each
+  // stub books the cumulative true-up (I6-payroll-243): crossing $1M mid-year
+  // reprices prior remuneration, which a flat per-stub rate can never do. No
+  // fallback — without a sector class the run refuses instead of mispricing.
   if (region === "QC") {
     const hsf = config.hsf(region);
     if (hsf) {
       hsfEarnings = grossEarnings();
       if (cmp(hsfEarnings, "0") > 0) {
-        hsfAmount = mulPercent(hsfEarnings, hsf.rate, 2);
-        pushStatutory("hsf", "employer_contribution", "Health Services Fund", hsfAmount, 280);
+        const classes = (hsf.sectorOther ? 1 : 0)
+          + (hsf.sectorPublic ? 1 : 0)
+          + (hsf.sectorPrimaryManufacturing ? 1 : 0)
+          + (hsf.sectorExempt2026 ? 1 : 0);
+        if (classes > 1) {
+          throw new PayrollPackError(
+            "QC HSF sector flags are mutually exclusive — set exactly one of sectorOther, "
+            + "sectorPublic, sectorPrimaryManufacturing, sectorExempt2026",
+          );
+        }
+        const sector: QuebecHsfSector | null = hsf.sectorOther
+          ? "other"
+          : hsf.sectorPublic
+            ? "public"
+            : hsf.sectorPrimaryManufacturing
+              ? "primary_manufacturing"
+              : hsf.sectorExempt2026
+                ? "exempt_2026"
+                : null;
+        if (sector === null) {
+          throw new PayrollPackError(
+            "QC HSF needs the employer's sector classification: the statutory rate comes from "
+            + "the Revenu Québec total-payroll formula by sector, never from a flat configured rate. "
+            + "Set exactly one sector flag on the QC ca_hsf rate (sectorOther, sectorPublic, "
+            + "sectorPrimaryManufacturing, or sectorExempt2026) before calculating payroll",
+          );
+        } else if (sector === "exempt_2026") {
+          if (taxYear !== 2026) {
+            throw new PayrollPackError(
+              `QC HSF 2026 agriculture/forestry/fishing exemption does not cover ${taxYear} — clear the `
+              + "exemption or transcribe the year's rule before pricing",
+            );
+          }
+          hsfAmount = "0";
+        } else {
+          // Committed runs plus the run being calculated (own-document arm,
+          // same sequencing doctrine as the EHT exemption above): a recalc
+          // deletes this run's stubs first, so no double count. Voided runs
+          // and documents consume and book nothing. Pre-adoption history has
+          // no HSF carry-in column yet — a mid-year adopter understates the
+          // rate basis, so true up the adoption stub outside the pack until
+          // one exists.
+          const ytd = (await tx.execute<{ remuneration: string; booked: string }>(sql`
+            select coalesce(sum((s.factors->>'HSF_EARN')::numeric), 0) as remuneration,
+                   coalesce(sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                                 where l.org_id = ${orgId} and l.stub_id = s.id
+                                   and l.kind = 'employer_contribution' and pc.system_key = 'hsf')), 0) as booked
+              from pay_stubs s
+              join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+              join documents d on d.id = r.document_id and d.org_id = r.org_id
+             where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${region}
+               and (r.run_status = 'committed' or s.pay_run_document_id = ${documentId})
+               and d.status <> 'voided'
+          `)).rows[0]!;
+          const ytdBase = add(ytd.remuneration, hsfEarnings);
+          const rate = quebecHsfRateForPayroll(sector, ytdBase, taxYear);
+          const cumulative = mulPercent(ytdBase, rate, 2);
+          hsfAmount = cmp(cumulative, ytd.booked) > 0 ? add(cumulative, neg(ytd.booked)) : "0";
+        }
+        if (cmp(hsfAmount, "0") > 0) {
+          pushStatutory("hsf", "employer_contribution", "Health Services Fund", hsfAmount, 280);
+        }
       }
     }
   }

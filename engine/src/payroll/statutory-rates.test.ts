@@ -73,17 +73,17 @@ test("the SUI rate is declared per FILING ACCOUNT, and FUTA per region", () => {
   assert.deepEqual([...statutoryRateSlot("CA", "ca_eht").regions ?? []], ["BC", "MB", "NL", "ON"]);
 });
 
-test("the QC health services fund is declared per region, rate-only, QC-only", () => {
+test("the QC health services fund is declared per region, sector-classified, QC-only", () => {
   // TP-1015.F-V s. 5 / Revenu Québec "Total Payroll Threshold and Health
   // Services Fund Contribution Rate" (2026): the HSF rate is a function of
   // the employer's own total payroll and sector class — no pack constant can
-  // supply it — and there is no annual exemption, so the slot carries a rate
-  // and nothing else, for QC only.
+  // supply it — so the slot carries exactly one sector-class flag, for QC
+  // only. The rate field is retained unrequired for reference, never priced.
   const hsf = statutoryRateSlot("CA", "ca_hsf");
   assert.equal(hsf.scope, "region");
   assert.deepEqual([...hsf.regions ?? []], ["QC"]);
   assert.deepEqual([...hsf.systemKeys], ["hsf"]);
-  assert.deepEqual(hsf.fields.map((field) => field.key), ["rate"]);
+  assert.deepEqual(hsf.fields.map((field) => field.key), ["rate", "sectorOther", "sectorPublic", "sectorPrimaryManufacturing", "sectorExempt2026"]);
   // The 2026 publication's other-sector rate, pasted: 1.65 × earnings.
   assert.deepEqual(
     canonicalStatutoryRateValues(hsf, { rate: "1.65" }),

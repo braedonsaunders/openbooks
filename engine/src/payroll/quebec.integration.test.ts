@@ -94,14 +94,14 @@ describe("quebec", () => {
         // the Québec withholding separately from the CRA payable.
         await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
         // A QC employer always owes the HSF at its own payroll-determined rate:
-        // a live-but-unconfigured slot refuses by name at calculate, so the
-        // fixture carries the 2026 other-sector rate (1.65%, as publication-
-        // pasted in the HSF test) and its own payable.
+        // an unclassified employer refuses by name at calculate, so the
+        // fixture classifies ordinary-sector (sectorOther) and carries
+        // its own payable.
         await setPackSlotAccount(org.orgId, actorId, "CA", "hsf", hsfPayable);
         await db.execute(sql`
           insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                                rate_values, created_by, updated_by)
-          values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+          values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
                   ${actorId}, ${actorId})`);
         // Québec income tax is declared `external`: the org names its Revenu
         // Québec vendor on the component itself.
@@ -313,13 +313,13 @@ describe("quebec-hsf", () => {
    *
    * The publication-pasted golden: the 2026 Revenu Québec table's other-sector
    * rate (1.65%) times the remuneration subject — employment income is
-   * generally subject, so the stub's gross — with no exemption and no cap:
-   * 2400.00 × 1.65% = 39.60. The rate is tenant-entered because it is a
-   * function of the employer's own total payroll and sector class, which no
-   * stub can see; the band itself is never derived here.
+   * generally subject, so the stub's gross — with no cap:
+   * 2400.00 × 1.65% = 39.60. The rate is derived from year-to-date payroll
+   * under the classified sector (sectorOther in this fixture); unclassified
+   * employers refuse instead of pricing a guessed rate.
    */
   test(
-    "QC HSF: tenant rate times gross on QC stubs, never on ON stubs, remitted to Revenu Québec",
+    "QC HSF: formula rate times gross on QC stubs, never on ON stubs, remitted to Revenu Québec",
     { skip: !DB },
     async () => {
       const org = await createScratchOrg();
@@ -380,12 +380,12 @@ describe("quebec-hsf", () => {
           update pay_components set remittance_party_id = ${rqVendorId}
            where org_id = ${org.orgId} and system_key = 'qc_income_tax'`);
 
-        // The employer's own HSF rate from Revenu Québec's total-payroll table:
-        // 1.65% (the 2026 other-sector rate, pasted from the publication).
+        // The employer's sector class for Revenu Québec's total-payroll table:
+        // ordinary-sector (sectorOther), pricing 1.65% at this payroll.
         await db.execute(sql`
           insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                                rate_values, created_by, updated_by)
-          values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+          values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
                   ${actorId}, ${actorId})`);
 
         const scheduleId = randomUUID();
@@ -563,15 +563,15 @@ describe("qpip-employer-cap", () => {
         await db.execute(sql`
           update pay_components set remittance_party_id = ${rqVendorId}
            where org_id = ${org.orgId} and system_key = 'qc_income_tax'`);
-        // A QC employer always owes the HSF at its own rate: a live-but-
-        // unconfigured slot refuses by name at calculate, so the fixture
-        // carries the employer's rate (this test asserts QPIP, never HSF).
+        // A QC employer always owes the HSF at its own rate: an unclassified
+        // employer refuses by name at calculate, so the fixture classifies
+        // ordinary-sector (this test asserts QPIP, never HSF).
         const hsfPayable = await account("2360", "HSF payable", "liability_current");
         await setPackSlotAccount(org.orgId, actorId, "CA", "hsf", hsfPayable);
         await db.execute(sql`
           insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                                rate_values, created_by, updated_by)
-          values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"rate": "1.65"}',
+          values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
                   ${actorId}, ${actorId})`);
 
         const employeeId = randomUUID();

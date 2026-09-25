@@ -262,9 +262,9 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
       // elsewhere — no line, no account demand.
       regions: ["QC"],
       components: [
-        // TP-1015.F-V s. 5: the tenant-entered HSF rate times the
-        // remuneration subject (employment income is generally subject —
-        // an earnings measure, no exemption, no cap). QC employment only,
+        // TP-1015.F-V s. 5: the statutory HSF rate (sector formula on
+        // year-to-date payroll) times the remuneration subject (employment
+        // income is generally subject — an earnings measure, no cap). QC employment only,
         // remitted to Revenu Québec on TPZ-1015.R like QPP/QPIP — declared
         // per region for the same reason, so the declaration stays on the
         // component, not in the remittance module.

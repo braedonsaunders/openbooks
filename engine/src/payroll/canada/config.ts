@@ -9,7 +9,12 @@ import { CA_PACK_RATES } from "./rates.ts";
  */
 export interface CaPayrollConfig {
   eht(region: string): { rate: string; annualExemption: string | null } | null;
-  hsf(region: string): { rate: string } | null;
+  hsf(region: string): {
+    sectorOther: boolean;
+    sectorPublic: boolean;
+    sectorPrimaryManufacturing: boolean;
+    sectorExempt2026: boolean;
+  } | null;
 }
 
 export async function caPayrollConfig(
@@ -27,8 +32,13 @@ export async function caPayrollConfig(
     },
     hsf: (region) => {
       const values = rates.values("ca_hsf", { region });
-      if (!values?.rate) return null;
-      return { rate: values.rate };
+      if (!values) return null;
+      return {
+        sectorOther: values.sectorOther === "true",
+        sectorPublic: values.sectorPublic === "true",
+        sectorPrimaryManufacturing: values.sectorPrimaryManufacturing === "true",
+        sectorExempt2026: values.sectorExempt2026 === "true",
+      };
     },
   };
 }

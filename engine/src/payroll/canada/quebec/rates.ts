@@ -33,7 +33,7 @@
  *     T4127 Option 2 is.
  *   - s. 5 health services fund (employer contribution by total payroll) — an
  *     employer levy outside the source-deduction stub, computed in
- *     engine/src/payroll/canada/employer-levies.ts at the tenant-entered
+ *     engine/src/payroll/canada/employer-levies.ts from the sector-classified
  *     ca_hsf QC rate (the stub cannot see the employer's total-payroll
  *     band, so the band itself is never derived here).
  */
