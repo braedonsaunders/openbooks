@@ -238,9 +238,20 @@ export const PAYROLL_WIDGETS = {
   /* --- pay run wizard --------------------------------------------------------- */
   /** Five freely-navigable steps whose every control is a fetch flow plus
    *  client state a spec cannot name — the /tax shape. */
-  'pay-run-wizard': (props) => (
-    <RunWizard {...(props as unknown as ComponentProps<typeof RunWizard>)} />
-  ),
+  'pay-run-wizard': (props) => {
+    // Remount per run: the wizard holds run-scoped state (step, refusal set
+    // and acknowledgement, dry-run, GL preview) in useState initializers
+    // that do not adopt new props, and the slot keys this widget stably —
+    // so navigating run A to run B reused A's refusals and ack. Keying by
+    // the run's document id resets every run-scoped control before render.
+    const runId = (props as { run?: { document_id?: unknown } }).run?.document_id
+    return (
+      <RunWizard
+        key={typeof runId === 'string' && runId ? runId : undefined}
+        {...(props as unknown as ComponentProps<typeof RunWizard>)}
+      />
+    )
+  },
 
   /* --- payroll cockpit ------------------------------------------------------- */
   'payroll-settings-banner': (props) => (
