@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { pool, withOrgContext } from "../platform/db.ts";
+import { env, pool, withOrgContext } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
-import { assertSimEnabled, assertDedicatedSimDatabase } from "./db-guard.ts";
+import { assertSimEnabled, assertDedicatedSimDatabase, assertDisposableDatabaseUrl } from "./db-guard.ts";
 import { listProfiles } from "./profiles/index.ts";
 import { provisionRun, dayStart, dayEnd, verify, loadRun } from "./runner.ts";
 import { writeManifest } from "./manifest.ts";
@@ -75,6 +75,7 @@ async function main(): Promise<number> {
 
   switch (cmd) {
     case "provision": {
+      assertDisposableDatabaseUrl(env.OPENBOOKS_DB_URL!, "simulator provisioning", { requireLoopback: true });
       const f = parseFlags(argv.slice(1));
       const res = await provisionRun({
         profileId: f.profile ?? "general-contractor",
