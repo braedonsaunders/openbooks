@@ -66,6 +66,7 @@ import {
 } from "./states/index.ts";
 import { act32LocalEit } from "./states/pa.ts";
 import { miDetroitResidentRate } from "./states/mi.ts";
+import { mdDelawareResidentTax, mdDelawareScheduleApplies } from "./states/md.ts";
 import { inCounty, inCountyWithholding } from "./states/in.ts";
 import { orTransitWithholding } from "./states/or.ts";
 import {
@@ -829,8 +830,31 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       socialInsuranceDeducted: input.socialInsuranceDeducted,
       ytd: input.ytd,
     });
+    // Guide-prescribed work-region schedule: a Maryland resident working
+    // only in Delaware prices the Guide's dedicated Delaware schedule
+    // (3.30% state+local less Delaware credit) instead of the county
+    // combined tables, and takes no further work-region credit — the
+    // credit is already inside the schedule.
+    const delawareSchedule = levy.basis === "resident_out_of_region"
+      && engine.state === "MD"
+      && residentWithholdingFacts != null
+      && mdDelawareScheduleApplies(
+        residentWithholdingFacts.workRegionTaxes,
+        residentWithholdingFacts.workRegionWages,
+      )
+      ? mdDelawareResidentTax({
+        payDate: input.payDate,
+        periodsPerYear: input.periodsPerYear,
+        wages: residentWages,
+        supplemental: residentSupplemental,
+        certificate,
+        supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
+      })
+      : undefined;
+    const priced = delawareSchedule ?? result;
     const residentAdjustment = levy.basis === "resident_out_of_region"
       && residentMethod.kind === "net_of_work_region_tax"
+      && delawareSchedule == null
       ? (() => {
         if (result.statutoryTax == null || result.additionalWithholding == null) {
           throw new UsWithholdingError(
@@ -847,18 +871,18 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       : undefined;
     return {
       code: engine.state, label: engine.label,
-      tax: residentAdjustment?.tax ?? result.tax,
+      tax: residentAdjustment?.tax ?? priced.tax,
       statutoryTax: (() => {
-        if (levy.basis === "resident_out_of_region" && (result.statutoryTax == null || result.additionalWithholding == null)) {
+        if (levy.basis === "resident_out_of_region" && (priced.statutoryTax == null || priced.additionalWithholding == null)) {
           throw new UsWithholdingError(
             `${levy.region} resident withholding must separate statutory tax and additional withholding; update ${engine.ratesModule}; refused by name`,
           );
         }
-        return residentAdjustment?.statutoryTax ?? result.statutoryTax;
+        return residentAdjustment?.statutoryTax ?? priced.statutoryTax;
       })(),
-      additionalWithholding: result.additionalWithholding,
+      additionalWithholding: priced.additionalWithholding,
       factors: {
-        ...result.factors,
+        ...priced.factors,
         ...(levy.basis === "resident_out_of_region" ? {
           US_RESIDENT_WITHHOLDING_OUTCOME: residentAdjustment?.outcome ?? waiverOutcome,
           US_RESIDENT_WORK_REGION_TAX_CREDIT: residentAdjustment?.workRegionTaxCredit ?? "0.0000",

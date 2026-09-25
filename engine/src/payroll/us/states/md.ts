@@ -248,8 +248,10 @@ export const MD_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   citation:
     "Comptroller of Maryland, 2026 Maryland Employer Withholding Guide, Revised December "
     + "2025 — percentage method (p. 6), $3,400 standard deduction, $3,200 exemption, "
-    + "combined state+local tables; Withholding Tax Facts January 2026–December 2026 "
-    + "(COM/RAD-098 Revised 12/25) county local rates; Form MW507 (COM/RAD-036 07/25)",
+    + "combined state+local tables; 2026 Delaware schedule for Maryland residents working "
+    + "in Delaware (pp. 10–12, 3.30% state+local less Delaware credit); Withholding Tax "
+    + "Facts January 2026–December 2026 (COM/RAD-098 Revised 12/25) county local rates; "
+    + "Form MW507 (COM/RAD-036 07/25)",
   status: "published",
   region: "MD",
 }];
@@ -403,6 +405,209 @@ export function mdFrederickLocal(taxable: bigint, schedule: MdSchedule): bigint 
 
 function bmin(a: bigint, b: bigint): bigint {
   return a < b ? a : b;
+}
+
+/** One Delaware-schedule annual band: printed base plus 3.30% of excess. */
+export interface MdDelawareBand {
+  /** Null on the top band. Inclusive — "but not over". */
+  upTo: string | null;
+  over: string;
+  /** The publication's printed plus-amount at `over` (exactly 3.30% of it). */
+  base: string;
+}
+
+/**
+ * Percentage method for MARYLAND RESIDENT EMPLOYEES WHO WORK IN DELAWARE —
+ * the Guide's dedicated 2026 Delaware schedule (pp. 10–12), fetched from
+ * marylandcomptroller.gov, not memory:
+ *   2026 Percentage method of withholding for Maryland resident employees
+ *   who work in Delaware,
+ *   https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/instructions/withholding/2026/delaware.pdf
+ *
+ * A single 3.30% table per filing status that already includes Maryland
+ * state and local income taxes LESS the Delaware credit — so no county
+ * enters and no work-region credit is applied on top. Same $3,400
+ * standard deduction, $3,200 exemption, $5,000 floor and MW507 inputs as
+ * the regular percentage method. The printed annual plus-amounts below
+ * are the publication's own numbers (each exactly 3.30% of its threshold).
+ */
+export interface MdDelawareSchedule {
+  joint: readonly MdDelawareBand[];
+  single: readonly MdDelawareBand[];
+}
+
+export const MD_DELAWARE_SCHEDULE_2026: MdDelawareSchedule = {
+  // (a) Married Filing Joint or Head of Household, annual payroll period.
+  joint: [
+    { over: "0", upTo: "150000", base: "0" },
+    { over: "150000", upTo: "175000", base: "4950.00" },
+    { over: "175000", upTo: "225000", base: "5775.00" },
+    { over: "225000", upTo: "300000", base: "7425.00" },
+    { over: "300000", upTo: "600000", base: "9900.00" },
+    { over: "600000", upTo: "1200000", base: "19800.00" },
+    { over: "1200000", upTo: null, base: "39600.00" },
+  ],
+  // (b) Single including Married Filing Separately or Dependent, annual.
+  single: [
+    { over: "0", upTo: "100000", base: "0" },
+    { over: "100000", upTo: "125000", base: "3300.00" },
+    { over: "125000", upTo: "150000", base: "4125.00" },
+    { over: "150000", upTo: "250000", base: "4950.00" },
+    { over: "250000", upTo: "500000", base: "8250.00" },
+    { over: "500000", upTo: "1000000", base: "16500.00" },
+    { over: "1000000", upTo: null, base: "33000.00" },
+  ],
+};
+
+const MD_DELAWARE_BY_YEAR: Record<number, MdDelawareSchedule> = {
+  [2026]: MD_DELAWARE_SCHEDULE_2026,
+};
+
+export function mdDelawareRatesForPayDate(payDate: string): MdDelawareSchedule {
+  const year = Number(payDate.slice(0, 4));
+  const schedule = MD_DELAWARE_BY_YEAR[year];
+  if (!schedule) {
+    refuseUntranscribedYear(MD_WITHHOLDING, year);
+  }
+  return schedule;
+}
+
+/** Delaware-schedule annual tax on annual taxable income. */
+export function mdDelawareAnnualTax(
+  taxable: bigint,
+  schedule: MdSchedule,
+  bands = MD_DELAWARE_SCHEDULE_2026[schedule],
+): bigint {
+  if (taxable <= 0n) return 0n;
+  const rate = pctToRate("3.30");
+  for (const band of bands) {
+    const ceiling = band.upTo == null ? null : U(band.upTo);
+    if (ceiling == null || taxable <= ceiling) {
+      return U(band.base) + mulRateCents(max0(taxable - U(band.over)), rate);
+    }
+  }
+  throw new PayrollError(`no Delaware-schedule band covers taxable wages of ${D(taxable)}`);
+}
+
+/**
+ * The Delaware schedule applies exactly when every work region is
+ * Delaware — the publication prices one cross-border case, not a
+ * multi-state allocation. Anything else keeps the shared resident-credit
+ * path.
+ */
+export function mdDelawareScheduleApplies(
+  workRegionTaxes: readonly { region: string }[],
+  workRegionWages: readonly { region: string }[],
+): boolean {
+  const regions = new Set([
+    ...workRegionTaxes.map((tax) => tax.region),
+    ...workRegionWages.map((wages) => wages.region),
+  ]);
+  return regions.size === 1 && regions.has("DE");
+}
+
+/**
+ * Maryland withholding for a resident working in Delaware, priced on the
+ * Guide's Delaware schedule instead of the county combined tables. Same
+ * MW507 inputs (filing status, exemptions, additional) and the same
+ * annualize-and-divide shape as `compute` — only the table differs, and
+ * the Delaware credit is already inside the 3.30%, so the caller applies
+ * no work-region credit on top.
+ */
+export function mdDelawareResidentTax(input: {
+  payDate: string;
+  periodsPerYear: number;
+  wages: string;
+  supplemental?: string | null;
+  certificate: UsStateWithholdingInput["certificate"];
+  supportingCertificates?: UsStateWithholdingInput["supportingCertificates"];
+}): UsStateWithholdingResult {
+  const scheduleBands = mdDelawareRatesForPayDate(input.payDate);
+  const rates = mdRatesForPayDate(input.payDate);
+  const rateYear = rates.year;
+  const P = input.periodsPerYear;
+  if (!Number.isInteger(P) || P < 1 || P > 2000) {
+    throw new PayrollError(`invalid pay periods per year for Maryland withholding: ${P}`);
+  }
+  const factors: Record<string, string> = {};
+  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const zeroed = (key: string): UsStateWithholdingResult => {
+    trace(key, 1n);
+    return {
+      state: "MD", year: rateYear, tax: D(0n), statutoryTax: D(0n),
+      additionalWithholding: D(0n), taxSupplemental: D(0n), factors,
+    };
+  };
+
+  if (certificateFlag(input.certificate, "military_spouse_exempt")) {
+    const militarySpouseCertificate = input.supportingCertificates?.us_md_mw507m;
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "Maryland", [
+      { key: "employee_married_to_servicemember", description: "the employee is married to a servicemember" },
+      { key: "employee_domiciled_outside_md", description: "the employee is domiciled in a state other than Maryland" },
+      { key: "servicemember_duty_station_qualifies", description: "the spouse's permanent duty station is in Maryland, an immediate neighboring state, or the District of Columbia" },
+      { key: "employee_in_md_only_to_be_with_spouse", description: "the employee resides and works in Maryland only to be with the servicemember spouse" },
+      { key: "spousal_military_id_on_file", description: "a copy of the military ID card is attached" },
+    ]);
+    return zeroed("MD_MILITARY_SPOUSE_EXEMPT");
+  }
+
+  if (
+    certificateFlag(input.certificate, "exempt")
+    || certificateFlag(input.certificate, "reciprocal_exempt")
+    || certificateFlag(input.certificate, "pa_york_adams_local_exempt")
+    || certificateFlag(input.certificate, "pa_other_local_exempt")
+  ) {
+    return zeroed("MD_EXEMPT");
+  }
+
+  const schedule = mdScheduleFor(certificateChoice(input.certificate, "filing_status"));
+  factors.MD_SCHEDULE = schedule;
+  factors.MD_DE_SCHEDULE = "delaware-2026";
+  const exemptions = certificateCount(input.certificate, "exemptions") ?? 1;
+
+  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const annualWages = mulInt(wages, P);
+  trace("MD_ANNUAL_WAGES", annualWages);
+
+  const periodName = periodNameFor(P);
+  if (periodName && wages < U(rates.periods[periodName].minimumGross)) {
+    factors.MD_BELOW_MINIMUM = "1";
+    const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+    return {
+      state: "MD", year: rateYear, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra),
+      taxSupplemental: D(0n), factors: { ...factors, MD_WITHHELD: D(extra) },
+    };
+  }
+  if (!periodName && annualWages < U(rates.annualMinimum)) {
+    factors.MD_BELOW_MINIMUM = "1";
+    const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+    return {
+      state: "MD", year: rateYear, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra),
+      taxSupplemental: D(0n), factors: { ...factors, MD_WITHHELD: D(extra) },
+    };
+  }
+
+  const annualExemption = U(rates.standardDeduction) + U(rates.exemption) * BigInt(Math.max(exemptions, 0));
+  trace("MD_ANNUAL_EXEMPTION", annualExemption);
+  const taxable = max0(annualWages - annualExemption);
+  trace("MD_TAXABLE", taxable);
+
+  const annualTax = mdDelawareAnnualTax(taxable, schedule, scheduleBands[schedule]);
+  trace("MD_ANNUAL_TAX", annualTax);
+  const periodTax = divIntCents(annualTax, P);
+  const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+  const total = periodTax + extra;
+  trace("MD_WITHHELD", total);
+
+  return {
+    state: "MD",
+    year: rateYear,
+    tax: D(total),
+    statutoryTax: D(periodTax),
+    additionalWithholding: D(extra),
+    taxSupplemental: D(0n),
+    factors,
+  };
 }
 
 /** State withholding only — the 4.75%+ schedule, no local. */
@@ -626,6 +831,7 @@ export const MD_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MD_EXEMPT: "Exempt from Maryland withholding",
   MD_PA_LOCAL_EXEMPT: "Maryland local-only withholding (PA resident)",
   MD_SCHEDULE: "Maryland schedule (filing status)",
+  MD_DE_SCHEDULE: "Maryland Delaware-schedule edition (resident working in Delaware)",
   MD_ANNUAL_WAGES: "Maryland annualized wages",
   MD_BELOW_MINIMUM: "Below Maryland minimum (additional only)",
   MD_ANNUAL_EXEMPTION: "Maryland annual exemption",
@@ -914,7 +1120,10 @@ export const MD_REGION: PayrollRegionWithholding = {
   taxesNonresidentWages: true,
   // Guide pp. 4, 10–12: residents' out-of-state wages are subject to
   // Maryland withholding, with work-state withholding credited against the
-  // state/local statutory result by the shared resident-credit path.
+  // state/local statutory result by the shared resident-credit path —
+  // except Delaware-only work, which prices the Guide's dedicated
+  // Delaware schedule (3.30%, credit already inside) via the dispatch
+  // override in ../withholding.ts, with no further credit on top.
   residentWithholding: "required",
   residentWithholdingImplemented: true,
   residentWithholdingMethod: { kind: "net_of_work_region_tax" },

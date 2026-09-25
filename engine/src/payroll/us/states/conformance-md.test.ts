@@ -24,7 +24,7 @@ import { pctToRate } from "./transcription.ts";
 import {
   MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION, MD_COUNTIES_2026,
   MD_MW507M, MD_RATES_2026, MD_WITHHOLDING, addPrintedPercents, mdAnneArundelLocal, mdAnnualCombinedTax,
-  mdCombinedRate, mdCounty, mdFrederickLocal, mdLumpSumBonus, mdScheduleFor,
+  mdCombinedRate, mdCounty, mdDelawareResidentTax, mdFrederickLocal, mdLumpSumBonus, mdScheduleFor,
 } from "./md.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
@@ -428,4 +428,18 @@ test("MD refuses a year it has not transcribed", () => {
     }),
     /2027 Maryland income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
+});
+
+test("MD Delaware schedule withholds 3.30% net of the Delaware credit — no county", () => {
+  // 2026 Delaware schedule (pp. 10–12): $10,000 monthly, single, one
+  // exemption → $120,000 annualized less $6,600 leaves $113,400 taxable;
+  // the $100,000–$125,000 band prices $3,300 plus 3.30% of $13,400
+  // ($442.20) = $3,742.20 a year, $311.85 a month — county-free, with the
+  // Delaware credit already inside the 3.30%.
+  const result = mdDelawareResidentTax({
+    payDate: "2026-03-15", periodsPerYear: 12, wages: "10000.00",
+    certificate: cert({ filing_status: "single", exemptions: "1" }),
+  });
+  assert.equal(result.factors.MD_DE_SCHEDULE, "delaware-2026");
+  assert.equal(result.statutoryTax, money("311.85"));
 });
