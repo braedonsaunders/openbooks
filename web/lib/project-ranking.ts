@@ -1,7 +1,8 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, neg, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, neg, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { marginPercentText } from './financial-decimal'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 
 /**
@@ -63,7 +64,7 @@ export interface ProjectRankingRow {
   revenue: string
   margin: string
   /** margin ÷ revenue × 100 at two decimals; null when there is no revenue. */
-  marginPercent: number | null
+  marginPercent: string | null
   committedCost: string
   /** cost + committed − cost budget; positive = over budget (null without a budget). */
   budgetOverrun: string | null
@@ -205,7 +206,6 @@ export async function rankProjects(
     const cost = m(r.cost)
     const committed = m(r.committed_cost)
     const contractValue = m(r.contract_value)
-    const revenueNum = Number(revenue)
     return {
       id: String(r.id),
       code: r.code == null ? null : String(r.code),
@@ -219,9 +219,9 @@ export async function rankProjects(
       cost,
       revenue,
       margin,
-      marginPercent: revenueNum === 0 ? null : Math.round((Number(margin) / revenueNum) * 10000) / 100,
+      marginPercent: marginPercentText(margin, revenue),
       committedCost: committed,
-      budgetOverrun: Number(costBudget) > 0 ? add(add(cost, committed), neg(costBudget)) : null,
+      budgetOverrun: cmp(costBudget, '0') > 0 ? add(add(cost, committed), neg(costBudget)) : null,
       unbilledContract: add(contractValue, neg(revenue)),
     }
   })
