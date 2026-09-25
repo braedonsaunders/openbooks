@@ -809,7 +809,7 @@ test("every implemented pack-sourced sub-region levy computes through the dispat
         computeUsWithholding({
           levy: {
             level: "sub_region", region: region.region, subRegion: levy.code,
-            label: levy.label, basis: reach,
+            label: levy.label, basis: reach, withholdingMethod: levy.withholdingMethod,
             side: reach === "resident" ? "residence" : "work", reach,
             certificateKey,
           },

@@ -110,6 +110,7 @@
  * file.
  */
 import {
+  type PayrollFlatRateMethod,
   type PayrollLevyReach,
   type PayrollRegionWithholding,
   regionWithholding,
@@ -186,10 +187,7 @@ export interface ResolvedWithholdingLevy {
     systemKey: string;
     kind: "deduction" | "employer_contribution";
   };
-  withholdingMethod?: {
-    kind: "flat_rate";
-    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
-  };
+  withholdingMethod?: PayrollFlatRateMethod;
   /**
    * For `required_net_of_credit`: the region whose withholding is credited
    * against this one. The engine must compute that region first.

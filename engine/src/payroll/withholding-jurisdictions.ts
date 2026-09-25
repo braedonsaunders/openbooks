@@ -67,6 +67,48 @@ export type PayrollLevyRateSource =
   | { kind: "tenant"; rateKey: string };
 
 /**
+ * Pack-owned arithmetic for simple effective-dated percentage levies,
+ * shared by the declaration and the resolved levy (the resolver forwards
+ * the declaration's method untouched, so the two spellings can never drift).
+ */
+export interface PayrollFlatRateMethod {
+  kind: "flat_rate";
+  rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+  /**
+   * First pay date the levy exists on, for levies whose rate is assessed
+   * or elected (no pack rate carries a date): Minnesota Paid Leave starts
+   * January 1, 2026. A pay date before it prices no line — nothing was
+   * owed — never a refusal and never a backdated rate.
+   */
+  effectiveFrom?: string;
+  /**
+   * Statutory ceiling on an employer-entered (`tenant`-sourced) rate, as a
+   * decimal: Vermont caps the elected Child Care Contribution employee
+   * share at 25% of the 0.44% levy (0.0011, WHT-436 instructions). An
+   * entered rate above it refuses by name; pack-sourced rates are the
+   * publication's own and never checked against it.
+   */
+  maxRate?: string;
+  /**
+   * What an absent employer-entered rate means. `refuse` (the default) is
+   * fail-closed: an assessed amount that is always owed must be entered
+   * before anything prices. `skip` is the narrow exception for an elected
+   * share whose statutory default is zero — Vermont's employee share
+   * defaults to employer-pays-all, so no election prices no line rather
+   * than refusing every run that never elected it.
+   */
+  absentTenantRate?: "skip" | "refuse";
+  /**
+   * Annual wage base the levy prices only up to, by reference rather than
+   * transcription: Minnesota Paid Leave covers wages to the Social Security
+   * wage base, which the federal rates carry per year. The caller supplies
+   * the employee's base history; the levy prices the remaining room and
+   * posts the priced base for the history to accumulate on.
+   */
+  wageBase?: "social_security";
+}
+
+/**
  * One taxing unit BELOW a region.
  *
  * Identified by a pack-assigned code that is unique within the region. The code
@@ -90,42 +132,7 @@ export interface PayrollSubRegionLevy {
     kind: "deduction" | "employer_contribution";
   };
   /** Pack-owned arithmetic for simple effective-dated percentage levies. */
-  withholdingMethod?: {
-    kind: "flat_rate";
-    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
-    /**
-     * First pay date the levy exists on, for levies whose rate is assessed
-     * or elected (no pack rate carries a date): Minnesota Paid Leave starts
-     * January 1, 2026. A pay date before it prices no line — nothing was
-     * owed — never a refusal and never a backdated rate.
-     */
-    effectiveFrom?: string;
-    /**
-     * Statutory ceiling on an employer-entered (`tenant`-sourced) rate, as a
-     * decimal: Vermont caps the elected Child Care Contribution employee
-     * share at 25% of the 0.44% levy (0.0011, WHT-436 instructions). An
-     * entered rate above it refuses by name; pack-sourced rates are the
-     * publication's own and never checked against it.
-     */
-    maxRate?: string;
-    /**
-     * What an absent employer-entered rate means. `refuse` (the default) is
-     * fail-closed: an assessed amount that is always owed must be entered
-     * before anything prices. `skip` is the narrow exception for an elected
-     * share whose statutory default is zero — Vermont's employee share
-     * defaults to employer-pays-all, so no election prices no line rather
-     * than refusing every run that never elected it.
-     */
-    absentTenantRate?: "skip" | "refuse";
-    /**
-     * Annual wage base the levy prices only up to, by reference rather than
-     * transcription: Minnesota Paid Leave covers wages to the Social Security
-     * wage base, which the federal rates carry per year. The caller supplies
-     * the employee's base history; the levy prices the remaining room and
-     * posts the priced base for the history to accumulate on.
-     */
-    wageBase?: "social_security";
-  };
+  withholdingMethod?: PayrollFlatRateMethod;
   /** The certificate that sets withholding for this levy, when one exists. */
   certificateKey?: string;
   /**
