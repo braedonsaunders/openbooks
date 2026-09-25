@@ -1,5 +1,7 @@
 import 'server-only'
+import { notFound } from 'next/navigation'
 import { reportBookSelection } from '../../../../../lib/report-books'
+import { isUuid } from '../../../../../lib/list-params'
 
 
 import { getTranslations } from 'next-intl/server'
@@ -110,6 +112,9 @@ export async function loadStatement(
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
   const authz = await requirePermission('reports.read')
+  // A malformed party id is not-found, never a 500 from the uuid cast in
+  // the statement reader.
+  if (!isUuid(partyId)) notFound()
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const tb = await getTranslations('budgets')
   const { books, selectedBook } = await reportBookSelection(authz.user.orgId, sp.book)
