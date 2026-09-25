@@ -21,6 +21,8 @@ import {
 import { orgBranding } from '../../../../lib/report-pdf'
 import { decimalAdd, decimalNeg, decimalSum } from '../../../../lib/statement-format'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
+import { getAuthz } from '@/lib/authz'
+import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import type { PaperCell } from '../PaperView'
 import { mergeHref } from '../../../../lib/list-params'
@@ -120,8 +122,10 @@ export async function loadTrialBalance(
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const authz = await getAuthz()
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
   const [opts, branding, startMonth] = await Promise.all([
-    dimensionOptions(undefined, undefined, dims.subsidiaryIds), orgBranding(), fiscalStartMonth(),
+    dimensionOptions(undefined, undefined, optionScope), orgBranding(), fiscalStartMonth(),
   ])
   const fyStart = fiscalYearStartOn(date, startMonth)
   const priorEnd = priorFiscalYearEndOn(date, startMonth)

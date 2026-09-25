@@ -28,6 +28,8 @@ import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, resolveAgingCurrencyParams } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
+import { getAuthz } from '@/lib/authz'
+import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { reportTotalRowClass } from '../ReportTable'
 import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
@@ -187,6 +189,8 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     // documents alongside attributed ones; restricted views stay fail-closed.
     includeNullSubsidiary: subView?.subsidiary?.includeNullSubsidiary === true,
   }
+  const authz = await getAuthz()
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
   // Currency basis is opt-in and URL-driven (never component state) so the
   // screen, its export, and its drill-downs all read the same selection.
   // Never the shared filter bar's `basis`: that word means accrual/cash.
@@ -195,10 +199,10 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   const [scope, opts, org] = subView
     ? await Promise.all([
         agingCurrenciesInScope(side, asOf, dims),
-        dimensionOptions(undefined, undefined, dims.subsidiaryIds),
+        dimensionOptions(undefined, undefined, optionScope),
         orgInfo(),
       ])
-    : [null, await dimensionOptions(), await orgInfo()] as const
+    : [null, await dimensionOptions(undefined, undefined, optionScope), await orgInfo()] as const
   // One shared resolver with the export (report-filters): the screen and the
   // CSV can never disagree on what a URL means. A hand-edited currency
   // outside the in-scope list falls back to base (ruling 1).

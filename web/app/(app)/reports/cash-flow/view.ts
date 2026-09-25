@@ -21,6 +21,8 @@ import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
+import { getAuthz } from '@/lib/authz'
+import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
 import type { StatementRow } from '../StatementRows'
 import { decimalCmp, decimalIsMaterial, type ExactDecimal } from '../../../../lib/statement-format'
@@ -99,7 +101,9 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
       deriveHref: '/close',
     }
   }
-  const [opts, org] = await Promise.all([dimensionOptions(undefined, undefined, subView?.subsidiary?.ids), orgInfo()])
+  const authz = await getAuthz()
+  const optionScope = dimensionOptionsScope(subView?.subsidiary?.ids, authz?.allowedSubsidiaryIds)
+  const [opts, org] = await Promise.all([dimensionOptions(undefined, undefined, optionScope), orgInfo()])
   // Resolves empty when blocked; drills only render beside the paper.
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const m = (v: ExactDecimal) => formatMoney(v, { currency: org?.base_currency })
