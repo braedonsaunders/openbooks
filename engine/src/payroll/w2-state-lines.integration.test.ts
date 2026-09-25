@@ -50,6 +50,7 @@ async function usPayrollOrg(): Promise<Fixture> {
   const netPayable = await account("2300", "Wages payable", "liability_current");
   const irsPayable = await account("2330", "Federal payroll taxes payable", "liability_current");
   const statePayable = await account("2360", "State income tax payable", "liability_current");
+  const ettPayable = await account("2365", "CA employment training tax payable", "liability_current");
   await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify({
       payroll: {
@@ -76,11 +77,22 @@ async function usPayrollOrg(): Promise<Fixture> {
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "US");
+  // Presence-only CA ETT reserve status: an unconfigured balance refuses by
+  // name at calculate, and these tests assert W-2 boxes, never ETT amounts.
+  // A positive test balance keeps the employer liable.
+  await db.execute(sql`
+    insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                         rate_values, created_by, updated_by)
+    values (${org.orgId}, 'US', 'us_ca_ett', 'CA', 2026, '{"reserveBalance": "5000.00"}',
+            ${actorId}, ${actorId})`);
   for (const slot of ["fit", "fica", "futa", "suta"]) {
     await setPackSlotAccount(org.orgId, actorId, "US", slot, irsPayable);
   }
   await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
+  // The presence-only ETT rate above makes California runs accrue ETT, which
+  // posts through its slot like every other employer contribution.
+  await setPackSlotAccount(org.orgId, actorId, "US", "ca_ett", ettPayable);
 
   const subsidiaryId = randomUUID();
   await db.execute(sql`
