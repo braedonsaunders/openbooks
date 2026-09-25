@@ -68,24 +68,32 @@ const FORAL_REASONS: Readonly<Record<string, string>> = {
 };
 
 const ES_REGIONS: readonly PayrollRegionWithholding[] = ES_REGION_CODES.map(
-  (region): PayrollRegionWithholding => ({
-    region,
-    label: `IRPF (${ES_REGION_NAMES[region]})`,
-    implemented: FORAL_REASONS[region] === undefined,
-    unimplementedReason: FORAL_REASONS[region],
-    // Rendimientos del trabajo de no residentes tributan por el IRNR
-    // (RD Legislativo 5/2004), no por el IRPF.
-    taxesNonresidentWages: false,
-    // Whether the AEAT requires withholding on a resident's wages earned in
-    // another community, and with what credit, is not established — refused
-    // rather than defaulted.
-    residentWithholding: "unknown",
-    residentWithholdingImplemented: false,
-    certificateKey: "es_145",
-    subRegions: [],
-    subRegionConflictRule: "work_only",
-    citation: "LIRPF (Ley 35/2006); RIRPF (RD 439/2007); LIRNR (RD Legislativo 5/2004)",
-  }),
+  (region): PayrollRegionWithholding => {
+    // AEAT-territory communities share the single national IRPF: the 2026
+    // AEAT retention algorithm and scale apply identically in every one
+    // (RIRPF arts. 76, 82), and the compute engine takes no community input.
+    // The work-side levy therefore prices the whole obligation, and the
+    // residence community raises no second claim — declaring "unknown" here
+    // blocked every cross-community payroll. Foral NC/PV keep "unknown":
+    // their residence rules are unestablished and AEAT tables never cover
+    // them, so those moves still refuse.
+    const aeat = FORAL_REASONS[region] === undefined;
+    return {
+      region,
+      label: `IRPF (${ES_REGION_NAMES[region]})`,
+      implemented: aeat,
+      unimplementedReason: FORAL_REASONS[region],
+      // Rendimientos del trabajo de no residentes tributan por el IRNR
+      // (RD Legislativo 5/2004), no por el IRPF.
+      taxesNonresidentWages: false,
+      residentWithholding: aeat ? "not_required" : "unknown",
+      residentWithholdingImplemented: aeat,
+      certificateKey: "es_145",
+      subRegions: [],
+      subRegionConflictRule: "work_only",
+      citation: "LIRPF (Ley 35/2006); RIRPF (RD 439/2007); LIRNR (RD Legislativo 5/2004)",
+    };
+  },
 );
 
 export const ES_WITHHOLDING: PayrollPackWithholding = {
