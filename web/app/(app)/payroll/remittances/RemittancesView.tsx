@@ -39,8 +39,12 @@ export function RemittancesView({
   const router = useRouter()
   const [busyParty, setBusyParty] = useState<string | null>(null)
   const [range, setRange] = useState({ from, to })
+  const rangeChanged = range.from !== from || range.to !== to
 
   async function createBill(partyId: string, filingAccountId: string | null, subsidiaryId: string | null) {
+    // The cards and their totals represent the server-applied period. Never
+    // create a bill for dates that the operator has only entered as a draft.
+    if (rangeChanged) return
     setBusyParty(`${groupKey(partyId, filingAccountId)}::${subsidiaryId ?? ''}`)
     try {
       const res = await fetch('/api/payroll/remittances', {
@@ -51,8 +55,8 @@ export function RemittancesView({
           partyId,
           filingAccountId,
           subsidiaryId,
-          from: range.from,
-          to: range.to,
+          from,
+          to,
         }),
       })
       // The status is checked before the body is parsed: a non-JSON error body
@@ -102,6 +106,7 @@ export function RemittancesView({
             group={group}
             canCreate={canCreate}
             busy={busyParty !== null}
+            rangeChanged={rangeChanged}
             onCreate={(subsidiaryId) => void createBill(group.partyId!, group.filingAccount.id, subsidiaryId)}
           />
         ))
@@ -120,11 +125,13 @@ function RemittanceGroupCard({
   group,
   canCreate,
   busy,
+  rangeChanged,
   onCreate,
 }: {
   group: RemittanceGroup
   canCreate: boolean
   busy: boolean
+  rangeChanged: boolean
   onCreate: (subsidiaryId: string | null) => void
 }) {
   const t = useTranslations('payroll.remittances')
@@ -199,7 +206,7 @@ function RemittanceGroupCard({
                     <SliceBillButton
                       key={slice.subsidiaryId}
                       slice={slice}
-                      busy={busy}
+                      busy={busy || rangeChanged}
                       onCreate={() => onCreate(slice.subsidiaryId)}
                     />
                   ))}
@@ -207,7 +214,7 @@ function RemittanceGroupCard({
               ) : (
                 <Button
                   size="sm"
-                  disabled={busy}
+                  disabled={busy || rangeChanged}
                   onClick={() => onCreate(
                     group.slices.length === 1 ? group.slices[0]!.subsidiaryId : null,
                   )}
