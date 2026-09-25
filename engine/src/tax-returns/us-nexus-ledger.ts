@@ -265,7 +265,7 @@ export async function computeUsNexusStatus(
   // the coarse whole-dollar figures round to cents for the numeric threshold
   // field while the measured sales keep full ledger precision.
   if (target === 'USD') {
-    return { from, to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: evaluateUsNexus(attributed), unattributed, translation: null }
+    return { from, to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: evaluateUsNexus(attributed, { asOf: to }), unattributed, translation: null }
   }
   let policyRate: string
   let policyAsOf: string
@@ -281,7 +281,7 @@ export async function computeUsNexusStatus(
   }
   const thresholds = new Map<string, StateNexusThreshold>()
   for (const sale of attributed) {
-    const reference = thresholdForState(sale.state)
+    const reference = thresholdForState(sale.state, to)
     thresholds.set(
       sale.state,
       reference.measure === 'none' || cmp(reference.salesUsd, '0') === 0
