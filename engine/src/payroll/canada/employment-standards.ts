@@ -620,10 +620,11 @@ const NU_HOLIDAY_PAY: PayrollHolidayPayRule = {
  * s. 7(1)(c): without reasonable cause, missing BOTH the last scheduled day
  * before and the first after — conjunctive, the employer's to apply through
  * the asserted denial. s. 7(1)(d) (agreed to work, then no-showed) rides the
- * same unconsented-absence assertion. s. 7(1)(e) (elect-to-work contracts)
- * needs the statutory occupation classification the engine does not yet
- * capture; an on-call employee computed here would be overpaid, and that
- * boundary is named rather than hidden.
+ * same unconsented-absence assertion. s. 7(1)(e) excludes elect-to-work
+ * contracts from holiday-pay entitlement entirely — declared as the rule's
+ * `elect_to_work` excluded arm: an answered member of the class is denied
+ * the day by name, and an unanswered class fails the calculation closed,
+ * exactly like an unanswered commission status.
  * s. 7(2): employer-directed non-reporting excuses (c) — again the
  * employer's application, not the engine's inference.
  *
@@ -637,6 +638,13 @@ const PE_HOLIDAY_PAY_REPEALED: PayrollHolidayPayRule = {
   citation: "Employment Standards Act (Prince Edward Island), RSPEI 1988 c E-6.2, ss. 6–10 "
     + "(as consolidated 2013; repealed by SPEI 2024 c 66 s. 105 — governs holidays through 2026-06-29)",
   basis: { kind: "normal_day" },
+  excludedOccupations: {
+    elect_to_work: {
+      label: "Elect-to-work",
+      citation: "Employment Standards Act (Prince Edward Island), RSPEI 1988 c E-6.2, s. 7(1)(e)",
+      reason: "elect-to-work contracts are not entitled to paid-holiday pay under the repealed Act",
+    },
+  },
   // No lookback exists, so the Act states no inclusions.
   include: { overtime: false, vacationPay: false, holidayPay: false },
   qualifying: {
@@ -651,8 +659,8 @@ const PE_HOLIDAY_PAY_REPEALED: PayrollHolidayPayRule = {
 
 const PE_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "Employment Standards Act (Prince Edward Island), SPEI 2024 c 66, ss. 27–28 "
-    + "(in force 2026-06-30; earlier periods are governed by the repealed RSPEI 1988 c E-6.2 "
-    + "and are NOT transcribed)",
+    + "(in force 2026-06-30; earlier periods are governed by the repealed RSPEI 1988 c E-6.2, "
+    + "transcribed as the pre-2026-06-30 edition)",
   basis: { kind: "percent_of_earnings", percent: "5", lookbackWeeks: 4 },
   include: { overtime: false, vacationPay: true, holidayPay: true },
   qualifying: { lastAndFirstScheduledShift: true },

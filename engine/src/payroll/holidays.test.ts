@@ -1014,22 +1014,21 @@ test("New Brunswick caps a route salesperson's unworked WEEK at the four-week av
 });
 
 test("an excluded occupation is denied the day; the gate refuses unrecorded and unknown classes", () => {
-  // Arm kind for the repealed PEI s. 7(1)(e) elect-to-work exclusion —
-  // synthetic until the repealed edition declares it, so no live rule
-  // misstates its statute.
-  const rule = { ...ruleFor("CA-SK"), excludedOccupations: { elect_to_work: {
-    label: "Elect-to-work",
-    citation: "Employment Standards Act (Prince Edward Island), RSPEI 1988 c E-6.2, s. 7(1)(e)",
-    reason: "elect-to-work contracts are not entitled to paid-holiday pay",
-  } } };
+  // The arm kind, declared for real: the repealed PEI edition denies
+  // elect-to-work contracts under s. 7(1)(e) — reason and citation on the
+  // denial, before qualifying, pricing, and premium alike.
+  const rule = ruleFor("CA-PE", "2026-04-03");
   const denied = computeStatutoryHolidayPay(rule, payContext({ occupationClass: "elect_to_work" }));
   assert.equal(denied.qualified, false);
   assert.match(denied.disqualifiedReason ?? "", /elect-to-work contracts are not entitled/);
-  // Any other class runs the general rule ...
+  assert.match(denied.disqualifiedReason ?? "", /s\. 7\(1\)\(e\)/);
+  // Any other class runs the general rule: a qualified non-member prices one
+  // normal day (8h x $25).
   const control = computeStatutoryHolidayPay(rule, payContext({
-    occupationClass: "general", earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+    occupationClass: "general", schedule: pattern("8"), hourlyRate: "25.00", daysWorkedInQualifyingWindow: 20,
   }));
   assert.equal(control.qualified, true);
+  assert.equal(control.holidayPay, "200.0000");
   // ... while the gate refuses what was never answered, or never declared.
   const nb = ruleFor("CA-NB");
   assert.throws(() => assertOccupationClass(nb, "CA", null, "Emp"), /not recorded/);
@@ -1037,9 +1036,12 @@ test("an excluded occupation is denied the day; the gate refuses unrecorded and 
   assert.doesNotThrow(() => assertOccupationClass(nb, "CA", undefined, "Emp"));
   assert.doesNotThrow(() => assertOccupationClass(nb, "CA", "general", "Emp"));
   assert.doesNotThrow(() => assertOccupationClass(ruleFor("CA-SK"), "CA", null, "Emp"));
-  // The registries the profile boundary and the editor read.
+  // The registries the profile boundary and the editor read: the NB cap's
+  // route_salesperson and the PEI exclusion's elect_to_work alike.
   assert.ok(occupationCapValues("CA").includes("route_salesperson"));
+  assert.ok(occupationCapValues("CA").includes("elect_to_work"));
   assert.ok(holidayOccupationClassesOf("CA-NB").some((entry) => entry.classKey === "route_salesperson"));
+  assert.ok(holidayOccupationClassesOf("CA-PE").some((entry) => entry.classKey === "elect_to_work"));
 });
 
 test("Newfoundland pays DOUBLE for the day worked, instead of stacking", () => {
@@ -1047,8 +1049,7 @@ test("Newfoundland pays DOUBLE for the day worked, instead of stacking", () => {
   // election — the only jurisdiction in the country where working the holiday
   // REPLACES the day's holiday pay rather than adding to it.
   const worked = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 15, hoursWorkedInLookback: "120", hoursWorked: "8", hourlyRate: "25.00", employmentDays: 400,
-    earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
+    daysWorked: 15, hoursWorkedInLookback: "120", hoursWorked: "8", hourlyRate: "25.00", employmentDays: 400, earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
   }));
   // The 8 hours are already on the stub at 1.0×, so the uplift is one more
   // times, and the day's pay is dropped.
@@ -1057,8 +1058,7 @@ test("Newfoundland pays DOUBLE for the day worked, instead of stacking", () => {
 
   // Not worked: an average day over the three-week window. $3,000 ÷ 15 = $200.
   const rested = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 15, hoursWorkedInLookback: "120", hourlyRate: "25.00", employmentDays: 400,
-    earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
+    daysWorked: 15, hoursWorkedInLookback: "120", hourlyRate: "25.00", employmentDays: 400, earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
   }));
   assert.equal(rested.holidayPay, "200.0000");
   assert.deepEqual(lookbackWindow(ruleFor("CA-NL"), "2026-07-01"), { from: "2026-06-10", to: "2026-06-30" });
@@ -1068,11 +1068,7 @@ test("Newfoundland uses the current hourly rate times average lookback hours", (
   // LSA s. 15(3): the holiday is paid at the employee's current rate, even
   // where that rate changed during the three-week hours lookback.
   const result = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 10,
-    hoursWorkedInLookback: "75.0000",
-    hourlyRate: "30.00",
-    employmentDays: 400,
-    earnings: { ...emptyLookbackEarnings(), regular: "1500.00" },
+    daysWorked: 10, hoursWorkedInLookback: "75.0000", hourlyRate: "30.00", employmentDays: 400, earnings: { ...emptyLookbackEarnings(), regular: "1500.00" },
   }));
   assert.equal(result.holidayPay, "225.0000");
 });
