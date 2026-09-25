@@ -1,4 +1,5 @@
 import { HrmConstructionError } from "./errors.ts";
+import { compareDecimal as compareExactDecimals, parseExactDecimal } from "../../money/exact-decimal.ts";
 
 /**
  * Pure construction-compliance decisions (HR-13): scope precedence,
@@ -86,13 +87,23 @@ export function applyReciprocity(
   return { line: home, source: "higher_of" };
 }
 
+/**
+ * Exact decimal comparison for rate bases. Decision (ARCH-MONEY-BRAND):
+ * this used to truncate fractions past 4dp silently, so 0.33333 and 0.3333
+ * compared equal and the higher_of rule could price the wrong schedule.
+ * It now compares exactly at any scale through the money kernel and
+ * refuses non-decimals BY NAME instead of crashing in BigInt. Garbage
+ * still throws; only the silent truncation is gone.
+ */
 export function compareDecimal(a: string, b: string): number {
-  const [ai, af = ""] = a.split(".");
-  const [bi, bf = ""] = b.split(".");
-  const norm = (i: string, f: string): string => `${i.replace("-", "")}.${(f + "0000").slice(0, 4)}`;
-  const an = BigInt(`${a.trim().startsWith("-") ? "-" : ""}${norm(ai!, af).replace(".", "")}`);
-  const bn = BigInt(`${b.trim().startsWith("-") ? "-" : ""}${norm(bi!, bf).replace(".", "")}`);
-  return an < bn ? -1 : an > bn ? 1 : 0;
+  for (const [label, value] of [["first", a], ["second", b]] as const) {
+    if (parseExactDecimal(value) === null) {
+      throw new HrmConstructionError(
+        `cannot compare rate ${JSON.stringify(value)} (${label} value) — re-enter both bases as plain decimals`,
+      );
+    }
+  }
+  return compareExactDecimals(a, b);
 }
 
 export type PerDiemBasis = "flat_daily" | "distance_brackets" | "hours_threshold";
