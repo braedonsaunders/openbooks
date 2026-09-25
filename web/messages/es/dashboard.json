@@ -175,6 +175,12 @@
       "newExpense": "Nuevo gasto",
       "runReport": "Ejecutar informe"
     },
+    "hints": {
+      "create": "Crear",
+      "open": "Abrir",
+      "navigate": "Navegar",
+      "app": "Aplicación"
+    },
     "editor": {
       "title": "Personalizar acciones rápidas",
       "description": "Añadir, reordenar y eliminar accesos directos.",

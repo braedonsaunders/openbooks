@@ -175,6 +175,12 @@
       "newExpense": "New expense",
       "runReport": "Run report"
     },
+    "hints": {
+      "create": "Create",
+      "open": "Open",
+      "navigate": "Navigate",
+      "app": "App"
+    },
     "editor": {
       "title": "Customize quick actions",
       "description": "Add, reorder, and remove shortcut tiles.",
