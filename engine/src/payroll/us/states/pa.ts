@@ -198,6 +198,11 @@ export const PA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   PHILA_WORK_ALLOCATION: "Philadelphia nonresident city work share",
   PHILA_TAXABLE_WAGES: "Philadelphia taxable wages",
   PHILA_TAX: "Philadelphia wage tax",
+  PA_LST_PSD: "LST worksite PSD code",
+  PA_LST_ANNUAL: "LST combined annual amount",
+  PA_LST_TAX: "Local Services Tax withheld",
+  PA_LST_YTD: "LST withheld year-to-date for this worksite",
+  PA_LST_EXEMPT: "LST exemption in effect",
 };
 
 export const PA_WITHHOLDING: UsStateWithholdingEngine = {
@@ -350,6 +355,13 @@ export function localServicesTaxPerPeriod(input: {
   periodsPerYear: number;
   /** The employee has filed the upfront low-income exemption certificate. */
   exempt?: boolean;
+  /**
+   * LST already withheld this year for this employee and worksite
+   * jurisdiction (committed history). The annual amount is a CAP, not a
+   * target: a 27th pay period or a mid-year schedule change must not push
+   * the year's total past it.
+   */
+  alreadyWithheldYtd?: string;
 }): string {
   if (input.exempt) return D(0n);
   const annual = U(input.annualAmount);
@@ -369,5 +381,13 @@ export function localServicesTaxPerPeriod(input: {
   // use `divIntCents`, which rounds half-up.
   const CENT = 100n;
   const perPeriod = annual / BigInt(input.periodsPerYear);
-  return D((perPeriod / CENT) * CENT);
+  const truncated = (perPeriod / CENT) * CENT;
+  const prior = U(input.alreadyWithheldYtd ?? "0");
+  if (prior < 0n) {
+    throw new PayrollError(
+      `invalid Local Services Tax withheld year-to-date: ${input.alreadyWithheldYtd}`,
+    );
+  }
+  const remaining = annual > prior ? annual - prior : 0n;
+  return D(truncated < remaining ? truncated : remaining);
 }
