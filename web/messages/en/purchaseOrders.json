@@ -28,6 +28,7 @@
     "convertCreated": "{target} {number} created",
     "convertFailed": "Conversion failed",
     "actionFailed": "Action failed",
+    "pricingResolving": "Selling-price lookup is pending. Wait for it to finish or correct the line price before saving or issuing.",
     "invalidLineSave": "Line {row}, {field}: enter a valid value or remove this line before saving.",
     "autosaveFailed": "Autosave failed",
     "toastIssued": "Issued",

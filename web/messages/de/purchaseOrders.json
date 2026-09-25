@@ -28,6 +28,7 @@
     "convertCreated": "{target} {number} erstellt",
     "convertFailed": "Umwandlung fehlgeschlagen",
     "actionFailed": "Aktion fehlgeschlagen",
+    "pricingResolving": "Die Ermittlung des Verkaufspreises läuft. Warten Sie, bis sie abgeschlossen ist, oder korrigieren Sie den Zeilenpreis, bevor Sie speichern oder ausstellen.",
     "invalidLineSave": "Zeile {row}, {field}: Geben Sie einen gültigen Wert ein oder entfernen Sie diese Zeile vor dem Speichern.",
     "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
     "toastIssued": "Ausgestellt",

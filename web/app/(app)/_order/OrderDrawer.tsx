@@ -489,6 +489,19 @@ export function OrderDrawer({
   const resolvedPriceRef = useRef(new Map<number, { itemId: string; unitPrice: string; basis: PriceBasis }>())
   const priceRequestRef = useRef(new Map<string, string>())
   const priceRequestSequence = useRef(0)
+  // Selling-price lookups that have not settled (pending) or were refused
+  // (failures, keyed by row): either blocks Save and Issue until every
+  // lookup resolves or the operator corrects the line price — a refused
+  // lookup must never post silently at the item default rate.
+  const [priceLookupPending, setPriceLookupPending] = useState<Set<string>>(new Set())
+  const [priceLookupFailures, setPriceLookupFailures] = useState<Map<string, string>>(new Map())
+  const priceLookupBlocked = priceLookupPending.size > 0 || priceLookupFailures.size > 0
+  // Row values at response time: a manual edit between request and response
+  // supersedes the lookup, so a late failure must neither pin nor overwrite it.
+  const latestRowsRef = useRef(rows)
+  useLayoutEffect(() => {
+    latestRowsRef.current = rows
+  })
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
 
@@ -548,20 +561,32 @@ export function OrderDrawer({
   }, [order.lines])
 
   // -- selecting an item defaults description/price/account/tax/unit ----------
+  // A row with no lookupable price leaves no lookup state behind: the
+  // request (if any) is stale, and a stuck pending entry would block Save
+  // long after the row stopped asking.
+  const clearPriceLookup = (rowKey: string) => {
+    priceRequestRef.current.delete(rowKey)
+    setPriceLookupPending((current) => {
+      if (!current.has(rowKey)) return current
+      const next = new Set(current)
+      next.delete(rowKey)
+      return next
+    })
+  }
   const resolveSellingPrice = (index: number, row: LineRow, allRows: LineRow[]) => {
     if (kind === 'purchase_order' || !row.itemId || !row.quantity) {
-      priceRequestRef.current.delete(row.clientKey)
+      clearPriceLookup(row.clientKey)
       return
     }
     let overallItemQuantity: string
     try {
       overallItemQuantity = sum(allRows.filter((candidate) => candidate.itemId === row.itemId).map((candidate) => candidate.quantity || '0'))
       if (cmp(row.quantity, '0') <= 0 || cmp(overallItemQuantity, '0') <= 0) {
-        priceRequestRef.current.delete(row.clientKey)
+        clearPriceLookup(row.clientKey)
         return
       }
     } catch {
-      priceRequestRef.current.delete(row.clientKey)
+      clearPriceLookup(row.clientKey)
       return
     }
     const priceInputs = JSON.stringify({
@@ -577,22 +602,46 @@ export function OrderDrawer({
     // The response lands asynchronously: bind it to the row and every
     // pricing input, not just the row's former position.
     const rowKey = row.clientKey
-    void fetch('/api/items/price', {
+    setPriceLookupPending((current) => new Set(current).add(rowKey))
+    setPriceLookupFailures((current) => {
+      if (!current.has(rowKey)) return current
+      const next = new Map(current)
+      next.delete(rowKey)
+      return next
+    })
+    clearRefusal()
+    void fetchAction<{ price: {
+      unitPrice: string
+      source: PriceBasis['kind']
+      scheduleId: string | null
+      priceLevelId: string | null
+      assignmentId: string | null
+      resolvedAt: string
+    } | null }>('/api/items/price', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: priceInputs,
-    }).then(async (response) => {
-      if (!response.ok) return null
-      return response.json() as Promise<{ price: {
-        unitPrice: string
-        source: PriceBasis['kind']
-        scheduleId: string | null
-        priceLevelId: string | null
-        assignmentId: string | null
-        resolvedAt: string
-      } | null }>
-    }).then((payload) => {
-      if (!payload?.price || priceRequestRef.current.get(rowKey) !== requestIdentity) return
-      const price = payload.price
+    }).then((result) => {
+      if (priceRequestRef.current.get(rowKey) !== requestIdentity) return
+      setPriceLookupPending((current) => {
+        if (!current.has(rowKey)) return current
+        const next = new Set(current)
+        next.delete(rowKey)
+        return next
+      })
+      if (!result.ok) {
+        // A manually corrected price replaces the failed lookup: pin the
+        // failure only while the row still shows exactly what was asked for,
+        // so a late refusal never blocks or overwrites a newer line edit.
+        const currentRow = latestRowsRef.current.find((candidate) => candidate.clientKey === rowKey)
+        if (currentRow?.itemId === row.itemId && currentRow.quantity === row.quantity && currentRow.unitPrice === row.unitPrice) {
+          const message = result.error.displayMessage(t('actionFailed'))
+          setPriceLookupFailures((current) => new Map(current).set(rowKey, message))
+          refuse(message, t('actionFailed'))
+        }
+        return
+      }
+      if (!result.data.price) return
+      const price = result.data.price
       const basis: PriceBasis = {
         kind: price.source,
         scheduleId: price.scheduleId,
@@ -606,7 +655,7 @@ export function OrderDrawer({
         resolvedPriceRef.current.set(rowIndex, { itemId: row.itemId, unitPrice: price.unitPrice, basis })
         return { ...candidate, unitPrice: price.unitPrice }
       }))
-    }).catch(() => undefined)
+    })
   }
 
   useLayoutEffect(() => {
@@ -657,8 +706,14 @@ export function OrderDrawer({
       resolvedPriceRef.current.clear()
       const liveKeys = new Set(merged.map((row) => row.clientKey))
       for (const key of priceRequestRef.current.keys()) {
-        if (!liveKeys.has(key)) priceRequestRef.current.delete(key)
+        if (!liveKeys.has(key)) clearPriceLookup(key)
       }
+      // A removed row takes its lookup state with it: neither a pending
+      // request nor a pinned failure for a deleted line may block Save.
+      setPriceLookupFailures((current) => {
+        if ([...current.keys()].every((key) => liveKeys.has(key))) return current
+        return new Map([...current].filter(([key]) => liveKeys.has(key)))
+      })
     }
     setRows(merged)
     merged.forEach((row, index) => {
@@ -667,8 +722,18 @@ export function OrderDrawer({
       const tracked = resolvedPriceRef.current.get(index)
       const manuallyChanged = Boolean(prior && row.unitPrice !== prior.unitPrice && !itemChanged)
       if (manuallyChanged) {
+        // A hand-entered price replaces whatever the lookup said or would
+        // have said: drop the request (its response is now stale) and the
+        // row's failure, so the correction unblocks Save.
         resolvedPriceRef.current.delete(index)
-        priceRequestRef.current.delete(row.clientKey)
+        clearPriceLookup(row.clientKey)
+        setPriceLookupFailures((current) => {
+          if (!current.has(row.clientKey)) return current
+          const next = new Map(current)
+          next.delete(row.clientKey)
+          return next
+        })
+        clearRefusal()
       }
       const trackedQuantityChanged = Boolean(tracked && tracked.itemId === row.itemId && prior && row.quantity !== prior.quantity && prior.unitPrice === tracked.unitPrice)
       const pendingQuantityChanged = Boolean(priceRequestRef.current.has(row.clientKey) && prior && row.quantity !== prior.quantity)
@@ -729,6 +794,11 @@ export function OrderDrawer({
 
   /** Reset every field back to the loaded document (used by Cancel). */
   function resetForm() {
+    // Cancel discards the edits the lookups were for: a failure that lands
+    // afterwards belongs to discarded rows and must not block Issue from
+    // view mode.
+    setPriceLookupPending(new Set())
+    setPriceLookupFailures(new Map())
     setPartyId(doc.party_id ?? '')
     setDocumentDate(doc.document_date ?? '')
     setDueDate(doc.due_date ?? '')
@@ -770,7 +840,21 @@ export function OrderDrawer({
       })
   }
 
+  // A line whose selling price never resolved (or was refused) must not
+  // post at the item default rate. execute() clears the pinned refusal on
+  // entry, so re-pin here rather than relying on the failure-time pin.
+  function refuseUnresolvedPriceLookup(): boolean {
+    if (!priceLookupBlocked) return false
+    if (priceLookupPending.size > 0) refuse(t('pricingResolving'), t('actionFailed'))
+    else {
+      const first = priceLookupFailures.values().next().value
+      if (first) refuse(first, t('actionFailed'))
+    }
+    return true
+  }
+
   async function persistDraft() {
+    if (refuseUnresolvedPriceLookup()) return null
     const sent = payload
     const sentRows = rows
     const saved = await persistOrderDraft({
@@ -802,6 +886,7 @@ export function OrderDrawer({
    *  The document number allocates inside that transaction — nothing before
    *  this call wrote a row or burned a sequence value. */
   async function persistCreate(): Promise<string | null> {
+    if (refuseUnresolvedPriceLookup()) return null
     const sentRows = rows
     const saved = await persistOrderDraft({
       request: () => fetch(apiBase, {
@@ -1199,7 +1284,7 @@ export function OrderDrawer({
         return null
     }
   }
-  const canIssue = !!partyId && rows.some((r) => {
+  const canIssue = !priceLookupBlocked && !!partyId && rows.some((r) => {
     try { return Boolean(r.itemId || r.accountId) && cmp(lineAmount(r), '0') > 0 } catch { return false }
   })
   const convertTargets = CONVERSION_TARGETS[kind]
@@ -1244,7 +1329,7 @@ export function OrderDrawer({
       actions={
         mode === 'edit' ? (
           <>
-            <Button disabled={busy} onClick={save}>
+            <Button disabled={busy || priceLookupBlocked} onClick={save}>
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </>
@@ -1255,7 +1340,7 @@ export function OrderDrawer({
             <FlowManualButtons subjectKind={kind} subjectId={String(doc.id)} />
             <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
             {isDraft ? (
-              <Button disabled={busy || !canIssue} onClick={issue} title={!canIssue ? t('issueHint') : undefined}>
+              <Button disabled={busy || !canIssue} onClick={issue} title={priceLookupBlocked ? t('pricingResolving') : !canIssue ? t('issueHint') : undefined}>
                 {t('issue')}
               </Button>
             ) : null}
@@ -1322,6 +1407,8 @@ export function OrderDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
+        {priceLookupPending.size > 0 ? <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{t('pricingResolving')}</p> : null}
+        {priceLookupFailures.size > 0 ? <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">{[...priceLookupFailures].map(([key, message]) => <li key={key} role="alert">{rows.find((row) => row.clientKey === key)?.description || t('columns.item')}: {message}</li>)}</ul> : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>

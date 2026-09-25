@@ -28,6 +28,7 @@
     "convertCreated": "{target} {number} criado",
     "convertFailed": "Falha na conversão",
     "actionFailed": "Falha na ação",
+    "pricingResolving": "A consulta do preço de venda está em andamento. Aguarde a conclusão ou corrija o preço da linha antes de salvar ou emitir.",
     "invalidLineSave": "Linha {row}, {field}: informe um valor válido ou remova esta linha antes de salvar.",
     "autosaveFailed": "Falha ao salvar automaticamente",
     "toastIssued": "Emitido",
