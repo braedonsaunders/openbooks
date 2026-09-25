@@ -17,9 +17,9 @@ import { defaultNavConfig, type NavAppOption, type OrgNavConfig } from '../../..
  * state, prompt() dialogs, a 4-pin mobile limit with a toast, and a PUT save)
  * that can never be decomposed into spec blocks — the same position the
  * customization page takes for its Form/ListView designers. So the spec binds
- * exactly one widgetBlock (`nav-editor`) carrying the two loader-resolved
- * props the native page already builds: the saved-or-default config and the
- * installed-app options. No new vocabulary.
+ * exactly one widgetBlock (`nav-editor`) carrying the three loader-resolved
+ * props the native page already builds: the saved-or-default config, the
+ * installed-app options, and the save-fence revision. No new vocabulary.
  *
  * The native query, filter and fallback logic is copied verbatim below.
  */
@@ -31,6 +31,9 @@ export interface NavigationAdminData {
   backLabel: string
   initial: OrgNavConfig
   apps: NavAppOption[]
+  /** Save fence token: the saved row's updated_at at load, null when no row
+   *  exists yet. The editor echoes it back; a mismatch is a stale write. */
+  revision: string | null
 }
 
 export async function loadNavigationAdmin(): Promise<NavigationAdminData | null> {
@@ -51,10 +54,11 @@ export async function loadNavigationAdmin(): Promise<NavigationAdminData | null>
   const tHub = await getTranslations('admin.hub')
 
   const [r, apps] = await Promise.all([
-    db.execute<{ config: OrgNavConfig }>(sql`select config from org_nav_configs where org_id = ${user.orgId} limit 1`),
+    db.execute<{ config: OrgNavConfig; updated_at: Date }>(sql`select config, updated_at from org_nav_configs where org_id = ${user.orgId} limit 1`),
     listApps(user.orgId),
   ])
   const saved = r.rows[0]?.config
+  const revision = r.rows[0]?.updated_at ? new Date(r.rows[0].updated_at).toISOString() : null
   const navApps = apps
     .filter((app) => app.status === 'installed' && app.activeVersionId)
     .map((app) => ({
@@ -71,6 +75,7 @@ export async function loadNavigationAdmin(): Promise<NavigationAdminData | null>
     backLabel: tHub('title'),
     initial: config,
     apps: navApps,
+    revision,
   }
 }
 
@@ -86,7 +91,7 @@ export function navigationAdminSpec(data: NavigationAdminData): PageSpec {
     layout: 'bare',
     header: [],
     body: [
-      frame('page-container', [pageHeader({ title: f('title'), description: f('description'), back: { href: f('backHref'), label: f('backLabel') } }), grid('mt-6', [widgetBlock('nav-editor', { initial: data.initial, apps: data.apps })])], {
+      frame('page-container', [pageHeader({ title: f('title'), description: f('description'), back: { href: f('backHref'), label: f('backLabel') } }), grid('mt-6', [widgetBlock('nav-editor', { initial: data.initial, apps: data.apps, revision: data.revision })])], {
         className: 'max-w-3xl',
       }),
     ],

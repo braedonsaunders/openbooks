@@ -388,6 +388,9 @@
     "save": "保存导航",
     "saved": "导航已保存",
     "saveFailed": "无法保存",
+    "saveConflict": "其他用户已更改导航。请重新加载页面并重新应用您的更改。",
+    "invalidConfig": "导航配置无效。",
+    "unknownApp": "导航引用了未安装的应用。",
     "resetDefaults": "重置为默认"
   },
   "roles": {

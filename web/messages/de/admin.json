@@ -388,6 +388,9 @@
     "save": "Navigation speichern",
     "saved": "Navigation gespeichert",
     "saveFailed": "Speichern fehlgeschlagen",
+    "saveConflict": "Jemand anderes hat die Navigation geändert. Laden Sie die Seite neu und wenden Sie Ihre Änderungen erneut an.",
+    "invalidConfig": "Die Navigationskonfiguration ist ungültig.",
+    "unknownApp": "Die Navigation verweist auf eine nicht installierte App.",
     "resetDefaults": "Auf Standardwerte zurücksetzen"
   },
   "roles": {

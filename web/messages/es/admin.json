@@ -435,6 +435,9 @@
     "save": "Guardar navegación",
     "saved": "Navegación guardada",
     "saveFailed": "No se pudo guardar",
+    "saveConflict": "Otro usuario cambió la navegación. Recargue la página y vuelva a aplicar sus cambios.",
+    "invalidConfig": "La configuración de navegación no es válida.",
+    "unknownApp": "La navegación hace referencia a una aplicación no instalada.",
     "resetDefaults": "Restablecer valores predeterminados"
   },
   "roles": {

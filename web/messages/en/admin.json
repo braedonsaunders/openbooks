@@ -388,6 +388,9 @@
     "save": "Save navigation",
     "saved": "Navigation saved",
     "saveFailed": "Could not save",
+    "saveConflict": "Someone else changed the navigation. Reload the page and reapply your edits.",
+    "invalidConfig": "The navigation configuration is invalid.",
+    "unknownApp": "The navigation references an app that is not installed.",
     "resetDefaults": "Reset to defaults"
   },
   "roles": {

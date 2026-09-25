@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, Eye, EyeOff, FolderPlus, Pin, PinOff, Plus, RotateCcw, Trash2 } from 'lucide-react'
@@ -34,11 +34,14 @@ function itemLabel(item: NavItemConfig): string {
   return item.label ?? MODULE_BY_KEY.get(item.moduleKey)?.label ?? item.moduleKey
 }
 
-export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavAppOption[] }) {
+export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavConfig; apps: NavAppOption[]; initialRevision?: string | null }) {
   const t = useTranslations('admin.navigation')
   const tCommon = useTranslations('common')
   const [config, setConfig] = useState<OrgNavConfig>(initial)
   const [savedConfig, setSavedConfig] = useState<OrgNavConfig>(initial)
+  // Save fence token: the row version this editor loaded. Undefined (legacy
+  // embeds and tests) sends no expectation; null expects no saved row.
+  const revisionRef = useRef<string | null | undefined>(initialRevision)
   const [busy, setBusy] = useState(false)
   const router = useRouter()
   const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig)
@@ -100,17 +103,27 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
       const res = await fetch('/api/admin/navigation', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config }),
+        body: JSON.stringify({
+          config,
+          ...(revisionRef.current !== undefined ? { expectedUpdatedAt: revisionRef.current } : {}),
+        }),
       })
       if (res.ok) {
+        const data = (await res.json().catch(() => null)) as { revision?: unknown } | null
+        if (typeof data?.revision === 'string') revisionRef.current = data.revision
         setSavedConfig(config)
         toast.success(t('saved'))
         router.refresh()
       } else {
         // The status is checked first: a non-JSON 500 (proxy page, empty
         // body) must toast the named refusal or the translated fallback,
-        // never a SyntaxError out of res.json() that hides it.
-        toast.error(await readApiErrorMessage(res, t('saveFailed')))
+        // never a SyntaxError out of res.json() that hides it. Known server
+        // refusals map to catalog copy; a 409 is always a stale write.
+        const message = await readApiErrorMessage(res, t('saveFailed'))
+        if (message === 'invalid nav config') toast.error(t('invalidConfig'))
+        else if (message === 'navigation references an unknown app') toast.error(t('unknownApp'))
+        else if (res.status === 409) toast.error(t('saveConflict'))
+        else toast.error(message)
       }
     } catch {
       // A dead network must toast and release busy, never wedge the editor.
