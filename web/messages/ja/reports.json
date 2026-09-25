@@ -480,6 +480,7 @@
       "downloadXlsx": "Excelをダウンロード",
       "runNow": "今すぐ実行",
       "runFailed": "レポートの実行に失敗しました",
+      "runFailedHelp": "レポートを実行できませんでした。再試行し、問題が続く場合は管理者に連絡してください。",
       "runComplete": "レポートの実行が完了しました",
       "emptyHint": "レポートを実行するとここに結果が表示されます。実行結果は保存され、CSVとしてダウンロードできます。",
       "scheduledDelivery": "定期配信",

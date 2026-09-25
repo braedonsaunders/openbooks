@@ -873,6 +873,7 @@ export async function recordReportRun(args: {
     return { runId, result, error: null }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Report run failed'
+    console.error(`[reports/run:${runId}] report execution failed`, err)
     await db.execute(sql`
       update report_runs set status = 'failed', error = ${message},
              finished_at = now(), updated_at = now()
