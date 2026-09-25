@@ -68,7 +68,7 @@ export function parseLaborCostComponents(input: unknown): LaborCostComponent[] {
     }
     const canonical = canonicalDecimal(c.value, 4);
     if (canonical === null) {
-      throw new LaborCostingSettingsError(`${label}: value must be a number with at most 4 decimals`);
+      throw new LaborCostingSettingsError(`${label}: value must be a decimal string with at most 4 decimals`);
     }
     if (compareDecimal(canonical, "0") < 0) {
       throw new LaborCostingSettingsError(`${label}: value cannot be negative`);
