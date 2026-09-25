@@ -211,6 +211,16 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // input (prior supplemental via the run's YTD) instead.
     source: "Massachusetts Circular M: Income Tax Withholding Tables at 5.0%, Effective January 1, 2026 (Rev. 12/25), section G",
   } as const,
+  MD: {
+    kind: "engine",
+    // Comptroller of Maryland, 2026 Employer Withholding Guide, p. 9: a
+    // separately paid lump-sum annual bonus takes the 6.50% highest state
+    // rate plus the highest local for the county of residence (2.25%
+    // special rate for nonresidents). The rate is county- and
+    // basis-dependent, so the MD engine prices it from the timed input
+    // instead of a static rate declaration.
+    source: "https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/instructions/withholding/2026/withholding-guide.pdf",
+  } as const,
   MI: {
     kind: "flat",
     // Michigan Form 446 (2026), "Bonuses and Other Payments": separately

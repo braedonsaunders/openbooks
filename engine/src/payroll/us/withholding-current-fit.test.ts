@@ -277,6 +277,24 @@ test('Georgia separately paid bonus uses the effective flat supplemental rate', 
   assert.equal(beforeRateChange?.factors.US_SUPPLEMENTAL_RATE, '0.0519')
 })
 
+test('Maryland separately paid annual bonus routes to the lump-sum calculation', () => {
+  // Comptroller of Maryland, 2026 Employer Withholding Guide, p. 9:
+  // $1,000 × (6.50% + 3.20% Montgomery highest local) = $97.00.
+  const result = computeUsWithholding({
+    levy: levy('MD', 'us_md_mw507'),
+    payDate: '2026-03-06', periodEnd: PERIOD_END, periodsPerYear: 52,
+    wages: '0.0000', supplemental: '1000.0000',
+    supplementalPaymentTiming: 'separate',
+    certificateFor: () => certificate('us_md_mw507', {
+      filing_status: 'single', exemptions: '1', residence_county: '16',
+    }),
+    tenantRates: () => undefined, federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0])
+  assert.equal(result?.tax, '97.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_METHOD, 'lump_sum')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '97.0000')
+})
+
 test('Michigan separately paid bonus uses 4.25% without the period exemption', () => {
   // Michigan Form 446 (2026): https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf
   const result = computeUsWithholding({
