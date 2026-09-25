@@ -27,6 +27,9 @@ const sources = {
     export async function deleteEmailAttachmentBlobs(ids) {
       for (const id of ids) globalThis.__attachmentRollbackTest.objects.delete(id);
     }
+    export function emailAttachmentObjectKey(id) {
+      return \`email-attachments/\${id}\`;
+    }
   `,
 }
 
