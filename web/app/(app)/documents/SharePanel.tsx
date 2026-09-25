@@ -73,6 +73,8 @@ export function SharePanel({
           setGrants(grantsPayload.grants as Grant[])
           setUsers(principalsPayload.users as Principal[])
           setRoles(principalsPayload.roles as Principal[])
+          // A retry that succeeds must clear the alert it retried from.
+          setLoadError(false)
         })
       })
       .catch(() => {
