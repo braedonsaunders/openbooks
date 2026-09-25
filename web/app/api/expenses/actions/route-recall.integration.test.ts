@@ -26,6 +26,7 @@ registerHooks({
       }
       export function can(authz, permission) { return authz.permissions.has(permission) }
       export function guardSubsidiaryScope() { return null }
+      export { subsidiaryScopeAllows } from '${root}engine/src/organization/subsidiary-scope.ts'
     `)
     if (specifier === '../../../../lib/features') return virtual(`
       export async function isFeatureEnabled() { return true }
@@ -100,7 +101,7 @@ async function submittedReport(orgId: string, submitterId: string, scratch: { da
   const gateId = randomUUID()
   const flowId = randomUUID()
   await db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, graph, created_by)
+    insert into flows (id, org_id, name, subject_kind, enabled, graph, created_by)
     values (${flowId}, ${orgId}, 'Expense approval', 'expense_report', true, '{"nodes":[],"edges":[]}'::jsonb, ${submitterId})`)
   await db.execute(sql`
     insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, context, created_by)

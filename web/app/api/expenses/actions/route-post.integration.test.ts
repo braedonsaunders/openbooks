@@ -25,6 +25,7 @@ registerHooks({
       }
       export function can(authz, permission) { return authz.permissions.includes(permission) }
       export function guardSubsidiaryScope() { return null }
+      export { subsidiaryScopeAllows } from '${root}engine/src/organization/subsidiary-scope.ts'
     `)
     if (specifier.startsWith('../../../../lib/features')) return virtual(`
       export async function isFeatureEnabled() { return true }

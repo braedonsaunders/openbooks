@@ -82,8 +82,13 @@ interface PostedFixture {
   cleanup: () => Promise<void>
 }
 
-/** A truly posted expense report: submitted, auto-approved, GL-posted. */
-async function postedFixture(): Promise<PostedFixture> {
+/**
+ * A truly posted expense report: submitted, auto-approved, GL-posted.
+ * stopBeforePosting halts at approved for wrong-state paths: posted rows
+ * are immutable (posted_document_status_guard), so a test that needs a
+ * non-posted report must never get there by rewinding one.
+ */
+async function postedFixture(opts: { stopBeforePosting?: boolean } = {}): Promise<PostedFixture> {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   const actorId = await createScratchUser(org.orgId, 'Sammy Sloppy', 'accountant')
@@ -116,8 +121,6 @@ async function postedFixture(): Promise<PostedFixture> {
     values (${randomUUID()}, ${org.orgId}, ${id}, 1, ${org.accounts.cogs}, 'Travel', '1', '875.50', '875.50', '0')`)
   await withOrgContext(org.orgId, () => submitAndReleaseIfUngated('expense_report', id, actorId))
   assert.equal(await statusOf(id), 'approved')
-  await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable } })
-  assert.equal(await statusOf(id), 'posted')
   const cleanup = async () => {
     await db.execute(sql`delete from employee_roles where org_id = ${org.orgId}`)
     await db.execute(sql`update users set is_active = false where org_id = ${org.orgId}`)
@@ -126,6 +129,9 @@ async function postedFixture(): Promise<PostedFixture> {
     await db.execute(sql`delete from users where org_id = ${org.orgId}`)
     await db.execute(sql`delete from app_roles where org_id = ${org.orgId}`)
   }
+  if (opts.stopBeforePosting) return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, cleanup }
+  await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable } })
+  assert.equal(await statusOf(id), 'posted')
   return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, cleanup }
 }
 
@@ -225,11 +231,19 @@ test('correct refuses non-posted reports and under-permissioned callers', async 
     const forbidden = await correct(id, { expectedUpdatedAt: await revision(id), amendmentReason: REASON })
     assert.equal(forbidden.status, 403, JSON.stringify(forbidden.json))
     assert.equal(await statusOf(id), 'posted')
-    as(actorId)
-    await db.execute(sql`update documents set status = 'approved' where id = ${id} and org_id = ${state.orgId}`)
-    const wrongState = await correct(id, { expectedUpdatedAt: await revision(id), amendmentReason: REASON })
-    assert.equal(wrongState.status, 422, JSON.stringify(wrongState.json))
   } finally {
     await cleanup()
+  }
+  // The wrong-state path needs an approved-but-never-posted report. It is
+  // built by halting the fixture at approved: posted rows are immutable, so
+  // rewinding one with a raw status update is refused by the guard.
+  const approved = await postedFixture({ stopBeforePosting: true })
+  try {
+    as(approved.actorId)
+    assert.equal(await statusOf(approved.id), 'approved')
+    const wrongState = await correct(approved.id, { expectedUpdatedAt: await revision(approved.id), amendmentReason: REASON })
+    assert.equal(wrongState.status, 422, JSON.stringify(wrongState.json))
+  } finally {
+    await approved.cleanup()
   }
 })
