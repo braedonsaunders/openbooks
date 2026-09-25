@@ -174,6 +174,17 @@ export function netSuiteFamPeriodForDate(
     ?? null;
 }
 
+/** Replace connector-owned keys while retaining local statutory classifications. */
+export function mergeNetSuiteFamTaxAttributes(
+  existing: unknown,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const local = existing && typeof existing === "object" && !Array.isArray(existing)
+    ? existing as Record<string, unknown>
+    : {};
+  return { ...local, ...incoming };
+}
+
 async function extractionDate(snapshot: NetSuiteFixedAssetSnapshot, orgId: string): Promise<string> {
   const date = new Date(snapshot.extractedAt);
   return Number.isNaN(date.getTime()) ? await businessToday(orgId) : date.toISOString().slice(0, 10);
@@ -323,10 +334,11 @@ export async function syncNetSuiteFixedAssets(
           // admin category assignment route. Re-read and lock the category
           // only after every affected subsidiary is fenced.
           await lockAssetCategoryTaxLifecycle(tx, options.orgId, categoryId);
-          const locked = (await tx.execute(sql`
-            select id from asset_categories where id = ${categoryId} and org_id = ${options.orgId} for update
+          const locked = (await tx.execute<{ id: string; tax_attributes: Record<string, unknown> | null }>(sql`
+            select id, tax_attributes from asset_categories where id = ${categoryId} and org_id = ${options.orgId} for update
           `)).rows[0];
           if (!locked) throw new Error(`NetSuite FAM asset category ${categoryId} disappeared before sync`);
+          const taxAttributes = mergeNetSuiteFamTaxAttributes(locked.tax_attributes, rawMetadata);
           const updated = (await tx.execute(sql`
             update asset_categories
                set name = ${text(assetType.name) ?? `NetSuite FAM type ${sourceId}`},
@@ -335,7 +347,7 @@ export async function syncNetSuiteFixedAssets(
                    depreciation_expense_account_id = ${expenseAccountId},
                    gain_loss_account_id = ${gainLossAccountId},
                    default_method = ${method(assetType)}, default_life_months = ${lifeMonths},
-                   default_convention = 'full_month', tax_attributes = ${json(rawMetadata)}::jsonb,
+                   default_convention = 'full_month', tax_attributes = ${json(taxAttributes)}::jsonb,
                    is_active = ${!truthy(assetType.isinactive)}, updated_at = now(), updated_by = ${options.actorId ?? null}
              where id = ${categoryId} and org_id = ${options.orgId}
              returning id
