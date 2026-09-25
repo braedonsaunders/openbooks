@@ -6,6 +6,7 @@ import { CalendarClock } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { ScheduleEditor, type ScheduleRow } from './ScheduleEditor'
 
 /**
@@ -34,6 +35,20 @@ export function ScheduleReportButton({
   const [schedules, setSchedules] = useState<ScheduleRow[] | null>(null)
   const [canSchedule, setCanSchedule] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [draftDirty, setDraftDirty] = useState(false)
+  const [draftBusy, setDraftBusy] = useState(false)
+  const closeDrawer = useCallback(() => {
+    setOpen(false)
+    setDraftDirty(false)
+    setDraftBusy(false)
+  }, [])
+  const { close, beforeClose } = useDirtyClose({
+    dirty: draftDirty,
+    busy: draftBusy,
+    onClose: closeDrawer,
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body — the previous refusal
@@ -70,7 +85,7 @@ export function ScheduleReportButton({
       </Button>
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={close}
         title={tk('scheduledDelivery')}
         description={t('drawerDescription')}
         size="lg"
@@ -83,24 +98,26 @@ export function ScheduleReportButton({
           </Link>
         ) : undefined}
       >
-        {loadError ? (
+        {open && loadError ? (
           <div className="py-8 text-center">
             <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
               {tc('actions.retry')}
             </Button>
           </div>
-        ) : schedules === null ? (
+        ) : open && schedules === null ? (
           <p className="py-8 text-center text-sm text-slate-400">{t('loading')}</p>
-        ) : (
+        ) : open && Array.isArray(schedules) ? (
           <ScheduleEditor
             definitionId={definitionId}
             schedules={schedules}
             canSchedule={canSchedule}
             statementParams={statementParams}
             onChanged={refetch}
+            onDraftStateChange={({ dirty, busy }) => { setDraftDirty(dirty); setDraftBusy(busy) }}
+            beforeDiscardDraft={beforeClose}
           />
-        )}
+        ) : null}
       </Drawer>
     </>
   )

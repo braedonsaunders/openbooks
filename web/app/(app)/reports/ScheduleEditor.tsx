@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -43,6 +43,8 @@ export function ScheduleEditor({
   canSchedule,
   statementParams,
   onChanged,
+  onDraftStateChange,
+  beforeDiscardDraft,
 }: {
   definitionId: string
   schedules: ScheduleRow[]
@@ -51,6 +53,8 @@ export function ScheduleEditor({
   statementParams?: Record<string, string>
   /** Fires after any mutation (self-fetching hosts refetch on this). */
   onChanged?: () => void
+  onDraftStateChange?: (state: { dirty: boolean; busy: boolean }) => void
+  beforeDiscardDraft?: () => Promise<boolean>
 }) {
   const t = useTranslations('reports.schedule')
   const tc = useTranslations('common')
@@ -143,12 +147,18 @@ export function ScheduleEditor({
           <ScheduleForm
             definitionId={definitionId}
             statementParams={statementParams}
+            onDraftStateChange={onDraftStateChange}
             onDone={() => {
               setAdding(false)
+              onDraftStateChange?.({ dirty: false, busy: false })
               onChanged?.()
               router.refresh()
             }}
-            onCancel={() => setAdding(false)}
+            onCancel={async () => {
+              if (beforeDiscardDraft && !(await beforeDiscardDraft())) return
+              setAdding(false)
+              onDraftStateChange?.({ dirty: false, busy: false })
+            }}
           />
         ) : (
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
@@ -163,13 +173,15 @@ export function ScheduleEditor({
 function ScheduleForm({
   definitionId,
   statementParams,
+  onDraftStateChange,
   onDone,
   onCancel,
 }: {
   definitionId: string
   statementParams?: Record<string, string>
+  onDraftStateChange?: (state: { dirty: boolean; busy: boolean }) => void
   onDone: () => void
-  onCancel: () => void
+  onCancel: () => void | Promise<void>
 }) {
   const { timeZone } = useViewerFormat()
   const t = useTranslations('reports.schedule')
@@ -182,6 +194,11 @@ function ScheduleForm({
   const [timezone, setTimezone] = useState(timeZone)
   const [recipients, setRecipients] = useState('')
   const [busy, setBusy] = useState(false)
+  const dirty = cadence !== 'weekly' || dayOfWeek !== 1 || dayOfMonth !== 1 || hour !== 7 || minute !== 0 || timezone !== timeZone || recipients !== ''
+
+  useEffect(() => {
+    onDraftStateChange?.({ dirty, busy })
+  }, [busy, dirty, onDraftStateChange])
 
   async function save() {
     setBusy(true)
@@ -215,7 +232,7 @@ function ScheduleForm({
 
   const field = 'space-y-1.5'
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+    <div className="space-y-4 rounded-lg border border-slate-200 p-4 dark:border-slate-800" inert={busy}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className={field}>
           <Label>{t('cadence')}</Label>
