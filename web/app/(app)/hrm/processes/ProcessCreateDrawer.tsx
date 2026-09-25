@@ -145,24 +145,32 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
 
   async function save() {
     if (!employmentId || !effectiveDate || !templateId) return
+    // A transport failure rejects instead of resolving: without the
+    // finally the drawer strands busy (and unclosable through the dirty
+    // guard) with no error shown.
     setSaving(true)
-    const response = await fetch('/api/hrm/processes', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ employmentId, kind, effectiveDate, templateId }),
-    })
-    setSaving(false)
-    if (!response.ok) {
-      toast.error(await readApiErrorMessage(response, t('processes.actionFailed')))
-      return
-    }
-    const payload = (await response.json()) as { process?: { id?: string } }
-    if (!payload.process?.id) {
+    try {
+      const response = await fetch('/api/hrm/processes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ employmentId, kind, effectiveDate, templateId }),
+      })
+      if (!response.ok) {
+        toast.error(await readApiErrorMessage(response, t('processes.actionFailed')))
+        return
+      }
+      const payload = (await response.json()) as { process?: { id?: string } }
+      if (!payload.process?.id) {
+        toast.error(t('processes.actionFailed'))
+        return
+      }
+      router.push(`/hrm/processes?segment=open&process=${payload.process.id}` as never)
+      router.refresh()
+    } catch {
       toast.error(t('processes.actionFailed'))
-      return
+    } finally {
+      setSaving(false)
     }
-    router.push(`/hrm/processes?segment=open&process=${payload.process.id}` as never)
-    router.refresh()
   }
 
   return (
