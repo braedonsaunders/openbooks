@@ -10,7 +10,6 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
@@ -27,39 +26,12 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("the custom-gl-lines path re-resolves gl.post live before any contribution", () => {
-  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const hostStart = source.indexOf("runCustomGlLineScripts");
-  assert.ok(hostStart > 0, "runCustomGlLineScripts must exist in scripting.ts");
-  const boundary = source.slice(hostStart, hostStart + 4000);
-  assert.match(
-    boundary,
-    /actorHasPermission\(db, [^,]+, [^,]+, "gl\.post"\)/,
-    "custom_gl_lines must re-resolve the caller's live gl.post like ob.journal.create",
-  );
-});
-
-test("custom_gl_lines applies the posting actor's subsidiary allowlist", () => {
-  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const host = source.slice(source.indexOf("runCustomGlLineScripts"), source.indexOf("const CUSTOM_GL_LINE_UUID_RE"));
-  assert.match(host, /actorAllowedSubsidiaryIds\(/);
-  const resolve = source.slice(source.indexOf("export async function resolveCustomGlLines"), source.indexOf("return parsed.map"));
-  assert.match(resolve, /allowedSubsidiaryIds/);
-});
+// NOTE: the gl.post live-resolution, subsidiary-allowlist, and lock-ordering
+// properties were pinned by source-text regexes; each has a behavioural
+// twin (the gl.post gate refusal, the outside-allowlist stamping refusal,
+// and the runScript Date/query refusals below), so the pins are deleted.
 
 test("deterministic Date/Math locks are installed before user source and query is omitted", async () => {
-  const source = readFileSync(new URL("./scripting.ts", import.meta.url), "utf8");
-  const globalsAt = source.indexOf("const DETERMINISTIC_SCRIPT_GLOBALS");
-  const evalAt = source.indexOf("vm.evalCode(DETERMINISTIC_SCRIPT_GLOBALS)");
-  const programAt = source.indexOf("await vm.evalCodeAsync(program)");
-  assert.ok(globalsAt >= 0, "DETERMINISTIC_SCRIPT_GLOBALS must lock Date/Math before tenant source");
-  assert.ok(evalAt >= 0, "deterministic preparation must eval DETERMINISTIC_SCRIPT_GLOBALS");
-  assert.ok(programAt >= 0, "user source must still run through evalCodeAsync(program)");
-  assert.ok(
-    evalAt < programAt,
-    "Date/Math.random must be locked in a separate evaluation before tenant source runs",
-  );
-
   const captured = await runScript(
     `const now = Date.now;
      function main(ctx) { return now(); }`,
