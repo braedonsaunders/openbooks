@@ -83,7 +83,7 @@ const retainageBalances: AssistantToolDef = {
          group by p.id, p.display_name
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
-         limit ${limit}
+         limit ${limit + 1}
       `)).rows;
     } else if (groupBy === "project") {
       rows = (await db.execute<Record<string, unknown>>(sql`
@@ -94,7 +94,7 @@ const retainageBalances: AssistantToolDef = {
          group by pr.id, pr.name, pr.code
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
-         limit ${limit}
+         limit ${limit + 1}
       `)).rows;
     } else {
       rows = (await db.execute<Record<string, unknown>>(sql`
@@ -107,9 +107,11 @@ const retainageBalances: AssistantToolDef = {
          group by d.id, d.kind, d.document_number, d.document_date, d.status, p.display_name
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
-         limit ${limit}
+         limit ${limit + 1}
       `)).rows;
     }
+    const truncated = rows.length > limit;
+    rows = rows.slice(0, limit);
     return {
       ok: true,
       data: {
@@ -121,7 +123,7 @@ const retainageBalances: AssistantToolDef = {
         lines: total?.lines ?? 0,
         groupBy,
         returned: rows.length,
-        truncated: rows.length === limit,
+        truncated,
         rows: rows.map((r) => ({ ...r, balance: money(r.balance) })),
         href: `/accounts?account=${acct.id}`,
       },
