@@ -1322,6 +1322,14 @@ export interface PayrollHolidayQualifying {
    * never infers the absence, because it cannot infer consent.
    */
   lastAndFirstScheduledShift: boolean;
+  /**
+   * A statute's OWN alternative to the day-count arm above. British Columbia
+   * ESA s. 44(b) qualifies an employee who worked under a s. 37 averaging
+   * agreement at any time in the window, whatever their day count. Declared
+   * on the rule so the alternative is a transcription, not a special case;
+   * the engine still never infers the agreement — the caller asserts it.
+   */
+  averagingAgreementAlternative?: boolean;
 }
 
 /** Pay for hours actually worked on the holiday, on top of the day's pay. */

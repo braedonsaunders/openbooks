@@ -214,10 +214,13 @@ const QC_HOLIDAY_PAY: PayrollHolidayPayRule = {
  * previously had no way to say — it counted approved timesheets and nothing
  * else, so an employee on paid vacation before the holiday was refused.
  *
- * NOT transcribed: s. 44(b) qualifies an employee who worked under a s. 37
- * averaging agreement at any time in the thirty days, whatever their day count.
- * Nothing records an averaging agreement, so an employee under one who falls
- * short of fifteen days is denied here and should not be.
+ * s. 44(b) qualifies an employee who worked under a s. 37 averaging agreement
+ * at any time in the thirty days, whatever their day count. Declared as
+ * `averagingAgreementAlternative`: the engine takes the alternative exactly
+ * when the caller asserts the agreement for the employee, and keeps the
+ * day-count denial otherwise. No stored producer supplies the agreement yet —
+ * no profile column or attestation carries it — so a run that needs the arm
+ * asserts `averagingAgreement` on the holiday input per employee.
  */
 const BC_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "Employment Standards Act (British Columbia), RSBC 1996 c 113, ss. 44–46",
@@ -227,6 +230,7 @@ const BC_HOLIDAY_PAY: PayrollHolidayPayRule = {
     minEmploymentDays: 30,
     minDaysWorkedInWindow: { days: 15, ofDays: 30, counting: "worked_or_earned_wages" },
     lastAndFirstScheduledShift: false,
+    averagingAgreementAlternative: true,
   },
   premium: {
     multiplier: "1.5", overtimeAfterHours: 12, overtimeMultiplier: "2",
