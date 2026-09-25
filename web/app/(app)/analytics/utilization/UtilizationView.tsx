@@ -9,7 +9,8 @@ import {
   Scale, Search, Table2, Target, TrendingDown, TrendingUp, Trophy,
   UserPlus, UserRound, Users, LayoutGrid, Grid3X3 } from 'lucide-react'
 import { cn, Select, Drawer, Badge } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
+import { abs as absMoney, add, cmp as compareMoney, div, mulDecimal, mulPercent, neg } from '@openbooks/engine/src/money/money.ts'
+import { divideDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 import type { UtilizationData, UGroupRow } from '../../../../lib/analytics/utilization-data'
 import { KpiCard } from '../_ui/KpiCard'
@@ -40,14 +41,16 @@ function statusTone(pct: number, target: number) {
 }
 
 /** Trend chip: delta in pp, $ or plain hours — green when moving the good way. */
-function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: number; goodIfUp: boolean; unit?: 'pp' | 'money' | 'hours'; digits?: number }) {
+function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: number | string; goodIfUp: boolean; unit?: 'pp' | 'money' | 'hours'; digits?: number }) {
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  if (!delta || Math.abs(delta) < (unit === 'pp' ? 0.05 : 0.5)) return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
-  const good = goodIfUp ? delta > 0 : delta < 0
-  const Icon = delta > 0 ? TrendingUp : TrendingDown
-  const text = unit === 'money' ? money(Math.abs(delta)) : unit === 'hours' ? `${hrs0(Math.abs(delta))}h` : `${Math.abs(delta).toFixed(digits)}pp`
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
+  const positive = unit === 'money' ? compareMoney(delta as string, '0') > 0 : (delta as number) > 0
+  const magnitude = unit === 'money' ? absMoney(delta as string) : String(Math.abs(delta as number))
+  if (unit === 'money' ? compareMoney(magnitude, '0.5') < 0 : Math.abs(delta as number) < (unit === 'pp' ? 0.05 : 0.5)) return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+  const good = goodIfUp ? positive : !positive
+  const Icon = positive ? TrendingUp : TrendingDown
+  const text = unit === 'money' ? money(magnitude) : unit === 'hours' ? `${hrs0(Math.abs(delta as number))}h` : `${Math.abs(delta as number).toFixed(digits)}pp`
   return (
     <span className={cn('inline-flex items-center gap-1 text-xs font-semibold tabular-nums', good ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
       <Icon size={12} />
@@ -324,7 +327,7 @@ export function UtilizationView({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const [flyout, setFlyout] = useState<Flyout>(null)
   const target = data.config.target
@@ -383,8 +386,8 @@ function OverviewTab({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const money0 = (n: number) => fmtMoney(n)
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
+  const money0 = (n: MoneyValue) => fmtMoney(n)
   const target = data.config.target
   const c = data.company.range
   const p = data.company.prior
@@ -465,7 +468,8 @@ function OverviewTab({ data }: { data: UtilizationData }) {
               <div className="space-y-2.5">
                 {topDepts.map((x) => {
                   const tone = statusTone(x.range.percentBilled, target)
-                  const max = topDepts[0]?.range.nonBillableCost || 1
+                  const max = String(topDepts[0]?.range.nonBillableCost || '1')
+                  const costRatio = Number(divideDecimal(String(x.range.nonBillableCost), max, 8))
                   return (
                     <div key={x.id}>
                       <div className="mb-0.5 flex justify-between text-xs">
@@ -473,7 +477,7 @@ function OverviewTab({ data }: { data: UtilizationData }) {
                         <span className="tabular-nums text-slate-500 dark:text-slate-400">{money(x.range.nonBillableCost)} · <span className={tone.text}>{pct1(x.range.percentBilled, 0)}</span></span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${Math.max(2, (x.range.nonBillableCost / max) * 100)}%` }} />
+                        <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${Math.max(2, Math.min(100, costRatio * 100))}%` }} />
                       </div>
                     </div>
                   )
@@ -583,32 +587,38 @@ function useForecasts(data: UtilizationData) {
     const projectedBillable = Math.min(100, Math.max(0, f.projected))
 
     // Cost projection — inverse to billable %, including the ~100% edge case.
-    const currentCost = range.nonBillableCost
+    const currentCost = String(range.nonBillableCost)
     const currentNonBillPct = 100 - range.percentBilled
     const projectedNonBillPct = 100 - projectedBillable
     let projectedCost = currentCost
     if (currentNonBillPct <= 0.01) {
       if (projectedNonBillPct > 0.01) {
-        const avgCostPerHour = range.nonBillableHours > 0 && currentCost > 0 ? currentCost / range.nonBillableHours : range.nonBillableCostPerHour || 50
-        projectedCost = range.hours * (projectedNonBillPct / 100) * avgCostPerHour
-      } else projectedCost = 0
+        const avgCostPerHour = range.nonBillableHours > 0 && compareMoney(currentCost, '0') > 0
+          ? div(currentCost, String(range.nonBillableHours))
+          : String(range.nonBillableCostPerHour || '50')
+        const projectedHours = range.hours * (projectedNonBillPct / 100)
+        projectedCost = mulDecimal(avgCostPerHour, String(projectedHours))
+      } else projectedCost = '0.0000'
     } else {
-      projectedCost = currentCost * (projectedNonBillPct / currentNonBillPct)
+      const exactProjectionRatio = divideDecimal(String(projectedNonBillPct), String(currentNonBillPct), 10)
+      projectedCost = mulDecimal(currentCost, exactProjectionRatio)
     }
-    projectedCost = Math.max(0, Math.min(currentCost * 2, projectedCost))
+    const cap = mulDecimal(currentCost, '2')
+    if (compareMoney(projectedCost, '0') < 0) projectedCost = '0.0000'
+    if (compareMoney(projectedCost, cap) > 0) projectedCost = cap
 
     const mean = series.reduce((a, b) => a + b, 0) / series.length
     const variance = Math.sqrt(series.map((v) => (v - mean) ** 2).reduce((a, b) => a + b, 0) / series.length)
     const confidence = Math.round(Math.max(30, Math.min(95, 100 - variance)))
 
-    return { series, projectedBillable, billableTrend: f.trend, projectedCost, costTrend: projectedCost - currentCost, confidence, dataPoints: series.length }
+    return { series, projectedBillable, billableTrend: f.trend, projectedCost, costTrend: add(projectedCost, neg(currentCost)), confidence, dataPoints: series.length }
   }, [data])
 }
 
 function ForecastingSub({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const f = useForecasts(data)
   const labels = [...data.history.periods.map((p) => p.label).reverse(), t('forecast.current'), t('forecast.projected')]
@@ -620,7 +630,7 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={ChartArea} accent="sky" label={t('kpi.projectedBillablePct')} value={pct1(f.projectedBillable)} sub={t('sub.trendArrow', { arrow: f.billableTrend >= 0 ? '↑' : '↓', trend: Math.abs(f.billableTrend).toFixed(1) })} tone={(tone)} />
-        <KpiCard icon={DollarSign} accent={f.costTrend <= 0 ? 'emerald' : 'red'} label={t('kpi.projectedNonBillCost')} value={money(f.projectedCost)} sub={t('sub.trajectory', { arrow: f.costTrend <= 0 ? '↓' : '↑', amount: money(Math.abs(f.costTrend)) })} tone={f.costTrend <= 0 ? 'positive' : 'negative'} />
+        <KpiCard icon={DollarSign} accent={compareMoney(f.costTrend, '0') <= 0 ? 'emerald' : 'red'} label={t('kpi.projectedNonBillCost')} value={money(f.projectedCost)} sub={t('sub.trajectory', { arrow: compareMoney(f.costTrend, '0') <= 0 ? '↓' : '↑', amount: money(absMoney(f.costTrend)) })} tone={compareMoney(f.costTrend, '0') <= 0 ? 'positive' : 'negative'} />
         <KpiCard icon={Target} accent="violet" label={t('kpi.targetStatus')} value={f.projectedBillable >= target ? t('forecast.onTrack') : t('forecast.atRisk')} sub={t('sub.targetPct', { target })} tone={(tone)} />
         <KpiCard icon={Brain} accent="slate" label={t('kpi.confidence')} value={`${f.confidence}%`} sub={t('sub.dataPoints', { count: f.dataPoints })} />
       </div>
@@ -837,13 +847,13 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
     const target = data.config.target
     const minHours = data.config.minHours
 
-    const titleGroups = new Map<string, { employees: UGroupRow[]; totalCost: number; avgPct: number }>()
+    const titleGroups = new Map<string, { employees: UGroupRow[]; totalCost: string; avgPct: number }>()
     for (const e of employees) {
       const t2 = e.title || t('noTitle')
       let g = titleGroups.get(t2)
-      if (!g) { g = { employees: [], totalCost: 0, avgPct: 0 }; titleGroups.set(t2, g) }
+      if (!g) { g = { employees: [], totalCost: '0.0000', avgPct: 0 }; titleGroups.set(t2, g) }
       g.employees.push(e)
-      g.totalCost += e.range.nonBillableCost
+      g.totalCost = add(g.totalCost, String(e.range.nonBillableCost))
     }
     for (const g of titleGroups.values()) {
       const q = g.employees.filter((e) => e.range.hours >= minHours)
@@ -853,13 +863,13 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
     }
 
     const improvements = [...titleGroups.entries()]
-      .filter(([, g]) => g.avgPct < target && g.totalCost > 0)
+      .filter(([, g]) => g.avgPct < target && compareMoney(g.totalCost, '0') > 0)
       .map(([title, g]) => ({
         description: t('whatif.improve', { title }),
         detail: t('whatif.improveDetail', { count: g.employees.length, pct: g.avgPct.toFixed(0) }),
-        savings: g.totalCost * 0.05,
+        savings: mulPercent(g.totalCost, '5'),
       }))
-      .sort((a, b) => b.savings - a.savings)
+      .sort((a, b) => compareMoney(b.savings, a.savings))
 
     const highDepts = depts.filter((d) => d.range.percentBilled >= target)
     const lowDepts = depts.filter((d) => d.range.percentBilled < target - 15)
@@ -872,15 +882,15 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
       }
     }
 
-    const totalEmployees = employees.length || 1
-    const totalCost = employees.reduce((s, e) => s + e.range.nonBillableCost, 0)
-    const totalHours = employees.reduce((s, e) => s + e.range.hours, 0)
-    const totalBillable = employees.reduce((s, e) => s + e.range.billableHours, 0)
-    const costPerEmployee = totalCost / totalEmployees
-    const avgBillable = totalHours > 0 ? (totalBillable / totalHours) * 100 : 0
-    const avgHoursPerEmployee = totalHours / totalEmployees
-    const nonBillHours = totalHours - totalBillable
-    const costPerNonBillableHour = nonBillHours > 0 ? totalCost / nonBillHours : 0
+    const employeeCount = employees.length || 1
+    const totalCost = employees.reduce((s, e) => add(s, String(e.range.nonBillableCost)), '0.0000')
+    const hoursAcrossEmployees = employees.reduce((s, e) => s + e.range.hours, 0)
+    const billableHoursAcrossEmployees = employees.reduce((s, e) => s + e.range.billableHours, 0)
+    const costPerEmployee = div(totalCost, String(employeeCount))
+    const avgBillable = hoursAcrossEmployees > 0 ? (billableHoursAcrossEmployees / hoursAcrossEmployees) * 100 : 0
+    const avgHoursPerEmployee = hoursAcrossEmployees / employeeCount
+    const nonBillableHoursAcrossEmployees = hoursAcrossEmployees - billableHoursAcrossEmployees
+    const costPerNonBillableHour = nonBillableHoursAcrossEmployees > 0 ? div(totalCost, String(nonBillableHoursAcrossEmployees)) : '0.0000'
 
     const titlePerf = [...titleGroups.entries()]
       .filter(([, g]) => g.employees.length >= 2)
@@ -891,10 +901,14 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
 
     const requiredBillable = Math.max(target, avgBillable + 5)
     const capacityHeadroom = avgBillable >= target ? Math.floor((avgBillable - target) / 5) : 0
-    const efficiencyScore = Math.min(100, Math.round(
-      (avgBillable / target) * 50 +
-      Math.min(50, costPerEmployee < 5000 ? 50 : 50 - (costPerEmployee - 5000) / 200),
-    ))
+    const exactCostPenaltyRatio = compareMoney(costPerEmployee, '5000') < 0
+      ? '0'
+      : divideDecimal(add(costPerEmployee, '-5000'), '200', 8)
+    const costPenaltyRatio = Number(exactCostPenaltyRatio)
+    const costPenaltyScore = compareMoney(costPerEmployee, '5000') < 0
+      ? 50
+      : 50 - costPenaltyRatio
+    const efficiencyScore = Math.min(100, Math.round((avgBillable / target) * 50 + Math.min(50, costPenaltyScore)))
     const recommendation = requiredBillable > 85
       ? t('whatif.recExceptional')
       : requiredBillable > target
@@ -905,7 +919,7 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
     return {
       improvements,
       reallocations: reallocations.slice(0, 4),
-      be: { costPerEmployee, requiredBillable, recommendation, avgBillable, avgHoursPerEmployee, costPerNonBillableHour, bestTitle, worstTitle, capacityHeadroom, efficiencyScore, hiringOutlook, totalEmployees },
+      be: { costPerEmployee, requiredBillable, recommendation, avgBillable, avgHoursPerEmployee, costPerNonBillableHour, bestTitle, worstTitle, capacityHeadroom, efficiencyScore, hiringOutlook, totalEmployees: employeeCount },
     }
   }, [data, t])
 }
@@ -914,8 +928,8 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const money0 = (n: number) => fmtMoney(n)
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
+  const money0 = (n: MoneyValue) => fmtMoney(n)
   const target = data.config.target
   const w = useWhatIf(data, t)
   const be = w.be
@@ -929,7 +943,7 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={Lightbulb} accent="emerald" label={t('kpi.opportunities')} value={String(w.improvements.length)} sub={t('sub.improvementScenarios')} />
-        <KpiCard icon={DollarSign} accent="sky" label={t('kpi.potentialSavings')} value={money(w.improvements.reduce((s, i) => s + i.savings, 0))} sub={t('sub.ifAllImplemented')} tone="positive" />
+        <KpiCard icon={DollarSign} accent="sky" label={t('kpi.potentialSavings')} value={money(w.improvements.reduce((s, i) => add(s, i.savings), '0.0000'))} sub={t('sub.ifAllImplemented')} tone="positive" />
         <KpiCard icon={Target} accent="violet" label={t('kpi.efficiencyScore')} value={String(be.efficiencyScore)} sub={t('sub.outOf100')} tone={be.efficiencyScore >= 70 ? 'positive' : be.efficiencyScore >= 50 ? 'neutral' : 'negative'} />
         <KpiCard icon={UserPlus} accent="slate" label={t('kpi.capacityHeadroom')} value={String(be.capacityHeadroom)} sub={t('sub.hiresAtEfficiency')} />
       </div>
@@ -1114,7 +1128,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const [view, setView] = useState<'cards' | 'table'>('cards')
   // Sparkline: history % billed per dept, oldest → newest, then current.
@@ -1193,7 +1207,7 @@ type SortKey = 'name' | 'percentBilled' | 'delta' | 'nonBillableCost' | 'hours'
 function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target: number; kind: 'department' | 'item' | 'employee'; onDrill?: (r: UGroupRow) => void }) {
   const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  const money0 = (n: MoneyValue) => fmtMoney(n)
   const hrs0 = useHrs0()
   const [sortKey, setSortKey] = useState<SortKey>(kind === 'employee' ? 'percentBilled' : 'nonBillableCost')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(kind === 'employee' ? 'asc' : 'desc')
@@ -1202,7 +1216,9 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
     k === 'name' ? r.name : k === 'percentBilled' ? r.range.percentBilled : k === 'delta' ? r.deltas.pctDelta : k === 'nonBillableCost' ? r.range.nonBillableCost : r.range.hours
   const sorted = useMemo(() => [...rows].sort((a, b) => {
     const av = val(a, sortKey), bv = val(b, sortKey)
-    const c = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+    const c = sortKey === 'nonBillableCost'
+      ? compareMoney(av as string, bv as string)
+      : typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
     return sortDir === 'asc' ? c : -c
   }), [rows, sortKey, sortDir])
 
@@ -1265,14 +1281,14 @@ function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyou
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const [search, setSearch] = useState('')
   const items = useMemo(
-    () => data.items.filter((i) => (i.range.hours > 0 || i.range.nonBillableCost > 0) && i.name.toLowerCase().includes(search.toLowerCase())),
+    () => data.items.filter((i) => (i.range.hours > 0 || compareMoney(String(i.range.nonBillableCost), '0') > 0) && i.name.toLowerCase().includes(search.toLowerCase())),
     [data.items, search],
   )
-  const all = data.items.filter((i) => i.range.hours > 0 || i.range.nonBillableCost > 0)
+  const all = data.items.filter((i) => i.range.hours > 0 || compareMoney(String(i.range.nonBillableCost), '0') > 0)
   const totalHours = all.reduce((s, i) => s + i.range.hours, 0)
   const billableHours = all.reduce((s, i) => s + i.range.billableHours, 0)
   const avgBillable = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
@@ -1308,7 +1324,7 @@ interface TitleGroup {
   employees: UGroupRow[]
   hours: number
   billableHours: number
-  nonBillableCost: number
+  nonBillableCost: string
   percentBilled: number
 }
 
@@ -1316,8 +1332,8 @@ function TitlesTab({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const money0 = (n: number) => fmtMoney(n)
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
+  const money0 = (n: MoneyValue) => fmtMoney(n)
   const target = data.config.target
   const [open, setOpen] = useState<TitleGroup | null>(null)
 
@@ -1326,16 +1342,16 @@ function TitlesTab({ data }: { data: UtilizationData }) {
     for (const e of data.employees) {
       const title = e.title || t('noTitle')
       let g = groups.get(title)
-      if (!g) { g = { title, employees: [], hours: 0, billableHours: 0, nonBillableCost: 0, percentBilled: 0 }; groups.set(title, g) }
+      if (!g) { g = { title, employees: [], hours: 0, billableHours: 0, nonBillableCost: '0.0000', percentBilled: 0 }; groups.set(title, g) }
       g.employees.push(e)
       g.hours += e.range.hours
       g.billableHours += e.range.billableHours
-      g.nonBillableCost += e.range.nonBillableCost
+      g.nonBillableCost = add(g.nonBillableCost, String(e.range.nonBillableCost))
     }
     return [...groups.values()]
       .map((g) => ({ ...g, percentBilled: g.hours > 0 ? (g.billableHours / g.hours) * 100 : 0, employeeCount: g.employees.length }))
   }, [data.employees, t])
-  const { sorted: sortedTitles, SortTh } = useSort(titles, { key: 'nonBillableCost', dir: 'desc' })
+  const { sorted: sortedTitles, SortTh } = useSort(titles, { key: 'nonBillableCost', dir: 'desc' }, ['nonBillableCost'])
 
   const sortedByPct = [...titles].sort((a, b) => b.percentBilled - a.percentBilled)
   const best = sortedByPct[0]
@@ -1417,7 +1433,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
   const t = useTranslations('analytics.utilization')
   const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const minHours = data.config.minHours
   const [dept, setDept] = useState('__ALL__')
@@ -1494,7 +1510,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
                     <span className={cn('text-lg font-bold tabular-nums', tone.text)}>{pct1(e.range.percentBilled, 0)}</span>
                     <span className="text-right text-[10px] leading-tight text-slate-400 dark:text-slate-500">
                       {hrs0(e.range.hours)}h
-                      {e.range.nonBillableCost > 0 ? <span className="block text-rose-500">{money(e.range.nonBillableCost)}</span> : null}
+                      {compareMoney(String(e.range.nonBillableCost), '0') > 0 ? <span className="block text-rose-500">{money(e.range.nonBillableCost)}</span> : null}
                     </span>
                   </div>
                 </button>
