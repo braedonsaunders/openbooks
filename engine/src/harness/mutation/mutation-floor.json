@@ -42,7 +42,7 @@
       "measured": 22,
       "mode": "unit"
     },
-    "engine/src/assets/depreciation.ts": {
+    "engine/src/assets/depreciation-schedule-build.ts": {
       "ratio": 0.21739130434782608,
       "measured": 23,
       "mode": "unit"
