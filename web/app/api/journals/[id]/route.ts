@@ -12,7 +12,7 @@ import { documentRevisionCounterSql } from "../../../../../engine/src/records/re
 import { loadJournalDoc } from '../../../../lib/journals'
 import { isUuid } from '../../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
-import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
+import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
 
 type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -286,7 +286,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await runDocumentVersionedTransaction<
       RouteTransaction,
-      { status: string; updatedAt: string; subsidiaryId: string | null },
+      { status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown },
       void
     >({
       expectedRevision,
@@ -294,10 +294,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // The row lock and exact revision comparison are the first operations in
       // the write transaction: a concurrent writer cannot slip between the
       // check and the header/line replacement.
-      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
+      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown }>(sql`
         select status,
                ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt",
-               subsidiary_id as "subsidiaryId"
+               subsidiary_id as "subsidiaryId", extra_dims as "extraDims"
           from documents
          where id = ${id} and kind = 'journal' and org_id = ${user.orgId}
          for update
@@ -311,6 +311,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             422,
             `a ${locked.status} journal cannot be edited — create a correcting journal instead`,
           )
+        }
+
+        const targetSubsidiaryId = body.subsidiaryId ?? locked.subsidiaryId
+        const effectiveHeaderDims = headerDims?.cleaned ?? (
+          locked.extraDims && typeof locked.extraDims === 'object' && !Array.isArray(locked.extraDims)
+            ? locked.extraDims as Record<string, string>
+            : {}
+        )
+        const headerNeedsDimensionCheck =
+          (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) ||
+          body.extraDims !== undefined || preparedLines !== null
+        if (headerNeedsDimensionCheck) {
+          const headerDimensionError = await extraDimsSubsidiaryError(
+            user.orgId, effectiveHeaderDims, targetSubsidiaryId ?? '', segments, tx,
+          )
+          if (headerDimensionError) throw new DocumentEditError(422, headerDimensionError)
+        }
+        if (preparedLines) {
+          for (const [index, line] of preparedLines.entries()) {
+            const lineSubsidiaryId = line.subsidiaryId ?? targetSubsidiaryId
+            if (!lineSubsidiaryId) throw new DocumentEditError(422, 'journal line requires a subsidiary')
+            const error = await extraDimsSubsidiaryError(user.orgId, line.extraDims, lineSubsidiaryId, segments, tx)
+            if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
+          }
+        } else if (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) {
+          const existingDims = (await tx.execute<{
+            subsidiary_id: string | null
+            extra_dims: Record<string, string> | null
+          }>(sql`
+            select subsidiary_id, extra_dims from document_lines
+             where org_id = ${user.orgId} and document_id = ${id}
+             order by line_number
+             for update
+          `)).rows
+          for (const [index, line] of existingDims.entries()) {
+            const lineSubsidiaryId = line.subsidiary_id ?? targetSubsidiaryId
+            if (!lineSubsidiaryId) throw new DocumentEditError(422, 'journal line requires a subsidiary')
+            const error = await extraDimsSubsidiaryError(user.orgId, line.extra_dims ?? {}, lineSubsidiaryId, segments, tx)
+            if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
+          }
         }
 
         const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)

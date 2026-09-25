@@ -41,7 +41,7 @@ import { activeStockLocations, profiledItemIds } from './stock-locations'
 import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind, type DocKindConfig } from './document-kinds'
 import { checkProjectsWriteEnabled, featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
-import { segmentRegistry, validateExtraDims } from './segments'
+import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
@@ -1497,7 +1497,7 @@ export async function applyDocumentEdit(
   // header/line replacement.
   await runDocumentVersionedTransaction<
     DocumentTransaction,
-    { kind: string; status: string; updatedAt: string },
+    { kind: string; status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown },
     void
   >({
     expectedRevision,
@@ -1506,11 +1506,13 @@ export async function applyDocumentEdit(
     // claim early.
     transaction: (work) => (scope ? work(scope.tx) : db.transaction(work)),
     lock: async (tx) => (await tx.execute<{
-        kind: string
-        status: string
-        updatedAt: string
+      kind: string
+      status: string
+      updatedAt: string
+      subsidiaryId: string | null
+      extraDims: unknown
       }>(sql`
-        select kind, status,
+        select kind, status, subsidiary_id as "subsidiaryId", extra_dims as "extraDims",
                ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
           from documents
          where id = ${id} and org_id = ${orgId}
@@ -1533,6 +1535,39 @@ export async function applyDocumentEdit(
           422,
           `a ${locked.status} document cannot be edited — return it to draft or create a controlled correction`,
         )
+      }
+
+      const targetSubsidiaryId = body.subsidiaryId ?? locked.subsidiaryId
+      const effectiveHeaderDims = headerDims?.cleaned ?? (
+        locked.extraDims && typeof locked.extraDims === 'object' && !Array.isArray(locked.extraDims)
+          ? locked.extraDims as Record<string, string>
+          : {}
+      )
+      const headerNeedsDimensionCheck =
+        (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) ||
+        body.extraDims !== undefined || preparedLines !== null
+      if (headerNeedsDimensionCheck) {
+        const headerDimensionError = await extraDimsSubsidiaryError(
+          orgId, effectiveHeaderDims, targetSubsidiaryId ?? '', segments, tx,
+        )
+        if (headerDimensionError) throw new DocumentEditError(422, headerDimensionError)
+      }
+      if (preparedLines) {
+        for (const [index, line] of preparedLines.entries()) {
+          const error = await extraDimsSubsidiaryError(orgId, line.extraDims, targetSubsidiaryId ?? '', segments, tx)
+          if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
+        }
+      } else if (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) {
+        const existingDims = (await tx.execute<{ extra_dims: Record<string, string> | null }>(sql`
+          select extra_dims from document_lines
+           where org_id = ${orgId} and document_id = ${id}
+           order by line_number
+           for update
+        `)).rows
+        for (const [index, line] of existingDims.entries()) {
+          const error = await extraDimsSubsidiaryError(orgId, line.extra_dims ?? {}, targetSubsidiaryId ?? '', segments, tx)
+          if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
+        }
       }
 
       // Native line provenance: a description-only save used to strip
