@@ -12,6 +12,7 @@ import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  seedWorkerEmployment,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import {
@@ -122,11 +123,29 @@ async function seedCommittedStub(
                             pay_date, tax_year, run_status, created_by, updated_by)
       values (${documentId}, ${org.orgId}, ${scheduleId}, ${payDate}, ${payDate},
               ${payDate}, 2026, 'committed', ${actorId}, ${actorId})`);
+    // pay_stubs.employment_id is NOT NULL with a same-worker coherence
+    // trigger (0186): legacy stub parties carry no HR employment by design
+    // (migration creates them), so the fixture seeds one bare employment
+    // per stub party in the party's own subsidiary. Reused across stubs of
+    // one party — a second live employment would resolve as ambiguous.
+    const party = (
+      await db.execute<{ subsidiaryId: string }>(sql`
+        select subsidiary_id::text as "subsidiaryId" from parties
+         where id = ${partyId} and org_id = ${org.orgId}`)
+    ).rows[0];
+    assert.ok(party, `expected party ${partyId} before seeding its stub`);
+    const existing = (
+      await db.execute<{ id: string }>(sql`
+        select id::text as id from worker_employments
+         where org_id = ${org.orgId} and worker_party_id = ${partyId} limit 1`)
+    ).rows[0];
+    const employmentId =
+      existing?.id ?? (await seedWorkerEmployment(org.orgId, partyId, party.subsidiaryId));
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                              periods_per_year, pay_date, tax_year, currency_code,
                              created_by, updated_by)
-      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${partyId}, 'ON', 26,
+      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${partyId}, ${employmentId}, 'ON', 26,
               ${payDate}, 2026, 'CAD', ${actorId}, ${actorId})`);
   });
 }
@@ -637,7 +656,10 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
       };
       return result.rows[0]?.n;
     });
-    assert.equal(stored, "2");
+    // Two fixture employments (one per stub party, required by the stub
+    // employment FK) plus exactly the two the apply created — still an
+    // exact count, so an extra or missing employment fails here.
+    assert.equal(stored, "4");
 
     // Re-collection after migration is byte-identical, and the dry run
     // reports the settled persons instead of migrating again.

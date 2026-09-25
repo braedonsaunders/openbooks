@@ -419,9 +419,11 @@ test("DSAR zip contents against a seeded person", { skip: !DB }, async () => {
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date, tax_year, run_status)
       values (${runId}, ${h.org.orgId}, ${scheduleId}, '2026-09-13'::date, '2026-09-19'::date, '2026-09-19'::date, 2026, 'committed')
     `);
+    // pay_stubs.employment_id is NOT NULL (0186): the stub carries the
+    // harness party's own employment.
     await db.execute(sql`
-      insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
-      values (${h.org.orgId}, ${runId}, ${h.partyId}, 'TX', 52, '2026-09-19'::date, 2026, 'USD', '900.0000', '700.0000')
+      insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
+      values (${h.org.orgId}, ${runId}, ${h.partyId}, ${h.employmentId}, 'TX', 52, '2026-09-19'::date, 2026, 'USD', '900.0000', '700.0000')
     `);
     const tpl = await makeTemplate(h, "contract");
     await completeDocument(h, tpl, "My contract");
@@ -502,8 +504,8 @@ test("DSAR exports paginate unbounded histories instead of truncating at 2000", 
           from docs
         returning document_id
       )
-      insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
-      select ${h.org.orgId}, document_id, ${h.partyId}, 'TX', 52,
+      insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
+      select ${h.org.orgId}, document_id, ${h.partyId}, ${h.employmentId}, 'TX', 52,
              date '2020-01-01' + ((row_number() over () - 1)::int), 2020, 'USD', '900.0000', '700.0000'
         from prs
     `);

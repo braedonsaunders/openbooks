@@ -464,7 +464,7 @@ async function seedRun(
   actorId: string,
   subsidiaryId: string,
   partyId: string,
-  opts: { runStatus: "calculated" | "committed"; docStatus: string; periodStart: string; periodEnd: string; number: string },
+  opts: { runStatus: "calculated" | "committed"; docStatus: string; periodStart: string; periodEnd: string; number: string; employmentId: string },
 ): Promise<string> {
   const scheduleId = randomUUID();
   // pay_schedules names are unique per org: one harness seeds several runs.
@@ -482,10 +482,13 @@ async function seedRun(
                           tax_year, run_status, created_by, updated_by)
     values (${runId}, ${orgId}, ${scheduleId}, ${opts.periodStart}, ${opts.periodEnd}, ${opts.periodEnd},
             2026, ${opts.runStatus}, ${actorId}, ${actorId})`);
+  // pay_stubs.employment_id is NOT NULL with a same-worker coherence trigger
+  // (0186): the stub carries the run party's own employment, seeded by the
+  // caller for the same worker.
   await db.execute(sql`
-    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province, periods_per_year,
+    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year,
                            pay_date, tax_year, currency_code, gross, created_by, updated_by)
-    values (${orgId}, ${runId}, ${partyId}, 'BC', 26, ${opts.periodEnd}, 2026, 'CAD', '2000.00', ${actorId}, ${actorId})`);
+    values (${orgId}, ${runId}, ${partyId}, ${opts.employmentId}, 'BC', 26, ${opts.periodEnd}, 2026, 'CAD', '2000.00', ${actorId}, ${actorId})`);
   return runId;
 }
 
@@ -525,6 +528,7 @@ test("approval refused with the retro remedy when a committed run covers the day
     await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
       runStatus: "committed", docStatus: "approved",
       periodStart: "2026-09-01", periodEnd: "2026-09-15", number: "PAY-RETRO-1",
+      employmentId,
     });
     const gate = await gateOf(draft.id);
     let refusal: unknown = null;
@@ -563,6 +567,7 @@ test("cancel voids pending inputs and reverses absences; committed consumption r
     const runId = await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
       runStatus: "calculated", docStatus: "draft",
       periodStart: "2026-09-01", periodEnd: "2026-09-15", number: "PAY-OPEN-1",
+      employmentId,
     });
     const consumed = await consumeLeavePayrollInputs(db, {
       orgId: h.org.orgId, runDocumentId: runId,
@@ -602,6 +607,7 @@ test("cancel voids pending inputs and reverses absences; committed consumption r
     const committedId = await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
       runStatus: "committed", docStatus: "approved",
       periodStart: "2026-10-01", periodEnd: "2026-10-15", number: "PAY-SHUT-1",
+      employmentId,
     });
     await consumeLeavePayrollInputs(db, {
       orgId: h.org.orgId, runDocumentId: committedId,
@@ -667,6 +673,7 @@ test("consume is idempotent per run, refuses foreign runs and stale parties; rel
     const runA = await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
       runStatus: "calculated", docStatus: "draft",
       periodStart: "2026-09-01", periodEnd: "2026-09-15", number: "PAY-A-1",
+      employmentId,
     });
     const first = await consumeLeavePayrollInputs(db, {
       orgId: h.org.orgId, runDocumentId: runA,
@@ -684,6 +691,7 @@ test("consume is idempotent per run, refuses foreign runs and stale parties; rel
     const runB = await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
       runStatus: "calculated", docStatus: "draft",
       periodStart: "2026-09-01", periodEnd: "2026-09-15", number: "PAY-B-1",
+      employmentId,
     });
     try {
       await consumeLeavePayrollInputs(db, {
@@ -745,6 +753,7 @@ test("commit gate refuses pending rows until the run consumes them", { skip: !DB
     const runId = await seedRun(h.org.orgId, h.managerId, h.org.subsidiaryId, workerParty, {
       runStatus: "calculated", docStatus: "draft",
       periodStart: "2026-09-01", periodEnd: "2026-09-15", number: "PAY-G-1",
+      employmentId,
     });
     const scope = {
       orgId: h.org.orgId, runDocumentId: runId,

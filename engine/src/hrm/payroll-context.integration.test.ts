@@ -106,7 +106,10 @@ async function mkVersion(
  * (to stamp); pass an id to probe the INSERT path. The ledger is append-only
  * (entitlement_ledger_append_only_guard refuses every UPDATE), so ledger
  * probes must set the link at INSERT — which is also the only path the stamp
- * can never rewrite (see the unstampable report).
+ * can never rewrite (see the unstampable report). pay_stubs is the mirror
+ * image: employment_id is NOT NULL there, so stub probes must always pass
+ * the worker's own employment — the stamp can only ever count that row,
+ * never write it.
  */
 async function seedPersonRow(
   ctx: Ctx,
@@ -220,6 +223,16 @@ async function employmentOf(table: string, orgId: string, personId: string): Pro
      where org_id = ${orgId} and employee_party_id = ${personId}`)).rows;
   assert.equal(rows.length, 1);
   return rows[0]!.employmentId;
+}
+
+/** updated_at of the person's stub: proves a stamp run counted without rewriting. */
+async function stubUpdatedAt(orgId: string, personId: string): Promise<string> {
+  const { db } = await import("../platform/db.ts");
+  const rows = (await db.execute<{ updatedAt: string }>(sql`
+    select updated_at::text as "updatedAt" from pay_stubs
+     where org_id = ${orgId} and employee_party_id = ${personId}`)).rows;
+  assert.equal(rows.length, 1);
+  return rows[0]!.updatedAt;
 }
 
 async function personRowCount(table: string, orgId: string, personId: string): Promise<number> {
@@ -356,7 +369,12 @@ test("stamp dry-run writes nothing; the real stamp fills every table and is idem
   const worker = await mkPerson(ctx, "Stamp worker");
   const employment = await mkEmployment(ctx, worker);
   await mkVersion(ctx, employment);
-  for (const table of TABLES) await seedPersonRow(ctx, table, worker);
+  for (const table of TABLES) {
+    // pay_stubs.employment_id is NOT NULL: the stub arrives pre-linked and
+    // the stamp only ever counts it.
+    await seedPersonRow(ctx, table, worker, table === "pay_stubs" ? employment : null);
+  }
+  const stubTouchedAt = await stubUpdatedAt(ctx.orgId, worker);
   const dry = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: true });
   assert.equal(dry.dryRun, true);
   assert.deepEqual(dry.requiresReview, []);
@@ -365,17 +383,29 @@ test("stamp dry-run writes nothing; the real stamp fills every table and is idem
       // Append-only: reported, never written, never refused over.
       assert.equal(dry.stamped[table], 0);
       assert.equal(dry.unstampable[table], 1, "ledger history must be reported as unstampable");
+    } else if (table === "pay_stubs") {
+      // Pre-linked by schema force: nothing to stamp, and the dry run must
+      // not touch the row it only counted.
+      assert.equal(dry.stamped[table], 0);
+      assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
+      assert.equal(await stubUpdatedAt(ctx.orgId, worker), stubTouchedAt, "dry-run must not rewrite the counted stub");
     } else {
       assert.equal(dry.stamped[table], 1, `${table}: dry-run must report one stamp`);
+      assert.equal(await employmentOf(table, ctx.orgId, worker), null, `${table}: dry-run wrote nothing`);
     }
-    assert.equal(await employmentOf(table, ctx.orgId, worker), null, `${table}: dry-run wrote nothing`);
   }
   const first = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false });
   assert.equal(first.dryRun, false);
   assert.equal(first.unstampable["entitlement_ledger"], 1);
   for (const table of TABLES) {
     if (table === "entitlement_ledger") continue;
-    assert.equal(first.stamped[table], 1, `${table}: real stamp must write one row`);
+    if (table === "pay_stubs") {
+      assert.equal(first.stamped[table], 0, "pay_stubs arrives linked: the real stamp counts it, never writes it");
+      assert.equal(first.alreadyStamped[table], 1);
+      assert.equal(await stubUpdatedAt(ctx.orgId, worker), stubTouchedAt, "real stamp must not rewrite the counted stub");
+    } else {
+      assert.equal(first.stamped[table], 1, `${table}: real stamp must write one row`);
+    }
     assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
   }
   assert.equal(await employmentOf("entitlement_ledger", ctx.orgId, worker), null);
@@ -468,7 +498,10 @@ test("the stamp writer refuses an actor without payroll.run, dry-run included, w
   const worker = await mkPerson(ctx, "Ungranted worker");
   const employment = await mkEmployment(ctx, worker);
   await mkVersion(ctx, employment);
-  for (const table of TABLES) await seedPersonRow(ctx, table, worker);
+  for (const table of TABLES) {
+    await seedPersonRow(ctx, table, worker, table === "pay_stubs" ? employment : null);
+  }
+  const stubTouchedAt = await stubUpdatedAt(ctx.orgId, worker);
   // No grant: this actor holds no payroll.run duty (setup grants only ctx.actorId).
   const outsider = await createScratchUser(ctx.orgId, "Stamp outsider", "stamp_outsider");
   for (const dryRun of [false, true] as const) {
@@ -484,9 +517,17 @@ test("the stamp writer refuses an actor without payroll.run, dry-run included, w
     );
   }
   // Asserted against row counts, not the error alone: the refused writer
-  // stamped nothing on any of the nine writable tables.
+  // stamped nothing on any of the nine writable tables. The stub arrives
+  // pre-linked by schema force, so "nothing" there means the link and the
+  // row timestamp are exactly as seeded.
   for (const table of TABLES) {
     if (table === "entitlement_ledger") continue;
+    if (table === "pay_stubs") {
+      assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
+      assert.equal(await stubUpdatedAt(ctx.orgId, worker), stubTouchedAt,
+        "the refused stamp left the counted stub untouched");
+      continue;
+    }
     assert.equal(await employmentOf(table, ctx.orgId, worker), null,
       `${table}: the refused stamp wrote nothing`);
   }
