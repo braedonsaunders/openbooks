@@ -14,6 +14,7 @@ export interface AdoptionFixture {
   scheduleId: string;
   employeeId: string;
   employeeName: string;
+  employmentId: string;
 }
 
 /** Seed an explicit ON EHT rate for shared, low-payroll Canadian fixtures. */
@@ -37,7 +38,7 @@ export async function seedCanadianPayrollComponentsForTest(
 async function seedEmployee(
   fx: { orgId: string; actorId: string; scheduleId: string; subsidiaryId: string },
   options: { name: string; hiredOn?: string } = { name: "Terry Worker" },
-): Promise<string> {
+): Promise<{ employeeId: string; employmentId: string }> {
   const employeeId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -61,7 +62,7 @@ async function seedEmployee(
                                            is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
             '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
-  return employeeId;
+  return { employeeId, employmentId };
 }
 
 /** A Canadian org with payroll accounts, components, a schedule and one hire. */
@@ -124,7 +125,7 @@ export async function seedAdoption(
             ${actorId}, ${actorId})`);
 
   const employeeName = "Terry Worker";
-  const employeeId = await seedEmployee(
+  const { employeeId, employmentId } = await seedEmployee(
     { orgId: org.orgId, actorId, scheduleId, subsidiaryId: org.subsidiaryId },
     { name: employeeName, hiredOn: options.hiredOn },
   );
@@ -136,6 +137,7 @@ export async function seedAdoption(
     scheduleId,
     employeeId,
     employeeName,
+    employmentId,
   };
 }
 
