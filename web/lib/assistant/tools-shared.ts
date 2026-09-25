@@ -79,6 +79,52 @@ export function capList<T>(items: T[], max = MAX_LIST_ROWS): { items: T[]; trunc
   return { items: items.slice(0, max), truncated: items.length > max };
 }
 
+/** Shape a capped assistant list from a limit+1 fetch and/or an authoritative count. */
+export function assistantListPage<T>(
+  fetched: readonly T[],
+  limit: number,
+  total: number,
+): { items: T[]; total: number; returned: number; truncated: boolean; dropped: number } {
+  const items = fetched.slice(0, limit);
+  const dropped = Math.max(0, total - items.length);
+  return { items, total, returned: items.length, truncated: dropped > 0 || fetched.length > items.length, dropped };
+}
+
+/** Page only after an async visibility predicate, scanning past hidden rows. */
+export async function assistantVisibleListPage<T, U>(options: {
+  limit: number;
+  offset: number;
+  fetch: (rawOffset: number, batchSize: number) => Promise<T[]>;
+  visible: (row: T) => Promise<U | null>;
+}): Promise<{ items: U[]; returned: number; offset: number; nextOffset: number | null; truncated: boolean }> {
+  const batchSize = 100;
+  const visibleRows: U[] = [];
+  let rawOffset = 0;
+  let visibleOffset = 0;
+  let exhausted = false;
+  while (visibleRows.length <= options.limit && !exhausted) {
+    const rows = await options.fetch(rawOffset, batchSize);
+    rawOffset += rows.length;
+    exhausted = rows.length < batchSize;
+    for (const row of rows) {
+      const item = await options.visible(row);
+      if (item === null) continue;
+      if (visibleOffset >= options.offset) visibleRows.push(item);
+      visibleOffset += 1;
+      if (visibleRows.length > options.limit) break;
+    }
+  }
+  const hasMore = visibleRows.length > options.limit;
+  const items = visibleRows.slice(0, options.limit);
+  return {
+    items,
+    returned: items.length,
+    offset: options.offset,
+    nextOffset: hasMore ? options.offset + items.length : null,
+    truncated: hasMore,
+  };
+}
+
 /** Default per-string ceiling inside compacted rows (see compactRows). */
 export const MAX_ROW_STRING = 500;
 
