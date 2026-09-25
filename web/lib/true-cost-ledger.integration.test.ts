@@ -53,7 +53,7 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
           const data=await trueCostData(org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'Ledger review'},null);
           if(view === 'overhead')assert.equal(data.kpis.totalOverhead,100);
           if(view === 'prior rate')assert.equal(data.kpis.compositeRateChangePct,100);
-          if(view === 'monthly')assert.equal(data.monthly.find(row=>row.month === '2026-07')?.burden,100);
+          if(view === 'monthly')assert.equal(data.monthly.find(row=>row.month === '2026-07')?.burden,'100.0000');
           if(view === 'applied burden'){assert.equal(data.kpis.burdenApplied,10);assert.equal(data.hasBurdenGL,true);}
           if(view === 'revenue base')assert.equal(data.bases.revenue.total,210);
           if(view === 'cost base')assert.equal(data.bases.directCost.total,30);
