@@ -30,10 +30,10 @@ function msg(labels: Record<string, string>, key: string): string {
   return labels[key] ?? key
 }
 
-async function post(url: string, body: unknown, failed: string, onRefusal?: (message: string) => void): Promise<boolean> {
+async function post(url: string, body: unknown, failed: string, onRefusal?: (message: string) => void, headers?: Record<string, string>): Promise<boolean> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
   if (!res.ok) {
@@ -95,6 +95,9 @@ function eventKindLabel(kind: string, labels: Record<string, string>): string {
 
 export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
   const router = useRouter()
+  const [remindPending, setRemindPending] = useState(false)
+  const remindPendingRef = useRef(false)
+  const remindKey = useRef<{ documentId: string; value: string } | null>(null)
   const commonActions = useTranslations('common.actions')
   const viewer = useViewerFormat()
   const labels = drawer.labels
@@ -107,7 +110,10 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
   }
   const actionable = ['draft', 'sent', 'viewed', 'partially_signed'].includes(document.status)
   const canRemind = ['sent', 'viewed', 'partially_signed'].includes(document.status)
-  const base = `/api/hrm/documents/${document.id}`
+  // Hoisted beside base: tsc does not carry the early-return narrowing
+  // into the async action closures below, so no closure reads document.id.
+  const documentId = document.id
+  const base = `/api/hrm/documents/${documentId}`
   const held = document.legalHold
 
   async function send() {
@@ -115,7 +121,22 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
   }
 
   async function remind() {
-    if (await post(`${base}/remind`, {}, msg(labels, 'actionFailed'))) router.refresh()
+    if (remindPendingRef.current) return
+    remindPendingRef.current = true
+    setRemindPending(true)
+    if (remindKey.current?.documentId !== documentId) {
+      remindKey.current = { documentId, value: crypto.randomUUID() }
+    }
+    const idempotencyKey = remindKey.current.value
+    try {
+      if (await post(`${base}/remind`, {}, msg(labels, 'actionFailed'), undefined, { 'idempotency-key': idempotencyKey })) {
+        remindKey.current = null
+        router.refresh()
+      }
+    } finally {
+      remindPendingRef.current = false
+      setRemindPending(false)
+    }
   }
 
   async function voidDocument() {
@@ -138,7 +159,7 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
         {canAct && document.status === 'draft' && (
           <Button onClick={send}>{msg(labels, 'send')}</Button>
         )}
-        {canAct && canRemind && <Button variant="outline" onClick={remind}>{msg(labels, 'remind')}</Button>}
+        {canAct && canRemind && <Button variant="outline" disabled={remindPending} onClick={remind}>{msg(labels, 'remind')}</Button>}
         {canAct && (
           <Button variant="outline" onClick={toggleHold}>
             {document.legalHold ? msg(labels, 'releaseHold') : msg(labels, 'hold')}
