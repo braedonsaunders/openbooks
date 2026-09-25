@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
 import {
   PAYROLL_COUNTRY_PACKS,
@@ -45,8 +45,6 @@ const certificateBodySchema = z.looseObject({
   answers: z.record(z.string(), z.unknown()),
   effectiveFrom: z.string().nullable().optional(),
 })
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 // A type alias, not an interface: db.execute constrains its row generic to
 // Record<string, unknown>, and an interface carries no implicit index
@@ -165,8 +163,8 @@ export async function POST(req: Request) {
 
   const effectiveFrom = body.effectiveFrom == null || body.effectiveFrom === ''
     ? null : String(body.effectiveFrom)
-  if (effectiveFrom !== null && !ISO_DATE.test(effectiveFrom)) {
-    return NextResponse.json({ error: 'effectiveFrom must be an ISO date (YYYY-MM-DD)' }, { status: 422 })
+  if (effectiveFrom !== null && !isIsoCalendarDate(effectiveFrom)) {
+    return NextResponse.json({ error: 'effectiveFrom must be a real ISO calendar date (YYYY-MM-DD)' }, { status: 422 })
   }
 
   // Canonicalize before validating: empty answers are "unanswered" (the

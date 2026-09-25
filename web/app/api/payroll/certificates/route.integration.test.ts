@@ -83,13 +83,11 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
   try {
     const hire = await employee(org.orgId, scheduleId, 'GB Hire', 'GB', 'ENG')
     const base = { employeePartyId: hire, country: 'GB' }
-    // Unknown certificate: refused with the pack's declared keys.
     {
       const response = await post({ ...base, certificateKey: 'gb_made_up', answers: {} })
       assert.equal(response.status, 422, await response.clone().text())
       assert.match(((await response.json()) as { error: string }).error, /unknown certificate "gb_made_up" for GB/)
     }
-    // Undeclared field key: refused by name with the declared keys.
     {
       const response = await post({
         ...base, certificateKey: 'gb_tax_code_notice', answers: { tax_bracket: '1257L' },
@@ -97,7 +95,6 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
       assert.equal(response.status, 422, await response.clone().text())
       assert.match(((await response.json()) as { error: string }).error, /"tax_bracket" is not a field of/)
     }
-    // Missing required field with no default: the P6/P9 tax code is required.
     {
       const response = await post({
         ...base, certificateKey: 'gb_tax_code_notice', answers: { non_cumulative: 'true' },
@@ -117,7 +114,6 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
       assert.equal(response.status, 422, await response.clone().text())
       assert.match(((await response.json()) as { error: string }).error, /no answers/)
     }
-    // Bad flag value is refused rather than read as false.
     {
       const response = await post({
         ...base, certificateKey: 'gb_tax_code_notice',
@@ -126,7 +122,11 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
       assert.equal(response.status, 422, await response.clone().text())
       assert.match(((await response.json()) as { error: string }).error, /non.cumulative|checkbox/)
     }
-    // Bad choice value on the starter checklist.
+    const invalidDate = await post({
+      ...base, certificateKey: 'gb_tax_code_notice', answers: { tax_code: '1257L' }, effectiveFrom: '2026-02-31',
+    })
+    assert.equal(invalidDate.status, 422, await invalidDate.clone().text())
+    assert.match(((await invalidDate.json()) as { error: string }).error, /effectiveFrom.*calendar date/)
     {
       const response = await post({
         ...base, certificateKey: 'gb_starter_checklist',
@@ -135,7 +135,6 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
       assert.equal(response.status, 422, await response.clone().text())
       assert.match(((await response.json()) as { error: string }).error, /is not one of A, B, C/)
     }
-    // A well-formed filing saves.
     {
       const response = await post({
         ...base, certificateKey: 'gb_tax_code_notice',
