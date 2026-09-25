@@ -65,8 +65,8 @@ export function OutOfOfficeButton({ users }: { users: DelegateOption[] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           toUserId,
-          startsAt: new Date(`${from}T00:00:00`).toISOString(),
-          endsAt: new Date(`${until}T23:59:59`).toISOString(),
+          startsAt: new Date(`${from}T00:00:00Z`).toISOString(),
+          endsAt: new Date(`${until}T23:59:59Z`).toISOString(),
         }),
       })
       if (res.status === 404) {
