@@ -2,7 +2,7 @@ import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
-import { add, cmp, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -154,8 +154,8 @@ export interface SpendVelocityData {
   };
   shadowIT: { available: false; reason: string };
   commitmentCliff: {
-    summary: { poVelocity: number; soVelocity: number; velocityGap: number; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: number; totalSO: number };
-    months: { month: string; poAmount: number; soAmount: number }[];
+    summary: { poVelocity: number; soVelocity: number; velocityGap: number; ratio: number; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string };
+    months: { month: string; poAmount: string; soAmount: string }[];
   };
   revenue: { hasData: boolean; totalRevenue: string; opexRatio: number };
   insights: SVInsight[];
@@ -795,34 +795,50 @@ export async function spendVelocityData(
   const commitCtx = await flowRates(orgId, poSoRows.rows.map((r) => ({
     func: (r.func ?? null) as string | null, date: asDate(r.late, to),
   })));
-  const cliffMonths = new Map<string, { po: number; so: number }>();
+  const cliffMonths = new Map<string, { po: string; so: string }>();
   for (const r of poSoRows.rows) {
-    const m = cliffMonths.get(r.month) ?? { po: 0, so: 0 };
-    const amount = Number(mulDecimal(String(r.amount ?? 0),
-      commitCtx.rateAt((r.func ?? null) as string | null, asDate(r.late, to))));
-    if (r.kind === "purchase_order") m.po += amount;
-    else m.so += amount;
+    const m = cliffMonths.get(r.month) ?? { po: "0.0000", so: "0.0000" };
+    const rate = commitCtx.rateAt((r.func ?? null) as string | null, asDate(r.late, to));
+    const amount = mulDecimal(String(r.amount ?? 0), rate);
+    if (r.kind === "purchase_order") m.po = add(m.po, amount);
+    else m.so = add(m.so, amount);
     cliffMonths.set(r.month, m);
   }
   const cliffSeries = [...cliffMonths.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     .map(([month, v]) => ({ month, poAmount: v.po, soAmount: v.so }));
   // A short history suppresses growth estimates, not the observed commitments.
-  const poVelocity = Math.round(velocityCAGR(cliffSeries.map((m) => m.poAmount), 1000));
-  const soVelocity = Math.round(velocityCAGR(cliffSeries.map((m) => m.soAmount), 1000));
+  const moneyCagr = (amounts: string[], minimum: string): number => {
+    if (amounts.length < 2) return 0;
+    let start = amounts[0]!;
+    let periods = amounts.length - 1;
+    const end = amounts[amounts.length - 1]!;
+    if (cmp(start, minimum) < 0) {
+      for (let i = 0; i < amounts.length - 1; i++) {
+        if (cmp(amounts[i]!, minimum) >= 0) { start = amounts[i]!; periods = amounts.length - 1 - i; break; }
+      }
+      if (cmp(start, minimum) < 0) return 0;
+    }
+    if (cmp(end, "0") <= 0) return -100;
+    const ratio = Number(div(end, start));
+    return Math.max(-100, Math.min(200, (Math.pow(ratio, 1 / periods) - 1) * 100));
+  };
+  const poVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.poAmount), String(CFG.minBaseAmount)));
+  const soVelocity = Math.round(moneyCagr(cliffSeries.map((m) => m.soAmount), String(CFG.minBaseAmount)));
   const velocityGap = poVelocity - soVelocity;
-  const totalPO = cliffSeries.reduce((s, m) => s + m.poAmount, 0);
-  const totalSO = cliffSeries.reduce((s, m) => s + m.soAmount, 0);
-  const ratio = totalSO > 0 ? Math.round((totalPO / totalSO) * 100) / 100 : 0;
+  const totalPO = cliffSeries.reduce((s, m) => add(s, m.poAmount), "0.0000");
+  const totalSO = cliffSeries.reduce((s, m) => add(s, m.soAmount), "0.0000");
+  const hasSales = cmp(totalSO, "0") > 0;
+  const ratio = hasSales ? Math.round(Number(div(totalPO, totalSO)) * 100) / 100 : 0;
   let status: "healthy" | "warning" | "critical" = "healthy";
   let monthsToCliff: number | null = null;
   if (velocityGap > 20 || ratio > 1.5) {
     status = "critical";
-    if (velocityGap > 0 && totalSO > 0) monthsToCliff = Math.max(1, Math.round(12 / (velocityGap / 10)));
+    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(12 / (velocityGap / 10)));
   } else if (velocityGap > 10 || ratio > 1.2) {
     status = "warning";
-    if (velocityGap > 0 && totalSO > 0) monthsToCliff = Math.max(1, Math.round(18 / (velocityGap / 10)));
+    if (velocityGap > 0 && hasSales) monthsToCliff = Math.max(1, Math.round(18 / (velocityGap / 10)));
   }
-  const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO: Math.round(totalPO), totalSO: Math.round(totalSO) }, months: cliffSeries };
+  const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO, totalSO }, months: cliffSeries };
 
   // ---- revenue normalisation ---------------------------------------------------------------------
   // The OpEx ratio reads the shared P&L operating-expenses reader (true OpEx
