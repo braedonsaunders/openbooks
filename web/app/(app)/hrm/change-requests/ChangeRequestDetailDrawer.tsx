@@ -121,6 +121,7 @@ export function ChangeRequestDetailDrawer({
   subject,
   departmentOptions,
   canManage,
+  canVerb = false,
   onClose,
 }: {
   requestId: string
@@ -131,6 +132,9 @@ export function ChangeRequestDetailDrawer({
   /** Loader-resolved manage grant (F3-36): the lifecycle actions render
    * only with it; detail stays readable without it. */
   canManage: boolean
+  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
+   * plus the hrmEventVerbs feature. */
+  canVerb?: boolean
   onClose: () => void
 }) {
   const t = useTranslations('hrm')
@@ -432,6 +436,7 @@ export function ChangeRequestDetailDrawer({
               appliedChangeId={detail.appliedEmploymentChangeId}
               departmentOptions={departmentOptions}
               canManage={canManage}
+              canVerb={canVerb}
               onChanged={() => {
                 setReloadToken((current) => current + 1)
                 router.refresh()

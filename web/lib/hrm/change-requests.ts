@@ -122,6 +122,13 @@ export interface ChangeRequestQueueData {
   emptyTitle: string
   emptyDescription: string
   canManage: boolean
+  /**
+   * HR-16 verb actions (Rescind/Correct) display gate: the rescind route
+   * 404s unless hrmEventVerbs is on and requires hrm.employment.approve,
+   * so the buttons render only for approvers while the feature is on —
+   * never as dead buttons that can only refuse.
+   */
+  canVerb: boolean
   departmentOptions: { value: string; label: string }[]
   statusHeader: string
   actionsHeader: string
@@ -354,6 +361,7 @@ export async function loadChangeRequestQueue(
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
   const canManage = can(authz, 'hrm.employment.manage')
+  const canVerb = can(authz, 'hrm.employment.approve') && (await isFeatureEnabled(orgId, 'hrmEventVerbs'))
   // HR-16: reason codes configure where changes are proposed; the button
   // and section render only while the feature is on and the viewer manages.
   const reasonsOn = canManage && (await isFeatureEnabled(orgId, 'hrmActionReasons'))
@@ -389,6 +397,7 @@ export async function loadChangeRequestQueue(
     emptyTitle: t('queue.emptyTitle'),
     emptyDescription: t('queue.emptyDescription'),
     canManage,
+    canVerb,
     departmentOptions: [],
     statusHeader: t('employment.changeRequests.statusLabel'),
     actionsHeader: t('queue.draftBadge'),
