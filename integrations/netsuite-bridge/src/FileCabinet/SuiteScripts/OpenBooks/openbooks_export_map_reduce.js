@@ -5,6 +5,7 @@
  */
 define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, search) => {
   const SCHEMA_VERSION = 1;
+  const JOB_PARAMETER = 'custscript_openbooks_export_job_id';
   const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
   const jobsFolder = () => file.load({ id: MARKER_PATH }).folder;
   const normalize = (value) => {
@@ -19,11 +20,16 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
     return String(value);
   };
 
-  const getInputData = () => {
-    const jobId = runtime.getCurrentScript().getParameter({ name: 'custscript_openbooks_export_job_id' });
-    if (typeof jobId !== 'string' || jobId.length === 0) {
-      throw new Error('NetSuite bulk export job ID is required');
+  const currentJobId = () => {
+    const value = runtime.getCurrentScript().getParameter({ name: JOB_PARAMETER });
+    if (typeof value !== 'string' || !/^[A-Za-z0-9_.:-]{1,160}$/.test(value)) {
+      throw new Error('OpenBooks export task is missing its job identity');
     }
+    return value;
+  };
+
+  const getInputData = () => {
+    const jobId = currentJobId();
     return search.create({
       type: 'file',
       filters: [['folder', 'anyof', jobsFolder()], 'AND', ['name', 'startswith', `ob-request-${jobId}-`]],
@@ -44,6 +50,7 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
     const requestFile = file.load({ id: searchResult.id });
     const request = JSON.parse(requestFile.getContents());
     const jobId = String(request.jobId);
+    if (jobId !== currentJobId()) throw new Error('OpenBooks export request does not belong to this task');
     const partId = String(request.partId);
     try {
       const queryOptions = {
