@@ -140,7 +140,7 @@ export async function loadOpportunities(
            ${boardOwnerUserId ? sql`and o.owner_user_id = ${boardOwnerUserId}` : sql``}
            ${boardSalesTeamId ? sql`and o.sales_team_id = ${boardSalesTeamId}` : sql``}
          order by o.expected_close_date nulls last, o.created_at desc
-         limit 500`),
+    `),
     ])
 
     const kanbanStatuses: KanbanStatus[] = statusesResult.rows.map((row) => ({
@@ -205,8 +205,8 @@ export async function loadOpportunities(
       loadOpportunity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
       (db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`)),
       (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name limit 2000`)),
-      (db.execute(sql`select c.id,c.party_id,c.name from contacts c left join parties p on p.id=c.party_id and p.org_id=c.org_id where c.org_id=${authz.user.orgId} and c.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by c.name limit 4000`)),
+      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`)),
+      (db.execute(sql`select c.id,c.party_id,c.name from contacts c left join parties p on p.id=c.party_id and p.org_id=c.org_id where c.org_id=${authz.user.orgId} and c.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by c.name`)),
       (db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`)),
       (db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`)),
       (db.execute(sql`
@@ -220,7 +220,7 @@ export async function loadOpportunities(
                 where org_id = ${authz.user.orgId} and opportunity_id = ${openId} and item_id is not null
              )
            )
-         order by name limit 2000`)),
+         order by name`)),
       multiCurrency
         ? db.execute<ElementOf<OpportunityDrawerProps['currencies']>>(sql`select code,name from currencies order by code`)
         : Promise.resolve({ rows: [] }),

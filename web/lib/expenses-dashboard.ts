@@ -228,10 +228,9 @@ export async function expensesDashboard(
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
       group by 1, 2
       order by 3 desc nulls last
-      limit 50
     `),
-    // Category KPI aggregates the full population; the display query above is
-    // intentionally capped for the categories table.
+    // Category KPI aggregates the full population; the display query above
+    // also returns the full category population.
     db.execute(sql`
       select coalesce(sum(c.current_amount - c.prior_amount) filter (
         where c.prior_amount > 0
