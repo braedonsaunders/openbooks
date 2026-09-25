@@ -195,7 +195,7 @@ export async function sendBriefingEmail(
         subject: mail.subject,
         html: mail.html,
         text: mail.text,
-        meta: { category: "agent-briefing" },
+        meta: { category: "agent-briefing", userId: authz.user.id },
       },
       { jobId: newEmailIntentKey(`agent-briefing|${authz.user.orgId}|${authz.user.id}`) },
     );

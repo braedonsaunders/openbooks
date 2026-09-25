@@ -268,10 +268,16 @@ export async function insertEmailLog(row: {
    * applied after the caller's meta so attribution evidence can be neither
    * forged nor stripped by it.
    */
-  actor?: EmailActor;
+  actor: EmailActor;
 }): Promise<string> {
-  if (row.actor?.kind === "user" && !row.actor.userId.trim()) {
+  if (!row.actor) {
+    throw new Error("email_log entries require a user actor or an explicit system reason");
+  }
+  if (row.actor.kind === "user" && !row.actor.userId.trim()) {
     throw new Error("email_log user attribution requires a non-empty user id");
+  }
+  if (row.actor.kind === "system" && !row.actor.reason.trim()) {
+    throw new Error("email_log system attribution requires a non-empty reason");
   }
   const meta: Record<string, unknown> = { ...row.meta };
   if (row.actor) {

@@ -83,6 +83,13 @@ export function createEmailWorker(): Worker<EmailJobData> {
     EMAIL_QUEUE,
     async (job) => {
       const d = job.data;
+      const actorUserId = typeof d.meta?.userId === "string" ? d.meta.userId.trim() : "";
+      const emailActor = actorUserId
+        ? { kind: "user" as const, userId: actorUserId }
+        : {
+            kind: "system" as const,
+            reason: `email worker delivery (${d.meta?.category ?? "uncategorized"})`,
+          };
       // Every read and write below (transport config, email_log, delivery
       // outbox) belongs to the job's tenant. A queue callback carries no request
       // store, so this scope is what makes those queries legal at all.
@@ -185,6 +192,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
         categoryKey: d.meta?.category ?? null,
         meta: suppressionReason ? { ...d.meta, reason: suppressionReason } : d.meta ?? {},
         ...(suppressionReason ? { status: "suppressed" as const, errorMessage: suppressionReason } : {}),
+        actor: emailActor,
       });
       const nextAttemptNo = canonical.attempts.length + 1;
 
