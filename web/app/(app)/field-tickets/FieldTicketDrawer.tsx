@@ -20,6 +20,7 @@ import {
 } from '../../../components/document-drawer'
 import { displayFormName } from '../../../lib/document-display'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
@@ -908,6 +909,15 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const dayHours = (day: string) =>
     grid.reduce((a, r) => a + gridTimeTypes.reduce((b, tt) => b + (Number(r.cells[`${tt.id}|${day}`]) || 0), 0), 0)
   const totalHours = grid.reduce((a, r) => a + rowHours(r), 0)
+  const lineDraftDirty = lineItem !== '' || lineQty !== '1' || lineRate !== '' || lineAmount !== '' ||
+    lineEquipment !== '' || lineOperator !== '' || lineRateUnit !== '' || lineComponents.length > 0
+  const closeGuard = useDirtyClose({
+    dirty: headerDirty || gridDirty || lineDraftDirty,
+    busy: busy || discarding,
+    onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
   const dayLabel = (isoDay: string) => {
     const d = new Date(`${isoDay}T12:00:00Z`)
     return { dow: date(d, { weekday: 'short', timeZone: 'UTC' }), dom: isoDay.slice(5) }
@@ -917,13 +927,14 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     <TransactionDrawer
       closeHref="/field-tickets"
       beforeClose={async () => {
+        if (busy || discarding) return false
         // A pristine draft is the New-ticket shell: discard it instead of
         // orphaning a row. The server refuses anything with content, so a
         // raced or filled draft simply stays — closing still proceeds.
-        if (!headerDirty && !gridDirty && ticket.status === 'draft' && props.canManage) {
+        if (!headerDirty && !gridDirty && !lineDraftDirty && ticket.status === 'draft' && props.canManage) {
           await discardDraft(false)
         }
-        return true
+        return closeGuard.beforeClose()
       }}
       recordId={ticket.id}
       canEditAttachments={props.canManage}
