@@ -15,6 +15,7 @@ import {
 } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts'
 import type { DerivedQualificationStatus } from '@openbooks/engine/src/hrm/qualifications/shared.ts'
 import { listRequirements } from '@openbooks/engine/src/hrm/qualifications/requirements.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmPeopleViewTabs } from './workspace-tabs'
 import { loadQueueLabels } from './change-requests'
@@ -177,13 +178,18 @@ const STATUS_VARIANT: Record<DerivedQualificationStatus, QualificationRow['statu
   not_yet_effective: 'info',
 }
 
-async function employmentsForParties(orgId: string, partyIds: string[]): Promise<Map<string, string>> {
+async function employmentsForParties(
+  orgId: string,
+  partyIds: string[],
+  allowed: ReadonlySet<string> | null,
+): Promise<Map<string, string>> {
   if (partyIds.length === 0) return new Map()
   const rows = (
     await db.execute<{ party: string; employment: string }>(sql`
       select worker_party_id::text as party, id::text as employment
         from worker_employments
        where org_id = ${orgId} and worker_party_id in (select jsonb_array_elements_text(${JSON.stringify(partyIds)}::jsonb)::uuid)
+         ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, allowed)}
        order by created_at desc
     `)
   ).rows
@@ -211,6 +217,11 @@ export async function loadQualificationsPage(
 ): Promise<QualificationsPageData> {
   const orgId = authz.user.orgId
   const actorId = authz.user.id
+  // Crew reads below resolve employments the gate never authorized, so
+  // every crew query carries the reader's subsidiary scope: a restricted
+  // reader sees only crew employed by visible subsidiaries, and the gate
+  // verdicts run only over those employments.
+  const allowed = authz.allowedSubsidiaryIds
   const t = await getTranslations('hrm')
   const segment = (sp.segment ?? 'all') as QualificationSegment
   const typeFilter = sp.type ?? 'all'
@@ -246,6 +257,7 @@ export async function loadQualificationsPage(
           from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id in (select jsonb_array_elements_text(${JSON.stringify(gatedProjects)}::jsonb)::uuid)
+           ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
       `)
     ).rows.map((r) => r.employment)
     const assignedSet = new Set(assigned)
@@ -263,6 +275,7 @@ export async function loadQualificationsPage(
           from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id = ${projectId}::uuid
+           ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
       `)
     ).rows.map((r) => r.employment)
     for (const employmentId of crew) {
@@ -341,7 +354,9 @@ export async function loadQualificationsPage(
   if (coverageProjectId) {
     coverageTotal = Number((await db.execute<{ n: string }>(sql`
       select count(distinct r.party_id) as n from schedule_resources r
+        join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
        where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
+         ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
     `)).rows[0]?.n ?? 0)
     const pageCount = Math.max(1, Math.ceil(coverageTotal / COVERAGE_PER_PAGE))
     const requested = Number.parseInt(sp.crewPage ?? '1', 10)
@@ -349,13 +364,17 @@ export async function loadQualificationsPage(
     const crewParties = (
       await db.execute<{ party: string }>(sql`
         select distinct r.party_id::text as party from schedule_resources r
+          join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
+           ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
          order by r.party_id
          limit ${COVERAGE_PER_PAGE} offset ${(coveragePage - 1) * COVERAGE_PER_PAGE}
       `)
     ).rows.map((r) => r.party)
     // party → employment, then display names through the shared labels.
-    const employmentByParty = await employmentsForParties(orgId, crewParties)
+    // The mapping stays inside the reader's scope: a dual-subsidiary
+    // party resolves to its visible employment, never the hidden one.
+    const employmentByParty = await employmentsForParties(orgId, crewParties, allowed)
     const crewEmployments = [...employmentByParty.values()]
     const crewLabels = await loadQueueLabels(orgId, crewEmployments, [])
     // One gate read per employment covers every column: the verdict
