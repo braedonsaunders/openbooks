@@ -68,6 +68,7 @@ import {
   IT_2025_INPS_IVS,
   IT_2025_IRPEF_BANDS,
   IT_2025_MASSIMALE_POST1995,
+  IT_2025_MINIMALE,
   IT_2025_PRIMA_FASCIA,
   IT_2025_RATIO_DECIMALS,
   IT_2025_SOMMA,
@@ -80,6 +81,7 @@ import {
   IT_2026_INPS_IVS,
   IT_2026_IRPEF_BANDS,
   IT_2026_MASSIMALE_POST1995,
+  IT_2026_MINIMALE,
   IT_2026_PRIMA_FASCIA,
   IT_2026_RATIO_DECIMALS,
   IT_2026_SOMMA,
@@ -100,6 +102,7 @@ export interface ItYearTables {
   readonly bands: readonly { readonly upTo: string | null; readonly rate: string }[];
   readonly ratioDecimals: number;
   readonly massimalePost1995: string;
+  readonly minimaleGiornaliero: string;
   readonly primaFascia: {
     readonly annual: string;
     readonly monthly: string;
@@ -144,6 +147,7 @@ export const IT_2025_TABLES: ItYearTables = {
   bands: IT_2025_IRPEF_BANDS,
   ratioDecimals: IT_2025_RATIO_DECIMALS,
   massimalePost1995: IT_2025_MASSIMALE_POST1995,
+  minimaleGiornaliero: IT_2025_MINIMALE.giornaliero,
   primaFascia: IT_2025_PRIMA_FASCIA,
   inpsIvs: IT_2025_INPS_IVS,
   detrazioneLavoro: IT_2025_DETRAZIONE_LAVORO,
@@ -159,6 +163,7 @@ export const IT_2026_TABLES: ItYearTables = {
   bands: IT_2026_IRPEF_BANDS,
   ratioDecimals: IT_2026_RATIO_DECIMALS,
   massimalePost1995: IT_2026_MASSIMALE_POST1995,
+  minimaleGiornaliero: IT_2026_MINIMALE.giornaliero,
   primaFascia: IT_2026_PRIMA_FASCIA,
   inpsIvs: IT_2026_INPS_IVS,
   detrazioneLavoro: IT_2026_DETRAZIONE_LAVORO,
@@ -356,7 +361,24 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   }
   const gross = needNonNegative(input.annualGrossEmployment, "annualGrossEmployment", year);
   const oneOff = needNonNegative(input.nonPeriodicAnnual ?? "0", "nonPeriodicAnnual", year);
-  const pensBase = needNonNegative(input.annualPensionable, "annualPensionable", year) + oneOff;
+  const annualPensionable = needNonNegative(input.annualPensionable, "annualPensionable", year);
+  const pensBase = annualPensionable + oneOff;
+
+  // A full-time year can carry up to 26 contribution days in each of 12
+  // months. Below that statutory floor, days in alta, hours/part-time and
+  // the applicable CCNL minimum are needed to prorate the actual base.
+  // Refuse instead of assuming that every worker has 312 contribution days.
+  // https://www.inps.it/it/it/inps-comunica/notizie/dettaglio-news-page.news.2026.02.lavoratori-dipendenti-limite-minimo-di-retribuzione-giornaliera-2026.html
+  // https://www.inps.it/it/it/dettaglio-approfondimento.schede-informative.minimali-giornalieri-di-retribuzione.html
+  const annualFullTimeMinimum = U(tables.minimaleGiornaliero) * 312n;
+  if (annualPensionable > ZERO && annualPensionable < annualFullTimeMinimum) {
+    refuse(
+      `IT ${year} IVS refuses annual pensionable earnings ${D(annualPensionable)} below the full-time daily-minimum `
+      + `base ${D(annualFullTimeMinimum)} (${tables.minimaleGiornaliero} × 26 days × 12 months): contribution days, `
+      + "part-time hours and the applicable CCNL minimum are not carried, so the statutory base cannot be prorated safely. "
+      + "Provide those contract and period facts or have a qualified Italian payroll provider calculate IVS before posting.",
+    );
+  }
 
   // INPS IVS on the pensionable base, with prima fascia and massimale. The
   // post-1995 status selects whether that cap applies; it is never inferred
