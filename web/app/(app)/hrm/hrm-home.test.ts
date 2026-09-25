@@ -161,6 +161,9 @@ registerHooks({
                 createdAt: new Date('2026-08-20T10:00:00.000Z'),
                 appliedEmploymentChangeId: null,
               }));
+            }
+             export async function countChangeRequests() {
+              return (globalThis.__homeQueue || []).filter((row) => row.status === 'pending_approval').length;
             }`,
           ),
       };
@@ -460,8 +463,8 @@ test("the cockpit binds loader figures and scopes every display leg to the org",
   );
   assert.deepEqual(
     data.actions.map((action) => action.href),
-    ["/admin/setup/departments"],
-    "without manage or report grants the rail keeps only the setup surface",
+    [],
+    "without manage or setup grants the rail keeps no setup surface — Departments needs admin.setup.manage",
   );
   assert.deepEqual(
     data.attention.map((item) => item.href),
