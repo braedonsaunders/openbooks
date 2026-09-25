@@ -296,8 +296,9 @@ export async function loadDirectory(query: {
   limit?: number;
   page?: number;
 }): Promise<DirectoryPage> {
-  // Use one organization business date for both visibility and effective
-  // dating; SQL current_date follows the database session timezone instead.
+  // Use one selected as-of date for both visibility and effective dating,
+  // defaulting to the organization's business date. SQL current_date follows
+  // the database session timezone instead.
   const asOf = query.asOf ?? await businessToday(query.orgId);
   parseCivilDate(asOf);
   const scope = await resolveOrgChartScope(query.orgId, query.actorId, asOf);
