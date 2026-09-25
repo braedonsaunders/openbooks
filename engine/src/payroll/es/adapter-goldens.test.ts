@@ -118,6 +118,21 @@ test("adapter: March payslip pushes IRPF plus all nine SS lines, assessed honest
   );
 });
 
+test("adapter emits the solidaridad lines when pay exceeds the tope máximo", async () => {
+  // Orden PJC/297/2026 art. 17.1 tranches on 6.000 pay: 510,12 at
+  // 0,19 %/0,96 % plus 388,68 at 0,21 %/1,04 %, each cuota half-up to
+  // the cent. Below-tope goldens cannot observe the pushes: zero lines
+  // are never emitted.
+  const { ctx, lines } = esAdapterContext("2026-03-15", false, "ninguna", false, "72000.00", "12");
+  Object.assign(ctx, { income: "6000.00", pensionable: "6000.00", insurable: "6000.00" });
+  await computeEsStatutory(ctx);
+  assert.deepEqual(
+    ["ss_solidaridad:deduction", "ss_solidaridad_er:employer_contribution"]
+      .map((id) => lines.find((line) => line.componentId === id)?.amount),
+    ["1.7900", "8.9400"],
+  );
+});
+
 test("adapter resolves the September late edition", async () => {
   const { ctx } = esAdapterContext("2026-09-15");
   const result = await computeEsStatutory(ctx);
