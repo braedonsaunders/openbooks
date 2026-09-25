@@ -4,10 +4,10 @@ import { db, schema } from "../platform/db.ts";
 import { businessTimeZone, businessToday, formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
 import { toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
-import { PaymentError } from "./payment-errors.ts";
-import { buildCpa005File, type Cpa005Payment } from "./rail-cpa005.ts";
-import { buildNachaFile, loadNachaSettings, nachaFileIdModifierForRunNumber, type NachaEntry } from "./rail-nacha.ts";
-import { buildSepaFile, loadSepaSettings } from "./rail-sepa.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
+import { buildCpa005File, type Cpa005Payment } from "../payments-core/rail-cpa005.ts";
+import { buildNachaFile, loadNachaSettings, nachaFileIdModifierForRunNumber, type NachaEntry } from "../payments-core/rail-nacha.ts";
+import { buildSepaFile, loadSepaSettings } from "../payments-core/rail-sepa.ts";
 import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
 // ---------------------------------------------------------------------------
 // CPA Standard 005 file

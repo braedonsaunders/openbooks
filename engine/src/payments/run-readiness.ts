@@ -2,10 +2,10 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { lockScopeRows } from "../organization/subsidiary-scope.ts";
 import { evaluateBillsForRelease, recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
-import { PaymentError } from "./payment-errors.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, loadEftSettings, type EftSettings, type EftSettingsResult } from "./rail-settings.ts";
-import { loadNachaSettings, nachaCheckDigit } from "./rail-nacha.ts";
-import { loadSepaSettings } from "./rail-sepa.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, loadEftSettings, type EftSettings, type EftSettingsResult } from "../payments-core/rail-settings.ts";
+import { loadNachaSettings, nachaCheckDigit } from "../payments-core/rail-nacha.ts";
+import { loadSepaSettings } from "../payments-core/rail-sepa.ts";
 export interface RunBlocker {
   instructionId: string;
   payee: string;

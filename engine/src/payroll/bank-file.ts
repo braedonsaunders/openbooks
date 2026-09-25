@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import { buildCpa005File, type Cpa005Payment } from "../payments/rail-cpa005.ts";
-import { buildNachaFile, type NachaEntry, type NachaSettings } from "../payments/rail-nacha.ts";
-import { buildSepaFile, validateSepaSettings, type SepaSettings } from "../payments/rail-sepa.ts";
-import { buildCemtexFile, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, type CemtexPayment, type CemtexSettings } from "../payments/rail-cemtex.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, type EftSettings } from "../payments/rail-settings.ts";
-import { buildBacsFile, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, type BacsPayment, type BacsSettings } from "../payments/rail-bacs.ts";
-import { buildZenginFile, encodeZenginFile, normalizeBankCode, normalizeBranchCode, normalizeZenginAccount, toZenginKana, validateZenginSettings, type ZenginPayment, type ZenginSettings } from "../payments/rail-zengin.ts";
-import { buildCnab240BbFile, inscricaoTipoFor, isValidBancoCode, isValidContaDv, normalizeAgencia, normalizeContaNumero, normalizeCpfCnpj, validateCnab240BbSettings, type Cnab240BbPayment, type Cnab240BbSettings } from "../payments/rail-cnab240-bb.ts";
+import { buildCpa005File, type Cpa005Payment } from "../payments-core/rail-cpa005.ts";
+import { buildNachaFile, type NachaEntry, type NachaSettings } from "../payments-core/rail-nacha.ts";
+import { buildSepaFile, validateSepaSettings, type SepaSettings } from "../payments-core/rail-sepa.ts";
+import { buildCemtexFile, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, type CemtexPayment, type CemtexSettings } from "../payments-core/rail-cemtex.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, type EftSettings } from "../payments-core/rail-settings.ts";
+import { buildBacsFile, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, type BacsPayment, type BacsSettings } from "../payments-core/rail-bacs.ts";
+import { buildZenginFile, encodeZenginFile, normalizeBankCode, normalizeBranchCode, normalizeZenginAccount, toZenginKana, validateZenginSettings, type ZenginPayment, type ZenginSettings } from "../payments-core/rail-zengin.ts";
+import { buildCnab240BbFile, inscricaoTipoFor, isValidBancoCode, isValidContaDv, normalizeAgencia, normalizeContaNumero, normalizeCpfCnpj, validateCnab240BbSettings, type Cnab240BbPayment, type Cnab240BbSettings } from "../payments-core/rail-cnab240-bb.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
@@ -89,7 +89,7 @@ export interface PayRunBankFileFormatSpec {
  *   and "F" (69–112), filler to 1464.
  * - Appendix 1 (Data Element Dictionary) pp.6–7, ITEM TRACE NUMBER, and
  *   pp.3–4, DESTINATION DATA CENTRE / FILE CREATION NUMBER / LOGICAL RECORD
- *   COUNT — see below and `itemTraceNumber` in engine/src/payments/rail-cpa005.ts.
+ *   COUNT — see below and `itemTraceNumber` in engine/src/payments-core/rail-cpa005.ts.
  * - Transaction codes against *Standard 007* (2026 ed., Appendix I — codes
  *   moved out of Standard 005 in 2016): 200 = Payroll Deposit, 460 = Accounts
  *   Payable.
@@ -104,7 +104,7 @@ export interface PayRunBankFileFormatSpec {
  * (b) the originating direct clearer's 5-digit allocated data centre, (c) the
  * 4-digit file creation number as per the A record, and (d) a 9-digit item
  * sequence number, where (b), (c) and (d) must each be greater than zero or
- * the transaction is REJECTED. `buildCpa005File` (engine/src/payments/rail-cpa005.ts)
+ * the transaction is REJECTED. `buildCpa005File` (engine/src/payments-core/rail-cpa005.ts)
  * now composes exactly that via `itemTraceNumber`, shared with the AP payment
  * files. Both data centres are institution-assigned tenant configuration on
  * the payment bank profile (`dataCentre`, `originatingDataCentre`; validated
@@ -127,7 +127,7 @@ export interface PayRunBankFileFormatSpec {
  *
  * ── SEPA (Eurozone) — ON ──────────────────────────────────────────────────
  * pain.001.001.03 Customer Credit Transfer Initiation (EUR), rendered by the
- * shared AP builder (`buildSepaFile`, engine/src/payments/rail-sepa.ts)
+ * shared AP builder (`buildSepaFile`, engine/src/payments-core/rail-sepa.ts)
  * with the shared ISO 13616 mod-97 IBAN gate — payroll maps its EFT
  * population onto the builder's generic payment rows and adds nothing of its
  * own. The originator triple (debtor name, debtor IBAN, debtor BIC) is tenant
@@ -142,7 +142,7 @@ export interface PayRunBankFileFormatSpec {
  * The Australian direct-credit file (120-character records: descriptive type
  * 0, detail type 1, file-total type 7; BSBs as NNN-NNN; amounts in implied
  * cents; transaction code 53 = Pay), rendered by the shared AP builder
- * (`buildCemtexFile`, engine/src/payments/rail-cemtex.ts) — payroll maps
+ * (`buildCemtexFile`, engine/src/payments-core/rail-cemtex.ts) — payroll maps
  * its EFT population onto the builder's generic payment rows and adds
  * nothing of its own, so AP can originate the same rail later with no fork.
  * The name is `cemtex`, never `aba`: ABA already means the US 9-digit
@@ -160,10 +160,10 @@ export interface PayRunBankFileFormatSpec {
  * digit account number is a named refusal, never a silent drop and never a
  * coerced account (a coerced BSB pays a stranger).
  *
- * All seven writers are the audited AP ones in engine/src/payments/rail-cpa005.ts,
- * engine/src/payments/rail-nacha.ts, engine/src/payments/rail-sepa.ts,
- * engine/src/payments/rail-cemtex.ts, engine/src/payments/rail-bacs.ts,
- * engine/src/payments/rail-zengin.ts and engine/src/payments/rail-cnab240-bb.ts
+ * All seven writers are the audited AP ones in engine/src/payments-core/rail-cpa005.ts,
+ * engine/src/payments-core/rail-nacha.ts, engine/src/payments-core/rail-sepa.ts,
+ * engine/src/payments-core/rail-cemtex.ts, engine/src/payments-core/rail-bacs.ts,
+ * engine/src/payments-core/rail-zengin.ts and engine/src/payments-core/rail-cnab240-bb.ts
  * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`,
  * `buildBacsFile`, `buildZenginFile`, `buildCnab240BbFile`) — payroll deliberately does not fork a
  * second implementation of a fixed-width money format.
@@ -172,7 +172,7 @@ export interface PayRunBankFileFormatSpec {
  * The Bacs Standard 18 Direct Credit submission (80-char VOL1/HDR1/HDR2/UHL1
  * labels, 100-char code-99 credit records, a code-17 debit contra, EOF1/EOF2
  * and the UTL1 totals trailer), rendered by the shared AP builder
- * (`buildBacsFile`, engine/src/payments/rail-bacs.ts) — payroll maps
+ * (`buildBacsFile`, engine/src/payments-core/rail-bacs.ts) — payroll maps
  * its EFT population onto the builder's generic payment rows and adds
  * nothing of its own, so AP can originate the same rail later with no fork.
  * Single-processing-day, single-SUN direct submission only. The formal
@@ -192,7 +192,7 @@ export interface PayRunBankFileFormatSpec {
  * header (1), one 120-byte data record (2) per payment, 120-byte trailer
  * (8) and end record (9), CRLF-terminated, Shift_JIS bytes — rendered by
  * the shared AP builder (`buildZenginFile` + `encodeZenginFile`,
- * engine/src/payments/rail-zengin.ts). Payroll maps its EFT population
+ * engine/src/payments-core/rail-zengin.ts). Payroll maps its EFT population
  * onto the builder's generic payment rows and adds nothing of its own, so
  * AP can originate the same rail later with no fork. Seven bank-published
  * manuals (MUFG BizStation, Chiba, Tajima, Kiraboshi, Tsuruga Shinkin, MUFG
@@ -213,7 +213,7 @@ export interface PayRunBankFileFormatSpec {
  * (header de arquivo, forma-01 / forma-41 lotes with tipo de serviço '30',
  * one Segmento A + Segmento B pair per payment, trailer de lote, trailer de
  * arquivo), rendered by the shared AP builder (`buildCnab240BbFile`,
- * engine/src/payments/rail-cnab240-bb.ts) — payroll maps its EFT population
+ * engine/src/payments-core/rail-cnab240-bb.ts) — payroll maps its EFT population
  * onto the builder's generic payment rows and adds nothing of its own, so
  * AP can originate the same rail later with no fork. CNAB 240 is
  * bank-specific in places (BB `convênio + '0126'` vs Bradesco's 20-char
@@ -276,7 +276,7 @@ export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankF
     extension: "txt",
     // Shift_JIS, never UTF-8: text fields are half-width katakana and the
     // bank reads Shift_JIS bytes (see `buildZenginFile` /
-    // `encodeZenginFile`, engine/src/payments/rail-zengin.ts).
+    // `encodeZenginFile`, engine/src/payments-core/rail-zengin.ts).
     contentType: "text/plain; charset=Shift_JIS",
   },
   cnab240: {
@@ -1970,7 +1970,7 @@ function buildCpa005Payroll(
 
 /**
  * Render payroll credits through the SHARED AP pain.001 builder
- * (`buildSepaFile`, engine/src/payments/rail-sepa.ts) — the same
+ * (`buildSepaFile`, engine/src/payments-core/rail-sepa.ts) — the same
  * function, the same IBAN mod-97 gate, the same XML. Payroll only maps its
  * own population onto the builder's generic payment rows; there is no second
  * SEPA implementation here.
@@ -2015,7 +2015,7 @@ function buildSepaPayroll(
 
 /**
  * Render payroll credits through the SHARED AP Cemtex builder
- * (`buildCemtexFile`, engine/src/payments/rail-cemtex.ts) — the same
+ * (`buildCemtexFile`, engine/src/payments-core/rail-cemtex.ts) — the same
  * function, the same BSB shape gate, the same 120-character records. Payroll
  * only maps its own population onto the builder's generic payment rows;
  * there is no second Cemtex implementation here.
@@ -2055,7 +2055,7 @@ function buildCemtexPayroll(
 
 /**
  * Render payroll credits through the SHARED AP Bacs builder (`buildBacsFile`,
- * engine/src/payments/rail-bacs.ts) — the same function, the same
+ * engine/src/payments-core/rail-bacs.ts) — the same function, the same
  * sort-code shape gate, the same 100-character credit records. Payroll only
  * maps its own population onto the builder's generic payment rows; there is
  * no second Standard 18 implementation here.
@@ -2109,7 +2109,7 @@ function buildBacsPayroll(
 
 /**
  * Render payroll credits through the SHARED AP Zengin builder
- * (`buildZenginFile`, engine/src/payments/rail-zengin.ts) — the same
+ * (`buildZenginFile`, engine/src/payments-core/rail-zengin.ts) — the same
  * function, the same bank/branch shape gates, the same 120-byte records.
  * Payroll only maps its own population onto the builder's generic payment
  * rows; there is no second Zengin implementation here.
@@ -2165,7 +2165,7 @@ function buildZenginPayroll(
 
 /**
  * Render payroll credits through the SHARED AP CNAB 240 builder
- * (`buildCnab240BbFile`, engine/src/payments/rail-cnab240-bb.ts) — the same
+ * (`buildCnab240BbFile`, engine/src/payments-core/rail-cnab240-bb.ts) — the same
  * function, the same agência/conta shape gates, the same 240-character
  * records. Payroll only maps its own population onto the builder's generic
  * payment rows; there is no second CNAB implementation here.

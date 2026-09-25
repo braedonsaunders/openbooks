@@ -4,7 +4,7 @@ import { toUnits } from "../money/money.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
-import { PaymentError, PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
+import { PaymentError, PaymentRunPostingClaimFencedError } from "../payments-core/payment-errors.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { paymentRunComplianceDecisions } from "./run-readiness.ts";
 import { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";

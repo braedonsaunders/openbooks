@@ -47,7 +47,7 @@ export function normalizeGbAccountNumber(value: string): string | null {
 // 6-digit Service User Number and the originating sort code, account and
 // account name — and each is validated to its channel shape below. The file
 // LAYOUT they populate is transcribed in `buildBacsFile`
-// (engine/src/payments/rail-bacs.ts) with per-field source notes.
+// (engine/src/payments-core/rail-bacs.ts) with per-field source notes.
 export interface BacsSettings {
   /** 6-digit Service User Number assigned by the bank (VOL1 owner + HDR1 SUN). */
   serviceUserNumber: string;

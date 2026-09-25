@@ -22,7 +22,7 @@ import {
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { businessTimeZone, formatInZone } from "../platform/business-date.ts";
-import { lowestFreeNachaModifier, nachaModifierExhaustionRefusal } from "../payments/rail-nacha.ts";
+import { lowestFreeNachaModifier, nachaModifierExhaustionRefusal } from "../payments-core/rail-nacha.ts";
 
 /**
  * Payroll direct-deposit artifacts — the lifecycle.

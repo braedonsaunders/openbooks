@@ -8,7 +8,7 @@ import {
   generatePaymentFileArtifact,
   recordPaymentFileDownload,
 } from "./operations.ts";
-import { encryptAccountNumber } from "./rail-settings.ts";
+import { encryptAccountNumber } from "../payments-core/rail-settings.ts";
 import { loadCpa005RunFile, loadNachaRunFile, loadSepaRunFile } from "./run-files.ts";
 import { paymentRunReadiness, type RailBankMethod } from "./run-readiness.ts";
 import { sealJson } from "../platform/secrets.ts";

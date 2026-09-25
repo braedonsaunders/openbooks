@@ -10,7 +10,7 @@ import { recordPayRunPayment } from "./payment.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
 import { postPaymentWithApplications } from "../payments/payment-posting.ts";
-import { PaymentError } from "../payments/payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { reversePaymentForReturn } from "../payments/payment-return.ts";
 import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";

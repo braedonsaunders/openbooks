@@ -9,7 +9,7 @@ import { evaluateBillsForRelease, recordReleaseCheck } from "../compliance/compl
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { allocationsMatchApprovedSnapshot, canonicalSettlementRate, carryingAmountForSettlement, realizedFxControlAdjustment, validateAllocationInputs, validateSettlementEvidence, type AllocationInput, type SettlementRateSource } from "./settlement-policy.ts";
 import { PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";

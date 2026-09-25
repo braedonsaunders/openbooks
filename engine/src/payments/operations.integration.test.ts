@@ -10,7 +10,7 @@ import {
   recordPaymentSettlement,
   updatePaymentBankProfile,
 } from "./operations.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);

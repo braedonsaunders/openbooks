@@ -11,9 +11,9 @@ import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { businessTimeZone, businessToday, formatInZone } from "../platform/business-date.ts";
 import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
-import { PaymentError } from "./payment-errors.ts";
-import { assertSafePaymentFilename } from "./payment-filenames.ts";
-import { decryptAccountNumber, isValidBic, isValidIban } from "./rail-settings.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
+import { assertSafePaymentFilename } from "../payments-core/payment-filenames.ts";
+import { decryptAccountNumber, isValidBic, isValidIban } from "../payments-core/rail-settings.ts";
 import { assertPaymentPartiesInScope, lockRunBankEvidence } from "./run-readiness.ts";
 import {
   lowestFreeNachaModifier,
@@ -21,8 +21,8 @@ import {
   nachaModifierExhaustionRefusal,
   validateNachaSettings,
   type NachaSettings,
-} from "./rail-nacha.ts";
-import { validateSepaSettings, type SepaSettings } from "./rail-sepa.ts";
+} from "../payments-core/rail-nacha.ts";
+import { validateSepaSettings, type SepaSettings } from "../payments-core/rail-sepa.ts";
 import { loadRunFile, type RunFileOptions } from "./run-files.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
 import { computeNextRunAt, runScript } from "../scripting/scripting.ts";

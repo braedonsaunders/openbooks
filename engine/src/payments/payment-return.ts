@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 /** Reverse a posted payment after a bank return and reopen its applications. */
 export async function reversePaymentForReturn(
   paymentDocumentId: string,

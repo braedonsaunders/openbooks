@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { createDirectDebitRun } from "./direct-debit.ts";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 

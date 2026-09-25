@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
+import { PaymentRunPostingClaimFencedError } from "../payments-core/payment-errors.ts";
 export type PostingClaim = { token: string };
 
 /**

@@ -12,7 +12,7 @@ import {
 import { cancelPaymentRun, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { createPaymentRun } from "./run-creation.ts";
-import { PaymentError, PaymentRevisionConflictError } from "./payment-errors.ts";
+import { PaymentError, PaymentRevisionConflictError } from "../payments-core/payment-errors.ts";
 import { postPaymentRun } from "./run-posting.ts";
 import { markAutomaticRemittanceEnqueueFailed, settleAutomaticRemittanceEnqueueError } from "./run-remittance.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";

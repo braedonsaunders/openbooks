@@ -1,7 +1,7 @@
 import { paymentRunScopeSql } from '@/lib/payment-run-access'
 import 'server-only'
 import { NextResponse } from 'next/server'
-import { PaymentError } from "@openbooks/engine/src/payments/payment-errors.ts";
+import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { sql } from 'drizzle-orm'

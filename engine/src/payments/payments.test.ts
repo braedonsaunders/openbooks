@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCpa005File, type Cpa005Run } from "./rail-cpa005.ts";
-import { buildNachaFile, lowestFreeNachaModifier, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "./rail-nacha.ts";
-import { buildSepaFile } from "./rail-sepa.ts";
+import { buildCpa005File, type Cpa005Run } from "../payments-core/rail-cpa005.ts";
+import { buildNachaFile, lowestFreeNachaModifier, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "../payments-core/rail-nacha.ts";
+import { buildSepaFile } from "../payments-core/rail-sepa.ts";
 import { carryingAmountForSettlement, persistPaymentFxRate, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
-import { type EftSettings, validateEftSettings } from "./rail-settings.ts";
-import { type NachaSettings } from "./rail-nacha.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { type EftSettings, validateEftSettings } from "../payments-core/rail-settings.ts";
+import { type NachaSettings } from "../payments-core/rail-nacha.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 
 test("payment FX rates share the positive, invertible numeric storage domain", () => {
   assert.equal(persistPaymentFxRate("1.25"), "1.2500000000");

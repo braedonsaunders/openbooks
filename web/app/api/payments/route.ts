@@ -6,7 +6,7 @@ import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../lib/api
 import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { PaymentError } from '@openbooks/engine/src/payments/payment-errors.ts'
+import { PaymentError } from '@openbooks/engine/src/payments-core/payment-errors.ts'
 import { PAYMENT_KIND_SIDE, type PaymentKind } from '@openbooks/engine/src/payments/payment-contracts.ts'
 import {
   validateAllocationInputs,

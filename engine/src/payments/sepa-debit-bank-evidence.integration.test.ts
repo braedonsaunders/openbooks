@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { createDirectDebitRun } from "./direct-debit.ts";
 import { generatePaymentFileArtifact, submitPaymentRun } from "./operations.ts";
 import { paymentRunReadiness } from "./run-readiness.ts";
-import { encryptAccountNumber } from "./rail-settings.ts";
+import { encryptAccountNumber } from "../payments-core/rail-settings.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";

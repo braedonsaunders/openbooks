@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { decidePaymentRun, runDuePaymentSchedules, submitPaymentRun } from "./operations.ts";
 import { createPaymentRun } from "./run-creation.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { cancelPaymentRun } from "./run-cancellation.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {

@@ -130,7 +130,7 @@ export function toZenginKana(value: string): string | null {
 // 10-digit 委託者コード, the kana 委託者名, and the originating bank/branch/
 // 種目/account — and each is validated to its channel shape below. The file
 // LAYOUT they populate is transcribed in `buildZenginFile`
-// (engine/src/payments/rail-zengin.ts) with per-field source notes.
+// (engine/src/payments-core/rail-zengin.ts) with per-field source notes.
 export interface ZenginSettings {
   /** 10-digit client code (委託者コード) assigned by the bank. */
   clientCode: string;

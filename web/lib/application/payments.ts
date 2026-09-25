@@ -5,7 +5,7 @@ import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
 import { loadPaymentDocument } from "@openbooks/engine/src/payments/payment-queries.ts";
-import { PaymentError } from "@openbooks/engine/src/payments/payment-errors.ts";
+import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
 import { type AllocationInput } from "@openbooks/engine/src/payments/settlement-policy.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";

@@ -325,11 +325,19 @@
         "ledger",
         "money",
         "organization",
+        "payments-core",
         "periods",
         "platform",
         "projects",
         "records",
         "scripting"
+      ]
+    },
+    "payments-core": {
+      "description": "Payment rails and file formats (BACS, SEPA, NACHA, Zengin, CNAB, CPA005, CEMTEX), rail settings, PaymentError and safe payment filenames. No ledger posting.",
+      "dependsOn": [
+        "money",
+        "platform"
       ]
     },
     "payroll": {
@@ -339,7 +347,7 @@
         "journal",
         "money",
         "organization",
-        "payments",
+        "payments-core",
         "periods",
         "platform",
         "projects",
@@ -503,6 +511,7 @@
         "banking",
         "organization",
         "payments",
+        "payments-core",
         "platform"
       ]
     },
