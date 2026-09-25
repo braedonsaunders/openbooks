@@ -5,23 +5,19 @@ import { db } from "../platform/db.ts";
 import { loadCatalog } from "./catalog.ts";
 import { DEFAULT_POLICIES, type MaskTransform } from "./masking.ts";
 
-// D2b: table-driven PII inventory. The clone engine copies every column of
-// every cloned table unless a masking policy rewrites it, so a new
-// sensitive column defaults to a verbatim copy into every masked sandbox.
-// This test derives the sensitive surface — every text/varchar/char/bytea/
-// json/jsonb column of every cloned table, straight from the catalog the
-// clone itself uses — and fails unless each column is either masked by a
-// DEFAULT_POLICIES entry or explicitly allow-listed below as non-personal.
+// D2b: table-driven PII inventory. The clone copies every column unless a
+// masking policy rewrites it, so a new sensitive column defaults to a
+// verbatim copy into every masked sandbox. This test derives the sensitive
+// surface — every text/varchar/char/bytea/json/jsonb column of every cloned
+// table, from the catalog the clone itself uses — and fails unless each is
+// masked by DEFAULT_POLICIES or allow-listed below as non-personal.
 //
-// Updating this file: a failure names the exact table.column. If it is a
-// person's identity, contact point, credential, secret, token, location, or
-// person-assessing prose, add a masking policy in masking.ts (preferred).
-// If it is genuinely non-personal, add it to ALLOW_LISTED_NON_PERSONAL with
-// its neighbours. The allow-list may only shrink: the hygiene test below
-// fails on entries that no longer correspond to a real, unmasked column, so
-// masking a column forces its entry's removal and speculative entries are
-// refused. No skip guard: a DB-owned test that self-skips turns CI red, so
-// this fails loud without a database instead of skipping silently.
+// Updating this file: a failure names the exact table.column. Personal data
+// (identity, contact, credential, secret, token, location, person-assessing
+// prose) gets a masking policy in masking.ts; genuinely non-personal data
+// joins ALLOW_LISTED_NON_PERSONAL with its neighbours. The allow-list may
+// only shrink (the hygiene phase fails stale entries). No skip guard: this
+// fails loud without a database instead of skipping silently.
 
 /** udt_name values counted as sensitive (matches the clone's ColumnInfo). */
 const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
@@ -35,43 +31,39 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
 
 /**
  * Columns the clone construction itself neutralizes for masked sandboxes,
- * independent of any policy (pointers at clone.ts):
- * - every table's json/jsonb `custom` column is nulled for masked clones
- *   (tenant-authored payload that may hide PII without a named column);
- * - file_blobs is not copied at all for masked clones;
- * - files/file_versions storage_kind carries the tombstone, never 'db'/'s3';
- * - flow_runs.occurrence_key is cleared on every copy (OM-13-CLONE: a global
- *   dedup unique the clone must not adopt), so it never reaches any sandbox.
+ * independent of any policy (pointers at clone.ts): every table's json/jsonb
+ * `custom` column is nulled (tenant-authored payload that may hide PII
+ * without a named column), plus the table.column pairs below.
  */
+const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
+  "file_blobs.bytes", // not copied at all for masked clones
+  "files.storage_kind", // tombstone carrier, never 'db'/'s3'
+  "file_versions.storage_kind",
+  "flow_runs.occurrence_key", // cleared on every copy (OM-13-CLONE global dedup)
+]);
+
 function isCoveredByConstruction(table: string, column: string, udtName: string): boolean {
   if (column === "custom" && (udtName === "json" || udtName === "jsonb")) return true;
-  if (table === "file_blobs" && column === "bytes") return true;
-  if ((table === "files" || table === "file_versions") && column === "storage_kind") return true;
-  if (table === "flow_runs" && column === "occurrence_key") return true;
-  return false;
+  return CONSTRUCTION_COVERED.has(`${table}.${column}`);
 }
 
 /**
  * Explicitly non-personal columns, as "table.column". Curated 2026-09-23
  * against the full derived surface; every entry was reviewed by family:
- * - business record prose (memos, descriptions, notes on transactions,
- *   close/run findings, dunning bodies, CRM opportunity text): the sandbox
- *   is a business copy and structured identity columns are masked at the
- *   source, so prose about companies and transactions stays;
+ * - business record prose (memos, descriptions, notes, findings, dunning
+ *   bodies, CRM text): about companies and transactions, never people;
  * - codes, statuses, kinds, types, units, currencies, countries, regions,
- *   languages, timezones: enumerations and coarse jurisdiction, never identity;
+ *   languages, timezones: enumerations and coarse jurisdiction;
  * - names of business objects (accounts, books, periods, rules, templates,
- *   policies, schedules, reports, assets, projects): configuration, not people;
+ *   policies, schedules, reports, assets, projects): configuration;
  * - one-way hashes and digests (content/sha256, fingerprints, definition
- *   hashes, salted scrypt PIN hashes, random-token hashes): unusable without
- *   the preimage, kept so integrity checks stay testable;
+ *   hashes, scrypt PIN hashes, token hashes): unusable without the preimage;
  * - sealed ciphertext (token_sealed) and null-by-bootstrap plaintexts:
  *   unusable without the data key;
- * - credential columns on connections/bank feeds/providers/bank profiles:
- *   neuterSandbox nulls them on every create and refresh, so the allow-list
- *   records configuration shape, never live secrets;
- * - job functions (contacts.title/role), labels ("Head office"), brand
- *   networks ("Visa"): paired with faked names they identify nobody.
+ * - credential columns on connections/feeds/providers: neuterSandbox nulls
+ *   them on every create and refresh, so the list records shape, not secrets;
+ * - job functions, labels ("Head office"), brand networks ("Visa"): paired
+ *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "account_group_members.dimension",
@@ -1245,6 +1237,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pay_applications.kind",
   "pay_applications.memo",
   "pay_applications.status",
+  "pay_component_earning_classifications.statutory_reporting_category",
   "pay_component_earning_classifications.supplemental_wage_category",
   "pay_components.basis",
   "pay_components.code",
@@ -1290,6 +1283,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pay_stub_lines.kind",
   "pay_stub_lines.liability_account_evidence",
   "pay_stub_lines.liability_account_source",
+  "pay_stub_lines.statutory_reporting_code",
   "pay_stubs.cheque_number",
   "pay_stubs.country",
   "pay_stubs.country_source",
@@ -1357,6 +1351,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payment_runs.currency",
   "payment_runs.direction",
   "payment_runs.exported_file_ref",
+  "payment_runs.file_id_modifier",
   "payment_runs.method",
   "payment_runs.purpose",
   "payment_runs.rejection_reason",
@@ -1418,6 +1413,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payroll_holidays.pack_key",
   "payroll_holidays.rule_kind",
   "payroll_opening_program_bases.program_key",
+  "payroll_opening_sui_wages.state",
   "payroll_parallel_comparisons.blocked_reason",
   "payroll_parallel_comparisons.status",
   "payroll_parallel_comparisons.tolerances_applied",
@@ -1440,6 +1436,13 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payroll_prior_registers.source_file_name",
   "payroll_prior_registers.unmapped_columns",
   "payroll_prior_stubs.employee_label",
+  "payroll_roe_component_classifications.block",
+  "payroll_roe_component_classifications.category_code",
+  "payroll_roe_component_classifications.change_reason",
+  "payroll_roe_separation_events.change_reason",
+  "payroll_roe_separation_events.status",
+  "payroll_roe_separation_payments.change_reason",
+  "payroll_roe_separation_payments.payment_status",
   "payroll_retro_allocations.description",
   "payroll_retro_settlements.quantified_source_snapshot",
   "payroll_retro_settlements.reasons",
@@ -1855,6 +1858,10 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "time_entries.rejection_reason",
   "time_entries.status",
   "time_entries.wage_currency",
+  "time_entries.work_region",
+  "time_entries.work_region_reason",
+  "time_entries.work_region_source",
+  "time_entries.work_subregion",
   "time_types.classification",
   "time_types.name",
   "timesheet_weeks.rejection_reason",
@@ -1930,7 +1937,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "worker_employments.service_start_provenance",
 ]);
 
-const LEGAL_TRANSFORMS: ReadonlySet<string> = new Set<string>([
+const LEGAL_TRANSFORMS: ReadonlySet<MaskTransform> = new Set<MaskTransform>([
   "faker_name",
   "faker_email",
   "faker_phone",
@@ -1952,11 +1959,13 @@ async function clonedSensitiveColumns(): Promise<{ table: string; column: string
   return out;
 }
 
-test("every sensitive column of every cloned table is masked or explicitly allow-listed", async () => {
+test("every sensitive column of every cloned table is masked or allow-listed, and the allow-list names only live unmasked columns", async () => {
   const masked = new Set(DEFAULT_POLICIES.map((p) => `${p.tableName}.${p.columnName}`));
+  const live = new Map<string, string>();
   const offenders: string[] = [];
   for (const col of await clonedSensitiveColumns()) {
     const key = `${col.table}.${col.column}`;
+    live.set(key, col.udtName);
     if (masked.has(key)) continue;
     if (isCoveredByConstruction(col.table, col.column, col.udtName)) continue;
     if (ALLOW_LISTED_NON_PERSONAL.has(key)) continue;
@@ -1969,14 +1978,6 @@ test("every sensitive column of every cloned table is masked or explicitly allow
       `with neither a masking policy nor an allow-list entry (showing first 20): ` +
       `${offenders.slice(0, 20).join(", ")}`,
   );
-});
-
-test("the allow-list names only real, currently-unmasked columns", async () => {
-  const masked = new Set(DEFAULT_POLICIES.map((p) => `${p.tableName}.${p.columnName}`));
-  const live = new Map<string, string>();
-  for (const col of await clonedSensitiveColumns()) {
-    live.set(`${col.table}.${col.column}`, col.udtName);
-  }
   const stale: string[] = [];
   for (const key of ALLOW_LISTED_NON_PERSONAL) {
     const udtName = live.get(key);
@@ -2008,8 +2009,7 @@ test("every masking policy names a real schema column with a legal transform", a
     if (!schemaCols.has(`${p.tableName}.${p.columnName}`)) {
       bad.push(`${p.tableName}.${p.columnName} (no such column — the policy silently does nothing)`);
     }
-    const transform: string = (p.transform as MaskTransform) as string;
-    if (!LEGAL_TRANSFORMS.has(transform)) bad.push(`${p.tableName}.${p.columnName} (unknown transform ${transform})`);
+    if (!LEGAL_TRANSFORMS.has(p.transform)) bad.push(`${p.tableName}.${p.columnName} (unknown transform ${p.transform})`);
   }
   assert.deepEqual(bad, [], `masking policies that never fire: ${bad.join(", ")}`);
 });
