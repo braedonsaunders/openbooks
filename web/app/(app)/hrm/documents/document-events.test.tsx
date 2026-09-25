@@ -72,6 +72,9 @@ function drawerWith(events: { kind: string; recordedAt: string }[], canManage = 
       signers: [],
       events: events.map((e) => ({ ...e, actor: null })),
     },
+    // I4-webui-173: the loader always carries the file-version list
+    // (empty when the document has no file); the drawer reads it direct.
+    versions: [],
     signerNames: {},
     missingDetail: null,
     labels,
@@ -165,13 +168,16 @@ test('retention actions render their translated action label', async () => {
   }
 })
 
-test('F3-38: a sent document offers Send, Remind, Hold and Void to the manage grant', async () => {
+test('F3-38: a sent document offers Remind, Hold and Void to the manage grant', async () => {
   const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02' }], true))
   try {
     const buttons = [...m.doc.querySelectorAll('button')].map((b) => b.textContent ?? '')
-    for (const label of ['Send', 'Remind', 'Hold', 'Void']) {
+    // I4-webui-168: the service accepts Send only on drafts, so a sent
+    // document offers Remind, Hold and Void — never Send again.
+    for (const label of ['Remind', 'Hold', 'Void']) {
       assert.ok(buttons.includes(label), `${label} renders for the manage grant`)
     }
+    assert.ok(!buttons.includes('Send'), 'Send never re-renders on a sent document')
   } finally {
     await m.unmount()
   }
