@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import type { PoolClient } from "pg";
-import { db, pool, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -150,17 +149,17 @@ async function tableCounts(orgId: string): Promise<TableCounts> {
 
 /** Tenant-scoped read through a raw RLS session: no bypass, explicit org. */
 async function scopedCount(orgId: string, table: string): Promise<number> {
-  const client: PoolClient = await pool.connect();
-  try {
-    await client.query("begin");
-    await client.query("select set_config('app.bypass_rls', 'off', true)");
-    await client.query("select set_config('app.current_org', $1, true)", [orgId]);
-    const result = await client.query(`select count(*)::int as n from ${table}`);
-    await client.query("rollback");
-    return (result.rows[0] as { n: number }).n;
-  } finally {
-    client.release();
-  }
+  // A tenant-scoped read through the public boundary: withOrgTransaction
+  // pins an app-role client with the org GUCs, so RLS actually applies.
+  // pool.connect() must not be used here — in this process it resolves to
+  // the bypass pool (the test bypass is ambient), whose superuser sessions
+  // ignore RLS and would count every org's rows as a false "leak".
+  return withOrg(orgId, async () => {
+    const result = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from ${sql.identifier(table)}`,
+    );
+    return result.rows[0]!.n;
+  });
 }
 
 function onlyPerson(report: EmploymentMigrationReport): PersonMigrationResult {
