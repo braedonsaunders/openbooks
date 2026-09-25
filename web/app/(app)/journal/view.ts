@@ -135,7 +135,7 @@ export async function loadJournal(
             const options = await subsidiaryOptions()
             return allowedSubsidiaries ? options.filter((option) => allowedSubsidiaries.has(option.id)) : options
           }),
-          customSegmentOptions(authz.user.orgId),
+          customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
           // Unsaved-create defaults: today's date plus the home subsidiary
           // (root for unrestricted callers, first allowed entity otherwise).
           // Read-only lookups — opening the drawer still writes nothing.
