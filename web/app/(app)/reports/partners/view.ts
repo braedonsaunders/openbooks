@@ -221,7 +221,7 @@ export async function loadPartners(
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
-    exportParams: { ...stringParams(sp), side: kind },
+    exportParams: { ...stringParams(sp), kind },
     subsidiaries: subView?.picker ?? [],
     currencyBasisBlocked,
     currencyBasisReady: currencyBasisBlocked === null,

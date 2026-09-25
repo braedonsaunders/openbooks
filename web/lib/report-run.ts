@@ -340,7 +340,13 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     case 'trial-balance':
       return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId, detailBookId), asOf, t) }
     case 'partners': {
-      const s = (p.get('side') === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
+      // `kind` is the one partners param end to end (seeded Receivables /
+      // Payables declarations, schedule snapshots, the page toggle and
+      // statementPageHref all carry kind). `side` stays as a legacy read so
+      // a previously exported URL keeps its meaning instead of silently
+      // flipping to payables.
+      const raw = p.get('kind') ?? p.get('side')
+      const s = (raw === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
       return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims), t) }
     }
     case 'aging': {
