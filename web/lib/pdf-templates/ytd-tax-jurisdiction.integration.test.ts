@@ -83,6 +83,7 @@ interface CaFixture {
   orgId: string
   actorId: string
   scheduleId: string
+  subsidiaryId: string
 }
 
 async function caPayrollOrg(): Promise<CaFixture> {
@@ -115,13 +116,20 @@ async function caPayrollOrg(): Promise<CaFixture> {
   // The health services fund is an employer contribution the QC employer always
   // owes, so it needs a liability account before any QC employee can calculate.
   await setPackSlotAccount(org.orgId, actorId, 'CA', 'hsf', craPayable)
+  // Ontario Employer health tax is a refuse-when-unconfigured slot: a zero
+  // rate keeps the accrual at nil while satisfying the readiness gate.
+  await db.execute(sql`
+    insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                         rate_values, created_by, updated_by)
+    values (${org.orgId}, 'CA', 'ca_eht', 'ON', 2026, '{"rate":"0","annualExemption":"0"}',
+            ${actorId}, ${actorId})`)
   const scheduleId = randomUUID()
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                pay_date_offset_days, is_active, created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`)
-  return { orgId: org.orgId, actorId, scheduleId }
+  return { orgId: org.orgId, actorId, scheduleId, subsidiaryId: org.subsidiaryId }
   })
 }
 
@@ -134,17 +142,25 @@ async function caEmployee(fx: CaFixture, name: string, province: string): Promis
   await db.execute(sql`
     insert into employee_roles (id, org_id, party_id)
     values (${randomUUID()}, ${fx.orgId}, ${id})`)
+  const employmentId = randomUUID()
+  await db.execute(sql`
+    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
+    values (${employmentId}, ${fx.orgId}, ${id}, ${fx.subsidiaryId})`)
+  await db.execute(sql`
+    insert into worker_employment_versions (org_id, employment_id, version_no, status,
+                                            effective_from, effective_to, recorded_at)
+    values (${fx.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null::date, now())`)
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                   effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', 2080, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`)
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_percent, vacation_method, is_active,
-                                           created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'CA', ${province},
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, federal_claim_code,
+                                           provincial_claim_code, vacation_percent, vacation_method,
+                                           is_active, created_by, updated_by)
+    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'CA', ${province},
             'hourly', 1, 1, '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`)
   for (const day of ['2026-07-06', '2026-07-08', '2026-07-10', '2026-07-14', '2026-07-20', '2026-07-22', '2026-07-24', '2026-07-28']) {
     await db.execute(sql`
@@ -317,16 +333,33 @@ test('a US state-tax stub prints FIT plus state withholding in YTD tax', { skip:
         values (${employee}, ${org.orgId}, 'person', 'Cali Coder', ${subsidiaryId}, true, '{}'::jsonb)`)
       await db.execute(sql`
         insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employee})`)
+      const usEmployment = randomUUID()
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
+        values (${usEmployment}, ${org.orgId}, ${employee}, ${subsidiaryId})`)
+      await db.execute(sql`
+        insert into worker_employment_versions (org_id, employment_id, version_no, status,
+                                                effective_from, effective_to, recorded_at)
+        values (${org.orgId}, ${usEmployment}, 1, 'active', '2020-01-01'::date, null::date, now())`)
+      // Federal withholding must know U.S. person vs nonresident alien (Pub.
+      // 15-T); state the U.S.-person answer like the single filing status.
+      await db.execute(sql`
+        insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                               region, sub_region, answers, effective_from,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employee}, 'US', 'us_w4_tax_residency', null, null,
+                '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+                ${actorId}, ${actorId})`)
       await db.execute(sql`
         insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                       effective_from, is_active, created_by, updated_by)
         values (${org.orgId}, ${employee}, 'USD', '52000', 'year', 2080, '2026-01-01', true,
                 ${actorId}, ${actorId})`)
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                               province, pay_basis, filing_status,
-                                               is_active, created_by, updated_by)
-        values (${org.orgId}, ${employee}, ${scheduleId}, 'US', 'CA',
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id,
+                                               pay_schedule_id, country, province, pay_basis,
+                                               filing_status, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employee}, ${usEmployment}, ${scheduleId}, 'US', 'CA',
                 'salary', 'single', true, ${actorId}, ${actorId})`)
       // SUI is experience-rated, so a live-but-unconfigured us_sui slot refuses
       // this employee by name at calculate. This test is about what a printed
@@ -338,6 +371,13 @@ test('a US state-tax stub prints FIT plus state withholding in YTD tax', { skip:
                                              tax_year, rate_values, created_by, updated_by)
         values (${org.orgId}, 'US', 'us_sui', 'CA', null, 2026,
                 '{"rate": "0.034", "wageBase": "7000.00"}'::jsonb, ${actorId}, ${actorId})`)
+      // ETT turns on the employer's UI reserve balance: zero or below is
+      // exempt, which is what this income-tax-counting test needs.
+      await db.execute(sql`
+        insert into payroll_statutory_rates (org_id, country, rate_key, region, filing_account_id,
+                                             tax_year, rate_values, created_by, updated_by)
+        values (${org.orgId}, 'US', 'us_ca_ett', 'CA', null, 2026,
+                '{"reserveBalance": "0"}'::jsonb, ${actorId}, ${actorId})`)
     })
 
     const run = await withOrgContext(org.orgId, () => createPayRun({
