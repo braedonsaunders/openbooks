@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useId, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -34,6 +35,7 @@ export function GenerateDialog({
   cancelLabel: string
   closeHref: string
 }) {
+  const t = useTranslations('hrm.compliance')
   const router = useRouter()
   const params = useSearchParams()
   const fieldId = useId()
@@ -57,7 +59,7 @@ export function GenerateDialog({
         body: JSON.stringify({ projectId, weekEnding, formatKey }),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, generateLabel))
+        toast.error(await readApiErrorMessage(res, t('actionFailed')))
         return
       }
       close()
