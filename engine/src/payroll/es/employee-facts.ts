@@ -71,6 +71,52 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
           + "trio above), declare the certificate or profile-column producer here.",
       },
     },
+    {
+      key: "es_contrato_duracion_dias",
+      kind: "integer",
+      min: 1,
+      label: "Duración efectiva del contrato temporal (días naturales)",
+      refusalReason:
+        "Art. 28 prices only fixed-term contracts under thirty days, so a temporal contract needs its "
+        + "effective duration in days before the €33.62 charge can be evaluated.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Read only for temporal contracts; indefinite contracts never need it. Absent is refused at "
+          + "calculation, never defaulted.",
+      },
+    },
+    {
+      key: "es_contrato_tipo",
+      kind: "choice",
+      choices: ["ordinario", "sustitucion", "formacion", "agrario", "hogar", "minero", "artista"],
+      label: "Clase de contrato temporal (art. 28.2)",
+      refusalReason:
+        "Art. 28.2 excludes sustitución, formación, agrario, hogar, minería del carbón and artistas; an "
+        + "unknown class cannot be priced or excluded, so it refuses by name.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Read only for temporal contracts. Ordinario is the chargeable class; every other value names "
+          + "an art. 28.2 exclusion.",
+      },
+    },
+    {
+      key: "es_contrato_fin_periodo",
+      kind: "flag",
+      label: "El contrato temporal finaliza en este periodo",
+      refusalReason:
+        "The €33.62 charge accrues at termination; absent is accepted as not ending this period.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Read only for temporal contracts. Only a present-but-foreign value refuses; absent means the "
+          + "contract continues and no charge accrues.",
+      },
+    },
 ];
 
 registerEmployeeFacts("ES", ES_EMPLOYEE_FACTS);

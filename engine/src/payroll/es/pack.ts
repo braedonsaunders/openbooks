@@ -169,6 +169,10 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         // DA 61ª activity tariff (es_atep_rate employer fact) on the
         // professional base. Emitted only when the tariff is on file.
         { code: "SS-ATEP-ER", name: "AT/EP (employer)", systemKey: "ss_atep_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "external" },
+        // Art. 28.1: €33.62 employer charge at termination of a fixed-term
+        // contract under thirty days (art. 28.2 exclusions screened first).
+        // Emitted only when the screened charge applies.
+        { code: "SS-CORTA-ER", name: "Cotización adicional contratos corta duración (employer)", systemKey: "ss_corta_er", kind: "employer_contribution", sequence: 216, assessedOn: "earnings", remittance: "external" },
       ],
     },
   ],

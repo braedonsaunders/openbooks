@@ -55,6 +55,12 @@ export interface EsSeguridadSocialInput {
   readonly horasExtraResto?: string;
   /** Tenant-entered AT/EP tariff rate (decimal fraction); absent = no line. */
   readonly atEpRate?: string | null;
+  /**
+   * Art. 28 short fixed-term contract ending this period, already screened
+   * for duration (< 30 days) and exclusions by the caller; true accrues the
+   * fixed €33.62 employer charge.
+   */
+  readonly cortaDuracionAplicable?: boolean;
 }
 
 export interface EsSeguridadSocialResult {
@@ -79,6 +85,8 @@ export interface EsSeguridadSocialResult {
   readonly horasExtraRestoEmpresa: string;
   /** Absent (null) when no tenant AT/EP rate was entered. */
   readonly atEpEmpresa: string | null;
+  /** Fixed art. 28 charge, present only when cortaDuracionAplicable. */
+  readonly cortaDuracionEmpresa: string | null;
   /** Total employee share (feeds IRPF COTIZACIONES). */
   readonly trabajadorTotal: string;
   readonly empresaTotal: string;
@@ -176,10 +184,14 @@ export function calculateEsSeguridadSocial2026(
     atEp = roundDiv(baseProf * rate, 10000n * 100n) * 100n;
   }
 
+  // Orden PJC/297/2026 art. 28.1: fixed-term contracts under thirty days owe
+  // a €33.62 employer charge at termination (exclusions screened by caller).
+  const cortaDuracion = input.cortaDuracionAplicable === true ? U("33.62") : null;
+
   const trabajadorTotal = cc.trabajador + des.trabajador + form.trabajador + mei.trabajador
     + solEe + hefmEe + herEe;
   const empresaTotal = cc.empresa + des.empresa + fogasa + form.empresa + mei.empresa
-    + solEr + hefmEr + herEr + (atEp ?? 0n);
+    + solEr + hefmEr + herEr + (atEp ?? 0n) + (cortaDuracion ?? 0n);
 
   return {
     baseContingenciasComunes: D(ccBase),
@@ -200,6 +212,7 @@ export function calculateEsSeguridadSocial2026(
     horasExtraRestoTrabajador: D(herEe),
     horasExtraRestoEmpresa: D(herEr),
     atEpEmpresa: atEp === null ? null : D(atEp),
+    cortaDuracionEmpresa: cortaDuracion === null ? null : D(cortaDuracion),
     trabajadorTotal: D(trabajadorTotal),
     empresaTotal: D(empresaTotal),
   };
