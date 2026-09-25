@@ -337,6 +337,7 @@
     "import": "Paket importieren",
     "importing": "Wird importiert…",
     "tooLarge": "Wählen Sie ein ZIP- oder JSON-Paket unter 10 MB.",
+    "invalidPackage": "Das Paket-JSON ist ungültig. Korrigieren Sie die Syntax und versuchen Sie es erneut.",
     "importReason": "App-Paket zur Prüfung importieren",
     "failed": "Das Paket konnte nicht importiert werden.",
     "discardEdits": "Ungespeicherte Paketänderungen verwerfen?"

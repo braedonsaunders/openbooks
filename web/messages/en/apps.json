@@ -331,6 +331,7 @@
     "import": "Import package",
     "importing": "Importing…",
     "tooLarge": "Choose a ZIP or JSON package smaller than 10 MB.",
+    "invalidPackage": "The package JSON is invalid. Correct the syntax and try again.",
     "importReason": "Import app package for review",
     "failed": "The package could not be imported.",
     "discardEdits": "Discard unsaved package changes?"
