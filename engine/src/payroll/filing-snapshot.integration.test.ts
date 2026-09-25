@@ -293,7 +293,7 @@ test(
       );
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
       const stubId = await markLegacy(fx.orgId);
-      for (const filingAccountId of [foreign, us]) {
+      for (const [filingAccountId, refusal] of [[foreign, /holds no filing account with that id/], [us, /Failed query/]] as const) {
         await assert.rejects(
           reconcilePayrollFilingAccounts({
             orgId: fx.orgId,
@@ -307,7 +307,7 @@ test(
               },
             ],
           }),
-          /Failed query/,
+          refusal,
         );
       }
       assert.equal(
