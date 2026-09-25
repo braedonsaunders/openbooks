@@ -75,24 +75,23 @@ export function AiDraftDrawer({
   const [loaded, setLoaded] = useState<{ param: string; draft: Draft } | null>(null)
   const [failed, setFailed] = useState<{ param: string; message: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  // A malformed ?draft= never resolves: parse during render and fail
+  // loudly through the derived status — a synchronous setState in the
+  // effect below cascades renders — instead of leaving busy true forever
+  // with neither draft nor error.
+  const separator = draftParam === null ? -1 : draftParam.indexOf(':')
+  const kind = separator < 0 || draftParam === null ? '' : draftParam.slice(0, separator)
+  const subjectId = separator < 0 || draftParam === null ? '' : draftParam.slice(separator + 1)
+  const malformed = draftParam !== null && (!kind || !subjectId)
   const draft = loaded && loaded.param === draftParam ? loaded.draft : null
-  const status = failed && failed.param === draftParam ? failed.message : null
+  const status = malformed ? failedLabel : failed && failed.param === draftParam ? failed.message : null
   // Busy is a fact about the other two, not a third copy of the same
   // state: a draft is being fetched while one is asked for, none has
   // arrived, and nothing has failed.
   const busy = Boolean(draftParam) && draft === null && status === null
   useEffect(() => {
-    if (!draftParam) return
+    if (!draftParam || malformed) return
     const requested = draftParam
-    const separator = requested.indexOf(':')
-    const kind = separator < 0 ? '' : requested.slice(0, separator)
-    const subjectId = separator < 0 ? '' : requested.slice(separator + 1)
-    // A malformed ?draft= never resolves: fail loudly instead of leaving
-    // busy true forever with neither draft nor error.
-    if (!kind || !subjectId) {
-      setFailed({ param: requested, message: failedLabel })
-      return
-    }
     let cancelled = false
     fetch('/api/ai/drafts', {
       method: 'POST',
@@ -114,7 +113,7 @@ export function AiDraftDrawer({
     return () => {
       cancelled = true
     }
-  }, [draftParam, failedLabel])
+  }, [draftParam, failedLabel, kind, malformed, subjectId])
   if (!draftParam) return null
   const close = async (outcome: 'accepted' | 'rejected' | null, decisionId: string | null): Promise<void> => {
     if (outcome && decisionId) {
