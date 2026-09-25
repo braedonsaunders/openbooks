@@ -311,18 +311,22 @@ test("a valid non-A NIC category refuses rather than applying category-A bands",
 // One assertion for the 223 minimums: a coherently enrolled worker prices
 // THROUGH the narrowed enrolled gates — both certificates agree
 // contributions are due. Monthly £3,000: qualifying £2,480; 5% = £124.
-test("an enrolled worker with priced scheme terms prices AE minimums", async () => {
-  const { ctx } = gbContext({
-    tx: stubTx(EMPTY_YTD),
-    codes: {
-      ...NOTICE_1257L,
-      gb_workplace_pension: { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" },
-      gb_workplace_pension_assessment: { age_band: "22_to_state_pension_age", membership_status: "active_member", scheme_basis: "qualifying_earnings_minimum", deduction_method: "net_pay" },
-    },
-    income: "3000",
-    pensionable: "3000",
+test("AE prices 5%/3% minimums on qualifying earnings; unassessed and unsupported schemes refuse", async () => {
+  // Monthly £3,000: qualifying £2,480; 5% = £124, 3% = £74.40. Enrolled on both
+  // certificates, so contributions price THROUGH the narrowed gates.
+  const active = { age_band: "22_to_state_pension_age", membership_status: "active_member", scheme_basis: "qualifying_earnings_minimum", deduction_method: "net_pay" };
+  const aeCodes = (assessment: Record<string, string> | null) => ({
+    ...NOTICE_1257L,
+    gb_workplace_pension: { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" },
+    gb_workplace_pension_assessment: assessment,
   });
-  assert.equal((await computeGbStatutory(ctx)).GB_AE_EMPLOYEE, "124.0000");
+  const factors = await computeGbStatutory(gbContext({ tx: stubTx(EMPTY_YTD), codes: aeCodes(active), income: "3000", pensionable: "3000" }).ctx);
+  assert.deepEqual([factors.GB_AE_EMPLOYEE, factors.GB_AE_EMPLOYER], ["124.0000", "74.4000"]);
+  for (const [assessment, refusal] of [
+    [null, /gb_ae_membership_status/],
+    [{ ...active, scheme_basis: "other_basis" }, /another certified basis/],
+    [{ ...active, deduction_method: "relief_at_source" }, /relief at source or salary sacrifice/],
+  ] as const) await assert.rejects(() => computeGbStatutory(gbContext({ codes: aeCodes(assessment) }).ctx), refusal);
 });
 
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
