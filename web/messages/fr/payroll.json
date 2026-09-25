@@ -846,7 +846,8 @@
         "slots": {
           "gensen": "Impôt prélevé à la source à payer (table mensuelle NTA)",
           "kosei_nenkin": "Assurance pension des employés à payer (parts employé et employeur)",
-          "kenko_hoken": "Assurance maladie à payer (parts employé et employeur)"
+          "kenko_hoken": "Assurance maladie à payer (parts employé et employeur)",
+          "child_rearing_contributions": "Cotisations sociales pour l’enfance à payer (part du salarié et prélèvement patronal)"
         }
       },
       "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux.",

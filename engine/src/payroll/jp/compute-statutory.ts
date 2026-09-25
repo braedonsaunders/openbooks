@@ -1,6 +1,6 @@
 /**
- * Phase 9 — JP pack statutory pass: 2026 源泉徴収 (月額表・甲/乙) + 厚生年金
- * + 健康保険 for a monthly payslip.
+ * Phase 9 — JP pack statutory pass: 2026 源泉徴収 (月額表・甲/乙), pension,
+ * health, and effective-dated child-related social contributions.
  *
  * Pure pricing lives in ./withholding-2026.ts (proven by goldens); this
  * adapter maps the generic run context onto it. The pack is monthly: the
@@ -64,6 +64,9 @@ export const JP_FACTOR_LABELS: Readonly<Record<string, string>> = {
   JP_PENSION_ER: "厚生年金 (employer share)",
   JP_HEALTH_W: "健康保険 (employee share)",
   JP_HEALTH_ER: "健康保険 (employer share)",
+  JP_CHILD_SUPPORT_W: "子ども・子育て支援金 (employee share)",
+  JP_CHILD_SUPPORT_ER: "子ども・子育て支援金 (employer share)",
+  JP_CHILD_CARE_ER: "子ども・子育て拠出金 (employer levy)",
 };
 
 export async function computeJpStatutoryWithRates(
@@ -90,6 +93,10 @@ export async function computeJpStatutoryWithRates(
       `periodsPerYear ${periodsPerYear} is refused: the 月額表 prices a month's pay and the `
       + "標準報酬月額 is intrinsically monthly — monthly payroll only",
     );
+  }
+  const payDate = ctx.run.pay_date;
+  if (payDate == null || !/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
+    fail("run pay_date is required to determine the effective month of the 2026 child-related contributions");
   }
   // Amounts arrive as decimal strings (money.ts 4dp, e.g. "300000.0000");
   // JPY has no minor unit, so anything below the yen refuses here.
@@ -176,13 +183,22 @@ export async function computeJpStatutoryWithRates(
     );
   }
 
-  const result = calculateJp2026({ grossMonthly: gross, standard, dependents, healthRate: rates.healthRate });
+  const result = calculateJp2026({
+    grossMonthly: gross,
+    standard,
+    dependents,
+    healthRate: rates.healthRate,
+    childContributionsEffective: payDate >= "2026-04-01",
+  });
 
   pushStatutory("income_tax", "deduction", "源泉徴収 (gensen withholding)", String(result.gensen), 110);
   pushStatutory("pension", "deduction", "厚生年金保険 (employee)", String(result.pension), 120);
   pushStatutory("health", "deduction", "健康保険 (employee)", String(result.health), 130);
+  pushStatutory("child_support", "deduction", "子ども・子育て支援金 (employee)", String(result.childSupport), 140);
   pushStatutory("pension", "employer_contribution", "厚生年金保険 (employer)", String(result.pensionEmployer), 220);
   pushStatutory("health", "employer_contribution", "健康保険 (employer)", String(result.healthEmployer), 230);
+  pushStatutory("child_support", "employer_contribution", "子ども・子育て支援金 (employer)", String(result.childSupportEmployer), 240);
+  pushStatutory("child_care_employer", "employer_contribution", "子ども・子育て拠出金 (employer)", String(result.childCareEmployer), 250);
   return {
     JP_GENSEN_BASE: String(result.gensenBase),
     JP_GENSEN: String(result.gensen),
@@ -190,6 +206,9 @@ export async function computeJpStatutoryWithRates(
     JP_PENSION_ER: String(result.pensionEmployer),
     JP_HEALTH_W: String(result.health),
     JP_HEALTH_ER: String(result.healthEmployer),
+    JP_CHILD_SUPPORT_W: String(result.childSupport),
+    JP_CHILD_SUPPORT_ER: String(result.childSupportEmployer),
+    JP_CHILD_CARE_ER: String(result.childCareEmployer),
   };
 }
 

@@ -161,6 +161,16 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
         { code: "KENKO-ER", name: "健康保険 (employer)", systemKey: "health", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "external" },
       ],
     },
+    {
+      key: "child_rearing_contributions",
+      components: [
+        // Both 2026 contributions use the operator-held 標準報酬月額; the
+        // support contribution is split, while the 拠出金 is employer-only.
+        { code: "KOSODATE-SUPPORT", name: "子ども・子育て支援金 (employee)", systemKey: "child_support", kind: "deduction", sequence: 140, assessedOn: "earnings", remittance: "external" },
+        { code: "KOSODATE-SUPPORT-ER", name: "子ども・子育て支援金 (employer)", systemKey: "child_support", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "external" },
+        { code: "KODOMO-ER", name: "子ども・子育て拠出金 (employer)", systemKey: "child_care_employer", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
   ],
   computeStatutory: computeJpStatutory,
   factorLabels: { ...JP_FACTOR_LABELS },

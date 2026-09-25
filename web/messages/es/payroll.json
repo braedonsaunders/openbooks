@@ -846,7 +846,8 @@
         "slots": {
           "gensen": "Impuesto retenido por pagar (tabla mensual NTA)",
           "kosei_nenkin": "Pensión de empleados por pagar (partes de empleado y empleador)",
-          "kenko_hoken": "Seguro de salud por pagar (partes de empleado y empleador)"
+          "kenko_hoken": "Seguro de salud por pagar (partes de empleado y empleador)",
+          "child_rearing_contributions": "Aportaciones sociales para crianza de hijos por pagar (aportación del empleado y gravamen del empleador)"
         }
       },
       "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales.",

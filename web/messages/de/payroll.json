@@ -846,7 +846,8 @@
         "slots": {
           "gensen": "Abzuführende Quellensteuer (NTA-Monatstabelle)",
           "kosei_nenkin": "Verbindlichkeiten aus Employees' Pension (Arbeitnehmer- und Arbeitgeberanteile)",
-          "kenko_hoken": "Verbindlichkeiten aus Krankenversicherung (Arbeitnehmer- und Arbeitgeberanteile)"
+          "kenko_hoken": "Verbindlichkeiten aus Krankenversicherung (Arbeitnehmer- und Arbeitgeberanteile)",
+          "child_rearing_contributions": "Verbindlichkeiten aus Kinderbetreuungsbeiträgen (Arbeitnehmerbeitrag und Arbeitgeberabgabe)"
         }
       },
       "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze.",

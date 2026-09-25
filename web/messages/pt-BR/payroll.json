@@ -846,7 +846,8 @@
         "slots": {
           "gensen": "Imposto retido a recolher (tabela mensal NTA)",
           "kosei_nenkin": "Pensão dos empregados a recolher (partes do funcionário e do empregador)",
-          "kenko_hoken": "Seguro de saúde a recolher (partes do funcionário e do empregador)"
+          "kenko_hoken": "Seguro de saúde a recolher (partes do funcionário e do empregador)",
+          "child_rearing_contributions": "Contribuições sociais para apoio à criação de filhos a recolher (parte do funcionário e contribuição patronal)"
         }
       },
       "ratesLink": "As alíquotas que você informa — desemprego, taxas de saúde — estão na aba Alíquotas oficiais.",

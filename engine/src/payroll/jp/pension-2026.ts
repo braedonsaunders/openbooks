@@ -28,10 +28,9 @@
  * - Top grade: 「令和2年9月分（10月納付分）から、厚生年金保険の標準報酬月
  *   額の上限（32等級）が650千円となりました。」 Grade 32 covers 635,000円
  *   以上 with no upper bound — pay above it still prices at 650,000円.
- * - 子ども・子育て拠出金 (employer-only, 0.36% from 令和8年4月1日):
+ * - 子ども・子育て拠出金 (employer-only, 0.36% from 令和8年4月分):
  *   「子ども・子育て拠出金については事業主が全額負担することとなります。」
- *   Round one refuses it by name (see JP_REFUSED_2026): no employer-levy
- *   slot is declared for it.
+ *   The statutory slot and 2026 effective month are carried by the pack.
  * - Health: 「全国健康保険協会管掌健康保険の都道府県別の保険料率について
  *   は、全国健康保険協会の各都道府県支部にお問い合わせください。」 — the
  *   JPS table carries no health rate, which is why the health premium is a
