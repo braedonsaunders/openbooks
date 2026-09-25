@@ -19,7 +19,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
-import { HrmPositionError } from '@openbooks/engine/src/hrm/positions.ts'
+import { formatFte, HrmPositionError, parseFte } from '@openbooks/engine/src/hrm/positions.ts'
 import { getPositionAsOf, getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -341,8 +341,21 @@ export async function loadPositionsPage(
       ? t('positions.columns.unassignedHolder')
       : t('positions.holdersCount', { count: row.holders.length })
 
-  const rows: PositionRow[] = allRows
-    .filter((row) => status === null || row.version.status === status)
+  // Totals sum the FILTERED rows beside them: org-wide totals under a
+  // status-filtered list read as the segment's own. Vacant derives as
+  // planned minus filled, exactly like the engine totals.
+  const visibleRows = allRows.filter((row) => status === null || row.version.status === status)
+  const sumTenths = (pick: (row: PositionRowDTO) => string): bigint =>
+    visibleRows.reduce((total, row) => total + parseFte(pick(row)), 0n)
+  const totalPlanned = sumTenths((row) => row.vacancy.plannedFte)
+  const totals = {
+    plannedFte: formatFte(totalPlanned),
+    fundedFte: formatFte(sumTenths((row) => row.vacancy.fundedFte)),
+    filledFte: formatFte(sumTenths((row) => row.vacancy.filledFte)),
+    vacantFte: formatFte(totalPlanned - sumTenths((row) => row.vacancy.filledFte)),
+  }
+
+  const rows: PositionRow[] = visibleRows
     .map((row) => ({
       id: row.id,
       code: row.positionCode,
@@ -552,12 +565,7 @@ export async function loadPositionsPage(
     rows,
     empty: t('positions.empty'),
     totalLabel: t('positions.total'),
-    totals: {
-      plannedFte: vacancy.totals.plannedFte,
-      fundedFte: vacancy.totals.fundedFte,
-      filledFte: vacancy.totals.filledFte,
-      vacantFte: vacancy.totals.vacantFte,
-    },
+    totals,
     detail,
     missingDetail,
     create,
