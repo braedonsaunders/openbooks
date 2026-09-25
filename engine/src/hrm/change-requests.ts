@@ -1027,6 +1027,47 @@ export interface ListChangeRequestsQuery {
 
 const LIST_STATUSES = ["draft", "pending_approval", "approved", "rejected", "withdrawn", "applied"] as const;
 
+function invalidStatusError(status: unknown): HrmChangeRequestError {
+  return new HrmChangeRequestError(
+    "INVALID_PAYLOAD",
+    `unknown request status ${JSON.stringify(status)} — filter by one of ${LIST_STATUSES.join(", ")}`,
+  );
+}
+
+/**
+ * Visibility predicates shared by the list and the count, over the same
+ * `r` (request) / `e` (employment) aliases: restricted HR sees only its
+ * legal entities, plus its own profile proposals when self-service read is
+ * granted. A count that filtered differently would disagree with the rows
+ * it claims to count, so both queries resolve scope here.
+ */
+async function resolveRequestScope(orgId: string, actorId: string) {
+  const canReadEmployment = await actorHasPermission(db, orgId, actorId, "hrm.employment.read");
+  const canReadOwnProfile = await actorHasPermission(db, orgId, actorId, "hrm.self.read");
+  if (!canReadEmployment && !canReadOwnProfile) {
+    throw new HrmAuthorizationError(
+      "Employment access requires the hrm.employment.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const allowedSubsidiaries = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+  const partyId = canReadOwnProfile
+    ? (await db.execute<{ party_id: string | null }>(sql`
+        select party_id::text as party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null
+    : null;
+  const employerFilter = allowedSubsidiaries === null
+    ? sql`true`
+    : allowedSubsidiaries.size === 0
+      ? sql`false`
+      : sql`e.employer_subsidiary_id = any(${`{${[...allowedSubsidiaries].join(",")}}`}::uuid[])`;
+  return {
+    subsidiaryFilter: canReadEmployment ? employerFilter : sql`false`,
+    ownProfileFilter: partyId === null
+      ? sql`false`
+      : sql`(r.payload ->> 'kind' = 'profile_change'
+             and e.worker_party_id = ${partyId}::uuid and ${employerFilter})`,
+  };
+}
+
 /**
  * List requests newest-first with access predicates applied before the
  * limit. Restricted HR sees only its legal entities, plus its own profile
@@ -1036,38 +1077,14 @@ export async function listChangeRequests(query: ListChangeRequestsQuery): Promis
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   if (query.status !== undefined && !(LIST_STATUSES as readonly string[]).includes(query.status)) {
-    throw new HrmChangeRequestError(
-      "INVALID_PAYLOAD",
-      `unknown request status ${JSON.stringify(query.status)} — filter by one of ${LIST_STATUSES.join(", ")}`,
-    );
+    throw invalidStatusError(query.status);
   }
   const limit = query.limit ?? 100;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
     throw new HrmChangeRequestError("INVALID_PAYLOAD", "limit must be an integer from 1 to 500");
   }
   return withOrgTransaction(orgId, async () => {
-    const canReadEmployment = await actorHasPermission(db, orgId, actorId, "hrm.employment.read");
-    const canReadOwnProfile = await actorHasPermission(db, orgId, actorId, "hrm.self.read");
-    if (!canReadEmployment && !canReadOwnProfile) {
-      throw new HrmAuthorizationError(
-        "Employment access requires the hrm.employment.read permission — ask an administrator to grant it in /admin/roles.",
-      );
-    }
-    const allowedSubsidiaries = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-    const partyId = canReadOwnProfile
-      ? (await db.execute<{ party_id: string | null }>(sql`
-          select party_id::text as party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null
-      : null;
-    const employerFilter = allowedSubsidiaries === null
-      ? sql`true`
-      : allowedSubsidiaries.size === 0
-        ? sql`false`
-        : sql`e.employer_subsidiary_id = any(${`{${[...allowedSubsidiaries].join(",")}}`}::uuid[])`;
-    const subsidiaryFilter = canReadEmployment ? employerFilter : sql`false`;
-    const ownProfileFilter = partyId === null
-      ? sql`false`
-      : sql`(r.payload ->> 'kind' = 'profile_change'
-             and e.worker_party_id = ${partyId}::uuid and ${employerFilter})`;
+    const { subsidiaryFilter, ownProfileFilter } = await resolveRequestScope(orgId, actorId);
     const rows = (await db.execute<RequestRow>(sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests r
        where r.org_id = ${orgId}
@@ -1082,6 +1099,42 @@ export async function listChangeRequests(query: ListChangeRequestsQuery): Promis
        limit ${limit}
     `)).rows;
     return rows.map(toDTO);
+  });
+}
+
+export interface CountChangeRequestsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly employmentId?: string;
+  readonly status?: string;
+}
+
+/**
+ * Exact scope-checked total for a status-filtered queue figure. The
+ * dashboard pending tile must not count a bounded preview whose older rows
+ * can fall outside the fetch window; this shares resolveRequestScope with
+ * the list so the total can never disagree with the rows about visibility.
+ */
+export async function countChangeRequests(query: CountChangeRequestsQuery): Promise<number> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  if (query.status !== undefined && !(LIST_STATUSES as readonly string[]).includes(query.status)) {
+    throw invalidStatusError(query.status);
+  }
+  return withOrgTransaction(orgId, async () => {
+    const { subsidiaryFilter, ownProfileFilter } = await resolveRequestScope(orgId, actorId);
+    const rows = (await db.execute<{ n: string }>(sql`
+      select count(*) as n from hrm_employment_change_requests r
+       where r.org_id = ${orgId}
+         ${query.employmentId ? sql`and r.employment_id = ${query.employmentId}` : sql``}
+         ${query.status ? sql`and r.status = ${query.status}` : sql``}
+         and exists (
+           select 1 from worker_employments e
+            where e.org_id = r.org_id and e.id = r.employment_id
+              and (${subsidiaryFilter} or ${ownProfileFilter})
+         )
+    `)).rows;
+    return Number(rows[0]?.n ?? 0);
   });
 }
 
