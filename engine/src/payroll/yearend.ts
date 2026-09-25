@@ -897,6 +897,30 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       + "record the interruption date, last insurable earnings date, and any salary-continuance or paid-leave end before issuing the ROE",
     );
   }
+  // Earnings dated after the separation's last insurable date are a lie or a
+  // stale declaration: the stub belongs to a later spell or the separation
+  // facts are wrong. Refuse by name before the ROE is built.
+  const earningsCutoff = event.salary_continuance_end_on ?? event.last_insurable_earnings_on;
+  const lateEarnings = (await db.execute<{ payDate: string }>(sql`
+    select distinct stub.pay_date::text as "payDate"
+      from pay_stubs stub
+      join pay_runs run on run.org_id = stub.org_id
+        and run.document_id = stub.pay_run_document_id and run.run_status = 'committed'
+      join pay_stub_lines line on line.org_id = stub.org_id and line.stub_id = stub.id
+        and line.kind = 'earning'
+     where stub.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
+       and stub.pay_date > ${earningsCutoff}::date
+     order by "payDate" desc
+     limit 1
+  `)).rows[0];
+  if (lateEarnings) {
+    throw new PayrollError(
+      `${row.display_name} has committed earnings dated ${lateEarnings.payDate}, after the confirmed `
+      + `separation's last insurable earnings date ${event.last_insurable_earnings_on}`
+      + (event.salary_continuance_end_on ? ` (salary continuance through ${event.salary_continuance_end_on})` : "")
+      + " — correct the separation dates or void the stub before issuing the ROE",
+    );
+  }
   const earningComponents = (await db.execute<{
     component_id: string; component_name: string; pay_date: string; block: "none" | "17A" | "17C" | null;
   }>(sql`
