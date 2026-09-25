@@ -145,6 +145,12 @@ export interface DcYearRates {
    * figures exactly as OTR prints them.
    */
   brackets: readonly DcBracket[];
+  /**
+   * Paid Family Leave employer rate for the year (2026: 0.75% of covered
+   * wages each quarter, no cap stated). Self-employed opt-in and coverage
+   * nuances ride a later employer-fact channel.
+   */
+  opflRate: string;
 }
 
 /**
@@ -165,6 +171,9 @@ export const DC_RATES_2026: DcYearRates = {
   year: 2026,
   status: "published",
   allowanceAnnual: "4300",
+  // DOES Employer Tax Registration / Paid Family Leave: 2026 employer rate
+  // 0.75% of covered wages each quarter.
+  opflRate: "0.0075",
   brackets: [
     { over: "0", notOver: "10000", base: "0", rate: pctToRate("4") },
     { over: "10000", notOver: "40000", base: "400", rate: pctToRate("6") },
@@ -349,8 +358,18 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * Trace-factor labels for the stub calculation trace, keyed by the trace
  * keys above. Terms are FR-230's own — see the module header.
  */
+/**
+ * Paid Family Leave employer contribution — 0.75% of covered wages each
+ * quarter, accrued beside income tax, never folded into it.
+ */
+export function dcOpflWithholding(payDate: string, coveredWages: string): string {
+  const rates = dcRatesForPayDate(payDate);
+  return D(mulRateCents(U(coveredWages), rates.opflRate));
+}
+
 export const DC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   DC_EXEMPT: "Exempt from District of Columbia withholding",
+  DC_OPFL_EMPLOYER: "District of Columbia Paid Family Leave employer contribution",
   DC_WAGES: "District of Columbia wages this period",
   DC_ALLOWANCE_PER_PERIOD: "District of Columbia allowance value this period",
   DC_ALLOWANCE: "District of Columbia allowance this period",

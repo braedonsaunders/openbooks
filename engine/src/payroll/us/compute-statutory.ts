@@ -26,6 +26,7 @@ import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
 import { caEttWithholding } from "./states/ca.ts";
 import { coFamliWithholding } from "./states/co.ts";
+import { dcOpflWithholding } from "./states/dc.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -252,6 +253,14 @@ export async function computeUsStatutory(
   const workSubRegions = subRegionsOnFile("work");
   const residenceSubRegions = subRegionsOnFile("residence");
   const residenceRegion = (empFact("US", emp, "residence_region") as string | null) || region;
+  // District Paid Family Leave (2026: 0.75% of covered wages each quarter)
+  // accrues beside income tax, never inside it — on the same base the DC
+  // levy priced (periodic plus supplemental).
+  if (region === "DC") {
+    const dcOpfl = dcOpflWithholding(run.pay_date!, sum([income, nonPeriodic]));
+    pushStatutory("dc_opfl_employer", "employer_contribution", "DC Paid Family Leave (employer)", dcOpfl, 254);
+    factors = { ...factors, DC_OPFL_EMPLOYER: dcOpfl };
+  }
   const resolution = resolveWithholding({
     country,
     workRegion: region,

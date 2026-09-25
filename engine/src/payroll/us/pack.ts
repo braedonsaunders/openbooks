@@ -359,6 +359,16 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "dc_opfl_employer",
+      regions: ["DC"],
+      components: [
+        // District Paid Family Leave (2026: 0.75% of covered wages each
+        // quarter): an EMPLOYER contribution remitted to the District,
+        // beside SUI rather than inside it.
+        { code: "DC-OPFL", name: "DC Paid Family Leave (employer)", systemKey: "dc_opfl_employer", kind: "employer_contribution", sequence: 254, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
       key: "state_income_tax",
       components: [
         // A state's income tax is computed from state-taxable wages after
