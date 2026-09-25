@@ -494,9 +494,14 @@ async function main() {
 
   const dbUrl = requireEnv("OPENBOOKS_DB_URL");
   requireEnv("OPENBOOKS_RUNTIME_DB_URL");
+  // The reference install lives on its own server. The bypass pool must follow
+  // it there: a bypass URL left on the candidate's server created
+  // openbooks_read on the wrong cluster, and the reference baseline then failed
+  // with 'role "openbooks_read" does not exist'.
   const referenceEnv = {
     OPENBOOKS_DB_URL: requireEnv("OPENBOOKS_REFERENCE_DB_URL"),
     OPENBOOKS_RUNTIME_DB_URL: requireEnv("OPENBOOKS_REFERENCE_RUNTIME_DB_URL"),
+    OPENBOOKS_BYPASS_DB_URL: requireEnv("OPENBOOKS_REFERENCE_DB_URL"),
   };
 
   const report = {
