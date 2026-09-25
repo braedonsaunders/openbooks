@@ -118,12 +118,15 @@ export function CategoryManager({
       setRevision((j as { revision: number }).revision)
     }
   }
-  const reload = async () => {
+  const reload = async (): Promise<ForecastCategory[] | null> => {
     try {
       const r = await fetch('/api/analytics/cashflow/categories')
-      if (!r.ok) return
-      applyRemote(await r.json())
-    } catch { /* keep the last known list */ }
+      if (!r.ok) return null
+      const j = await r.json()
+      applyRemote(j)
+      const fresh = (j as { categories?: unknown }).categories
+      return Array.isArray(fresh) ? fresh as ForecastCategory[] : null
+    } catch { return null /* keep the last known list */ }
   }
   useEffect(() => {
     fetch('/api/analytics/cashflow/categories')
@@ -159,9 +162,27 @@ export function CategoryManager({
         // overwriting it.
         const j = await r.json().catch(() => null)
         setMsg(j && typeof j.message === 'string' ? j.message : t('toasts.saveFailed', { status: r.status }))
-        await reload()
+        const fresh = await reload()
+        // The open draft was built against the superseded list: its index
+        // belongs to the old order, so a later Save would map it onto
+        // whatever category now sits there (duplicating the edit, deleting
+        // the other); when the edited category itself is gone the Save
+        // would report success while persisting nothing; and rebasing by id
+        // would silently overwrite another editor's unseen field changes.
+        // So an edit draft closes and must be reapplied onto the fresh
+        // list, exactly as the conflict message instructs. A draft for a
+        // NEW category is index-free and stays open. When the reload itself
+        // fails the displayed list is unchanged, so the draft stays too —
+        // the next Save 409s again with the same instruction.
+        if (fresh !== null && editIdx !== null && editIdx !== -1) {
+          setEditIdx(null)
+          setDraft(null)
+        }
       } else {
-        setMsg(r.status === 403 ? t('toasts.forbidden') : await readApiErrorMessage(r, t('toasts.saveFailed', { status: r.status })))
+        // The PUT needs the Setup permission with unrestricted scope: a scoped
+        // admin holds the permission yet is still refused, so the server's
+        // reason leads and the generic line is only the fallback.
+        setMsg(await readApiErrorMessage(r, r.status === 403 ? t('toasts.forbidden') : t('toasts.saveFailed', { status: r.status })))
       }
     } catch {
       setMsg(t('toasts.saveFailed', { status: 'network' }))
