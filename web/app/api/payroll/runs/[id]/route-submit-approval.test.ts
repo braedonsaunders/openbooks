@@ -118,7 +118,7 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:payroll-scope', `export async function lockAndCheckPayrollRunPopulation() { throw new Error('not under test') }`],
+  ['mock:payroll-scope', `export async function lockAndCheckPayrollRunPopulation() {}`],
   [
     'mock:payroll-run-adjustments',
     `
