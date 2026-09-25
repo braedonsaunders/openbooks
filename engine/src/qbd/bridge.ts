@@ -278,12 +278,38 @@ export async function authenticateWebConnector(connectionId: string, username: s
            and c.status in ('queued', 'running') and c.expires_at > now()
       ) as pending`));
     const ticket = randomUUID();
-    await db.insert(schema.qbdSessions).values({
-      id: ticket,
-      orgId: conn.orgId,
-      connectionId,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    // The snapshot above predates this insert: a pause (status update, then
+    // session termination) can commit between the password check and the
+    // insert, leaving a live ticket across pause/resume. Lock the connection
+    // row and re-read status and credentials under it, then insert in the
+    // same transaction — either this commits before the pause (whose
+    // termination then closes this ticket) or it observes the pause and
+    // issues nothing (I5-platform-219). Lock order stays connection row
+    // first, matching the pause path, so the two cannot deadlock.
+    const issue = await db.transaction(async (tx) => {
+      const fresh = (await tx.execute<PublicConnection>(sql`
+        select id, org_id as "orgId", config, secrets, status
+          from connections where id = ${connectionId} and source = 'qbd' limit 1 for update`));
+      const current = fresh.rows[0] ?? null;
+      if (!current || current.status === "paused") return "stale" as const;
+      const secret = unsealJson<QbdSecrets>(current.secrets);
+      if (!secret?.webConnectorPassword || !secureEqual(password, secret.webConnectorPassword)) {
+        return "rotated" as const;
+      }
+      await tx.insert(schema.qbdSessions).values({
+        id: ticket,
+        orgId: current.orgId,
+        connectionId,
+        expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+      });
+      return "issued" as const;
     });
+    // Credentials rotated between the snapshot check and the insert: the
+    // attempt genuinely failed against the current secret, so it counts one
+    // guess like any other failure (the snapshot check recorded nothing —
+    // it passed against the old secret).
+    if (issue === "rotated") await recordQbwcGuessFailure(connectionId);
+    if (issue !== "issued") return { ticket: "", companyFile: "nvu" };
     return { ticket, companyFile: pending.rows[0]?.pending ? String(conn.config.companyFile ?? "") : "none" };
   });
 }
