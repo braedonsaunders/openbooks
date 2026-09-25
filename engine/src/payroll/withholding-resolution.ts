@@ -484,6 +484,25 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
             ? { kind: "net_of_work_region_tax" as const }
             : { kind: "full" as const });
         const netOfCredit = method.kind === "net_of_work_region_tax";
+        if (method.kind === "waive_when_work_region_withheld") {
+          // A conditional waiver is a resolution answer, not just a compute
+          // adjustment: when the work region's own levy is already pushed, the
+          // residence region waives instead of levying alongside it. Any doubt
+          // (no work levy, or a work region outside the waiver's eligible
+          // regions) falls through to the levy below — never to silence.
+          const coversWorkRegion = method.regions === undefined || method.regions.includes(workRegion);
+          const workWithholds = levies.some(
+            (levy) => levy.level === "region" && levy.region === workRegion && levy.side === "work",
+          );
+          if (coversWorkRegion && workWithholds) {
+            trace.push(
+              `${residence.label} waives its claim on these out-of-region wages: ${workRegion} `
+              + "withholds them and the waiver covers that work region — no "
+              + `${residenceRegion} levy`,
+            );
+            return;
+          }
+        }
         if (!residence.implemented || !residence.residentWithholdingImplemented) {
           // REFUSE. Withholding only the work region here under-withholds an
           // employee by the whole residence-region liability, and nothing
