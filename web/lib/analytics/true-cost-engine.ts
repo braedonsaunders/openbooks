@@ -332,7 +332,7 @@ export function calculateManualCategoryData(
     const fixedTotalUnits = toUnits(String(manualConfig.fixedTotal ?? 0));
     totalExpense = Number(fromUnits(fixedTotalUnits));
     const weightUnits = (value: number): bigint => {
-      if (!Number.isFinite(value) || value < 0) throw new Error("Fixed-total allocation requires finite, non-negative department bases.");
+      if (!Number.isFinite(value) || value < 0) throw new Error("fixed-total allocation requires finite, non-negative department bases.");
       let raw = String(value);
       const negative = raw.startsWith("-");
       if (negative) raw = raw.slice(1);
@@ -341,7 +341,7 @@ export function calculateManualCategoryData(
       const [whole = "0", fraction = ""] = coefficient!.split(".");
       const digits = BigInt(`${whole}${fraction}` || "0");
       const decimalPlaces = fraction.length - exponent;
-      if (decimalPlaces > 18) throw new Error("Fixed-total allocation base exceeds supported decimal precision.");
+      if (decimalPlaces > 18) throw new Error("fixed-total allocation base exceeds supported decimal precision.");
       const scaled = digits * 10n ** BigInt(18 - decimalPlaces);
       return negative ? -scaled : scaled;
     };
