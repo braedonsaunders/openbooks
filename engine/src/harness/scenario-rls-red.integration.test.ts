@@ -123,15 +123,13 @@ test("rls-org-isolation passes on a clean catalog with live foreign rows", { ski
 });
 
 /**
- * The rehearsal/CI harness logs in as a superuser, which PostgreSQL exempts
- * from RLS entirely (FORCE included) — so the table half of the probe must
- * assume the runtime role first. With two document-holding orgs the probe is
- * live (not vacuous): it must PASS on a clean catalog. Where the test login
- * itself bypasses, the detail must say which runtime role was assumed, which
- * pins the switch; where the login is already RLS-subject (ownership
- * transfer), the same test still pins the passing behavior.
+ * With two document-holding orgs the probe is live (not vacuous): it must
+ * PASS on a clean catalog with the foreign row genuinely hidden. The probe
+ * reads through the constrained app pool, which is RLS-subject since the
+ * ownership transfer — so no role assumption is expected here; the
+ * bypass-login switch stays a fallback for superuser harnesses only.
  */
-test("rls-org-isolation passes with live foreign rows, even when the login bypasses RLS", { skip: !DB }, async () => {
+test("rls-org-isolation hides live foreign rows across orgs", { skip: !DB }, async () => {
   const orgA = await createScratchOrg();
   const orgB = await createScratchOrg();
   try {
@@ -141,22 +139,10 @@ test("rls-org-isolation passes with live foreign rows, even when the login bypas
         values (${randomUUID()}, ${orgB.orgId}, 'customer_invoice', ${`RLS-PROBE-${orgB.orgId.slice(0, 8)}`},
                 ${orgB.date}, 'CAD')`);
     });
-    const login = await withBypassContext(async () => {
-      const r = await db.execute<{ bypass: boolean }>(sql`
-        select coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass`);
-      return r.rows[0]!;
-    });
     const cp = await runScenario(orgA.orgId, { at: orgA.date });
     const rls = check(cp, "rls-org-isolation");
     assert.equal(rls.ok, true, `RLS gate must hold with live foreign rows: ${rls.detail}`);
     assert.match(rls.detail, /foreign doc invisible via table=true view=true/, "both halves must genuinely probe");
-    if (login.bypass) {
-      assert.match(
-        rls.detail,
-        /table half assumed runtime role [a-z_]+; harness login \S+ bypasses RLS/,
-        "a bypassing login must assume the runtime role for the table half",
-      );
-    }
   } finally {
     await dropScratchOrg(orgA.orgId);
     await dropScratchOrg(orgB.orgId);
