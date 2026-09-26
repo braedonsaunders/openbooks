@@ -5,8 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const stateKey = Symbol.for("openbooks.route-factory-test");
-type Gate = "allow" | "deny401" | "deny403";
-const state: { permission: Gate; feature: "on" | "off"; scope: "allow" | "deny"; session: boolean; calls: string[] }
+const state: { permission: "allow" | "deny401" | "deny403"; feature: "on" | "off"; scope: "allow" | "deny"; session: boolean; calls: string[] }
   = { permission: "allow", feature: "on", scope: "allow", session: true, calls: [] };
 (globalThis as Record<symbol, unknown>)[stateKey] = state;
 (globalThis as Record<string, unknown>).openbooksRouteFactoryNextResponse = NextResponse;
@@ -19,8 +18,7 @@ const mockSources = new Map<string, string>([
     export async function getAuthz() { state.calls.push('session'); return state.session ? gate() : null; }
     export async function guardPermission() {
       state.calls.push('permission');
-      if (state.permission === 'deny401') return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-      if (state.permission === 'deny403') return NextResponse.json({ error: 'missing permission: x' }, { status: 403 });
+      if (state.permission !== 'allow') return NextResponse.json({ error: state.permission }, { status: state.permission === 'deny401' ? 401 : 403 });
       return gate();
     }
     export function guardUnrestrictedScope() {
@@ -77,11 +75,9 @@ function reset(overrides: Partial<typeof state> = {}): void {
 
 const get = (url = "http://test.local/api/thing"): Request => new Request(url, { method: "GET" });
 
-function post(body: unknown): Request {
-  return new Request("http://test.local/api/thing", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-  });
-}
+const post = (body: unknown): Request => new Request("http://test.local/api/thing", {
+  method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+});
 
 const ok = () => NextResponse.json({ ok: true });
 
@@ -140,6 +136,19 @@ test("restricted scope is refused after permission and feature pass", async () =
     assert.equal(response.status, scope === "unrestricted" ? 403 : 404);
     assert.deepEqual(state.calls, ["permission", "feature", "scope"]);
   }
+});
+
+test("an unknown scope fails closed instead of running unscoped", async () => {
+  reset();
+  let ran = false;
+  const handler = defineRoute({
+    permission: "x",
+    feature: { none: "test surface" },
+    scope: "subsidiary" as never,
+    handler: async () => { ran = true; return ok(); },
+  });
+  await assert.rejects(() => handler(get()), /unknown scope/);
+  assert.equal(ran, false);
 });
 
 test("invalid route params fail closed with 400", async () => {

@@ -33,9 +33,13 @@ export const POST = defineRoute({
   answers 404 without naming the feature, so hidden modules expose no
   alternate API surface. Only the leaf key is declared; the registry
   resolves parents and requirements.
-- `scope` is `"subsidiary"` (record-level enforcement lives in the handler),
-  `"unrestricted"` (org-wide configuration: restricted callers are refused),
-  or `"root"` (the org-root subsidiary must be inside the caller's scope).
+- `scope` is `"unrestricted"` (org-wide configuration: restricted callers
+  are refused) or `"root"` (the org-root subsidiary must be inside the
+  caller's scope). There is no `"subsidiary"` option: list filtering and
+  record-level checks live in the handler, which enforces them through
+  `authz` with `guardSubsidiaryScope` or the subsidiary filters — only the
+  handler knows which field carries the subsidiary. An unknown scope value
+  fails closed instead of running unscoped.
 - `body` and `params` are zod schemas. Bodies parse through the shared JSON
   boundary; failures answer before the handler runs. Omit `body` on reads
   that take no input.
