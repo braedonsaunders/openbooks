@@ -1585,7 +1585,7 @@ test("a multi-hour outage produces one run row per missed tick and advances the 
         select logs->0->>'scheduledFor' as "scheduledFor", logs->0->>'occurrence' as "occurrence"
           from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
-         order by at
+         order by logs->0->>'scheduledFor'
       `)
     ).rows;
     assert.equal(occurrences.length, 4, "one durable row per missed tick");
