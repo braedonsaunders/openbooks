@@ -179,12 +179,12 @@ test("a duplicate account number surfaces the already-in-use message", async (t)
   assert.match(alert.textContent ?? "", /already in use/i);
   const errors = (globalThis.__acctTestToasts ?? []).filter((toast) => toast.kind === "error");
   assert.equal(errors.length, 1, "the duplicate must also surface exactly one error toast");
-  // The alert clears on the next edit.
+  // Saving remounts the inputs: edit the live node, asserting null-ness (a live element diff OOMs the runner).
   await act(async () => {
-    setInput(inputs[1]!, "6991");
+    setInput(document.querySelectorAll("input")[1]!, "6991");
     await tick();
   });
-  assert.equal(document.querySelector('[role="alert"]'), null, "the alert must clear on edit");
+  assert.ok(document.querySelector('[role="alert"]') === null, "the alert must clear on edit");
 });
 
 test("single-currency reconcilable accounts select and submit the base currency", async (t) => {
