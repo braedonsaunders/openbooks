@@ -87,9 +87,14 @@ To re-deploy or roll back to an earlier attested digest, run
 `deploy-production.yml` manually from the release tag ref with the digest and
 the version the health endpoint should report. The release script leaves the
 previous Dokploy compose file and env under
-`/home/<user>/openbooks-deploy-backup-<stamp>/` on the manager; restoring that
-compose file into Dokploy and redeploying is the application-tier rollback
-when no migration changed the schema.
+`/home/<user>/openbooks-deploy-backup-<stamp>/` on the manager, and — before
+any migration runs — a verified database snapshot
+`pre-<tag>-<sha>-<stamp>.dump` in the manager's database backup directory
+(`OPENBOOKS_DB_BACKUP_DIR`, newest `OPENBOOKS_DB_BACKUP_KEEP` dumps retained,
+default 5). Restoring that compose file into Dokploy and redeploying is the
+application-tier rollback when no migration changed the schema; when one did,
+restore the snapshot first (Rollback, below) — the release log prints the
+exact `pg_restore` command.
 
 ## Release gate: upgrade rehearsal
 
@@ -127,8 +132,11 @@ A cell runs `scripts/upgrade-rehearsal/rehearse.mjs`:
 5. Refuse unless every candidate migration is recorded as applied, a second
    bootstrap applies nothing, the ledger fingerprint is identical, the
    candidate's golden harness passes on every org with activity, the
-   dataset's post-upgrade assertions pass (below), and the upgraded schema
-   catalog equals a fresh install's.
+   dataset's post-upgrade assertions pass (below), a verified `pg_dump -Fc`
+   snapshot of the upgraded install lists cleanly under `pg_restore --list`
+   (`snapshot-backup` phase, `dump-list.txt` in the report), and the upgraded
+   schema catalog equals a fresh install's. The snapshot rehearses the same
+   dump-before-migrate discipline the production release enforces.
 
 **Post-upgrade assertions.** Some legacy handling is only observable on the
 upgraded install: a frozen-or-refused executed waiver, a paused unbound
@@ -223,12 +231,32 @@ or a `.sql` that is not one read-only statement each fail by name.
 
 ## Rollback
 
+Every production release snapshots the target database before migrating:
+`swarm-release.sh` writes `pg_dump -Fc` output to
+`pre-<tag>-<sha>-<stamp>.dump` in the manager's database backup directory,
+verifies the archive with `pg_restore --list`, and refuses the release when
+either step fails. To roll back a release whose migrations applied, restore
+that snapshot into the target database and redeploy the previous digest:
+
+```bash
+pg_restore --clean --if-exists --dbname="$OPENBOOKS_MIGRATION_DB_URL" < pre-<tag>-<sha>-<stamp>.dump
+```
+
+The release log prints this command with the concrete dump path. The newest
+`OPENBOOKS_DB_BACKUP_KEEP` snapshots (default 5) are retained; older ones are
+pruned, so a rollback past the retention window needs an older recovery set.
+
 If bootstrap did not change the schema, reverting the application digest may be
 possible after confirming compatibility. Once a migration has applied, recover
 the pre-upgrade PostgreSQL and object-storage recovery set into clean
 infrastructure and start the matching prior image. Preserve the failed target
 for investigation. Never attempt an improvised reverse migration on the only
 copy of financial data.
+
+Point-in-time recovery and WAL archiving are not implemented: the
+pre-migration snapshot is the rollback point, so changes written between the
+snapshot and the restore are lost. That gap is a known follow-up, not a
+substitute to assume.
 
 Declare rollback complete only after restored checksums, constraints, ledger
 totals, attachments, authentication, worker processing, and business acceptance

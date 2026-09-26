@@ -30,6 +30,8 @@
  *   assertions         post-upgrade legacy assertions
  *                      (scripts/upgrade-rehearsal/assertions/<dataset>.mjs,
  *                      when that file exists; assertions.json)
+ *   snapshot-backup    a verified pg_dump -Fc of the upgraded install,
+ *                      listed by pg_restore, before the catalog diff
  *   catalog            the upgraded schema equals a fresh install's
  *
  * Environment:
@@ -43,7 +45,7 @@
  *     --source-dir ../source --report-dir upgrade-report
  */
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -130,6 +132,20 @@ function lastJsonLine(phase, stdout) {
 /** Sorted multiset of "severity:code" over --check findings. */
 export function findingKeys(findings) {
   return (findings ?? []).map((finding) => `${finding.severity}:${finding.code}`).sort();
+}
+
+/**
+ * Filename for the verified pre-upgrade dump:
+ * `pre-<source>-<candidate>-<stamp>.dump`. Every run of characters outside
+ * the filename-safe set is flattened to one underscore so a source tag or
+ * SHA can never escape the report directory or split into hidden files.
+ */
+export function preUpgradeDumpName(sourceTag, candidateSha, stamp) {
+  const safe = (value, fallback) => {
+    const text = String(value ?? "").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+    return text.length > 0 ? text : fallback;
+  };
+  return `pre-${safe(sourceTag, "untagged")}-${safe(candidateSha, "candidate")}-${safe(stamp, "nostamp")}.dump`;
 }
 
 /** Multiset difference between the reported and the expected finding keys. */
@@ -580,6 +596,7 @@ async function main() {
     upgrade: null,
     preflight: null,
     assertions: null,
+    backup: null,
     refusals: [],
     ok: false,
   };
@@ -669,6 +686,26 @@ async function main() {
 
     report.assertions = await phase("assertions", () =>
       runAssertionsPhase(datasetId, reportDir, { seededOrgs: report.seededOrgs }));
+
+    // The production release cannot migrate without a verified dump, so the
+    // rehearsal proves the same discipline on every release: a pg_dump -Fc
+    // of the upgraded install, verified by pg_restore --list, before the
+    // upgraded-vs-fresh catalog diff. Either step failing refuses the cell.
+    await phase("snapshot-backup", async () => {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const file = join(reportDir, preUpgradeDumpName(report.source, report.candidate ?? "candidate", stamp));
+      await run("snapshot-backup", "pg_dump", ["-Fc", dbUrl, "-f", file]);
+      const bytes = statSync(file).size;
+      if (bytes === 0) throw new PhaseRefusal("snapshot-backup", `dump ${file} is empty; refusing the rehearsal`);
+      const list = await run("snapshot-backup", "pg_restore", ["--list", file]);
+      writeFileSync(join(reportDir, "dump-list.txt"), list);
+      const entries = list.split("\n").filter((line) => line.trim().length > 0 && !line.trim().startsWith(";")).length;
+      if (entries === 0) {
+        throw new PhaseRefusal("snapshot-backup", `pg_restore --list of ${file} names no archive entries; refusing the rehearsal`);
+      }
+      report.backup = { file, bytes, entries };
+      console.log(`upgrade rehearsal: verified pre-upgrade dump ${file} (${entries} entries)`);
+    });
 
     await phase("catalog", async () => {
       const actual = await catalogSnapshot("catalog", {});

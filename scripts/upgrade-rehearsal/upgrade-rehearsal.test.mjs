@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
 import { REMEDY_DIR_PREFIX, coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, diffFindingKeys, findingKeys, summarize, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
+import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, diffFindingKeys, findingKeys, preUpgradeDumpName, summarize, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
@@ -362,6 +362,17 @@ test("a result that declares no checks refuses instead of reading green", () => 
   for (const result of [{ assertions: [] }, {}, null, { assertions: [{ name: "x", ok: 1 }] }]) {
     assert.match(assertionsRefusal("edge-legacy", result) ?? "", /edge-legacy/, JSON.stringify(result));
   }
+});
+
+test("the pre-upgrade dump name carries source, candidate, and stamp, and a hostile tag cannot escape the report dir", () => {
+  assert.equal(
+    preUpgradeDumpName("v0.1.0-alpha.23", "deadbeef", "2026-01-01T00-00-00"),
+    "pre-v0.1.0-alpha.23-deadbeef-2026-01-01T00-00-00.dump",
+  );
+  const hostile = preUpgradeDumpName("refs/tags/v1 ../../x", "abc", "s");
+  assert.equal(hostile, "pre-refs_tags_v1_.._.._x-abc-s.dump");
+  assert.doesNotMatch(hostile, /[/\s]/);
+  assert.equal(preUpgradeDumpName("", null, ""), "pre-untagged-candidate-nostamp.dump");
 });
 
 test("a declared source harness defect must name its check and say why the tagged check is wrong", () => {
