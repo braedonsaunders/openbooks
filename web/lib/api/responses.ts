@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ClosedPeriodError, PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
@@ -106,7 +106,6 @@ interface RefusalFamily {
 }
 
 const REFUSAL_FAMILIES: RefusalFamily[] = [
-  { match: (error) => error instanceof ClosedPeriodError, code: "closed_period", pinCode: true },
   { match: (error) => error instanceof PostingError, code: "posting_refused", pinCode: false },
   { match: (error) => error instanceof InventoryError, code: "inventory_refused", pinCode: false },
   { match: (error) => error instanceof PaymentError, code: "payment_refused", pinCode: false },
