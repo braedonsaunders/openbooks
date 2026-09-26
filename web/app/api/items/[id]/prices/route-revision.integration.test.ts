@@ -37,17 +37,19 @@ const routeUrl = './route.ts?item-price-revision'
 const { POST, PATCH, DELETE, GET } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
 interface Fixture { orgId: string; actorId: string; itemId: string; priceLevelId: string }
 
 async function fixture(): Promise<Fixture> {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
-  const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`)).rows[0]
-  assert.ok(baseLevel, 'migration must seed one active base price level')
-  return { orgId: org.orgId, actorId, itemId: org.items.service, priceLevelId: baseLevel.id }
+  return withBypassContext(async () => {
+    const org = await createScratchOrg()
+    const actorId = (await seedFlowActors(org.orgId)).adminId
+    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`)).rows[0]
+    assert.ok(baseLevel, 'migration must seed one active base price level')
+    return { orgId: org.orgId, actorId, itemId: org.items.service, priceLevelId: baseLevel.id }
+  })
 }
 
 async function today(): Promise<string> {
