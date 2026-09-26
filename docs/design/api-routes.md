@@ -64,6 +64,7 @@ the shape `{ error, code?, field?, fieldErrors?, remedy? }`:
   idempotency key answers 400 `invalid_idempotency_key` when malformed and
   409 `idempotency_key_conflict` when it cannot replay.
 - `created(body)` — 201 with the created payload.
+- `postingRefusal(error)` — the backstop for status-less engine refusals (posting, closed-period, inventory, payment, payroll, temporal families): 422 with code and remedy, 409 on conflicts, null for anything else so typed 4xx and unknown-error paths apply.
 
 ## Coverage
 
