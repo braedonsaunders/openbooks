@@ -7,7 +7,7 @@ import {
   createRemittanceBill,
   payrollRemittanceSummary,
 } from "./remittance.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -112,6 +112,8 @@ async function seedRqPayroll(options: {
                          is_active, custom, created_by, updated_by)
     values (${employeeId}, ${org.orgId}, 'person', 'Quebec Employee',
             ${org.subsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId})`);
+  // pay_stubs.employment_id is NOT NULL since 0374, so the stub carries its employment.
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   const documentId = randomUUID();
   await db.execute(sql`
     insert into documents
@@ -129,12 +131,12 @@ async function seedRqPayroll(options: {
   const stubId = randomUUID();
   await db.execute(sql`
     insert into pay_stubs
-      (id, org_id, pay_run_document_id, employee_party_id, province,
+      (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
        periods_per_year, pay_date, tax_year, currency_code, gross,
        pensionable_earnings, insurable_earnings, net_pay, employer_cost,
        vacation_accrued, factors, filing_account_id, filing_account_source,
        created_by, updated_by)
-    values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${province}, 52,
+    values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, ${province}, 52,
             '2026-07-31', 2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '1600.0000',
             '2000.0000', '0', '{}'::jsonb, ${accountId}, 'calculation', ${actorId}, ${actorId})`);
   await db.execute(sql`

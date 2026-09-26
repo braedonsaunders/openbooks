@@ -8,12 +8,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   collectLegacyEmployments,
   EmploymentCollectionError,
@@ -111,6 +106,9 @@ async function seedCommittedStub(
   payDate: string,
 ): Promise<void> {
   const documentId = randomUUID();
+  // pay_stubs.employment_id is NOT NULL since 0374: the stub carries the legacy payroll employment for the
+  // run's legal entity, which the migration reuses instead of duplicating (HRM-MIGRATE-DUP-EMPLOYMENT).
+  const employmentId = await seedWorkerEmployment(org.orgId, partyId, org.subsidiaryId);
   await withOrg(org.orgId, async () => {
     await db.execute(sql`
       insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
@@ -123,11 +121,10 @@ async function seedCommittedStub(
       values (${documentId}, ${org.orgId}, ${scheduleId}, ${payDate}, ${payDate},
               ${payDate}, 2026, 'committed', ${actorId}, ${actorId})`);
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
-                             periods_per_year, pay_date, tax_year, currency_code,
-                             created_by, updated_by)
-      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${partyId}, 'ON', 26,
-              ${payDate}, 2026, 'CAD', ${actorId}, ${actorId})`);
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
+                             periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
+      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${partyId}, ${employmentId},
+              'ON', 26, ${payDate}, 2026, 'CAD', ${actorId}, ${actorId})`);
   });
 }
 
@@ -621,13 +618,15 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     const dry = runCli([`--org=${org.orgId}`, `--input=${rowsPath}`]);
     assert.equal(dry.status, 0, `dry run failed: ${dry.stderr}\n${dry.stdout}`);
     const dryReport = reportJson(dry.stdout);
-    assert.equal(dryReport.totals.wouldMigrate, 2);
+    assert.equal(dryReport.totals.wouldMigrate, 0);
+    assert.equal(dryReport.totals.alreadyMigrated, 2);
     assert.equal(dryReport.totals.refused, 0);
 
     const applied = runCli([`--org=${org.orgId}`, `--input=${rowsPath}`, "--apply"]);
     assert.equal(applied.status, 0, `apply failed: ${applied.stderr}\n${applied.stdout}`);
     const appliedReport = reportJson(applied.stdout);
-    assert.equal(appliedReport.totals.migrated, 2);
+    assert.equal(appliedReport.totals.migrated, 0);
+    assert.equal(appliedReport.totals.alreadyMigrated, 2);
     assert.equal(appliedReport.totals.refused, 0);
     const stored = await withBypassContext(async () => {
       const result = (await db.execute<{ n: string }>(sql`
@@ -652,8 +651,8 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     assert.equal(againReport.totals.refused, 0);
     assert.equal(againReport.persons.length, 2, "the re-run reports both persons");
     for (const person of againReport.persons) {
-      assert.equal(person.classification, "already_migrated");
-      assert.equal(person.outcome, "already_migrated");
+      assert.equal(person.classification, "ready", "reuse writes no migration evidence, so preflight still classifies the row ready");
+      assert.equal(person.outcome, "already_migrated", "execution reuses the stub's employment instead of duplicating it");
     }
     assert.equal(migrationExitCode(againReport), 0);
   } finally {

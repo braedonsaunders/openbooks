@@ -179,11 +179,6 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON',
               26, '2026-07-21', 2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '2000.0000',
               '{}'::jsonb, ${actorId}, ${actorId})`);
-    await db.execute(sql`
-      insert into payroll_roe_separation_events
-        (org_id, employee_party_id, interruption_on, last_insurable_earnings_on, status, change_reason, created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, '2026-07-22', '2026-07-18', 'confirmed', 'fixture', ${actorId}, ${actorId})`);
-
     // Confirmed separation facts: the ROE refuses by name without them.
     await db.execute(sql`
       insert into payroll_roe_separation_events

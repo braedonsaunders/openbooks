@@ -17,7 +17,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { add, cmp } from "../../money/money.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 import { SG_PAYROLL_PACK } from "./pack.ts";
 import { ir8aSlips } from "./filings.ts";
 
@@ -46,6 +46,8 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
       values (${id}, ${org.orgId}, 'person', ${name}, true, ${org.subsidiaryId}, '{}'::jsonb)`);
+    // pay_stubs.employment_id is NOT NULL since 0374, so the stub carries its employment.
+    await seedWorkerEmployment(org.orgId, id, org.subsidiaryId);
     return id;
   };
   const employeeA = await employee("Amena Tan");
@@ -97,13 +99,12 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
   ): Promise<void> => {
     const stubId = randomUUID();
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                              periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                             pensionable_earnings, insurable_earnings, factors,
-                             country, country_source, created_by, updated_by)
-      values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, 'SG',
-              12, ${payDate}, ${taxYear}, 'SGD', ${gross}, ${gross},
-              ${gross}, ${gross}, '{}'::jsonb,
+                             pensionable_earnings, insurable_earnings, factors, country, country_source,
+                             created_by, updated_by)
+      values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, (select id from worker_employments where org_id = ${org.orgId} and worker_party_id = ${employeeId} limit 1),
+              'SG', 12, ${payDate}, ${taxYear}, 'SGD', ${gross}, ${gross}, ${gross}, ${gross}, '{}'::jsonb,
               'SG', 'calculation', ${actorId}, ${actorId})`);
     await db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
