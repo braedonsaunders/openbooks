@@ -1,13 +1,12 @@
 import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
 import type { ComponentProps } from 'react'
 import { AutomationApprovalSettings, AutomationRowActions, NewAutomationButton } from './AutomationsClient'
 
 /**
  * The automations list's composite cells, mirroring the flows list cells:
- * the name link, the status chip, the last-run badge pair, the error text,
- * and the row actions (enable/disable/run-now). One implementation shared
- * by the page and the widget registry — never a second copy.
+ * the name link, the last-run badge pair, the error text, and the row
+ * actions (enable/disable/run-now). One implementation shared by the page
+ * and the widget registry — never a second copy.
  */
 
 export function AutomationNameCell({ name, href }: { name: string; href: string }) {
@@ -19,19 +18,6 @@ export function AutomationNameCell({ name, href }: { name: string; href: string 
       {name}
     </Link>
   )
-}
-
-export function AutomationStatusCell({
-  status,
-  label,
-  variant,
-}: {
-  status: string
-  label: string
-  variant: 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'
-}) {
-  void status
-  return <Badge variant={variant}>{label}</Badge>
 }
 
 export function AutomationLastRunCell({

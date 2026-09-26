@@ -6,7 +6,7 @@
 // change, and follows the OS setting while in 'system' mode.
 
 import { createContext, useCallback, useContext, useEffect, useSyncExternalStore } from 'react'
-import { useHydrated } from '@/lib/use-hydrated'
+import { useHydrated } from '@openbooks/ui'
 
 export type Theme = 'light' | 'dark' | 'system'
 type ResolvedTheme = 'light' | 'dark'

@@ -147,13 +147,6 @@ export interface ReconciliationListRow {
   actionLabel: string
 }
 
-export interface DrawerLineParams {
-  page: number
-  perPage: number
-  sort: string
-  dir: 'asc' | 'desc'
-}
-
 export interface BankingAccountData {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>

@@ -9,13 +9,12 @@ import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
-import { Badge } from '@openbooks/ui'
+import { Badge, useHydrated } from '@openbooks/ui'
 import { Logo } from './brand-logo'
 import { useMobileNav } from './mobile-nav'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 import { useNavGroups } from './use-platform-nav'
 import { ThemeToggle } from './theme-toggle'
-import { useHydrated } from '@/lib/use-hydrated'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
   const t = useTranslations('shell.mobileNav')

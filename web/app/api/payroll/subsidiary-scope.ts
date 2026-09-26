@@ -93,31 +93,6 @@ export async function guardPayrollVendor(gate: Authz, partyId: string): Promise<
   return denied
 }
 
-/** A remittance summary is aggregate data; hide an entire group if its
- * account is not visible. Unassigned groups are safe only after all employees
- * in that period have been checked by the caller. */
-export async function visibleRemittanceAccountIds(
-  gate: Authz,
-  accountIds: readonly (string | null)[],
-): Promise<Set<string | null>> {
-  if (gate.allowedSubsidiaryIds === null) return new Set(accountIds)
-  const visible = new Set<string | null>()
-  const ids = [...new Set(accountIds.filter((id): id is string => Boolean(id)))]
-  if (ids.length) {
-    const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-      select id, subsidiary_id as "subsidiaryId"
-        from payroll_filing_accounts
-       where org_id = ${gate.user.orgId}
-         and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-    `)).rows
-    for (const row of rows) {
-      const sub = row.subsidiaryId ?? await activeRoot(gate)
-      if (sub && subsidiaryScopeAllows(gate.allowedSubsidiaryIds, sub)) visible.add(row.id)
-    }
-  }
-  return visible
-}
-
 /** Guard every row in a filing population before returning a year-end output. */
 export async function guardPayrollFilingData(
   gate: Authz,

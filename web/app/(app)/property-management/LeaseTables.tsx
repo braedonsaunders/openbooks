@@ -6,64 +6,6 @@ import { Empty, Status } from "./workspace-ui";
 import type { DepositRow, LeaseRow, Money, ScheduleRow } from "./types";
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
-export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; money: Money; onOpen: (id: string) => void }) {
-  const t = useTranslations("entities.propertyManagement");
-  if (!leases.length)
-    return (
-      <Empty
-        title={t("detail.leases.emptyTitle")}
-        detail={t("detail.leases.emptyDetail")}
-      />
-    );
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{t("detail.leases.table.lease")}</TableHead>
-          <TableHead>{t("detail.leases.table.unit")}</TableHead>
-          <TableHead>{t("detail.leases.table.tenant")}</TableHead>
-          <TableHead>{t("detail.leases.table.term")}</TableHead>
-          <TableHead>{t("detail.leases.table.status")}</TableHead>
-          <TableHead className="text-right">{t("workspace.metrics.depositsHeld")}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {leases.map((lease) => (
-          <InteractiveTableRow
-            key={lease.id}
-            role="button"
-            tabIndex={0}
-            className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
-            onClick={() => onOpen(lease.id)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onOpen(lease.id);
-              }
-            }}
-          >
-            <TableCell className="font-medium">{lease.leaseNumber}</TableCell>
-            <TableCell>
-              {lease.propertyName}
-              {lease.unitCode ? ` · ${lease.unitCode}` : ""}
-            </TableCell>
-            <TableCell>{lease.tenantName}</TableCell>
-            <TableCell>
-              {lease.startsOn} – {lease.endsOn || t("detail.leases.openTerm")}
-            </TableCell>
-            <TableCell>
-              <Status value={lease.status} />
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {money(lease.depositBalance, { currency: lease.currency })}
-            </TableCell>
-          </InteractiveTableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
 export function RentTable({ schedules, leases, money, total }: { schedules: ScheduleRow[]; leases: LeaseRow[]; money: Money; total?: number }) {
   const t = useTranslations("entities.propertyManagement");
   const tc = useTranslations("common");

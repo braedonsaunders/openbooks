@@ -27,8 +27,6 @@ const runRecognitionBody = z.object({
   fingerprint: z.string().min(1).optional(),
 })
 
-export type RunRecognitionRequest = z.input<typeof runRecognitionBody>
-
 /**
  * Run revenue recognition: post every due, unposted schedule line through the
  * kernel (DR deferred / CR earned, origin='revenue_recognition'), idempotently.

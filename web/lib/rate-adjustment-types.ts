@@ -33,7 +33,6 @@ export const ADJUSTMENT_TARGET_TYPES = [
   'project',
   'customer',
 ] as const
-export type AdjustmentTargetType = (typeof ADJUSTMENT_TARGET_TYPES)[number]
 
 /**
  * How an adjustment turns into money. Every entry here must have a pricing
@@ -48,7 +47,6 @@ export const ADJUSTMENT_CALCULATIONS = [
   'per_day',
   'text',
 ] as const
-export type AdjustmentCalculationType = (typeof ADJUSTMENT_CALCULATIONS)[number]
 
 /** What kind of commercial term the adjustment is. */
 export const ADJUSTMENT_CATEGORIES = [

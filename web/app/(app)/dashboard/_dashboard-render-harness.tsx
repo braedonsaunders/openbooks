@@ -56,10 +56,6 @@ if (typeof window.requestAnimationFrame !== "function") {
 // Controllable viewport: the grid picks phone/tablet/desktop from these.
 const mediaMatches = new Map<string, boolean>();
 const mediaListeners = new Map<string, Set<() => void>>();
-export function setMediaQuery(query: string, matches: boolean): void {
-  mediaMatches.set(query, matches);
-  for (const notify of mediaListeners.get(query) ?? []) notify();
-}
 if (typeof window.matchMedia !== "function") {
   window.matchMedia = ((query: string) => ({
     matches: mediaMatches.get(query) ?? false,

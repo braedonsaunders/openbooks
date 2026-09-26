@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useHydrated } from '@/lib/use-hydrated'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
   Activity,
@@ -62,7 +61,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
-import { Popover, cn } from '@openbooks/ui'
+import { Popover, cn, useHydrated } from '@openbooks/ui'
 import { findActiveNavHref } from './sidebar-nav-active'
 import { NavCountBadge } from './nav-count-badge'
 

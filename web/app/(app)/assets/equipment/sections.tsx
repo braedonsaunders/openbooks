@@ -1,15 +1,11 @@
 import Link from 'next/link'
-import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 
 /**
- * Equipment adapters retained for stored PageSpecs plus the KPI strip used by
- * the built-in page.
+ * Equipment adapters retained for stored PageSpecs.
  *
  * New built-in layouts use ModuleHomeTabs for the Fixed Assets / Tax
  * Depreciation / Equipment switch. The old link-row renderer remains
  * registered so tenant layouts saved before that conversion still render.
- * The KPI strip is KpiStrip markup, not stat-tile — values arrive already
- * formatted from the loader.
  */
 
 /** Legacy stored-layout adapter; built-in pages use ModuleHomeTabs. */
@@ -46,7 +42,3 @@ export function EquipmentHeaderLinks({
   )
 }
 
-/** The four loader-formatted summary tiles above the list. */
-export function EquipmentKpiStrip({ items }: { items: Kpi[] }) {
-  return <KpiStrip items={items} />
-}

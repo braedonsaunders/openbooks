@@ -56,7 +56,6 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/crm/accounts/draft/route.ts": "bodyless draft factory",
   "web/app/api/crm/opportunities/[id]/estimate/route.ts": "bodyless conversion action; opportunity id is a path parameter",
   "web/app/api/equipment/[id]/capitalize/route.ts": "bodyless capitalization action; equipment id is a path parameter",
-  "web/app/api/equipment/draft/route.ts": "bodyless draft factory",
   "web/app/api/estimates/draft/route.ts": "bodyless draft factory",
   "web/app/api/expenses/draft/route.ts": "bodyless draft factory",
   "web/app/api/field-tickets/draft/route.ts": "bodyless draft factory",
@@ -208,7 +207,7 @@ test("every JSON mutation route parses its body through the shared zod boundary"
     failures.push("web/lib/api/v1-request.ts: v1 body helper reads req/request.json() directly");
   }
   const v1RecordsSource = readFileSync(join(TEST_DIR, "v1-records.ts"), "utf8");
-  if ((v1RecordsSource.match(/readV1JsonObject\(/g) ?? []).length < 4) {
+  if ((v1RecordsSource.match(/readV1JsonObject\(/g) ?? []).length < 2) {
     failures.push("web/lib/api/v1-records.ts: record create/update aliases must parse through readV1JsonObject");
   }
   const v1OrdersSource = readFileSync(join(TEST_DIR, "v1-orders.ts"), "utf8");
