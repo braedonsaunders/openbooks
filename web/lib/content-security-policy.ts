@@ -27,7 +27,12 @@ export function buildContentSecurityPolicy(nonce: string, development: boolean):
     // React component style attributes and several embedded editors currently
     // require inline styles. Scripts remain nonce-only in production.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' blob: data: https:",
+    // No remote hosts: every in-app image is a same-origin file response or
+    // an inline asset, so a prompt-injected `![](https://…)` has no second
+    // path to the network even if a renderer ever emits it. The PDF template
+    // starter still points at an external placeholder and will render
+    // without it until it is replaced with an uploaded file.
+    "img-src 'self' blob: data:",
     "font-src 'self' data:",
     "connect-src 'self' https: wss:",
     "frame-src 'self' blob: data:",
