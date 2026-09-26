@@ -10,6 +10,7 @@ import {
   updateManagedProperty,
 } from "./management.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { waitForLockWaiter } from "../testing/lock-wait.ts";
 
 async function seedBranchLocation(orgId: string, parentId: string): Promise<string> {
   const branchId = randomUUID();
@@ -82,8 +83,6 @@ test("property creation waits for a concurrent feature disable and then refuses"
       [org.orgId],
     );
     assert.equal(staged.rowCount, 1, 'the concurrent writer must stage the feature disable');
-    const holderPid = (await holder.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
-
     const request = withBypass(() => createManagedProperty({
       orgId: org.orgId,
       actorId,
@@ -95,18 +94,7 @@ test("property creation waits for a concurrent feature disable and then refuses"
     }));
     pending = request;
     void request.catch(() => {});
-    let blocked = false;
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
-      await holder.query('select pg_stat_clear_snapshot()');
-      const check = await holder.query<{ blocked: boolean }>(
-        'select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',
-        [holderPid],
-      );
-      if (check.rows[0]?.blocked) { blocked = true; break; }
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.ok(blocked, 'property write must wait on the shared feature-gate lock');
+    await waitForLockWaiter(holder, { label: 'the managed-property write' });
     await holder.query('commit');
     await assert.rejects(request, (error: unknown) =>
       error instanceof PropertyManagementError && /feature is disabled/.test(error.message),
