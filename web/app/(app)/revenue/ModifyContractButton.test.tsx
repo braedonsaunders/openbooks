@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F1-8: the modify-contract form was hard-coded English and its save path
+// The modify-contract form was hard-coded English and its save path
 // parsed the mutation response with hard-coded English fallbacks. Mounts
 // the real ModifyContractButton under jsdom, opens the form, and asserts
 // the chrome renders through the catalog (en) and a failed proposal

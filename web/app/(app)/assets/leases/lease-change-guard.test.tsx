@@ -1,4 +1,4 @@
-// F2-13: the lease change/terminate popover never replays another lease's
+// The lease change/terminate popover never replays another lease's
 // terms or another proposal's idempotency key. Switching leases remounts
 // the drawer (keyed by lease id), and every popover open resets the form
 // to the current lease with a fresh key — so a proposal for lease B is

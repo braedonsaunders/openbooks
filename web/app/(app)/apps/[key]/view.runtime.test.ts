@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F4-7: the installed-app runtime notices ("App not found", "This app is
+// The installed-app runtime notices ("App not found", "This app is
 // not installed...", "This app is currently disabled.", "Back to apps")
 // were hardcoded English literals in the loader, so a non-English operator
 // read English on the missing/disabled branches. The loader now resolves

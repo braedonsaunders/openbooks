@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { shortDate } from './sections'
 
-// F3-16: the payroll home formatted its dates with a hard-coded en-US
+// The payroll home formatted its dates with a hard-coded en-US
 // locale, so every operator read American month/day order. The loader now
 // passes the operator locale through; the formatter honors it.
 test('short dates follow the operator locale', () => {

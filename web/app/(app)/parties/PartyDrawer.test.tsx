@@ -741,7 +741,7 @@ for (const locale of LOCALES) {
   });
 }
 
-// F3-96: switching tabs remounted TabContent and dropped unsaved
+// Switching tabs remounted TabContent and dropped unsaved
 // relationship, accounting, and compliance input (keep-alive covered only
 // wages and payroll). Those panels now stay mounted once visited, so a
 // half-typed form survives a tab round-trip.

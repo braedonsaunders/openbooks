@@ -129,7 +129,7 @@ export function ChangeRequestDetailDrawer({
    * on a deep link into another segment — the live fetch still resolves. */
   subject: ChangeRequestDetailSubject | null
   departmentOptions: { value: string; label: string }[]
-  /** Loader-resolved manage grant (F3-36): the lifecycle actions render
+  /** Loader-resolved manage grant: the lifecycle actions render
    * only with it; detail stays readable without it. */
   canManage: boolean
   /** HR-16 verb actions (Rescind/Correct) display gate: approve grant

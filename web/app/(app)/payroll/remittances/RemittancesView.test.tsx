@@ -115,7 +115,7 @@ test('bill creation refuses an unapplied date draft', async (t) => {
     button.textContent?.includes(messages.remittances.createBill),
   )
   assert.ok(create, 'the bill action is available to a caller with create permission')
-  // I4-webui-197: the cards bill the applied July period, never a draft.
+  // The cards bill the applied July period, never a draft.
   await act(async () => {
     create.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await tick()

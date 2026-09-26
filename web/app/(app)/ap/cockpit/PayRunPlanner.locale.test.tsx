@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F2-14b (AP pay-run planner): due dates must render in the viewer's locale.
+// AP pay-run planner: due dates must render in the viewer's locale.
 // A French viewer sees "5 janv.", never the pinned English "Jan 5".
 const React = await import('react')
 Object.assign(globalThis, { React })
@@ -49,7 +49,7 @@ function markup(locale: string): string {
   )
 }
 
-test('pay-run due dates render in the viewer locale (F2-14b)', () => {
+test('pay-run due dates render in the viewer locale', () => {
   assert.match(markup('en-US'), /Jan 5/)
   assert.match(markup('fr'), /janv/i)
   assert.ok(!markup('fr').includes('Jan 5'), 'no pinned English date may leak into the French render')

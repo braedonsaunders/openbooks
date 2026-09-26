@@ -249,7 +249,7 @@ export async function loadBankingAccount(
   const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone })
   const formatTimestamp = (value: string) => timestampFormatter.format(new Date(value))
 
-  // Membership comes from the ONE banking reader (F-t06-001) — the same
+  // Membership comes from the ONE banking reader — the same
   // reconcilable/active/bank-type predicate the overview roster and the
   // Match picker filter through — so a non-bank page never renders for an
   // account its siblings refuse to list.

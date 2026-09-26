@@ -1,4 +1,4 @@
-// F2-11 (client half): a refused weekly save surfaces the server's named
+// A refused weekly save surfaces the server's named
 // 409 with a reload path instead of a generic toast. The grid keeps the
 // typed hours; Reload re-runs the server loader, which delivers the week
 // the other editor saved under a new revision.

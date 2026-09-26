@@ -468,10 +468,10 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
   // so the cycles list, the calibration grid, the talent grid, the feedback
   // settings and the retention figures each get the page to themselves.
   // Loaded here (not beside the retention panel) so every drawer href below
-  // preserves the continuous tab through the shared helper (F3-57).
+  // preserves the continuous tab through the shared helper.
   const continuous = await loadContinuousTab(authz, sp, canManage, canRetain)
   const cyclesTab = continuous.tab === 'cycles'
-  // F3-57: drawer hrefs preserve the segment and the continuous tab — a
+  // Drawer hrefs preserve the segment and the continuous tab — a
   // drawer opened from Retention closes back onto Retention, not Cycles.
   const preservedParams = {
     ...(rawStatus ? { status: rawStatus } : {}),

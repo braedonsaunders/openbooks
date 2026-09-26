@@ -162,9 +162,9 @@ export function BankAccountsPanel({
         onRefused: (error) => {
           // A 409 reloads the list behind the still-open draft — the server
           // reason names the recovery, and the stale token is never adopted,
-          // so the next save still cannot overwrite unseen work. (F-t04-004:
-          // the pre-fix bug was truncated tokens 409ing every save; the
-          // route bodies are clean human sentences now, safe to surface.)
+          // so the next save still cannot overwrite unseen work. (Truncated tokens
+          // once 409ed every save; the route bodies are clean human sentences
+          // now, safe to surface.)
           if (error.kind === 'conflict') void refreshAccounts()
         },
       },

@@ -37,7 +37,7 @@ export function CloseReadinessCell({ readiness }: { readiness: number }) {
 /**
  * The run badge with the enforcement truth beneath it: when the selected
  * book holds closed locks for the period — with or without a run — the lock
- * line names exactly which modules on which book are locked (F-t02-005). The
+ * line names exactly which modules on which book are locked. The
  * LOADER resolves both strings; the component only stacks them.
  */
 export function CloseStatusCell({

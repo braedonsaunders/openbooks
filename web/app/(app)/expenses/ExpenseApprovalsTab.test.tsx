@@ -126,7 +126,7 @@ test('expense Approvals tab renders loading content while record-state is in fli
   assert.match(
     host.textContent ?? '',
     /Loading…/,
-    'F-t04-002: the Approvals tab body must render content even before the fetch resolves',
+    'the Approvals tab body must render content even before the fetch resolves',
   )
 })
 
@@ -138,7 +138,7 @@ test('expense Approvals tab renders the empty state when no flow history exists'
   assert.match(
     host.textContent ?? '',
     /No approvals required for this record\./,
-    'F-t04-002: the Approvals tab body must render content, never a blank panel',
+    'the Approvals tab body must render content, never a blank panel',
   )
 })
 

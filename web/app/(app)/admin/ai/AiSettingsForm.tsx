@@ -124,7 +124,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
           } else {
             setModels([])
             // The route returns a code, never the raw upstream body: render
-            // the localized message (F-t11-004).
+            // the localized message.
             setModelsError(modelsErrorMessage(result.code, result.status ?? null))
           }
         } catch {

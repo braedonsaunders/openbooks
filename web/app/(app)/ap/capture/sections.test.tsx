@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import type { CaptureListRow } from './sections'
 
-// F1-6: bulk capture actions parsed the body before the status and collapsed
+// Bulk capture actions parsed the body before the status and collapsed
 // per-item reasons to counts ("2 succeeded, 1 failed"), so the operator
 // could not tell WHICH document failed or WHY. Mounts the real CaptureList
 // under jsdom and drives a partial bulk result with scripted fetches.

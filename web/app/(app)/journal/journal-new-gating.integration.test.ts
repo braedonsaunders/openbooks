@@ -1,5 +1,5 @@
 /**
- * F1-1: the journal New button shows iff the server would allow the save.
+ * The journal New button shows iff the server would allow the save.
  *
  * Before the fix the spec rendered the New button unconditionally, but the
  * loader opens the ?entryNew=1 drawer only with gl.post — a gl.read-only

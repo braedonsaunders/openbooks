@@ -7,7 +7,7 @@ declare global {
   var __triageFetches: { url: string; method: string }[] | undefined;
 }
 
-// F4-4: bulk-resolving N findings broke on the first refusal — the loop
+// Bulk-resolving N findings broke on the first refusal — the loop
 // stopped, the selection was cleared, one generic actionFailed toast fired
 // and the list refreshed, so applied rows, refused rows and unattempted rows
 // were indistinguishable. Every selected row must now be attempted, refused

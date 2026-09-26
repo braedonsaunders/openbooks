@@ -479,7 +479,7 @@ test('read mode respects the section split', () => {
   assert.doesNotMatch(tax, /Monthly/)
 })
 
-// F3-10: a pack amount the classifier cannot read names its cause and
+// A pack amount the classifier cannot read names its cause and
 // remedy under the field instead of posting raw text for the server to
 // refuse. A decimal comma reads as twelve-thirty-four (never as a
 // thousands separator to strip — that remedy would store 1234).

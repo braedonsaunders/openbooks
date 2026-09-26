@@ -140,7 +140,7 @@ function retryButton(m: Mount, section: string): HTMLButtonElement | undefined {
   return [...(block?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Retry') as HTMLButtonElement | undefined
 }
 
-// F3-60: a 500 on the beside-the-record APIs must read as an error with
+// A 500 on the beside-the-record APIs must read as an error with
 // retry — never as no access.
 test('failing benefits and qualifications sections show an error with retry instead of hiding', async () => {
   const m = await mount(
@@ -166,7 +166,7 @@ test('failing benefits and qualifications sections show an error with retry inst
   }
 })
 
-// F3-60: a 403 still hides the section — the record is readable without
+// A 403 still hides the section — the record is readable without
 // the grant.
 test('a forbidden beside-the-record section still hides instead of erroring', async () => {
   const m = await mount(
@@ -188,7 +188,7 @@ test('a forbidden beside-the-record section still hides instead of erroring', as
   }
 })
 
-// F3-60: the retry refetches the section.
+// The retry refetches the section.
 test('retrying a failed section refetches it', async () => {
   let attempts = 0
   const m = await mount(async (url: string) => {

@@ -10,7 +10,7 @@ declare global {
 // creating a lien waiver without a project fired no request and
 // (as filed) showed no message — indistinguishable from a dead button. The
 // validation message exists in current code; what was missing is the
-// fleet-wide contract for user-triggerable refusals: the message must pin
+// shared contract for user-triggerable refusals: the message must pin
 // as a record-level alert (announced, persistent until the next attempt),
 // not a plain paragraph.
 const { JSDOM } = await import("jsdom");
@@ -85,7 +85,7 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-test("creating a waiver requires an explicit type choice and posts nothing without it (F3-80)", async (t) => {
+test("creating a waiver requires an explicit type choice and posts nothing without it", async (t) => {
   globalThis.__waiverRouter = { push() {}, refresh() {} };
   globalThis.__waiverToasts = [];
   globalThis.__waiverPosts = [];

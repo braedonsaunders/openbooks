@@ -301,7 +301,7 @@ export function PaymentDrawer({
   }>({ key: '', rates: [] })
   const settlementRates = settlementRateResult.key === settlementRateKey ? settlementRateResult.rates : []
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  // A refused save/post must stay visible past its toast (F-t02-006): the
+  // A refused save/post must stay visible past its toast: the
   // typed refusal pins as a record-level alert until the next action, and
   // busy always releases through the shared path's finally.
   const { busy, refusal, execute, clearRefusal } = useAppAction()
@@ -576,7 +576,7 @@ export function PaymentDrawer({
 
   async function post() {
     // A non-JSON refusal body must not throw past the toast and wedge the
-    // button busy (F-t02-006 posted a 422 with zero UI feedback from the
+    // button busy (a 422 once posted with zero UI feedback from the
     // bare res.json() here): the shared read cannot throw, and the busy
     // reset lives in its finally.
     await execute(

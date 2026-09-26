@@ -91,7 +91,7 @@ export async function loadInvoicingSetup(): Promise<InvoicingSetupData> {
 
 export function invoicingSetupSpec(data: InvoicingSetupData): PageSpec {
   // The widget takes the workspace props flat (no nested bag); typing the
-  // object against the component's own props keeps the coordinator's verbatim
+  // object against the component's own props keeps that verbatim
   // wiring compiler-checked — a prop rename breaks here, not at render time.
   const props: InvoicingWorkspaceProps = {
     subscriptionBillingEnabled: data.subscriptionBillingEnabled,

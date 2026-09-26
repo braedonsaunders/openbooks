@@ -45,7 +45,7 @@ type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker
 type Tabs = Awaited<ReturnType<typeof groupTabs>>
 
 /**
- * Lean scope recovery for a rates-blocked workspace (F-t03-009): the refusal
+ * Lean scope recovery for a rates-blocked workspace: the refusal
  * carries no scope, so resolve it leniently like the banking overview — same
  * visibility, same picker rows, figures included. The home translates at
  * dated spot rates rather than period consolidated rates, so a dormant
@@ -70,7 +70,7 @@ export interface PurchasingData {
   subsidiaryLabel: string
   subsidiaryPicker: SubsidiaryPicker
   subsidiaryValue: string
-  /** Set when underived consolidated rates block the workspace (F-t06-027):
+  /** Set when underived consolidated rates block the workspace:
    * the page renders a typed banner with a derive link above empty vitals. */
   ratesBlocked: RatesBlockedNotice | null
   tabs: Tabs
@@ -129,11 +129,11 @@ export async function loadPurchasing(
   const tNav = await getTranslations('nav')
   const tr = await getTranslations('reports')
 
-  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link above live vitals.
   // Anything else is a real defect and still throws. The home translates at
   // dated spot rates, so figures load through the lenient scope even while
-  // the banner pins (F-t03-009, same recovery as the banking overview).
+  // the banner pins (same recovery as the banking overview).
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let ratesBlocked: RatesBlockedNotice | null = null
   try {

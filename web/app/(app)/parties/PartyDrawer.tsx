@@ -115,7 +115,7 @@ export function PartyDrawer({
    *  Multi-currency configuration; hide and omit it when that switch is off. */
   multiCurrency?: boolean
   /** Company Settings → Features. The Subcontractor-compliance switch gates
-   *  the vendor Compliance tab (F-t04-003). */
+   *  the vendor Compliance tab. */
   complianceEnabled?: boolean
   /** compliance.manage — assigning the class releases vendor money, so the
    *  tab is read-only without it (the PATCH route re-checks). */
@@ -244,7 +244,7 @@ export function PartyDrawer({
   const [kind, setKind] = useState<string>(p.kind ?? 'company')
   // The stored kind can be any of the five party kinds (role lists are that
   // kind by construction) — the label must render what is stored, never fall
-  // through to Company for a customer/vendor/employee row (F-t05-002).
+  // through to Company for a customer/vendor/employee row.
   // OM-16: a role-kind label additionally needs its ACTIVE role row behind
   // it — the list's role badges derive from the same rows, so the drawer
   // must not claim "Vendor" the badges (and compliance) cannot see. A
@@ -342,7 +342,7 @@ export function PartyDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [nameError, setNameError] = useState(false)
   // A refused save or activate/deactivate pins its reason on the record until
-  // the next action or cancel — a toast alone let F-t05-002 read as a
+  // the next action or cancel — a toast alone once let a refused save read as a
   // successful save while the data was silently lost.
   const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
 
@@ -1717,7 +1717,7 @@ export function PartyDrawer({
       {/* Relationship, vendor bank accounts, and vendor compliance hold
           unsaved edits in local component state, so they stay mounted once
           visited (hidden, outside the remounting TabContent) instead of
-          discarding input on every tab switch (F3-96). Mounting stays lazy:
+          discarding input on every tab switch. Mounting stays lazy:
           an unvisited tab issues no requests until first opened. */}
       {showRelationshipTab && keptTabs.has('relationship') ? (
         <div hidden={tab !== 'relationship'} className="space-y-7 p-1">
@@ -1742,7 +1742,7 @@ export function PartyDrawer({
       {/* Employee compensation tabs stay mounted once visited (hidden, outside
           the remounting TabContent) so switching tabs never discards their
           local edits — the payroll profile editor and wage-rate form hold
-          unsaved state locally (F-t08-003). Mounting stays lazy: an unvisited
+          unsaved state locally. Mounting stays lazy: an unvisited
           tab issues no requests until first opened. */}
       {role === 'employee' && canManageWages && keptTabs.has('wages') ? (
         <div hidden={tab !== 'wages'} className="space-y-7 p-1">

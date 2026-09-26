@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F2-7: the workspace load parsed the body before the status and threw
+// The workspace load parsed the body before the status and threw
 // new Error(body.error) — an error body without an error field became
 // new Error(undefined) with an empty toast. The load now checks the status
 // first through readApiErrorMessage. Mounts the real workspace under jsdom

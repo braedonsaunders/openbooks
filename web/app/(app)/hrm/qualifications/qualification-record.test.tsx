@@ -198,7 +198,7 @@ test('the record form submits the picked worker and required evidence file', asy
   }
 })
 
-// F3-59: a picker failure is an error with retry, never a silent empty list.
+// A picker failure is an error with retry, never a silent empty list.
 test('a picker failure renders the translated error with retry', async () => {
   let attempts = 0
   const m = await mount(async (url) => {
@@ -257,7 +257,7 @@ test('a qualification type list failure is named and can be retried', async () =
   }
 })
 
-// F3-37: Verify, Renew and Revoke render for the manage grant only — a
+// Verify, Renew and Revoke render for the manage grant only — a
 // read-only viewer sees the credential detail with no action buttons.
 const PENDING_DETAIL = {
   qualification: {
@@ -316,7 +316,7 @@ test('a read-only viewer sees the credential with no Verify, Renew or Revoke', a
   }
 })
 
-// F3-39: renewal writes a new row, so the drawer navigates to the new id
+// Renewal writes a new row, so the drawer navigates to the new id
 // instead of showing the new row under the old id.
 test('renew navigates to the renewed row, preserving the other params', async () => {
   const g = globalThis as Record<string, unknown>

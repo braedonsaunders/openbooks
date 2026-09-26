@@ -40,7 +40,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState(false)
   // A refused save/end/delete stays visible on the record until the next
-  // mutation attempt — a 4-second toast alone let F-t05-001 read as a
+  // mutation attempt — a 4-second toast alone once let a refused change read as a
   // silent no-op. The detail is the server's refusal text when present.
   const [actionError, setActionError] = useState<string | null>(null)
   const [rate, setRate] = useState('')

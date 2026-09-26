@@ -360,10 +360,10 @@ export function JournalDrawer({
   )
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // Saves, posts, deletes and voids run on the shared action path: a
-  // refusal (F-t06-006/F-t06-011) pins until the next action AND toasts,
+  // refusal pins until the next action AND toasts,
   // and busy always releases through the package's finally.
   const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
-  // A posted-with-warnings post pins here (F-t08-007): the entry IS posted,
+  // A posted-with-warnings post pins here: the entry IS posted,
   // but its party-less control legs sit outside every subledger, so the
   // drawer keeps saying so until the next action (same rule as refusals).
   const [postWarning, setPostWarning] = useState<string | null>(null)
@@ -737,7 +737,7 @@ export function JournalDrawer({
           }
           // Posting commits a new documents.revision_seq (migration 0167 bumps it
           // on EVERY update): re-pin the canonical token now, or the next fenced
-          // write in this session (void) 409s on the pre-post revision (F-t06-008).
+          // write in this session (void) 409s on the pre-post revision.
           await refreshFromServer(false).catch(() => {})
           if (posted.pendingApproval) toast.success(tc('actions.submitForApproval'))
           else toast.success(t('postedToast'))
@@ -810,10 +810,10 @@ export function JournalDrawer({
         })
         if (!result.ok && result.error.code === 'stale-revision') {
           // A stale revision means the re-pin raced a concurrent write:
-          // reload the canonical revision and say so in translated copy
-          // (F-t06-021) — the server sentence leaks the revision-token
-          // mechanism, and the recovery (reload) already happened here, so
-          // the message must describe what happened, not quote the refusal.
+          // reload the canonical revision and say so in translated copy.
+          // The server sentence leaks the revision-token mechanism, and the
+          // recovery (reload) already happened here, so the message must
+          // describe what happened, not quote the refusal.
           await refreshFromServer(false).catch(() => {})
           return {
             ok: false,

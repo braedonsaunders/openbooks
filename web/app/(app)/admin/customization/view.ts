@@ -141,7 +141,7 @@ export interface CustomizationData {
   formDrawerOpen: boolean
   formDrawerRecordType: string
   /**
-   * Remount key for the form drawer (F-t10-002): FormDesigner seeds its
+   * Remount key for the form drawer: FormDesigner seeds its
    * field state in mount-only useState, so edit-<id> and create-from-<src>
    * sessions must mount distinct instances — otherwise a duplicate opened
    * after editing the org-default form inherits isDefault=true and steals

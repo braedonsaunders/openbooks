@@ -59,7 +59,7 @@ export function ProjectDuplicatesView({ canMerge }: { canMerge: boolean }) {
   const tCommon = useTranslations('common')
   // The full project lifecycle, not just the pre-award trio: duplicates can
   // group active, closed and cancelled projects, and those rendered as an
-  // unknown-value fallback read as a data defect (I4-webui-44 regression).
+  // unknown-value fallback read as a data defect.
   const projectStatusLabels = {
     quoted: t('status.quoted'),
     awarded: t('status.awarded'),
@@ -72,11 +72,11 @@ export function ProjectDuplicatesView({ canMerge }: { canMerge: boolean }) {
   const [survivors, setSurvivors] = useState<Record<string, string>>({})
   // One cached preview per group + duplicate row. The survivor direction is
   // part of the identity: a count previewed for the other direction must
-  // never render as this direction's impact (F-t04-004).
+  // never render as this direction's impact.
   const [previews, setPreviews] = useState<Record<string, Preview>>({})
   // A refused preview/merge pins here, per group, until the next action in
   // that group — a toast alone left the previous direction's success on
-  // screen as if it were the answer (F-t04-004).
+  // screen as if it were the answer.
   const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)

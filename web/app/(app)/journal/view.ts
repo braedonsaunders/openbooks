@@ -100,7 +100,7 @@ export async function loadJournal(
   // The header counts the list's own backing relation (JOURNAL_ENTRY_TABLE)
   // through the shared journalScopeWhere — same scope, same subsidiary
   // fence, no status filter — so the header total and the list total agree
-  // by construction (F-t11-010). The old journalsOnly predicate counted a
+  // by construction. The old journalsOnly predicate counted a
   // narrower scope (it dropped native entries carrying a subledger document,
   // e.g. migrated bills) with no status filter, which is why the header
   // read 25,943 against the list's 47,625.

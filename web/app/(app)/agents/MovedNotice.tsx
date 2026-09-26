@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle, Button } from '@openbooks/ui'
 
 /**
  * Dismissible landing notice for retired routes that redirect here with
- * context (F-t13-007: /continuous-close → /agents?from=continuous-close).
+ * context (for example, retired /continuous-close → /agents?from=continuous-close).
  * Loader-resolved strings only — no catalog access, so the spec places it
  * like every other widget. Dismissal is session-local; the redirect explains
  * itself once per landing.

@@ -243,7 +243,7 @@ export async function loadContinuousTab(
     if (sessionId) {
       try {
         const session = await getCalibrationSession({ orgId: authz.user.orgId, actorId: authz.user.id, id: sessionId })
-        // F3-34: the editor offers the session cycle's declared scale
+        // The editor offers the session cycle's declared scale
         // labels — the same source setPotential enforces, so an offered
         // option always saves. A labelless template offers nothing.
         const potentialOptions = await calibrationPotentialOptions({

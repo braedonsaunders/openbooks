@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildSurveyAuthorPayload, parseMinGroupSize, splitOptions } from './authoring'
 
-// F3-68: the anonymity threshold must refuse by name on unparseable input —
+// The anonymity threshold must refuse by name on unparseable input —
 // a silent fallback to 5 would move the anonymity threshold under the
 // operator. The dialog shows the minGroupInvalid catalog string and posts
 // nothing when the build refuses.
@@ -46,7 +46,7 @@ test('the author payload refuses an unparseable group size instead of defaulting
   assert.equal(accepted.ok === true ? accepted.body.minGroupSize : null, 5)
 })
 
-// F3-54: the options editor is multi-line (one choice per line), so the
+// The options editor is multi-line (one choice per line), so the
 // payload carries every line — never just the first.
 test('splitOptions splits lines and drops blanks', () => {
   assert.deepEqual(splitOptions('red\ngreen\nblue'), ['red', 'green', 'blue'])

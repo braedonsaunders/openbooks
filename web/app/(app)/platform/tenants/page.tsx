@@ -17,7 +17,7 @@ export default async function PlatformTenantsPage({
   // The house list params: sort, direction, search, page and page size all
   // travel on the URL, so the loader pages in SQL and every control survives
   // refreshes and shared links. The default sort stays the long-standing
-  // name-ascending fleet order.
+  // name-ascending tenant order.
   const params = parseListParams(sp, {
     sort: 'name',
     dir: 'asc',

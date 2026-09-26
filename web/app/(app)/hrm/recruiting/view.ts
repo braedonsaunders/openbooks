@@ -368,7 +368,7 @@ export async function loadRecruitingPage(
   // HR-18: route sub-tabs. A tab naming a switched-off surface falls back
   // to Openings, so feature-off tabs are absent, not errors.
   const tab: DepthTab = await resolveDepthTab(authz, sp.tab)
-  // F3-56: drawer hrefs preserve the depth tab, the status filter, and the
+  // Drawer hrefs preserve the depth tab, the status filter, and the
   // rehomed setup-section params through the ONE shared helper — closing a
   // drawer returns to the same tab/filter instead of the default view.
   const preservedParams = { ...(status ? { status } : {}), tab, ...setupSectionParams(sp) }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F3-66: Withdraw and Cancel rendered for read-only viewers, and an empty
+// Withdraw and Cancel rendered for read-only viewers, and an empty
 // reason posted. The drawer now hides both unless it holds hrm.leave.request
 // (canWithdrawCancel, mirroring the withdraw/cancel route guard), and an
 // empty prompt answer never posts.

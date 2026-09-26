@@ -1,5 +1,5 @@
 /**
- * F2-1: the New Batch button (?new=1) opens the create workspace.
+ * The New Batch button (?new=1) opens the create workspace.
  *
  * Before the fix the loader read only sp.batch, so ?new=1 rendered the
  * list with no drawer — a dead click. Now ?new=1 (with time.crew.enter)

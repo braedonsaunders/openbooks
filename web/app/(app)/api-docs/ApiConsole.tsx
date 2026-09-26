@@ -112,7 +112,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
   // Generation fence for in-flight requests: every request-defining change
   // (selected type, method, id, body) retires the generation, and a
   // completion applies only to the generation it was sent from — so type A's
-  // late response can never land under type B (I4-webui-230).
+  // late response can never land under type B.
   const requestGeneration = useRef(0)
 
   const selected = useMemo(() => schema.find((s) => s.key === selectedKey) ?? null, [schema, selectedKey])

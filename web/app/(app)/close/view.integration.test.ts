@@ -115,7 +115,7 @@ test('close list names the locked modules and book for a period locked outside a
     for (const module of ['ar', 'gl'] as const) {
       await setPeriodLockState({
         orgId: org.orgId, periodId: org.periodId, bookId: org.bookId,
-        module, state: 'closed', actorId, reason: 'F-t02-005 diagnosis',
+        module, state: 'closed', actorId, reason: 'manual test lock',
       })
     }
     const view = await loadClose({})

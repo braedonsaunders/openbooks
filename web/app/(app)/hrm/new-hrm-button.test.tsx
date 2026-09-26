@@ -87,7 +87,7 @@ async function mount(props: { employee: boolean; change: boolean; process: boole
   }
 }
 
-test('F3-65: the New menu hides entirely when no grant applies', async () => {
+test('the New menu hides entirely when no grant applies', async () => {
   const m = await mount({ employee: false, change: false, process: false })
   try {
     assert.equal(m.document.getElementById('root')!.innerHTML.trim(), '', 'no button and no empty menu may render')
@@ -96,7 +96,7 @@ test('F3-65: the New menu hides entirely when no grant applies', async () => {
   }
 })
 
-test('F3-65: the New menu renders when at least one grant applies', async () => {
+test('the New menu renders when at least one grant applies', async () => {
   const m = await mount({ employee: true, change: false, process: false })
   try {
     assert.ok(m.document.querySelector('button'), 'the New button must render when a grant applies')

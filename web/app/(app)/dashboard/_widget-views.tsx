@@ -45,7 +45,7 @@ export function WidgetCard({
   const { date, dateTime, number } = useViewerFormat()
   const t = useTranslations('dashboard')
   // The cut-off the as-of readers used, so a tile that excludes
-  // future-dated documents says which day it is cut at (F-t02-007).
+  // future-dated documents says which day it is cut at.
   // Noon-anchored: a bare YYYY-MM-DD parses as UTC midnight and would
   // render a day early west of Greenwich.
   const asOf = data.asOfDate
@@ -95,7 +95,7 @@ export function WidgetCard({
     case 'kpi-cash-balance':
       return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={withAsOf(t('metricContext.baseCurrency', { currency: data.baseCurrency }))} />
     case 'kpi-open-receivables': {
-      // F-t02-007 pins the withAsOf(outstanding) shape below: a money tile
+      // The withAsOf(outstanding) shape below: a money tile
       // must state its cut-off. The DSO qualifier appends after it, never
       // in place of it.
       const dso = data.receivablesDso === null ? '' : ` · ${t('metricContext.dso', { days: Math.round(data.receivablesDso) })}`
@@ -104,7 +104,7 @@ export function WidgetCard({
     case 'kpi-overdue-receivables':
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-open-payables': {
-      // F-t02-007 pins the withAsOf(outstanding) shape below: a money tile
+      // The withAsOf(outstanding) shape below: a money tile
       // must state its cut-off. The DPO qualifier appends after it, never
       // in place of it.
       const dpo = data.payablesDpo === null ? '' : ` · ${t('metricContext.dpo', { days: Math.round(data.payablesDpo) })}`
@@ -517,7 +517,7 @@ function RecentEntriesList({
   const { money } = useMoney()
   const t = useTranslations('dashboard')
   // The loader only emits posted/reversed rows; anything else renders raw
-  // rather than guessing a translation (F-t01-009).
+  // rather than guessing a translation.
   const statusLabel = (status: string) =>
     status === 'posted'
       ? t('widgets.recentEntryStatusPosted')
@@ -540,7 +540,7 @@ function RecentEntriesList({
               // The posted-entry route resolves every origin to the drawer
               // that owns it (source-document, journal, or txn drawer).
               // ?entry= drives the manual-journal drawer over DOCUMENT ids
-              // only, so entry ids linked there opened nothing (F-t06-005).
+              // only, so entry ids linked there opened nothing.
               href={`/journal/${e.id}`}
               className="flex items-center justify-between gap-2 px-4 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
             >
@@ -696,7 +696,7 @@ function CloseReadinessList({
   const t = useTranslations('dashboard')
   const tc = useTranslations('close')
   // Canonical workspace labels; an unknown status/stage renders raw rather
-  // than guessing a translation (the recent-entries precedent, F-t01-009).
+  // than guessing a translation, as with recent entries above.
   const statusLabel = (status: string) =>
     tc.has(`runStatus.${status}` as never) ? tc(`runStatus.${status}` as never) : status
   const stageLabel = (stage: string | null) =>

@@ -59,7 +59,7 @@ function drawerWith(events: { kind: string; recordedAt: string }[], canManage = 
   return {
     closeHref: '/hrm/documents',
     title: 'Offer letter',
-    // F3-38: the write actions follow the loader grant.
+    // The write actions follow the loader grant.
     canManage,
     document: {
       id: 'doc-1',
@@ -72,7 +72,7 @@ function drawerWith(events: { kind: string; recordedAt: string }[], canManage = 
       signers: [],
       events: events.map((e) => ({ ...e, actor: null })),
     },
-    // I4-webui-173: the loader always carries the file-version list
+    // The loader always carries the file-version list
     // (empty when the document has no file); the drawer reads it direct.
     versions: [],
     signerNames: {},
@@ -119,7 +119,7 @@ async function renderText(drawer: Drawer): Promise<{ text: string; doc: Document
   }
 }
 
-test('F3-67: document events render translated labels, never raw codes', async () => {
+test('document events render translated labels, never raw codes', async () => {
   const m = await renderText(
     drawerWith([
       { kind: 'created', recordedAt: '2026-09-01' },
@@ -137,7 +137,7 @@ test('F3-67: document events render translated labels, never raw codes', async (
   }
 })
 
-test('F3-67: an unrecognized event kind falls back to its code, never blank', async () => {
+test('an unrecognized event kind falls back to its code, never blank', async () => {
   const m = await renderText(drawerWith([{ kind: 'mystery_kind', recordedAt: '2026-09-04' }]))
   try {
     assert.match(m.text, /mystery_kind/, 'an unknown kind stays visible as its code')
@@ -168,11 +168,11 @@ test('retention actions render their translated action label', async () => {
   }
 })
 
-test('F3-38: a sent document offers Remind, Hold and Void to the manage grant', async () => {
+test('a sent document offers Remind, Hold and Void to the manage grant', async () => {
   const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02' }], true))
   try {
     const buttons = [...m.doc.querySelectorAll('button')].map((b) => b.textContent ?? '')
-    // I4-webui-168: the service accepts Send only on drafts, so a sent
+    // The service accepts Send only on drafts, so a sent
     // document offers Remind, Hold and Void — never Send again.
     for (const label of ['Remind', 'Hold', 'Void']) {
       assert.ok(buttons.includes(label), `${label} renders for the manage grant`)
@@ -183,7 +183,7 @@ test('F3-38: a sent document offers Remind, Hold and Void to the manage grant', 
   }
 })
 
-test('F3-38: a read-only viewer sees the document with no Send, Remind, Hold or Void', async () => {
+test('a read-only viewer sees the document with no Send, Remind, Hold or Void', async () => {
   const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02' }], false))
   try {
     // The body carries no title (the UrlDrawer owns it) — Signers/Events

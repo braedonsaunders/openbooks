@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F3-26: BulkEditDrawer closed silently on a half-typed adjustment — Cancel,
+// BulkEditDrawer closed silently on a half-typed adjustment — Cancel,
 // the X button, Esc and the backdrop all dropped the typed component, amount
 // and note with no question. The drawer now asks first when dirty (the
 // confirmDiscard pattern: a clean drawer still closes without prompting, and

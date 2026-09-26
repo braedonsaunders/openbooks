@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F2-9: the lease drawer was hard-coded English and parsed mutation
+// The lease drawer was hard-coded English and parsed mutation
 // responses before checking the status. Mounts the real LeaseDrawer under
 // jsdom and asserts the summary chrome renders through the catalog (en)
 // and a failed commence toasts the translated fallback with the status.

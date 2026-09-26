@@ -50,7 +50,7 @@ export interface CustomerAttentionItem {
 }
 
 /**
- * Fail-closed home figures for a rates-blocked workspace (F-t06-027): every
+ * Fail-closed home figures for a rates-blocked workspace: every
  * vital reads empty/zero and feature tiles hide, so nothing presents a
  * scoped number beside the banner. Navigation (tabs, directory, subsidiary
  * switcher) keeps working — switching to a single-subsidiary view loads
@@ -76,7 +76,7 @@ const BLOCKED_HOME: CustomersHome = {
   },
   ordersEnabled: false,
   crmEnabled: false,
-  // Rates-blocked keeps the existing empty-vitals render (F-t06-027): the
+  // Rates-blocked keeps the existing empty-vitals render: the
   // omission here is rates, not permission, so the allow flags stay open.
   arAllowed: true,
   partiesAllowed: true,
@@ -88,7 +88,7 @@ export interface CustomersData {
   subsidiaryLabel: string
   subsidiaryPicker: SubsidiaryPicker
   subsidiaryValue: string
-  /** Set when underived consolidated rates block the workspace (F-t06-027):
+  /** Set when underived consolidated rates block the workspace:
    * the page renders a typed banner with a derive link above empty vitals. */
   ratesBlocked: RatesBlockedNotice | null
   tabs: Tabs
@@ -96,9 +96,9 @@ export interface CustomersData {
   activeCustomersValue: string
   crmEnabled: boolean
   ordersEnabled: boolean
-  /** I4-webui-225b: false hides every AR-derived vital (omitted, not zero). */
+  /** When false, hides every AR-derived vital (omitted, not zero). */
   arAllowed: boolean
-  /** I4-webui-225b: false hides the directory and customer count. */
+  /** When false, hides the directory and customer count. */
   partiesAllowed: boolean
   pipelineLabel: string
   pipelineValue: string
@@ -141,7 +141,7 @@ export async function loadCustomers(
   if (!authz) redirect('/login')
   // The workspace spans CRM + AR + records — any of the group's read
   // permissions opens the home; every panel then keeps only its own
-  // family's grant (I4-webui-225b). 'crm.read' stays admitted for
+  // family's grant. 'crm.read' stays admitted for
   // wildcard-era grants; the pipeline itself requires the granular
   // crm.opportunities.read its board source requires.
   if (!['ar.read', 'crm.read', 'crm.opportunities.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ar.read')
@@ -155,7 +155,7 @@ export async function loadCustomers(
   const tNav = await getTranslations('nav')
   const tr = await getTranslations('reports')
 
-  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link above empty vitals.
   // Anything else is a real defect and still throws. Home figures load only
   // with a resolved subsidiary scope — BLOCKED_HOME otherwise (fail-closed).
@@ -207,7 +207,7 @@ export async function loadCustomers(
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
   const tabs = await customerGroupTabs(authz, '/customers', { subQs })
 
-  // I4-webui-225b: directory links are already permission-filtered by
+  // Directory links are already permission-filtered by
   // resolveNav; the badge VALUES need the same per-family grant, or a
   // count from an unreadable family leaks beside an allowed link.
   const badgeFor = (href: string): DirectoryItem['badge'] => {
@@ -373,7 +373,7 @@ export function customersSpec(data: CustomersData): PageSpec {
         // tile is orders-gated; `when` expresses that without the spec
         // gaining a conditional.
         grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
-          // I4-webui-225b: the count reads behind parties.read.
+          // The count reads behind parties.read.
           statTile({ iconKey: 'users', accent: 'teal', label: f('activeCustomersLabel'), value: f('activeCustomersValue'), when: f('partiesAllowed') }),
           statTile({
             iconKey: 'trending-up',
@@ -406,7 +406,7 @@ export function customersSpec(data: CustomersData): PageSpec {
             value: f('collectedWeekValue'),
             sub: f('collectedWeekSub'),
             tone: 'positive',
-            // I4-webui-225b: collections read behind ar.read.
+            // Collections read behind ar.read.
             when: f('arAllowed'),
           }),
         ]),
@@ -418,7 +418,7 @@ export function customersSpec(data: CustomersData): PageSpec {
             hint: f('heroHint'),
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-[24rem] lg:col-span-2',
-            // I4-webui-225b: the roster is AR balances; hide it unread.
+            // The roster is AR balances; hide it unread.
             when: f('arAllowed'),
             blocks: [
               // The empty state lives inside the section component, not as a
@@ -437,7 +437,7 @@ export function customersSpec(data: CustomersData): PageSpec {
               iconKey: 'gauge',
               bodyClassName: 'p-0',
               className: 'shrink-0',
-              // I4-webui-225b: AR pulse reads behind ar.read.
+              // AR pulse reads behind ar.read.
               when: f('arAllowed'),
               blocks: [
                 widgetBlock('customer-ar-pulse', {
@@ -455,7 +455,7 @@ export function customersSpec(data: CustomersData): PageSpec {
               iconKey: 'area-chart',
               hint: f('trendHint'),
               className: 'shrink-0',
-              // I4-webui-225b: the collections trend reads behind ar.read.
+              // The collections trend reads behind ar.read.
               when: f('arAllowed'),
               blocks: [
                 widgetBlock('trend-chart', {
@@ -474,7 +474,7 @@ export function customersSpec(data: CustomersData): PageSpec {
               iconKey: 'triangle-alert',
               bodyClassName: 'p-0',
               className: 'shrink-0',
-              // I4-webui-225b: attention derives from AR exposure — never
+              // Attention derives from AR exposure — never
               // render its all-clear state to an AR-unreadable caller.
               when: f('arAllowed'),
               blocks: [

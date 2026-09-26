@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F1-5: starting a reconciliation parsed the response body BEFORE checking
+// Starting a reconciliation parsed the response body BEFORE checking
 // the status with no try/catch, so a non-JSON 502 page threw a SyntaxError
 // out of the handler (no toast) and any thrown fetch left the Start button
 // wedged on "Starting…". Mounts the real button under jsdom and drives the

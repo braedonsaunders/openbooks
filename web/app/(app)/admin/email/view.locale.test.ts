@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F4-8 (page half): the /admin/email page title and description were
+// The /admin/email page title and description were
 // hardcoded English in the loader. They now resolve through the same
 // admin.email catalog keys as the form, in the request locale.
 

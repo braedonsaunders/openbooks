@@ -138,7 +138,7 @@ async function mountDialog(opts: {
   closeHref: string
   subject: typeof SUBJECT | null
   departmentOptions?: { value: string; label: string }[]
-  // F3-36: the drawer's lifecycle actions follow the loader grant.
+  // The drawer's lifecycle actions follow the loader grant.
   canManage?: boolean
   fetchHandler: FetchHandler
 }): Promise<{ unmount: () => Promise<void> }> {
@@ -402,7 +402,7 @@ test('no request id renders nothing', async () => {
   }
 })
 
-test('F3-36: a read-only viewer sees the draft detail with no Edit, Submit or Withdraw', async () => {
+test('a read-only viewer sees the draft detail with no Edit, Submit or Withdraw', async () => {
   const { unmount } = await mountDialog({
     requestId: REQUEST_ID,
     closeHref: '/hrm/change-requests',

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F3-71: the activity drawer PATCHed with no revision token, so the last
+// The activity drawer PATCHed with no revision token, so the last
 // writer won silently — and a 409 came back as a generic failure. The save
 // must echo the loader-projected updated_at as expectedUpdatedAt, and a
 // stale-token 409 must surface the server's named refusal in the toast.

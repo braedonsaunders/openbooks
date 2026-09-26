@@ -99,7 +99,7 @@ export interface JournalData {
   columnDetail: string
   columnDebits: string
   columnCredits: string
-  /** Set when underived consolidated rates block the report (F-t06-027):
+  /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
   /** Set when the viewed set spans more than one functional currency: the
@@ -132,7 +132,7 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
   // and every query below carries it — the same contract as the export path.
   const orgId = await resolveOrgId()
   const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
-  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link instead of any
   // numbers. A multi-currency viewed set refuses the same way, with the
   // subsidiary picker as its remedy. Anything else is a real defect and

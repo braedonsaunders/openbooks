@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F3-5: the bulk-edit amount used a naive two-decimal regex with Apply
+// The bulk-edit amount used a naive two-decimal regex with Apply
 // silently disabled — a decimal-comma operator met a dead button with no
 // reason, and a four-decimal server-valid amount could never be entered.
 // The drawer now reads through the shared money input: every unreadable

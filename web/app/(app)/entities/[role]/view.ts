@@ -251,7 +251,7 @@ export async function loadEntityRole(
           canManage,
           complianceEnabled,
           canManageCompliance: can(authz, 'compliance.manage'),
-          // F-t04-003: the vendor Compliance tab — drawer-open vendors only.
+          // The vendor Compliance tab — drawer-open vendors only.
           compliance: complianceEnabled && role === 'vendor' && partyId && isUuid(partyId)
             ? {
                 classId: await loadVendorComplianceClass(orgId, partyId),

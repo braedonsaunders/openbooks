@@ -100,7 +100,7 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   const requestIdRef = useRef<string | null>(null)
   // Saves, deletes and capitalizations run on the shared action path: a
   // refused save pins its reason on the record until the next action
-  // (F-t07-006) AND toasts, and busy always releases through the package's
+  // AND toasts, and busy always releases through the package's
   // finally. The charge-item code flags its field straight from the pin.
   const { busy, refusal, execute, clearRefusal } = useAppAction()
   const [name, setName] = useState(e.name === 'New equipment unit' ? '' : e.name); const [unitNumber, setUnitNumber] = useState(e.unit_number)
@@ -219,7 +219,7 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
         const result = await fetchAction(`/api/equipment/${e.id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ revision: e.revision, ...form, ...extra }) })
         // The API names the blocker as a stable code (e.g.
         // charge_item_required at activation): surface its translated
-        // reason, not the generic failure (F-t07-006) — and never the raw
+        // reason, not the generic failure — and never the raw
         // code, which names no remedy.
         if (!result.ok && result.error.code === 'charge_item_required') {
           return { ok: false, error: new ActionError({ kind: 'refused', code: result.error.code, serverMessage: t('chargeItemRequired') }) }

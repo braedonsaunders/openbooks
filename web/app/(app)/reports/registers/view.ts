@@ -110,7 +110,7 @@ export interface RegistersData {
   columnDebits: string
   columnCredits: string
   columnBalance: string
-  /** Set when underived consolidated rates block the report (F-t06-027):
+  /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
   /** Set when the viewed set spans more than one functional currency: the
@@ -140,7 +140,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link instead of any
   // numbers. A multi-currency viewed set refuses the same way, with the
   // subsidiary picker as its remedy. Anything else is a real defect and

@@ -340,7 +340,7 @@ test('a lost record response retried with the same quantity reuses the step key'
   assert.equal(retry!.countedQuantity, '7', 'the retry must replay the same counted quantity')
 })
 
-test('a refused create names the server reason and a 502 names the translated fallback (F2-6)', async (t) => {
+test('a refused create names the server reason and a 502 names the translated fallback', async (t) => {
   await mountCounts(t, baseProps())
   await fillCreate()
   script.postBehavior.push(

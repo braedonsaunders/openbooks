@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F2-3: a rate-lookup 422 silently cleared rate, amount, source and
+// A rate-lookup 422 silently cleared rate, amount, source and
 // provenance with no message. The lookup now pins its named reason beside
 // the kept (stale) values. Mounts the real FieldTicketDrawer under jsdom:
 // a successful lookup prices the line, then a refused lookup must keep the

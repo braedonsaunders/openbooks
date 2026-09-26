@@ -161,7 +161,7 @@ test('edit mode keeps the inputs and the save button', () => {
   assert.match(html, /Save certificate/)
 })
 
-// F3-11: a certificate amount the classifier cannot read names its cause
+// A certificate amount the classifier cannot read names its cause
 // and remedy under the field, and the save stays disabled until every
 // amount reads. Seeded from the stored filing, so the refusal renders with
 // no interaction — a static render that passed before the fix cannot name
@@ -201,7 +201,7 @@ test('an unreadable certificate amount names its remedy and blocks the save', ()
   assert.match(html, /<button[^>]*disabled[^>]*>Save certificate<\/button>/)
 })
 
-// F3-17: the save confirmation, the save button and the effective-from
+// The save confirmation, the save button and the effective-from
 // label resolve through the catalog in every locale — a German operator
 // reads German, not the English literals the form used to carry.
 test('the certificate chrome translates with the operator locale', () => {

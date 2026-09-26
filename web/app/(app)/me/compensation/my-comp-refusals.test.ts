@@ -62,7 +62,7 @@ registerHooks({
     // `db` is overridden; planned pages are consumed in order and anything
     // unexpected reads empty.
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
-      // The workspace engine lives at <repo>/engine; every fleet gate runs
+      // The workspace engine lives at <repo>/engine; every test file runs
       // from the repo root, so the file URL is stable without resolution.
       const target = new URL("file://" + process.cwd() + "/engine/src/platform/db.ts").href;
       return {

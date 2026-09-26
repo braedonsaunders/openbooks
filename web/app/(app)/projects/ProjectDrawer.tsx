@@ -409,7 +409,7 @@ export function ProjectDrawer({
           setSaveState('saved')
           setDirty(false)
           setMode('view')
-          // F-t03-001: the draft placeholder is inactive by design, but the save
+          // The draft placeholder is inactive by design, but the save
           // that gives it a real name completes creation — leave it inactive and
           // the user thinks the save failed (Inactive badge, hidden from the
           // list). Later saves never touch the flag, so deactivation sticks.

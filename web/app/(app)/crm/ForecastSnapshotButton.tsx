@@ -26,7 +26,7 @@ export function ForecastSnapshotButton({
     try {
       // The snapshot must file the scope the summary displays: an unfiltered
       // page sends explicit nulls (an organization snapshot), never the
-      // key-absent personal default (F-t02-002).
+      // key-absent personal default.
       const response = await fetch('/api/crm/forecasts', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

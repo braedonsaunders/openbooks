@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F3-22: the filing workspace offered Record-as-filed, Issue amendment and
+// The filing workspace offered Record-as-filed, Issue amendment and
 // Cancel slip to payroll.read-only callers — the routes refuse all three
 // (payroll.run), but the buttons were there to press. The workspace now
 // takes canFile (payroll.run, from the route's permission constant) and

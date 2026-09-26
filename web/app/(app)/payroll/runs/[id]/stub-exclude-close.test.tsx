@@ -9,7 +9,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 
-// F3-15: excluding a stub closed the drawer even when the exclusion
+// Excluding a stub closed the drawer even when the exclusion
 // FAILED, stranding the typed adjustments with the stub that still holds
 // them. The drawer closes only on a successful exclusion now. Mounts the
 // real drawer under jsdom with an onAdjust that reports success or failure

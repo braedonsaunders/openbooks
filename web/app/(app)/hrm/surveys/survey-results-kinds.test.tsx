@@ -141,7 +141,7 @@ async function renderText(): Promise<{ text: string; unmount: () => Promise<void
   }
 }
 
-test('F3-67: result question kinds render the translated option label', async () => {
+test('result question kinds render the translated option label', async () => {
   const m = await renderText()
   try {
     assert.match(m.text, /Scale/, 'the scale question renders its translated kind')
@@ -151,7 +151,7 @@ test('F3-67: result question kinds render the translated option label', async ()
   }
 })
 
-test('F3-67: an unrecognized question kind falls back to its code, never blank', async () => {
+test('an unrecognized question kind falls back to its code, never blank', async () => {
   const m = await renderText()
   try {
     assert.match(m.text, /mystery_kind/, 'an unknown kind stays visible as its code')

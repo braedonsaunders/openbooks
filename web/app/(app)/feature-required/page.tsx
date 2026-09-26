@@ -11,7 +11,7 @@ import { parseFeatureRequiredParam } from '../../../lib/gate-targets'
 export const dynamic = 'force-dynamic'
 
 /**
- * The shared explanation for a disabled feature (F-t13-002/003, F-t03-012).
+ * The shared explanation for a disabled feature.
  * Gates redirect here with ?feature=<key> instead of 404ing as if the route
  * were a typo: the page names the feature, says where to turn it on, and —
  * for visitors who cannot manage setup — who can. A crafted URL with no

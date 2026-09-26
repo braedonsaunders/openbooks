@@ -187,7 +187,7 @@ export async function loadBankingTransactions(
         // last so the indices above never shift).
         drawerKind === 'check' ? partyOptions('vendor') : Promise.resolve([]),
         // Card-liability fallback for the card-charge picker when no card
-        // instruments exist (F-t05-020) — appended after the payee slot so
+        // instruments exist — appended after the payee slot so
         // no index above shifts.
         drawerKind === 'card_charge' || drawerKind === 'card_refund' ? cardLiabilityAccountOptions() : Promise.resolve([]),
       ])

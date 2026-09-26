@@ -105,7 +105,7 @@ export interface LineDrawerData {
   labels: CompDrawerLabels
   cycleId: string
   canDecide: boolean
-  /** Transition-table gates from the loader (F3-38): the forms render
+  /** Transition-table gates from the loader: the forms render
    *  only while the round/line state allows the action. */
   canPropose: boolean
   canDecideLine: boolean

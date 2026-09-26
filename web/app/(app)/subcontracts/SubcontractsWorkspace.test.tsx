@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F2-8: the whole workspace was hard-coded English with zero i18n. Mounts
+// The whole workspace was hard-coded English with zero i18n. Mounts
 // the real SubcontractsWorkspace under jsdom and asserts the chrome renders
 // through the catalog (en) and a failed load toasts the translated
 // fallback with the status.

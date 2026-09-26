@@ -85,7 +85,7 @@ export function UserManageCell({ href }: { href: string }) {
  *
  * It replaces the AppKit users table, which filtered, sorted and counted
  * client-side over the one fetched page: search matched only the visible
- * page and the status counts described 500 rows as the fleet. The status
+ * page and the status counts described 500 rows as the whole list. The status
  * filter now narrows in SQL with loader-computed counts, and sort, search,
  * status and page size all travel on the URL. The row cells stay the shared
  * cells above that the viewspec platform widgets also render.

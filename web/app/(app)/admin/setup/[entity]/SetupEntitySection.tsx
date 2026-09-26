@@ -107,7 +107,7 @@ export async function SetupEntitySection({
   canManage: boolean
   // Subsidiary-scoped callers only see their vendors in ref pickers (NULL
   // subsidiary stays org-wide visible) — without this the remittance-vendor
-  // listbox cannot scope its options (F-t08-015).
+  // listbox cannot scope its options.
   allowedSubsidiaryIds?: ReadonlySet<string> | null
   // Rehomed sections whose rows carry caller-dependent visibility (rate
   // schedules anchored to another subsidiary's projects): the host slot

@@ -8,7 +8,7 @@ declare global {
   var __recordConfirm: boolean | undefined;
 }
 
-// The filed holdout (fleet8 finding u2-record-drawer-transient-save-failure):
+// A past transient-save failure report:
 // saveState had no 'error' member and every non-field failure — 409 revision
 // conflict, 500, 403 — set 'dirty' plus a transient toast. Once the toast
 // went, the form sat dirty with no reason on screen. Through useAppAction the

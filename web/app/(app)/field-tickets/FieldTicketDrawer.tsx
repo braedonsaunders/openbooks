@@ -317,7 +317,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   // spanning multiple sections can fence its next request with the newest
   // server token instead of the closure's stale ticket snapshot.
   const latestRevisionRef = useRef(props.ticket.revision)
-  // Project-context lookups are sequenced (I4-webui-116): a slow response
+  // Project-context lookups are sequenced: a slow response
   // for a previously selected project must never overwrite the state
   // derived from the current selection.
   const projectContextRequest = useRef(0)
@@ -333,7 +333,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const [sending, setSending] = useState(false)
   const [sendTo, setSendTo] = useState(props.ticket.customerEmail ?? '')
   const [sendMessage, setSendMessage] = useState('')
-  // F-t04-001: a refused send (e.g. email delivery unconfigured, 422) must
+  // A refused send (e.g. email delivery unconfigured, 422) must
   // persist in the dialog — toasts alone expire and the failure reads silent.
   const [sendError, setSendError] = useState<string | null>(null)
   const [customerName, setCustomerName] = useState(props.ticket.customerName)
@@ -666,7 +666,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const discardedRef = useRef(false)
 
   /**
-   * Discard the draft shell (F-t04-005). The server is the authority on
+   * Discard the draft shell. The server is the authority on
    * "untouched": anything with content, signatures, links, or status
    * refuses with the blocker named. A raced 404 means someone else already
    * discarded it — that is the requested end state too.

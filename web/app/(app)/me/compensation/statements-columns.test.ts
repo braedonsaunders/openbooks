@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F3-90: the statements table headers were hardcoded English ('period',
+// The statements table headers were hardcoded English ('period',
 // 'generated') while the loader already shipped translated
 // statementsColumns in all 7 locales. The spec now reads the headers from
 // the loader data. French labels below prove the header comes from the
@@ -44,7 +44,7 @@ function statementHeaders(): unknown[] {
   return found[0] as unknown[]
 }
 
-test('F3-90: statement headers read the translated loader labels', () => {
+test('statement headers read the translated loader labels', () => {
   // Headers are field refs the renderer resolves against the loader data
   // (which carries the translated labels): the paths must name
   // statementsColumns, never hardcoded English literals.

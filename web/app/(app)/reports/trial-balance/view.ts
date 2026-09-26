@@ -51,7 +51,7 @@ export interface TrialBalanceData {
   company: string
   currency: string | undefined
   emptyLabel: string
-  /** Set when underived consolidated rates block the statement (F-t06-025):
+  /** Set when underived consolidated rates block the statement:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
   /** Set when the viewed set spans more than one functional currency: the
@@ -117,7 +117,7 @@ export async function loadTrialBalance(
     subView = await reportSubsidiaryView(q.subsidiaryId, date)
     rows = await trialBalance(date, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
   } catch (e) {
-    // Underived consolidated rates must not throw out of SSR (F-t06-025):
+    // Underived consolidated rates must not throw out of SSR:
     // the page renders a typed banner with a derive link instead of any
     // numbers. A multi-currency viewed set is the same shape of refusal
     // with a different remedy (choose a single-currency subsidiary view).

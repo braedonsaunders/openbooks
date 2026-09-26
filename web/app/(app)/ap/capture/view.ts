@@ -180,7 +180,7 @@ export async function loadApCapture(
           ? sql`and false`
           : sql`and (d.subsidiary_id is null or d.subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
       // The vendor/PO lists above are caller-scoped; the account list was
-      // not (I4-webui-345 AP sibling): a subsidiary-A caller saw
+      // not: a subsidiary-A caller saw
       // subsidiary-B accounts. Org-wide rows (subsidiary_id null) stay
       // visible, exactly as for vendors and purchase orders.
       const accountScope = allowed === null

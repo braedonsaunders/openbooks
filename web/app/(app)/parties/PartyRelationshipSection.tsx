@@ -61,7 +61,7 @@ const pad2 = (n: number): string => String(n).padStart(2, '0')
 /**
  * A stored UTC instant rendered as the viewer's local wall time for
  * datetime-local. Slicing the ISO string instead shows the UTC clock face
- * as local time and shifts the reminder by the zone offset (I4-webui-223).
+ * as local time and shifts the reminder by the zone offset.
  */
 function instantToLocalInput(value: unknown): string {
   if (value == null || value === '') return ''

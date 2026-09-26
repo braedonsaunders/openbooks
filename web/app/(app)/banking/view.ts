@@ -71,7 +71,7 @@ type Tabs = Awaited<ReturnType<typeof groupTabs>>
 export interface BankingData {
   title: string
   description: string
-  /** Set when underived consolidated rates block the workspace (F-t06-027):
+  /** Set when underived consolidated rates block the workspace:
    * the page renders a typed banner with a derive link above live vitals. */
   ratesBlocked: RatesBlockedNotice | null
   layoutPrefs: Record<string, unknown>
@@ -131,9 +131,9 @@ export async function loadBanking(
   const tNav = await getTranslations('nav')
   const tr = await getTranslations('reports')
 
-  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link, and the workspace
-  // below it keeps reading the ONE banking figures reader (F-t06-001) —
+  // below it keeps reading the ONE banking figures reader —
   // the roster translates at dated spot rates, not period consolidated
   // rates, so it agrees with the Match picker and the per-account pages
   // even before close derives the period's rates. Anything else is a real
@@ -451,7 +451,7 @@ export function bankingSpec(data: BankingData): PageSpec {
                   height: 170,
                   area: true,
                   // 13 weekly points: thin to a data-fixed stride so the
-                  // ticks read the same at every width (F-t05-010).
+                  // ticks read the same at every width.
                   maxTicks: 5,
                 }),
               ],

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F2-14b (setup preview quantities): integer grouping must follow the
+// Setup preview quantities: integer grouping must follow the
 // viewer's locale — "50 000" for a French viewer, never pinned "50,000".
 const React = await import('react')
 Object.assign(globalThis, { React })
@@ -44,7 +44,7 @@ function markup(locale: string): string {
   )
 }
 
-test('preview quantities group in the viewer locale (F2-14b)', () => {
+test('preview quantities group in the viewer locale', () => {
   const en = markup('en-US')
   const fr = markup('fr')
   assert.ok(en.includes('50,000'), 'English render must group with commas')

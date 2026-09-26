@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 
-// The HRM cockpit loader's data contract, proved against the shard database:
+// The HRM cockpit loader's data contract, proved against the test database:
 // cross-org invisibility of every scoped leg, the subsidiary lens, the
 // grant-gated panels resolving null (never gated links), and scoped queues
 // excluding out-of-scope requests. Page-level gates

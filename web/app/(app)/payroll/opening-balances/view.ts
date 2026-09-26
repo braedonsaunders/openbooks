@@ -56,8 +56,8 @@ import type { OpeningBalancesView } from './OpeningBalancesView'
 type BalancesProps = Parameters<typeof OpeningBalancesView>[0]
 
 /**
- * The carry-in grid's two IT-only assessed-saldo columns (migration 0393,
- * I6-payroll-50): the prior-year regional/municipal assessment the year's
+ * The carry-in grid's two IT-only assessed-saldo columns (migration 0393):
+ * the prior-year regional/municipal assessment the year's
  * installments withhold. Shown for IT employees only via the packs filter;
  * the save routes these keys to it_addizionali_opening_balances, never to
  * the generic opening-balances save.

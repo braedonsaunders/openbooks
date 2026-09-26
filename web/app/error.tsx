@@ -12,7 +12,7 @@ import { RouteStateView } from '@/components/route-state'
  * authenticated app shell.
  *
  * Next.js never routes a segment's own layout failure to that segment's
- * error.tsx, so a throw in (app)/layout.tsx (F-t05-001: a transient pool
+ * error.tsx, so a throw in (app)/layout.tsx (a transient pool
  * timeout behind ten concurrent shell queries) bypassed (app)/error.tsx and
  * the root had no boundary — Next served a raw "Internal Server Error" text
  * page with no shell and no recovery action. This boundary catches those

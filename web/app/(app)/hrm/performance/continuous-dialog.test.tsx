@@ -156,7 +156,7 @@ async function openDialog(m: Awaited<ReturnType<typeof mount>>) {
   })
 }
 
-// F3-41: succession plan notes belong to the plan and travel with its create request.
+// Succession plan notes belong to the plan and travel with its create request.
 test('succession mode posts its notes with the plan', async () => {
   const posts: Post[] = []
   const m = await mount(posts)

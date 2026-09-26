@@ -161,7 +161,7 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
     if (await post(`${base}/hold`, { hold: !held }, msg(labels, 'actionFailed'))) router.refresh()
   }
 
-  // F3-38: Send, Remind, Void and Legal-hold are writes — they render
+  // Send, Remind, Void and Legal-hold are writes — they render
   // only with the manage grant, never on document status alone. Detail
   // and download stay readable without it.
   const canAct = drawer.canManage
@@ -277,7 +277,7 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
   const [categoryKey, setCategoryKey] = useState('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   // The preview is fingerprinted by the exact subject (and template) that
-  // produced it (I4-webui-165): changing the person or template drops the
+  // produced it: changing the person or template drops the
   // prior preview immediately, and a late response for a superseded subject
   // is discarded instead of rendering beside the new selection.
   const [preview, setPreview] = useState<{ partyId: string; templateId: string; values: Record<string, string> } | null>(null)

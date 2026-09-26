@@ -72,7 +72,7 @@ export function TemplatesList({
           : size
 
   // Taken names per record type (the unique index is org + type + name), so
-  // the offered duplicate default never collides (F-t13-001).
+  // the offered duplicate default never collides.
   const takenByType = useMemo(() => {
     const map = new Map<string, Set<string>>()
     for (const tp of templates) {

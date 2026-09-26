@@ -82,7 +82,7 @@ function bill(open = "2500.00") {
 function profile() {
   return {
     id: randomUUID(),
-    name: "Fleet6 Operating",
+    name: "Acme Operating",
     currency: "USD",
     format_name: "NACHA ACH credit",
     bank_number: "1000",
@@ -143,7 +143,7 @@ async function chooseProfile() {
   await tick();
   await tick();
   const option = [...document.querySelectorAll('button[role="option"]')].find((el) =>
-    el.textContent?.includes("Fleet6 Operating"),
+    el.textContent?.includes("Acme Operating"),
   ) as HTMLButtonElement;
   assert.ok(option, "bank profile option must render");
   await act(async () => {

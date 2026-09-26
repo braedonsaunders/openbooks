@@ -509,7 +509,7 @@ export function ProjectTypesWorkspace({
                 onChange={(v) => setIp({ notToExceed: v === 'yes' })} />
               {/* The label lives with the invoicing-preference it names
                   (projects.invoicing.rateCardLapse, all locales) — the same
-                  setting the project/customer overrides edit (F-t11-002). */}
+                  setting the project/customer overrides edit. */}
               <EnumField label={tProjectInvoicing('rateCardLapse')} value={ip.rateCardLapse ?? 'block'}
                 options={['block', 'carry_forward']}
                 onChange={(v) => setIp({ rateCardLapse: v as 'block' | 'carry_forward' })} />

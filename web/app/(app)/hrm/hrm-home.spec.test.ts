@@ -3,7 +3,7 @@
 // PageSpec tree comes out, and the tests walk that tree: panel order,
 // activity gates, vitals icons, header actions, and table composition.
 // Loader-resolved facts (gates, scoping, flags) are proved against the
-// shard database in hrm-home.integration.test.ts.
+// test database in hrm-home.integration.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { existsSync } from "node:fs";

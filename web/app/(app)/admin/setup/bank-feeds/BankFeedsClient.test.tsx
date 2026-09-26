@@ -191,7 +191,7 @@ async function mountSftpSchedules(
               id: 'srv-1',
               name: 'Bank SFTP',
               username: 'feedbot',
-              rootPrefix: 'fleet',
+              rootPrefix: 'sftp-root',
               isActive: true,
               lastConnectedAt: null,
             },

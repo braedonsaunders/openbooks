@@ -25,7 +25,7 @@ export function ChangeRequestDetailDialog({
   closeHref: string
   subject: ChangeRequestDetailSubject | null
   departmentOptions: { value: string; label: string }[]
-  /** Loader-resolved manage grant (F3-36): the drawer's lifecycle actions
+  /** Loader-resolved manage grant: the drawer's lifecycle actions
    * render only with it. */
   canManage: boolean
   /** HR-16 verb actions (Rescind/Correct) display gate: approve grant

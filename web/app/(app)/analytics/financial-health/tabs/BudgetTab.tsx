@@ -17,7 +17,7 @@ const STATUS_STYLE: Record<BudgetRow['status'], string> = {
   'on-track': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   watch: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
   over: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
-  // F-t09-004: a missed revenue line is unfavorable, so it shares the
+  // A missed revenue line is unfavorable, so it shares the
   // over-spend hue family but keeps its own "Under" label and filter.
   under: 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300',
   'no-budget': 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
@@ -63,7 +63,7 @@ function RealBudget({ data }: { data: HealthData }) {
   }, [b.rows])
 
   const budgeted = b.rows.filter((r) => r.status !== 'no-budget')
-  // F-t09-004: the header counts genuine cost overruns only — revenue
+  // The header counts genuine cost overruns only — revenue
   // shortfalls carry the "under" status and never inflate this figure.
   const overCount = counts.over
   const coverage = b.rows.length ? budgeted.length / b.rows.length : 0
