@@ -2,7 +2,7 @@ import { getAuthz, guardPermission, guardRootSubsidiaryScope, guardUnrestrictedS
 import type { Authz } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
-import { apiErrorResponse } from "./error-response";
+import { apiErrorResponse, typedRefusal } from "./error-response";
 import { parseJsonBody } from "./json";
 import { notFound, postingRefusal } from "./responses";
 
@@ -206,26 +206,10 @@ export function defineRoute(options: LooseOptions) {
       // the server log, never the body).
       const refusal = postingRefusal(error);
       if (refusal) return refusal;
-      if (!isTypedRefusal(error)) throw error;
+      if (!typedRefusal(error)) throw error;
       return apiErrorResponse(error, { request, details: refusalDetails(error) });
     }
   };
-}
-
-/**
- * Mirrors the typed-refusal predicate in `./error-response.ts`: only a
- * named error class carrying a 4xx status is safe to show. Anything else —
- * a plain Error, a 5xx, a non-error throw — rethrows.
- */
-function isTypedRefusal(error: unknown): error is Error & { status: number } {
-  if (!(error instanceof Error) || error.constructor === Error) return false;
-  const status = (error as { status?: unknown }).status;
-  return (
-    typeof status === "number" &&
-    Number.isInteger(status) &&
-    status >= 400 &&
-    status < 500
-  );
 }
 
 /** Carry the named refusal's machine-readable detail into the 4xx body. */

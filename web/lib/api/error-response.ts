@@ -3,7 +3,12 @@ import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 
 /** A typed refusal is safe to show only when its class names the business condition and its status is 4xx. */
-function typedRefusal(error: unknown, safeStatus?: number): error is Error & { status?: number; statusCode?: number } {
+/**
+ * A typed business refusal: a named error class (never a plain Error) with a
+ * 4xx `status` or `statusCode`, or `safeStatus` when it carries neither. Only
+ * these are safe to show; anything else is an unexpected failure.
+ */
+export function typedRefusal(error: unknown, safeStatus?: number): error is Error & { status?: number; statusCode?: number } {
   if (!(error instanceof Error) || error.constructor === Error) return false
   const status = 'status' in error ? error.status : 'statusCode' in error ? error.statusCode : safeStatus
   return typeof status === 'number' && Number.isInteger(status) && status >= 400 && status < 500
