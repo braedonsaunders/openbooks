@@ -6,7 +6,8 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
-No migrations.
+One migration: 0417 (sealed-secret hygiene gate — refuses non-sealed values
+in sealed columns, changes no schema).
 
 ### Bank feeds
 
@@ -38,6 +39,23 @@ No migrations.
   file's behaviour changes. Every deep import path
   (`@openbooks/engine/src/<file>.ts`) changed; `scripts/engine-modules/moves.json`
   records every move.
+
+### Sealed secrets
+
+- **Operator action: no key change is required, but read this before rotating
+  keys.** Stored secrets (connections, bank feeds, provider credentials,
+  payroll identifiers, MFA factors, email credentials) now seal as
+  `enc:v2:<keyId>:<nonce>:<ct>:<tag>`, bound to their tenant and purpose, so
+  a blob copied into another row refuses instead of decrypting. The existing
+  `OPENBOOKS_DATA_KEY` keeps working as key id `k1`. To rotate, list every
+  live key as `OPENBOOKS_DATA_KEYS=k1=<old>,k2=<new>` with
+  `OPENBOOKS_DATA_KEY_ACTIVE=k2`, run `npx tsx scripts/rotate-data-key.ts`
+  (dry run, read-only) and then with `--apply`, and remove the retired id
+  once every blob reports current. `node --import tsx scripts/bootstrap.ts
+  --check` refuses a missing, placeholder, or wrong-length data key and names
+  the fix (`openssl rand -hex 32`). Pre-`v2` blobs still open until rotated;
+  email credentials sealed before the move keep reading through the same
+  window.
 
 ## [0.1.0-alpha.17] - 2026-09-19
 
