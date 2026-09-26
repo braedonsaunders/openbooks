@@ -56,7 +56,7 @@ test("refresh refuses a sandbox marked for deletion instead of steamrolling it t
     assert.equal(await sandboxStatus(created.sandboxId), "deleting");
     assert.equal(await orgExists(created.sandboxOrgId), true);
   } finally {
-    await deleteSandbox(created.sandboxId).catch(() => undefined);
+    await db.execute(sql`update sandboxes set status = 'ready' where id = ${created.sandboxId}`); await deleteSandbox(created.sandboxId).catch(() => undefined);
     await dropScratchOrg(org.orgId);
   }
 });
