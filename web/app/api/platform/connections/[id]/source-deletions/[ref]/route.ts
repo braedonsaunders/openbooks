@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
@@ -43,7 +44,7 @@ export async function POST(
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     if (error instanceof SourceDeletionResolutionError) {
-      return NextResponse.json({ error: error.message }, { status: 422 });
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
     if (storageIdentityError(error)) {
       return NextResponse.json({ error: "not found" }, { status: 404 });

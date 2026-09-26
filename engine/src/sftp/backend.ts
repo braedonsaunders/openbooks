@@ -366,15 +366,27 @@ function sftpEnv(name: string): string | undefined {
  * therefore requires an explicitly configured ABSOLUTE OPENBOOKS_DATA_DIR
  * shared by both processes; anything else refuses by name.
  */
+/**
+ * Deployment storage misconfiguration. Thrown with an actionable remedy for
+ * the platform operator; the daemon PATCH surface reports it in its degraded
+ * response instead of a generic failure, and anything else stays generic.
+ */
+export class SftpStorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SftpStorageError";
+  }
+}
+
 function localSftpRoot(): string {
   const dataDir = sftpEnv("OPENBOOKS_DATA_DIR");
   if (!dataDir) {
-    throw new Error(
+    throw new SftpStorageError(
       "Local SFTP storage needs OPENBOOKS_DATA_DIR set to an absolute directory shared by the web and worker processes, or configure S3",
     );
   }
   if (!path.isAbsolute(dataDir)) {
-    throw new Error(
+    throw new SftpStorageError(
       `Local SFTP storage needs OPENBOOKS_DATA_DIR to be an absolute directory shared by the web and worker processes (got '${dataDir}'), or configure S3`,
     );
   }
@@ -401,7 +413,7 @@ export function sftpStorageSelection(): SftpStorageSelection {
   const missing = SFTP_S3_VARS.filter((name) => !sftpEnv(name));
   if (missing.length > 0 && missing.length < SFTP_S3_VARS.length) {
     const plural = missing.length === 1 ? "is" : "are";
-    throw new Error(
+    throw new SftpStorageError(
       `S3 is partly configured: ${missing.join(", ")} ${plural} missing — ` +
         `set the missing variable${missing.length === 1 ? "" : "s"} or unset all four S3 variables to use local SFTP storage`,
     );

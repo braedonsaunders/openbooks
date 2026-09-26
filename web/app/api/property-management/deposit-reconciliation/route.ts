@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { securityDepositReconciliation } from "@openbooks/engine/src/property/management.ts";
 import { guardPermission } from "../../../../lib/authz";
@@ -23,9 +24,6 @@ export async function GET(request: Request) {
     );
     return NextResponse.json(reconciliation);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Reconciliation failed" },
-      { status: 422 },
-    );
+    return apiErrorResponse(error);
   }
 }
