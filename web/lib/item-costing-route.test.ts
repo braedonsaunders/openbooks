@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { isUuid } from './list-params'
 
 // Route boundary suite for /api/items/[id]/costing: the costing-profile PUT
 // must mutate the accounting policy and write its audit row in ONE database
@@ -312,19 +313,13 @@ function reset(): void {
   routeState.committedAudits = []
   routeState.failOn = 'none'
   routeState.nextProfileAfterUpsert = null
-  ;(
-    routeState as RouteState & {
-      stagedProfile: ProfileRow | null
-      pendingAudits: { action: string; changes: unknown }[]
-      itemId: string
-      txDepth: number
-    }
-  ).stagedProfile = null
   const extra = routeState as RouteState & {
+    stagedProfile: ProfileRow | null
     pendingAudits: { action: string; changes: unknown }[]
     itemId: string
     txDepth: number
   }
+  extra.stagedProfile = null
   extra.pendingAudits = []
   extra.itemId = ITEM_ID
   extra.txDepth = 0
@@ -484,7 +479,11 @@ for (const failing of ['upsert', 'audit'] as const) {
 
     const response = await put(validBody({ expectedUpdatedAt: STORED_REVISION }))
 
-    assert.equal(response.status, 400)
+    assert.equal(response.status, 500)
+    const failure = (await response.json()) as { error: string; requestId: string }
+    assert.match(failure.error, /An unexpected error occurred/, 'statement faults sanitize to the generic envelope')
+    assert.ok(!failure.error.includes(failing === 'upsert' ? 'profile upsert failed' : 'audit sink offline'), 'statement internals must not reach the operator')
+    assert.ok(isUuid(failure.requestId), 'the sanitized refusal carries its correlation id')
     assert.deepEqual(routeState.committedProfiles.get(ITEM_ID), BASE_PROFILE, 'the accounting policy is unchanged')
     assert.equal(routeState.committedAudits.length, 0, 'no orphan audit evidence')
   })
