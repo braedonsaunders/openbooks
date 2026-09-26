@@ -7,6 +7,21 @@ import { cmp, mul, normalizeDecimal } from '@openbooks/engine/src/money/money.ts
 import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/sales/item-rate-pricing.ts'
 import { convertBillRate } from './item-rate-currency'
 
+/**
+ * Rate resolution refusals are user-actionable (the message names the
+ * remedy: pick a covered date, unit, or rate card) and answer 422. A named
+ * class keeps them intact through the API error sanitizer; unexpected
+ * failures stay anonymous 500s. Callers that wrap resolution (project
+ * charges, ticket lines) keep working: they re-wrap the message.
+ */
+export class ItemRateResolutionError extends Error {
+  readonly status = 422
+  constructor(message: string) {
+    super(message)
+    this.name = 'ItemRateResolutionError'
+  }
+}
+
 export interface ResolvedRateUnit {
   unitCode: string
   unitName: string
@@ -231,7 +246,7 @@ export async function resolveItemRate(input: {
     const sourceCurrency=version.rows[0]!.currency
     const fxRate=await billRateFx(input.orgId,sourceCurrency,ctx.target_currency,input.onDate)
     if(!fxRate) {
-      throw new Error(`No spot rate for ${sourceCurrency}→${ctx.target_currency} on or before ${input.onDate} — the selected rate card prices in ${sourceCurrency}`)
+      throw new ItemRateResolutionError(`No spot rate for ${sourceCurrency}→${ctx.target_currency} on or before ${input.onDate} — the selected rate card prices in ${sourceCurrency}`)
     }
     // Pricing behavior is pinned per (version, item) at save time: a policy
     // switch for next month must never reprice a late entry dated in this
@@ -271,7 +286,7 @@ export async function resolveItemRate(input: {
       ? tiers.find((tier) => tier.unitCode.toLowerCase() === requestedUnit)
       : null
     if (requestedUnit && (!selectedTier || selectedTier.costRate == null || selectedTier.billRate == null)) {
-      throw new Error('The selected rate unit is not available for this item and date')
+      throw new ItemRateResolutionError('The selected rate unit is not available for this item and date')
     }
     const normalizedBaseQuantity = selectedTier
       ? mul(input.baseQuantity, selectedTier.baseQuantity)
@@ -452,7 +467,7 @@ export async function snapshotTimeBillRates(
     // subsidiary/project currency just like any other source rate.
     if (sourceCurrency == null) continue
     const fxRate = await billRateFx(orgId,sourceCurrency,te.target_currency,te.worked_on)
-    if (!fxRate) throw new Error(`No spot rate for bill-out ${sourceCurrency}→${te.target_currency} on or before ${te.worked_on}`)
+    if (!fxRate) throw new ItemRateResolutionError(`No spot rate for bill-out ${sourceCurrency}→${te.target_currency} on or before ${te.worked_on}`)
     const rate=convertBillRate(sourceRate,fxRate)
     resolved.set(te.id, rate)
     if (!opts.dryRun) {

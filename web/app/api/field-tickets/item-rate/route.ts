@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -76,7 +77,7 @@ export async function GET(req: Request) {
     })
   } catch (error) {
     if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not resolve item rate' }, { status: 422 })
+    return apiErrorResponse(error)
   }
   // Absent pricing is not a zero price: when the rate book has no match and
   // the item carries no default rate or cost, quoting '0' labeled

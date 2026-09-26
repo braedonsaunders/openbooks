@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { NextResponse } from 'next/server'
@@ -24,13 +25,18 @@ export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
-function fail(e: unknown) {
+function fail(e: unknown): Promise<NextResponse> {
   // The send-for-signature action renders the ticket PDF: a renderer outage
   // answers with the named 503 refusal, never the generic 500 below.
   const rendererRefusal = rendererUnavailableResponse(e)
-  if (rendererRefusal) return rendererRefusal
-  const status = e instanceof DocumentEditError ? e.status : e instanceof FieldTicketNotFoundError ? 404 : e instanceof FieldTicketError ? 422 : 500
-  return NextResponse.json({ error: (e as Error).message }, { status })
+  if (rendererRefusal) return Promise.resolve(rendererRefusal)
+  // DocumentEditError and FieldTicketNotFoundError carry their own 4xx
+  // status; a bare FieldTicketError answers 422; anything else sanitizes
+  // to a 500 with a request id.
+  if (e instanceof FieldTicketError && !(e instanceof FieldTicketNotFoundError)) {
+    return apiErrorResponse(e, { safeStatus: 422 })
+  }
+  return apiErrorResponse(e)
 }
 
 /** Resolve the canonical document subsidiary before any ticket disclosure or write. */
@@ -69,12 +75,12 @@ async function guardProjectScope(authz: Authz, projectId: string): Promise<NextR
  * caller echoes the `revision` token it loaded, and a stale or missing token
  * is rejected with 409 instead of silently overwriting a competing save.
  */
-function requireRevision(value: unknown): string | NextResponse {
+async function requireRevision(value: unknown): Promise<string | NextResponse> {
   try {
     return requireDocumentEditRevision(value)
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
@@ -109,7 +115,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
-  const expectedRevision = requireRevision(body.expectedRevision)
+  const expectedRevision = await requireRevision(body.expectedRevision)
   if (expectedRevision instanceof NextResponse) return expectedRevision
   // Present-but-malformed header inputs fail closed here. Silently dropping
   // them (or coercing a bad id to null) would answer 200 while the ticket
@@ -172,7 +178,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // record scope first so forbidden tickets always remain indistinguishable
   // 404s, even when the request body is malformed or stale.
   const preflightRevision = ['save-grid', 'patch', 'add-line', 'remove-line'].includes(action)
-    ? requireRevision(body.expectedRevision)
+    ? await requireRevision(body.expectedRevision)
     : null
   if (preflightRevision instanceof NextResponse) return preflightRevision
 
@@ -274,7 +280,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (denied) return denied
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const expectedRevision = requireRevision(parsedBody.data.expectedRevision)
+  const expectedRevision = await requireRevision(parsedBody.data.expectedRevision)
   if (expectedRevision instanceof NextResponse) return expectedRevision
   try {
     await discardEmptyTicketDraft(gate.user.orgId, gate.user.id, id, expectedRevision, gate.allowedSubsidiaryIds ?? null)

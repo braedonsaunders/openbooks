@@ -100,8 +100,11 @@ export type ChargeCommittedStage = 'approval-routing' | 'posting'
  * A project charge is intentionally retained as a draft/approved document when
  * lifecycle work fails: callers must be able to identify and repair that exact
  * charge instead of retrying creation and risking a duplicate posting. The
- * original failure is kept as `cause` for service callers and rendered as a
- * safe message by the API boundary.
+ * original failure is kept as `cause` for service callers, and the API
+ * boundary exposes the charge identity, stage, and cause text verbatim
+ * (pinned by the committed-charge route test) so the operator repairs rather
+ * than retries. Lifecycle causes are designed refusal messages; an
+ * unexpected fault's text surfaces here as-is.
  */
 export class ChargeCommittedError extends Error {
   override readonly name = 'ChargeCommittedError'
@@ -115,6 +118,27 @@ export class ChargeCommittedError extends Error {
     const reason = cause instanceof Error ? cause.message : String(cause)
     super(`project charge ${documentNumber} (${chargeId}) was committed but ${stage} failed: ${reason}`)
   }
+}
+
+/**
+ * Wire fields for the committed-charge 409: the durable identity plus the
+ * lifecycle cause text verbatim (pinned by the route test). Lives here so
+ * the route body never touches caught `.message` text.
+ */
+export function chargeCommittedDetails(e: ChargeCommittedError): {
+  committed: true;
+  chargeId: string;
+  documentNumber: string;
+  stage: ChargeCommittedStage;
+  cause: string;
+} {
+  return {
+    committed: true,
+    chargeId: e.chargeId,
+    documentNumber: e.documentNumber,
+    stage: e.stage,
+    cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+  };
 }
 
 /** Quantity columns are numeric(28,8); do not force ledger money scale. */
