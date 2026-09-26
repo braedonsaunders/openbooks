@@ -30,7 +30,7 @@ Configure the normal database environment for the intended installation. Preview
 executes the guarded writes and audit inserts, then rolls back the transaction:
 
 ```sh
-node --import tsx scripts/payroll-reconcile-liability-accounts.ts \
+node --import tsx scripts/payroll-reconcile-accounts.ts --kind liability \
   --org '<organization UUID>' --actor '<authorized actor UUID>' \
   --input '/absolute/path/reviewed-liabilities.json'
 ```
@@ -38,7 +38,7 @@ node --import tsx scripts/payroll-reconcile-liability-accounts.ts \
 After reviewing the preview and the original evidence, apply the same file:
 
 ```sh
-node --import tsx scripts/payroll-reconcile-liability-accounts.ts \
+node --import tsx scripts/payroll-reconcile-accounts.ts --kind liability \
   --org '<organization UUID>' --actor '<authorized actor UUID>' \
   --input '/absolute/path/reviewed-liabilities.json' --apply
 ```
