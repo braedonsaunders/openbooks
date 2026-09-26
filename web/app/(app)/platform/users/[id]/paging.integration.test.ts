@@ -40,8 +40,8 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 const { platformUser } = await import('../../../../../lib/platform-admin.ts')
 
 const PREFIX = 'W93D'
-const GRANTS = 7
-const PAGE_SIZE = 5
+const GRANTS = 3
+const PAGE_SIZE = 2
 
 function orgName(i: number): string {
   return `${PREFIX} Org ${String(i).padStart(2, '0')}`
