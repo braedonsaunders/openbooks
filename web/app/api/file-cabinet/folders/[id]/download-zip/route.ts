@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { getFolder } from '../../../../../../lib/file-cabinet'
@@ -34,7 +35,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ;({ bytes } = await buildZip(gate.user.orgId, viewer, entries))
   } catch (error) {
     if (error instanceof ZipSizeLimitError) {
-      return NextResponse.json({ error: error.message }, { status: 413 })
+      return apiErrorResponse(error, { safeStatus: 413 })
     }
     throw error
   }

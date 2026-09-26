@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
     ;({ bytes, included } = await buildZip(gate.user.orgId, viewer, entries))
   } catch (error) {
     if (error instanceof ZipSizeLimitError) {
-      return NextResponse.json({ error: error.message }, { status: 413 })
+      return apiErrorResponse(error, { safeStatus: 413 })
     }
     throw error
   }

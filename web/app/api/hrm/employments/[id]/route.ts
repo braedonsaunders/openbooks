@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
@@ -61,7 +62,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // Computed domain refusals (gate off, malformed as-of, missing or
     // ambiguous revision) reach the caller with their code and remedy.
     if (error instanceof EmploymentReadError || error instanceof TemporalError) {
-      return NextResponse.json({ error: error.message, code: error.name }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422, details: { code: error.name } })
     }
     throw error
   }

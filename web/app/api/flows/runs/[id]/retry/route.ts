@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -53,7 +54,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   } catch (e) {
     if (e instanceof FlowRetryError) {
       const status = /not found/.test(e.message) ? 404 : 422
-      return NextResponse.json({ error: e.message }, { status })
+      return apiErrorResponse(e, { safeStatus: status })
     }
     throw e
   }
