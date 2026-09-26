@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "Operator validation and import harnesses; ES modules, like the engine they import.",
+  "type": "module"
+}

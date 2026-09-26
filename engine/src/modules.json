@@ -611,16 +611,6 @@
       "description": "Test support: scratch organizations and fixture pools, the database bypass loader, test child processes.",
       "dependsOn": []
     },
-    "validation": {
-      "description": "Project financial validation against source-system oracles.",
-      "dependsOn": [
-        "money",
-        "organization",
-        "platform",
-        "projects",
-        "sync"
-      ]
-    },
     "worker": {
       "description": "The background worker process: queues, schedulers, migration and delivery workers.",
       "dependsOn": [
