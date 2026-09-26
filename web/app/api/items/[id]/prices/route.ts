@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -402,7 +403,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (error) {
     if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const code = (error as { code?: string }).code
-    return NextResponse.json({ error: code === '23P01' ? 'An active pricing schedule already covers that scope and date range' : error instanceof Error ? error.message : 'Pricing schedule could not be saved' }, { status: code === '23P01' ? 409 : 400 })
+    if (code === '23P01') {
+      return NextResponse.json({ error: 'An active pricing schedule already covers that scope and date range' }, { status: 409 })
+    }
+    return apiErrorResponse(error)
   }
 }
 

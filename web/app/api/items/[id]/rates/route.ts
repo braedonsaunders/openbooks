@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -12,6 +13,19 @@ import { parseItemRateDecimal } from '../../../../../lib/item-rate-numerics'
 import { validateTimeTypeBillRates } from '../../../../../lib/item-rate-time-types'
 
 export const runtime = 'nodejs'
+
+/**
+ * Rate-version writes refuse with plain Errors (missing item/book, duplicate
+ * effective date) carrying operator-actionable messages, so the sanitizer
+ * cannot type-refuse them: carry the message in a named 422 refusal.
+ */
+class ItemRatesRefusal extends Error {
+  readonly status = 422
+  constructor(message: string) {
+    super(message)
+    this.name = 'ItemRatesRefusal'
+  }
+}
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const POLICIES = ['capped_ladder', 'lowest_cost'] as const
@@ -142,7 +156,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const result = await db.transaction(async (tx) => {
       const item = ((await tx.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
-      if (!item.rows[0]) throw new Error('Item not found')
+      if (!item.rows[0]) throw new ItemRatesRefusal('Item not found')
       // First version creation must serialize with rate-book currency edits:
       // take the same advisory fence and row lock the Setup writer takes,
       // before this transaction reads the book. A concurrent currency PATCH
@@ -152,7 +166,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       let rateBookId = body.rateBookId
       if (rateBookId) {
         const book = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active for update`)))
-        if (!book.rows[0]) throw new Error('Rate book not found')
+        if (!book.rows[0]) throw new ItemRatesRefusal('Rate book not found')
       } else {
         const existing = (await tx.execute<{ id: string }>(sql`select id from item_rate_books where org_id = ${gate.user.orgId} and is_default and is_active limit 1 for update`))
         rateBookId = existing.rows[0]?.id
@@ -166,7 +180,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
       }
       const duplicate = ((await tx.execute(sql`select 1 from item_rate_versions where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from = ${body.effectiveFrom}`)))
-      if (duplicate.rows[0]) throw new Error('A rate version already starts on that date')
+      if (duplicate.rows[0]) throw new ItemRatesRefusal('A rate version already starts on that date')
       const nextVersion = ((await tx.execute(sql`
         select effective_from from item_rate_versions
          where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from > ${body.effectiveFrom}
@@ -250,6 +264,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(result)
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not save rates' }, { status: 422 })
+    return apiErrorResponse(error)
   }
 }
