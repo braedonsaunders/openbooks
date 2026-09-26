@@ -236,7 +236,7 @@
     }
   },
   "create": {
-    "subsidiary": "子会社",
+    "subsidiary": "所有子会社",
     "selectSubsidiary": "子会社を選択…"
   }
 }

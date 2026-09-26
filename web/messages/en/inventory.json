@@ -236,7 +236,7 @@
     }
   },
   "create": {
-    "subsidiary": "Subsidiary",
+    "subsidiary": "Owning subsidiary",
     "selectSubsidiary": "Select subsidiary…"
   }
 }
