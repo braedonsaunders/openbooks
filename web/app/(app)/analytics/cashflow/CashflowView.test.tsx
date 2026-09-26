@@ -1,3 +1,5 @@
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__cfRouter}export function usePathname(){return \'/analytics/cashflow\'}export function useSearchParams(){return new URLSearchParams()}' })
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -14,19 +16,6 @@ import type { CashflowData } from '../../../../lib/analytics/cashflow-data'
  * selector render translated copy, and the lowest-week date follows the
  * operator locale instead of a hardcoded `en-US`.
  */
-
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__cfRouter}export function usePathname(){return \'/analytics/cashflow\'}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
 
 declare global {
   var __cfRouter: { push(url: string): void; refresh(): void; replace(url: string): void } | undefined

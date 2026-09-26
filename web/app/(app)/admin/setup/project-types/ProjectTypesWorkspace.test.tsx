@@ -2,31 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // jsdom first: the workspace reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/admin/setup/project-types",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-// SearchSelect measures its trigger through matchMedia; jsdom has none.
-if (typeof dom.window.matchMedia !== "function") {
-  const stub = () => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-    addListener() {},
-    removeListener() {},
-    dispatchEvent() { return false; },
-  });
-  dom.window.matchMedia = stub as unknown as typeof window.matchMedia;
-  globals.matchMedia = stub;
-}
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/project-types", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
 
 const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return {refresh(){},push(){},replace(){},back(){},forward(){}}};export function redirect(){throw new Error('redirect')};export function notFound(){throw new Error('notFound')}" });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
@@ -35,19 +16,11 @@ registerHooks({
         url: "data:text/javascript,export default function Link(p){return p.children}",
       };
     }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(
-          "export function useRouter(){return {refresh(){},push(){},replace(){},back(){},forward(){}}};export function redirect(){throw new Error('redirect')};export function notFound(){throw new Error('notFound')}",
-        ),
-      };
-    }
+
     return next(specifier, context);
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

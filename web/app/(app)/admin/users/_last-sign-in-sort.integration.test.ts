@@ -23,9 +23,7 @@ const mockIntl = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/admin/users/")) {
       return { url: "mock:admin-users-sort-authz", shortCircuit: true };
     }

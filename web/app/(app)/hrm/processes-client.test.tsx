@@ -13,14 +13,11 @@ Object.assign(globalThis, {
 })
 Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter=()=>({refresh(){}})', extra: { 'next-intl': 'export const useTranslations=()=>key=>key' } })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: "data:text/javascript,export const useRouter=()=>({refresh(){}})" }
-    }
-    if (specifier === 'next-intl') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const useTranslations=()=>key=>key' }
-    }
+
     if (specifier === '@openbooks/ui') {
       return {
         shortCircuit: true,

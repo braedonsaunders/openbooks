@@ -1,23 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/expenses' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
+const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost/expenses', scrollIntoView: false, resizeObserver: false })
 Object.assign(globalThis, {
   __expenseActionTest: { errors: [] as string[], refreshes: 0 },
   IS_REACT_ACT_ENVIRONMENT: true,
 })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return {refresh(){globalThis.__expenseActionTest.refreshes++}}}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return {refresh(){globalThis.__expenseActionTest.refreshes++}}}' }
-    }
+
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast={success(){},error(message){globalThis.__expenseActionTest.errors.push(message)}}' }
     }

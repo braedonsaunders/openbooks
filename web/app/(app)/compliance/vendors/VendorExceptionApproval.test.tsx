@@ -38,14 +38,11 @@ if (globals.requestAnimationFrame === undefined) {
 }
 
 const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/compliance/vendors" } });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/compliance/vendors'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
+
     if (specifier === "next/link") {
       return {
         shortCircuit: true,

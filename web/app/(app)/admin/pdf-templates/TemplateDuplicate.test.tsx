@@ -48,17 +48,14 @@ const { pathToFileURL } = await import("node:url");
 const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return{push(u){(globalThis.__templatePushes??=[]).push(String(u))},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/admin/pdf-templates'}export function useSearchParams(){return new URLSearchParams()}" });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
       return { shortCircuit: true, url: worktreeUi };
     }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(u){(globalThis.__templatePushes??=[]).push(String(u))},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/admin/pdf-templates'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
+
     if (specifier === "sonner") {
       return {
         shortCircuit: true,

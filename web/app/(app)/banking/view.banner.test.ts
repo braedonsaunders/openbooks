@@ -2,14 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { BankingData } from './view'
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export default {}' }
-    return next(specifier, context)
-  },
-})
-
 const { bankingSpec } = await import('./view')
 
 function blockedData(): BankingData {

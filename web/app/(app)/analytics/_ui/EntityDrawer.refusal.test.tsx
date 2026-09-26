@@ -9,16 +9,8 @@ for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLEl
 }
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, format: 'module', url: "data:text/javascript,export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/analytics'}export function useSearchParams(){return new URLSearchParams()}" }
-    }
-    return nextResolve(specifier, context)
-  },
-})
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/analytics' } })
 
 const React = await import('react')
 Object.assign(globalThis, { React })

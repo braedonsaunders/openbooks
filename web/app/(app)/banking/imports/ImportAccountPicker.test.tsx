@@ -5,30 +5,10 @@ import test from 'node:test'
 // import — no header CTA, no empty-state action. The picker carries the bank
 // account context beside the canonical per-account import dialog, and serves
 // both slots from one implementation.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/banking/imports',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-if (typeof (globalThis as Record<string, unknown>).ResizeObserver !== 'function') {
-  (globalThis as Record<string, unknown>).ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-}
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/banking/imports', scrollIntoView: false })
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__importPickerRouter}' })
 
 Object.assign(globalThis, {
   __importPickerRouter: {
@@ -39,20 +19,6 @@ Object.assign(globalThis, {
     prefetch() {},
   },
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__importPickerRouter}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
-
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

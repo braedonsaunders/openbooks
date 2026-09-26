@@ -1,16 +1,9 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+
 import test from 'node:test'
 import { assetWorkspaceTabs } from './tabs'
 import type { AssetsData } from './view'
 import type { EquipmentData } from './equipment/view'
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    return next(specifier, context)
-  },
-})
 
 const { assetsSpec } = await import('./view')
 const { equipmentSpec } = await import('./equipment/view')

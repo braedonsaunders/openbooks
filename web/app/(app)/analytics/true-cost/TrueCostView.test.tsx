@@ -7,42 +7,15 @@ import type { TrueCostData } from '../../../../lib/analytics/true-cost-data'
 // the server's refusal in a toast — never a JSON parse error over a
 // non-JSON error body.
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/analytics/true-cost',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__tcRouter}export function usePathname(){return \'/analytics/true-cost\'}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/analytics/true-cost', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__tcRouter}export function usePathname(){return \'/analytics/true-cost\'}export function useSearchParams(){return new URLSearchParams()}' })
 
 declare global {
   var __tcRouter: { push(url: string): void; refresh(): void } | undefined
 }
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

@@ -29,11 +29,11 @@ const adminCatalog = JSON.parse(
 
 (globalThis as Record<string, unknown>).__compDlgCatalogs = { hrm: hrmCatalog, routeState: shellRouteState, admin: adminCatalog };
 
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ extra: { "../feature-gates": "export async function requireFeatureEnabled() {}" } });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     const parent = context.parentURL ?? "";
     const owned =
       parent.endsWith("/web/lib/hrm/compensation.ts") || parent.endsWith("/web/lib/hrm/workspace-tabs.ts");
@@ -93,13 +93,7 @@ registerHooks({
           ),
       };
     }
-    if (specifier === "../feature-gates") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function requireFeatureEnabled() {}",
-      };
-    }
+
     if (owned && specifier === "../../components/module-home/group-tabs") {
       return {
         shortCircuit: true,

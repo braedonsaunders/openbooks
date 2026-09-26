@@ -1,15 +1,6 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
 
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
+import test from 'node:test'
 
 const { automationsSpec } = await import('./view')
 import type { AutomationsData } from './view'

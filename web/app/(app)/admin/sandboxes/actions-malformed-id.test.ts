@@ -46,9 +46,7 @@ const mocks = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }

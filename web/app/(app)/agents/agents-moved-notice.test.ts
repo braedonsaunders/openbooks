@@ -2,17 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ navigation: "export function redirect(url){throw new Error('REDIRECT:'+url)}", intl: true });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function redirect(url){throw new Error('REDIRECT:'+url)}",
-      };
-    }
-    if (specifier === "next-intl/server") {
-      return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key}" };
-    }
+
     if (
       specifier === "./view" &&
       context.parentURL?.endsWith("/web/app/(app)/continuous-close/page.tsx")

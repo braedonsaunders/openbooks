@@ -1,3 +1,5 @@
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return{push(){},refresh(){},replace(){},back(){},prefetch(){}}}' })
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -5,18 +7,7 @@ import test from 'node:test'
 // A French viewer sees "5 janv.", never the pinned English "Jan 5".
 const React = await import('react')
 Object.assign(globalThis, { React })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){},back(){},prefetch(){}}}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
+
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('@/components/money-provider')

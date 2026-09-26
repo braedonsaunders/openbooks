@@ -1,21 +1,8 @@
-import { registerHooks } from 'node:module'
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ intl: 'export async function getTranslations(){return (s)=>s;}export async function getLocale(){return "en"}export async function getFormatter(){return new Intl.DateTimeFormat("en")}' })
+
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent('export async function getTranslations(){return (s)=>s;}export async function getLocale(){return "en"}export async function getFormatter(){return new Intl.DateTimeFormat("en")}'),
-      }
-    }
-    return next(specifier, context)
-  },
-})
 
 const { documentsSpec } = await import('./view.ts')
 

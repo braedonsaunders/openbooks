@@ -6,30 +6,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/expenses/reports?expense=019f0000-0000-4000-8000-000000000002',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof window.requestAnimationFrame !== 'function') {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  window.cancelAnimationFrame = ((_id: number) => setTimeout(() => {}, 0)) as unknown as typeof window.cancelAnimationFrame;
-}
+const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/expenses/reports?expense=019f0000-0000-4000-8000-000000000002', matchMediaMatches: false, resizeObserver: false })
 
 const script = { confirmResult: true, confirmCalls: 0 }
 Object.assign(globalThis, {
@@ -39,14 +17,11 @@ Object.assign(globalThis, {
 })
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__expenseDiscardRouter}export function usePathname(){return "/expenses/reports"}export function useSearchParams(){return new URLSearchParams()}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__expenseDiscardRouter}export function usePathname(){return "/expenses/reports"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,
@@ -75,7 +50,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

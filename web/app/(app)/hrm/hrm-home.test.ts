@@ -31,9 +31,7 @@ const engineSubsidiariesUrl = pathToFileURL(`${process.cwd()}/web/lib/subsidiari
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     const parent = context.parentURL ?? "";
     const owned =
       parent.endsWith("/web/lib/hrm/home.ts") ||

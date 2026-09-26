@@ -3,29 +3,18 @@ import test from 'node:test'
 import React from 'react'
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} });export function redirect(){ throw new Error("redirect") };export const useSearchParams = () => new URLSearchParams();export const usePathname = () => "/hrm"', intl: 'export async function getTranslations(){const t=(k)=>k;return t};export async function getLocale(){return "en"}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function getTranslations(){const t=(k)=>k;return t};export async function getLocale(){return "en"}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export default function Link(p){return globalThis.React.createElement('a',{href:String(p.href)},p.children)}`,
       }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} });export function redirect(){ throw new Error("redirect") };export const useSearchParams = () => new URLSearchParams();export const usePathname = () => "/hrm"',
-      }
-    }
+
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){}, info(){} }' }
     }

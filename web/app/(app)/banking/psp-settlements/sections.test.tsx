@@ -3,29 +3,8 @@ import test from "node:test";
 import { isUuid } from "@/lib/list-params";
 
 // jsdom first: the workspace reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/banking/psp-settlements",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-// SearchSelect measures its trigger through matchMedia; jsdom has none.
-if (typeof dom.window.matchMedia !== "function") {
-  const stub = () => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-    addListener() {},
-    removeListener() {},
-    dispatchEvent() { return false; },
-  });
-  dom.window.matchMedia = stub as unknown as typeof window.matchMedia;
-  globals.matchMedia = stub;
-}
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/banking/psp-settlements", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
 
 const { registerHooks } = await import("node:module");
 registerHooks({
@@ -40,7 +19,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

@@ -6,18 +6,11 @@ import test from "node:test";
 // the dashboard "Pending approvals" widget lists the top-5
 // pending FLOW GATES while the tile counts the unified worklist, so the
 // widget reads "—" next to a 97 tile. Both lists must read the union.
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ intl: true });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}",
-      };
-    }
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     if (specifier.startsWith("@/")) {
       const webRoot = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 5);
       return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context);

@@ -35,7 +35,7 @@ const state = { app: null as null | { key: string; name: string; status: string;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+
     if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:apps-runtime-intl' }
     if (specifier === '@/lib/authz') return { shortCircuit: true, url: 'mock:apps-runtime-authz' }
     if (specifier === '@/lib/apps/store') return { shortCircuit: true, url: 'mock:apps-runtime-store' }

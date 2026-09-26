@@ -4,17 +4,14 @@ import test from 'node:test'
 import React from 'react'
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){ (globalThis.__qualRefreshes ??= []).push(1) }, push(u){ (globalThis.__qualPushes ??= []).push(u) }, replace(){} }); export const usePathname = () => (globalThis.__qualPathname ?? "/hrm/qualifications"); export const useSearchParams = () => new URLSearchParams(globalThis.__qualSearch ?? "")' })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){ (globalThis.__qualRefreshes ??= []).push(1) }, push(u){ (globalThis.__qualPushes ??= []).push(u) }, replace(){} }); export const usePathname = () => (globalThis.__qualPathname ?? "/hrm/qualifications"); export const useSearchParams = () => new URLSearchParams(globalThis.__qualSearch ?? "")',
-      }
-    }
+
     return next(specifier, context)
   },
 })

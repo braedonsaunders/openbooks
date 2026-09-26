@@ -40,14 +40,11 @@ Object.assign(globalThis, {
   __folderFetchImpl: undefined as ((url: string, init?: { method?: string }) => Promise<Response>) | undefined,
 })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/documents' } })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){},push(){}}}export function usePathname(){return "/documents"}export function useSearchParams(){return new URLSearchParams("folder=folder-1")}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

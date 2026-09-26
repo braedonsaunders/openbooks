@@ -13,43 +13,22 @@ declare global {
 // the next action AND toast it, without refreshing the un-applied state away.
 
 // jsdom first: the drawer reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/close",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/close", matchMediaMatches: false, resizeObserver: false });
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
 const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return{push(){},refresh(){globalThis.__workItemRefreshed=true},replace(){}}}export function usePathname(){return '/close'}export function useSearchParams(){return new URLSearchParams()}" });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
       return { shortCircuit: true, url: worktreeUi };
     }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){globalThis.__workItemRefreshed=true},replace(){}}}export function usePathname(){return '/close'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
+
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -66,7 +45,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

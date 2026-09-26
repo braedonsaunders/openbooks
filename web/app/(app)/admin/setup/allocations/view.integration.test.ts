@@ -42,9 +42,7 @@ const mockIntl = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
+
     const parent = String(context.parentURL)
     if (
       (specifier === '../../../../../lib/authz' && parent.includes('/admin/setup/allocations/view.ts'))

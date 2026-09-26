@@ -1,7 +1,7 @@
 // source-pin-contract: readiness guide hrefs resolve against the route tree; subjects derived by extracting every href the guide loader emits, never hand-listed
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { registerHooks } from 'node:module'
+
 import test from 'node:test'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,14 +12,6 @@ import { fileURLToPath } from 'node:url'
 // loader emits is pinned here against the route tree: a static segment, a
 // registry entity served by setup/[entity], or one of that page's three
 // bespoke keys. Only server-only is stubbed.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
 
 const { SETUP_ENTITY_BY_KEY } = await import('../../../../../lib/setup/registry.ts')
 

@@ -7,15 +7,11 @@ import { registerHooks } from 'node:module'
 // strands its surface with no navigation, and a leaked gated entry invites
 // the reader onto a refusal page. Proved here through the real rail.
 
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/admin/setup/company' } })
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: `data:text/javascript,export function usePathname(){return '/admin/setup/company'}export function useRouter(){return {push(){},refresh(){},replace(){}}}export function useSearchParams(){return new URLSearchParams()}`,
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

@@ -26,9 +26,7 @@ const engineAuthorizationUrl = pathToFileURL(`${process.cwd()}/engine/src/hrm/au
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     const parent = context.parentURL ?? "";
     const owned =
       parent.endsWith("/web/lib/hrm/leave.ts") ||

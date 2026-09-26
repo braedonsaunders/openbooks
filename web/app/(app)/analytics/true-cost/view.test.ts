@@ -9,16 +9,6 @@ import test from 'node:test'
  * names the `burden` dimension.
  */
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,' }
-    }
-    return next(specifier, context)
-  },
-})
-
 const { trueCostSpec } = await import('./view')
 
 function dashboardData(reportHref: string) {

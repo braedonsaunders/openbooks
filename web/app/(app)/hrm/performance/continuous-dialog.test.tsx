@@ -1,3 +1,5 @@
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })' })
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -6,18 +8,6 @@ import React from 'react'
 const uiMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8'))
 const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })',
-      }
-    }
-    return next(specifier, context)
-  },
-})
 const { TalentDialog } = await import('./continuous-islands')
 // tsx compiles JSX classic: the island never imports React, so the test bridges it.
 Object.assign(globalThis, { React })

@@ -8,33 +8,15 @@ import test from "node:test";
 // projection. Drives the real tab in jsdom on a declining revenue series
 // (the chart itself is stubbed: ECharts needs no canvas for this).
 
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/analytics/financial-health",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/analytics/financial-health", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
 
 const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return globalThis.__fcRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}" });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return globalThis.__fcRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
+
     if (specifier.endsWith("/_ui/charts")) {
       return {
         shortCircuit: true,
@@ -49,7 +31,6 @@ declare global {
   var __fcRouter: { push(url: string): void; refresh(): void } | undefined;
 }
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

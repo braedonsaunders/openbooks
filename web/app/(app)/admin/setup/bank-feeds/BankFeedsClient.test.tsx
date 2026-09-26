@@ -1,3 +1,10 @@
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({
+  navigation: 'export function useRouter(){return globalThis.__feedTestRouter}',
+  extra: {
+    '@/lib/confirm': 'export function confirmDialog(o){(globalThis.__feedConfirmCalls??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__feedConfirmAnswer??true)};export function ConfirmRoot(){return null}',
+  },
+})
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -48,25 +55,6 @@ Object.assign(globalThis, {
     prefetch() {},
   },
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__feedTestRouter}',
-      }
-    }
-    if (specifier === '@/lib/confirm') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function confirmDialog(o){(globalThis.__feedConfirmCalls??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__feedConfirmAnswer??true)};export function ConfirmRoot(){return null}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
-
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })

@@ -39,9 +39,7 @@ const mockIntl = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     if (context.parentURL?.includes("/admin/setup/agents/") && context.parentURL.endsWith('/view.ts')) {
       if (specifier.endsWith("/lib/authz")) {
         return { url: "mock:agents-overview-authz", shortCircuit: true };

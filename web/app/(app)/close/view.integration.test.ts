@@ -71,7 +71,7 @@ registerHooks({
       export async function resolvedFeatureState() { return {} }
       export function featureEnabled() { return false }
     `)
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
+
     return next(specifier, context)
   },
 })

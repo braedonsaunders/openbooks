@@ -30,9 +30,7 @@ hooks.deregister()
 // server-only scripted.
 const gateHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
+
     if (specifier.endsWith('/lib/authz')) {
       return { shortCircuit: true, format: 'module', url: 'mock:alias-gate-authz' }
     }

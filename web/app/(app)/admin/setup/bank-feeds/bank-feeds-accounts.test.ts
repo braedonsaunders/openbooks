@@ -4,18 +4,8 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { registerHooks } from 'node:module'
-
 // Only server-only is stubbed: the spec is pure data binding and must load
 // the real view module.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
 
 const { bankFeedsSpec } = (await import('./view')) as typeof import('./view')
 import type { BankFeedsData } from './view'

@@ -7,33 +7,15 @@ declare global {
 }
 
 // jsdom first: the section reads browser globals at render.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/admin/setup/payroll',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/payroll', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__ratesRouter}export function usePathname(){return "/admin/setup/payroll"}export function useSearchParams(){return new URLSearchParams()}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__ratesRouter}export function usePathname(){return "/admin/setup/payroll"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,
@@ -50,7 +32,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

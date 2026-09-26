@@ -6,6 +6,8 @@ import React from 'react'
 const confirmCalls: unknown[] = []
 const toastErrors: string[] = []
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })' })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
@@ -14,12 +16,7 @@ registerHooks({
         url: 'data:text/javascript,export const toast = { success(){}, error(msg){ globalThis.__templateToastErrors.push(msg) } }',
       }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })',
-      }
-    }
+
     if (specifier.endsWith('/lib/confirm')) {
       return {
         shortCircuit: true,

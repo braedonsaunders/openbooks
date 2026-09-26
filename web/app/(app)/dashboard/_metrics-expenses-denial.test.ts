@@ -6,12 +6,7 @@ import test from "node:test";
 // query attempt throws and a null return proves the reader was never called.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
+
     if (specifier.startsWith("@openbooks/engine/")) {
       return nextResolve(
         new URL(`../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,

@@ -1,28 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/banking' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.requestAnimationFrame !== 'function') {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as typeof window.requestAnimationFrame
-  window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as typeof window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/banking', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
 
 const { registerHooks } = await import('node:module')
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

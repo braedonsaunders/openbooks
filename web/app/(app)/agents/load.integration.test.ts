@@ -18,7 +18,7 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06AgentsHome: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
+
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key, values)=>values && typeof values.count === 'number' ? `${values.count} records` : key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__b06AgentsHome.user}' };
   if (specifier.startsWith('@/')) {
