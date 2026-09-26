@@ -51,7 +51,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export async function proposeLossOfControlReversal(...args){const s=globalThis[Symbol.for('control-loss-reversal-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return 'reversal-proposal'}`,
+        source: `export class LossOfControlProposalError extends Error{constructor(status,message){super(message);this.status=status}}export async function proposeLossOfControlReversal(...args){const s=globalThis[Symbol.for('control-loss-reversal-route')];s.calls.push(args);if(s.refusal)throw new LossOfControlProposalError(422,s.refusal);return 'reversal-proposal'}`,
       };
     return next(url, context);
   },

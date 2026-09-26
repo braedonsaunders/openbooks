@@ -43,7 +43,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export async function proposeRevenueModification(...args){const s=globalThis[Symbol.for('revenue-modification-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return {changeId:'change'}}`,
+        source: `export class RevenueModificationError extends Error{constructor(message){super(message);this.status=422}}export async function proposeRevenueModification(...args){const s=globalThis[Symbol.for('revenue-modification-route')];s.calls.push(args);if(s.refusal)throw new RevenueModificationError(s.refusal);return {changeId:'change'}}`,
       };
     return next(url, context);
   },

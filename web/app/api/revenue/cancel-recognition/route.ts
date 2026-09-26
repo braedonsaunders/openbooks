@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
@@ -78,10 +79,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'invoice not found' }, { status: 404 })
     }
     if (error instanceof RevenueRecognitionCancellationError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     if (error instanceof DocumentVoidError) {
-      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+      return apiErrorResponse(error, { details: { code: error.code } })
     }
     throw error
   }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { proposeRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
@@ -79,11 +80,6 @@ export async function POST(
       ),
     );
   } catch (e) {
-    return NextResponse.json(
-      {
-        error: e instanceof Error ? e.message : "contract modification failed",
-      },
-      { status: 422 },
-    );
+    return apiErrorResponse(e);
   }
 }

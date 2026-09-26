@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardSubsidiaryScope } from '@/lib/authz'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
     if (e instanceof ConsolidationError) {
       // Typed refusal (F-t06-026): the close task persists the message
       // inline and maps the code, instead of swallowing a bare 422.
-      return NextResponse.json({ error: e.message, code: e.code }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422, details: { code: e.code } })
     }
     throw e
   }

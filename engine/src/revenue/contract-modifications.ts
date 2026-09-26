@@ -47,6 +47,21 @@ import {
   type RevenueChangeBasis,
 } from "./recognition.ts";
 
+/**
+ * Governed refusal for the contract-modification propose path (and the
+ * apply path's re-validation of the same state). Input and state failures
+ * answer 422 with the remedy intact. A named class keeps them out of the
+ * API sanitizer's anonymous-500 bucket — a computed refusal must reach
+ * the caller, never a bare 500.
+ */
+export class RevenueModificationError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "RevenueModificationError";
+  }
+}
+
 export interface RevenueModificationPromise {
   existingId?: string;
   description: string;
@@ -169,19 +184,19 @@ async function lockedContract(tx: SqlExecutor, orgId: string, id: string) {
 }
 function validate(input: RevenueModificationInput) {
   if (!isIsoCalendarDate(input.effectiveOn))
-    throw new Error("enter a calendar effective date");
+    throw new RevenueModificationError("enter a calendar effective date");
   if (
     typeof input.enforceableRightsEvidence !== "string" ||
     input.enforceableRightsEvidence.trim().length < 8
   )
-    throw new Error(
+    throw new RevenueModificationError(
       "record evidence that the parties approved enforceable amended rights and obligations",
     );
   if (
     typeof input.assessment !== "string" ||
     input.assessment.trim().length < 8
   )
-    throw new Error(
+    throw new RevenueModificationError(
       "record the distinctness, price, progress and recognition-rate assessment",
     );
   if (
@@ -189,9 +204,9 @@ function validate(input: RevenueModificationInput) {
     !input.groups.length ||
     input.groups.length > 100
   )
-    throw new Error("enter between one and 100 modification groups");
+    throw new RevenueModificationError("enter between one and 100 modification groups");
   if (!Array.isArray(input.bookRates) || !input.bookRates.length)
-    throw new Error(
+    throw new RevenueModificationError(
       "provide a recognition exchange rate for every active posting book",
     );
   const ids = new Set<string>();
@@ -202,10 +217,10 @@ function validate(input: RevenueModificationInput) {
       !group.promises.length ||
       group.promises.length > 500
     )
-      throw new Error("each group requires one to 500 promises");
+      throw new RevenueModificationError("each group requires one to 500 promises");
     for (const id of group.existingObligationIds) {
       if (ids.has(id))
-        throw new Error(
+        throw new RevenueModificationError(
           "an existing obligation can belong to only one modification group",
         );
       ids.add(id);
@@ -216,7 +231,7 @@ function validate(input: RevenueModificationInput) {
         !p.description.trim() ||
         p.description.length > 1000
       )
-        throw new Error(
+        throw new RevenueModificationError(
           "each promise needs a description of at most 1,000 characters",
         );
       modificationMoney(p.standaloneSellingPrice, "Standalone selling price");
@@ -226,11 +241,11 @@ function validate(input: RevenueModificationInput) {
         (!isIsoCalendarDate(p.recognitionEndsOn) ||
           p.recognitionEndsOn < input.effectiveOn)
       )
-        throw new Error(
+        throw new RevenueModificationError(
           "remaining recognition end cannot precede the modification",
         );
       if (p.events && p.events.length > 1200)
-        throw new Error(
+        throw new RevenueModificationError(
           "a promise can carry at most 1,200 dated recognition events",
         );
       for (const e of p.events ?? []) {
@@ -239,7 +254,7 @@ function validate(input: RevenueModificationInput) {
           !e.periodMonth.endsWith("-01") ||
           e.periodMonth.slice(0, 7) < input.effectiveOn.slice(0, 7)
         )
-          throw new Error(
+          throw new RevenueModificationError(
             "new milestone/usage events must belong to the modification month or a later month",
           );
         modificationMoney(e.amount, "Event amount");
@@ -309,7 +324,7 @@ function accruedBeforeChange(
       const elapsed = day(effectiveOn) - day(start),
         days = day(end) - day(start) + 1n;
       if (days <= 0n)
-        throw new Error(
+        throw new RevenueModificationError(
           "the current revenue schedule has an inverted service interval",
         );
       return fromUnits(
@@ -328,15 +343,15 @@ async function snapshot(
   input: RevenueModificationInput,
 ) {
   if (!["active", "complete"].includes(c.status))
-    throw new Error(
+    throw new RevenueModificationError(
       "only an active or completed enforceable contract can be modified",
     );
   if (c.starts_on && input.effectiveOn < c.starts_on)
-    throw new Error("a modification cannot precede contract inception");
+    throw new RevenueModificationError("a modification cannot precede contract inception");
   if (c.last_change_id) {
     const prior = await loadFinancialChange(tx, orgId, c.last_change_id);
     if (input.effectiveOn < prior.effective_on)
-      throw new Error(
+      throw new RevenueModificationError(
         "a new modification cannot precede the current approved revision",
       );
   }
@@ -352,9 +367,9 @@ async function snapshot(
   ).rows;
   const owner = subsidiaries.find((s) => s.id === input.subsidiaryId);
   if (!owner || !owner.is_active || owner.is_elimination)
-    throw new Error("select an active operating legal entity");
+    throw new RevenueModificationError("select an active operating legal entity");
   if (c.subsidiary_id && c.subsidiary_id !== owner.id)
-    throw new Error(
+    throw new RevenueModificationError(
       "a modification cannot move a contract to another legal entity",
     );
   const obligations = (
@@ -375,7 +390,7 @@ async function snapshot(
       (o) => o.source_subsidiary_id && o.source_subsidiary_id !== owner.id,
     )
   )
-    throw new Error(
+    throw new RevenueModificationError(
       "the contract contains performance in another legal entity; its source legal entities must be reconciled before changing it",
     );
   const selected = new Set(
@@ -387,7 +402,7 @@ async function snapshot(
         (o) => o.id === id && o.status !== "cancelled" && !o.is_forecast,
       )
     )
-      throw new Error(
+      throw new RevenueModificationError(
         "each selected obligation must be a live actual-revenue promise in this contract",
       );
   const books = (
@@ -396,13 +411,13 @@ async function snapshot(
     )
   ).rows;
   if (!books.length || books.filter((b) => b.is_primary).length !== 1)
-    throw new Error("configure one authoritative primary posting book");
+    throw new RevenueModificationError("configure one authoritative primary posting book");
   if (
     input.bookRates.length !== books.length ||
     new Set(input.bookRates.map((b) => b.bookId)).size !== books.length ||
     books.some((b) => !input.bookRates.some((r) => r.bookId === b.id))
   )
-    throw new Error(
+    throw new RevenueModificationError(
       "provide exactly one recognition rate for every active posting book",
     );
   const currency = c.currency ?? owner.base_currency;
@@ -414,11 +429,11 @@ async function snapshot(
       rate.split(".")[0]!.length > 18 ||
       BigInt(rate.replace(".", "")) === 0n
     )
-      throw new Error(
+      throw new RevenueModificationError(
         "recognition exchange rates must be positive exact decimals with at most ten fractional digits",
       );
     if (currency === owner.base_currency && !/^1(?:\.0+)?$/.test(rate))
-      throw new Error(
+      throw new RevenueModificationError(
         "a functional-currency contract requires a recognition exchange rate of one",
       );
   }
@@ -441,7 +456,7 @@ async function snapshot(
       and (not b.is_active or not b.posts_gl) and exists(select 1 from recognition_schedule_lines l where l.org_id=s.org_id and l.schedule_id=s.id and l.journal_entry_id is null and l.superseded_by_change_id is null and l.planned_amount<>0)`)
   ).rows;
   if (unavailable.length)
-    throw new Error(
+    throw new RevenueModificationError(
       `The affected recognition plan belongs to an inactive or non-posting book (${unavailable.map((b) => b.name).join(", ")}). Enable its Active and Posts GL settings in Accounting setup → Accounting books before applying a change to that plan.`,
     );
   const events = (
@@ -468,7 +483,7 @@ async function snapshot(
     for (const promise of g.promises) {
       const rule = rules.find((r) => r.id === promise.recognitionRuleId);
       if (!rule || !rule.is_active || rule.is_forecast)
-        throw new Error(
+        throw new RevenueModificationError(
           "each revised promise needs an active actual-recognition rule",
         );
       // Accounts with existing earned history cannot be re-labelled as if prior
@@ -481,25 +496,25 @@ async function snapshot(
         (old.deferred_account_id !== promise.deferredAccountId ||
           old.recognized_account_id !== promise.recognizedAccountId)
       )
-        throw new Error(
+        throw new RevenueModificationError(
           "retain the existing promise accounts; post an approved account reclassification separately",
         );
       if (!promise.existingId && cmp(promise.percentComplete, "0") !== 0)
-        throw new Error(
+        throw new RevenueModificationError(
           "a new performance obligation starts with no prior recognized performance",
         );
       if (
         rule.method.startsWith("straight_line_") &&
         !promise.recognitionEndsOn
       )
-        throw new Error(
+        throw new RevenueModificationError(
           "enter the explicit remaining service end for a time-based amended promise",
         );
       if (
         (rule.method === "milestone" || rule.method === "usage") &&
         (promise.events ?? []).some((e) => cmp(e.amount, "0") < 0)
       )
-        throw new Error(
+        throw new RevenueModificationError(
           "new amendment events must be non-negative; corrections retain their original event lineage",
         );
     }
@@ -521,7 +536,7 @@ async function snapshot(
         !accounts.some((a) => a.id === id && a.is_active && !a.is_summary),
     )
   )
-    throw new Error(
+    throw new RevenueModificationError(
       "revenue accounts must be active non-summary accounts in this organization",
     );
   await validateSubsidiaryRestrictions(tx, {
@@ -551,7 +566,7 @@ async function snapshot(
         (s) => s.obligation_id === o.id && s.book_id === b.id,
       );
       if (!schedule)
-        throw new Error(
+        throw new RevenueModificationError(
           `build the missing recognition schedule for ${o.description} before proposing its modification`,
         );
       const own = lines.filter((l) => l.schedule_id === schedule.id);
@@ -563,7 +578,7 @@ async function snapshot(
             l.posting_date! >= input.effectiveOn,
         )
       )
-        throw new Error(
+        throw new RevenueModificationError(
           "revenue is already posted on or after the amendment date; use an open prospective date and an attributable correcting adjustment",
         );
       if (
@@ -575,11 +590,11 @@ async function snapshot(
             l.ends_on < input.effectiveOn,
         )
       )
-        throw new Error(
+        throw new RevenueModificationError(
           `run revenue recognition through the day before ${input.effectiveOn} before proposing this modification`,
         );
       if (!o.deferred_account_id)
-        throw new Error(
+        throw new RevenueModificationError(
           "the existing promise has no deferred/contract-asset account",
         );
       const cap = await recognitionUnearnedRemaining(tx, {

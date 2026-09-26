@@ -1,3 +1,5 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { LeaseError } from "@openbooks/engine/src/revenue/leases.ts";
 import { NextResponse } from "next/server";
 import { parseJsonBody } from "@/lib/api/json";
 import { guardFeaturePermission } from "@/lib/feature-gates";
@@ -14,9 +16,9 @@ export async function POST(req: Request) {
       await createLeaseAgreement(gate.user.orgId, gate.user.id, body.data),
     );
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "lease could not be created" },
-      { status: 422 },
-    );
+    if (e instanceof LeaseError) {
+      return apiErrorResponse(e, { safeStatus: 422 })
+    }
+    return apiErrorResponse(e);
   }
 }

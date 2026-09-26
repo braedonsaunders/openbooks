@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authorizeChange } from "@/app/api/accounting/changes/_authorization";
@@ -41,12 +42,6 @@ export async function POST(
       ),
     });
   } catch (e) {
-    return NextResponse.json(
-      {
-        error:
-          e instanceof Error ? e.message : "correction could not be proposed",
-      },
-      { status: 422 },
-    );
+    return apiErrorResponse(e);
   }
 }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -77,7 +78,7 @@ export async function GET(
     );
   } catch (e) {
     if (e instanceof LossOfControlProposalError)
-      return NextResponse.json({ error: e.message }, { status: e.status });
+      return apiErrorResponse(e);
     throw e;
   }
 }
@@ -105,14 +106,6 @@ export async function POST(
       ),
     });
   } catch (e) {
-    return NextResponse.json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "loss of control could not be proposed",
-      },
-      { status: 422 },
-    );
+    return apiErrorResponse(e);
   }
 }

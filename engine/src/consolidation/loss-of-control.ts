@@ -78,9 +78,16 @@ export interface LossOfControlInput {
     description: string;
   }[];
 }
+/**
+ * Governed refusal for the loss-of-control propose paths. Load failures
+ * answer 404/403; proposal validation failures (bad dates, decimals,
+ * rates, state conflicts) answer 422 with the remedy intact. A named
+ * class keeps them out of the API sanitizer's anonymous-500 bucket —
+ * a computed refusal must reach the caller, never a bare 500.
+ */
 export class LossOfControlProposalError extends Error {
   constructor(
-    readonly status: 404 | 403,
+    readonly status: 404 | 403 | 422,
     message: string,
   ) {
     super(message);
@@ -279,7 +286,7 @@ async function assertDisposalAccountsAdmissible(
       const restrictedTo = account.subsidiary_id
         ? context.byId.get(account.subsidiary_id)?.name ?? "another subsidiary"
         : null;
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         restrictedTo
           ? `account "${account.name}" is restricted to "${restrictedTo}" and cannot post the ${leg.leg} leg to "${context.byId.get(leg.targetId)?.name ?? leg.targetId}" in this disposal`
           : `account "${account.name}" cannot post the ${leg.leg} leg in this disposal`,
@@ -304,10 +311,10 @@ type Interest = {
 };
 function validate(input: LossOfControlInput) {
   if (!isIsoCalendarDate(input.effectiveOn))
-    throw new Error("control-loss date must be a calendar date");
+    throw new LossOfControlProposalError(422, "control-loss date must be a calendar date");
   for (const name of ["assessment", "ociAssessment"] as const)
     if (input[name].trim().length < 8)
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         "document the control-loss and OCI assessments, including why any category has no balance",
       );
   for (const name of [
@@ -319,10 +326,10 @@ function validate(input: LossOfControlInput) {
   ] as const) {
     const v = canonicalDecimal(input[name], 4);
     if (v === null || toUnits(v) < 0n)
-      throw new Error(`${name} must be an exact non-negative decimal`);
+      throw new LossOfControlProposalError(422, `${name} must be an exact non-negative decimal`);
   }
   if (cmp(input.retainedPercent, "100") >= 0)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "retained interest must be below 100 percent and the assessment must demonstrate that control has ceased",
     );
   if (
@@ -333,11 +340,11 @@ function validate(input: LossOfControlInput) {
       input.parentRetainedCarrying,
     ].some((v) => !isZero(v))
   )
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "no retained interest requires zero percentage and zero carrying/fair values",
     );
   if (input.retainedMethod !== "none" && isZero(input.retainedPercent))
-    throw new Error("record the percentage of the retained interest");
+    throw new LossOfControlProposalError(422, "record the percentage of the retained interest");
   for (const rate of [
     input.parentToGroupRate,
     ...input.rates.map((r) => r.rate),
@@ -346,16 +353,16 @@ function validate(input: LossOfControlInput) {
       canonicalDecimal(rate, 10) === null ||
       BigInt(rate.replace(".", "")) <= 0n
     )
-      throw new Error("translation rates must be exact positive decimals");
+      throw new LossOfControlProposalError(422, "translation rates must be exact positive decimals");
   if (
     new Set(input.rates.map((r) => r.subsidiaryId)).size !== input.rates.length
   )
-    throw new Error("supply one translation rate per subsidiary");
+    throw new LossOfControlProposalError(422, "supply one translation rate per subsidiary");
   if (
     new Set(input.additionalConsolidationLines.map((l) => l.lineId)).size !==
     input.additionalConsolidationLines.length
   )
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "a consolidation adjustment journal cannot be attributed twice",
     );
 }
@@ -372,18 +379,18 @@ async function scope(
     )
   ).rows[0];
   if (!interest || interest.method !== "full")
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "select the full-consolidation ownership interest whose control has ceased",
     );
   if (
     input.effectiveOn < interest.effective_from ||
     (interest.effective_to && input.effectiveOn > interest.effective_to)
   )
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "the control-loss date must lie in the existing ownership window",
     );
   if (cmp(input.retainedPercent, interest.ownership_percent) > 0)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "retained ownership cannot exceed the disposed controlling interest",
     );
   const prior = (
@@ -392,7 +399,7 @@ async function scope(
     )
   ).rows[0];
   if (prior)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "loss of control has already been recorded for this interest",
     );
   await tx.execute(
@@ -402,12 +409,12 @@ async function scope(
     parent = context.byId.get(interest.parent_subsidiary_id),
     elimination = context.byId.get(input.eliminationSubsidiaryId);
   if (!parent?.isActive || !elimination?.isActive || !elimination.isElimination)
-    throw new Error("the parent and group elimination entity must be active");
+    throw new LossOfControlProposalError(422, "the parent and group elimination entity must be active");
   if (
     [...context.byId.values()].find((row) => row.isElimination && row.isActive)
       ?.id !== elimination.id
   )
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "select the active ownership-consolidation elimination entity",
     );
   const family = [interest.subsidiary_id];
@@ -441,7 +448,7 @@ async function scope(
     // only an unrestricted group controller may select them explicitly (L2).
     const actorScope = await actorAllowedSubsidiaryIds(tx, orgId, actorId);
     if (actorScope)
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         "manual elimination lines carry no family attribution, so a subsidiary-restricted proposal cannot select them; have an unrestricted group controller include the lines explicitly",
       );
   }
@@ -451,7 +458,7 @@ async function scope(
     )
   ).rows;
   if (period.length !== 1)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "configure one default-calendar accounting period for the control-loss date",
     );
   const book = (
@@ -460,7 +467,7 @@ async function scope(
     )
   ).rows;
   if (book.length !== 1)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "loss of control requires the active primary consolidation book",
     );
   await assertPeriodModulesOpen(tx, {
@@ -506,25 +513,25 @@ async function scope(
     )
   ).rows[0];
   if (late)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "a later ownership close is already posted; reverse that later consolidation generation before recording an earlier loss of control",
     );
   for (const id of family) {
     const entity = context.byId.get(id)!,
       rate = input.rates.find((r) => r.subsidiaryId === id)?.rate;
     if (!rate)
-      throw new Error(`supply the closing translation rate for ${entity.name}`);
+      throw new LossOfControlProposalError(422, `supply the closing translation rate for ${entity.name}`);
     if (
       entity.baseCurrency === elimination.baseCurrency &&
       mulRate("1000000", rate) !== "1000000.0000"
     )
-      throw new Error("same-currency subsidiary translation must be at one");
+      throw new LossOfControlProposalError(422, "same-currency subsidiary translation must be at one");
   }
   if (
     parent.baseCurrency === elimination.baseCurrency &&
     mulRate("1000000", input.parentToGroupRate) !== "1000000.0000"
   )
-    throw new Error("same-currency parent translation must be at one");
+    throw new LossOfControlProposalError(422, "same-currency parent translation must be at one");
   const baseline = (
     await tx.execute<{
       subsidiary_id: string;
@@ -648,7 +655,7 @@ async function measure(
   );
   for (const inputLine of attributed) {
     if (canonicalDecimal(inputLine.amount, 4) === null)
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         "attributed consolidation amounts must be exact signed decimals",
       );
     const line = (
@@ -664,7 +671,7 @@ async function measure(
       )
     ).rows[0];
     if (!line)
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         "select a posted, manually attributed elimination line; ownership and transferred-asset adjustments are already included automatically",
       );
     const source = toUnits(line.amount),
@@ -673,7 +680,7 @@ async function measure(
       source < 0n !== portion < 0n ||
       (source < 0n ? -source : source) < (portion < 0n ? -portion : portion)
     )
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         "the attributed portion must have the source line sign and cannot exceed its amount",
       );
     await tx.execute(
@@ -688,7 +695,7 @@ async function measure(
       portionAbs = portion < 0n ? -portion : portion,
       remaining = sourceAbs - toUnits(prior);
     if (portionAbs > remaining)
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         `elimination line "${line.name}" (entry ${line.entry_number}) already attributes ${prior} to other disposals against a ${line.amount} source; attribute at most the remaining balance`,
       );
     owned.push({
@@ -719,14 +726,14 @@ async function measure(
   }[] = [];
   for (const o of input.oci) {
     if (canonicalDecimal(o.balance, 4) === null)
-      throw new Error("OCI balances must be exact signed decimals");
+      throw new LossOfControlProposalError(422, "OCI balances must be exact signed decimals");
     const source = (
       await tx.execute<{ id: string; name: string; type: string }>(
         sql`select id,name,type from accounts where org_id=${orgId} and id=${o.accountId}`,
       )
     ).rows[0];
     if (!source || !EQUITY_TYPES.includes(source.type))
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         `OCI source "${source?.name ?? o.accountId}" must be an equity reserve account; label the reserve correctly instead of releasing an operating balance as OCI`,
       );
     let attributable = "0";
@@ -764,7 +771,7 @@ async function measure(
       cap < 0n !== want < 0n ||
       (want < 0n ? -want : want) > remaining
     )
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         `OCI source "${source.name}" carries an attributable reserve balance of ${attributable} at ${input.effectiveOn} after ${priorAttributed} already released by other disposals; release at most the remaining reserve`,
       );
   }
@@ -874,7 +881,7 @@ async function measure(
         l.account_id === s.interest.investment_account_id,
     )?.amount ?? "0";
   if (cmp(parentBalance, input.parentInvestmentCarrying) < 0)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "the attributed investment carrying amount exceeds the parent investment account balance",
     );
   const accountIds = [
@@ -894,7 +901,7 @@ async function measure(
     )
   ).rows;
   if (accounts.length !== accountIds.length)
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "select active posting accounts for every disposal, retained interest and OCI leg",
     );
   for (const oci of input.oci) {
@@ -906,7 +913,7 @@ async function measure(
             destination?.type ?? "",
           )
     )
-      throw new Error(
+      throw new LossOfControlProposalError(422,
         "OCI recycling must post to profit/loss; a direct reserve transfer must post to retained earnings",
       );
   }
@@ -1231,7 +1238,7 @@ async function reversalState(
     source.operation !== "loss_of_control" ||
     source.status !== "applied"
   )
-    throw new Error("select an applied loss-of-control change");
+    throw new LossOfControlProposalError(422, "select an applied loss-of-control change");
   const loss = (
     await tx.execute<{
       id: string;
@@ -1249,7 +1256,7 @@ async function reversalState(
     )
   ).rows[0];
   if (!loss || loss.reversed_by_change_id)
-    throw new Error("this loss of control has already been corrected");
+    throw new LossOfControlProposalError(422, "this loss of control has already been corrected");
   const requiredSubsidiaryIds = source.payload
     .requiredSubsidiaryIds as string[];
   await assertFinancialChangeAccess(tx, {
@@ -1274,7 +1281,7 @@ async function reversalState(
       )
     ).rows.length
   )
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "the retained interest has subsequent consolidation history; reverse its later consolidation entries before correcting this disposal",
     );
   const entries = (source.result?.entryIds ?? []) as string[];
@@ -1294,7 +1301,7 @@ async function reversalState(
     journals.length !== entries.length ||
     journals.some((e) => e.status !== "posted")
   )
-    throw new Error(
+    throw new LossOfControlProposalError(422,
       "a disposal journal has subsequent correction history; retain that evidence and reconcile it before proposing a new disposal correction",
     );
   const lines = (
