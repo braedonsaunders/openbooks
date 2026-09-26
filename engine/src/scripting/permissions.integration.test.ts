@@ -446,8 +446,8 @@ function main(ctx) {
 
 async function seedQueryScript(orgId: string, slug: string): Promise<void> {
   await db.execute(sql`
-    insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source)
-    values (${randomUUID()}, ${orgId}, ${"query-" + slug}, 'endpoint', ${slug}, ${QUERY_SCRIPT})`);
+    insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source, timeout_ms)
+    values (${randomUUID()}, ${orgId}, ${"query-" + slug}, 'endpoint', ${slug}, ${QUERY_SCRIPT}, 10000)`);
 }
 
 async function setQueryConsole(orgId: string, enabled: boolean): Promise<void> {
@@ -659,8 +659,8 @@ test("ob.search refuses injected and unknown filter keys by name and runs no sea
     await setQueryConsole(seeded.org.orgId, true);
     const slug = "search-keys";
     await db.execute(sql`
-      insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source)
-      values (${randomUUID()}, ${seeded.org.orgId}, 'search-keys', 'endpoint', ${slug}, ${SEARCH_KEY_SCRIPT})`);
+      insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source, timeout_ms)
+      values (${randomUUID()}, ${seeded.org.orgId}, 'search-keys', 'endpoint', ${slug}, ${SEARCH_KEY_SCRIPT}, 10000)`);
     const analystId = await createScratchUser(seeded.org.orgId, "SearchAnalyst", "search-analyst");
     await db.execute(sql`
       update app_roles set permissions = '["sql.execute"]'::jsonb
