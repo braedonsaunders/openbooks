@@ -1,13 +1,13 @@
 -- OpenBooks forward migration 0334_tenant_isolation_and_posting_guards.
 --
--- Audit wave G (database layer), RLS section: the migration chain must
+-- Tenant-isolation audit (database layer), RLS section: the migration chain must
 -- isolate tenants on its own, without relying on the bootstrap
 -- environments.sql backstop that re-applies RLS to every org_id table at
 -- boot. A scratch install from these files alone left three tenant tables
 -- readable and writable across organizations. This migration makes the
 -- chain correct standalone for those three and stays re-runnable: every
--- statement tolerates re-execution. The wave's posting-guard and
--- derived-summary sections ship separately in 0338, which also carries
+-- statement tolerates re-execution. The posting-guard and derived-summary
+-- sections ship separately in 0338, which also carries
 -- their backfills.
 --
 -- Section 1 (G1/G2/G3): explicit tenant isolation.

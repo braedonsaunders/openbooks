@@ -4,8 +4,8 @@
 -- schema/migrations/generated/*.sql in filename order inside one tracked
 -- transaction). Written defensively: every statement tolerates re-execution.
 --
--- The assistant's rolling conversation summary (assistant shard b07) needs a
--- home for `{ text, entities, turnsCovered, updatedAt }` per thread: a short
+-- The assistant's rolling conversation summary needs a home for
+-- `{ text, entities, turnsCovered, updatedAt }` per thread: a short
 -- paragraph plus the party/account/project/document ids the user already
 -- referred to, injected into later turns instead of the raw old transcript.
 -- A metadata home on the conversation row keeps the summary owner-scoped by
@@ -29,4 +29,4 @@ ALTER TABLE public.ai_conversations
   ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 COMMENT ON COLUMN public.ai_conversations.metadata IS
-  'Assistant conversation memory (shard b07): rolling summary { text, entities, turnsCovered, updatedAt }. Owner-scoped with the row; never shared across users.';
+  'Assistant conversation memory: rolling summary { text, entities, turnsCovered, updatedAt }. Owner-scoped with the row; never shared across users.';

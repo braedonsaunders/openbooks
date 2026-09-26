@@ -1,6 +1,6 @@
 -- OpenBooks forward migration 0339_depreciation_schedule_convention.
 --
--- Audit wave B (B-AST-001): the post-posting drift gate compared method,
+-- Fixed-asset audit finding (B-AST-001): the post-posting drift gate compared method,
 -- method-id, life, rate and units but deliberately omitted convention,
 -- because legacy schedule headers never captured one. Changing half-year
 -- to mid-month after lines had posted therefore rebuilt the remaining plan

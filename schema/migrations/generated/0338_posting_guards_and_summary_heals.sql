@@ -1,7 +1,8 @@
 -- OpenBooks forward migration 0338_posting_guards_and_summary_heals.
 --
--- Audit wave G (database layer), posting-guard and derived-summary
--- sections (0334 carried the RLS section). Sections land in this file under
+-- Tenant-isolation audit (database layer), posting-guard and
+-- derived-summary sections (0334 carried the RLS section). Sections land in
+-- this file under
 -- successive commits; the header names only landed sections. Each section
 -- names its finding and stays re-runnable: every statement tolerates
 -- re-execution.

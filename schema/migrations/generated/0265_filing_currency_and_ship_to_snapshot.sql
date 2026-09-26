@@ -38,11 +38,11 @@
 --
 -- SHIP-TO DESTINATION SNAPSHOT (documents half; the kernel stamp and the
 -- ledger rewrite land with the D1 commit — this file only carries the DDL so
--- the shard's schema ships in one ordinal).
+-- the schema ships in one ordinal).
 --
 -- SHIP-TO DESTINATION SNAPSHOT (documents half below: ship_to_country /
--- ship_to_region DDL, comments and the evidence-only backfill — the shard's
--- schema ships in one ordinal).
+-- ship_to_region DDL, comments and the evidence-only backfill — the schema
+-- ships in one ordinal).
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;

@@ -1,6 +1,6 @@
 -- OpenBooks forward migration 0413_ns_remembrance_alternate_day_bank.
 --
--- I6-payroll-262: Nova Scotia's Remembrance Day Act grants an employee who
+-- Nova Scotia's Remembrance Day Act grants an employee who
 -- works November 11 (and was entitled to wages for 15 of the prior 30 days,
 -- for a non-exempt business) another day off WITH PAY — taken on the next
 -- working day after vacation or on an agreed date — instead of immediate

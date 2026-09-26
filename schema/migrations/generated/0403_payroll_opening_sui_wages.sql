@@ -1,8 +1,8 @@
 -- OpenBooks forward migration 0403_payroll_opening_sui_wages.
 --
--- SUI-TRANSFER-CREDIT-IMPL: a mid-year adopter's pre-adoption SUI wages had
--- nowhere state-scoped to live. `payroll_opening_balances.insurable_ytd` is
--- the nationwide FUTA number, so the I6-payroll-38 transfer refusal fires on
+-- A mid-year adopter's pre-adoption SUI wages had nowhere state-scoped to
+-- live. `payroll_opening_balances.insurable_ytd` is the nationwide FUTA
+-- number, so the transfer refusal fires on
 -- any unscoped opening: state transfer credits (Oregon PUB 217, California
 -- CUIC 930.1) cannot be determined from a stateless total. The fix is a
 -- per-state SUI carry-in, child of the parent carry-in row exactly like

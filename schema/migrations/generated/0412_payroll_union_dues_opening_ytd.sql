@@ -23,7 +23,7 @@
 -- Nothing depends on this view, and the read role's grant is restored
 -- explicitly below.
 --
--- Recreated on current main (I6-payroll-250): the view carries main's newer
+-- Recreated on current main: the view carries main's newer
 -- columns (qc_tax_ytd, employer_cpp/cpp2/ei_ytd) with union_dues_ytd
 -- appended after them, so this migration widens rather than narrows the
 -- reporting view.

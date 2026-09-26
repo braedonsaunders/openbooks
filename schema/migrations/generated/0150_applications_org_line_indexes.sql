@@ -14,8 +14,8 @@
 -- tenant's own slice.
 --
 -- Additive, ledger-tracked, no history reinterpretation: index-only, no row
--- or trigger changes. See engine/src/worker notes in the b03 wave-7 ledger
--- (bulk-aggregate aging rewrite) for the measurement context.
+-- or trigger changes. See the engine worker notes on the bulk-aggregate
+-- aging rewrite for the measurement context.
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
