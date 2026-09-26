@@ -5,13 +5,14 @@ import { sql } from "drizzle-orm";
 import { db, env } from "../platform/db.ts";
 import pg from "pg";
 import { rl1Slips } from "./canada/quebec/rl1.ts";
-import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 interface AdoptionFixture {
   orgId: string;
   actorId: string;
@@ -22,7 +23,7 @@ interface AdoptionFixture {
 }
 
 async function seedEmployee(
-  fx: { orgId: string; actorId: string; scheduleId: string },
+  fx: { orgId: string; actorId: string; scheduleId: string; subsidiaryId: string },
   options: { name: string; hiredOn?: string } = { name: "Terry Worker" },
 ): Promise<string> {
   const employeeId = randomUUID();
@@ -38,13 +39,14 @@ async function seedEmployee(
                                   is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2020-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
+  // Stub calculation refuses employees without an HRM employment (NOT NULL since 0374), so the hire carries one.
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           province, pay_basis, country, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
-            '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
+    values (${fx.orgId}, ${employeeId}, ${await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId)}, ${fx.scheduleId},
+            'ON', 'hourly', 'CA', 1, 1, '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
   return employeeId;
 }
 
@@ -81,16 +83,16 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId);
-  // A QC employer always owes the HSF at its own rate: an unclassified
-  // employer refuses by name at calculate, so the shared fixture
-  // classifies ordinary-sector (inert for every ON test). HSF routing is
-  // pinned elsewhere; here the slot just needs an account so a QC commit
-  // posts.
+  // Québec legs need their classifications (HSF sector, CNT exemption class,
+  // CNT liability slot): an unclassified Québec employer refuses by name.
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                          rate_values, created_by, updated_by)
     values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
             ${actorId}, ${actorId})`);
+  await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId, country: "CA",
+    factKey: "cnt_exemption", effectiveFrom: "2026-01-01", value: "none", changeReason: "test employer subject to CNT" });
+  await setPackSlotAccount(org.orgId, actorId, "CA", "cnt", craPayable);
   await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}
      where org_id = ${org.orgId} and system_key = 'hsf'`);
@@ -104,7 +106,7 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
 
   const employeeName = "Terry Worker";
   const employeeId = await seedEmployee(
-    { orgId: org.orgId, actorId, scheduleId },
+    { orgId: org.orgId, actorId, scheduleId, subsidiaryId: org.subsidiaryId },
     { name: employeeName, hiredOn: options.hiredOn },
   );
 
@@ -197,12 +199,10 @@ test("voided payroll retains component classification and reference evidence",
 
 /**
  * Race scaffolding runs on raw pg clients that skip the pool's RLS-GUC
- * wrapper. Pre-r1 these connected as superuser (RLS-exempt), so their
- * locking reads saw every row; under the constrained runtime role the same
- * reads see zero rows, the lock barrier never forms, and the test times out
- * instead of racing. Explicit session bypass restores the pre-r1 visibility
- * on these throwaway connections (closed at test end); the fencing
- * assertions themselves run through the product path unchanged.
+ * wrapper, so under the constrained runtime role their locking reads see
+ * zero rows and the lock barrier never forms. Explicit session bypass
+ * restores full visibility on these throwaway connections (closed at test
+ * end); the fencing assertions run through the product path unchanged.
  */
 async function scopeRaceClient(client: pg.Client, orgId: string): Promise<void> {
   await client.query(
@@ -230,13 +230,13 @@ for (const operation of ["edit", "delete"] as const) {
       const fx = await seedAdoption();
       const holder = new pg.Client({connectionString: env.OPENBOOKS_DB_URL});
       const editor = new pg.Client({connectionString: env.OPENBOOKS_DB_URL});
+      await holder.connect(); await editor.connect();
+      await scopeRaceClient(holder, fx.orgId);
+      await scopeRaceClient(editor, fx.orgId);
       let committing: Promise<unknown> | undefined;
       let editing: Promise<unknown> | undefined;
       try {
         const {input, entryId} = await calculatedRun(fx);
-        await holder.connect(); await editor.connect();
-        await scopeRaceClient(holder, fx.orgId);
-        await scopeRaceClient(editor, fx.orgId);
         await holder.query("begin");
         await holder.query("select id from time_entries where org_id=$1 and id=$2 for update", [fx.orgId, entryId]);
         const holderPid = (await holder.query<{pid: number}>("select pg_backend_pid() as pid")).rows[0]!.pid;
@@ -277,11 +277,11 @@ test("commit waits for an earlier component editor and then refuses its stale ca
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedAdoption();
     const editor = new pg.Client({connectionString: env.OPENBOOKS_DB_URL});
+    await editor.connect();
+    await scopeRaceClient(editor, fx.orgId);
     let committing: Promise<unknown> | undefined;
     try {
       const {input} = await calculatedRun(fx);
-      await editor.connect();
-      await scopeRaceClient(editor, fx.orgId);
       await editor.query("begin");
       await editor.query("update pay_components set taxable=false where org_id=$1 and system_key='base_pay'", [fx.orgId]);
       const pid = (await editor.query<{pid: number}>("select pg_backend_pid() as pid")).rows[0]!.pid;
