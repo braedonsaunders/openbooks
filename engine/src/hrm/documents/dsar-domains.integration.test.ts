@@ -156,20 +156,16 @@ async function seedRecruiting(h: Harness): Promise<void> {
 }
 
 async function seedQualifications(h: Harness): Promise<void> {
-  const { org } = h;
   const typeId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_qualification_types (id, org_id, code, name, category)
-    values (${typeId}, ${org.orgId}, 'LIC', 'License', 'license')
-  `);
+  await db.execute(sql`insert into hrm_qualification_types (id, org_id, code, name, category) values (${typeId}, ${h.org.orgId}, 'LIC', 'License', 'license')`);
   const qualificationId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_worker_qualifications (id, org_id, employment_id, type_id, issued_on)
-    values (${qualificationId}, ${org.orgId}, ${h.employmentId}, ${typeId}, '2025-06-01'::date)
-  `);
-  await db.execute(sql`
-    insert into hrm_qualification_events (org_id, qualification_id, kind) values (${org.orgId}, ${qualificationId}, 'recorded')
-  `);
+  await db.execute(sql`insert into hrm_worker_qualifications (id, org_id, employment_id, type_id, issued_on) values (${qualificationId}, ${h.org.orgId}, ${h.employmentId}, ${typeId}, '2025-06-01'::date)`);
+  await db.execute(sql`insert into hrm_qualification_events (org_id, qualification_id, kind) values (${h.org.orgId}, ${qualificationId}, 'recorded')`);
+}
+
+async function seedPartyExtras(h: Harness): Promise<void> {
+  await db.execute(sql`insert into addresses (org_id, party_id, label, line1, city, country) values (${h.org.orgId}, ${h.partyId}, 'home', '1 Main St', 'Toronto', 'CA')`);
+  await db.execute(sql`insert into contacts (org_id, party_id, name, email) values (${h.org.orgId}, ${h.partyId}, 'Sam Subject', 'sam@scratch.test')`);
 }
 
 async function seedStatement(h: Harness): Promise<string> {
@@ -197,22 +193,12 @@ async function seedStatement(h: Harness): Promise<string> {
 }
 
 async function seedSurvey(h: Harness): Promise<void> {
-  const { org } = h;
   const surveyId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_surveys (id, org_id, name, kind, anonymity, status)
-    values (${surveyId}, ${org.orgId}, 'Engagement', 'engagement', 'confidential', 'open')
-  `);
-  await db.execute(sql`
-    insert into hrm_survey_invitations (org_id, survey_id, party_id, token_hash)
-    values (${org.orgId}, ${surveyId}, ${h.partyId}, ${randomUUID()})
-  `);
+  await db.execute(sql`insert into hrm_surveys (id, org_id, name, kind, anonymity, status) values (${surveyId}, ${h.org.orgId}, 'Engagement', 'engagement', 'confidential', 'open')`);
+  await db.execute(sql`insert into hrm_survey_invitations (org_id, survey_id, party_id, token_hash) values (${h.org.orgId}, ${surveyId}, ${h.partyId}, ${randomUUID()})`);
   // 0363 requires one answer per question id: the seeded answer names its
   // question instead of the bare legacy shape.
-  await db.execute(sql`
-    insert into hrm_survey_responses (org_id, survey_id, respondent_link_enc, answers)
-    values (${org.orgId}, ${surveyId}, ${encryptRespondentLink(org.orgId, h.partyId)}, '[{"questionId": "engagement-1", "a": 1}]'::jsonb)
-  `);
+  await db.execute(sql`insert into hrm_survey_responses (org_id, survey_id, respondent_link_enc, answers) values (${h.org.orgId}, ${surveyId}, ${encryptRespondentLink(h.org.orgId, h.partyId)}, '[{"questionId": "engagement-1", "a": 1}]'::jsonb)`);
 }
 
 async function seedClock(h: Harness): Promise<void> {
@@ -289,6 +275,7 @@ test("an export carries every new domain and the manifest names them all", { ski
     await seedStatement(h);
     await seedSurvey(h);
     await seedClock(h);
+    await seedPartyExtras(h);
     await seedPayrollIdentity(h);
     await seedPerformance(h);
     const prior = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
@@ -313,6 +300,8 @@ test("an export carries every new domain and the manifest names them all", { ski
       surveyInvitations: unknown[];
       surveyResponses: unknown[];
       clockEvents: unknown[];
+      addresses: unknown[];
+      contacts: unknown[];
       taxCertificates: { certificate_key: string }[];
       payrollProfiles: Record<string, unknown>[];
       workLocationAllocations: Record<string, unknown>[];
@@ -337,6 +326,8 @@ test("an export carries every new domain and the manifest names them all", { ski
       ["surveyInvitations", 1],
       ["surveyResponses", 1],
       ["clockEvents", 1],
+      ["addresses", 1],
+      ["contacts", 1],
       ["goals", 1],
       ["reviews", 1],
       ["reviewAnswers", 1],
