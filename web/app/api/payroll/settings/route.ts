@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -467,7 +468,7 @@ export async function PUT(req: Request) {
       try {
         assertValidPasswordExpression(expression, STUB_PASSWORD_TOKENS)
       } catch (e) {
-        return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+        return apiErrorResponse(e, { safeStatus: 422 })
       }
       if (!(await pdfEncryptionAvailable())) {
         return NextResponse.json(
@@ -651,7 +652,7 @@ export async function POST(req: Request) {
       })
     } catch (error) {
       if (error instanceof PayrollPackError) {
-        return NextResponse.json({ error: error.message }, { status: 409 })
+        return apiErrorResponse(error, { safeStatus: 409 })
       }
       throw error
     }

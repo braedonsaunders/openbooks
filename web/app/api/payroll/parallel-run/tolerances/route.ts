@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -98,7 +99,7 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }

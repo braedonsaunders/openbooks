@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json(data)
   } catch (error) {
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }
@@ -119,18 +120,19 @@ export async function POST(req: Request) {
     // A refusal is per-row data the operator has to act on, not a bare 4xx, and
     // nothing was written.
     if (error instanceof EntitlementOpeningSaveError) {
-      return NextResponse.json(
-        {
-          error: error.message,
+      return apiErrorResponse(error, {
+        safeStatus: 409,
+        details: {
           errors: error.result.errors,
           warnings: error.result.warnings,
-          created: 0, updated: 0, deleted: 0,
+          created: 0,
+          updated: 0,
+          deleted: 0,
         },
-        { status: 409 },
-      )
+      })
     }
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }

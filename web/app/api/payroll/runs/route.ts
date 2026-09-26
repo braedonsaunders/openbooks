@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll/scope.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
@@ -140,7 +141,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
     throw e
   }
 }

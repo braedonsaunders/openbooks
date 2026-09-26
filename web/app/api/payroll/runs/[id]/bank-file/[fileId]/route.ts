@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -70,10 +71,9 @@ export async function POST(
     })
   } catch (error) {
     if (error instanceof PayrollError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 409, headers: { 'Cache-Control': 'no-store' } },
-      )
+      const refusal = await apiErrorResponse(error, { safeStatus: 409 })
+      refusal.headers.set('Cache-Control', 'no-store')
+      return refusal
     }
     throw error
   }
