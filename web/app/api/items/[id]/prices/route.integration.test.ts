@@ -37,15 +37,17 @@ const routeUrl = './route.ts?item-price-route-integration'
 const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
 async function fixture() {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
-  const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`)).rows[0]
-  assert.ok(baseLevel, 'migration must seed one active base price level')
-  return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, itemId: org.items.service, priceLevelId: baseLevel.id }
+  return withBypassContext(async () => {
+    const org = await createScratchOrg()
+    const actorId = (await seedFlowActors(org.orgId)).adminId
+    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`)).rows[0]
+    assert.ok(baseLevel, 'migration must seed one active base price level')
+    return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, itemId: org.items.service, priceLevelId: baseLevel.id }
+  })
 }
 
 function post(input: { orgId: string; actorId: string; itemId: string; priceLevelId: string; customerId?: string }, key: string, unitPrice = '12.3400', allowedSubsidiaryIds: Set<string> | null = null) {
@@ -109,8 +111,10 @@ test('customer price schedules and picker entries stay hidden outside the actor 
   const customerId = randomUUID()
   const key = randomUUID()
   try {
-    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id) values (${customerId}, ${f.orgId}, 'customer', 'Private Subsidiary Customer', ${f.subsidiaryId})`)
-    await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${f.orgId}, ${customerId}, true)`)
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id) values (${customerId}, ${f.orgId}, 'customer', 'Private Subsidiary Customer', ${f.subsidiaryId})`)
+      await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${f.orgId}, ${customerId}, true)`)
+    })
     const created = await post({ ...f, customerId }, key)
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
 

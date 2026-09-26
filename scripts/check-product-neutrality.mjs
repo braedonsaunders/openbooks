@@ -146,6 +146,10 @@ const connectorPaths = [
   // repository-relative file paths, so it names the connector client files it
   // moved exactly as the connector scope above does. No product copy.
   /^scripts\/engine-modules\/moves\.json$/,
+  // Route-factory migration ledger. Its entries are repository-relative route
+  // paths, so it names the connector OAuth routes exactly as the connector
+  // scope above does. No product copy.
+  /^scripts\/route-factory\.baseline\.json$/,
 ];
 
 export function isConnectorPath(filePath) {

@@ -228,7 +228,6 @@
     "web/app/api/dunning/route.ts",
     "web/app/api/equipment/[id]/capitalize/route.ts",
     "web/app/api/equipment/[id]/route.ts",
-    "web/app/api/equipment/draft/route.ts",
     "web/app/api/equipment/route.ts",
     "web/app/api/estimates/[id]/convert/route.ts",
     "web/app/api/estimates/[id]/route.ts",
@@ -659,5 +658,5 @@
     "web/app/api/work-schedules/route.ts"
   ],
   "jsonObjectImporters": 243,
-  "sqlImporters": 263
+  "sqlImporters": 262
 }
