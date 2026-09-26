@@ -145,6 +145,20 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
  * the flat paper/export shape for the rest. A caller picks its representation
  * per output format.
  */
+/**
+ * Report resolution refusals are user-actionable (the message names the
+ * remedy: enable the feature, pick a party, choose a valid report) and
+ * answer 422. A named class keeps them intact through the API error
+ * sanitizer; unexpected failures stay anonymous 500s.
+ */
+export class ReportResolutionError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "ReportResolutionError";
+  }
+}
+
 export type ResolvedReport =
   | { render: 'view'; view: StatementView; title: string; periodPhrase: string; requiredPermissions?: string[] }
   | { render: 'data'; data: ExportData; requiredPermissions?: string[] }
@@ -178,7 +192,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const { orgId, t, period, query: q } = ctx
   const featureKey = STATEMENT_KIND_FEATURE[kind]
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
-    throw new Error(`${featureKey} feature is disabled`)
+    throw new ReportResolutionError(`${featureKey} feature is disabled`)
   }
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
@@ -260,7 +274,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
         }, q.dims, dims.subsidiaryIds, { from: period.from, to: period.to })
       }
     }
-    if (!view) throw new Error('no data')
+    if (!view) throw new ReportResolutionError('no data')
     if (selectedBook) periodPhrase = `${selectedBook.name} · ${periodPhrase}`
     return { render: 'view', view, title, periodPhrase }
   }
@@ -310,7 +324,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       }
     case 'partner-statement': {
       const partyId = p.get('party')
-      if (!partyId) throw new Error('party required')
+      if (!partyId) throw new ReportResolutionError('party required')
       return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side, dims, bookId: detailBookId, canSeePayroll }), t) }
     }
     case 'true-cost':
@@ -385,7 +399,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return { render: 'data', data: cashFlowIndirectExportData(await cashFlowIndirect(from, to, dims, orgId, detailBookId), from, to, t) }
   }
 
-  throw new Error('unknown statement')
+  throw new ReportResolutionError('unknown statement')
 }
 
 /**
@@ -427,10 +441,10 @@ async function loadAuthorizedDefinition(orgId: string, id: string): Promise<{
      where id = ${id} and org_id = ${orgId} and archived_at is null
   `))
   const row = r.rows[0]
-  if (!row) throw new Error('report not found')
+  if (!row) throw new ReportResolutionError('report not found')
 
   const authz = await requireReportAuthz(orgId)
-  if (!(await canAccessReportDefinition(authz, row as ReportAuthorization['definition']))) throw new Error('Report access denied')
+  if (!(await canAccessReportDefinition(authz, row as ReportAuthorization['definition']))) throw new ReportResolutionError('Report access denied')
   return { row, authz }
 }
 
@@ -445,7 +459,7 @@ export async function resolveDefinitionToExportData(
 
   if (row.report_type === 'statement') {
     const spec = row.statement ?? {}
-    if (!spec.kind || !isReportKind(spec.kind)) throw new Error('unknown statement kind')
+    if (!spec.kind || !isReportKind(spec.kind)) throw new ReportResolutionError('unknown statement kind')
     // Request params win; the definition supplies fixed defaults (side, kind…).
     const params = new URLSearchParams(p)
     for (const [k, v] of Object.entries(spec.params ?? {})) if (!params.has(k)) params.set(k, v)
@@ -491,7 +505,7 @@ async function planDefinitionQuery(
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
 ): Promise<{ query: ReportCustomQuery; title: string; dateRangeLabel: string }> {
-  if (!row.query) throw new Error('report has no query')
+  if (!row.query) throw new ReportResolutionError('report has no query')
   const entityMap = await reportEntityCatalog(authz)
   let query = mergeReportFilters(validateCatalogReportQuery(row.query, entityMap), options.extraFilters, entityMap)
   const periodTouched = p.has('period') || p.has('from') || p.has('to')
@@ -540,11 +554,11 @@ export async function streamDefinitionExport(
   truncated: boolean
 }> {
   const { row, authz } = await loadAuthorizedDefinition(orgId, id)
-  if (row.report_type === 'statement') throw new Error('Streaming export needs a query definition')
+  if (row.report_type === 'statement') throw new ReportResolutionError('Streaming export needs a query definition')
   const plan = await planDefinitionQuery(row, authz, p, ctx)
   const entity = REPORT_ENTITY_MAP[plan.query.entity]
   if (plan.query.mode !== 'rows' || !entity?.pagination) {
-    throw new Error('Streaming export needs a paged rows-mode entity')
+    throw new ReportResolutionError('Streaming export needs a paged rows-mode entity')
   }
   if (opts.format === 'csv') {
     const out = await streamPagedReportCsv(orgId, plan.query, {
