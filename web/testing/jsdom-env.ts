@@ -1,7 +1,18 @@
 import { JSDOM } from "jsdom";
 
+export interface JsdomPresetOptions {
+  html?: string;
+  url?: string;
+  /** Override the matchMedia stub's matched state. Defaults to true. */
+  matchMediaMatches?: boolean;
+  /** Install a recording scrollIntoView stub. Defaults to true. */
+  scrollIntoView?: boolean;
+  /** Install a no-op ResizeObserver. Defaults to true. */
+  resizeObserver?: boolean;
+}
+
 export async function bootJsdomEnvironment(
-  options: { html?: string; url?: string } = {},
+  options: JsdomPresetOptions = {},
 ): Promise<void> {
   const dom = new JSDOM(
     options.html ?? "<!DOCTYPE html><html><body></body></html>",
@@ -17,9 +28,28 @@ export async function bootJsdomEnvironment(
     "Element",
     "HTMLElement",
     "Event",
+    "MouseEvent",
+    "KeyboardEvent",
+    "CustomEvent",
     "self",
+    "getComputedStyle",
   ]) {
     if (globals[key] === undefined) globals[key] = domWindow[key];
+  }
+  if (options.scrollIntoView !== false) {
+    const prototype = (globalThis as Record<string, unknown>).HTMLElement as
+      | { prototype?: { scrollIntoView?: unknown } }
+      | undefined;
+    if (prototype?.prototype && typeof prototype.prototype.scrollIntoView !== "function") {
+      prototype.prototype.scrollIntoView = function () {};
+    }
+  }
+  if (options.resizeObserver !== false && globals.ResizeObserver === undefined) {
+    globals.ResizeObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    };
   }
   if (typeof dom.window.requestAnimationFrame !== "function") {
     dom.window.requestAnimationFrame = (cb: FrameRequestCallback): number =>
@@ -33,8 +63,9 @@ export async function bootJsdomEnvironment(
     globals.cancelAnimationFrame = dom.window.cancelAnimationFrame;
   }
   if (typeof window.matchMedia !== "function") {
+    const matches = options.matchMediaMatches ?? true;
     window.matchMedia = (() => ({
-      matches: true,
+      matches,
       media: "",
       addEventListener() {},
       removeEventListener() {},
