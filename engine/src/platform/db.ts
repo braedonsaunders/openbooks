@@ -324,7 +324,11 @@ const rawConnect = async (): Promise<pg.PoolClient> =>
   );
 const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
   const target = long ? bypassLongPool : bypassPool;
-  if (target) {
+  // The installer never uses the dedicated bypass login, even when its URL is
+  // configured: on a fresh installation that login does not exist until this
+  // very bootstrap provisions it, so connecting as it first failed every new
+  // install that sets OPENBOOKS_BYPASS_DB_URL (the stock Compose file does).
+  if (target && !isInstaller) {
     return protectCheckedOutClient(await target.connect(), long ? "pg bypass long pool" : "pg bypass pool");
   }
   // No dedicated bypass credential. Outside the one-shot installer this stays
