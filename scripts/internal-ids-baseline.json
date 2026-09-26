@@ -1,0 +1,4 @@
+{
+  "$comment": "Ceiling on internal work-tracking language hits (finding/ticket ids and fleet wording) across the swept roots. It may only be lowered. See scripts/check-internal-ids.mjs.",
+  "ceiling": 0
+}
