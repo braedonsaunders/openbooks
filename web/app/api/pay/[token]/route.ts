@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
@@ -32,7 +33,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     return NextResponse.json(session);
   } catch (e) {
     if (e instanceof PaymentAcceptanceError) {
-      return NextResponse.json({ error: e.message }, { status: 422 });
+      return apiErrorResponse(e, { safeStatus: 422 });
     }
     // Anonymous callers must never see engine internals (connection strings,
     // provider secrets, stack traces): log the detail against a request id

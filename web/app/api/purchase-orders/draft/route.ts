@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ id: doc.id, document_number: doc.document_number }, { status: doc.replayed ? 200 : 201 })
   } catch (error) {
     if (error instanceof OrderDraftError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return apiErrorResponse(error)
     }
     throw error
   }
