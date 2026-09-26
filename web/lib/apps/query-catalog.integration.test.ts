@@ -37,7 +37,7 @@ test('custom source publication, audience, app grants and schema drift are enfor
     assert.equal((await reportEntityCatalog(authz))['custom:query-fixture'],undefined)
     await assert.rejects(()=>platform.query!(plan),/unavailable/)
   } finally {
-    await Promise.all([dropScratchOrg(orgId), dropScratchOrg(otherOrg)])
+    await dropScratchOrg(otherOrg); await dropScratchOrg(orgId) // dependent first: otherOrg's rows reference orgId's type
     await pool.end()
   }
 })
