@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
@@ -63,7 +64,7 @@ export async function PATCH(
     return NextResponse.json({ id: recipientId })
   } catch (e) {
     if (e instanceof InformationReturnError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     return complianceWriteFailure(e)
   }

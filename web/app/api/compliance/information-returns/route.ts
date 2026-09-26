@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -112,7 +113,7 @@ export async function POST(req: Request) {
     // A computed filing refusal names its remedy; only an unclassified
     // driver failure falls through to the generic write mapping.
     if (e instanceof InformationReturnError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
     return complianceWriteFailure(e)
   }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
@@ -704,7 +705,7 @@ export async function POST(req: Request) {
     // A locked scope recheck that fails (missing, cross-org, or moved out of
     // the caller's subsidiaries) is indistinguishable from a missing record.
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
-    if (e instanceof ConstructionBillingError) return NextResponse.json({ error: e.message }, { status: 422 });
+    if (e instanceof ConstructionBillingError) return apiErrorResponse(e, { safeStatus: 422 });
     // Residual simultaneous-insert race against change_orders_project_number:
     // the pre-check above already answered, so report its verdict.
     if (isDuplicateChangeOrderNumber(e)) {
