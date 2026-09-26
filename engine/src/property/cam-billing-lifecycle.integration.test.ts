@@ -132,8 +132,8 @@ test('reopening rechecks billed dependencies after waiting for the billing pool 
   assert.ok(waiting,'reopening waits behind the biller');
   await client.query('commit');
   const result=await settled;
-  assert.equal(result[0]!.status,'fulfilled');
-  assert.equal(result[1]!.status,'rejected');
+  const [billed,reopened]=result;if(billed!.status==='rejected')throw billed.reason;
+  if(reopened!.status==='fulfilled')assert.fail(`reopening settled fulfilled: ${JSON.stringify(reopened.value)}`);
   const remaining=(await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0];
   assert.ok(remaining?.invoice_document_id,'successful invoice retains its allocation');
  }finally{await client.query('rollback');client.release();await billing?.catch(()=>{});await reopening?.catch(()=>{});}
