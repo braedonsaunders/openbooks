@@ -64,6 +64,10 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_goals", domain: "reviews", linkage: "direct" },
   { table: "hrm_goal_updates", domain: "reviews", linkage: "transitive" },
   { table: "hrm_succession_candidates", domain: "reviews", linkage: "direct" },
+  { table: "hrm_feedback", domain: "reviews", linkage: "direct" },
+  { table: "hrm_one_on_ones", domain: "reviews", linkage: "direct" },
+  { table: "hrm_one_on_one_items", domain: "reviews", linkage: "transitive" },
+  { table: "hrm_succession_plans", domain: "reviews", linkage: "direct" },
   { table: "hrm_talent_reviews", domain: "reviews", linkage: "direct" },
   { table: "hrm_benefit_enrollments", domain: "benefits", linkage: "direct" },
   { table: "hrm_benefit_dependents", domain: "benefits", linkage: "direct" },
@@ -119,39 +123,11 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   // SUBJECT DATA — gatherer pending. Each note names the subject link and
   // the required gatherer; these are tracked gaps, not silent omissions.
   {
-    table: "hrm_feedback",
-    reason:
-      "SUBJECT DATA — gatherer pending: rows where the subject is the " +
-      "subject (subject_employment_id, unconstrained), the author, or the " +
-      "requested party. Needs a reviews-domain gatherer following all three links.",
-  },
-  {
-    table: "hrm_one_on_ones",
-    reason:
-      "SUBJECT DATA — gatherer pending: the subject's 1:1s as report " +
-      "(report_employment_id) or manager (manager_employment_id, both " +
-      "unconstrained). Needs a reviews-domain gatherer.",
-  },
-  {
-    table: "hrm_one_on_one_items",
-    reason:
-      "SUBJECT DATA — gatherer pending: items of the subject's 1:1s " +
-      "(transitive under hrm_one_on_ones via one_on_one_id, following " +
-      "assignee/author). Gather with hrm_one_on_ones.",
-  },
-  {
     table: "hrm_document_signers",
     reason:
       "SUBJECT DATA — gatherer pending: signature events where the subject " +
       "signed (signer_party_id), transitive under gathered hrm_documents. " +
       "token_hash is credential material and must stay denied when gathered.",
-  },
-  {
-    table: "hrm_succession_plans",
-    reason:
-      "SUBJECT DATA — gatherer pending: succession plans where the subject " +
-      "is the incumbent (incumbent_employment_id, unconstrained). Extend " +
-      "the reviews-domain succession gatherer.",
   },
   {
     table: "employee_pay_components",
