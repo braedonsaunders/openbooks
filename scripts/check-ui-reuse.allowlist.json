@@ -272,52 +272,8 @@
   ],
   "dialogWindow": [
     {
-      "path": "web/app/(app)/admin/backups/BackupManager.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/admin/customization/FormDesigner.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/budgets/BudgetDrawer.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/close/CloseWizard.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/construction/ConstructionClient.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/field-tickets/FieldTicketDrawer.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
       "path": "web/app/(app)/hrm/qualifications/QualificationDrawer.tsx",
       "reason": "Legacy window.prompt renewal date entry; confirmations and prompts route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/parties/EmployeeWageRates.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/property-management/CamTable.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/property-management/LeaseRecordDrawer.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/property-management/PropertyDetailDrawer.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
-    },
-    {
-      "path": "web/app/(app)/property-management/UnitRecordDrawer.tsx",
-      "reason": "Legacy window.confirm destructive-action guard; confirmations route through the shared promptDialog flow in web/lib/prompt.tsx. Do not copy."
     }
   ],
   "bespokePages": [
