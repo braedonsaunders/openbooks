@@ -96,6 +96,24 @@ jobs:
             echo "PRODUCTION_DEPLOY_SSH_KEY / PRODUCTION_SSH_KNOWN_HOSTS are not configured" >&2; exit 1
           fi
 
+      - name: Stage the release version on the manager
+        run: |
+          set -euo pipefail
+          # The release script's ssh argv carries the digest alone (pinned by
+          # scripts/deploy-production-workflow.test.mjs), so the human-readable
+          # tag for the pre-migration snapshot filename travels in a
+          # digest-keyed file the script consumes and deletes. The digest in
+          # the filename means a stale file can never mislabel a later
+          # release; EXPECTED_VERSION was validated as a version above.
+          short="${DIGEST#sha256:}"; short="${short:0:12}"
+          printf '%s\n' "$EXPECTED_VERSION" | ssh -i "$RUNNER_TEMP/deploy-ssh/key" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/deploy-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            "$SSH_USER@$SSH_HOST" \
+            "cat > \"\$HOME/.openbooks-release-version-$short\""
+
       - name: Release the digest (migrate first, then swap both pins)
         run: |
           set -euo pipefail
@@ -122,6 +140,7 @@ jobs:
             if [ "$(date +%s)" -ge "$deadline" ]; then
               echo "health did not report $EXPECTED_VERSION within 10 minutes (last: ${body:-<no response>})" >&2
               echo "The release script left a backup under /home/$SSH_USER/openbooks-deploy-backup-<stamp>/ on the manager; restore composeFile.yml into Dokploy and redeploy to roll back." >&2
+              echo "When migrations applied, roll back with the verified pre-migration dump instead: the release log prints its pg_restore command (pre-<version>-<sha>-<stamp>.dump in the manager's database backup directory)." >&2
               exit 1
             fi
             sleep 15

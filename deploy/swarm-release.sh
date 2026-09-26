@@ -55,6 +55,14 @@
 # holds BYPASSRLS, so a stack that cannot boot its new servers never swaps.
 #
 # Usage: swarm-release.sh sha256:<64 hex>
+#
+# The release tag for the pre-migration snapshot filename arrives in a
+# digest-keyed file in the release user's home
+# (~/.openbooks-release-version-<12 hex>), staged by deploy-production.yml
+# before this script runs and deleted once read. The ssh argv carries the
+# digest alone, so a manual run without the staging step snapshots as
+# "untagged". The digest in the filename means a stale file can never
+# mislabel a later release.
 set -euo pipefail
 # Recovery files include deployment credentials and must remain owner-only.
 umask 077
@@ -88,7 +96,7 @@ dokploy_sql "select env from compose where \"appName\"='$APP'" > "$BK/compose.en
 echo "backup: $BK"
 
 # ---------------------------------------------------------------------------
-# 1. Migrate, from the exact image being released, BEFORE anything serves it.
+# 2. Migrate, from the exact image being released, BEFORE anything serves it.
 # ---------------------------------------------------------------------------
 # Export line-wise: `set -a; . file` breaks on unquoted parentheses in secrets.
 ENV_FILE="$BK/compose.env"
@@ -114,6 +122,71 @@ done < "$ENV_FILE"
   echo "refusing to deploy: the runtime and migration database URLs are identical." >&2
   echo "Web/worker must serve as a non-owner runtime login while migrations run as the schema owner." >&2
   exit 1; }
+
+# ---------------------------------------------------------------------------
+# 1. Snapshot the target database BEFORE anything migrates it. A mid-chain
+#    bootstrap failure leaves earlier migrations committed; without a snapshot
+#    there is nothing to restore. (Placed after the URL checks because the
+#    dump connects with the migration URL they validate.)
+# ---------------------------------------------------------------------------
+# The tag names the release in the dump filename; anything outside the
+# filename-safe set is flattened so a tag can never escape the backup
+# directory. Retention keeps the newest OPENBOOKS_DB_BACKUP_KEEP dumps
+# (default 5, this one included) and prunes older ones.
+STAGED_TAG=""
+VERSION_FILE="$HOME/.openbooks-release-version-$(printf '%s' "${NEW#sha256:}" | cut -c1-12)"
+if [ -f "$VERSION_FILE" ]; then
+  STAGED_TAG=$(cat "$VERSION_FILE")
+  rm -f -- "$VERSION_FILE"
+fi
+TAG_SANITIZED=$(printf '%s' "${STAGED_TAG:-untagged}" | tr -c 'A-Za-z0-9._-' '_')
+SHORT_SHA="${NEW#sha256:}"
+SHORT_SHA="${SHORT_SHA:0:12}"
+DB_BACKUP_DIR="${OPENBOOKS_DB_BACKUP_DIR:-/home/administrator/openbooks-db-backups}"
+DB_BACKUP_KEEP="${OPENBOOKS_DB_BACKUP_KEEP:-5}"
+[[ "$DB_BACKUP_KEEP" =~ ^[0-9]+$ ]] && [ "$DB_BACKUP_KEEP" -ge 1 ] || {
+  echo "OPENBOOKS_DB_BACKUP_KEEP must be a positive integer (got '${DB_BACKUP_KEEP}')" >&2; exit 1; }
+mkdir -p "$DB_BACKUP_DIR"
+DUMP_FILE="$DB_BACKUP_DIR/pre-${TAG_SANITIZED}-${SHORT_SHA}-${STAMP}.dump"
+
+echo "snapshotting the target database to $DUMP_FILE ..."
+# pg_dump is the client inside the Dokploy postgres container: it connects to
+# the migration URL wherever that database lives, and the archive streams to
+# the host backup directory. The URL travels as a transient process argument
+# visible only to root on the manager, which already owns the credential
+# files this script writes.
+# shellcheck disable=SC2024  # the redirect intentionally runs as the release
+# user, who owns the backup directory; only the docker call needs sudo.
+if ! sudo docker exec "$PG" pg_dump -Fc "$MIGRATION_URL" </dev/null > "$DUMP_FILE"; then
+  echo "pre-migration snapshot failed: pg_dump of the target database did not complete; refusing the release" >&2
+  rm -f -- "$DUMP_FILE"
+  exit 1
+fi
+# The dump is not a backup until pg_restore can list it. Its stdin is the
+# dump file itself rather than the ssh pipe this script arrives over, so -i
+# is correct here.
+DUMP_LIST="$BK/pre-snapshot.list"
+# shellcheck disable=SC2024  # same ownership split as the pg_dump call above.
+if ! sudo docker exec -i "$PG" pg_restore --list < "$DUMP_FILE" > "$DUMP_LIST"; then
+  echo "pre-migration snapshot failed verification: pg_restore --list could not read $DUMP_FILE; refusing the release" >&2
+  rm -f -- "$DUMP_FILE"
+  exit 1
+fi
+echo "snapshot verified: $DUMP_FILE ($(wc -l < "$DUMP_LIST") catalog entries)"
+echo "rollback: pg_restore --clean --if-exists --dbname=\"\$OPENBOOKS_MIGRATION_DB_URL\" < \"$DUMP_FILE\""
+echo "To roll back after migrations apply, restore the snapshot above into the target database, then redeploy the previous digest."
+
+# Retain only the newest dumps; only pre-*.dump files are ever removed.
+shopt -s nullglob
+dump_files=( "$DB_BACKUP_DIR"/pre-*.dump )
+shopt -u nullglob
+if [ "${#dump_files[@]}" -gt "$DB_BACKUP_KEEP" ]; then
+  mapfile -t dump_newest_first < <(ls -1t "${dump_files[@]}")
+  for old in "${dump_newest_first[@]:$DB_BACKUP_KEEP}"; do
+    rm -f -- "$old"
+    echo "pruned snapshot older than the newest $DB_BACKUP_KEEP: $old"
+  done
+fi
 
 # Keep credentialed URLs out of the Docker process argument list.
 MIGRATION_ENV=$(mktemp "$BK/migration.XXXXXXXX.env")
@@ -142,7 +215,7 @@ sudo docker run --rm \
   "${IMAGE_REPO}@${NEW}" node scripts/bootstrap.mjs
 
 # ---------------------------------------------------------------------------
-# 2. Only now repoint the stack. The schema is already ahead of the new code.
+# 3. Only now repoint the stack. The schema is already ahead of the new code.
 # ---------------------------------------------------------------------------
 if [ "$OLD" = "$NEW" ]; then
   echo "stack already pinned to this digest; migrations applied, nothing to swap"
