@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -72,10 +73,7 @@ export async function POST(req: Request) {
     try {
       query = await validateOrgReportQuery(gate, body.query)
     } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'Invalid report query' },
-        { status: 422 },
-      )
+      return apiErrorResponse(err)
     }
     const denied = await guardReportEntity(gate, query)
     if (denied) return denied

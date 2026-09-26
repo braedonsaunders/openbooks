@@ -8,6 +8,7 @@ import { nextDocumentNumber } from "../../../../../lib/bills.ts";
 import { buildSearchText, hasSubsidiaryField, inTypeAudience, loadRecordTypeByKey } from '../../../../../lib/records'
 import {
   lintRecordFields,
+  recordDataValidationBody,
   recordNumberPrefix,
   stripUnknownData,
   validateRecordData,
@@ -76,14 +77,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
   // which validates stripped data while persisting the retained token.
   const errors = validateRecordData(lint.sections, stripUnknownData(lint.sections, data), 'draft')
   if (errors.length > 0) {
-    return NextResponse.json(
-      {
-        error: errors[0]!.message,
-        errors,
-        issues: errors.map((e) => ({ path: e.fieldId, message: e.message })),
-      },
-      { status: 422 },
-    )
+    return NextResponse.json(recordDataValidationBody('draft', errors), { status: 422 })
   }
 
   const recordNumber = await nextDocumentNumber(

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -137,10 +138,10 @@ function context(auth: ApiKeyAuth, request: Request) {
 async function failure(auth: ApiKeyAuth, error: unknown): Promise<NextResponse> {
   if (error instanceof ApplicationError) {
     const tail = await emitExecutionEvent(error.status, auth, error.code);
-    return tail ?? NextResponse.json(
-      { error: error.code, message: error.message, details: error.details },
-      { status: error.status },
-    );
+    // The versioned v1 failure shape keeps `error` as the machine-readable
+    // code with the message beside it; the sanitizer carries both for
+    // typed 4xx refusals and genericizes unexpected 500s.
+    return tail ?? apiErrorResponse(error, { details: { error: error.code, message: error.message, details: error.details } });
   }
   console.error("[api/v1/records] application operation failed", error);
   const tail = await emitExecutionEvent(500, auth, "internal_error");

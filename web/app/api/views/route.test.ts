@@ -179,7 +179,6 @@ const mockSources = new Map<string, string>([
       export async function withBypass(work) { return work() }
       export async function withBypassContext(_opts, work) { return work() }
       export const pool = {}
-      export const env = {}
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
@@ -199,8 +198,9 @@ const mockSources = new Map<string, string>([
     // malformed plans and echoes shapes, so the route's own 422 paths and
     // the idempotency contract are still exercised for real.
     'mock:report-catalog',
-    `export async function validateOrgReportQuery(_gate, query) {
-       if (!query || typeof query !== 'object' || Array.isArray(query)) throw new Error('Invalid report query')
+    `export class ReportQueryValidationError extends Error { constructor(message) { super(message); this.status = 422 } }
+     export async function validateOrgReportQuery(_gate, query) {
+       if (!query || typeof query !== 'object' || Array.isArray(query)) throw new ReportQueryValidationError('Invalid report query')
        return query
      }`,
   ],

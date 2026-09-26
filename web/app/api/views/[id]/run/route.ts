@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -23,9 +24,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const result = await runView(user.orgId, view.query)
     return NextResponse.json({ result })
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'View failed' },
-      { status: 422 },
-    )
+    return apiErrorResponse(err)
   }
 }

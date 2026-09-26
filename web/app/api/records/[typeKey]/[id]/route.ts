@@ -19,6 +19,7 @@ import {
 import {
   findUnknownDataKeys,
   lintRecordFields,
+  recordDataValidationBody,
   stripUnknownData,
   validateRecordData,
   withComputedFormulas,
@@ -285,20 +286,7 @@ export async function PATCH(
     if (errors.length > 0) {
       return {
         kind: 'response' as const,
-        response: NextResponse.json(
-          {
-            error:
-              stage === 'submit' && errors.some((e) => e.message === 'Required')
-                ? 'Fill every required field before activating'
-                : errors[0]!.message,
-            errors,
-            // Machine-readable twin of `errors` for the shared action path:
-            // the client branches on `code`/status and renders `issues`,
-            // never on message text.
-            issues: errors.map((e) => ({ path: e.fieldId, message: e.message })),
-          },
-          { status: 422 },
-        ),
+        response: NextResponse.json(recordDataValidationBody(stage, errors), { status: 422 }),
       }
     }
 

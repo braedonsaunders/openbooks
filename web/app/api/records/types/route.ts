@@ -7,7 +7,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { pgTextArrayLiteral } from '../../../../lib/pg-array'
 import { subsidiaryDeclaredTypeIds } from '../../../../lib/records'
-import { lintRecordFields, slugifyTypeKey, typeKeyError } from '../../../../lib/record-schema'
+import { lintRecordFields, recordTypeLintBody, slugifyTypeKey, typeKeyError } from '../../../../lib/record-schema'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
 import { auditSetupChange } from '../../../../lib/setup/audit'
 
@@ -122,13 +122,7 @@ export async function POST(request: Request) {
 
   const lint = lintRecordFields(body.fields ?? [], name)
   if (!lint.success) {
-    return NextResponse.json(
-      {
-        error: `Invalid fields: ${lint.issues.slice(0, 3).map((i) => i.message).join('; ')}`,
-        issues: lint.issues,
-      },
-      { status: 422 },
-    )
+    return NextResponse.json(recordTypeLintBody(lint.issues), { status: 422 })
   }
 
   // A caller-supplied key is pinned exactly (clash is a 409, as on PATCH);
