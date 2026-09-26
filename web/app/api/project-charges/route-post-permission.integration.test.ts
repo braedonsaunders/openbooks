@@ -45,9 +45,6 @@ const hooks = registerHooks({
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
     }
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     if (
       specifier === "../../../lib/authz" &&
       context.parentURL?.includes("/api/project-charges/")

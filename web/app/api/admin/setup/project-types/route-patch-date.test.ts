@@ -105,15 +105,13 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const forwarded = specifier.startsWith("@/")
-      ? new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL!).href
-      : mockUrls.get(specifier);
+    const forwarded = mockUrls.get(specifier);
     if (forwarded) return { url: forwarded, shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    // '@/lib/api/json' resolves to the real module through the @/ forwarder
-    // above; never double the validation boundary.
+    // '@/…' resolves to the real module through the shared test-hook
+    // preload; never double the validation boundary.
     const source = mockSources.get(url);
     if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);

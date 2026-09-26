@@ -123,13 +123,6 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
-    if (specifier.startsWith("@/")) {
-      return {
-        url: new URL(`${specifier.slice(2)}.ts`, new URL("../../../", import.meta.url)).href,
-        shortCircuit: true,
-        format: "module",
-      };
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

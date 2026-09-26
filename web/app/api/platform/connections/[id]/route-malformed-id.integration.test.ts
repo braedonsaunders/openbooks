@@ -22,7 +22,6 @@ const AUTHZ = `
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.endsWith('/lib/authz')) return virtual(AUTHZ)
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

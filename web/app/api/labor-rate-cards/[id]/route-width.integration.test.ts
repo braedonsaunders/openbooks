@@ -26,7 +26,6 @@ registerHooks({
         }
       `);
     if (specifier.endsWith("/lib/projects-gate")) return virtual("export async function guardProjectsFeature() { return null }");
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

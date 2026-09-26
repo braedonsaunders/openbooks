@@ -35,9 +35,6 @@ export const ambientBypassWithoutTransaction = () => false;`;
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (
       specifier === "@openbooks/engine/src/platform/db.ts" ||
       specifier === "../platform/db.ts"

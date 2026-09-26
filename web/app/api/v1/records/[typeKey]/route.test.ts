@@ -118,13 +118,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/")) {
-      return {
-        url: new URL(`${specifier.slice(2)}.ts`, new URL("../../../../../", import.meta.url)).href,
-        shortCircuit: true,
-        format: "module",
-      };
-    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);

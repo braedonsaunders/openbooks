@@ -10,7 +10,6 @@ Object.assign(globalThis, { __constructionDrawsSession: session })
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__constructionDrawsSession.user}' }
-  if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')

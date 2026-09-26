@@ -37,9 +37,6 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as platform.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     // The shared dependency tree links @openbooks/engine to another checkout;
     // route tests must execute this worktree's service boundary.
     if (specifier.startsWith("@openbooks/engine/") && context.parentURL?.includes("setup/payment-providers")) {

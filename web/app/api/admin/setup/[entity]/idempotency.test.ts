@@ -93,9 +93,6 @@ const mockDb = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     const parent = context.parentURL ?? "";
     const isEntityRoute = parent.includes("%5Bentity%5D") || parent.includes("[entity]");
     if (specifier === "../../../../../lib/authz" && isEntityRoute) {

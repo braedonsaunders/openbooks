@@ -47,7 +47,6 @@ registerHooks({
         }
         export { can, guardSubsidiaryScope } from '${fileRoot}web/lib/authz.ts';
       `);
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

@@ -27,12 +27,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      // Anchor at the web/ root instead of assuming the importer's depth: this
-      // route sits one level deeper than the [id] routes the pattern was copied from.
-      const webRoot = context.parentURL.slice(0, context.parentURL.indexOf("/web/") + 5);
-      return nextResolve(new URL(`./${specifier.slice(2)}.ts`, webRoot).href, context);
-    }
     if (
       specifier === "../../../../../lib/feature-gates" &&
       context.parentURL?.includes("/api/assets/")

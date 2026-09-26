@@ -41,12 +41,6 @@ const VIEW_ID = '11111111-1111-4111-8111-111111111111'
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/')) {
-      return nextResolve(
-        new URL(`../../../../../web/${specifier.slice(2)}.ts`, import.meta.url).href,
-        context,
-      )
-    }
     if (specifier === '../../../../lib/authz') {
       return { shortCircuit: true, url: 'mock:authz' }
     }

@@ -43,10 +43,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  // lib/application/context imports the server-only marker, which throws
-  // outside a React Server Component runtime; the route under test needs
-  // only its context builder, so stub the marker like the route tests do.
-  ['mock:server-only', `export {}`],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -57,12 +53,8 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/')) {
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}`, import.meta.url).href, context)
-    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
-    if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

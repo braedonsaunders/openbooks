@@ -22,12 +22,6 @@ const hooks = registerHooks({
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'mock:apps-session' }
     }
-    if (specifier.startsWith('@/lib/')) {
-      return nextResolve(
-        pathToFileURL(`${webRoot}/lib/${specifier.slice('@/lib/'.length)}.ts`).href,
-        context,
-      )
-    }
     if (specifier.startsWith('@openbooks/engine/')) {
       return nextResolve(
         pathToFileURL(`${repoRoot}/engine/${specifier.slice('@openbooks/engine/'.length)}`).href,

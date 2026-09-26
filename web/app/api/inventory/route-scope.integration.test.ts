@@ -26,7 +26,6 @@ registerHooks({
         "export async function guardPermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
       ) };
     }
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

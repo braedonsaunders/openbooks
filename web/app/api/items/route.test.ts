@@ -136,9 +136,6 @@ const mockUrls = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === './_lib' && context.parentURL?.includes('/api/items/')) return { shortCircuit: true, url: 'mock:item-lib' }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
-    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { shortCircuit: true, url: mocked }
     return nextResolve(specifier, context)

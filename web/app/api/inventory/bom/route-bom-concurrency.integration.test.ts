@@ -43,9 +43,6 @@ const hooks = registerHooks({
     if (specifier === "@/lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

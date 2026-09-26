@@ -43,12 +43,6 @@ const hooks = registerHooks({
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier.startsWith("@/") && context.parentURL) {
-      const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
-      const webRoot = parentDir.lastIndexOf("/web/");
-      if (webRoot === -1) return nextResolve(specifier, context);
-      return nextResolve(new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + ".ts").href, context);
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

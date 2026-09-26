@@ -36,19 +36,6 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier.startsWith("@/")) {
-      const parentDir = decodeURIComponent(
-        new URL(".", context.parentURL).href,
-      );
-      const webRoot = parentDir.lastIndexOf("/web/");
-      if (webRoot !== -1) {
-        return nextResolve(
-          new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + ".ts")
-            .href,
-          context,
-        );
-      }
-    }
     if (specifier.startsWith("@openbooks/engine/")) {
       const webMarker = context.parentURL?.lastIndexOf("/web/") ?? -1;
       if (webMarker === -1) return nextResolve(specifier, context);

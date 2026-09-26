@@ -22,7 +22,6 @@ registerHooks({
       // Catalog writes need unrestricted scope (1cb07bf7b); the scripted actor is unrestricted, so this passes.
       export function guardUnrestrictedScope() { return null; }
     `)
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

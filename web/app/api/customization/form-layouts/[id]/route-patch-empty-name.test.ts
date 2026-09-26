@@ -64,12 +64,6 @@ const mockDb = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/')) {
-      return nextResolve(
-        new URL(`../../../../../../web/${specifier.slice(2)}.ts`, import.meta.url).href,
-        context,
-      )
-    }
     const parent = context.parentURL ?? ''
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/form-layouts')) {
       return { shortCircuit: true, format: 'module', url: 'mock:form-empty-name-db' }

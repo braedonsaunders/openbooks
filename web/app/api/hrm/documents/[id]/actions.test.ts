@@ -96,9 +96,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier.startsWith("@/")) {
-      return nextResolve(root + "web/" + specifier.slice(2));
-    }
     if (specifier === "../../../../../../lib/authz") return { url: "mock:authz", shortCircuit: true };
     if (specifier === "@openbooks/engine/src/hrm/documents/documents.ts") return { url: "mock:service", shortCircuit: true };
     if (specifier === "../../../../../../lib/hrm/document-delivery") return { url: "mock:delivery", shortCircuit: true };

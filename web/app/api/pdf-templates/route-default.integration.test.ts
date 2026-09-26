@@ -33,13 +33,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/")) {
-      const base = join(process.cwd(), "web", specifier.slice(2));
-      const hit = [".ts", ".tsx", "/index.ts"]
-        .map((suffix) => base + suffix)
-        .find((candidate) => existsSync(candidate));
-      if (hit) return { shortCircuit: true, url: pathToFileURL(hit).href };
-    }
     if (
       (specifier === "../../../lib/authz" || specifier === "../../../../lib/authz") &&
       context.parentURL?.includes("pdf-templates")

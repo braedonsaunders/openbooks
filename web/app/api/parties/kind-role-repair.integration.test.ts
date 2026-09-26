@@ -21,10 +21,6 @@ registerHooks({
         url: 'data:text/javascript,export async function currentUser(){return globalThis.__partyKindRoleRepairSession.user}',
       }
     }
-    if (specifier.startsWith('@/')) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 5)
-      return next(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context)
-    }
     if (specifier.startsWith('@openbooks/engine/')) {
       const root = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 1)
       return next(new URL(`engine/${specifier.slice('@openbooks/engine/'.length)}`, root).href, context)

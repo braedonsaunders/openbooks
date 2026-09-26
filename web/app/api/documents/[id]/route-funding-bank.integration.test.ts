@@ -23,7 +23,6 @@ registerHooks({
       }
       export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
     `)
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     // Pin the engine to THIS checkout (see route-recall for why).
     if (specifier.startsWith('@openbooks/engine/')) return next(root + specifier.slice('@openbooks/'.length), context)
     return next(specifier, context)

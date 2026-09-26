@@ -37,7 +37,6 @@ registerHooks({
     if (specifier.startsWith("@openbooks/reports")) {
       return next(new URL("packages/reports/src/index.ts", root).href, context);
     }
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

@@ -222,12 +222,6 @@ const hooks = registerHooks({
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     // Resolve the web tsconfig's @/ alias for the plain Node test runner.
-    if (specifier.startsWith('@/')) {
-      return {
-        url: new URL(`../../../../../${specifier.slice(2)}.ts`, import.meta.url).href,
-        shortCircuit: true,
-      }
-    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

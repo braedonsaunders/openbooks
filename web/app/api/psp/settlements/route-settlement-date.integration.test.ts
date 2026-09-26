@@ -30,7 +30,6 @@ registerHooks({
         export async function isFeatureEnabled() { return true }
         export async function subsidiaryFeatureEnabled() { return false }
       `);
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

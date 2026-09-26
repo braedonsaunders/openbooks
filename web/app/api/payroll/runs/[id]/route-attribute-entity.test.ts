@@ -47,9 +47,6 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as platform.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`.${specifier.slice(1)}.ts`, webRoot).href, context);
-    }
     if (specifier.endsWith("/lib/feature-gates")) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }

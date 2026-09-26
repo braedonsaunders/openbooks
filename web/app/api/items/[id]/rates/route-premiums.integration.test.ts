@@ -16,7 +16,6 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith('/lib/feature-gates')) return { shortCircuit: true, url: 'mock:item-rates-premiums-gates' }
     if (specifier.endsWith('/lib/features')) return { shortCircuit: true, url: 'mock:item-rates-premiums-features' }
-    if (specifier.startsWith('@/')) return nextResolve(`${webRoot}${specifier.slice(2)}.ts`, context)
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

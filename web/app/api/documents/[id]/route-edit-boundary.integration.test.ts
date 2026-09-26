@@ -37,7 +37,6 @@ registerHooks({
     if (context.parentURL?.startsWith('data:') && specifier.startsWith('@openbooks/')) {
       return next(specifier, { ...context, parentURL: import.meta.url })
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

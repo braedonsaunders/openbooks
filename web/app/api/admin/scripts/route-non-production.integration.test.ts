@@ -22,7 +22,6 @@ registerHooks({
         url: "data:text/javascript,export async function currentUser(){return globalThis.__scriptAdminEnvHunt.user}",
       };
     }
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

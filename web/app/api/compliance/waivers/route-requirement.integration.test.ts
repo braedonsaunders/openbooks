@@ -26,7 +26,6 @@ registerHooks({
         export function guardSubsidiaryScope() { return null }
       `);
     if (specifier.endsWith("/lib/compliance")) return virtual("export async function guardComplianceFeature() { return null }");
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

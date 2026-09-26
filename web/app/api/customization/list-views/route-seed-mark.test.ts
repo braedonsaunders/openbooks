@@ -53,12 +53,6 @@ const mockCustomization = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // No root tsconfig maps `@/` (only web/tsconfig does): `@/lib/...` → web/lib.
-    if (specifier.startsWith('@/')) {
-      return nextResolve(
-        new URL(`../../../../../web/${specifier.slice(2)}.ts`, import.meta.url).href,
-        context,
-      )
-    }
     const parent = context.parentURL ?? ''
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
       // Late delegation: the route binds `db` at import time, before the

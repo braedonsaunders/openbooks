@@ -40,7 +40,6 @@ const hooks = registerHooks({
     if (specifier === '@openbooks/pdf') {
       return virtual(`export * from '${root}packages/pdf/src/index.ts'; export async function renderHtmlDocumentPdf(){ return Buffer.from("MOCK-WAIVER-PDF") }`)
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

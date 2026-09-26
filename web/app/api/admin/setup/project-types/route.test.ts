@@ -221,9 +221,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     if (context.parentURL?.includes("setup/project-types")) {
       const modules: Record<string, string> = {
         "@openbooks/engine/src/platform/db.ts": "mock:project-types-db",

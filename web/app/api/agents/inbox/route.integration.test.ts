@@ -15,11 +15,6 @@ Object.assign(globalThis, { __b06ApiInbox: state });
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__b06ApiInbox.user}' };
-  if (specifier.startsWith('@/')) {
-    const path = root + 'web/' + specifier.slice(2);
-    for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');

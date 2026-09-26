@@ -193,15 +193,6 @@ const hooks = registerHooks({
     // `@/` is a Next alias, not a package: resolve it against web/ like the
     // reconcilable-currency boundary test does, so the REAL json boundary
     // runs instead of a permissive double.
-    if (specifier.startsWith("@/") && context.parentURL) {
-      const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
-      const webRoot = parentDir.lastIndexOf("/web/");
-      if (webRoot === -1) return nextResolve(specifier, context);
-      return nextResolve(
-        new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + ".ts").href,
-        context,
-      );
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

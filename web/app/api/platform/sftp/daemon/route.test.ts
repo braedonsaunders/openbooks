@@ -179,9 +179,6 @@ const hooks = registerHooks({
     // Forward Next.js-style aliases to the real modules they point at,
     // anchored at this test's web root so every importing depth resolves
     // identically.
-    if (specifier.startsWith('@/lib/') && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, import.meta.url).href, context)
-    }
     // The platform route exercises the REAL lib/super-admin guardSuperAdmin;
     // only its identity source is replaced so no session or database is needed.
     if (specifier === './authz' && context.parentURL?.endsWith('/lib/super-admin.ts')) {
