@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -9,16 +10,12 @@ import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 
 export const runtime = 'nodejs'
 
-function bad(error: string, status = 422) {
-  return NextResponse.json({ error }, { status })
-}
-
-function fieldTime(error: unknown) {
+function fieldTime(error: unknown): NextResponse | Promise<NextResponse> {
   if (error instanceof FieldTimeError) {
     // A reused offline id with a different payload is a client conflict,
     // not a validation failure.
-    if (error.code === 'client_event_conflict') return NextResponse.json({ error: error.message }, { status: 409 })
-    return bad(error.message)
+    if (error.code === 'client_event_conflict') return apiErrorResponse(error, { safeStatus: 409 })
+    return apiErrorResponse(error, { safeStatus: 422 })
   }
   throw error
 }
