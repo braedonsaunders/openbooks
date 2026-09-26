@@ -438,9 +438,12 @@ export async function billCamReconciliation(orgId: string, actorId: string, allo
   await db.transaction(async (tx) => {
     // A missing pool stamps nothing (the update below affects zero rows);
     // a present one is locked and rechecked so a restricted caller cannot
-    // flip another entity's pool after a rehome.
+    // flip another entity's pool after a rehome. Lock order is pool row, then
+    // property, the same order reopenFinalizedCamPool takes: taking the
+    // property first and the pool row at the update deadlocked against a
+    // concurrent reopen.
     const anchor = (await tx.execute<{ property_id: string }>(sql`
-      select property_id from cam_pools where org_id=${orgId} and id=${poolId}`)).rows[0];
+      select property_id from cam_pools where org_id=${orgId} and id=${poolId} for update`)).rows[0];
     if (anchor) await lockPropertyInScope(tx, orgId, String(anchor.property_id), allowedSubsidiaryIds);
     const stamped = (await tx.execute<{ id: string }>(sql`
       update cam_pools cp set status='invoiced',updated_at=now(),updated_by=${actorId}
