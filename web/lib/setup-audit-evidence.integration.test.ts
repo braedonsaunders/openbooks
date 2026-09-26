@@ -7,6 +7,7 @@ import pg from 'pg';
 import { sql } from 'drizzle-orm';
 import { db, env } from '@openbooks/engine/src/platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __setupEvidence: state });
@@ -153,14 +154,8 @@ test('setup evidence reads the committed before-image after waiting for another 
   await writer.query("select set_config('app.bypass_rls','on',true)");
   const committed = await writer.query('update departments set name=$1 where id=$2',['Concurrent committed name',id]);
   assert.equal(committed.rowCount, 1, 'concurrent writer must hold the department row');
-  const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
   pending=send('PATCH','departments',{...body,id,name:'Final reviewed name'});void pending.catch(()=>{});
-  let blocked=false;const deadline=Date.now()+10000;
-  while(Date.now()<deadline){
-   if((await writer.query<{blocked:boolean}>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',[pid])).rows[0]!.blocked){blocked=true;break;}
-   await new Promise(resolve=>setTimeout(resolve,25));
-  }
-  assert.ok(blocked);await writer.query('commit');assert.equal((await pending).status,200);
+  await waitForLockWaiter(writer,{label:'the department PATCH'});await writer.query('commit');assert.equal((await pending).status,200);
   const audit=await evidence(id,'update');assert.equal((audit.changes.before as Record<string,unknown>).name,'Concurrent committed name');
   assert.deepEqual(audit.changes.after,json(await row('departments',id)));
  }finally{await writer.query('rollback').catch(()=>{});await pending?.catch(()=>{});await writer.end();state.gate=null;await dropScratchOrg(org.orgId);}

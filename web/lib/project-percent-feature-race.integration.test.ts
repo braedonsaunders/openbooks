@@ -18,6 +18,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import("drizzle-orm");
 const { db, env } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { waitForLockWaiter } = await import("@openbooks/engine/src/testing/lock-wait.ts");
 const { PUT } = await import("../app/api/projects/[id]/percent-complete/route");
 
 test("project percent-complete refuses a Projects disable committed while its write waits", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -41,18 +42,9 @@ test("project percent-complete refuses a Projects disable committed while its wr
     await writer.query("begin");
     // 0399 gates the bypass GUC by session role, so the writer connects as the privileged test login above.
     await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [org.orgId]);
-    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
     pending = send();
     void pending.catch(() => {});
-    let blocked = false;
-    const deadline = Date.now() + 10000;
-    while (Date.now() < deadline) {
-      await writer.query("select pg_stat_clear_snapshot()");
-      const row = (await writer.query<{ blocked: boolean }>("select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked", [pid])).rows[0]!;
-      if (row.blocked) { blocked = true; break; }
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.ok(blocked, "request must reach the write fence after reading the old enabled feature");
+    await waitForLockWaiter(writer, { label: "the percent-complete PUT" });
     await writer.query("commit");
     const response = await pending;
     assert.equal(response.status, 404, JSON.stringify(await response.json()));

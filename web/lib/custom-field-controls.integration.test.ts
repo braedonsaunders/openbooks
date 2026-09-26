@@ -21,6 +21,7 @@ const { sql } = await import('drizzle-orm');
 const { db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { documentRevisionSql, isDocumentRevisionToken } = await import('@openbooks/engine/src/records/revision.ts');
 const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts');
 const { POST, PATCH } = await import('../app/api/admin/custom-fields/route');
 
 const scenarios = ['create evidence', 'update evidence', 'missing revision', 'truncated revision', 'malformed revision', 'stale revision', 'successive saves', 'concurrent editors', 'waiting writer', 'create audit failure', 'update audit failure', 'foreign definition', 'permission denied', 'invalid id'] as const;
@@ -102,15 +103,8 @@ for (const scenario of scenarios) {
         await writer.connect(); connected = true;
         await writer.query('begin'); await writer.query("select set_config('app.bypass_rls','on',true)");
         await writer.query("update custom_field_defs set label='Committed while editor waited',updated_at=updated_at+interval '1 microsecond' where id=$1", [id]);
-        const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
         pending = patch({ label: 'Stale waiting editor' }); void pending.catch(() => {});
-        let blocked = false;
-        const deadline = Date.now() + 10000;
-        while (Date.now() < deadline) {
-          if ((await writer.query<{ blocked: boolean }>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked', [pid])).rows[0]!.blocked) { blocked = true; break; }
-          await new Promise(resolve => setTimeout(resolve, 25));
-        }
-        assert.ok(blocked); await writer.query('commit'); assert.equal((await pending).status, 409);
+        await waitForLockWaiter(writer, { label: 'the waiting editor' }); await writer.query('commit'); assert.equal((await pending).status, 409);
         assert.equal((await row()).label, 'Committed while editor waited');
         return;
       }
