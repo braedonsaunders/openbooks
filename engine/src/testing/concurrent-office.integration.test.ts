@@ -253,9 +253,9 @@ test("two replicas racing one scheduled report run render exactly once", { skip:
     assert.equal(first.ok, true, `child 1 failed: ${first.error}`);
     assert.equal(second.ok, true, `child 2 failed: ${second.error}`);
     const claimed = [first, second].filter(
-      (r) => r.ok && typeof r.result === "object" && r.result !== null && !("skipped" in (r.result as Record<string, unknown>)),
+      (r) => r.ok && typeof r.result === "object" && r.result !== null && ("deliveries" in (r.result as Record<string, unknown>)),
     );
-    assert.equal(claimed.length, 1, "exactly one replica claims the run");
+    assert.equal(claimed.length, 1, "exactly one replica claims the run"); // only a deliveries result rendered; unclaimed/skipped losers stand down cleanly
     const artifacts = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from report_run_artifacts where org_id = ${org.orgId} and run_id = ${runId}
     `)).rows[0]!.n;
