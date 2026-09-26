@@ -45,7 +45,7 @@ an active actor with `payroll.manage` permission in the organization. The comman
 uses tenant transactions and checks the actor's current permission.
 
 ```sh
-node --import tsx scripts/payroll-reconcile-filing-accounts.ts \
+node --import tsx scripts/payroll-reconcile-accounts.ts --kind filing \
   --org '<organization UUID>' --actor '<authorized actor UUID>' \
   --input '/absolute/path/reviewed-attribution.json'
 ```
@@ -55,7 +55,7 @@ rolls the entire transaction back. Review the original evidence, mappings and
 preview result before explicitly applying the same file:
 
 ```sh
-node --import tsx scripts/payroll-reconcile-filing-accounts.ts \
+node --import tsx scripts/payroll-reconcile-accounts.ts --kind filing \
   --org '<organization UUID>' --actor '<authorized actor UUID>' \
   --input '/absolute/path/reviewed-attribution.json' --apply
 ```

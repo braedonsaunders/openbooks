@@ -44,7 +44,7 @@ The lowest modules have no engine dependencies at all (`money`, `platform`,
 sit directly above them. Subledgers (`inventory`, `assets`, `revenue`,
 `projects`, `payroll`, `tax`, `tax-returns`, `billing`, `payments`, …) build on
 those, and the tooling modules (`worker`, `harness`, `sim`, `conformance`,
-`sample-companies`, `validation`) sit on top.
+`sample-companies`) sit on top.
 
 The pinned cycle is the engine's known layering debt: the ledger posting operation family contains
 both the posting kernel and orchestration that calls subledger guards and
@@ -58,10 +58,8 @@ and every step that removes an edge shrinks the pin.
 ## Moving files
 
 Relocations are recorded in `scripts/engine-modules/moves.json` (old path to
-new path). `node scripts/engine-modules/rewrite-imports.mjs` rewrites every
-reference in a tree, so a branch written against an older layout comes across
-mechanically: rebase, run the script, typecheck. It follows a file through
-several relocations and is idempotent on a tree that is already current.
+new path), so a reference written against an older layout can be traced to the
+file's current home.
 
 Operation ownership and transaction boundaries are described in
 [Financial operation boundaries](financial-operation-boundaries.md).

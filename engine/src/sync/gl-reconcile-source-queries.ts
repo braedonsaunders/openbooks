@@ -1,6 +1,6 @@
 /**
  * Source-system query builders for the GL reconciliation harness
- * (`engine/src/validation/gl-reconcile.ts`). They speak the source connector's
+ * (`scripts/validation/gl-reconcile.ts`). They speak the source connector's
  * query dialect, so they live in the connector scope; the harness stays
  * vendor-neutral and consumes them through this module.
  *

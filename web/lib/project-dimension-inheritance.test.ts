@@ -37,7 +37,7 @@ test("every project commercial query follows canonical dimension inheritance", (
   );
 
   const certificate = source(
-    "engine/src/validation/project-parity-certificate.ts",
+    "scripts/validation/project-parity-certificate.ts",
   );
   assert.match(
     certificate,

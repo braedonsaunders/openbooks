@@ -37,8 +37,7 @@ No migrations.
   web app, and any growth of the pinned dependency cycles. Pure relocation: no
   file's behaviour changes. Every deep import path
   (`@openbooks/engine/src/<file>.ts`) changed; `scripts/engine-modules/moves.json`
-  records every move and `node scripts/engine-modules/rewrite-imports.mjs`
-  brings a branch written against the old layout across mechanically.
+  records every move.
 
 ## [0.1.0-alpha.17] - 2026-09-19
 
