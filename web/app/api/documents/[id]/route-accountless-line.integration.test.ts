@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // A PATCH whose lines contain a contentful row without an account
@@ -9,7 +8,6 @@ import test from 'node:test'
 // line — and must change nothing: the invoice total and its stored lines
 // stay exactly as they were. Only the session gate is stubbed; handler,
 // service, and storage are real.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __documentAccountlessLineState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // F3-97: the relationship PATCH carried no concurrency token while the main
@@ -10,7 +9,6 @@ import test from 'node:test'
 // token the GET surfaces as profile.updated_at: a missing, malformed, or
 // stale token 409s naming the reload remedy, and every write rotates the
 // token so a consumed one never works twice.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmAccountRevisionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

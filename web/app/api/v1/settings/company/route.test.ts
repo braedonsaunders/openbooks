@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-settings-company-route-test");
@@ -19,10 +19,13 @@ const routeState: RouteState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/api/v1-request": `
       const state = globalThis[Symbol.for('openbooks.v1-settings-company-route-test')]
       export async function withV1Request(request, label, operation) {
         state.labels.push(label)
@@ -42,41 +45,23 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:context",
-    `
+    "../../../../../lib/application/context": `
       const state = globalThis[Symbol.for('openbooks.v1-settings-company-route-test')]
       export function assertApplicationPermission(context, permission) { state.asserted = permission }
     `,
-  ],
-  [
-    "mock:errors",
-    `export class ApplicationError extends Error {
+    "../../../../../lib/application/errors": `export class ApplicationError extends Error {
       constructor(code, message, status, details) { super(message); this.code = code; this.status = status; this.details = details }
     }`,
-  ],
-  [
-    "mock:authz",
-    `
+    "../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.v1-settings-company-route-test')]
       export function can(authz, permission) { return state.permissions.includes(permission) }
     `,
-  ],
-  [
-    "mock:idempotency",
-    `export async function executeIdempotent(args) { return { replayed: false, value: await args.execute() } }`,
-  ],
-  [
-    "mock:catalog",
-    `export function settleWrite(result) {
+    "../../../../../lib/application/idempotency": `export async function executeIdempotent(args) { return { replayed: false, value: await args.execute() } }`,
+    "../../../../../lib/application/tool-catalog": `export function settleWrite(result) {
       if (result.status >= 300) throw new Error("refusal:" + result.status)
       return result.body
     }`,
-  ],
-  [
-    "mock:settings",
-    `
+    "../../../../../lib/company-settings": `
       const state = globalThis[Symbol.for('openbooks.v1-settings-company-route-test')]
       export async function readCompanySettings(orgId) {
         state.readOrg = orgId
@@ -87,34 +72,10 @@ const mockSources = new Map<string, string>([
         return { status: 200, body: { ok: true, changed: true } }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../../lib/application/context", "mock:context"],
-  ["../../../../../lib/application/errors", "mock:errors"],
-  ["../../../../../lib/authz", "mock:authz"],
-  ["../../../../../lib/application/idempotency", "mock:idempotency"],
-  ["../../../../../lib/application/tool-catalog", "mock:catalog"],
-  ["../../../../../lib/company-settings", "mock:settings"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET, PATCH } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 const json = (body: unknown, headers: Record<string, string> = {}) => new Request("http://openbooks.test/api/v1/settings/company", {
   method: "POST",

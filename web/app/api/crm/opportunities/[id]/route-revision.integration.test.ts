@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Two tabs editing the same opportunity: the second save carries the revision
@@ -8,7 +7,6 @@ import test from 'node:test'
 // instead of silently replacing the first tab's full-replace payload (header
 // fields + lines). Same contract as document, payment, prebill-line, capture,
 // and custom-record edits.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __opportunityRevisionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

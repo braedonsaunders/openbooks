@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../testing/stub-modules'
 import test from 'node:test'
 
 // Route boundary suite: two overlapping PATCH requests exercise the same row
@@ -54,16 +54,19 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextDashboard?: unknown }).openbooksSqlTextDashboard = sqlText
 
-const mockSources = new Map<string, string>([
-  ['mock:mutations', `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@/lib/insight-mutations": `
     import { db } from '@openbooks/engine/src/platform/db.ts'
     export async function mutateInsight(_authz, _table, _id, _action, work) {
       return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
     }
-  `],
-  [
-    'mock:db',
-    `
+  `,
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
       const sqlText = globalThis.openbooksSqlTextDashboard
       const record = (kind, query) => {
@@ -91,10 +94,7 @@ const mockSources = new Map<string, string>([
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
     `,
-  ],
-  [
-    'mock:authz',
-    `
+    "../../../../../lib/authz": `
       export async function guardPermission(permission) {
         if (permission === 'insights.read' || permission === 'insights.create') {
           return { user: { orgId: 'org-1', id: 'user-1' } }
@@ -102,10 +102,7 @@ const mockSources = new Map<string, string>([
         return new Response(null, { status: 403 })
       }
     `,
-  ],
-  [
-    'mock:dashboard-lib',
-    `
+    "../../_lib": `
       const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
       export async function loadDashboard() { return state.dashboard }
       // Neither PATCH case in this suite sends a layout, so admission here is
@@ -116,32 +113,11 @@ const mockSources = new Map<string, string>([
       export function normalizeAllowedRoles(value) { return value }
       export function strOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : null }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['@/lib/insight-mutations', 'mock:mutations'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../_lib', 'mock:dashboard-lib'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './[id]/route.ts?dashboard-occ-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./[id]/route.ts')
-hooks.deregister()
 
 const DASHBOARD_ID = '00000000-0000-4000-8000-00000000d001'
 

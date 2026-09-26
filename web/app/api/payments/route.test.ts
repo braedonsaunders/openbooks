@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Unsaved-create contract for POST /api/payments: opening the drawer writes
@@ -85,10 +85,13 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksPaymentsSqlText = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:db",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.payments-route-test')]
       const sqlText = globalThis.openbooksPaymentsSqlText
       // The shared claim helper reads through sql.identifier, whose chunk
@@ -147,12 +150,7 @@ const mockSources = new Map<string, string>([
       export function withBypassContext(fn) { return fn() }
       export function withOrgContext(_orgId, fn) { return fn() }
     `,
-  ],
-  [
-    // Authenticate-first is observable here: the double reports whether any
-    // session existed before the route parsed the body.
-    "mock:authz",
-    `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
+    "../../../lib/authz": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
      export async function getAuthz() {
        if (!state.authenticated) return null
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
@@ -163,49 +161,29 @@ const mockSources = new Map<string, string>([
        return null
      }
      export function subsidiariesInScope() { return true }`,
-  ],
-  [
-    "mock:payment-queries",
-    `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
+    "@/lib/authz": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
+     export async function getAuthz() {
+       if (!state.authenticated) return null
+       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
+     }
+     export function can(_authz, perm) { return state.permissions.includes(perm) }
+     export function guardSubsidiaryScope(_authz, _subsidiaryId) {
+       if (state.scopeDenied) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+       return null
+     }
+     export function subsidiariesInScope() { return true }`,
+    "@openbooks/engine/src/payments/payment-queries.ts": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
      export async function openItemsForParty() { return state.openItems }
      export async function loadPaymentDocument(id, kind, orgId) {
        if (!state.inserted || id !== state.requestKey) return null
        return { doc: { id, kind, org_id: orgId, document_number: 'PAY-000003' }, bankAccountId: null, allocations: [], applied: [] }
      }`,
-  ],
-  [
-    "mock:clock",
-    `export async function businessToday() { return globalThis[Symbol.for('openbooks.payments-route-test')].clockDate }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../lib/authz", "mock:authz"],
-  ["@/lib/authz", "mock:authz"],
-  ["@openbooks/engine/src/payments/payment-queries.ts", "mock:payment-queries"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:clock"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    // Server-module guard: the route's transitive imports mark themselves
-    // tests neutralize it the same way.
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return globalThis[Symbol.for('openbooks.payments-route-test')].clockDate }`,
   },
 });
 
 const routeUrl = "./route.ts?payments-create-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   state.requestKey = null;

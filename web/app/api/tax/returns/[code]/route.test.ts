@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 // Route boundary suite: filing-entity scoping and the declared translation
@@ -22,10 +22,13 @@ const routeState: RouteState = { calls: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/authz": `
       const allowed = new Set(['sub-allowed'])
       export async function guardPermission(permission) {
         if (permission !== 'reports.read') {
@@ -41,40 +44,17 @@ const mockSources = new Map<string, string>([
         return null
       }
     `,
-  ],
-  [
-    "mock:tax-return",
-    `
+    "@openbooks/engine/src/tax-returns/return.ts": `
       const state = globalThis[Symbol.for('openbooks.tax-return-route-test')]
       export async function computeTaxReturn(orgId, formCode, from, to, adjustments, opts) {
         state.calls.push({ orgId, formCode, from, to, adjustments, opts })
         return { formCode, boxes: [] }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/authz", "mock:authz"],
-  ["@openbooks/engine/src/tax-returns/return.ts", "mock:tax-return"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 function get(query: string): Promise<Response> {
   return GET(

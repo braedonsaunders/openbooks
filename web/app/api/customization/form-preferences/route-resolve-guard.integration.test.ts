@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // Live-Postgres regression for PUT /api/customization/form-preferences.
@@ -11,7 +10,6 @@ import test from "node:test";
 // preference for an inactive or role-restricted form had no observable
 // effect — the save reported {ok:true} and resolve ignored it.
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const state: {
   orgId: string;
   actorId: string;

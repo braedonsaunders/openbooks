@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Account PATCH validates employeeCount as a non-negative integer and
@@ -9,7 +8,6 @@ import test from 'node:test'
 // pasted 20-digit revenue sails through and dies in Postgres as a raw storage
 // failure (HTTP 500 — the verb has no catch) instead of failing closed with a
 // named 422. annual_revenue is numeric(19,4); employee_count is integer.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmAccountMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

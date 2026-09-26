@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import type { SessionUser } from '../../../../lib/auth'
 
@@ -10,7 +9,6 @@ import type { SessionUser } from '../../../../lib/auth'
 // nothing — no dashboard row and no audit event. (The embed loader silently
 // drops such cards, so without this check a client would get a 201 plus an
 // audited layout and then an empty dashboard.)
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __insightDashboardCardsSession: session })
 registerHooks({ resolve(specifier, context, next) {

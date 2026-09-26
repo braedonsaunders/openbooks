@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
 
 // C-74: the attach and detach UPDATEs never checked rowCount, so a form row
@@ -34,10 +34,13 @@ const routeState: RouteState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
       export async function guardPermission(permission) {
         if (permission !== 'admin.setup.manage') {
@@ -55,10 +58,7 @@ const mockSources = new Map<string, string>([
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
     `,
-  ],
-  [
-    "mock:db",
-    `
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
       const sqlText = (query) => {
         const chunks = query?.queryChunks
@@ -95,10 +95,7 @@ const mockSources = new Map<string, string>([
         async transaction(work) { return work(tx) },
       }
     `,
-  ],
-  [
-    "mock:file-cabinet",
-    `
+    "../../../../../../lib/file-cabinet": `
       const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
       export async function ensureAttachmentsRoot() { return 'root-1' }
       export async function createFile() {
@@ -109,31 +106,10 @@ const mockSources = new Map<string, string>([
         state.deletedFiles.push(fileId)
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../../lib/authz", "mock:authz"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../../../../lib/file-cabinet", "mock:file-cabinet"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { POST, DELETE } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(state: Partial<RouteState>): void {
   routeState.formRow = state.formRow ?? null;

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 // PATCH /api/admin/setup/project-types shape-checks billingMethod, name, and
@@ -33,23 +33,16 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextProjectDate = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
-      export async function guardPermission() {
-        return {
-          user: { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
-          permissions: new Set(['admin.setup.manage']),
-          allowedSubsidiaryIds: null,
-        };
-      }
-      export function guardUnrestrictedScope() { return null; }
-    `,
-  ],
-  [
-    "mock:db",
-    `
+// '@/lib/api/json' is not mocked here: never double the validation boundary.
+// The resolve hook's @/ forwarder already maps it to the real module.
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const sqlText = globalThis.openbooksSqlTextProjectDate
       const before = {
         key: 'custom', name: 'Custom', description: null, is_active: true,
@@ -72,10 +65,7 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-  [
-    "mock:profile",
-    `
+    "@openbooks/engine/src/projects/financial-profile-versions.ts": `
       const state = globalThis[Symbol.for('openbooks.project-types-patch-date-test')]
       export function canonicalizeProjectFinancialProfile(profile) { return structuredClone(profile) }
       export function assertValidProjectFinancialProfile(_profile) {}
@@ -84,43 +74,25 @@ const mockSources = new Map<string, string>([
         return { id: 'version-1', effectiveFrom: input.effectiveFrom, effectiveTo: null }
       }
     `,
-  ],
-  ["mock:date", "export async function businessToday() { return '2026-08-31' }"],
-  ["mock:gate", "export async function guardProjectsFeature() { return null }"],
-  ["mock:features", "export async function isFeatureEnabled() { return true }"],
-  ["mock:params", "export function isUuid(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v)) }"],
-]);
-
-// '@/lib/api/json' is not mocked here: never double the validation boundary.
-// The resolve hook's @/ forwarder already maps it to the real module.
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/projects/financial-profile-versions.ts", "mock:profile"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:date"],
-  ["../../../../../lib/authz", "mock:authz"],
-  ["../../../../../lib/projects-gate", "mock:gate"],
-  ["../../../../../lib/features", "mock:features"],
-  ["../../../../../lib/list-params", "mock:params"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const forwarded = mockUrls.get(specifier);
-    if (forwarded) return { url: forwarded, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    // '@/…' resolves to the real module through the shared test-hook
-    // preload; never double the validation boundary.
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "@openbooks/engine/src/platform/business-date.ts": "export async function businessToday() { return '2026-08-31' }",
+    "../../../../../lib/authz": `
+      export async function guardPermission() {
+        return {
+          user: { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          permissions: new Set(['admin.setup.manage']),
+          allowedSubsidiaryIds: null,
+        };
+      }
+      export function guardUnrestrictedScope() { return null; }
+    `,
+    "../../../../../lib/projects-gate": "export async function guardProjectsFeature() { return null }",
+    "../../../../../lib/features": "export async function isFeatureEnabled() { return true }",
+    "../../../../../lib/list-params": "export function isUuid(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v)) }",
   },
 });
 
 const routeUrl = "./route.ts?project-types-patch-date-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const TYPE_ID = "11111111-1111-4111-8111-111111111111";
 

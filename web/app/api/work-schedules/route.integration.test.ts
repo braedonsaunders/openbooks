@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -9,7 +8,6 @@ import test from "node:test";
  * malformed hours value is — never silently dropped from the stored pattern.
  * A dropped day understates the pattern that decides holiday pay.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __workScheduleRouteState: state });
 registerHooks({

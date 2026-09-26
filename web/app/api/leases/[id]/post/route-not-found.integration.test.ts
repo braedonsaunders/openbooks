@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // Posting schedules for a valid-but-unknown lease id answered 200 with
 // posted: 0 — indistinguishable from a successful empty run for a lease
 // that is gone or belongs to another tenant. Unknown ids are now a 404;
 // known leases with nothing due still answer 200.
-const root = pathToFileURL(process.cwd() + "/").href;
 const state: { orgId: string; actorId: string; allowedSubsidiaryIds: Set<string> | null } = {
   orgId: "",
   actorId: "",

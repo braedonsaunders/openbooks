@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../testing/stub-modules'
 import test from 'node:test'
 import { NextRequest } from 'next/server'
 
@@ -21,10 +21,13 @@ const auditState: AuditState = { recordExists: true, permissions: [] }
 const EXISTING_ID = '00000000-0000-4000-8000-00000000a001'
 const MISSING_ID = '00000000-0000-4000-8000-00000000a002'
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:db',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export const db = {
         async execute(query) {
@@ -43,10 +46,7 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-  [
-    'mock:authz',
-    `
+    "../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export async function getAuthz() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: new Set(state.permissions) }
@@ -59,32 +59,11 @@ const mockSources = new Map<string, string>([
         return null
       }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  // The canonical scope module loads for real: its denial shape is the
-  // behavior under test, so doubling it would only prove the copy.
-  ['../../../../lib/authz', 'mock:authz'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?audit-record-route-test'
 const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function get(table: string, id: string): Promise<Response> {
   return GET(new NextRequest(`http://openbooks.test/api/audit/record?table=${table}&id=${id}`))

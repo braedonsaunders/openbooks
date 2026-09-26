@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../testing/stub-modules'
 import test from 'node:test'
 
 const stateKey = Symbol.for('openbooks.party-route-hold-test')
@@ -67,10 +67,17 @@ function sqlText(query: unknown): string {
 
 ;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextParty?: unknown }).openbooksSqlTextParty = sqlText
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:db',
-    `
+// Neither the decimal classifier nor the money kernel is mocked: a hand
+// double of either decides amount questions the real module would refuse,
+// so the route's exact-decimal behavior below was never really tested.
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.party-route-hold-test')]
       const sqlText = globalThis.openbooksSqlTextParty
       const record = (query) => {
@@ -94,84 +101,38 @@ const mockSources = new Map<string, string>([
       export async function withBypassContext(fn) { return fn() }
       export function ambientTenantOrgId() { return null }
     `,
-  ],
-  [
-    'mock:authz',
-    `
+    "../../../../lib/authz": `
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
       export function guardSubsidiaryScope() { return null }
       export function subsidiariesInScope() { return true }
     `,
-  ],
-  ['mock:features', `export async function isFeatureEnabled() { return true }`],
-  [
-    'mock:custom-fields',
-    `
+    "../../../../lib/features": `export async function isFeatureEnabled() { return true }`,
+    "../../../../lib/custom-fields": `
       export async function loadFieldDefs() { return [] }
       export function validateCustomValues(_defs, values) { return { ok: true, errors: {}, cleaned: values ?? {} } }
       export async function findUnownedCustomReferences() { return [] }
     `,
-  ],
-  ['mock:list-params', `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`],
-  [
-    'mock:countries',
-    `
+    "../../../../lib/list-params": `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`,
+    "../../../../lib/countries": `
       export function normalizeCountryCode(value) {
         if (typeof value !== 'string') return null
         const normalized = value.trim().toUpperCase()
         return normalized.length === 2 ? normalized : null
       }
     `,
-  ],
-  [
-    'mock:party-loader',
-    `
+    "../_lib": `
       export async function loadParty(id) {
         return { party: { id }, customer: null, vendor: null, employee: null, addresses: [], contacts: [], bankAccounts: [], transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] }, additionalSubsidiaryIds: [] }
       }
     `,
-  ],
-  // The locked in-transaction scope recheck is IO, not pure logic, so it is
-  // doubled here like the database: the mocked gate is unrestricted, for
-  // which the real helper returns null. The recheck itself is covered by
-  // subsidiary-scope-lock.integration.test.ts and the parties PATCH
-  // integration tests, which load the real module.
-  ['mock:party-scope', `export async function denyLockedOutsidePartyScope() { return null }`],
-])
-
-// Neither the decimal classifier nor the money kernel is mocked: a hand
-// double of either decides amount questions the real module would refuse,
-// so the route's exact-decimal behavior below was never really tested.
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['../../../../lib/features', 'mock:features'],
-  ['../../../../lib/custom-fields', 'mock:custom-fields'],
-  ['../../../../lib/list-params', 'mock:list-params'],
-  ['../../../../lib/countries', 'mock:countries'],
-  ['../_lib', 'mock:party-loader'],
-  ['./bank-accounts/party-scope', 'mock:party-scope'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    // '@/lib/api/json' is not mocked: never double the validation boundary.
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    "./bank-accounts/party-scope": `export async function denyLockedOutsidePartyScope() { return null }`,
   },
 })
 
 const routeUrl = './route.ts?party-hold-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(existing: Partial<ExistingParty> = {}): void {
   routeState.calls.length = 0

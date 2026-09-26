@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -11,7 +10,6 @@ import test from "node:test";
  * the project-types/close fixes: refuse non-booleans, default
  * omission to active.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningActiveFlagUser: state });
 registerHooks({

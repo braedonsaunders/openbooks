@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Export wrote a blank Account Number for NULL-number accounts (the import
@@ -11,7 +10,6 @@ import test from 'node:test'
 // writes the name fallback the import resolves, so export→import round-trips
 // exactly — and anything still unresolvable refuses instead of re-homing.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
   orgId: '', actorId: '', allowed: null,
 }

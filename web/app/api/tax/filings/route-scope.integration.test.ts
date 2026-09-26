@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '@/lib/auth'
 
@@ -13,7 +12,6 @@ import type { SessionUser } from '@/lib/auth'
 // mark filed (the mark-filed recompute replays the frozen posture instead of
 // the org-wide default, which would refuse as mixed-currency).
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __taxFilingScopeUser: state })
 const virtual = (source: string) => ({

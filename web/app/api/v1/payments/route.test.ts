@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-payments-route-test");
@@ -10,10 +10,13 @@ interface RouteState {
 const routeState: RouteState = { calls: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         try {
           const result = await operation(
@@ -42,10 +45,7 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:errors",
-    `
+    "../../../../lib/application/errors": `
       export class ApplicationError extends Error {
         constructor(code, message, status, details) {
           super(message)
@@ -55,51 +55,24 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    "mock:payments",
-    `
+    "../../../../lib/application/payments": `
       const state = globalThis[Symbol.for('openbooks.v1-payments-route-test')]
       export async function createPayment(_context, input) {
         state.calls.push(input)
         return { replayed: false, status: 201, result: { id: "payment-1", kind: input.kind } }
       }
     `,
-  ],
-  [
-    "mock:v1-records",
-    `
+    "../../../../lib/api/v1-records": `
       const state = globalThis[Symbol.for('openbooks.v1-payments-route-test')]
       export async function v1ListRecords(_request, typeKey) {
         state.calls.push({ list: typeKey })
         return Response.json({ records: [], total: 0, page: 1, perPage: 25, typeKey })
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/application/errors", "mock:errors"],
-  ["../../../../lib/application/payments", "mock:payments"],
-  ["../../../../lib/api/v1-records", "mock:v1-records"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 function post(body: unknown, idempotencyKey = "payments-key-1"): Promise<Response> {
   return POST(

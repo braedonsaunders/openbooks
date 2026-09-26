@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
 
@@ -29,10 +29,13 @@ const callsKey = Symbol.for('openbooks.payroll-amendments-permission-calls')
 const calls: Array<[string, string]> = []
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[callsKey] = calls
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:feature-gates',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/feature-gates": `
       export async function guardFeaturePermission(permission, feature) {
         globalThis[Symbol.for('openbooks.payroll-amendments-permission-calls')].push([permission, feature])
         const refusal = globalThis.__filingPermissionRefusal ?? null
@@ -40,10 +43,7 @@ const mockSources = new Map<string, string>([
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
     `,
-  ],
-  [
-    'mock:subsidiary-scope',
-    `
+    "../../subsidiary-scope": `
       export class FilingScopeDenied {
         constructor(response) {
           this.response = response
@@ -52,40 +52,22 @@ const mockSources = new Map<string, string>([
       export async function guardPayrollFilingRowIds() { return null }
       export async function guardPayrollFilingData() { return null }
     `,
-  ],
-  [
-    'mock:yearend',
-    `
-      export async function orgYearEndFilings() { return [] }
-    `,
-  ],
-  [
-    'mock:db',
-    `
+    "@openbooks/engine/src/platform/db.ts": `
       export const db = { execute: async () => ({ rows: [] }) }
     `,
-  ],
-  [
-    'mock:drizzle',
-    `
+    "drizzle-orm": `
       export function sql() { return {} }
     `,
-  ],
-  [
-    'mock:packs',
-    `
+    "@openbooks/engine/src/payroll/packs.ts": `
       export class PayrollPackError extends Error {}
     `,
-  ],
-  [
-    'mock:payroll-error',
-    `
+    "@openbooks/engine/src/payroll/error.ts": `
       export class PayrollError extends Error {}
     `,
-  ],
-  [
-    'mock:amendments',
-    `
+    "@openbooks/engine/src/payroll/yearend.ts": `
+      export async function orgYearEndFilings() { return [] }
+    `,
+    "@openbooks/engine/src/payroll/yearend-amendments.ts": `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-permission-test')]
       export async function filingLifecycle() { return { submissions: [], rows: [] } }
       export async function recordFilingIssue(input) {
@@ -99,38 +81,11 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['../../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
-  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
-  ['@openbooks/engine/src/payroll/yearend-amendments.ts', 'mock:amendments'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    // The real @/lib/api/json is used (no hand double of the protected
-    // mock-surface checker itself makes — it carries no behaviour.
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?payroll-amendments-permission-test'
 const { POST, GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.issues.length = 0

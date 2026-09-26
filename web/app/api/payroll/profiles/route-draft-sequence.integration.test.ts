@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { NextRequest } from 'next/server'
 import type { SessionUser } from '../../../../lib/auth'
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; user: SessionUser | null } = { orgId: '', actorId: '', user: null }
 Object.assign(globalThis, { __draftProfileState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

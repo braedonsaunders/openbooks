@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 // PATCH /api/assets/[id] legacy-sentence parity after the ../_fields
@@ -109,41 +109,24 @@ const mockDb = `
   export const withBypassContext = async (work) => work()
 `;
 
-const mockSources = new Map<string, string>([
-  ["mock:db", mockDb],
-  [
-    "mock:feature-gates",
-    `export async function guardFeaturePermission() {
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": mockDb,
+    "../../../../lib/feature-gates": `export async function guardFeaturePermission() {
        return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
          allowedSubsidiaryIds: null,
        }
      }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../../lib/feature-gates", "mock:feature-gates"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?asset-patch-parity-test";
 const routeModule = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { PATCH, DELETE } = routeModule;
 

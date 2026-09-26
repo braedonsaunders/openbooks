@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -11,7 +10,6 @@ import test from "node:test";
  * AdvancedSubscriptionError), and the amend path spreads the whole body into
  * the engine call and the persisted request snapshot.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __subscriptionShapeState: state });

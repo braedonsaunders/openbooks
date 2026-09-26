@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import pg from 'pg'
 
@@ -16,7 +15,6 @@ const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.insights-home-resolver-test')]
   export async function getAuthz() { return state.authz }
 `
-const root = pathToFileURL(process.cwd() + '/').href
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/authz') return { url: 'mock:insights-test-authz', shortCircuit: true }

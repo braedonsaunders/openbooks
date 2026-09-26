@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Overhead publish must fail closed on invalid input like its sibling
@@ -10,7 +9,6 @@ import test from 'node:test'
 // as a raw Postgres throw (HTTP 500). Department identity itself belongs to
 // the publisher, which fails closed through its foreign key — the route only
 // shapes the payload and maps storage input failures.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; allowedSubsidiaryIds: Set<string> | null } = {
   orgId: '',
   actorId: '',

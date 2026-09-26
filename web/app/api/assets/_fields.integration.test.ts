@@ -1,18 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    return nextResolve(specifier, context);
-  },
-});
 const { FieldRefusal, assetAccountScopeSql, parseAccountOverride } = await import("./_fields.ts");
-hooks.deregister();
 
 test("asset account overrides accept shared and caller-visible accounts and refuse an outside subsidiary", async () => {
   const org = await createScratchOrg();

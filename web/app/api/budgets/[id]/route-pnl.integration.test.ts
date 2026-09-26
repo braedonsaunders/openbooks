@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Budgets cover the P&L only — the worksheet, the variances and the
@@ -10,7 +9,6 @@ import test from 'node:test'
 // in totals. The import, the save API and the line trigger now refuse them
 // by name.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
   orgId: '', actorId: '', allowed: null,
 }

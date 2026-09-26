@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { NextResponse } from "next/server";
 Object.assign(globalThis, { __provisionPostOracleNextResponse: NextResponse });
@@ -13,7 +12,6 @@ Object.assign(globalThis, { __provisionPostOracleNextResponse: NextResponse });
  * existence lookup — an existing run and a missing id answer identically,
  * and the engine is never reached.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = {
   user: { orgId: "", id: "" },
   permissions: new Set<string>(),

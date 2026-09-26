@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Empty caller subsidiary scope must fail closed, like the sibling close
@@ -10,7 +9,6 @@ import test from 'node:test'
 // and non-empty scopes pass through to the engine untouched. Only the
 // permission/feature gate is stubbed; body parsing, validation, and the
 // engine run against the real implementations.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; scope: 'empty' | 'open' | 'unknown' | 'real'; unknownId: string; realId: string } = {
   orgId: '',
   actorId: '',

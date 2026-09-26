@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Equipment PATCH canonicalizes purchasePrice/capacityQuantity to 4dp but
 // never bounds their magnitude, so a pasted 20-digit figure sails through
 // validation and dies in Postgres as a raw numeric(19,4) overflow (HTTP 500)
 // instead of failing closed with a named 422.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __equipmentPatchMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

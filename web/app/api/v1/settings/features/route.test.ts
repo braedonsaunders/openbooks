@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-settings-features-route-test");
@@ -17,10 +17,13 @@ const routeState: RouteState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         const result = await operation(
           { user: { orgId: "org-1", id: "user-1" }, keyId: "key-1" },
@@ -38,30 +41,23 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:context",
-    `export function assertApplicationPermission(context, permission) {
+    "../../../../../lib/application/context": `export function assertApplicationPermission(context, permission) {
       if (permission !== "admin.setup.manage") throw new Error("unexpected permission:" + permission)
     }`,
-  ],
-  [
-    "mock:errors",
-    `
+    "../../../../../lib/application/errors": `
       export class ApplicationError extends Error {
         constructor(code, message, status, details) { super(message); this.code = code; this.status = status; this.details = details }
       }
       export function conflict(message, details) { throw new Error("conflict:" + message) }
       export function notFound(resource) { throw new Error("not_found:" + resource) }
     `,
-  ],
-  [
-    "mock:idempotency",
-    `export async function executeIdempotent(args) { return { replayed: false, value: await args.execute() } }`,
-  ],
-  [
-    "mock:features",
-    `
+    "../../../../../lib/application/idempotency": `export async function executeIdempotent(args) { return { replayed: false, value: await args.execute() } }`,
+    "../../../../../lib/application/setup-read": `
+      export async function listApplicationFeatures() {
+        return { features: [{ key: "projects", enabled: true }] }
+      }
+    `,
+    "../../../../../lib/features-admin": `
       const state = globalThis[Symbol.for('openbooks.v1-settings-features-route-test')]
       export function normalizeFeatureChanges(input) { state.normalizedInput = input; return state.normalized }
       export async function applyFeatureChanges(orgId, actorId, changes) {
@@ -69,41 +65,10 @@ const mockSources = new Map<string, string>([
         return state.appliedResult
       }
     `,
-  ],
-  [
-    "mock:setup-read",
-    `
-      export async function listApplicationFeatures() {
-        return { features: [{ key: "projects", enabled: true }] }
-      }
-    `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../../lib/application/context", "mock:context"],
-  ["../../../../../lib/application/errors", "mock:errors"],
-  ["../../../../../lib/application/idempotency", "mock:idempotency"],
-  ["../../../../../lib/application/setup-read", "mock:setup-read"],
-  ["../../../../../lib/features-admin", "mock:features"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 const post = (body: unknown, headers: Record<string, string> = {}) => new Request("http://openbooks.test/api/v1/settings/features", {
   method: "POST",

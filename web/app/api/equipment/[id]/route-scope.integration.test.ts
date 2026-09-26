@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Equipment GET checks the scope first, on the locked unit row, then answers
@@ -9,7 +8,6 @@ import test from 'node:test'
 // concurrent unit rehome cannot authorize the unit and then move it before
 // the metric reads of one response. Out-of-scope answers exactly like
 // missing.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; scope: Set<string> | null } = { orgId: '', actorId: '', scope: null }
 Object.assign(globalThis, { __equipmentScopeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

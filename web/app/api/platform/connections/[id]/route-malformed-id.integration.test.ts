@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // The platform-connections [id] family resolves the path id without gating
 // it: PATCH/DELETE/run/test/qwc bind it straight into the connection lookup
 // and a malformed id escapes as a raw Postgres uuid throw (HTTP 500) instead
 // of the same 404 an unknown id returns.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __platformConnIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

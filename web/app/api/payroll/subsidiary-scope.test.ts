@@ -1,14 +1,8 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // stands in for the server boundary. All setup completes before the first
 // test() registration below.
-registerHooks({
-  resolve(specifier, context, next) {
-    return next(specifier, context)
-  },
-})
 const { filingGuardKind, payrollRowScope } = await import('./subsidiary-scope')
 
 // The subsidiary-scope guard routes by declaration, never by (country,

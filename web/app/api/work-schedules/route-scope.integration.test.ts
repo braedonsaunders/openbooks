@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -13,7 +12,6 @@ import test from "node:test";
  * there (404) — or names the org-wide remedy (403) where the row itself is
  * visible configuration.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = {
   orgId: "",
   actorId: "",

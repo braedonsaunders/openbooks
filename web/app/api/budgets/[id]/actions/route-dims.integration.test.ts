@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // A supplied dimension that is not a valid id used to coerce to null, and
@@ -9,7 +8,6 @@ import test from 'node:test'
 // silently broadened a narrow request into a whole-budget delete-and-replace.
 // Malformed supplied dimensions now refuse by name before any write.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
   orgId: '', actorId: '', allowed: null,
 }

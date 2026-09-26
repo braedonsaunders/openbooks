@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import { allocationRuleVisible } from "@openbooks/engine/src/organization/allocation-scope.ts";
@@ -93,39 +93,13 @@ function cannedRule(
   };
 }
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `export async function guardPermission() {
-       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
-       if (!state.authed) {
-         return globalThis[Symbol.for('openbooks.entry-candidates-route-denied')]()
-       }
-       return {
-         user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
-         allowedSubsidiaryIds: state.allowedSubsidiaryIds === null ? null : new Set(state.allowedSubsidiaryIds),
-       }
-     }`,
-  ],
-  [
-    "mock:features",
-    `export async function isFeatureEnabled(orgId, key) {
-       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
-       if (orgId !== '${ORG_ID}') return false
-       return state.features[key] === true
-     }`,
-  ],
-  [
-    "mock:business-date",
-    `export async function businessToday(orgId) {
-       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
-       state.lastBusinessTodayOrg = orgId
-       return '2026-07-15'
-     }`,
-  ],
-  [
-    "mock:allocations-scope",
-    `export function allocationRuleScopeVisible(allowed, rule) {
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/allocations-scope": `export function allocationRuleScopeVisible(allowed, rule) {
       const real = globalThis[Symbol.for('openbooks.entry-candidates-scope-visible')]
       return real(allowed, {
         sourceSubsidiaryIds: rule.version.dimensionFilters?.subsidiaryIds,
@@ -135,10 +109,22 @@ const mockSources = new Map<string, string>([
         targetSubsidiaryIds: (rule.targets ?? []).map((t) => t.subsidiaryId),
       })
     }`,
-  ],
-  [
-    "mock:match",
-    `export async function listEntryRulesInEffect(request) {
+    "../../../../lib/authz": `export async function guardPermission() {
+       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
+       if (!state.authed) {
+         return globalThis[Symbol.for('openbooks.entry-candidates-route-denied')]()
+       }
+       return {
+         user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
+         allowedSubsidiaryIds: state.allowedSubsidiaryIds === null ? null : new Set(state.allowedSubsidiaryIds),
+       }
+     }`,
+    "../../../../lib/features": `export async function isFeatureEnabled(orgId, key) {
+       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
+       if (orgId !== '${ORG_ID}') return false
+       return state.features[key] === true
+     }`,
+    "@openbooks/engine/src/allocations/match.ts": `export async function listEntryRulesInEffect(request) {
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
        state.lastListRequest = { ...request }
        return state.rules.map((canned) => ({
@@ -208,33 +194,16 @@ const mockSources = new Map<string, string>([
        state.selectCalls.push({ keys: candidates.map((c) => c.rule.key), line: { ...line } })
        return candidates[0] ?? null
      }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/allocations-scope", "mock:allocations-scope"],
-  ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/features", "mock:features"],
-  ["@openbooks/engine/src/allocations/match.ts", "mock:match"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday(orgId) {
+       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
+       state.lastBusinessTodayOrg = orgId
+       return '2026-07-15'
+     }`,
   },
 });
 
 const routeUrl = "./route.ts?entry-candidates-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   state.features = { allocations: true, allocationsAtEntry: true };

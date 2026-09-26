@@ -3,11 +3,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { Pool } from "pg";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import type { SessionUser } from "../../../lib/auth";
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const engineRoot = new URL("../../../../engine/", import.meta.url).href;
 const state: { user: SessionUser | null; allowedSubsidiaryId: string | null } = { user: null, allowedSubsidiaryId: null };
 Object.assign(globalThis, { __subcontractRehomeRace: state });

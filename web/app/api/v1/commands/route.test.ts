@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-commands-route-test");
@@ -10,10 +10,13 @@ interface RouteState {
 const routeState: RouteState = { listed: false };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         const result = await operation(
           { user: { orgId: "org-1" }, keyId: "key-1" },
@@ -22,10 +25,7 @@ const mockSources = new Map<string, string>([
         return Response.json(result.body, { status: result.status })
       }
     `,
-  ],
-  [
-    "mock:tools",
-    `
+    "../../../../lib/application/tool-catalog": `
       const state = globalThis[Symbol.for('openbooks.v1-commands-route-test')]
       export const APPLICATION_TOOLS = [
         { name: "list_records", title: "List Records", description: "list", readOnly: true, destructive: false },
@@ -33,42 +33,15 @@ const mockSources = new Map<string, string>([
       ]
       export function applicationTool() { return undefined }
     `,
-  ],
-  [
-    "mock:visible",
-    `
+    "../../../../lib/assistant/registry": `
       const state = globalThis[Symbol.for('openbooks.v1-commands-route-test')]
       export function applicationToolVisible() { state.listed = true; return true }
     `,
-  ],
-  [
-    "mock:features",
-    `export async function resolvedFeatureState() { return {} }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/application/tool-catalog", "mock:tools"],
-  ["../../../../lib/assistant/registry", "mock:visible"],
-  ["../../../../lib/features", "mock:features"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "../../../../lib/features": `export async function resolvedFeatureState() { return {} }`,
   },
 });
 
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 test("GET /api/v1/commands lists the visible application catalog", async () => {
   routeState.listed = false;

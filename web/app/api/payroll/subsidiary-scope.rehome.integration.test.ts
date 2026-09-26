@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { PoolClient } from 'pg'
 import { sql } from 'drizzle-orm'
 import { withBypassContext, db, pool, withOrg  } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
-registerHooks({
-  resolve(specifier, context, next) {
-    return next(specifier, context)
-  },
-})
 
 const { guardPayrollEmployees } = await import('./subsidiary-scope.ts')
 

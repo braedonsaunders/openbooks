@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextResponse } from "next/server";
+import { stubModules } from "../../../testing/stub-modules";
 
 type Scope = Set<string> | null;
 
@@ -34,10 +34,17 @@ const routeState: RouteState = {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksBillingRequestsNextResponse = NextResponse;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: hand doubles cannot produce the refusals the real modules
+// enforce ('canonicalDecimal() { return null }' refused every amount,
+// valid or not, so no amount case behind it was ever really tested).
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
       export async function guardPermission() {
         return {
@@ -46,24 +53,15 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    "mock:list-params",
-    `
+    "../../../lib/list-params": `
       export function isUuid(value) {
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
       }
     `,
-  ],
-  [
-    "mock:projects-gate",
-    `
+    "../../../lib/projects-gate": `
       export async function guardProjectsFeature() { return null }
     `,
-  ],
-  [
-    "mock:billing-requests",
-    `
+    "../../../lib/billing-requests": `
       const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
       const visible = (allowed) =>
         allowed === null || allowed === undefined || allowed.has(state.projectSubsidiaryId)
@@ -86,37 +84,11 @@ const mockSources = new Map<string, string>([
         return { id: 'request-1', projectId: input.projectId }
       }
     `,
-  ],
-]);
-
-// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
-// mocked: hand doubles cannot produce the refusals the real modules
-// enforce ('canonicalDecimal() { return null }' refused every amount,
-// valid or not, so no amount case behind it was ever really tested).
-const mockUrls = new Map<string, string>([
-  ["../../../lib/authz", "mock:authz"],
-  ["../../../lib/list-params", "mock:list-params"],
-  ["../../../lib/projects-gate", "mock:projects-gate"],
-  ["../../../lib/billing-requests", "mock:billing-requests"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { format: "module", shortCircuit: true, url: mocked };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?billing-request-scope-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const PROJECT_ID = "00000000-0000-4000-8000-000000000001";
 

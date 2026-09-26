@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Canonical unsaved-create contract for equipment units (exemplar: POST
@@ -168,11 +168,14 @@ const mockDb = `
   }
 `;
 
-const mockSources = new Map<string, string>([
-  ["mock:db", mockDb],
-  [
-    "mock:feature-gates",
-    `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": mockDb,
+    "../../../lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
      export async function guardFeaturePermission() {
        return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
@@ -181,44 +184,17 @@ const mockSources = new Map<string, string>([
            : null,
        }
      }`,
-  ],
-  [
-    "mock:features",
-    `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
+    "../../../lib/features": `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
      export async function isFeatureEnabled(_orgId, key) {
        if (key === 'fixedAssets') return state.fixedAssetsEnabled
        if (key === 'projects') return state.projectsEnabled
        return true
      }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../lib/feature-gates", "mock:feature-gates"],
-  ["../../../lib/features", "mock:features"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    // `@/` is a Next alias, not a package: resolve it against web/ like the
-    // reconcilable-currency boundary test does, so the REAL json boundary
-    // runs instead of a permissive double.
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?equipment-create-test";
 const routeModule = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { POST } = routeModule;
 

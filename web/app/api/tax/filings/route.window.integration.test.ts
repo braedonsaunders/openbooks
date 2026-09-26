@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '@/lib/auth'
 
@@ -14,7 +13,6 @@ import type { SessionUser } from '@/lib/auth'
 // This test proves both halves through the public POST: the stored row AND
 // the response body carry the narrowed Q1 window.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __taxFilingWindowUser: state })
 const virtual = (source: string) => ({

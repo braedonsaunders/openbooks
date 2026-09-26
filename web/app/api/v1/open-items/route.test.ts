@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-open-items-route-test");
@@ -9,10 +9,13 @@ interface RouteState {
 const routeState: RouteState = { input: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         const result = await operation(
           { user: { orgId: "org-1" }, keyId: "key-1" },
@@ -21,39 +24,17 @@ const mockSources = new Map<string, string>([
         return Response.json(result.body, { status: result.status })
       }
     `,
-  ],
-  [
-    "mock:open-items",
-    `
+    "../../../../lib/application/open-items": `
       const state = globalThis[Symbol.for('openbooks.v1-open-items-route-test')]
       export async function listApplicationOpenItems(_context, input) {
         state.input = input
         return { side: input.side, asOf: "2026-09-22", total: 0, items: [] }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/application/open-items", "mock:open-items"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 test("GET /api/v1/open-items forwards side, asOf, partyId, and limit", async () => {
   const response = await GET(new Request(

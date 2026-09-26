@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { NextRequest } from 'next/server'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Quota save validates amount to 4dp but never bounds its magnitude, so a
 // pasted 20-digit figure sails through and dies in Postgres as a raw
 // numeric(19,4) overflow (HTTP 500) instead of failing closed with the named
 // 422 the junk-amount path returns.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmQuotaMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

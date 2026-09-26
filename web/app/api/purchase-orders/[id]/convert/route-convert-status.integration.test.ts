@@ -1,18 +1,10 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Only an approved (issued) purchase order converts: convertOrder used to
 // reject only draft/voided, so a pending_approval order converted into a
 // vendor bill before it was ever issued.
-const root = pathToFileURL(process.cwd() + '/').href
-registerHooks({
-  resolve(specifier, context, next) {
-    return next(specifier, context)
-  },
-})
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')

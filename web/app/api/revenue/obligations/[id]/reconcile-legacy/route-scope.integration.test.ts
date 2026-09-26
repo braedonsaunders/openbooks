@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { NextResponse } from "next/server";
 Object.assign(globalThis, { __reconcileLegacyOracleNextResponse: NextResponse });
@@ -13,7 +12,6 @@ Object.assign(globalThis, { __reconcileLegacyOracleNextResponse: NextResponse })
  * id, and stores nothing; in-scope and unrestricted callers proceed.
  * Only the gate is doubled; the engine, audit writer and database are real.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = {
   user: { orgId: "", id: "" },
   permissions: new Set<string>(),

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../../../../lib/auth'
 
@@ -10,7 +9,6 @@ import type { SessionUser } from '../../../../lib/auth'
 // document id, so a lost-response retry replays the same order instead of
 // minting a second one and burning a second number. All three draft routes
 // enforce the same contract — no route mints without a key.
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __poDraftIdempotencySession: session })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

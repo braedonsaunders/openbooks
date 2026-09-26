@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 // H-ITEMCATALOG: POST /api/items/[id]/rates writes org-wide project billing
@@ -17,33 +17,13 @@ const ratesState: RatesState = { restricted: false, dbCalls: 0 }
 
 const ITEM_ID = '00000000-0000-4000-8000-00000000c101'
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:feature-gates',
-    `
-      const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
-      export async function guardFeaturePermission() {
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          allowedSubsidiaryIds: state.restricted ? new Set(['sub-a']) : null,
-        }
-      }
-    `,
-  ],
-  [
-    'mock:authz',
-    `
-      // Org-wide pricing-policy gate: only an explicit unrestricted scope
-      // passes — the canonical assertUnrestrictedScope rule.
-      export function guardUnrestrictedScope(authz) {
-        if (authz.allowedSubsidiaryIds === null) return null
-        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
-      }
-    `,
-  ],
-  [
-    'mock:db',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
       export const db = {
         async execute() {
@@ -53,31 +33,28 @@ const mockSources = new Map<string, string>([
         async transaction(work) { return work({ execute: async () => ({ rows: [] }) }) },
       }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    "../../../../../lib/authz": `
+      // Org-wide pricing-policy gate: only an explicit unrestricted scope
+      // passes — the canonical assertUnrestrictedScope rule.
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+      }
+    `,
+    "../../../../../lib/feature-gates": `
+      const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
+      export async function guardFeaturePermission() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.restricted ? new Set(['sub-a']) : null,
+        }
+      }
+    `,
   },
 })
 
 const routeUrl = './route.ts?item-rates-scope-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function post(): Promise<Response> {
   return POST(

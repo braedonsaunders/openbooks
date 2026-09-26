@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -9,7 +8,6 @@ import test from "node:test";
  * column. A malformed id must be the same clean 404 as an unknown one — never
  * a PostgreSQL 22P02 cast error escaping as a 500.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: randomUUID(), id: randomUUID() } };
 Object.assign(globalThis, { __apCaptureRouteUser: state });
 registerHooks({

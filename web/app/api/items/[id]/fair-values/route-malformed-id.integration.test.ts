@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Fair-value PATCH and DELETE scope their row by the path item id but never
 // gate it: GET and POST both return 404 for a malformed item id while
 // PATCH/DELETE bind it straight into the uuid comparison and escape as a raw
 // Postgres throw (HTTP 500). Same intra-file contract on every verb.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __fairValuePathIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

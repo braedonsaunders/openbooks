@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { NextRequest } from "next/server";
 
@@ -11,7 +10,6 @@ import { NextRequest } from "next/server";
  * overflow (HTTP 500) instead of failing closed with a named 422 and nothing
  * written. override_amount is numeric(19,4).
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __forecastOverrideState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

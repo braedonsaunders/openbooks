@@ -2,14 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../../../../lib/auth';
 
 // Workbench JSON API contract (b06): GET /api/agents/inbox is a thin adapter
 // over loadAgentInbox and GET item reuses the shared detail loader. Same
 // stubbed-session harness as the inbox integration tests; real scratch orgs.
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06ApiInbox: state });
 registerHooks({ resolve(specifier, context, next) {

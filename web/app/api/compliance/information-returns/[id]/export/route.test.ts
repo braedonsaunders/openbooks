@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
 
@@ -19,10 +19,13 @@ const exportState: ExportState = {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksInformationReturnExportNextResponse = NextResponse;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@/lib/authz": `
       const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
       const NextResponse = globalThis.openbooksInformationReturnExportNextResponse
       export async function guardPermission() {
@@ -36,38 +39,17 @@ const mockSources = new Map<string, string>([
         return NextResponse.json({ error: "not found" }, { status: 404 })
       }
     `,
-  ],
-  [
-    "mock:compliance",
-    `
+    "@/lib/compliance": `
       export async function guardComplianceFeature() { return null }
       export async function loadInformationReturnFilingScope() { return { subsidiaryId: null } }
     `,
-  ],
-  [
-    "mock:list-params",
-    `
+    "@/lib/list-params": `
       export function isUuid() { return true }
     `,
-  ],
-  [
-    "mock:business-date",
-    `
+    "@openbooks/engine/src/platform/business-date.ts": `
       export async function businessToday() { return "2026-08-28" }
     `,
-  ],
-  [
-    "mock:information-returns",
-    `
-      export function formDefinition() {
-        return { boxes: [{ number: "1", key: "nec1" }] }
-      }
-      export function filedBoxAmounts() { return { nec1: "-42.50" } }
-    `,
-  ],
-  [
-    "mock:db",
-    `
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
       export const db = {
         async execute() {
@@ -106,35 +88,17 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@/lib/authz", "mock:authz"],
-  ["@/lib/compliance", "mock:compliance"],
-  ["@/lib/list-params", "mock:list-params"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/compliance/information-returns.ts", "mock:information-returns"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "@openbooks/engine/src/compliance/information-returns.ts": `
+      export function formDefinition() {
+        return { boxes: [{ number: "1", key: "nec1" }] }
+      }
+      export function filedBoxAmounts() { return { nec1: "-42.50" } }
+    `,
   },
 });
 
 const routeUrl = "./route.ts?csv-formula-injection-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 /** Parse one CSV document while preserving quoted commas and newlines. */
 function parseCsv(csv: string): string[][] {

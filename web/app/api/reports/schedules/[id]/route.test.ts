@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 // Route-boundary regression harness. The fake database models the real
@@ -89,10 +89,13 @@ const existingSchedule = {
 
 const updatedSchedule = { ...existingSchedule, active: false, updated_by: USER_ID }
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:db',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.report-schedule-route-test')]
       const sqlText = globalThis.openbooksSqlTextReportSchedule
       const isWrite = (text) =>
@@ -132,10 +135,7 @@ const mockSources = new Map<string, string>([
       export const env = {}
       export function registerRequestOrgResolver() {}
     `,
-  ],
-  [
-    'mock:authz',
-    `
+    "../../../../../lib/authz": `
       export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }
       export async function canAccessReportDefinition() { return true }
       export async function canAccessReportArtifact() { return true }
@@ -146,32 +146,33 @@ const mockSources = new Map<string, string>([
         return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
       }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/custom-reports', 'mock:authz'],
-  ['../../../../../lib/report-execution-context', 'mock:authz'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    "../../../../../lib/custom-reports": `
+      export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }
+      export async function canAccessReportDefinition() { return true }
+      export async function canAccessReportArtifact() { return true }
+      export function snapshotReportAuthorization() {
+        return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null }
+      }
+      export async function guardPermission() {
+        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+      }
+    `,
+    "../../../../../lib/report-execution-context": `
+      export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }
+      export async function canAccessReportDefinition() { return true }
+      export async function canAccessReportArtifact() { return true }
+      export function snapshotReportAuthorization() {
+        return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null }
+      }
+      export async function guardPermission() {
+        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+      }
+    `,
   },
 })
 
 const routeUrl = './route.ts?report-schedule-route-test'
 const { PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.calls = []
