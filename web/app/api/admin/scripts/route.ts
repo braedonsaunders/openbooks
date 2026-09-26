@@ -20,7 +20,7 @@ import { isUuid } from '../../../../lib/list-params'
 export const runtime = 'nodejs'
 
 /** The schedule would never fire outside production — refuse by name, nothing written. */
-function nonProductionResponse(error: ScheduledScriptNonProductionError): NextResponse {
+function nonProductionResponse(error: ScheduledScriptNonProductionError): Promise<NextResponse> {
   return apiErrorResponse(error, {
     safeStatus: 409,
     details: { code: SCHEDULED_SCRIPT_NON_PRODUCTION_CODE, envKind: error.envKind },
@@ -43,7 +43,7 @@ class ScriptValidationRefusal extends Error {
   }
 }
 
-function validationResponse(error: ValidationError): NextResponse {
+function validationResponse(error: ValidationError): Promise<NextResponse> {
   const refusal = new ScriptValidationRefusal(
     error,
     error.code === INVALID_SCHEDULED_SCRIPT_CRON_CODE ? 422 : 400,

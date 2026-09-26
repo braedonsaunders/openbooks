@@ -989,6 +989,7 @@
       "normalDay": "le salaire d’une journée normale de travail, d’après l’horaire de travail consigné de l’employé",
       "normalDayStandardHours": "pour les employés travaillant au moins les heures normales de la juridiction, ",
       "normalDayOtherwise": "Sinon",
+      "normalDayNoFallback": "La loi ne prévoit aucune formule pour les salariés sans journée normale de travail ; leur indemnité de jour férié est donc refusée nommément plutôt que calculée.",
       "beforeTheDay": "avant le jour férié",
       "beforeTheWeek": "avant la semaine du jour férié",
       "daysWorked": "jours travaillés dedans",

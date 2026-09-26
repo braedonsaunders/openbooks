@@ -989,6 +989,7 @@
       "normalDay": "按员工登记的工作时间表折算的一个正常工作日的工资",
       "normalDayStandardHours": "对达到辖区标准工时的员工,",
       "normalDayOtherwise": "否则",
+      "normalDayNoFallback": "法律未为没有正常工作日的员工规定计算公式，因此其节假日工资会被明确拒绝而不是计算。",
       "beforeTheDay": "假日前",
       "beforeTheWeek": "假日所在周前",
       "daysWorked": "其中工作的天数",

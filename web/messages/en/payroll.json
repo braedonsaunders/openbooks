@@ -989,6 +989,7 @@
       "normalDay": "the wages of one normal working day, from the employee’s recorded work schedule",
       "normalDayStandardHours": "for employees working at least the jurisdiction's standard hours, ",
       "normalDayOtherwise": "Otherwise",
+      "normalDayNoFallback": "The Act states no formula for employees without a normal working day, so their holiday pay is refused by name rather than priced.",
       "beforeTheDay": "before the holiday",
       "beforeTheWeek": "before the week of the holiday",
       "daysWorked": "days worked in it",

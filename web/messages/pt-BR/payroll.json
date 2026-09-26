@@ -989,6 +989,7 @@
       "normalDay": "o salário de um dia normal de trabalho, pela escala registrada do funcionário",
       "normalDayStandardHours": "para funcionários com ao menos a jornada padrão da jurisdição, ",
       "normalDayOtherwise": "Caso contrário",
+      "normalDayNoFallback": "A lei não define fórmula para empregados sem um dia normal de trabalho; por isso, o pagamento do feriado é recusado nominalmente em vez de calculado.",
       "beforeTheDay": "antes do feriado",
       "beforeTheWeek": "antes da semana do feriado",
       "daysWorked": "dias trabalhados nele",
