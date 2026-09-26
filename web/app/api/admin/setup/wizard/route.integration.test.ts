@@ -600,8 +600,8 @@ test(
       const response = await wizard;
       assert.equal(response.status, 409);
       assert.deepEqual(await response.json(), {
-        error: "base-currency-locked",
-        message: "Cannot change base currency after postings exist.",
+        error: "Cannot change base currency after postings exist.",
+        key: "base-currency-locked",
       });
       const after = await withBypassContext(() => db.execute<{ base_currency: string }>(sql`
         select base_currency from orgs where id = ${org.orgId}`));
