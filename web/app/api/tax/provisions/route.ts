@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -286,7 +287,6 @@ export async function POST(req: Request) {
     );
     return NextResponse.json({ runId }, { status: 201 });
   } catch (e) {
-    const status = e instanceof IncomeTaxProvisionError ? 422 : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    return apiErrorResponse(e, e instanceof IncomeTaxProvisionError ? { safeStatus: 422 } : {})
   }
 }

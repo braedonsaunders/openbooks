@@ -1,3 +1,5 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { invalidInput } from '../../../../lib/application/errors'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isTaxProvisionSelection, packInstallationStatuses, provisionTaxPacks } from '@openbooks/engine/src/tax/pack-provisioning.ts'
@@ -39,6 +41,10 @@ export async function POST(req: Request) {
     const result = await provisionTaxPacks(gate.user.orgId, body.packs as string[], gate.user.id)
     return NextResponse.json(result)
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'provisioning failed' }, { status: 422 })
+    // provisionTaxPacks signals request-state validation (exact decimals,
+    // known selections, version drift) with bare Errors carrying curated
+    // operator text; only those travel as 422s with their message.
+    if (e instanceof Error && e.constructor === Error) return apiErrorResponse(invalidInput(e.message))
+    return apiErrorResponse(e, { safeStatus: 422 })
   }
 }

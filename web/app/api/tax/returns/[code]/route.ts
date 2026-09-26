@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
@@ -45,7 +46,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     adjustments = parseAdjustments(p)
   } catch (e: unknown) {
     if (e instanceof AdjustmentParamError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
+      return apiErrorResponse(e, { safeStatus: 400 })
     }
     throw e
   }
@@ -53,6 +54,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     const result = await computeTaxReturn(gate.user.orgId, code, from, to, adjustments, returnScopeOpts(parsed.scope))
     return NextResponse.json(result)
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'compute failed' }, { status: 422 })
+    return apiErrorResponse(e, { safeStatus: 422 })
   }
 }

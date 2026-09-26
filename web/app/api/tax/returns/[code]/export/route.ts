@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
@@ -67,7 +68,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     adjustments = parseAdjustments(p)
   } catch (e: unknown) {
     if (e instanceof AdjustmentParamError) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
+      return apiErrorResponse(e, { safeStatus: 400 })
     }
     throw e
   }
@@ -90,7 +91,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
       } catch (err) {
         // Masked-clone tombstone: refuse by name, never as a 422 export error.
         if (isMaskedFileContentError(err)) {
-          return NextResponse.json({ error: (err as Error).message }, { status: 403 })
+          return apiErrorResponse(err, { safeStatus: 403 })
         }
         throw err
       }
@@ -153,6 +154,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   } catch (e: unknown) {
     const rendererRefusal = rendererUnavailableResponse(e)
     if (rendererRefusal) return rendererRefusal
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'export failed' }, { status: 422 })
+    return apiErrorResponse(e, { safeStatus: 422 })
   }
 }

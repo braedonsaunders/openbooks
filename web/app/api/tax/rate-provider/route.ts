@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
@@ -65,7 +66,7 @@ export async function PUT(req: Request) {
     );
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 422 });
+    return apiErrorResponse(e, { safeStatus: 422 });
   }
 }
 
@@ -122,7 +123,6 @@ export async function POST(req: Request) {
     );
     return NextResponse.json(result);
   } catch (e) {
-    const status = e instanceof TaxRateProviderError ? 422 : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    return apiErrorResponse(e, e instanceof TaxRateProviderError ? { safeStatus: 422 } : {})
   }
 }
