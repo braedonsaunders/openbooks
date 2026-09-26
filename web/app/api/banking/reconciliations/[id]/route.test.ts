@@ -201,8 +201,8 @@ const mockUrls = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Exercise the extracted native adjustment service against the original
-    // serialized SQL fake; preserve the audit before/after assertion below.
-    if (specifier === '../platform/db.ts' && (context.parentURL ?? '').endsWith('/engine/src/banking/banking.ts')) {
+    // serialized SQL fake; directory-scoped so module splits keep using it.
+    if (specifier === '../platform/db.ts' && (context.parentURL ?? '').includes('/engine/src/banking/')) {
       return { url: 'mock:db', shortCircuit: true }
     }
     const mocked = mockUrls.get(specifier)
