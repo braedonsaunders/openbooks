@@ -63,84 +63,73 @@ async function setupHarness(): Promise<Harness> {
 }
 
 async function seedRecruiting(h: Harness): Promise<void> {
-  const { org } = h;
   const requisitionId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_requisitions (id, org_id, requisition_number, title, employer_subsidiary_id, headcount)
-    values (${requisitionId}, ${org.orgId}, 'REQ-1', 'Engineer', ${org.subsidiaryId}, 1)
-  `);
+  await db.execute(sql`insert into hrm_requisitions (id, org_id, requisition_number, title, employer_subsidiary_id, headcount) values (${requisitionId}, ${h.org.orgId}, 'REQ-1', 'Engineer', ${h.org.subsidiaryId}, 1)`);
   const templateId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_pipeline_templates (id, org_id, name) values (${templateId}, ${org.orgId}, 'Standard')
-  `);
+  await db.execute(sql`insert into hrm_pipeline_templates (id, org_id, name) values (${templateId}, ${h.org.orgId}, 'Standard')`);
   const stageId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_pipeline_stages (id, org_id, template_id, position, key, name, kind)
-    values (${stageId}, ${org.orgId}, ${templateId}, 0, 'screen', 'Screen', 'screening')
-  `);
+  await db.execute(sql`insert into hrm_pipeline_stages (id, org_id, template_id, position, key, name, kind) values (${stageId}, ${h.org.orgId}, ${templateId}, 0, 'screen', 'Screen', 'screening')`);
   const candidateId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_candidates (id, org_id, party_id, display_name, email)
-    values (${candidateId}, ${org.orgId}, ${h.partyId}, 'Sam Subject', 'sam@scratch.test')
-  `);
-  await db.execute(sql`
-    insert into hrm_candidate_consents (org_id, candidate_id, purpose, source)
-    values (${org.orgId}, ${candidateId}, 'this_application', 'form')
-  `);
+  await db.execute(sql`insert into hrm_candidates (id, org_id, party_id, display_name, email) values (${candidateId}, ${h.org.orgId}, ${h.partyId}, 'Sam Subject', 'sam@scratch.test')`);
+  await db.execute(sql`insert into hrm_candidate_consents (org_id, candidate_id, purpose, source) values (${h.org.orgId}, ${candidateId}, 'this_application', 'form')`);
   const applicationId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_applications (id, org_id, requisition_id, candidate_id, stage_id, applied_on)
-    values (${applicationId}, ${org.orgId}, ${requisitionId}, ${candidateId}, ${stageId}, '2026-01-05'::date)
-  `);
-  await db.execute(sql`
-    insert into hrm_application_events (org_id, application_id, kind) values (${org.orgId}, ${applicationId}, 'applied')
-  `);
+  await db.execute(sql`insert into hrm_applications (id, org_id, requisition_id, candidate_id, stage_id, applied_on) values (${applicationId}, ${h.org.orgId}, ${requisitionId}, ${candidateId}, ${stageId}, '2026-01-05'::date)`);
+  await db.execute(sql`insert into hrm_application_events (org_id, application_id, kind) values (${h.org.orgId}, ${applicationId}, 'applied')`);
   const interviewId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_interviews (id, org_id, application_id, kind, scheduled_at)
-    values (${interviewId}, ${org.orgId}, ${applicationId}, 'phone', now())
-  `);
+  await db.execute(sql`insert into hrm_interviews (id, org_id, application_id, kind, scheduled_at) values (${interviewId}, ${h.org.orgId}, ${applicationId}, 'phone', now())`);
   const scorecardId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_scorecards (id, org_id, interview_id, interviewer_party_id, overall, submitted_at)
-    values (${scorecardId}, ${org.orgId}, ${interviewId}, ${h.otherPartyId}, 'yes', now())
-  `);
+  await db.execute(sql`insert into hrm_scorecards (id, org_id, interview_id, interviewer_party_id, overall, submitted_at) values (${scorecardId}, ${h.org.orgId}, ${interviewId}, ${h.otherPartyId}, 'yes', now())`);
   const kitId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_interview_kits (id, org_id, name) values (${kitId}, ${org.orgId}, 'Phone screen')
-  `);
+  await db.execute(sql`insert into hrm_interview_kits (id, org_id, name) values (${kitId}, ${h.org.orgId}, 'Phone screen')`);
   const attributeId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_scorecard_attributes (id, org_id, kit_id, category, attribute, position)
-    values (${attributeId}, ${org.orgId}, ${kitId}, 'skill', 'communication', 0)
-  `);
-  await db.execute(sql`
-    insert into hrm_scorecard_ratings (org_id, scorecard_id, attribute_id, rating_key)
-    values (${org.orgId}, ${scorecardId}, ${attributeId}, 'yes')
-  `);
+  await db.execute(sql`insert into hrm_scorecard_attributes (id, org_id, kit_id, category, attribute, position) values (${attributeId}, ${h.org.orgId}, ${kitId}, 'skill', 'communication', 0)`);
+  await db.execute(sql`insert into hrm_scorecard_ratings (org_id, scorecard_id, attribute_id, rating_key) values (${h.org.orgId}, ${scorecardId}, ${attributeId}, 'yes')`);
   const offerId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_offers (id, org_id, application_id, employer_subsidiary_id, job_title,
-                            proposed_start_on, compensation_amount, compensation_currency, compensation_basis)
-    values (${offerId}, ${org.orgId}, ${applicationId}, ${org.subsidiaryId}, 'Engineer',
-            '2026-03-01'::date, 100000, 'USD', 'annual')
-  `);
-  await db.execute(sql`
-    insert into hrm_offer_versions (org_id, offer_id, version, payload)
-    values (${org.orgId}, ${offerId}, 1, '{}'::jsonb)
-  `);
+  await db.execute(sql`insert into hrm_offers (id, org_id, application_id, employer_subsidiary_id, job_title, proposed_start_on, compensation_amount, compensation_currency, compensation_basis) values (${offerId}, ${h.org.orgId}, ${applicationId}, ${h.org.subsidiaryId}, 'Engineer', '2026-03-01'::date, 100000, 'USD', 'annual')`);
+  await db.execute(sql`insert into hrm_offer_versions (org_id, offer_id, version, payload) values (${h.org.orgId}, ${offerId}, 1, '{}'::jsonb)`);
   const poolId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_talent_pools (id, org_id, name) values (${poolId}, ${org.orgId}, 'Engineering')
-  `);
-  await db.execute(sql`
-    insert into hrm_talent_pool_members (org_id, pool_id, candidate_id, note)
-    values (${org.orgId}, ${poolId}, ${candidateId}, 'strong phone screen')
-  `);
-  await db.execute(sql`
-    insert into hrm_interview_panel (org_id, interview_id, party_id)
-    values (${org.orgId}, ${interviewId}, ${h.otherPartyId})
-  `);
+  await db.execute(sql`insert into hrm_talent_pools (id, org_id, name) values (${poolId}, ${h.org.orgId}, 'Engineering')`);
+  await db.execute(sql`insert into hrm_talent_pool_members (org_id, pool_id, candidate_id, note) values (${h.org.orgId}, ${poolId}, ${candidateId}, 'strong phone screen')`);
+  await db.execute(sql`insert into hrm_interview_panel (org_id, interview_id, party_id) values (${h.org.orgId}, ${interviewId}, ${h.otherPartyId})`);
+}
+
+async function seedTimePayrollExtras(h: Harness): Promise<void> {
+  const runDocId = randomUUID();
+  const retroDocId = randomUUID();
+  const sourceDocId = randomUUID();
+  const ticketDocId = randomUUID();
+  await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, currency) values (${runDocId}, ${h.org.orgId}, 'pay_run', 'PR-1', '2026-01-31'::date, 'USD')`);
+  await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, currency) values (${retroDocId}, ${h.org.orgId}, 'pay_run', 'PR-2', '2026-02-28'::date, 'USD')`);
+  await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, currency) values (${sourceDocId}, ${h.org.orgId}, 'pay_run', 'PR-0', '2025-12-31'::date, 'USD')`);
+  await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, currency) values (${ticketDocId}, ${h.org.orgId}, 'field_ticket', 'TI-1', '2026-01-31'::date, 'USD')`);
+  await db.execute(sql`insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date, tax_year) values (${runDocId}, ${h.org.orgId}, (select id from pay_schedules where org_id = ${h.org.orgId} limit 1), '2026-01-01'::date, '2026-01-31'::date, '2026-01-31'::date, 2026)`);
+  await db.execute(sql`insert into employee_pay_components (org_id, employee_party_id, component_id, effective_from) values (${h.org.orgId}, ${h.partyId}, (select id from pay_components where org_id = ${h.org.orgId} and code = 'ROE_SEV'), '2026-01-01'::date)`);
+  await db.execute(sql`insert into payroll_opening_balances (org_id, employee_party_id, tax_year) values (${h.org.orgId}, ${h.partyId}, 2025)`);
+  await db.execute(sql`insert into payroll_opening_program_bases (org_id, employee_party_id, tax_year, program_key, insurable_ytd) values (${h.org.orgId}, ${h.partyId}, 2025, 'CPP', 1000)`);
+  const filingAccountId = randomUUID();
+  await db.execute(sql`insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name) values (${filingAccountId}, ${h.org.orgId}, 'CA', 'payroll', 'RP0001', 'RP account')`);
+  await db.execute(sql`insert into payroll_opening_account_bases (org_id, employee_party_id, tax_year, program_key, filing_account_id, insurable_ytd) values (${h.org.orgId}, ${h.partyId}, 2025, 'CPP', ${filingAccountId}, 1000)`);
+  const registerId = randomUUID();
+  await db.execute(sql`insert into payroll_prior_registers (id, org_id, name, period_start, period_end, pay_date) values (${registerId}, ${h.org.orgId}, 'Legacy 2025', '2025-01-01'::date, '2025-12-31'::date, '2025-12-31'::date)`);
+  await db.execute(sql`insert into payroll_prior_stubs (org_id, register_id, employee_party_id, employee_label, gross, net_pay) values (${h.org.orgId}, ${registerId}, ${h.partyId}, 'Sam Subject', 50000, 35000)`);
+  await db.execute(sql`insert into payroll_parallel_comparisons (org_id, register_id, pay_run_document_id, status) values (${h.org.orgId}, ${registerId}, ${runDocId}, 'clean')`);
+  await db.execute(sql`insert into payroll_parallel_findings (org_id, comparison_id, employee_party_id, employee_name, kind, slot, slot_label, classification) values (${h.org.orgId}, (select id from payroll_parallel_comparisons where org_id = ${h.org.orgId} limit 1), ${h.partyId}, 'Sam Subject', 'total', 'net', 'Net', 'match')`);
+  await db.execute(sql`insert into payroll_retro_settlements (org_id, retro_pay_run_document_id, employee_party_id, source_pay_run_document_id, source_period_start, source_period_end, source_pay_date, source_tax_year, original_earnings, recomputed_earnings, delta) values (${h.org.orgId}, ${retroDocId}, ${h.partyId}, ${sourceDocId}, '2025-12-01'::date, '2025-12-31'::date, '2025-12-31'::date, 2025, 1000, 1200, 200)`);
+  await db.execute(sql`insert into payroll_anomaly_flags (org_id, employment_id, pay_period_from, pay_period_to, kind, severity, explanation) values (${h.org.orgId}, ${h.employmentId}, '2026-01-01'::date, '2026-01-31'::date, 'custom', 'info', 'seed')`);
+  await db.execute(sql`insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id, adjustment_type, note) values (${h.org.orgId}, ${runDocId}, ${h.partyId}, 'exclude', 'seed')`);
+  await db.execute(sql`insert into pay_run_holiday_assertions (org_id, pay_run_document_id, employee_party_id, holiday_key, holiday_date, absent_without_consent) values (${h.org.orgId}, ${runDocId}, ${h.partyId}, 'new-year', '2026-01-01'::date, false)`);
+  await db.execute(sql`insert into labor_cost_rates (org_id, employee_party_id, rate, effective_from, currency) values (${h.org.orgId}, ${h.partyId}, 75, '2026-01-01'::date, 'USD')`);
+  await db.execute(sql`insert into work_schedules (org_id, employee_party_id, pattern, effective_from) values (${h.org.orgId}, ${h.partyId}, 'varies', '2026-01-01'::date)`);
+  const projectId = randomUUID();
+  await db.execute(sql`insert into projects (id, org_id, name) values (${projectId}, ${h.org.orgId}, 'Seed project')`);
+  const batchId = randomUUID();
+  await db.execute(sql`insert into crew_time_batches (id, org_id, foreman_party_id, project_id, worked_on) values (${batchId}, ${h.org.orgId}, ${h.otherPartyId}, ${projectId}, '2026-01-15'::date)`);
+  await db.execute(sql`insert into crew_time_batch_lines (org_id, batch_id, employee_party_id, hours) values (${h.org.orgId}, ${batchId}, ${h.partyId}, 8)`);
+  await db.execute(sql`insert into timesheet_weeks (org_id, employee_party_id, week_start) values (${h.org.orgId}, ${h.partyId}, '2026-01-04'::date)`);
+  await db.execute(sql`insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id) values (${ticketDocId}, ${h.org.orgId}, 'weekly', '2026-01-01'::date, '2026-01-31'::date, ${h.otherPartyId})`);
+  const snapshotId = randomUUID();
+  await db.execute(sql`insert into field_ticket_labor_snapshots (id, org_id, field_ticket_id, revision, evidence_basis, reason, currency) values (${snapshotId}, ${h.org.orgId}, ${ticketDocId}, 1, 'operational_time', 'seed', 'USD')`);
+  await db.execute(sql`insert into field_ticket_labor_lines (org_id, snapshot_id, field_ticket_id, sequence, employee_party_id, employee_name, time_type_name, worked_on, hours, time_classification) values (${h.org.orgId}, ${snapshotId}, ${ticketDocId}, 1, ${h.partyId}, 'Sam Subject', 'Regular', '2026-01-15'::date, 8, 'regular')`);
 }
 
 async function seedQualifications(h: Harness): Promise<void> {
@@ -268,6 +257,7 @@ test("an export carries every new domain and the manifest names them all", { ski
     await seedReviewsExtras(h);
     await seedDocumentsLeaveExtras(h);
     await seedPayrollIdentity(h);
+    await seedTimePayrollExtras(h);
     await seedPerformance(h);
     const prior = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
     const requested = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
@@ -300,6 +290,10 @@ test("an export carries every new domain and the manifest names them all", { ski
       ["contacts", 1], ["processSteps", 1], ["employeeRoles", 1], ["reportingRelationships", 1],
       ["feedback", 3], ["oneOnOnes", 1], ["oneOnOneItems", 1], ["successionPlans", 1],
       ["documentSigners", 1], ["entitlementMovements", 1], ["entitlementPlanLimits", 1],
+      ["crewTimeBatchLines", 1], ["timesheetWeeks", 1], ["fieldTicketLaborLines", 1],
+      ["employeePayComponents", 1], ["openingBalances", 1], ["openingProgramBases", 1], ["openingAccountBases", 1],
+      ["priorStubs", 1], ["retroSettlements", 1], ["parallelFindings", 1], ["anomalyFlags", 1],
+      ["runAdjustments", 1], ["holidayAssertions", 1], ["laborCostRates", 1], ["workSchedules", 1],
       ["goals", 1], ["reviews", 1], ["reviewAnswers", 1],
     ] as const) {
       assert.equal(
