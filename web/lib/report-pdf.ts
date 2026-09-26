@@ -231,41 +231,8 @@ export function exportDataToCsv(data: ExportData, opts: { sectionHeader?: string
 // Section/group titles and column headers come through the reports translator
 // (keys under reports.* — see web/messages/<locale>/reports.json).
 
-type StatementRow = {
-  id: string
-  number: string | null
-  name: string
-  type: string
-  balance: ExactDecimal
-  depth: number
-  isSummary: boolean
-}
-
-const MONEY_ALIGN: PdfColumnAlign[] = ['left', 'left', 'right']
-
 function indent(d: number): string {
   return d > 0 ? ' '.repeat(d * 2) : ''
-}
-
-function statementGroup(
-  t: Translator,
-  sectionTitle: string,
-  items: StatementRow[],
-  types: string[],
-  total: ExactDecimal,
-): ExportTableGroup {
-  const rows = items
-    .filter((r) => types.includes(r.type))
-    .map((r) => [r.number ?? '', `${indent(r.depth)}${r.name}`, r.balance] as (string | number)[])
-  rows.push(['', t('statement.sectionTotal', { section: sectionTitle }), total])
-  return {
-    kind: 'section',
-    title: sectionTitle,
-    columns: [t('export.columns.accountNumber'), t('export.columns.accountName'), t('export.columns.amount')],
-    rows,
-    align: MONEY_ALIGN,
-    money: [false, false, true],
-  }
 }
 
 export function projectProfitabilityExportData(

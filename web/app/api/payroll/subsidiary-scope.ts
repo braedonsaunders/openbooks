@@ -8,7 +8,7 @@ import {
   type PayrollYearEndFiling,
 } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import type { Authz } from '../../../lib/authz'
-import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
