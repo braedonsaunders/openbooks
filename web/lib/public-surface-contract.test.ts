@@ -129,7 +129,7 @@ const TOKEN_SURFACES: TokenSurface[] = [
     dir: join(webApp, "api", "time", "kiosk"),
     kind: "api",
     tokenMarker: /resolveKioskByToken/,
-    refusalMarker: /\bbad\(error\.message, 404\)/,
+    refusalMarker: /apiErrorResponse\(error, \{ safeStatus: 404 \}\)/,
   },
   {
     dir: join(webApp, "sign", "[token]"),
