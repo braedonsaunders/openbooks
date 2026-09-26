@@ -1378,4 +1378,28 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "Restamp, not reapply: the revision stages the build but changes no "
       + "enforced state.",
   },
+  {
+    filename: "generated/0151_continuous_close_agent_packs.sql",
+    from: "471e0977727fbbf03a50414bf972d720f61b44d9fe26c4ee63527e4270e0b51e",
+    to: "333531e2ff2899db39e8558d86bbdade51a45c872b2523b55da456969b5fe44b",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the workgroup that wrote the "
+      + "migration instead of the change itself. No statement changed, so a "
+      + "database recorded at the old digest holds the identical catalog and "
+      + "data — only the digest moves. Restamp, not reapply: replaying the "
+      + "idempotent body would rebuild identical constraints for no effect.",
+  },
+  {
+    filename: "generated/0155_continuous_close_agent_packs_b03.sql",
+    from: "4ff74ae34a5bd893cb0965c863d6ba38027db1221a0f1014e5abf8e941a4fb4d",
+    to: "58b2e164ee669d85364049c86540d3fb01cb186aaf2d3e3f580b5088e2187b89",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the workgroup that wrote the "
+      + "migration instead of the change itself. No statement changed, so a "
+      + "database recorded at the old digest holds the identical catalog and "
+      + "data — only the digest moves. Restamp, not reapply: replaying the "
+      + "idempotent body would rebuild identical constraints for no effect.",
+  },
 ];

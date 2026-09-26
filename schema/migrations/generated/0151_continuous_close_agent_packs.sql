@@ -4,9 +4,9 @@
 -- schema/migrations/generated/*.sql in filename order inside one tracked
 -- transaction). Written defensively: every statement tolerates re-execution.
 --
--- The background-agent fleet (wave 2, shard b02) adds four detector packs —
--- collections, payables, reconciliation, data hygiene — beside the original
--- accounting/finance agents. Policies, runs, and work items for the new packs
+-- This migration adds four detector packs — collections, payables,
+-- reconciliation, data hygiene — beside the original accounting/finance
+-- agents. Policies, runs, and work items for the new packs
 -- persist through the same three tables, whose agent_key CHECK constraints
 -- still admit only ('accounting','finance'). This migration widens exactly
 -- those three constraints to the six registered agent keys.
