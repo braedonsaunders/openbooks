@@ -57,12 +57,7 @@ function resetQueries(): void {
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    if (specifier.startsWith('@/')) {
-      return nextResolve(root + 'web/' + specifier.slice(2) + '.ts', context)
-    }
+
     if (specifier === '@openbooks/engine/src/platform/db.ts') {
       return { shortCircuit: true, format: 'module', url: 'mock:customization-id-db' }
     }

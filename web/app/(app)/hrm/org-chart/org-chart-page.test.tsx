@@ -10,31 +10,11 @@ import test from "node:test";
 // read — this widget renders what the loader resolved.
 
 // jsdom first: the tree reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/hrm/org-chart",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/org-chart", scrollIntoView: false, resizeObserver: false });
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return { push(){}, refresh(){} }} export function useSearchParams(){return { get(k){ return k === 'q' ? (globalThis.__orgChartQuery ?? null) : null } }}" });
 
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export function useRouter(){return { push(){}, refresh(){} }} export function useSearchParams(){return { get(k){ return k === 'q' ? (globalThis.__orgChartQuery ?? null) : null } }}",
-      };
-    }
-    return next(specifier, context);
-  },
-});
-
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

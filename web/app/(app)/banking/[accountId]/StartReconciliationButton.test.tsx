@@ -38,14 +38,11 @@ Object.assign(globalThis, {
   },
 })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__reconTestRouter}export function usePathname(){return "/banking/acc-1"}export function useSearchParams(){return new URLSearchParams()}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__reconTestRouter}export function usePathname(){return "/banking/acc-1"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,

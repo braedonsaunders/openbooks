@@ -6,30 +6,10 @@ import test from 'node:test'
 // The empty state must name the reconcilable prerequisite and offer the
 // Chart-of-Accounts setup path; once an account is configured the Import
 // statement action shows as before.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/banking/imports',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-if (typeof (globalThis as Record<string, unknown>).ResizeObserver !== 'function') {
-  (globalThis as Record<string, unknown>).ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-}
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/banking/imports', scrollIntoView: false })
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__importEmptyRouter} export function useSearchParams(){return new URLSearchParams()} export function usePathname(){return "/banking/imports"} export function useParams(){return {}} export function redirect(){throw new Error("redirect")} export function notFound(){throw new Error("notFound")} export function useSelectedLayoutSegment(){return null}' })
 
 Object.assign(globalThis, {
   __importEmptyRouter: {
@@ -40,23 +20,6 @@ Object.assign(globalThis, {
     prefetch() {},
   },
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export default {}' }
-    }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__importEmptyRouter} export function useSearchParams(){return new URLSearchParams()} export function usePathname(){return "/banking/imports"} export function useParams(){return {}} export function redirect(){throw new Error("redirect")} export function notFound(){throw new Error("notFound")} export function useSelectedLayoutSegment(){return null}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
-
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

@@ -31,9 +31,7 @@ const mockIntl = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
+
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { url: 'mock:true-cost-auth', shortCircuit: true }
     }

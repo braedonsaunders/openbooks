@@ -12,6 +12,8 @@ const root = pathToFileURL(`${process.cwd()}/`).href;
 // a corrected package after a controlled reopen is refused without a
 // restatement note — and the publish button previously sent no comment at
 // all, so a restatement died with a 422 and no way to comply.
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter() { return { refresh() {}, push() {}, replace() {} } }", extra: { "next-intl": "export function useTranslations() { const t = (key) => key; t.has = () => true; return t }" } });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "react" && context.parentURL?.startsWith("data:")) {
@@ -23,24 +25,14 @@ registerHooks({
         url: `data:text/javascript,import { createElement } from 'react'; export default function Link(p) { return createElement('a', { href: p.href }, p.children) }`,
       };
     }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: `data:text/javascript,export function useRouter() { return { refresh() {}, push() {}, replace() {} } }`,
-      };
-    }
+
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export const toast = { success() {}, error() {} }`,
       };
     }
-    if (specifier === "next-intl") {
-      return {
-        shortCircuit: true,
-        url: `data:text/javascript,export function useTranslations() { const t = (key) => key; t.has = () => true; return t }`,
-      };
-    }
+
     if (specifier === "../../../components/page-layout") {
       return {
         shortCircuit: true,

@@ -132,9 +132,7 @@ const forecastUrls = new Map<string, string>([
 
 const forecastHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
+
     const mocked = forecastUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
@@ -256,9 +254,7 @@ const boardUrls = new Map<string, string>([
 
 const boardHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
+
     const mocked = boardUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
@@ -309,7 +305,6 @@ test('the unscoped undated link stays exactly as before', async () => {
   const data = await forecastScope(null, null)
   assert.equal(data.excludedUndatedHref, '/crm/opportunities?view=board&undated=1')
 })
-
 
 function boardQuery(): string {
   const found = boardState.queries.filter((text) => text.includes('from crm_opportunities o'))

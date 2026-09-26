@@ -33,6 +33,8 @@ const { pathToFileURL } = await import('node:url')
 // worktree copies so the test runs the code under test.
 const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
 const worktreeCustomization = pathToFileURL(join(process.cwd(), 'packages', 'customization', 'src', 'index.ts')).href
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/admin/customization' } })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '@openbooks/ui') {
@@ -41,12 +43,7 @@ registerHooks({
     if (specifier === '@openbooks/customization') {
       return { shortCircuit: true, url: worktreeCustomization }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){}}}export function usePathname(){return \'/admin/customization\'}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,

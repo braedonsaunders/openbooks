@@ -6,7 +6,7 @@ const state = { genericFailure: false, customerHomeCalls: 0 }
 Object.assign(globalThis, { __customerRatesBannerTest: state })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+
     if (specifier === 'next/navigation') return { shortCircuit: true, url: 'data:text/javascript,export function redirect(path){throw new Error(`redirect:${path}`)}' }
     if (specifier === 'next-intl/server') {
       return {

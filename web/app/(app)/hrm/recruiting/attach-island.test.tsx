@@ -5,6 +5,8 @@ import React from 'react'
 
 const toastInfos: string[] = []
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){ globalThis.__attachRefreshes += 1 }, push(){}, replace(){} })' })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
@@ -13,12 +15,7 @@ registerHooks({
         url: 'data:text/javascript,export const toast = { success(){}, error(){}, info(msg){ globalThis.__attachToastInfos.push(msg) } }',
       }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){ globalThis.__attachRefreshes += 1 }, push(){}, replace(){} })',
-      }
-    }
+
     if (specifier.endsWith('/lib/prompt')) {
       return {
         shortCircuit: true,

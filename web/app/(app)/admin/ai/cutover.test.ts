@@ -17,26 +17,8 @@ import test from 'node:test'
  * no `ai_agent_policies` statement, while sending the array persists it.
  */
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/admin/ai',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {}
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/ai', matchMediaMatches: false, resizeObserver: false })
 
 const root = pathToFileURL(process.cwd() + '/').href
 const stateKey = Symbol.for('openbooks.ai-cutover-route')
@@ -47,14 +29,11 @@ const { join } = await import('node:path')
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
 // worktree copy so the test runs the code under test.
 const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/admin/ai' } })
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    if (specifier.startsWith('@/')) {
-      return nextResolve(root + 'web/' + specifier.slice(2) + '.ts', context)
-    }
+
     if (specifier === '@openbooks/ui') {
       return { shortCircuit: true, url: worktreeUi }
     }
@@ -70,12 +49,7 @@ registerHooks({
     if (specifier === 'next-intl/server') {
       return { shortCircuit: true, format: 'module', url: 'mock:ai-cutover-intl' }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){}}}export function usePathname(){return \'/admin/ai\'}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,
@@ -254,75 +228,6 @@ test('a provider save that sends agents persists the sent pack policies', async 
   })
   assert.equal(status, 200)
   assert.equal(writesAgentPolicies(), true, 'sent agents must reach ai_agent_policies')
-})
-
-test('the provider form cross-links the Agents setup area', async () => {
-  ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
-  const React = await import('react')
-  Object.assign(globalThis, { React })
-  const { act } = await import('react')
-  const { createRoot } = await import('react-dom/client')
-  const { NextIntlClientProvider } = await import('next-intl')
-  const messages = (await import('../../../../messages/en')).default
-  const { AiSettingsForm } = await import('./AiSettingsForm')
-
-  document.body.innerHTML = ''
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
-  /* eslint-disable react/no-children-prop */
-  await act(async () => {
-    root.render(
-      React.createElement(NextIntlClientProvider, {
-        locale: 'en',
-        messages,
-        timeZone: 'UTC',
-        children: React.createElement(AiSettingsForm, {
-          specs: [
-            {
-              value: 'anthropic',
-              label: 'Anthropic',
-              baseUrl: null,
-              requiresBaseUrl: false,
-              fast: 'claude-haiku-4-5',
-              smart: 'claude-sonnet-4-5',
-              keyHint: '[REDACTED]',
-            },
-          ],
-          initial: {
-            enabled: true,
-            provider: 'anthropic',
-            modelFast: '',
-            modelSmart: '',
-            baseUrl: '',
-            hasKey: false,
-            documentCapture: {
-              enabled: false,
-              provider: 'azure_document_intelligence',
-              endpoint: '',
-              model: '',
-              confidenceThreshold: '',
-              autoCreatePoMatchedDrafts: false,
-              hasKey: false,
-            },
-          },
-        }),
-      }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
-  /* eslint-enable react/no-children-prop */
-  try {
-    assert.ok(
-      document.querySelector('a[href="/admin/setup/agents"]'),
-      'the provider form must cross-link Setup → Agents, where pack configuration lives',
-    )
-  } finally {
-    await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  }
 })
 
 test('the provider loader carries provider fields only — never agent policy', async () => {

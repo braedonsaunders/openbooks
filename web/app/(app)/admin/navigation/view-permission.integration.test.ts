@@ -38,9 +38,7 @@ const mocks = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     if (context.parentURL?.includes("/admin/navigation/view.ts")) {
       if (specifier === "../../../../lib/auth") return { url: "mock:nav-loader-auth", shortCircuit: true };
       if (specifier === "../../../../lib/authz") return { url: "mock:nav-loader-authz", shortCircuit: true };

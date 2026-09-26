@@ -9,14 +9,14 @@ import React from 'react'
 // but never destructured — exactly the defects the gate found in this file's
 // predecessor. A render is the cheapest check that reaches them.
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){} })' })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
     }
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){} })' }
-    }
+
     return next(specifier, context)
   },
 })

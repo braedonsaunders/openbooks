@@ -11,21 +11,11 @@ import test from 'node:test';
 // loader feeds is proved in hrm-home.spec.test.ts.
 process.env.SESSION_SECRET ??= "t6-lane-test-secret-must-be-32+chars!!!!";
 
+const { stubModules } = await import('../../../testing/stub-modules');
+stubModules({ navigation: 'export function redirect(){throw new Error("redirect")}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return "/hrm"}export function useSearchParams(){return new URLSearchParams()}', intl: 'export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}export async function getLocale(){return "en"}' });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}export async function getLocale(){return "en"}',
-      };
-    }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function redirect(){throw new Error("redirect")}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return "/hrm"}export function useSearchParams(){return new URLSearchParams()}',
-      };
-    }
+
     if (specifier === 'next/server') {
       return {
         shortCircuit: true,

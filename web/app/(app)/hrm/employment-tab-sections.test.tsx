@@ -4,17 +4,14 @@ import test from 'node:test'
 import React from 'react'
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })' })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })',
-      }
-    }
+
     return next(specifier, context)
   },
 })

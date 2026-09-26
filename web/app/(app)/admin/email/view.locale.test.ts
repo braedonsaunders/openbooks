@@ -27,7 +27,7 @@ function lookup(tree: Record<string, unknown>, key: string): string {
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+
     if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:email-page-intl' }
     if (specifier === '../../../../lib/authz') return { shortCircuit: true, url: 'mock:email-page-authz' }
     if (specifier === '@openbooks/engine/src/delivery/email-config.ts') {

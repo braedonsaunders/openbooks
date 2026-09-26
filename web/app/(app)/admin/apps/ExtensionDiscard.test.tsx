@@ -41,6 +41,8 @@ const worktreeUi = pathToFileURL(
 ).href;
 // Heavy children irrelevant to the footer discard flow render as null.
 const nullWidget = "data:text/javascript,export function AppPackageEditor(){return null}export function AppOverviewHero(){return null}export function LiveDirectory(){return null}";
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/admin/apps" } });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
@@ -55,12 +57,7 @@ registerHooks({
     if (specifier === "@/components/module-home/ui") {
       return { shortCircuit: true, url: nullWidget };
     }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){}}}export function usePathname(){return '/admin/apps'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
+
     if (specifier === "next/link") {
       return {
         shortCircuit: true,

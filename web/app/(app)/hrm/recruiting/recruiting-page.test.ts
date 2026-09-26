@@ -11,9 +11,7 @@ import test from "node:test";
 // here.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     if (specifier === "../../../../lib/features") {
       return {
         shortCircuit: true,
@@ -95,4 +93,3 @@ test("selection hrefs keep the tab and the selection", () => {
   assert.equal(hrefForDepth("interviews", { interview: "i-1" }), "/hrm/recruiting?tab=interviews&interview=i-1");
   assert.equal(hrefForDepth("offers", { offer: "o-9" }), "/hrm/recruiting?tab=offers&offer=o-9");
 });
-

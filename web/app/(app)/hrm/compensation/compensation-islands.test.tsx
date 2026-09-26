@@ -1,3 +1,5 @@
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter() { return { push() {}, refresh() {} }; }" });
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -20,19 +22,6 @@ if (typeof window.matchMedia !== "function") {
   })) as typeof window.matchMedia;
 }
 globals.IS_REACT_ACT_ENVIRONMENT = true;
-
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter() { return { push() {}, refresh() {} }; }",
-      };
-    }
-    return next(specifier, context);
-  },
-});
 
 const React = await import("react");
 // The shared @openbooks/ui Select compiles against a global React.

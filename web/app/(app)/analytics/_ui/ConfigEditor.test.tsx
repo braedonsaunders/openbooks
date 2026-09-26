@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/analytics' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/analytics', scrollIntoView: false, resizeObserver: false })
 
 declare global {
   var __configRouter: { refresh(): void } | undefined
@@ -16,11 +11,11 @@ declare global {
 
 globalThis.__configRouter = { refresh() {} }
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__configRouter}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return globalThis.__configRouter}' }
-    }
+
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: "data:text/javascript,export const toast={error(m){(globalThis.__configToasts??=[]).push({kind:'error',message:String(m)})}}" }
     }
@@ -28,7 +23,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

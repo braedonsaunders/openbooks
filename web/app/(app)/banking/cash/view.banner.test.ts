@@ -3,21 +3,18 @@ import test from 'node:test'
 import type { BankingCashData } from './view'
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/banking/cash' } })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export default {}' }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export default function Link(p){return globalThis.React.createElement("a",{href:p.href},p.children)}',
       }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {push(){}}}export function usePathname(){return "/banking/cash"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     return next(specifier, context)
   },
 })

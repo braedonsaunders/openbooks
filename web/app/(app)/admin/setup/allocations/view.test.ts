@@ -4,9 +4,7 @@ import test from 'node:test'
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
+
     if (specifier === 'next-intl/server') {
       return { url: 'mock:alloc-setup-intl', shortCircuit: true }
     }

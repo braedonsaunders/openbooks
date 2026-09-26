@@ -10,39 +10,15 @@ import test from 'node:test'
 // drawer opens with a usable rating-scale labels control.
 
 // jsdom first: the drawer reads browser globals at render.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/admin/setup/hrm-review-templates?row=new',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of [
-  'window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement',
-  'HTMLInputElement', 'HTMLButtonElement', 'Event', 'MouseEvent', 'KeyboardEvent', 'self',
-]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {}
-}
+const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/hrm-review-templates?row=new', matchMediaMatches: false, resizeObserver: false })
 
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__setupRouter}export function usePathname(){return \'/admin/setup/hrm-review-templates\'}export function useSearchParams(){return new URLSearchParams(globalThis.__setupQuery ?? \'\')}' })
 registerHooks({
   resolve(specifier, context, next) {
     // next/navigation: the drawer only navigates on save/close/tab switch.
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: `data:text/javascript,export function useRouter(){return globalThis.__setupRouter}export function usePathname(){return '/admin/setup/hrm-review-templates'}export function useSearchParams(){return new URLSearchParams(globalThis.__setupQuery ?? '')}`,
-      }
-    }
+
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,
@@ -67,7 +43,6 @@ declare global {
   var __setupQuery: string | undefined
 }
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

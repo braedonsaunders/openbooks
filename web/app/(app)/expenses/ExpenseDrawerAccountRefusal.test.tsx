@@ -42,14 +42,11 @@ Object.assign(globalThis, {
   __expenseRefusalRouter: { push() {}, refresh() {}, replace() {}, back() {}, prefetch() {} },
 })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__expenseRefusalRouter}export function usePathname(){return "/expenses/reports"}export function useSearchParams(){return new URLSearchParams()}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__expenseRefusalRouter}export function usePathname(){return "/expenses/reports"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,

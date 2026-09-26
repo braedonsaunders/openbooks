@@ -46,14 +46,11 @@ Object.assign(globalThis, {
   },
 })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__taxTestRouter}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__taxTestRouter}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

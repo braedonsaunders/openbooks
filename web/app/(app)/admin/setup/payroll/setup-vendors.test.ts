@@ -1,16 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { registerHooks } from 'node:module'
 
 // Only server-only is stubbed: the predicate under test must load for real.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
 
 const { sql } = await import('drizzle-orm')
 const { PgDialect } = await import('drizzle-orm/pg-core')

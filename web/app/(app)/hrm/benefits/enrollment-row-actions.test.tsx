@@ -11,11 +11,11 @@ for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLEl
 Object.assign(globalThis, { React })
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return {refresh(){}}}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}' }
-    }
+
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,

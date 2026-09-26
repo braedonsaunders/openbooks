@@ -5,23 +5,11 @@ import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/
 import test from "node:test";
 
 const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){}}}", intl: true });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function getTranslations(){return key=>key}",
-      };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return {push(){},refresh(){},replace(){}}}",
-      };
-    }
+
     if (specifier === "next/link") {
       return {
         shortCircuit: true,

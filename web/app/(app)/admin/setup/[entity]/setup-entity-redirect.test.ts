@@ -9,9 +9,7 @@ import test from 'node:test'
 // is proven by the scope suite, not doubled here.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
+
     if (specifier === 'next/navigation') {
       return { shortCircuit: true, format: 'module', url: 'mock:navigation' }
     }

@@ -13,23 +13,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 const root = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "")).href;
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ navigation: "export function redirect(){throw new Error('redirect')}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/hrm'}export function useSearchParams(){return new URLSearchParams()}", intl: true });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function getTranslations(){return (key)=>key}export async function getLocale(){return 'en'}",
-      };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function redirect(){throw new Error('redirect')}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/hrm'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
+
     if (specifier === "next/server") {
       return {
         shortCircuit: true,

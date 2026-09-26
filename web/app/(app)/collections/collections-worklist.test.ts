@@ -4,12 +4,11 @@ import test from 'node:test'
 
 const state = { canReadAr: true }
 Object.assign(globalThis, { __collectionsWorklistState: state })
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function redirect(path){throw new Error(`redirect:${path}`)}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export function redirect(path){throw new Error(`redirect:${path}`)}' }
-    }
+
     if (specifier === 'next-intl/server') {
       return {
         shortCircuit: true,

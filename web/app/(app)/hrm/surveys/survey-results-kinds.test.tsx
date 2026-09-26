@@ -3,17 +3,14 @@ import test from 'node:test'
 import React from 'react'
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/hrm/surveys' } })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){},push(){},replace(){}}}export function usePathname(){return "/hrm/surveys"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

@@ -1,3 +1,5 @@
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useSearchParams(){return{get(){return globalThis.__redirectNoticeSearch}}}' })
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -33,23 +35,7 @@ const keys = [
 // scripts/test-registration-order.test.mjs): the notice renders the movedFrom
 // source's sentence and nothing otherwise — real component, scripted search
 // params, real en catalog.
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url:
-          'data:text/javascript,' +
-          encodeURIComponent(
-            'export function useSearchParams(){return{get(){return globalThis.__redirectNoticeSearch}}}',
-          ),
-      }
-    }
-    return next(specifier, context)
-  },
-})
+
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { renderToStaticMarkup } = await import('react-dom/server')

@@ -3,23 +3,14 @@ import test from 'node:test'
 import React from 'react'
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })', extra: { 'next-intl': 'export function useLocale(){return "fr-CA"};export function useTimeZone(){return "America/Toronto"};export function useTranslations(){return (key)=>key}' } })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })',
-      }
-    }
-    if (specifier === 'next-intl') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useLocale(){return "fr-CA"};export function useTimeZone(){return "America/Toronto"};export function useTranslations(){return (key)=>key}',
-      }
-    }
+
     return next(specifier, context)
   },
 })

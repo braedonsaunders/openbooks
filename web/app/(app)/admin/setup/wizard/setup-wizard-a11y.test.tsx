@@ -15,15 +15,8 @@ declare global {
 // welcome → review and asserts each of those properties in the DOM.
 
 // jsdom first: the wizard reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/admin/setup/wizard",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/wizard", scrollIntoView: false, resizeObserver: false });
 // Reduced-motion matches so step transitions swap synchronously: jsdom
 // never completes the exit tween that AnimatePresence mode="wait" holds the
 // next step behind.
@@ -49,14 +42,11 @@ if (dialogProto && typeof dialogProto.close !== "function") {
 }
 
 const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return globalThis.__wizardRouter}export function usePathname(){return globalThis.__wizardPath ?? '/'}export function useSearchParams(){return new URLSearchParams()}" });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return globalThis.__wizardRouter}export function usePathname(){return globalThis.__wizardPath ?? '/'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
+
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -73,7 +63,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

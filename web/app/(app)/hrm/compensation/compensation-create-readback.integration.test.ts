@@ -35,7 +35,7 @@ const catalogs = {
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
+
     if (specifier === "next-intl/server") {
       return {
         shortCircuit: true,

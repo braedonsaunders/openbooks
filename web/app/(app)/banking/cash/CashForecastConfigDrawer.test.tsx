@@ -32,14 +32,11 @@ if (typeof window.matchMedia !== 'function') {
 }
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/banking/cash' } })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}export function usePathname(){return "/banking/cash"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

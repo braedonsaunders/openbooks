@@ -1,3 +1,5 @@
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export function redirect(url){throw new Error(`NEXT_REDIRECT;replace;${url};307`)}' })
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,22 +12,6 @@ import test from 'node:test'
  * (keeping the query) and owns no view of its own; the report links to the
  * dashboard that holds the planning.
  */
-
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function redirect(url){throw new Error(`NEXT_REDIRECT;replace;${url};307`)}',
-      }
-    }
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,' }
-    }
-    return next(specifier, context)
-  },
-})
 
 const { default: TrueCostPlannerPage } = await import('./page')
 const { trueCostSpec } = await import('../../../reports/true-cost/view')

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+
 import test from 'node:test'
 
 // The coverage matrix hid the 7th+ qualification type behind
@@ -7,15 +7,6 @@ import test from 'node:test'
 // The spec now renders one column per required type from the loader data.
 // These tests CALL the spec with eight required types and assert every one
 // lands as a column — against the pre-fix spec only seven columns exist.
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return next(specifier, context)
-  },
-})
 
 const { qualificationsSpec } = await import('./view')
 

@@ -1,20 +1,10 @@
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })' })
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import React from 'react'
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })',
-      }
-    }
-    return next(specifier, context)
-  },
-})
 const { NextIntlClientProvider } = await import('next-intl')
 const { GoalProgressForm } = await import('./GoalForm')
 // tsx compiles JSX classic: the form never imports React, so the test bridges it.

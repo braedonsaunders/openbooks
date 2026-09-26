@@ -42,14 +42,11 @@ Object.assign(globalThis, {
   },
 })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return globalThis.__ftTestRouter}export function usePathname(){return "/field-tickets"}export function useSearchParams(){return new URLSearchParams("ticket=ft-1&transactionTab=items")}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__ftTestRouter}export function usePathname(){return "/field-tickets"}export function useSearchParams(){return new URLSearchParams("ticket=ft-1&transactionTab=items")}',
-      }
-    }
+
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,

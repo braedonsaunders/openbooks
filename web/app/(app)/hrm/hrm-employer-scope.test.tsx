@@ -1,3 +1,5 @@
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return { refresh(){}, push(){} }}' })
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -20,19 +22,6 @@ import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
  * asserts the data rule (translated words, never an id) on the message
  * catalogs.
  */
-
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return { refresh(){}, push(){} }}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
 
 const React = await import('react')
 Object.assign(globalThis, { React })

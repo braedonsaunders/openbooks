@@ -28,11 +28,11 @@ function lookup(key: string): string {
   return typeof node === "string" ? node : key;
 }
 
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ extra: { "../features": "export async function isFeatureEnabled(orgId, key) { const flags = globalThis.__f17Features; if (flags && key in flags) return flags[key]; return true; }" } });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
+
     const parent = context.parentURL ?? "";
     // The translations seam must follow the loader's callees, not just the
     // loader: loadEquity now builds its tab strip through workspace-tabs.ts,
@@ -65,13 +65,7 @@ registerHooks({
     // the gates on (the off-switch remedy is pinned by
     // compensation-page.test.ts); the loaders' real refusal and error
     // classes stay intact.
-    if (specifier === "../features") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function isFeatureEnabled(orgId, key) { const flags = globalThis.__f17Features; if (flags && key in flags) return flags[key]; return true; }",
-      };
-    }
+
     if (specifier === "../feature-gates") {
       return {
         shortCircuit: true,

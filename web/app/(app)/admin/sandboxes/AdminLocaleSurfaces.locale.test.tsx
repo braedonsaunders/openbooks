@@ -4,11 +4,11 @@ import test from 'node:test'
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return {refresh(){},push(){}}}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return {refresh(){},push(){}}}' }
-    }
+
     if (specifier === 'next/link') {
       return { shortCircuit: true, url: 'data:text/javascript,export default function Link({children,...props}){return globalThis.React.createElement("a",props,children)}' }
     }

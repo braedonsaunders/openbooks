@@ -7,26 +7,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 // jsdom first: the builder reads browser globals at render.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'HTMLInputElement', 'HTMLSelectElement', 'Event', 'MouseEvent', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {}
-}
+const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: false })
 
 const posted: { url: string; body: unknown }[] = []
 const priorFetch = globalThis.fetch
@@ -40,14 +22,11 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof fetch
 
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export function useRouter(){return{push(){},replace(){},refresh(){}}}' })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return{push(){},replace(){},refresh(){}}}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,
@@ -64,7 +43,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

@@ -6,24 +6,15 @@ declare global {
   var __startCloseToasts: string[] | undefined;
 }
 
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost:4800/close" });
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({ matches: false, media: "", addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia;
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/close", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
 
 const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return globalThis.__startCloseRouter}" });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return { shortCircuit: true, url: "data:text/javascript,export function useRouter(){return globalThis.__startCloseRouter}" };
-    }
+
     if (specifier === "sonner") {
       return { shortCircuit: true, url: "data:text/javascript,export const toast={error(m){(globalThis.__startCloseToasts??=[]).push(String(m))}}" };
     }

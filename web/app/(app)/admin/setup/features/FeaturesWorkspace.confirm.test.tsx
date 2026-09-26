@@ -40,14 +40,11 @@ Object.assign(globalThis, {
   __featuresPuts: [] as unknown[],
 })
 const { registerHooks } = await import('node:module')
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/admin/setup/features' } })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){},push(){},replace(){}}}export function usePathname(){return "/admin/setup/features"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
+
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

@@ -16,9 +16,7 @@ const testState: TestState = { permissions: ['documents.read', 'documents.manage
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
+
     if (specifier === 'next-intl/server') {
       return { shortCircuit: true, format: 'module', url: 'mock:intl' }
     }
