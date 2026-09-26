@@ -79,10 +79,6 @@ test('email log pages in sort order with a stable total', async () => {
     assert.equal(first.rows.length, PAGE_SIZE, 'page one holds one page, not every delivery')
     assert.equal(first.total, DELIVERIES, 'the total is stable across pages')
     assert.equal(second.total, DELIVERIES, 'the total is stable across pages')
-    const firstIds = new Set(first.rows.map((row) => row.id))
-    for (const row of second.rows) {
-      assert.ok(!firstIds.has(row.id), `page two repeats a page-one delivery (${row.id})`)
-    }
     assert.deepEqual(
       [...first.rows, ...second.rows].map((row) => row.id),
       full.rows.map((row) => row.id),
@@ -119,6 +115,7 @@ test('email log status filter narrows the log', async () => {
       status: 'failed',
     })
     assert.equal(failed.total, 3, 'the failed filter returns only failed deliveries')
+    assert.equal(failed.rows.length, 3, 'a filter matching three rows returns three rows, never an empty window')
     for (const row of failed.rows) {
       assert.equal(row.status, 'failed', 'every row carries the requested status')
       assert.ok(row.errorMessage, 'failed rows keep their delivery evidence')

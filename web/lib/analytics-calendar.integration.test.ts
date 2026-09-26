@@ -23,6 +23,7 @@ const ranges = [
 ] as const;
 
 test('the health dashboard echoes each calendar range with zero aggregates', async () => {
+  assert.equal(ranges.length, 3, 'the calendar suite covers three ranges; an empty list would vacate every assertion below');
   const org = await withBypass(() => createScratchOrg());
   try {
     await withOrgContext(org.orgId, async () => {
@@ -42,6 +43,7 @@ test('the health dashboard echoes each calendar range with zero aggregates', asy
 });
 
 test('the health score echoes each calendar range with zero figures', async () => {
+  assert.equal(ranges.length, 3, 'the calendar suite covers three ranges; an empty list would vacate every assertion below');
   const org = await withBypass(() => createScratchOrg());
   try {
     await withOrgContext(org.orgId, async () => {
@@ -59,6 +61,7 @@ test('the health score echoes each calendar range with zero figures', async () =
 });
 
 test('the customer view echoes each calendar range with zero customers', async () => {
+  assert.equal(ranges.length, 3, 'the calendar suite covers three ranges; an empty list would vacate every assertion below');
   const org = await withBypass(() => createScratchOrg());
   try {
     await withOrgContext(org.orgId, async () => {
@@ -74,6 +77,7 @@ test('the customer view echoes each calendar range with zero customers', async (
 });
 
 test('the vendor view echoes each calendar range with zero spend', async () => {
+  assert.equal(ranges.length, 3, 'the calendar suite covers three ranges; an empty list would vacate every assertion below');
   const org = await withBypass(() => createScratchOrg());
   try {
     await withOrgContext(org.orgId, async () => {
@@ -89,6 +93,7 @@ test('the vendor view echoes each calendar range with zero spend', async () => {
 });
 
 test('the spend velocity view echoes each calendar range with zero spend', async () => {
+  assert.equal(ranges.length, 3, 'the calendar suite covers three ranges; an empty list would vacate every assertion below');
   const org = await withBypass(() => createScratchOrg());
   try {
     await withOrgContext(org.orgId, async () => {

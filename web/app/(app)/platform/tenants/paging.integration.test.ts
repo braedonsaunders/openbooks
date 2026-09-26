@@ -98,9 +98,6 @@ test('tenants list pages in sort order with a stable total', async () => {
     assert.equal(second.total, ORGS, 'the total is stable across pages')
     const firstNames = new Set(first.rows.map((row) => row.name))
     assert.equal(firstNames.size, PAGE_SIZE, 'page-one rows are distinct')
-    for (const row of second.rows) {
-      assert.ok(!firstNames.has(row.name), `page two repeats a page-one row (${row.name})`)
-    }
     assert.deepEqual(
       [...first.rows, ...second.rows].map((row) => row.name),
       full.rows.map((row) => row.name),
