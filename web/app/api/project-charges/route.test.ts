@@ -69,11 +69,11 @@ const mockSources = new Map<string, string>([
       export class ChargeCommittedError extends Error {
         constructor(chargeId, documentNumber, stage, cause) {
           super('project charge ' + documentNumber + ' (' + chargeId + ') was committed but ' + stage + ' failed: ' + cause.message)
-          this.chargeId = chargeId
-          this.documentNumber = documentNumber
-          this.stage = stage
-          this.cause = cause
+          Object.assign(this, { chargeId, documentNumber, stage, cause })
         }
+      }
+      export function chargeCommittedDetails(e) {
+        return { committed: true, chargeId: e.chargeId, documentNumber: e.documentNumber, stage: e.stage, cause: e.cause instanceof Error ? e.cause.message : String(e.cause) }
       }
       export async function createProjectCharge(orgId, userId, input, opts) {
         state.createCalls += 1

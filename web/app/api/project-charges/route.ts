@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -8,6 +9,7 @@ import { can, guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import {
   createProjectCharge,
+  chargeCommittedDetails,
   ChargeCommittedError,
   ChargeError,
   ChargeNotFoundError,
@@ -165,21 +167,15 @@ export async function POST(req: Request) {
     // Creation commits before approval/posting so a lifecycle failure must
     // identify the durable charge instead of inviting a duplicate retry.
     if (e instanceof ChargeCommittedError) {
-      return NextResponse.json({
-        error: e.message,
-        committed: true,
-        chargeId: e.chargeId,
-        documentNumber: e.documentNumber,
-        stage: e.stage,
-        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
-      }, { status: 409 })
+      // The committed identity rides along so the caller repairs the exact
+      // charge instead of retrying creation (pinned by the route test).
+      return apiErrorResponse(e, { safeStatus: 409, details: chargeCommittedDetails(e) })
     }
     // Posting refusals (kernel rules or unconfigured org control accounts) are
     // request-state failures, not server defects.
-    const status =
-      e instanceof ChargeError || e instanceof ControlAccountsIncompleteError
-        ? 422
-        : 500
-    return NextResponse.json({ error: (e as Error).message }, { status })
+    if (e instanceof ChargeError || e instanceof ControlAccountsIncompleteError) {
+      return apiErrorResponse(e, { safeStatus: 422 })
+    }
+    return apiErrorResponse(e)
   }
 }

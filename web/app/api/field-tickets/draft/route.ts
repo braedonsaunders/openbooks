@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -24,7 +25,9 @@ export async function POST() {
   } catch (e) {
     // A fenced in-transaction refusal stays indistinguishable from a missing
     // ticket, like the entry guard above and the main ticket route.
-    const status = e instanceof FieldTicketNotFoundError ? 404 : e instanceof FieldTicketError ? 422 : 500
-    return NextResponse.json({ error: (e as Error).message }, { status })
+    if (e instanceof FieldTicketError && !(e instanceof FieldTicketNotFoundError)) {
+      return apiErrorResponse(e, { safeStatus: 422 })
+    }
+    return apiErrorResponse(e)
   }
 }

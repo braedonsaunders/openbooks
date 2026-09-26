@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -92,7 +93,9 @@ export async function POST(req: Request) {
     const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
     return NextResponse.json(created)
   } catch (e) {
-    const status = e instanceof FieldTicketNotFoundError ? 404 : e instanceof FieldTicketError ? 422 : 500
-    return NextResponse.json({ error: (e as Error).message }, { status })
+    if (e instanceof FieldTicketError && !(e instanceof FieldTicketNotFoundError)) {
+      return apiErrorResponse(e, { safeStatus: 422 })
+    }
+    return apiErrorResponse(e)
   }
 }
