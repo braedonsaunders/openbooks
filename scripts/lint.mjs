@@ -15,8 +15,7 @@ const files = paths.length > 0
   : execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' })
     .split('\0').filter((file) => /\.(?:[cm]?js|tsx?)$/.test(file) && existsSync(file))
 const result = spawnSync(process.execPath, [
-  '--import', './scripts/eslint-typescript-api.mjs', './node_modules/eslint/bin/eslint.js',
-  '--no-warn-ignored', ...options, ...new Set(files),
+  './node_modules/eslint/bin/eslint.js', '--no-warn-ignored', ...options, ...new Set(files),
 ], { stdio: 'inherit' })
 if (result.error) console.error(result.error)
 process.exitCode = result.status ?? 1

@@ -1,17 +1,9 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "isolatedModules": true
   },
   "include": ["./**/*.ts", "../playwright.config.ts"]
 }

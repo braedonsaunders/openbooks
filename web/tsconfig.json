@@ -1,24 +1,17 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
     "lib": [
       "dom",
       "dom.iterable",
       "esnext"
     ],
     "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noEmit": true,
     "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "allowImportingTsExtensions": true,
     "plugins": [
       {
         "name": "next"
@@ -27,9 +20,6 @@
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "vitest": [
-        "./app/api/compliance/information-returns/route.test.ts"
       ]
     }
   },
