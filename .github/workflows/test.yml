@@ -1,6 +1,6 @@
 name: test
 
-# All tests remain release gates. Units, isolated database shards, browser tests,
+# All tests remain release gates. Units, isolated database partitions, browser tests,
 # and the accounting simulation run independently. Coverage instrumentation is
 # manual so per-push latency measures tests rather than tracing overhead.
 
@@ -135,14 +135,14 @@ jobs:
       - run: npm ci
       - name: Install qpdf
         run: sudo apt-get update && sudo apt-get install -y qpdf
-      - name: Unit test shard
+      - name: Unit test partition
         shell: bash
         run: |
           set -o pipefail
           timeout --signal=TERM --kill-after=10s 16m npm run test:unit 2>&1 | tee unit.txt
       - name: Skips are declared, not silent
-        # A skipped control is an unrun control. Runs even when the shard
-        # failed, so a red shard cannot hide a partition that also stopped
+        # A skipped control is an unrun control. Runs even when the partition
+        # failed, so a red partition cannot hide one that also stopped
         # executing things.
         if: always()
         run: node scripts/assert-skip-budget.mjs unit unit.txt
@@ -161,14 +161,15 @@ jobs:
     if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     # 15 was enough until the payroll and tax packs landed: ten installable
-    # countries and 41 tax packs added real work to every shard, and 11 and 16
-    # were cancelled mid fixture-pool reset at 15m06s and 15m18s while still
-    # making progress. Raised rather than re-sharded because shard membership
-    # is derived from the file list, so changing the count moves every file
-    # and invalidates the per-shard receipts this campaign was verified on.
-    # 25 then held until the shard carrying the migration-replay proof
-    # reached the limit while still passing, so the ceiling moved again
-    # rather than reshuffling every shard just before a release.
+    # countries and 41 tax packs added real work to every partition, and 11
+    # and 16 were cancelled mid fixture-pool reset at 15m06s and 15m18s while
+    # still making progress. Raised rather than re-partitioned because
+    # partition membership is derived from the file list, so changing the
+    # count moves every file and invalidates the per-partition receipts this
+    # campaign was verified on. 25 then held until the partition carrying the
+    # migration-replay proof reached the limit while still passing, so the
+    # ceiling moved again rather than reshuffling every partition just before
+    # a release.
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -278,7 +279,7 @@ jobs:
             engine/src/ledger/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
           node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: canary recorded a failing test"); process.exit(1); } if (!/^# fail 0$/m.test(s)) { console.error("FATAL: canary did not report zero failures"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
 
-      - name: Database test shard
+      - name: Database test partition
         shell: bash
         env:
           COLLECT_COVERAGE: ${{ github.event_name == 'workflow_dispatch' }}
@@ -292,8 +293,8 @@ jobs:
             --test-reporter=spec --test-reporter-destination=stdout 2>&1 | tee coverage.txt
       - name: Skips are declared, not silent
         # This partition HAS a database, so every `{ skip: !DB }` guard must
-        # resolve to run. A skip means the wiring broke and the shard reported
-        # green having executed nothing.
+        # resolve to run. A skip means the wiring broke and the partition
+        # reported green having executed nothing.
         if: always()
         run: node scripts/assert-skip-budget.mjs database coverage.txt
 
@@ -612,8 +613,9 @@ jobs:
   # its own pristine tenant — so the serialisation bought no isolation it did
   # not already have. Both halves now fan out.
   #
-  # Every shard rebuilds the app instead of sharing one build artifact. The
-  # build is ~3.5 minutes, so funnelling the shards through a single build job
+  # Every partition rebuilds the app instead of sharing one build artifact.
+  # The build is ~3.5 minutes, so funnelling the partitions through a single
+  # build job
   # would add a dependency edge longer than the fan-out removes.
   e2e-app:
     needs: [scope, typecheck]
@@ -688,10 +690,10 @@ jobs:
       - name: Restore Next compiler cache
         # Restore-only. The previous key carried github.sha, so the primary key
         # could never hit, a fresh entry was written on every green run, and the
-        # measured restore was 0s on every run inspected — the shards were
+        # measured restore was 0s on every run inspected — the partitions were
         # paying a cold 3.5-minute build each time. Keying on the web sources
         # themselves makes an untouched frontend an exact hit, and one job owns
-        # the write so the shards cannot race each other for it.
+        # the write so the partitions cannot race each other for it.
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: web/.next/cache
@@ -705,7 +707,7 @@ jobs:
         run: npm run build -w web
 
       - name: Save Next compiler cache
-        # One writer, so eight shards do not race to upload the same key.
+        # One writer, so eight partitions do not race to upload the same key.
         if: always() && matrix.shard == 1
         continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -878,7 +880,7 @@ jobs:
             spec="${pair%%:*}"
             echo "::group::playwright workflows ${spec}"
             # The runtime and bypass pools must stay on the SAME database.
-            # Since the ARCH-RLS-ROLE split, cross-tenant reads (for example
+            # Since the runtime/bypass role split, cross-tenant reads (for example
             # subscription bill-now resolving the owning org) go through the
             # bypass pool while the suite's writes go through the runtime pool;
             # overriding only OPENBOOKS_DB_URL left bypass on the shared
