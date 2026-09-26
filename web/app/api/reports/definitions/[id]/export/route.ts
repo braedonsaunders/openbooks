@@ -4,7 +4,6 @@ import { getTranslations } from 'next-intl/server'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardReportEntity } from '../../../../../../lib/report-authz'
-import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { resolveDefinitionToExportData, streamDefinitionExport } from '../../../../../../lib/report-run'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
@@ -80,8 +79,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       if (out.format === 'csv') return csvResponse(out.csv, filename)
       return xlsxResponse(out.xlsx, filename)
     } catch (err) {
-      if (err instanceof ReportCurrencyBasisError) return apiErrorResponse(err, { safeStatus: 422 })
-      return apiErrorResponse(err)
+      // Typed refusals (currency basis, a drifted saved query failing
+      // ReportQueryValidationError) answer 422 intact, like the run route;
+      // untyped faults still sanitize to a generic 500.
+      return apiErrorResponse(err, { safeStatus: 422 })
     }
   }
 
@@ -89,8 +90,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     data = await resolveDefinitionToExportData(user.orgId, id, url.searchParams, { orgId: user.orgId, t, period, query: q })
   } catch (err) {
-    if (err instanceof ReportCurrencyBasisError) return apiErrorResponse(err, { safeStatus: 422 })
-    return apiErrorResponse(err)
+    // Typed refusals (currency basis, a drifted saved query failing
+    // ReportQueryValidationError) answer 422 intact, like the run route;
+    // untyped faults still sanitize to a generic 500.
+    return apiErrorResponse(err, { safeStatus: 422 })
   }
 
   if (format === 'csv') {
