@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "feature_disabled" }, { status: 409 });
     }
     if (error instanceof UnrestrictedScopeError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return apiErrorResponse(error);
     }
     throw error;
   }

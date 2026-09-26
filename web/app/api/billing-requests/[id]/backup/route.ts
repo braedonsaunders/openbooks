@@ -43,7 +43,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount })
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if (e instanceof InvoiceBackupSourceAccessError) return NextResponse.json({ error: e.message }, { status: 403 })
+    if (e instanceof InvoiceBackupSourceAccessError) return apiErrorResponse(e, { safeStatus: 403 })
     if (e instanceof InvoiceBackupImmutableError) return apiErrorResponse(e, { safeStatus: 422 })
     const rendererRefusal = rendererUnavailableResponse(e)
     if (rendererRefusal) return rendererRefusal
@@ -77,7 +77,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return pdfResponse(backup.bytes, safeName(backup.filename))
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if (e instanceof InvoiceBackupSourceAccessError) return NextResponse.json({ error: e.message }, { status: 403 })
+    if (e instanceof InvoiceBackupSourceAccessError) return apiErrorResponse(e, { safeStatus: 403 })
     throw e
   }
 }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { dbWriteErrorResponse } from "@/lib/api/db-errors";
 import { NextResponse } from "next/server";
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ id: row.id, name: row.name });
   } catch (e) {
     if (e instanceof AmbiguousListViewDefaultError)
-      return NextResponse.json({ error: e.message }, { status: 409 });
+      return apiErrorResponse(e, { safeStatus: 409 });
     return dbWriteErrorResponse(e, {
       route: "customization:list-views",
       uniqueConflicts: { list_views_org_scope_type_name: "A view with that name already exists" },
