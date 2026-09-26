@@ -66,6 +66,7 @@ async function seedApplications(org: {
   }
   // Cross-entry pairs (line 2 of entry k settles line 1 of entry k+1): same
   // account/party/subsidiary, opposite signs, both posted open items.
+  await db.execute(sql`ANALYZE journal_entries, journal_lines`);
   await db.execute(sql`
     INSERT INTO applications (org_id, from_line_id, to_line_id, amount, applied_on, source_amount,
       source_transaction_amount, source_transaction_currency, target_transaction_amount,
@@ -102,8 +103,7 @@ test("small-tenant application OR-probes use the org-leading composite indexes",
     await seedApplications(small, SMALL_ROWS);
     const smallLine = (await db.execute<{ id: string }>(sql`
       select jl.id from journal_lines jl where jl.org_id = ${small.orgId} limit 1`)).rows[0]!.id;
-    const migration = readFileSync(
-      "schema/migrations/generated/0150_applications_org_line_indexes.sql", "utf8");
+    const migration = readFileSync("schema/migrations/generated/0150_applications_org_line_indexes.sql", "utf8");
 
     // Red: without the composites the probe BitmapOrs the tenant-blind
     // single-column arms with the org as a late filter.
