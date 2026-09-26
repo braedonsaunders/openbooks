@@ -192,8 +192,9 @@ export function stubModules(options: StubModulesOptions = {}): void {
       if (features !== null && isFeaturesSpecifier(specifier)) {
         return virtual(features);
       }
-      if (Object.hasOwn(extra, specifier)) {
-        return virtual(extra[specifier]);
+      const override = extra[specifier];
+      if (override !== undefined) {
+        return virtual(override);
       }
       return next(specifier, context);
     },
