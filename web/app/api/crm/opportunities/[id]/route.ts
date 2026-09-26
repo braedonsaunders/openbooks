@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { crmOpportunityScope, crmSharedScope } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -43,6 +44,18 @@ class OpportunityNotFound extends Error {}
 class OpportunityRevisionError extends Error {
   constructor(message: string) {
     super(message)
+  }
+}
+/**
+ * Opportunity line/team math throws plain Errors (engine crm-math is pure
+ * decimal validation with operator-actionable messages), so the sanitizer
+ * cannot type-refuse them: carry the message in a named 422 refusal.
+ */
+class OpportunityMathRefusal extends Error {
+  readonly status = 422
+  constructor(message: string) {
+    super(message)
+    this.name = 'OpportunityMathRefusal'
   }
 }
 class OpportunityPermissionDenied extends Error {
@@ -259,7 +272,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       })
       calculated = computeOpportunityTotals(lineMathInputs, probability)
     } catch (error) {
-      return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid lines' }, { status: 422 })
+      return apiErrorResponse(new OpportunityMathRefusal(error instanceof Error ? error.message : String(error)))
     }
     for (const line of lines) {
       if (!line.itemId || !isUuid(line.itemId) || !((await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`))).rows[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
@@ -326,7 +339,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (wholeDigits(contribution) > 15) return NextResponse.json({ error: 'sales-team contributions must fit the ledger (at most 15 whole digits)' }, { status: 422 })
       teamRows.push({ ...member, contributionPercent: normalizeMoney(contribution) })
     }
-    try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 422 }) }
+    try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return apiErrorResponse(new OpportunityMathRefusal(error instanceof Error ? error.message : String(error))) }
     if (teamRows.filter((member) => member.isPrimary).length !== 1) return NextResponse.json({ error: 'exactly one team member must be primary' }, { status: 422 })
     for (const member of teamRows) if (!await orgUuidExists('users', member.userId, user.orgId)) return NextResponse.json({ error: 'invalid sales team member' }, { status: 422 })
   }
@@ -630,11 +643,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (error) {
     if (error instanceof OpportunityDisappeared) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if (error instanceof OpportunityRevisionError) return NextResponse.json({ error: error.message }, { status: 409 })
+    if (error instanceof OpportunityRevisionError) return apiErrorResponse(error, { safeStatus: 409 })
     if (error instanceof OpportunityNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (error instanceof OpportunityContactMismatch) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
-    if (error instanceof OpportunityStageRefusalError) return NextResponse.json({ error: error.message, code: error.refusal }, { status: 422 })
-    if (error instanceof OpportunityValidationError) return NextResponse.json({ error: error.message }, { status: 422 })
+    if (error instanceof OpportunityStageRefusalError) return apiErrorResponse(error, { safeStatus: 422, details: { code: error.refusal } })
+    if (error instanceof OpportunityValidationError) return apiErrorResponse(error, { safeStatus: 422 })
     if (error instanceof OpportunityPermissionDenied) return error.response
     throw error
   }

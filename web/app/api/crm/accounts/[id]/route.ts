@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { crmSharedScope } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -295,7 +296,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           // An unsafe demotion is an operator-actionable refusal, not a
           // server fault: answer 422 with the message that names the remedy.
           if (error instanceof CrmLifecycleRefusalError) {
-            return NextResponse.json({ error: error.message }, { status: 422 })
+            return apiErrorResponse(error, { safeStatus: 422 })
           }
           throw error
         }
