@@ -125,7 +125,7 @@ export const SETUP_WIDGETS = {
   },
   'form-drawer': (props) => (
     <FormDesigner
-      // Session remount key (F-t10-002): a duplicate opened after an edit
+      // Session remount key: a duplicate opened after an edit
       // must not inherit the edit's mount-only state (notably isDefault).
       key={str(props, 'drawerKey') ?? 'form-drawer'}
       recordType={str(props, 'recordType') ?? ''}

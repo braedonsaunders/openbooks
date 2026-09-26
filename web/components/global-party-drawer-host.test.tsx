@@ -81,7 +81,7 @@ const CLASSES = [
 
 const drawerPayload = {
   payload: {
-    party: { id: PARTY_ID, display_name: 'Fleet6 Test Vendor', kind: 'company', is_active: true },
+    party: { id: PARTY_ID, display_name: 'Test Vendor', kind: 'company', is_active: true },
     customer: null,
     vendor: {},
     employee: null,

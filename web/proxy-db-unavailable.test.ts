@@ -5,7 +5,7 @@ import { sessionSigningInput } from "./lib/auth-token-format";
 import { proxy } from "./proxy";
 
 const previousSecret = process.env.SESSION_SECRET;
-process.env.SESSION_SECRET = "fleet6-test-secret-value-0123456789abcdef";
+process.env.SESSION_SECRET = "test-secret-value-0123456789abcdef";
 test.after(() => {
   if (previousSecret === undefined) delete process.env.SESSION_SECRET;
   else process.env.SESSION_SECRET = previousSecret;

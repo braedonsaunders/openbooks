@@ -317,7 +317,7 @@ export async function EntityListView({
       ? Promise.resolve({ rows: [] })
       // A CRM-off customer list has one constant status bucket ('customer'):
       // grouping by a constant is a Postgres 42601, so count it ungrouped
-      // instead of skipping the facet (F-t11-001).
+      // instead of skipping the facet.
       : recordType === 'customer' && !crmOn
         ? (db.execute(sql`
             select ${statusExpr} as status, count(*) as n from ${tableSql}
@@ -335,7 +335,7 @@ export async function EntityListView({
     // Static registry options come first; a loader appends tenant-defined
     // values (custom project types) that no static set can name. No filter
     // mixes both today except billing/project_type, so merging is a no-op
-    // everywhere else (F-t11-003).
+    // everywhere else.
     Promise.all(quickFilterDefs.map(async (quick) => {
       const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
       const statics = (filterMeta?.options ?? []).map((option) => ({

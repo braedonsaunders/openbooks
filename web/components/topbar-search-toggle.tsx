@@ -6,7 +6,7 @@ import { Search } from 'lucide-react'
 import { GlobalSearch } from './global-search'
 
 /**
- * Topbar-mode mobile search trigger (F-t11-014). Below lg the inline header
+ * Topbar-mode mobile search trigger. Below lg the inline header
  * search is hidden, which left global search unreachable on mobile with no
  * trigger at all. This icon button opens the same search as an overlay
  * strip under the header; the desktop inline input owns lg and up, so the

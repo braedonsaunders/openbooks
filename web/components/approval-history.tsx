@@ -65,12 +65,12 @@ function relativeTime(iso: string, locale: string): string {
 export type ApprovalTabBodyKind = 'loading' | 'pending' | 'empty' | 'history' | 'unsubmitted'
 
 /**
- * Which body the Approvals surface shows (F-t02-003: the tab rendered a
+ * Which body the Approvals surface shows (the tab once rendered a
  * completely blank panel while loading and when no flow applied). History
  * wins over a concurrent pending gate; a pending flow with no events yet
  * still names who holds it. A record whose status still claims it awaits
- * approval, but which no flow run ever fired for (F-t04-004 residual:
- * pre-flow bank details), is neither history nor genuinely empty — it gets
+ * approval, but which no flow run ever fired for (e.g. created before the
+ * flow existed), is neither history nor genuinely empty — it gets
  * its own body naming the stale state.
  */
 export function approvalTabBody(state: {

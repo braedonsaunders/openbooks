@@ -66,7 +66,7 @@ type Opt = {
   label?: string
   subsidiary_id?: string | null
   tax_components?: TaxComponentConfig[]
-  /** Settlement currency the account accepts (null = any; F-t06-002). */
+  /** Settlement currency the account accepts (null = any). */
   currency_restriction?: string | null
   /** True when the item carries an inventory costing profile (line pickers). */
   has_inventory_profile?: boolean | null
@@ -137,7 +137,7 @@ interface LineRow extends Record<string, unknown> {
   locationId: string
   classId: string
   /** Warehouse for inventory receipt/issue effects; blank unless the line's
-   *  item is stocked (F-t07-003 pickers). */
+   *  item is stocked. */
   stockLocationId: string
   /** On a credit memo, the posted receipt or shipment this line returns.
    *  Blank = a purely financial credit line that moves no stock. The chosen
@@ -148,7 +148,7 @@ interface LineRow extends Record<string, unknown> {
   taxInputAmount: string
   taxOverridden: boolean
   taxAmount: string
-  /** Entry-mode distribution staging (shard A9; exploded by A4 on save). */
+  /** Entry-mode distribution staging (exploded into child lines on save). */
   distributionGroupId: string
   distributionRuleId: string
   distributionRuleName: string
@@ -556,7 +556,7 @@ export interface CurrencyMismatchedAccount {
 }
 
 /**
- * Form-level currency proof (F-t06-002): every referenced account carrying
+ * Form-level currency proof: every referenced account carrying
  * a settlement-currency restriction must name the document's own currency —
  * the storage trigger would refuse anything else at post, so saving or
  * posting a mismatched form only buys a round trip to a certain refusal.
@@ -603,7 +603,7 @@ const STATUS_KEYS: Record<string, string> = {
  * Drawer title row: type badge + document number + status pill. The status
  * is decision-relevant (open/paid/voided), so the pill must never be the
  * thing that clips on narrow viewports — it keeps its width and wraps to
- * its own line instead (F-t12-013).
+ * its own line instead.
  */
 export function DocumentDrawerTitle({
   kind,
@@ -746,8 +746,8 @@ function parseLineDecimal(value: string): { units: bigint; scale: number } | nul
 }
 
 /**
- * Quantity × Unit price as a canonical ledger amount (F-t02-004: the invoice
- * line editor silently ignored qty/price, so totals followed only the
+ * Quantity × Unit price as a canonical ledger amount (the line editor must
+ * never silently ignore qty/price and leave totals following only the
  * hand-typed Amount). Exact bigint math, halves away from zero, no Number
  * hop. Returns null when either side is blank or unparseable — a manual
  * discount line or a hand-typed amount must never be guessed over.
@@ -949,7 +949,7 @@ export interface DocumentDrawerProps {
   taxGroups?: Opt[]
   cards?: Opt[]
   /** Reconcilable card-liability accounts: the card picker fallback when no
-   * card instruments exist (F-t05-020). Only passed by loaders for
+   * card instruments exist. Only passed by loaders for
    * fundingSource='card' kinds. */
   cardAccounts?: Opt[]
   bankAccounts?: Opt[]
@@ -1116,7 +1116,7 @@ export function DocumentDrawer({
   const [rows, setRows] = useState<LineRow[]>(
     payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()],
   )
-  // F-t02-004: grid edits flow through here so a quantity/unit-price change
+  // Grid edits flow through here so a quantity/unit-price change
   // re-derives the line amount (blank/manual-divergent amounts are kept).
   const handleGridRowsChange = useCallback((next: LineRow[]) => {
     setRows((prev) => applyQtyPriceToRows(prev, next))
@@ -1135,7 +1135,7 @@ export function DocumentDrawer({
   const [rehydrationEpoch, setRehydrationEpoch] = useState(0)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // A refused submit/post that only fires a transient toast reads as
-  // "nothing happened" once it dismisses (the F-t06-018 precedent): the
+  // "nothing happened" once it dismisses: the
   // typed refusal also persists as a record-level alert, cleared on the
   // next action. Saves, lifecycle actions, deletes, voids and form
   // preference writes all run on the shared action path, whose busy flag
@@ -1159,7 +1159,7 @@ export function DocumentDrawer({
     }
   }
 
-  // -- entry-mode distributions (shard A9) ----------------------------------
+  // -- entry-mode distributions -------------------------------------------
   // The server is the feature truth: every affordance below renders only
   // while entry-candidates answers. A 404/403 (gate off, out of scope)
   // hides everything, and the server refuses regardless of UI.
@@ -1173,7 +1173,7 @@ export function DocumentDrawer({
   const [splitTarget, setSplitTarget] = useState<number | null>(null)
   const distInflight = useRef(new Set<string>())
   // Staged-key display names only: applied-rule names ride the read-path
-  // stamps (distribution_rule_name, A4), never this cache.
+  // stamps (distribution_rule_name), never this cache.
   const distNamesByKey = useRef(new Map<string, string>())
 
   const distCoordKey = (row: LineRow): string =>
@@ -1834,7 +1834,7 @@ export function DocumentDrawer({
     }
     for (const w of gate.warnings) toast.warning(w)
     // A currency-mismatched form can never post (the ledger refuses it), so
-    // refuse the save up front with the account named (F-t06-002).
+    // refuse the save up front with the account named.
     if (blockCurrencyMismatch()) {
       setSaveState('error')
       return
@@ -1842,7 +1842,7 @@ export function DocumentDrawer({
     // A contentful row without an account can never book either: the
     // server names the line and refuses. Refuse up front with the grid
     // line named and keep every entered row in place — dropping the row
-    // here used to book a total the operator never reviewed (OM-09).
+    // here used to book a total the operator never reviewed.
     const missingAccount = findMissingAccountLine(rows)
     if (missingAccount) {
       refuse(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }), t('toasts.actionFailed'))
@@ -1891,7 +1891,7 @@ export function DocumentDrawer({
         }),
       {
         // A fresh attempt clears the previous refusal: the alert pins until
-        // the next action, not past a successful save (F-t03-002).
+        // the next action, not past a successful save.
         fallbackMessage: t('toasts.actionFailed'),
         onOk: (payload) => {
           const data = payload as DocPayload & {
@@ -1923,9 +1923,8 @@ export function DocumentDrawer({
           router.refresh()
         },
         onRefused: () => {
-          // A save refusal stays on the record, not only in a toast
-          // (F-t03-002): the typed reason pins as an alert until the next
-          // action or edit.
+          // A save refusal stays on the record, not only in a toast:
+          // the typed reason pins as an alert until the next action or edit.
           setSaveState('error')
         },
       },
@@ -1933,7 +1932,7 @@ export function DocumentDrawer({
   })
 
   // A dirty editor never closes silently: the X button (via beforeClose) and
-  // Cancel both ask first, so typed work survives a stray click (F-t02-003).
+  // Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
     if (mode !== 'edit' || !dirty) return true
     return confirmDialog({
@@ -1985,7 +1984,7 @@ export function DocumentDrawer({
 
   async function act(action: 'submit' | 'post') {
     // Same up-front refusal as save: posting a currency-mismatched record
-    // is a certain 422, so name the account before the round trip (F-t06-002).
+    // is a certain 422, so name the account before the round trip.
     if (blockCurrencyMismatch()) {
       return
     }
@@ -2084,7 +2083,7 @@ export function DocumentDrawer({
     router.refresh()
   }
 
-  // -- line warehouse picker (F-t07-003) ------------------------------------
+  // -- line warehouse picker ------------------------------------------------
   const showWarehousePicker =
     recordType === 'customer_invoice' &&
     (stockLocations ?? []).length > 1 &&
@@ -2190,7 +2189,7 @@ export function DocumentDrawer({
     return a ? `${a.number ?? ''} ${a.name ?? ''}`.trim() : String(id)
   }
   // Settlement-currency restrictions keyed by account, across every picker
-  // list the form can reference (F-t06-002).
+  // list the form can reference.
   const currencyRestrictionById = useMemo(() => {
     const map = new Map<string, string | null>()
     for (const a of [...(cardAccounts ?? []), ...(bankAccounts ?? accounts), ...accounts]) {
@@ -2225,7 +2224,7 @@ export function DocumentDrawer({
     refuse(message, t('toasts.actionFailed'))
     return true
   }
-  // Card-instrument fallback (F-t05-020): no UI creates payment_cards rows,
+  // Card-instrument fallback: no UI creates payment_cards rows,
   // so with zero instruments the instrument picker is unfillable. Offer the
   // reconcilable card-liability accounts as the controlAccountId override
   // the engine cardRule reads first; name what qualifies when those are
@@ -2548,7 +2547,7 @@ export function DocumentDrawer({
         // HARD RULE: no subsidiary UI in single-subsidiary orgs, even if a
         // form layout carries the field. Locked (read-only) once posted — the
         // subsidiary shapes the GL and intercompany balancing.
-        // An unset subsidiary reads as unset (F-t03-003): the empty option
+        // An unset subsidiary reads as unset: the empty option
         // must never borrow the root name, or the picker lists "Main Co"
         // twice and the pre-selected entry saves as null.
         if (!multiSub) return null

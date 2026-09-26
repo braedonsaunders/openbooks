@@ -109,7 +109,7 @@ export function ApprovalActions({
   subjectId: string
   /**
    * POST endpoint that submits a never-submitted record into its current
-   * flow (F-t04-004 residual: pre-flow bank details). Passed only by
+   * flow (for records created before the flow existed). Passed only by
    * surfaces that own such a path — the row stays quiet without it.
    */
   submitApprovalHref?: string
@@ -259,7 +259,7 @@ export function ApprovalActions({
     (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry && !showSubmit)
   ) return null
 
-  // A failed run strands the record with no live gate (F-t04-004): offer a
+  // A failed run strands the record with no live gate: offer a
   // retry that re-drives the stored trigger through the current graph. It
   // renders beside a stale pending chip when one lingers, never instead of
   // live Approve/Reject buttons.
