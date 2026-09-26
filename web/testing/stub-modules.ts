@@ -119,26 +119,20 @@ function virtual(source: string): { shortCircuit: boolean; url: string } {
   };
 }
 
-function stripExtension(specifier: string): string {
-  return specifier.replace(/\.(?:ts|tsx|js|jsx|mjs|cjs)$/, "");
-}
-
 function isAuthzSpecifier(specifier: string): boolean {
-  const base = stripExtension(specifier);
-  return (
-    base === "@/lib/authz" ||
-    base.endsWith("/lib/authz") ||
-    /(^|\/)(\.\.?\/)+authz$/.test(base)
-  );
+  // Mirrors the conditions the suite's own hooks used: the house alias or a
+  // path ending in /lib/authz. Bare relative spellings (`../authz`) and
+  // explicit extensions are NOT covered on purpose — a test that stubs those
+  // passes the exact specifier through `extra`, so this default can never
+  // hijack an edge the test expected to be real.
+  return specifier === "@/lib/authz" || specifier.endsWith("/lib/authz");
 }
 
 function isFeaturesSpecifier(specifier: string): boolean {
-  const base = stripExtension(specifier);
+  // Same scoping rule as above: only the /lib/-suffixed family. Bare
+  // relative spellings (`../features`) go through `extra` exactly.
   return (
-    base.endsWith("/lib/features") ||
-    base.endsWith("/lib/feature-gates") ||
-    /(^|\/)(\.\.?\/)+features?$/.test(base) ||
-    /(^|\/)(\.\.?\/)+feature-gates$/.test(base)
+    specifier.endsWith("/lib/features") || specifier.endsWith("/lib/feature-gates")
   );
 }
 
