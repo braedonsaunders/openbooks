@@ -25,6 +25,7 @@ import {
   packWarnsOnMissingIdentifier,
   PayrollPackError,
   payrollJurisdictionDeclared,
+  payrollPack,
   PAYROLL_COUNTRY_PACKS,
   remittanceFrequencyBand,
 } from "./packs.ts";
@@ -499,7 +500,7 @@ export async function payrollSetupState(
   // above — one population for the whole setup state.)
   for (const country of installed) {
     const missing = await unconfiguredRatesForRun(
-      orgId, country, await currentTaxYear(orgId, country), setupPopulation,
+      orgId, country, await currentTaxYear(orgId, country), setupPopulation, today,
     );
     if (missing.length === 0) {
       checks.push({
@@ -716,7 +717,7 @@ export async function payRunReadiness(
 
     // --- Statutory rates the employer has to supply -------------------------
     for (const country of countriesInRun.size > 0 ? [...countriesInRun] : installed) {
-      for (const missing of await unconfiguredRatesForRun(orgId, country, run.tax_year, people)) {
+      for (const missing of await unconfiguredRatesForRun(orgId, country, run.tax_year, people, run.pay_date)) {
         flag(
           "warning", "statutory.rateUnconfigured",
           people.filter((p) => missing.employees.some((e) => e.partyId === p.employee_party_id)),
@@ -942,12 +943,14 @@ export async function payrollStatutoryRateGaps(
   country: string,
   taxYear: number,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+  asOf?: string,
 ): Promise<UnconfiguredStatutoryRate[]> {
   return unconfiguredRatesForRun(
     orgId,
     country,
     taxYear,
     await activePayrollPopulation(orgId, allowedSubsidiaryIds),
+    asOf ?? (await businessToday(orgId)),
   );
 }
 
@@ -965,6 +968,7 @@ async function unconfiguredRatesForRun(
   country: string,
   taxYear: number,
   people: readonly RateScopeRow[],
+  asOf: string,
 ): Promise<UnconfiguredStatutoryRate[]> {
   let resolution;
   try {
@@ -986,7 +990,27 @@ async function unconfiguredRatesForRun(
     points.set(key, entry);
   }
   if (points.size === 0) return [];
-  return unconfiguredStatutoryRates(resolution, [...points.values()]);
+  // A pack-recorded waiver stands its slots down from the requirement — the
+  // SAME hook the run's rate gate calls, asked per scope point, so readiness
+  // and the run cannot disagree about what is missing. Nothing recorded
+  // waives nothing: every other point keeps today's warning byte-for-byte.
+  // (packRates above already resolved this country's declaration off the
+  // same registry, so payrollPack cannot throw for it here.)
+  const waive = payrollPack(country).waivedRateSlots;
+  if (!waive) return unconfiguredStatutoryRates(resolution, [...points.values()]);
+  const found: UnconfiguredStatutoryRate[] = [];
+  for (const point of points.values()) {
+    const waived = new Set(await waive(db, {
+      orgId, region: point.region, filingAccountId: point.filingAccountId, payDate: asOf,
+    }));
+    found.push(...unconfiguredStatutoryRates(
+      waived.size === 0
+        ? resolution
+        : { ...resolution, slots: resolution.slots.filter((slot) => !waived.has(slot.key)) },
+      [point],
+    ));
+  }
+  return found;
 }
 
 /**

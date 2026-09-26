@@ -297,6 +297,7 @@ test(
         orgId: h.orgId, actorId: h.actorId, payScheduleId: h.scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
+      assert.ok((await payRunReadiness(h.orgId, run.documentId)).items.every((item) => item.code !== "statutory.rateUnconfigured"), "a recorded non-contributory SUI account needs no rate notice");
       const result = await calculatePayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
