@@ -1,0 +1,16 @@
+{
+  // Shared compiler settings for every workspace. A workspace tsconfig
+  // extends this file and states only what differs: its lib, jsx, module
+  // interop, path aliases and file set.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  }
+}

@@ -1,14 +1,10 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "strict": true, "noUncheckedIndexedAccess": true,
-    "noEmit": true,
-    "esModuleInterop": true,
+    // A browser package: Node globals are not available to it.
+    "types": [],
     "isolatedModules": true,
-    "skipLibCheck": true,
     "jsx": "react-jsx"
   },
   "include": ["src/**/*"]
