@@ -13,6 +13,20 @@ import { enqueueStorageCleanupStandalone, fileCabinetObjectKey } from '../../../
 
 export const runtime = 'nodejs'
 
+/**
+ * Misconfigured document-capture endpoints refuse with their own actionable
+ * message: a typed 4xx refusal so the sanitizer preserves it. Collapsing
+ * these throws into capture_not_configured sent operators to reconfigure a
+ * correctly configured endpoint, and an untyped throw sanitizes to a
+ * requestId 500 that hides the remedy.
+ */
+class CaptureConfigRefusal extends Error {
+  constructor(message: string, readonly status = 422) {
+    super(message)
+    this.name = 'CaptureConfigRefusal'
+  }
+}
+
 const MAX_FILES = 50
 const MAX_BYTES = 20 * 1024 * 1024
 const MAX_BATCH_BYTES = 100 * 1024 * 1024
@@ -32,7 +46,9 @@ export async function POST(request: Request) {
   try {
     captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId)
   } catch (error) {
-    return apiErrorResponse(error)
+    return apiErrorResponse(
+      new CaptureConfigRefusal(error instanceof Error ? error.message : 'capture_config_failed'),
+    )
   }
   if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 })
   const form = await request.formData()
