@@ -64,7 +64,7 @@ APP="${OPENBOOKS_STACK_APP:-compose-bypass-open-source-driver-miu7hf}"
 IMAGE_REPO="${OPENBOOKS_IMAGE_REPO:-ghcr.io/braedonsaunders/openbooks}"
 
 [[ "$NEW" =~ ^sha256:[0-9a-f]{64}$ ]] || {
-  echo "usage: $(basename "$0") sha256:<64 hex>" >&2; exit 1; }
+  echo "usage: swarm-release.sh sha256:<64 hex>" >&2; exit 1; }
 
 PG=$(sudo docker ps -qf name=dokploy-postgres | head -1)
 [ -n "$PG" ] || { echo "dokploy-postgres container not found" >&2; exit 1; }
@@ -104,11 +104,11 @@ done < "$ENV_FILE"
 [ -n "$RUNTIME_URL" ] || { echo "OPENBOOKS_DB_URL (runtime login) missing from the stack env" >&2; exit 1; }
 [ -n "$BYPASS_URL" ] || {
   echo "OPENBOOKS_BYPASS_DB_URL (cross-tenant login) missing from the stack env." >&2
-  echo "Production web/worker refuse at import without it; create the dedicated BYPASSRLS login and wire its URL per the OPERATOR SETUP section in $0." >&2
+  echo "Production web/worker refuse at import without it; create the dedicated BYPASSRLS login and wire its URL per the OPERATOR SETUP section in deploy/swarm-release.sh." >&2
   exit 1; }
 [ -n "$MIGRATION_URL" ] || {
   echo "OPENBOOKS_MIGRATION_DB_URL (schema-owner login) missing from the stack env." >&2
-  echo "Create the runtime login and wire both URLs per the OPERATOR SETUP section in $0." >&2
+  echo "Create the runtime login and wire both URLs per the OPERATOR SETUP section in deploy/swarm-release.sh." >&2
   exit 1; }
 [ "$RUNTIME_URL" != "$MIGRATION_URL" ] || {
   echo "refusing to deploy: the runtime and migration database URLs are identical." >&2
