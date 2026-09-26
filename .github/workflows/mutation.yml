@@ -49,7 +49,7 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       # Mutant runs connect as the constrained runtime role (same RLS honesty
-      # as the database shards); only the Load schema step uses the privileged
+      # as the database partitions); only the Load schema step uses the privileged
       # container login for extensions, roles, and the ownership transfer.
       OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_mutation
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_mutation

@@ -36,24 +36,24 @@ test('units, database shards and simulation run independently without omitted te
   const integration = topLevelJob('database')
   const simulation = topLevelJob('simulation')
   // The INNER timeout must stay strictly below the job timeout. It fires first,
-  // so `tee unit.txt` still produces an artifact and the shard exits 124 — a
+  // so `tee unit.txt` still produces an artifact and the partition exits 124 — a
   // diagnosable failure. If the JOB timeout wins instead, the runner is killed
   // with no output and the only evidence is "the job timed out".
-  // Raised 12m -> 16m (job 16 -> 20) after shard 5 hit the 12m wall on
-  // 30f3f660d while shards 1-4 finished in 3m44s-6m06s. That spread is
-  // IMBALANCE, not growth. Shards are now a plain round robin (the committed
+  // Raised 12m -> 16m (job 16 -> 20) after partition 5 hit the 12m wall on
+  // 30f3f660d while partitions 1-4 finished in 3m44s-6m06s. That spread is
+  // IMBALANCE, not growth. Partitions are now a plain round robin (the committed
   // timing record was removed), so the budget keeps headroom for the spread.
   assert.match(unit, /timeout --signal=TERM --kill-after=10s 16m npm run test:unit/)
   assert.match(unit, /timeout-minutes: 20/)
   assert.match(unit, /apt-get install -y qpdf/)
   // Pinned together so the matrix and the denominator cannot drift apart.
-  // Raised 4 -> 5 when shard 2 hit the 8m wall on tip-of-main: the passing
-  // shards ran 297s/403s/445s against a 480s budget, so shard 4 was at 93%
+  // Raised 4 -> 5 when partition 2 hit the 8m wall on tip-of-main: the passing
+  // partitions ran 297s/403s/445s against a 480s budget, so partition 4 was at 93%
   // and the packing was already even to 3s. The partition had outgrown four
   // shards rather than been packed badly.
   assert.match(unit, /shard: \[1, 2, 3, 4, 5\]/)
   assert.match(unit, /OPENBOOKS_TEST_SHARD: \$\{\{ matrix.shard \}\}\/5/)
-  // THIRD place the shard count lives: the receipt check in the integration
+  // THIRD place the partition count lives: the receipt check in the integration
   // job counts evidence directories. Widening the matrix to 5 without this
   // left it expecting 4 and the run failed on "Verify every test file ran
   // exactly once" — after the two assertions above were already green, so
@@ -78,7 +78,7 @@ test('units, database shards and simulation run independently without omitted te
   // Pinned so the budget is a decision rather than a drift. Raised 15 -> 25
   // when the payroll and tax packs landed (shards cancelled mid fixture-pool
   // reset while still making progress), then 25 -> 35 when the migration
-  // replay tests pushed one shard past 25 minutes, still passing.
+  // replay tests pushed one partition past 25 minutes, still passing.
   assert.match(integration, /timeout-minutes: 35/)
   assert.doesNotMatch(integration, /--test-concurrency|continue-on-error/)
   assert.match(integration, /name: coverage-\$\{\{ matrix.shard \}\}/)
@@ -183,7 +183,7 @@ test('browser suites fan out and claim every workflow spec exactly once', () => 
 test('test workflow propagates tee producer failures and retains its failure guards', (t) => {
   const pipelines = [
     { stepName: 'Integration canary', logFile: 'canary.tap' },
-    { stepName: 'Database test shard', logFile: 'coverage.txt' },
+    { stepName: 'Database test partition', logFile: 'coverage.txt' },
   ]
   const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-test-workflow-'))
   t.after(() => rmSync(tempDirectory, { recursive: true, force: true }))
@@ -313,7 +313,7 @@ test('the unit deadline kills an unresponsive test worker and stays failed', { s
 });
 
 
-test('receipt directory comparison accepts two-digit shard names and still rejects omissions', () => {
+test('receipt directory comparison accepts two-digit partition names and still rejects omissions', () => {
   const step = namedStep('Verify every test file ran exactly once')
   const statement = step.split('\n').find(line => line.includes('assert.deepEqual(dirs,'))
   assert.ok(statement)
@@ -329,7 +329,7 @@ test('receipt directory comparison accepts two-digit shard names and still rejec
 test('a skipped control is an unrun control: both partitions audit their own skips', () => {
   // The hazard this pins: every DB-backed test skips itself when no database is
   // configured, so a partition whose database wiring breaks reports green
-  // having executed nothing. The canary proves ONE known file ran; these prove the shard that
+  // having executed nothing. The canary proves ONE known file ran; these prove the partition that
   // actually matters did not quietly skip.
   for (const partition of ['unit', 'database']) {
     const job = topLevelJob(partition)
@@ -339,8 +339,8 @@ test('a skipped control is an unrun control: both partitions audit their own ski
       `${partition} must audit its own skip count`,
     )
   }
-  // `if: always()` matters: a shard that FAILED must still be audited, or a red
-  // shard hides a partition that also stopped running things.
+  // `if: always()` matters: a partition that FAILED must still be audited, or a red
+  // partition hides one that also stopped running things.
   const audits = workflow.split('- name: Skips are declared, not silent')
   assert.equal(audits.length, 3, 'both partitions declare the audit step')
   for (const audit of audits.slice(1)) {

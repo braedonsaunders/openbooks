@@ -38,7 +38,7 @@
  * - SEC-NN collides with secondary-book/section fixture shorthand
  *   (SEC-1), and RLS/DSAR prose is row-level-security / subject-access
  *   product vocabulary; only numbered RLS-/DSAR- findings are refused.
- * - web/ is owned by a sibling sweep and schema/migrations/generated is
+ * - web/ is covered by its own change and schema/migrations/generated is
  *   digest-pinned with its own transition mechanism, so neither root is
  *   scanned here.
  */
