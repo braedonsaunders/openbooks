@@ -1,19 +1,16 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
-  check,
   date,
   index,
   integer,
   jsonb,
   pgTable,
   text,
-  timestamp,
-  unique,
   uniqueIndex,
-  uuid,
+  uuid
 } from "drizzle-orm/pg-core";
-import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
+import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 import type { InvoicingPreference } from "./project-types";
 
 /**
@@ -49,83 +46,11 @@ export const orgs = pgTable("orgs", {
   ...auditColumns,
 });
 
-/**
- * Accounting books — primary, tax, IFRS, … Every journal entry belongs to
- * exactly one book; schedules (depreciation, rev rec) are book-aware.
- */
-export const accountingBooks = pgTable(
-  "accounting_books",
-  {
-    id: id(),
-    orgId: orgRef(),
-    code: text("code").notNull(), // "primary", "tax", "ifrs"
-    name: text("name").notNull(),
-    isPrimary: boolean("is_primary").notNull().default(false),
-    /** Accounting books post GL journals; alternate/reporting books compute
-     *  schedules without posting (multi-book depreciation). */
-    postsGl: boolean("posts_gl").notNull().default(true),
-    isActive: boolean("is_active").notNull().default(true),
-    ...auditColumns,
-  },
-  (t) => [
-    uniqueIndex("accounting_books_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("books_org_code").on(t.orgId, t.code),
-  ],
-);
-
-/**
- * Intercompany relationships: the due-to/due-from account pair used to
- * auto-balance postings that span two subsidiaries, and elimination in
- * consolidation. Both accounts should be flagged `accounts.eliminate`.
- */
-export const intercompanyPairs = pgTable(
-  "intercompany_pairs",
-  {
-    id: id(),
-    orgId: orgRef(),
-    fromSubsidiaryId: uuid("from_subsidiary_id").notNull(),
-    toSubsidiaryId: uuid("to_subsidiary_id").notNull(),
-    dueFromAccountId: uuid("due_from_account_id").notNull(), // asset on from-subsidiary
-    dueToAccountId: uuid("due_to_account_id").notNull(), // liability on to-subsidiary
-    isActive: boolean("is_active").notNull().default(true),
-    ...auditColumns,
-  },
-  (t) => [uniqueIndex("intercompany_subsidiary_pair").on(t.fromSubsidiaryId, t.toSubsidiaryId)],
-);
-
 export const currencies = pgTable("currencies", {
   code: currencyCode("code").primaryKey(), // ISO 4217
   name: text("name").notNull(),
   minorUnits: integer("minor_units").notNull().default(2),
 });
-
-export const fxRates = pgTable(
-  "fx_rates",
-  {
-    id: id(),
-    /** Tenant-owned rate table; rates and manual overrides never cross orgs. */
-    orgId: orgRef(),
-    fromCurrency: currencyCode("from_currency").notNull(),
-    toCurrency: currencyCode("to_currency").notNull(),
-    asOf: date("as_of").notNull(),
-    /**
-     * spot: transaction-date rate. average / historical: period rates for
-     * consolidation translation (P&L at average, equity at historical).
-     */
-    rateType: text("rate_type", { enum: ["spot", "average", "historical"] })
-      .notNull()
-      .default("spot"),
-    rate: fxRate("rate").notNull(),
-    source: text("source").notNull().default("manual"),
-    /** Null for manual overrides; set for automatic feed observations. */
-    providerConfigId: uuid("provider_config_id"),
-    importedAt: timestamp("imported_at", { withTimezone: true }),
-    ...auditColumns,
-  },
-  (t) => [
-    uniqueIndex("fx_rates_org_pair_date_type").on(t.orgId, t.fromCurrency, t.toCurrency, t.asOf, t.rateType),
-  ],
-);
 
 /**
  * Accounting periods with per-module close — closing AP doesn't block GL
@@ -154,44 +79,6 @@ export const accountingPeriods = pgTable(
   (t) => [
     uniqueIndex("accounting_periods_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("periods_calendar_year_num").on(t.orgId, t.fiscalCalendarId, t.fiscalYear, t.periodNumber),
-  ],
-);
-
-/**
- * Document numbering. Default mode allocates from a Postgres sequence
- * (fast, may gap on rollback); gapless mode locks the row and increments
- * (correct, serialized) for jurisdictions that require it.
- *
- * Document numbers are organization-wide identities — `documents` enforces
- * UNIQUE (org_id, kind, document_number) with no subsidiary column — so
- * numbering must guarantee organization-wide disjoint output: exactly ONE
- * sequence per (org_id, document_kind), always the org-wide row. Per-subsidiary
- * sequences would each hand out the same number, so storage refuses them
- * (0032_document_number_sequence_globality). `allocatedThrough` records the
- * highest number ever issued; a used counter cannot move backward or change
- * its output format (storage trigger), while advancing forward stays legal.
- */
-export const numberSequences = pgTable(
-  "number_sequences",
-  {
-    id: id(),
-    orgId: orgRef(),
-    documentKind: text("document_kind").notNull(),
-    /** Retired: always NULL — allocation is org-wide (see above). */
-    subsidiaryId: uuid("subsidiary_id"),
-    prefix: text("prefix").notNull().default(""),
-    nextNumber: integer("next_number").notNull().default(1),
-    padding: integer("padding").notNull().default(5),
-    gapless: boolean("gapless").notNull().default(false),
-    /** Highest document number this sequence has issued (watermark trigger). */
-    allocatedThrough: integer("allocated_through").notNull().default(0),
-    ...auditColumns,
-  },
-  (t) => [
-    unique("sequences_org_kind_sub").on(t.orgId, t.documentKind),
-    check("number_sequences_org_wide_sequence", sql`${t.subsidiaryId} is null`),
-    check("number_sequences_next_number_positive", sql`${t.nextNumber} >= 1`),
-    check("number_sequences_allocated_through_nonnegative", sql`${t.allocatedThrough} >= 0`),
   ],
 );
 

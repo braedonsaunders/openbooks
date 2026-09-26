@@ -4,13 +4,8 @@ import {
   integer,
   boolean,
   jsonb,
-  date,
-  index,
-  uuid,
-  uniqueIndex,
-  check,
+  uniqueIndex
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 import { id, orgRef, auditColumns } from "./helpers";
 
 /**
@@ -279,14 +274,6 @@ export interface InvoiceRollupGroup {
   sourceKinds?: string[];
 }
 
-/**
- * A partial invoicing profile layered over the project type's. The agreement is
- * with a CUSTOMER and sometimes specific to one PROJECT, so presentation and
- * billing rules must be narrowable at both without cloning a project type per
- * customer — which is what tenants otherwise end up doing.
- */
-export type InvoicingProfileOverride = Partial<InvoicingProfile>;
-
 export interface BackupProfile {
   required: boolean;
   defaultBackupType: string;
@@ -334,55 +321,6 @@ export const projectTypes = pgTable(
     ...auditColumns,
   },
   (t) => [uniqueIndex("project_types_org_key").on(t.orgId, t.key)],
-);
-
-/**
- * Effective-dated financial-policy history. This table is authoritative for
- * project profitability calculations. Published profiles are append-only; a
- * new version closes the prior range.
- */
-export const projectFinancialProfileVersions = pgTable(
-  "project_financial_profile_versions",
-  {
-    id: id(),
-    orgId: orgRef(),
-    projectTypeId: uuid("project_type_id")
-      .notNull()
-      .references(() => projectTypes.id),
-    /** Inclusive policy window. Windows may not overlap within one project
-     *  type (storage constraint 0051). */
-    effectiveFrom: date("effective_from").notNull(),
-    effectiveTo: date("effective_to"),
-    financialProfile: jsonb("financial_profile")
-      .$type<FinancialProfile>()
-      .notNull(),
-    reason: text("reason").notNull(),
-    ...auditColumns,
-  },
-  (t) => [
-    uniqueIndex("project_financial_profile_versions_identity").on(
-      t.projectTypeId,
-      t.effectiveFrom,
-    ),
-    index("project_financial_profile_versions_effective").on(
-      t.orgId,
-      t.projectTypeId,
-      t.effectiveFrom,
-      t.effectiveTo,
-    ),
-    check(
-      "project_financial_profile_versions_dates",
-      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
-    ),
-    check(
-      "project_financial_profile_versions_profile_object",
-      sql`jsonb_typeof(${t.financialProfile}) = 'object'`,
-    ),
-    check(
-      "project_financial_profile_versions_reason",
-      sql`length(btrim(${t.reason})) >= 8`,
-    ),
-  ],
 );
 
 /* ------------------------------------------------------------------ */

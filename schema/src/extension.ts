@@ -203,45 +203,6 @@ export const users = pgTable(
 );
 
 /**
- * Statement layouts as data — custom P&L / balance-sheet row structures
- * (the job NetSuite does with 25 hand-built "financial layout" objects).
- * rows: ordered JSON, e.g.
- *   { kind: "group",    label: "Direct Labour", match: { numberPrefixes: ["51"] } }
- *   { kind: "subtotal", label: "Total Direct Costs", of: ["Direct Labour", "Materials"] }
- *   { kind: "formula",  label: "Gross Margin", plus: ["Revenue"], minus: ["Total Direct Costs"] }
- * Unmatched accounts land in an automatic "Other" group so nothing is
- * silently dropped from a statement.
- */
-export const statementLayouts = pgTable(
-  "statement_layouts",
-  {
-    id: id(),
-    orgId: orgRef(),
-    name: text("name").notNull(),
-    statement: text("statement", { enum: ["pnl", "balance_sheet"] }).notNull(),
-    rows: jsonb("rows").notNull().default([]),
-    isDefault: boolean("is_default").notNull().default(false),
-    ...auditColumns,
-  },
-  (t) => [index("statement_layouts_org").on(t.orgId, t.statement)],
-);
-
-/** Saved report views: a report path + its query params, by name. */
-export const savedReports = pgTable(
-  "saved_reports",
-  {
-    id: id(),
-    orgId: orgRef(),
-    name: text("name").notNull(),
-    path: text("path").notNull(), // e.g. "/reports/pnl"
-    params: jsonb("params").notNull().default({}),
-    createdByUserId: uuid("created_by_user_id"),
-    ...auditColumns,
-  },
-  (t) => [index("saved_reports_org").on(t.orgId)],
-);
-
-/**
  * A tenant-configured link to an external accounting system (NetSuite, QBO,
  * Xero…). Created and managed by the tenant in the platform page — one org can
  * hold several (e.g. mirror from NetSuite while trialling QBO). Drives the
@@ -352,32 +313,6 @@ export const syncRuns = pgTable(
   (t) => [
     index("sync_runs_org_started").on(t.orgId, t.startedAt),
     index("sync_runs_connection").on(t.connectionId, t.startedAt),
-  ],
-);
-
-/** Controller evidence for a source transaction that disappeared upstream. */
-export const sourceDeletionResolutions = pgTable(
-  "source_deletion_resolutions",
-  {
-    id: id(),
-    orgId: orgRef(),
-    connectionId: uuid("connection_id").notNull(),
-    sourceRef: text("source_ref").notNull(),
-    documentId: uuid("document_id"),
-    action: text("action", { enum: ["retain", "void"] }).notNull(),
-    note: text("note"),
-    resolvedAt: timestamp("resolved_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    resolvedBy: uuid("resolved_by"),
-    ...auditColumns,
-  },
-  (t) => [
-    uniqueIndex("source_deletion_resolutions_connection_ref").on(
-      t.connectionId,
-      t.sourceRef,
-    ),
-    index("source_deletion_resolutions_org").on(t.orgId, t.resolvedAt),
   ],
 );
 

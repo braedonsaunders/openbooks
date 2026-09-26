@@ -2,28 +2,6 @@ import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
-/**
- * Per-tenant + per-user transaction-form and record-list customization — the
- * source platform "Custom Form" + "Preferred Form" model and the saved-list-view
- * model. The config blobs (FormLayoutConfig / ListViewConfig) are validated by
- * @openbooks/customization; this module only stores them.
- *
- * Form layouts (custom transaction forms):
- *   form_layouts (org-scoped)          — 1..N named forms per record type
- *   user_form_preferences (per-user)    — which form a user prefers per type
- *
- * List views (saved searches):
- *   list_views (org-scoped, scope org|user) — named, shareable or personal
- *   user_list_preferences (per-user)       — which view a user defaults to
- *
- * Custom field VALUES remain in each table's `custom` jsonb (see web/lib/
- * custom-fields + custom_field_defs). Layouts reference custom fields by the
- * stable `cf_<def.key>`, discovered at render time — so a layout never breaks
- * when a custom field is deactivated (the renderer skips unknown cf_ keys).
- */
-
-export const FORM_LAYOUT_SCOPE = ["org"] as const;
-
 /** Org-level custom transaction/entity form. */
 export const formLayouts = pgTable(
   "form_layouts",
@@ -51,20 +29,6 @@ export const formLayouts = pgTable(
     uniqueIndex("form_layouts_org_type_name").on(t.orgId, t.recordType, t.name),
     index("form_layouts_org_type").on(t.orgId, t.recordType, t.isDefault),
   ],
-);
-
-/** A user's preferred form per record type (null layoutId ⇒ org default). */
-export const userFormPreferences = pgTable(
-  "user_form_preferences",
-  {
-    id: id(),
-    orgId: orgRef(),
-    userId: uuid("user_id").notNull(),
-    recordType: text("record_type").notNull(),
-    layoutId: uuid("layout_id"),
-    ...auditColumns,
-  },
-  (t) => [uniqueIndex("user_form_prefs_user_type").on(t.orgId, t.userId, t.recordType)],
 );
 
 export const LIST_VIEW_SCOPE = ["org", "user"] as const;
@@ -96,32 +60,3 @@ export const listViews = pgTable(
     uniqueIndex("list_views_one_live_personal_default").on(t.orgId, t.ownerId, t.recordType).where(sql`${t.scope} = 'user' AND ${t.isDefault} AND ${t.isActive}`),
   ],
 );
-
-/** A user's default list view per record type (null viewId ⇒ org default). */
-export const userListPreferences = pgTable(
-  "user_list_preferences",
-  {
-    id: id(),
-    orgId: orgRef(),
-    userId: uuid("user_id").notNull(),
-    recordType: text("record_type").notNull(),
-    viewId: uuid("view_id"),
-    ...auditColumns,
-  },
-  (t) => [uniqueIndex("user_list_prefs_user_type").on(t.orgId, t.userId, t.recordType)],
-);
-
-/*
-FOREIGN KEYS (added by the generated migration):
-  form_layouts.org_id          → orgs.id
-  form_layouts.created_by/updated_by → users.id
-  user_form_preferences.org_id → orgs.id
-  user_form_preferences.user_id → users.id ON DELETE CASCADE
-  user_form_preferences.layout_id → form_layouts.id ON DELETE SET NULL
-  list_views.org_id            → orgs.id
-  list_views.owner_id          → users.id ON DELETE CASCADE
-  list_views.created_by/updated_by → users.id
-  user_list_preferences.org_id → orgs.id
-  user_list_preferences.user_id → users.id ON DELETE CASCADE
-  user_list_preferences.view_id → list_views.id ON DELETE SET NULL
-*/

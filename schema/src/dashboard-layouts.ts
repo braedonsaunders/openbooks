@@ -1,5 +1,4 @@
-import { boolean, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { auditColumns, id, orgRef } from "./helpers";
+import { id } from "./helpers";
 
 /**
  * Per-user and per-role dashboard widget layouts. The home page resolves a
@@ -120,36 +119,6 @@ export function defaultDashboardLayoutForRole(roleKey: string): DashboardLayoutD
   return DEFAULT_DASHBOARD_LAYOUTS[roleKey as DashboardRole] ?? DEFAULT_DASHBOARD_LAYOUTS.viewer;
 }
 
-/** One row per (org, user) — the user's personalised widget layout. */
-export const userDashboardLayouts = pgTable(
-  "user_dashboard_layouts",
-  {
-    id: id(),
-    orgId: orgRef(),
-    userId: uuid("user_id").notNull(),
-    layout: jsonb("layout").$type<DashboardLayoutData>().notNull().default({ widgets: [] }),
-    /** Tracks which default the user customised from — a role change lets the
-     *  new default win again (sourceRole mismatch → fall back to default). */
-    sourceRole: text("source_role").notNull(),
-    isCustomised: boolean("is_customised").notNull().default(false),
-    ...auditColumns,
-  },
-  (t) => [uniqueIndex("user_dashboard_layouts_unique").on(t.orgId, t.userId)],
-);
-
-/** One row per (org, role key) — an admin-set default layout for a role. */
-export const roleDashboardLayouts = pgTable(
-  "role_dashboard_layouts",
-  {
-    id: id(),
-    orgId: orgRef(),
-    roleKey: text("role_key").notNull(),
-    layout: jsonb("layout").$type<DashboardLayoutData>().notNull().default({ widgets: [] }),
-    ...auditColumns,
-  },
-  (t) => [uniqueIndex("role_dashboard_layouts_unique").on(t.orgId, t.roleKey)],
-);
-
 /*
  * Foreign keys (add to schema/migrations/referential-integrity.sql):
  *
@@ -173,24 +142,3 @@ export type PageLayoutPrefs = {
   /** Panel keys the user hid. */
   hidden?: string[];
 };
-
-export const userPageLayouts = pgTable(
-  "user_page_layouts",
-  {
-    id: id(),
-    orgId: orgRef(),
-    userId: uuid("user_id").notNull(),
-    page: text("page").notNull(),
-    layout: jsonb("layout").$type<PageLayoutPrefs>().notNull().default({}),
-    ...auditColumns,
-  },
-  (t) => [uniqueIndex("user_page_layouts_unique").on(t.orgId, t.userId, t.page)],
-);
-
-/*
- * Foreign keys (in schema/migrations/referential-integrity.sql):
- *
- *   alter table user_page_layouts
- *     add foreign key (org_id) references orgs(id),
- *     add foreign key (user_id) references users(id) on delete cascade;
- */

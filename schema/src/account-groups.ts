@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, integer, boolean, jsonb, uuid, uniqueIndex, index, foreignKey } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { id, orgRef, auditColumns } from "./helpers";
 
 /**
@@ -111,28 +111,5 @@ export const accountGroups = pgTable(
     uniqueIndex("account_groups_one_active_catch_all")
       .on(t.orgId, t.dimension)
       .where(sql`${t.isCatchAll} AND ${t.isActive}`),
-  ],
-);
-
-/** Explicit account→group pin, overriding rule matching within the dimension. */
-export const accountGroupMembers = pgTable(
-  "account_group_members",
-  {
-    id: id(),
-    orgId: orgRef(),
-    groupId: uuid("group_id").notNull(),
-    accountId: uuid("account_id").notNull(),
-    /** Copied from the parent group so one account can be pinned once per dimension. */
-    dimension: text("dimension").notNull(),
-    ...auditColumns,
-  },
-  (t) => [
-    uniqueIndex("account_group_members_org_dimension_account").on(t.orgId, t.dimension, t.accountId),
-    index("account_group_members_account").on(t.accountId),
-    foreignKey({
-      name: "account_group_members_group_id_fkey",
-      columns: [t.groupId],
-      foreignColumns: [accountGroups.id],
-    }).onDelete("restrict"),
   ],
 );

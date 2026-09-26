@@ -1,5 +1,4 @@
 export * from "./core";
-export * from "./currency";
 export * from "./segments";
 export * from "./subsidiaries";
 export * from "./coa";
@@ -8,20 +7,14 @@ export * from "./ledger";
 export * from "./documents";
 export * from "./tax";
 export * from "./depreciation-conventions";
-export * from "./tax-pools";
 export * from "./extension";
 export * from "./inventory";
 export * from "./revenue";
 export * from "./assets";
-export * from "./item-rates";
-export * from "./item-pricing";
 export * from "./labor-costing";
 export * from "./banking";
-export * from "./bank-feeds";
 export * from "./payment-operations";
-export * from "./planning";
 export * from "./allocations";
-export * from "./scheduling";
 export * from "./time";
 export * from "./field-tickets";
 export * from "./billing";
@@ -29,21 +22,13 @@ export * from "./dunning";
 export * from "./construction";
 export * from "./compliance";
 export * from "./subscriptions";
-export * from "./advanced-subscriptions";
 export * from "./subcontracts";
-export * from "./wip-billing";
 export * from "./property-management";
 export * from "./iam";
 export * from "./platform";
 export * from "./api";
-export * from "./application-operations";
-export * from "./nav";
-export * from "./forms";
 export * from "./custom-records";
-export * from "./reporting";
 export * from "./scheduler-outbox";
-export * from "./posting-effects";
-export * from "./recurring-occurrences";
 export * from "./insights";
 export * from "./views";
 export * from "./file-cabinet";
@@ -52,7 +37,6 @@ export * from "./ai";
 export * from "./customization";
 export * from "./pdf-templates";
 export * from "./dashboard-layouts";
-export * from "./data-io";
 export * from "./email";
 export * from "./account-groups";
 export * from "./sandboxes";
@@ -61,25 +45,14 @@ export * from "./flows";
 export * from "./close";
 export * from "./crm-core";
 export * from "./crm-sales";
-export * from "./ap-capture";
 export * from "./project-types";
-export * from "./project-overhead-adjustments";
 export * from "./project-financial-adjustments";
 export * from "./qbd";
 export * from "./psp-settlements";
-export * from "./tax-rate-providers";
 export * from "./income-tax";
-export * from "./auth";
 export * from "./payroll";
-export * from "./payroll-bank-file";
-export * from "./payroll-certificates";
 export * from "./payroll-entitlements";
-export * from "./payroll-filing";
-export * from "./payroll-holidays";
-export * from "./payroll-parallel-run";
-export * from "./payroll-retro";
 export * from "./work-schedules";
-export * from "./payroll-rules";
 export * from "./leases";
 export * from "./hrm";
 export * from "./hrm-positions";
@@ -88,12 +61,10 @@ export * from "./hrm-compensation";
 // HR-16 automations (0226) + action reasons and event verbs (0227).
 export * from "./hrm-automations";
 // HR-21 begin: AI rails tables (0232).
-export * from "./hrm-ai-rails";
 // HR-21 end
 // HR-13: construction-compliance drizzle mirror (0223/0224).
 export * from "./hrm-construction";
 // HR-14 begin: qualifications and dispatch gating (0225).
-export * from "./hrm-qualifications";
 // HR-14 end
 // HR-19 begin: documents/e-sign/retention/DSAR/surveys drizzle mirror (0230).
 export * from "./hrm-documents-surveys";
@@ -102,6 +73,4 @@ export * from "./hrm-documents-surveys";
 export * from "./hrm-recruiting-depth";
 // HR-18 end
 
-export * from './extension-drafts';
 
-export * from "./financial-changes";

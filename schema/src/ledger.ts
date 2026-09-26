@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import {
-  bigint,
   boolean,
   check,
   date,
@@ -8,24 +7,21 @@ import {
   index,
   integer,
   jsonb,
-  numeric,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
-  uuid,
+  uuid
 } from "drizzle-orm/pg-core";
 import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
 import {
-  accountingBooks,
   accountingPeriods,
   classes,
   departments,
   locations,
   paymentCards,
-  projects,
+  projects
 } from "./core";
 import { documents } from "./documents";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
@@ -106,11 +102,7 @@ export const journalEntries = pgTable(
   },
   (t): PgTableExtraConfigValue[] => [
     uniqueIndex("journal_entries_org_id_id_unique").on(t.orgId, t.id),
-    foreignKey({
-      name: "journal_entries_book_id_fkey",
-      columns: [t.orgId, t.bookId],
-      foreignColumns: [accountingBooks.orgId, accountingBooks.id],
-    }),
+
     foreignKey({
       name: "journal_entries_subsidiary_id_fkey",
       columns: [t.orgId, t.subsidiaryId],
@@ -331,71 +323,6 @@ export const journalLines = pgTable(
       .on(t.orgId)
       .where(sql`${t.fxRate} <> 1`),
     check("jl_nonzero", sql`${t.amount} <> 0`),
-  ],
-);
-
-/**
- * Derived GL aggregate: per (org, account, book, posting month, subsidiary)
- * debit and credit totals over posted+reversed entries. Maintained by the
- * order-independent journal triggers (entry insert/status-flip/date-move plus
- * per-line DML — see 0001_baseline.sql openbooks_gl_activity_*), so bulk
- * copies that interleave entries and lines still count each line exactly
- * once. Statement engines read whole months from here and top up boundary
- * slivers from the lines. NEVER written by application code:
- * openbooks_gl_activity_rebuild(org) is the only sanctioned repair path, and
- * backups/sandbox clones exclude the table so the triggers rebuild it during
- * row copy.
- */
-export const glMonthActivity = pgTable(
-  "gl_month_activity",
-  {
-    orgId: orgRef(),
-    accountId: uuid("account_id").notNull(),
-    /** The entry's accounting book — statements always read one book at a time. */
-    bookId: uuid("book_id").notNull(),
-    /** First day of the entry's posting month (date_trunc('month', …)). */
-    month: date("month").notNull(),
-    subsidiaryId: uuid("subsidiary_id").notNull(),
-    debitTotal: money("debit_total").notNull().default("0"),
-    creditTotal: money("credit_total").notNull().default("0"),
-    lineCount: bigint("line_count", { mode: "number" }).notNull().default(0),
-  },
-  (t) => [
-    primaryKey({ columns: [t.orgId, t.accountId, t.bookId, t.month, t.subsidiaryId] }),
-  ],
-);
-
-/**
- * Derived payment-behaviour rollup: per (org, control-account class,
- * settlement day, party), how many settlements happened and the sum and sum of
- * squares of the days each took. Maintained by the applications trigger (see
- * 0001_baseline.sql openbooks_party_payment_stats*).
- *
- * Sufficient statistics rather than an average, because averages cannot be
- * averaged: count / Σdays / Σdays² sum freely, so any trailing window is a
- * range scan and the mean and population standard deviation are reconstructed
- * exactly on read. Keyed by day so no partial-period arithmetic is needed; the
- * primary key leads with (org, class, day) so the window is a prefix scan.
- *
- * NEVER written by application code — openbooks_party_payment_stats_rebuild is
- * the repair path, and backups/sandbox clones exclude it so the trigger
- * repopulates it as the settlements are copied.
- */
-export const partyPaymentStats = pgTable(
-  "party_payment_stats",
-  {
-    orgId: orgRef(),
-    partyId: uuid("party_id").notNull(),
-    /** asset_receivable | liability_payable — the settled item's class. */
-    accountType: text("account_type").notNull(),
-    /** Posting date of the settling (payment) line. */
-    settledOn: date("settled_on").notNull(),
-    n: bigint("n", { mode: "number" }).notNull().default(0),
-    sumDays: numeric("sum_days", { precision: 38, scale: 4 }).notNull().default("0"),
-    sumDaysSq: numeric("sum_days_sq", { precision: 38, scale: 4 }).notNull().default("0"),
-  },
-  (t) => [
-    primaryKey({ columns: [t.orgId, t.accountType, t.settledOn, t.partyId] }),
   ],
 );
 

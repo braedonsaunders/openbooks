@@ -2,13 +2,12 @@ import {
   boolean,
   date,
   index,
-  integer,
   jsonb,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
-  uuid,
+  uuid
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
@@ -92,52 +91,4 @@ export const billingRequestFieldTickets = pgTable(
     ),
     index("billing_request_field_tickets_ticket").on(t.orgId, t.fieldTicketId),
   ],
-);
-
-/** Milestone / progress billing schedule. */
-export const billingSchedules = pgTable(
-  "billing_schedules",
-  {
-    id: id(),
-    orgId: orgRef(),
-    projectId: uuid("project_id").notNull(),
-    name: text("name").notNull(),
-    type: text("type"),
-    scheduledDate: date("scheduled_date"),
-    milestone: text("milestone"),
-    percentComplete: money("percent_complete"),
-    amountBilled: money("amount_billed"),
-    percentBilled: money("percent_billed"),
-    sortOrder: integer("sort_order").notNull().default(0),
-    /** Set when this milestone is drawn into a billing request. */
-    billingRequestId: uuid("billing_request_id"),
-    custom: jsonb("custom").notNull().default({}),
-    ...auditColumns,
-  },
-  (t) => [index("billing_schedules_project").on(t.orgId, t.projectId, t.sortOrder)],
-);
-
-/**
- * Persisted invoice backup package — the merged PDF (invoice + costed
- * timesheets + vendor-bill/receipt attachments) stored in the file cabinet and
- * attached to the invoice document. componentManifest is the ordered audit
- * trail of what was merged.
- */
-export const invoiceBackups = pgTable(
-  "invoice_backups",
-  {
-    id: id(),
-    orgId: orgRef(),
-    /** The invoice document this backs. */
-    documentId: uuid("document_id").notNull(),
-    billingRequestId: uuid("billing_request_id"),
-    backupType: text("backup_type").notNull(),
-    /** The merged PDF in the file cabinet. */
-    fileId: uuid("file_id").notNull(),
-    pageCount: integer("page_count"),
-    componentManifest: jsonb("component_manifest").notNull().default([]),
-    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
-    ...auditColumns,
-  },
-  (t) => [uniqueIndex("invoice_backups_document").on(t.orgId, t.documentId)],
 );

@@ -73,6 +73,3 @@ export const emailLog = pgTable(
       .where(sql`${t.deliveryKey} is not null`),
   ],
 );
-
-export type EmailLogRow = typeof emailLog.$inferSelect;
-export type EmailLogInsert = typeof emailLog.$inferInsert;
