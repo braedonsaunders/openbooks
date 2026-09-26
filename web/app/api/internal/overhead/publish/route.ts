@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { parseInternalOrgId, requestHasInternalToken } from '../../../../../lib/internal-token'
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     if (e instanceof OverheadPublishError) {
-      return NextResponse.json({ error: e.message }, { status: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 })
     }
     return unexpectedServerError('internal/overhead/publish', e)
   }

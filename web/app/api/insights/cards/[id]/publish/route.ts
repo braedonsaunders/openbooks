@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -9,6 +10,19 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { loadCard } from '../../../_lib'
 
 export const runtime = 'nodejs'
+
+/**
+ * A stored card query that no longer validates refuses publish at 422 with
+ * the validation message intact. The sanitizer only carries messages on
+ * named refusals, so the message rides in one.
+ */
+class InsightPublishValidationRefusal extends Error {
+  readonly status = 422
+  constructor(message: string) {
+    super(`The query is incomplete: ${message}`)
+    this.name = 'InsightPublishValidationRefusal'
+  }
+}
 
 /**
  * Publish (or unpublish) a card. Publishing gates on insights.publish, requires
@@ -70,12 +84,7 @@ export async function POST(
         try {
           validateInsightQuery(card.query)
         } catch (e) {
-          return NextResponse.json(
-            {
-              error: `The query is incomplete: ${e instanceof Error ? e.message : 'invalid query'}`,
-            },
-            { status: 422 },
-          )
+          return apiErrorResponse(e instanceof Error ? new InsightPublishValidationRefusal(e.message) : e)
         }
       }
 

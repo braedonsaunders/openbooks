@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
       )
       return NextResponse.json({ ok: true, replayed, ...res })
     } catch (e: unknown) {
-      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryErrorStatus(e) })
+      return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) })
     }
   }
   if (!body.itemId || !isUuid(body.itemId)) return NextResponse.json({ error: 'item required' }, { status: 422 })
@@ -323,6 +324,6 @@ export async function POST(req: Request) {
     // A cross-entity inventory attempt is refused as an authorization
     // failure (403) through the shared inventory mapping, mirroring the
     // subsidiary permission gate above.
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryErrorStatus(e) })
+    return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) })
   }
 }

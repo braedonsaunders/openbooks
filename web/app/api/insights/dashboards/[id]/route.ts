@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { mutateInsight } from '@/lib/insight-mutations'
 import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
@@ -114,7 +115,7 @@ export async function PATCH(
     expectedRevision = requireDashboardRevision(body.expectedUpdatedAt)
   } catch (e) {
     if (e instanceof DashboardRevisionError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
@@ -183,7 +184,7 @@ export async function PATCH(
     return outcome
   } catch (e) {
     if (e instanceof DashboardRevisionError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
