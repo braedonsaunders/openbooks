@@ -16,7 +16,7 @@ import { Transform, type Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { createGzip } from "node:zlib";
-import { streamOrgBackup, type BackupExportStats } from "./backup.ts";
+import { beginEncryptedBackup, streamOrgBackup, type BackupExportStats } from "./backup.ts";
 import { BACKUP_FORMAT_VERSION } from "./format.ts";
 import { isUuid } from "../platform/uuid.ts";
 
@@ -68,6 +68,10 @@ export async function runLocalBackup({
   await mkdir(dirname(out), { recursive: true, mode: 0o700 });
   const partial = `${out}.partial`;
   const hash = createHash("sha256");
+  // beginEncryptedBackup refuses before any artifact exists when the data
+  // key is unset or still the placeholder.
+  const encrypted = beginEncryptedBackup();
+  hash.update(encrypted.envelopeLine);
   const gzip = createGzip({ level: 6 });
   const hasher = new Transform({
     transform(chunk, _encoding, callback) {
@@ -80,7 +84,9 @@ export async function runLocalBackup({
   let manifestExistedBeforeWrite = false;
 
   try {
-    const completed = pipeline(gzip, hasher, createWriteStream(partial, { mode: 0o600 }));
+    const archiveOut = createWriteStream(partial, { mode: 0o600 });
+    archiveOut.write(encrypted.envelopeLine);
+    const completed = pipeline(gzip, encrypted.cipher, encrypted.trailer, hasher, archiveOut);
     // Attach the sink's rejection BEFORE awaiting the producer (the same
     // invariant as the stored-backup writer): on export failure the
     // producer destroys the sink and throws, and an unattached pipeline
@@ -104,6 +110,7 @@ export async function runLocalBackup({
       format: "openbooks-local-backup-manifest",
       version: 1,
       backupFormatVersion: BACKUP_FORMAT_VERSION,
+      encrypted: true,
       orgId,
       createdAt: new Date().toISOString(),
       file: out,

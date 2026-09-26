@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createCipheriv, createHash, randomBytes, type CipherGCM } from "node:crypto";
 import { once } from "node:events";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
@@ -21,13 +21,77 @@ import {
   BACKUP_FORMAT,
   BACKUP_FORMAT_VERSION,
   BACKUP_DATA_KEY_CHECK_PLAINTEXT,
+  BACKUP_ENCRYPTION,
+  BACKUP_KEY_ID,
   DURABLE_USER_AUTH_BACKUP_TABLES,
   ORGLESS_CHILD_BACKUP_TABLES,
   ORG_SCOPED_BACKUP_EXCLUSIONS,
   backupSchemaFingerprint,
+  encodeBackupEnvelope,
   type BackupQueryable,
 } from "./format.ts";
 import { sealSecret } from "../platform/secrets.ts";
+
+/** The `.env.example` placeholder, which carries no entropy and encrypts nothing. */
+const DATA_KEY_PLACEHOLDER = "replace-me";
+
+/**
+ * Refuse a backup before any export work when the data key is missing or
+ * still the documented placeholder. The message names the remedy: without
+ * the source deployment key the archive could neither be encrypted nor ever
+ * restored.
+ */
+export function requireBackupDataKey(): void {
+  const raw = process.env.OPENBOOKS_DATA_KEY;
+  if (!raw || raw === DATA_KEY_PLACEHOLDER) {
+    throw new Error(
+      "organization backup refused: OPENBOOKS_DATA_KEY is unset or still the .env.example placeholder " +
+        `"${DATA_KEY_PLACEHOLDER}" — set OPENBOOKS_DATA_KEY to the deployment's 32-byte data key ` +
+        "(hex or base64) from the secret manager before running a backup; restore requires the same key",
+    );
+  }
+}
+
+export interface EncryptedBackupSink {
+  /** The plaintext envelope line, already newline-terminated. Write it first. */
+  envelopeLine: string;
+  /** AES-256-GCM cipher over the gzip bytes under the per-backup content key. */
+  cipher: CipherGCM;
+  /** A Transform stage that appends the GCM tag after the ciphertext. */
+  trailer: Transform;
+}
+
+/**
+ * Begin one encrypted backup: a random content key wrapped by
+ * OPENBOOKS_DATA_KEY, with the envelope line the file must start with.
+ * Pipe gzip output through `cipher` then `trailer` so the file ends with
+ * the authentication tag. Throws the named key refusal when the data key
+ * is unset or still the placeholder.
+ */
+export function beginEncryptedBackup(): EncryptedBackupSink {
+  requireBackupDataKey();
+  const contentKey = randomBytes(32);
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", contentKey, nonce);
+  const envelopeLine = encodeBackupEnvelope({
+    format: BACKUP_FORMAT,
+    version: BACKUP_FORMAT_VERSION,
+    encryption: BACKUP_ENCRYPTION,
+    keyId: BACKUP_KEY_ID,
+    nonce: nonce.toString("base64"),
+    wrappedKey: sealSecret(contentKey.toString("base64")),
+  });
+  const trailer = new Transform({
+    transform(chunk, _encoding, callback) {
+      callback(null, chunk);
+    },
+    flush(callback) {
+      this.push(cipher.getAuthTag());
+      callback();
+    },
+  });
+  return { envelopeLine, cipher, trailer };
+}
 
 /**
  * Organization backups.
@@ -36,7 +100,9 @@ import { sealSecret } from "../platform/secrets.ts";
  * org row, tenant tables (any base table with an org_id column, except the
  * explicitly non-portable cross-tenant access-grant table), org-less children,
  * and durable MFA/OIDC rows filtered through their home user. Live sessions,
- * login challenges/state/events are intentionally excluded. The export runs
+ * login challenges/state/events are intentionally excluded. The stored bytes
+ * are envelope + AES-256-GCM ciphertext + tag trailer under a per-backup
+ * content key wrapped by OPENBOOKS_DATA_KEY. The export runs
  * inside one REPEATABLE
  * READ, READ ONLY transaction so the dump is a single consistent point-in-time
  * snapshot, with the session timezone pinned to UTC so timestamptz values
@@ -224,6 +290,10 @@ async function assertForeignKeyClosure(
  */
 export async function streamOrgBackup(orgId: string, sink: Writable): Promise<BackupExportStats> {
   assertUuid(orgId);
+  // Refuse before taking the deployment lock or opening a snapshot: without
+  // the source data key the header canary cannot be sealed and the archive
+  // could never be restored.
+  requireBackupDataKey();
   const client = await longPool.connect();
   let deploymentLock = false;
   const stats: BackupExportStats = { tables: [], totalRows: 0 };
@@ -554,6 +624,11 @@ export async function executeBackupRun(runId: string): Promise<void> {
     try {
       const tmpFile = join(tmp, "backup.ndjson.gz");
       const hash = createHash("sha256");
+      // The stored object is envelope + AES-256-GCM ciphertext + tag trailer,
+      // so the bytes are opaque without the source OPENBOOKS_DATA_KEY. The
+      // hash covers the whole file, envelope included.
+      const encrypted = beginEncryptedBackup();
+      hash.update(encrypted.envelopeLine);
       const gzip = createGzip({ level: 6 });
       const hasher = new Transform({
         transform(chunk, _enc, cb) {
@@ -561,7 +636,9 @@ export async function executeBackupRun(runId: string): Promise<void> {
           cb(null, chunk);
         },
       });
-      const pipeDone = pipeline(gzip, hasher, createWriteStream(tmpFile));
+      const out = createWriteStream(tmpFile);
+      out.write(encrypted.envelopeLine);
+      const pipeDone = pipeline(gzip, encrypted.cipher, encrypted.trailer, hasher, out);
       // Attach the sink's rejection BEFORE awaiting the producer: on export
       // failure the producer destroys the sink and throws, which rejects the
       // pipeline with no other waiter — an unhandled rejection that kills

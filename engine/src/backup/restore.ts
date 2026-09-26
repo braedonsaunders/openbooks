@@ -1,20 +1,25 @@
-import { createHash } from "node:crypto";
+import { createDecipheriv, createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
+import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import pg from "pg";
 import {
   BACKUP_FORMAT,
   BACKUP_FORMAT_VERSION,
   BACKUP_DATA_KEY_CHECK_PLAINTEXT,
+  BACKUP_KEY_ID,
+  BACKUP_TAG_BYTES,
   DURABLE_USER_AUTH_BACKUP_TABLES,
   ORGLESS_BACKUP_TABLES,
   ORG_SCOPED_BACKUP_EXCLUSIONS,
   backupSchemaFingerprint,
+  decodeBackupEnvelopeLine,
+  type BackupEnvelope,
   type BackupHeaderV2,
   type BackupHeaderV3,
 } from "./format.ts";
@@ -44,6 +49,8 @@ export interface BackupArchiveInspection {
   tables: { name: string; rows: number }[];
   totalRows: number;
   spoolDir: string;
+  /** True when the file carried an encryption envelope (all new backups). */
+  encrypted: boolean;
 }
 
 export interface RestoreReport {
@@ -91,6 +98,130 @@ async function closeWriteStream(stream: ReturnType<typeof createWriteStream> | n
 }
 
 /**
+ * Read the raw first line of an archive: the plaintext envelope for an
+ * encrypted backup, binary gzip magic for a legacy one. Returns the line and
+ * its byte length (including the newline) so callers can bound the envelope.
+ */
+async function readArchiveFirstLine(archivePath: string): Promise<{ line: string; length: number }> {
+  const handle = await open(archivePath, "r");
+  try {
+    const buf = Buffer.alloc(8192);
+    const { bytesRead } = await handle.read(buf, 0, buf.length, 0);
+    const text = buf.subarray(0, bytesRead);
+    const newline = text.indexOf(0x0a);
+    if (newline === -1) return { line: text.toString("utf8"), length: bytesRead };
+    return { line: text.subarray(0, newline).toString("utf8"), length: newline + 1 };
+  } finally {
+    await handle.close();
+  }
+}
+
+export interface BackupArchiveKind {
+  encrypted: boolean;
+  /** Envelope version for encrypted archives, inner header version for legacy. */
+  version: number | null;
+}
+
+/**
+ * Identify an archive without a database: encrypted new backups versus
+ * legacy plaintext ones. The restore CLI uses this to print the
+ * unencrypted-file notice before restoring.
+ */
+export async function peekBackupArchiveKind(archivePath: string): Promise<BackupArchiveKind> {
+  if (!archivePath.startsWith("/")) throw new Error("backup archive path must be absolute");
+  const { line } = await readArchiveFirstLine(archivePath);
+  const envelope = decodeBackupEnvelopeLine(line);
+  if (envelope) return { encrypted: true, version: envelope.version };
+  const gunzip = createReadStream(archivePath).pipe(createGunzip());
+  const inner = createInterface({ input: gunzip, crlfDelay: Infinity });
+  try {
+    for await (const first of inner) {
+      if (!first) continue;
+      try {
+        const parsed: unknown = JSON.parse(first);
+        if (plainObject(parsed) && typeof parsed.version === "number") {
+          return { encrypted: false, version: parsed.version };
+        }
+      } catch {
+        // Not a parseable header; report unknown below.
+      }
+      return { encrypted: false, version: null };
+    }
+  } catch {
+    return { encrypted: false, version: null };
+  } finally {
+    inner.close();
+    gunzip.destroy();
+  }
+  return { encrypted: false, version: null };
+}
+
+/**
+ * Decrypt an enveloped archive to a temp gzip file, authenticating every
+ * byte. The GCM tag trailer is read first so streaming decryption verifies
+ * before any row is parsed; a single modified byte refuses by name here
+ * instead of surfacing as a downstream decompression error. The caller must
+ * run `cleanup` afterwards.
+ */
+async function decryptBackupArchive(archivePath: string): Promise<{
+  plaintextPath: string;
+  cleanup: () => Promise<void>;
+  envelope: BackupEnvelope;
+}> {
+  const { line, length: headerLength } = await readArchiveFirstLine(archivePath);
+  const envelope = decodeBackupEnvelopeLine(line);
+  if (!envelope) throw new Error("not an encrypted OpenBooks organization backup");
+  if (envelope.keyId !== BACKUP_KEY_ID) {
+    throw new Error(
+      `unsupported backup key id ${JSON.stringify(envelope.keyId)}; this build restores key id ${JSON.stringify(BACKUP_KEY_ID)} — upgrade to a release that knows the archiving key`,
+    );
+  }
+  const unwrapped = unsealSecret(envelope.wrappedKey);
+  if (unwrapped === null) {
+    throw new Error(
+      "backup content-key unwrap failed: OPENBOOKS_DATA_KEY is not the source deployment key, or the envelope was tampered",
+    );
+  }
+  const contentKey = Buffer.from(unwrapped, "base64");
+  const nonce = Buffer.from(envelope.nonce, "base64");
+  if (contentKey.length !== 32 || nonce.length !== 12) {
+    throw new Error("backup encryption envelope carries an invalid key or nonce; the envelope was tampered");
+  }
+  const size = (await stat(archivePath)).size;
+  if (size < headerLength + BACKUP_TAG_BYTES + 1) {
+    throw new Error("backup archive is truncated: no ciphertext beyond the encryption envelope");
+  }
+  const tag = Buffer.alloc(BACKUP_TAG_BYTES);
+  const handle = await open(archivePath, "r");
+  try {
+    await handle.read(tag, 0, tag.length, size - tag.length);
+  } finally {
+    await handle.close();
+  }
+  const dir = await mkdtemp(join(tmpdir(), "openbooks-backup-decrypt-"));
+  const plaintextPath = join(dir, "backup.ndjson.gz");
+  const cleanup = () => rm(dir, { recursive: true, force: true });
+  const decipher = createDecipheriv("aes-256-gcm", contentKey, nonce);
+  decipher.setAuthTag(tag);
+  try {
+    await pipeline(
+      createReadStream(archivePath, { start: headerLength, end: size - BACKUP_TAG_BYTES - 1 }),
+      decipher,
+      createWriteStream(plaintextPath, { mode: 0o600 }),
+    );
+  } catch (error) {
+    await cleanup();
+    if (error instanceof Error && /authenticate|unsupported state/i.test(error.message)) {
+      throw new Error(
+        "backup authentication failed: the archive was modified after its manifest hash was recorded, or OPENBOOKS_DATA_KEY is not the source deployment key",
+      );
+    }
+    throw error;
+  }
+  return { plaintextPath, cleanup, envelope };
+}
+
+/**
  * Authenticate and fully validate an archive before opening a database
  * transaction. Row JSON is spooled verbatim by table so numeric precision is
  * never round-tripped through JavaScript and restore memory stays bounded.
@@ -113,8 +244,21 @@ export async function inspectBackupArchive(args: {
     throw new Error(`backup SHA-256 mismatch: expected ${args.expectedSha256}, received ${actualSha256}`);
   }
 
+  // Encrypted archives authenticate and decrypt to a temp gzip first, so a
+  // modified byte refuses by name before any row is parsed. Legacy plaintext
+  // archives stream straight from the file.
+  const { line: firstLine } = await readArchiveFirstLine(args.archivePath);
+  const encrypted = decodeBackupEnvelopeLine(firstLine) !== null;
+  let plaintextPath = args.archivePath;
+  let decryptCleanup: (() => Promise<void>) | null = null;
+  if (encrypted) {
+    const decrypted = await decryptBackupArchive(args.archivePath);
+    plaintextPath = decrypted.plaintextPath;
+    decryptCleanup = decrypted.cleanup;
+  }
+
   const lines = createInterface({
-    input: createReadStream(args.archivePath).pipe(createGunzip()),
+    input: createReadStream(plaintextPath).pipe(createGunzip()),
     crlfDelay: Infinity,
   });
   let header: BackupHeaderV3 | BackupHeaderV2 | LegacyHeader | null = null;
@@ -223,6 +367,7 @@ export async function inspectBackupArchive(args: {
     }
   } finally {
     await closeWriteStream(currentSink).catch(() => {});
+    if (decryptCleanup) await decryptCleanup().catch(() => {});
   }
 
   if (!header) throw new Error("backup is empty");
@@ -250,6 +395,7 @@ export async function inspectBackupArchive(args: {
     tables: footer.tables,
     totalRows: footer.totalRows,
     spoolDir: args.spoolDir,
+    encrypted,
   };
 }
 
@@ -980,6 +1126,7 @@ export interface LocalBackupManifest {
   sha256: string;
   rowCount?: number;
   tableCount?: number;
+  encrypted?: boolean;
 }
 
 export async function readLocalBackupManifest(path: string): Promise<LocalBackupManifest> {

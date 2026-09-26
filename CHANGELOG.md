@@ -8,6 +8,22 @@ changes; each release documents required operator action.
 
 No migrations.
 
+### Backups
+
+- **Operator action: none for new backups; old backups remain readable.**
+  Organization backup archives are now encrypted: one JSON envelope line
+  (format version 3, key id `v1`, nonce, content key wrapped by
+  `OPENBOOKS_DATA_KEY`), AES-256-GCM ciphertext of the gzip stream, and the
+  authentication tag as the trailer. A new backup object is opaque without
+  the source data key and is not readable by `zcat`. Restore reads encrypted
+  v3 natively and still reads unencrypted v1/v2 archives under the existing
+  explicit `--allow-legacy-*` flags; the restore CLI prints a
+  `backup-legacy-unencrypted` notice naming any file without an envelope. A
+  backup refuses before writing anything when `OPENBOOKS_DATA_KEY` is unset
+  or still the `.env.example` placeholder — set it from the secret manager;
+  restore requires the same key. Keep the key with the same care as the
+  archive.
+
 ### Bank feeds
 
 - **Operator action: SFTP import schedules created before the expected-account

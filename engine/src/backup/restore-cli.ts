@@ -18,7 +18,7 @@
  */
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { restoreOrgBackup, readLocalBackupManifest } from "./restore.ts";
+import { restoreOrgBackup, readLocalBackupManifest, peekBackupArchiveKind } from "./restore.ts";
 
 const args = new Map(
   process.argv
@@ -54,6 +54,13 @@ if (existsSync(reportPath)) throw new Error(`refusing to overwrite restore repor
 const manifest = manifestPath ? await readLocalBackupManifest(manifestPath) : null;
 if (manifest && manifest.orgId !== expectedOrgId) {
   throw new Error(`manifest organization ${manifest.orgId} does not match --org ${expectedOrgId}`);
+}
+const kind = await peekBackupArchiveKind(input);
+if (!kind.encrypted) {
+  console.log(
+    `backup-legacy-unencrypted: ${input} has no encryption envelope (format v${kind.version ?? "unknown"}) — ` +
+      "restoring a pre-encryption archive whose bytes are readable without a key; new backups are AES-256-GCM encrypted",
+  );
 }
 const report = await restoreOrgBackup({
   archivePath: input,
