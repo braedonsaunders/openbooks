@@ -31,7 +31,7 @@ function publishedDigests() {
     'git',
     // --no-abbrev: the batch responses echo full blob SHAs, and attribution
     // below keys on them; abbreviated raw SHAs would never match back.
-    ['log', 'main', '--raw', '--no-abbrev', '--format=%H', '--', 'schema/migrations/generated'],
+    ['log', spawnSync('git', ['rev-parse', '--verify', 'main'], { cwd: ROOT }).status === 0 ? 'main' : 'origin/main', '--raw', '--no-abbrev', '--format=%H', '--', 'schema/migrations/generated'],
     { cwd: ROOT, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 },
   )
   const blobs = new Map() // blobSha -> Set<filename>
