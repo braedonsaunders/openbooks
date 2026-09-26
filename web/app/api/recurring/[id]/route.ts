@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -139,10 +140,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     });
     return NextResponse.json(gen);
   } catch (e) {
-    if (e instanceof RecurringError) return NextResponse.json({ error: e.message }, { status: e.status });
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "generation failed" },
-      { status: 422 },
-    );
+    if (e instanceof RecurringError) return apiErrorResponse(e);
+    return apiErrorResponse(e);
   }
 }

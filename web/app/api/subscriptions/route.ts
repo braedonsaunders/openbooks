@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
@@ -239,7 +240,7 @@ export async function GET() {
   try {
     mrr = await subscriptionMrrInOrgCurrency(orgId, orgCurrency, subs.rows as SubscriptionMrrRow[]);
   } catch (e) {
-    if (e instanceof SubscriptionError) return NextResponse.json({ error: e.message }, { status: e.status });
+    if (e instanceof SubscriptionError) return apiErrorResponse(e);
     throw e;
   }
   return NextResponse.json({ plans: plans.rows, subscriptions, mrr });
@@ -587,7 +588,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
-    if (e instanceof SubscriptionError) return NextResponse.json({ error: e.message }, { status: e.status });
+    if (e instanceof SubscriptionError) return apiErrorResponse(e);
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
     throw e;
   }

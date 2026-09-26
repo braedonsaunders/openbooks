@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
 import { advanceCadence, recurringTemplateScopeFilter } from "@openbooks/engine/src/billing/recurring.ts";
@@ -9,6 +10,20 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents.ts";
 
 export const runtime = "nodejs";
+
+/**
+ * Malformed recurrence input answers 400 on this route (the engine names
+ * these 422 by default, but the route's idiom for bad schedule input is
+ * 400, matching the endsOn check below). The message rides in a named
+ * refusal so the sanitizer carries it.
+ */
+class RecurringInputRefusal extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "RecurringInputRefusal";
+  }
+}
 
 const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"] as const;
 
@@ -74,7 +89,7 @@ export async function POST(req: Request) {
   const nextRunOn = body.nextRunOn ?? await businessToday(authz.user.orgId);
   try { advanceCadence(nextRunOn, body.cadence, body.cron); }
   catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "invalid recurrence" }, { status: 400 });
+    return apiErrorResponse(error instanceof Error ? new RecurringInputRefusal(error.message) : error);
   }
   if (body.endsOn && body.endsOn < nextRunOn) {
     return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });

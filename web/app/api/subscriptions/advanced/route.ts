@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
@@ -231,11 +232,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (error) {
-    if (error instanceof AdvancedSubscriptionError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof AdvancedSubscriptionError) return apiErrorResponse(error);
     // Defence in depth: the engine asserts unrestricted scope itself, so a
     // restricted caller reaching past the route gate still gets the named
     // 403 instead of an anonymous 500.
-    if (error instanceof UnrestrictedScopeError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof UnrestrictedScopeError) return apiErrorResponse(error);
     throw error;
   }
 }
