@@ -52,6 +52,9 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_compliance_findings", domain: "employments", linkage: "direct" },
   { table: "hrm_employment_classifications", domain: "employments", linkage: "direct" },
   { table: "hrm_processes", domain: "employments", linkage: "direct" },
+  { table: "hrm_process_steps", domain: "employments", linkage: "transitive" },
+  { table: "employee_roles", domain: "employments", linkage: "direct" },
+  { table: "reporting_relationships", domain: "employments", linkage: "direct" },
   { table: "hrm_employment_change_requests", domain: "change_requests", linkage: "direct" },
   { table: "hrm_leave_requests", domain: "leave", linkage: "direct" },
   { table: "hrm_absences", domain: "leave", linkage: "direct" },
@@ -144,13 +147,6 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "token_hash is credential material and must stay denied when gathered.",
   },
   {
-    table: "hrm_process_steps",
-    reason:
-      "SUBJECT DATA — gatherer pending: steps of the subject's processes " +
-      "(owner_party_id/done_by), transitive under gathered hrm_processes. " +
-      "Attachment content needs a secrecy review before inclusion.",
-  },
-  {
     table: "hrm_succession_plans",
     reason:
       "SUBJECT DATA — gatherer pending: succession plans where the subject " +
@@ -162,13 +158,6 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason:
       "SUBJECT DATA — gatherer pending: the subject's pay component values " +
       "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "employee_roles",
-    reason:
-      "SUBJECT DATA — gatherer pending: role assignments (party_id) " +
-      "including birth_date, which is held PII and exports with the record " +
-      "when gathered. Needs an employments-domain gatherer.",
   },
   {
     table: "entitlement_ledger",
@@ -248,12 +237,6 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason:
       "SUBJECT DATA — gatherer pending: the subject's schedule pattern " +
       "(employee_party_id). Needs a payroll/time-domain gatherer.",
-  },
-  {
-    table: "reporting_relationships",
-    reason:
-      "SUBJECT DATA — gatherer pending: the manager chain " +
-      "(employment_id/manager_employment_id). Needs an employments-domain gatherer.",
   },
   {
     table: "crew_time_batch_lines",

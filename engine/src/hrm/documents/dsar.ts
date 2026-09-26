@@ -516,6 +516,36 @@ const CONTACTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
+// Employment-file subject records. Steps gather transitively under the
+// subject's gathered hrm_processes (owner/done_by name who does what on
+// the subject's own file, so the whole step file exports): attachment_id
+// is a cabinet-file reference only — no bytes are fetched, so attachment
+// content stays out while the subject can still name the record. Roles
+// carry the subject's own assignment row (birth_date exports with the
+// record — it is held PII on the subject's file). The manager chain
+// gathers both directions (as report and as manager).
+const PROCESS_STEPS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "process_id",
+  "created_by",
+  "updated_by",
+]);
+
+const EMPLOYEE_ROLES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const REPORTING_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employment_id",
+  "manager_employment_id",
+  "created_by",
+  "updated_by",
+]);
+
 export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
   const claimed = await withOrgTransaction(orgId, () =>
@@ -658,6 +688,30 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           from hrm_processes
          where org_id = ${orgId} and employment_id in (${subjectEmployments})
          order by effective_date
+      `)).rows;
+      // Steps of the subject's processes (transitive under the gathered
+      // processes above), plus the subject's own assignment row and both
+      // directions of the manager chain.
+      payload.processSteps = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("hrm_process_steps", PROCESS_STEPS_DENIED_COLUMNS)}
+          from hrm_process_steps
+         where org_id = ${orgId} and process_id in (
+           select id from hrm_processes where org_id = ${orgId} and employment_id in (${subjectEmployments})
+         )
+         order by created_at
+      `)).rows;
+      payload.employeeRoles = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("employee_roles", EMPLOYEE_ROLES_DENIED_COLUMNS)}
+          from employee_roles
+         where org_id = ${orgId} and party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.reportingRelationships = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("reporting_relationships", REPORTING_DENIED_COLUMNS)}
+          from reporting_relationships
+         where org_id = ${orgId}
+           and (employment_id in (${subjectEmployments}) or manager_employment_id in (${subjectEmployments}))
+         order by effective_from
       `)).rows;
     });
 

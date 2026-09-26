@@ -202,26 +202,14 @@ async function seedSurvey(h: Harness): Promise<void> {
 }
 
 async function seedClock(h: Harness): Promise<void> {
-  const { org } = h;
   const eventId = randomUUID();
-  await db.execute(sql`
-    insert into time_clock_events (id, org_id, employee_party_id, kind, occurred_at, client_event_id, geo)
-    values (${eventId}, ${org.orgId}, ${h.partyId}, 'clock_in', now(), ${randomUUID()}, '{"lat": 1}'::jsonb)
-  `);
+  await db.execute(sql`insert into time_clock_events (id, org_id, employee_party_id, kind, occurred_at, client_event_id, geo) values (${eventId}, ${h.org.orgId}, ${h.partyId}, 'clock_in', now(), ${randomUUID()}, '{"lat": 1}'::jsonb)`);
   const { fileId } = await storeCabinetFile(db, {
-    orgId: org.orgId,
-    recordTable: "time_clock_events",
-    recordId: eventId,
-    groupLabel: "HR Clock",
-    filename: "photo.jpg",
-    contentType: "image/jpeg",
-    bytes: Buffer.from("fake-photo-bytes"),
-    createdBy: null,
-    viewerUserIds: [h.adminId],
+    orgId: h.org.orgId, recordTable: "time_clock_events", recordId: eventId, groupLabel: "HR Clock",
+    filename: "photo.jpg", contentType: "image/jpeg", bytes: Buffer.from("fake-photo-bytes"),
+    createdBy: null, viewerUserIds: [h.adminId],
   });
-  await db.execute(sql`
-    update time_clock_events set photo_file_id = ${fileId} where org_id = ${org.orgId} and id = ${eventId}
-  `);
+  await db.execute(sql`update time_clock_events set photo_file_id = ${fileId} where org_id = ${h.org.orgId} and id = ${eventId}`);
 }
 
 async function seedPayrollIdentity(h: Harness): Promise<void> {
@@ -238,32 +226,28 @@ async function seedPayrollIdentity(h: Harness): Promise<void> {
 }
 
 async function seedPerformance(h: Harness): Promise<void> {
-  const { org } = h;
   const templateId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_review_templates (id, org_id, name) values (${templateId}, ${org.orgId}, 'Annual')
-  `);
+  await db.execute(sql`insert into hrm_review_templates (id, org_id, name) values (${templateId}, ${h.org.orgId}, 'Annual')`);
   const cycleId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_review_cycles (id, org_id, template_id, name, period_start_on, period_end_on)
-    values (${cycleId}, ${org.orgId}, ${templateId}, '2026', '2026-01-01'::date, '2026-12-31'::date)
-  `);
+  await db.execute(sql`insert into hrm_review_cycles (id, org_id, template_id, name, period_start_on, period_end_on) values (${cycleId}, ${h.org.orgId}, ${templateId}, '2026', '2026-01-01'::date, '2026-12-31'::date)`);
   const reviewId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_reviews (id, org_id, cycle_id, employment_id, subject_party_id, reviewer_party_id, kind, status, shared_at, submitted_at)
-    values (${reviewId}, ${org.orgId}, ${cycleId}, ${h.employmentId}, ${h.partyId}, ${h.partyId}, 'self', 'shared', now(), now())
-  `);
-  await db.execute(sql`
-    insert into hrm_review_answers (org_id, review_id, section_title, question_prompt, position, answer_kind, text)
-    values (${org.orgId}, ${reviewId}, 'Impact', 'What shipped?', 0, 'text', 'Everything')
-  `);
+  await db.execute(sql`insert into hrm_reviews (id, org_id, cycle_id, employment_id, subject_party_id, reviewer_party_id, kind, status, shared_at, submitted_at) values (${reviewId}, ${h.org.orgId}, ${cycleId}, ${h.employmentId}, ${h.partyId}, ${h.partyId}, 'self', 'shared', now(), now())`);
+  await db.execute(sql`insert into hrm_review_answers (org_id, review_id, section_title, question_prompt, position, answer_kind, text) values (${h.org.orgId}, ${reviewId}, 'Impact', 'What shipped?', 0, 'text', 'Everything')`);
   const goalId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_goals (id, org_id, employment_id, title) values (${goalId}, ${org.orgId}, ${h.employmentId}, 'Ship')
-  `);
-  await db.execute(sql`
-    insert into hrm_goal_updates (org_id, goal_id, progress_percent, note) values (${org.orgId}, ${goalId}, 50, 'halfway')
-  `);
+  await db.execute(sql`insert into hrm_goals (id, org_id, employment_id, title) values (${goalId}, ${h.org.orgId}, ${h.employmentId}, 'Ship')`);
+  await db.execute(sql`insert into hrm_goal_updates (org_id, goal_id, progress_percent, note) values (${h.org.orgId}, ${goalId}, 50, 'halfway')`);
+}
+
+async function seedEmploymentExtras(h: Harness): Promise<void> {
+  const templateId = randomUUID();
+  await db.execute(sql`insert into hrm_process_templates (id, org_id, kind, name) values (${templateId}, ${h.org.orgId}, 'onboarding', 'Onboarding')`);
+  const processId = randomUUID();
+  await db.execute(sql`insert into hrm_processes (id, org_id, template_id, employment_id, kind, effective_date) values (${processId}, ${h.org.orgId}, ${templateId}, ${h.employmentId}, 'onboarding', '2026-01-05'::date)`);
+  await db.execute(sql`insert into hrm_process_steps (org_id, process_id, position, title, owner_kind, due_on) values (${h.org.orgId}, ${processId}, 0, 'Read the handbook', 'employee', '2026-01-12'::date)`);
+  await db.execute(sql`insert into employee_roles (org_id, party_id, birth_date, job_title) values (${h.org.orgId}, ${h.partyId}, '1990-05-01'::date, 'Engineer')`);
+  const managerEmploymentId = randomUUID();
+  await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${managerEmploymentId}, ${h.org.orgId}, ${h.otherPartyId}, ${h.org.subsidiaryId}, 1)`);
+  await db.execute(sql`insert into reporting_relationships (org_id, employment_id, manager_employment_id, relationship_id, effective_from) values (${h.org.orgId}, ${h.employmentId}, ${managerEmploymentId}, ${randomUUID()}, '2026-01-01'::date)`);
 }
 
 test("an export carries every new domain and the manifest names them all", { skip: !DB }, async () => {
@@ -276,6 +260,7 @@ test("an export carries every new domain and the manifest names them all", { ski
     await seedSurvey(h);
     await seedClock(h);
     await seedPartyExtras(h);
+    await seedEmploymentExtras(h);
     await seedPayrollIdentity(h);
     await seedPerformance(h);
     const prior = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
@@ -302,6 +287,9 @@ test("an export carries every new domain and the manifest names them all", { ski
       clockEvents: unknown[];
       addresses: unknown[];
       contacts: unknown[];
+      processSteps: unknown[];
+      employeeRoles: unknown[];
+      reportingRelationships: unknown[];
       taxCertificates: { certificate_key: string }[];
       payrollProfiles: Record<string, unknown>[];
       workLocationAllocations: Record<string, unknown>[];
@@ -328,6 +316,9 @@ test("an export carries every new domain and the manifest names them all", { ski
       ["clockEvents", 1],
       ["addresses", 1],
       ["contacts", 1],
+      ["processSteps", 1],
+      ["employeeRoles", 1],
+      ["reportingRelationships", 1],
       ["goals", 1],
       ["reviews", 1],
       ["reviewAnswers", 1],
