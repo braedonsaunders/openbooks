@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -78,10 +79,7 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     if (error instanceof AppError || error instanceof ApplicationError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      )
+      return apiErrorResponse(error)
     throw error
   }
 }

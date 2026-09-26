@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
@@ -52,10 +53,7 @@ export async function PATCH(
     }
   } catch (error) {
     if (error instanceof AppError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      )
+      return apiErrorResponse(error)
     throw error
   }
   return NextResponse.json({ ok: true })
@@ -82,10 +80,7 @@ export async function DELETE(
     }
   } catch (error) {
     if (error instanceof AppError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      )
+      return apiErrorResponse(error)
     throw error
   }
   return NextResponse.json({ ok: true })
