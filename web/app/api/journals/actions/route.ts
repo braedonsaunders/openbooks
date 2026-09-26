@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -119,12 +120,12 @@ export async function POST(req: Request) {
     // Posting refusals (kernel rules or unconfigured org control accounts)
     // and refused approval routings (already rolled back) are request-state
     // failures, not server defects.
-    const status =
+    if (
       e instanceof PostingError ||
       e instanceof ControlAccountsIncompleteError ||
       e instanceof ApprovalRoutingError
-        ? 422
-        : 500
-    return NextResponse.json({ error: (e as Error).message }, { status })
+    )
+      return apiErrorResponse(e, { safeStatus: 422 })
+    return apiErrorResponse(e)
   }
 }
