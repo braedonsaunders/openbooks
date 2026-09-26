@@ -495,6 +495,8 @@ export const NS_REMEMBRANCE_ALTERNATE_DAY: PayrollRemembranceAlternateDayRule = 
   counting: "entitled_to_pay",
   businessClassFactKey: "ns_remembrance_business_class",
   exemptBusinessClasses: NS_REMEMBRANCE_EXEMPT_BUSINESS_CLASSES,
+  // The Act binds Nova Scotia employment: only a CA-NS labour jurisdiction can ever accrue the bank.
+  jurisdictions: ["CA-NS"],
   citation: "Remembrance Day Act (Nova Scotia), RSNS 1989 c 396 — alternate day off with regular pay",
 };
 

@@ -1107,6 +1107,28 @@ async function flagMissingOpeningBalances(args: {
 }
 
 /**
+ * Whether the alternate-day carry-in question applies to this employee. The
+ * bank is seeded org-wide wherever the country pack declares the
+ * work-triggered grant, but it accrues only under the declaration's
+ * jurisdictions — an employee governed elsewhere can never hold a balance,
+ * so asking for one is noise. Scoped from the pack declaration
+ * (`alternateDayGrant.jurisdictions` against the resolved labour
+ * jurisdiction, override included), never a province literal: a second
+ * jurisdiction's grant extends the declaration and flows here with no
+ * branch.
+ *
+ * Keeps the current behavior on every input the declaration does not pin:
+ * a pack declaring no grant (or no scope) warns as before, and an
+ * unresolvable labour jurisdiction is left out — the run refuses it by name.
+ */
+function alternateDayCarryInApplies(person: ScopeRow): boolean {
+  const scope = PAYROLL_COUNTRY_PACKS[person.country]?.alternateDayGrant?.jurisdictions;
+  if (!scope) return true;
+  if (labourJurisdictionProblem(person.country, person.labour_jurisdiction)) return false;
+  return scope.includes(jurisdictionKey(person.country, person.province, person.labour_jurisdiction));
+}
+
+/**
  * The bank carry-ins: a plan whose FIRST run in this org's history is happening
  * now, for an employee who demonstrably predates it.
  *
@@ -1153,8 +1175,8 @@ async function flagMissingEntitlementOpenings(args: {
   if (adopted.size === 0) return;
 
   // Plans no committed run has ever moved: this run is the plan's first.
-  const virgin = (await db.execute<{ id: string; code: string; name: string }>(sql`
-    select pl.id, pl.code, pl.name from entitlement_plans pl
+  const virgin = (await db.execute<{ id: string; code: string; name: string; system_key: string | null }>(sql`
+    select pl.id, pl.code, pl.name, pl.system_key from entitlement_plans pl
      where pl.org_id = ${orgId} and pl.is_active
        and not exists (
          select 1 from entitlement_ledger l
@@ -1172,8 +1194,16 @@ async function flagMissingEntitlementOpenings(args: {
   const have = new Set(openings.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
   for (const plan of virgin.rows) {
+    // The alternate-day bank accrues only under the declaring jurisdictions:
+    // name it only for employees whose resolved labour jurisdiction the pack
+    // declaration covers, so an Ontario-governed hire is never asked for a
+    // balance no run could grant them.
+    const applies =
+      plan.system_key === "stat_holiday_alternate"
+        ? (person: ScopeRow) => alternateDayCarryInApplies(person)
+        : () => true;
     const missing = people.filter(
-      (p) => adopted.has(p.employee_party_id) && !have.has(`${plan.id}:${p.employee_party_id}`),
+      (p) => applies(p) && adopted.has(p.employee_party_id) && !have.has(`${plan.id}:${p.employee_party_id}`),
     );
     if (missing.length === 0) continue;
     flag("warning", "employee.noOpeningEntitlement", missing, {
