@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { REPORT_ENTITY_MAP, bindPayStubIncomeTaxKeys, bindPayStubSocialKeys, customRecordEntities, validateCustomQuery, type ReportEntity, type ReportCustomQuery } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, bindPayStubIncomeTaxKeys, bindPayStubSocialKeys, customRecordEntities, ReportQueryValidationError, validateCustomQuery, type ReportEntity, type ReportCustomQuery } from '@openbooks/reports'
 import { eiColumnSystemKeys, employeeSocialInsuranceSystemKeys, incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/packs.ts'
 import { can, type Authz } from './authz'
 import { applyPayrollConfidentialityToCatalog } from './payroll-confidentiality'
@@ -59,11 +59,11 @@ export function validateCatalogReportQuery(query: unknown, catalog: Record<strin
   const raw = query as ReportCustomQuery | null
   if (raw?.entity?.startsWith('custom:')) {
     const entity = Object.hasOwn(catalog, raw.entity) ? catalog[raw.entity] : null
-    if (!entity) throw new Error('Custom record report source is unavailable')
+    if (!entity) throw new ReportQueryValidationError('Custom record report source is unavailable')
     const fields = [...(raw.columns ?? []), ...(raw.breakouts ?? []).map(b => b.column),
       ...(raw.measures ?? []).flatMap(m => m.column ? [m.column] : []),
       ...(raw.sorts ?? []).map(s => s.column), ...(raw.groupBy ? [raw.groupBy] : [])]
-    if (fields.some(f => !entity.columns.some(c => c.key === f))) throw new Error('A custom record report field changed or is unavailable; review the report definition')
+    if (fields.some(f => !entity.columns.some(c => c.key === f))) throw new ReportQueryValidationError('A custom record report field changed or is unavailable; review the report definition')
   }
   return validateCustomQuery(query, catalog)
 }

@@ -13,6 +13,19 @@
 
 import { lastDayOfMonth, utcCivilDate } from './fiscal-calendar'
 
+/**
+ * Schedule input validation the sanitizer can type-refuse: every message is
+ * operator-actionable setup feedback (bad cadence, timezone, recipient,
+ * filter bound) carrying no internals. The next-run math keeps plain Errors
+ * so exhausted searches stay generic 500s.
+ */
+export class ReportScheduleValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ReportScheduleValidationError'
+  }
+}
+
 export type ReportCadence = 'daily' | 'weekly' | 'monthly'
 export const REPORT_CADENCES: ReportCadence[] = ['daily', 'weekly', 'monthly']
 
@@ -79,7 +92,7 @@ export function validateCadenceInput(raw: {
 }): CadenceInput {
   const cadence = String(raw.cadence ?? '')
   if (!REPORT_CADENCES.includes(cadence as ReportCadence)) {
-    throw new Error(`Invalid cadence: ${cadence}`)
+    throw new ReportScheduleValidationError(`Invalid cadence: ${cadence}`)
   }
   const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
     const n = Number(v)
@@ -88,13 +101,13 @@ export function validateCadenceInput(raw: {
   }
   const timezone = String(raw.timezone ?? 'UTC').trim() || 'UTC'
   if (timezone.length > REPORT_SCHEDULE_LIMITS.timezoneChars) {
-    throw new Error('Timezone is too long')
+    throw new ReportScheduleValidationError('Timezone is too long')
   }
   // Probe the IANA zone — Intl throws on unknown zones.
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: timezone })
   } catch {
-    throw new Error(`Unknown timezone: ${timezone}`)
+    throw new ReportScheduleValidationError(`Unknown timezone: ${timezone}`)
   }
   return {
     cadence: cadence as ReportCadence,
@@ -236,11 +249,11 @@ export function normalizeReportRecipientEmails(values: readonly string[]): strin
       value.length > REPORT_SCHEDULE_LIMITS.recipientEmailChars ||
       !EMAIL_PATTERN.test(value)
     ) {
-      throw new Error(`Invalid report recipient email address: ${value || '(blank)'}`)
+      throw new ReportScheduleValidationError(`Invalid report recipient email address: ${value || '(blank)'}`)
     }
     normalized.add(value)
     if (normalized.size > REPORT_SCHEDULE_LIMITS.recipientCount) {
-      throw new Error(
+      throw new ReportScheduleValidationError(
         `Scheduled reports may have at most ${REPORT_SCHEDULE_LIMITS.recipientCount} recipients.`,
       )
     }
@@ -253,20 +266,20 @@ export function assertBoundedReportFilters(
   value: unknown,
 ): asserts value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Report filters must be a JSON object.')
+    throw new ReportScheduleValidationError('Report filters must be a JSON object.')
   }
 
   let encoded: string
   try {
     encoded = JSON.stringify(value)
   } catch {
-    throw new Error('Report filters must be JSON serializable.')
+    throw new ReportScheduleValidationError('Report filters must be JSON serializable.')
   }
   if (encoded.length > REPORT_SCHEDULE_LIMITS.filtersChars) {
-    throw new Error('Report filters are too large.')
+    throw new ReportScheduleValidationError('Report filters are too large.')
   }
   if (new TextEncoder().encode(encoded).byteLength > REPORT_SCHEDULE_LIMITS.filtersBytes) {
-    throw new Error('Report filters are too large.')
+    throw new ReportScheduleValidationError('Report filters are too large.')
   }
 
   let nodes = 0
@@ -275,10 +288,10 @@ export function assertBoundedReportFilters(
     const current = stack.pop()!
     nodes += 1
     if (nodes > REPORT_SCHEDULE_LIMITS.filtersNodes) {
-      throw new Error('Report filters contain too many values.')
+      throw new ReportScheduleValidationError('Report filters contain too many values.')
     }
     if (current.depth > REPORT_SCHEDULE_LIMITS.filtersDepth) {
-      throw new Error('Report filters are nested too deeply.')
+      throw new ReportScheduleValidationError('Report filters are nested too deeply.')
     }
     if (!current.value || typeof current.value !== 'object') continue
 
@@ -291,7 +304,7 @@ export function assertBoundedReportFilters(
 
     for (const [key, entry] of Object.entries(current.value as Record<string, unknown>)) {
       if (key.length > REPORT_SCHEDULE_LIMITS.filterKeyChars || UNSAFE_OBJECT_KEYS.has(key)) {
-        throw new Error('Report filters contain an invalid key.')
+        throw new ReportScheduleValidationError('Report filters contain an invalid key.')
       }
       stack.push({ value: entry, depth: current.depth + 1 })
     }

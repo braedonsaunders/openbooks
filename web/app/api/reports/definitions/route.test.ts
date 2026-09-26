@@ -197,10 +197,8 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:catalog',
-    `export async function validateOrgReportQuery(_gate, query) {
-       if (!query || typeof query !== 'object' || Array.isArray(query)) throw new Error('Invalid report query')
-       return query
-     }`,
+    `class ReportQueryValidationError extends Error { constructor(m) { super(m); this.name = 'ReportQueryValidationError' } }
+     export async function validateOrgReportQuery(_gate, query) { if (!query || typeof query !== 'object' || Array.isArray(query)) throw new ReportQueryValidationError('Invalid report query'); return query }`,
   ],
   [
     'mock:report-authz',

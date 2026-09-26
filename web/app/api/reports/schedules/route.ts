@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -84,10 +85,7 @@ export async function POST(req: Request) {
       Array.isArray(body.recipientEmails) ? (body.recipientEmails as string[]) : [],
     )
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Invalid schedule' },
-      { status: 422 },
-    )
+    return apiErrorResponse(err, { safeStatus: 422 })
   }
   if (body.active !== false && recipients.length === 0) {
     return NextResponse.json({ error: 'At least one recipient is required for an active schedule' }, { status: 422 })

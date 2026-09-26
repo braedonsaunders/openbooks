@@ -1,9 +1,11 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { withReportBookColumn } from '../../../../../../lib/report-book-label'
 import { reportBookSelection } from '../../../../../../lib/report-books'
 import { guardPermission } from '../../../../../../lib/authz'
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
+import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -137,6 +139,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   } catch (err) {
     const rendererRefusal = rendererUnavailableResponse(err)
     if (rendererRefusal) return rendererRefusal
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Statement failed' }, { status: 422 })
+    if (err instanceof ReportCurrencyBasisError) return apiErrorResponse(err, { safeStatus: 422 })
+    return apiErrorResponse(err)
   }
 }
