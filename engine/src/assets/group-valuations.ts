@@ -465,7 +465,7 @@ export async function applyAssetGroupValuation(
         change.approved_by!,
       );
       if (allowed && state.required.some((id) => !allowed.has(id)))
-        throw new Error(
+        throw new AssetValidationError(
           "the independent approver no longer covers the asset and elimination company; obtain a new approval",
         );
       const result = await db.execute<{ id: string }>(

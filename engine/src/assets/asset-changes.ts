@@ -1081,7 +1081,7 @@ export async function applyAssetChange(
         approverScope &&
         state.requiredSubsidiaryIds.some((id) => !approverScope.has(id))
       )
-        throw new Error(
+        throw new AssetValidationError(
           "the independent approver no longer has access to every affected legal entity; obtain a new approval",
         );
       const entries: string[] = [];
@@ -1147,7 +1147,7 @@ export async function applyAssetChange(
             preview.bookId,
           );
           if (rebuilt.skippedMonths.length)
-            throw new Error(
+            throw new AssetValidationError(
               `create accounting periods through ${rebuilt.skippedMonths.at(-1)} before applying this asset change`,
             );
         }
@@ -1214,7 +1214,7 @@ export async function applyAssetChange(
                 t.eliminationSubsidiaryId ||
               predecessor.group_currency !== state.elimination!.base_currency
             )
-              throw new Error(
+              throw new AssetValidationError(
                 "an onward transfer must retain its existing group consolidation currency and elimination entity",
               );
             const component = state.groupComponents[preview.bookId]!;
@@ -1240,7 +1240,7 @@ export async function applyAssetChange(
             preview.bookId,
           );
           if (rebuilt.skippedMonths.length)
-            throw new Error(
+            throw new AssetValidationError(
               `create receiving depreciation periods through ${rebuilt.skippedMonths.at(-1)} before applying this transfer`,
             );
         }
