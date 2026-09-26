@@ -158,7 +158,7 @@ export function TypeBuilderDrawer({
     loadedUpdatedAt.current = type.updated_at
   }, [type.updated_at])
   // The debounced PATCH, extracted so closing with a pending edit can flush
-  // it first (I4-webui-250 shape): true when the server accepts the edits.
+  // it first: true when the server accepts the edits.
   // A network failure lands back on dirty with the translated message —
   // never stuck on Saving with Publish disabled.
   const persistEdits = useCallback(async (): Promise<boolean> => {

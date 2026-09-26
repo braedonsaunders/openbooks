@@ -555,7 +555,7 @@ export function ChangeRequestDrawer({
         )
       }
     } catch {
-      // I4-webui-127: transport/parse failure is distinct from an HTTP
+      // Transport/parse failure is distinct from an HTTP
       // refusal (which the helpers already surface) — same localized
       // failure state, never a stranded drawer or unhandled rejection.
       const message = t('employment.changeRequests.requestFailed')
@@ -589,7 +589,7 @@ export function ChangeRequestDrawer({
       requestId = await resolveDraftId(payload)
       submitted = requestId !== null && (await submitDraft(requestId, submitReason))
     } catch {
-      // I4-webui-127: transport/parse failure is distinct from an HTTP
+      // Transport/parse failure is distinct from an HTTP
       // refusal (which the helpers already surface) — same localized
       // failure state, never a stranded drawer or unhandled rejection.
       const message = t('employment.changeRequests.requestFailed')

@@ -26,7 +26,7 @@ import type { DocArticleContent } from './sections'
  * whole-component doctrine as the docs home (`docs-home`): the page is
  * conditional pairs (category span, related block, adjacent nav) and styled
  * composite cards (prev/next links with lucide icons) that generic
- * vocabulary cannot name without NEW language (coordinator-owned). Icons
+ * vocabulary cannot name without NEW language. Icons
  * alone (`ChevronRight`, `ArrowLeft`, `ArrowRight` via lucide) force a
  * widget — specs name no components.
  */

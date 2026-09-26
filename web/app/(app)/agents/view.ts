@@ -164,7 +164,7 @@ export interface AgentsData {
   /**
    * Retired-route landing notice: /continuous-close redirects here with
    * ?from=continuous-close, and the move is explained once, on the record,
-   * instead of silently bouncing the visitor (F-t13-007). Null on every
+   * instead of silently bouncing the visitor. Null on every
    * other arrival — the `when` below is presence-gated.
    */
   movedNotice: { title: string; description: string; dismissLabel: string } | null
@@ -252,7 +252,7 @@ export async function loadAgents(
   const countFormat = new Intl.NumberFormat(locale)
   const canWrite = can(authz, 'assistant.write')
   // Query-independent by construction (the read model counts it without the
-  // free-text clause): the tile keeps global scope under ?q= (F-t11-005).
+  // free-text clause): the tile keeps global scope under ?q=.
   const activeCount = inbox.facets.openActive
   const overdueCount = inbox.facets.overdue
   const lastRun = runs[0] ?? null
@@ -327,7 +327,7 @@ export async function loadAgents(
     })),
     // Every lifecycle state is always offered (counts from the unfiltered-by-
     // status facet): triaged work stays discoverable while the default inbox
-    // remains actionable (F-t11-006).
+    // remains actionable.
     statusOptions: INBOX_STATUSES.map((key) => ({
       value: key,
       label: tc(`status.${key}`),

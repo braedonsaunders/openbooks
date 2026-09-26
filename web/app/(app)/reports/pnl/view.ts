@@ -55,7 +55,7 @@ export interface PnlData {
   wide: boolean
   truncated: boolean
   truncatedLabel: string
-  /** Set when underived consolidated rates block the statement (F-t06-025):
+  /** Set when underived consolidated rates block the statement:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
   /** False exactly when ratesBlocked is set; the paper hides with it. */
@@ -113,7 +113,7 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
       bookId: selectedBook?.id,
     })
   } catch (e) {
-    // Underived consolidated rates must not throw out of SSR (F-t06-025):
+    // Underived consolidated rates must not throw out of SSR:
     // the page renders a typed banner with a derive link instead of any
     // numbers. Anything else is a real defect and still throws.
     if (!(e instanceof MissingRatesError)) throw e

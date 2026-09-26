@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
-// F3-89: the provision run list built its year/version cells with hardcoded
+// The provision run list built its year/version cells with hardcoded
 // English template literals (`FY${year}` / `v${version}`), so every locale
 // read English prefixes — German drops the FY prefix entirely in the detail
 // title ("Abgrenzung {year}"), Japanese suffixes 年度. The loader must

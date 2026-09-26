@@ -69,7 +69,7 @@ export async function loadMatch(
     : 'match'
 
   // Reconcilable accounts (the picker) come from the ONE banking reader
-  // (F-t06-001) — the same membership the overview roster and the
+  // — the same membership the overview roster and the
   // account-page guard filter through — with per-account unmatched counts
   // grouped in one pass (statement lines in the account's own settlement
   // currency still awaiting a match).

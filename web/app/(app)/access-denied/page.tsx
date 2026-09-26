@@ -14,7 +14,7 @@ function singleParam(value: string | string[] | undefined): string | undefined {
 }
 
 /**
- * The shared explanation for a refused visitor (F-t12-001, F-t13-008).
+ * The shared explanation for a refused visitor.
  * Gates redirect here instead of silently bouncing home: the page names the
  * missing permission (or the operator-only scope) and points at the person
  * who can grant it. The key is echoed as text only, never looked up, so any

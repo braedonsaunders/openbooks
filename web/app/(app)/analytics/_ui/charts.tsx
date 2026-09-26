@@ -51,7 +51,7 @@ function catAxis(data: string[], maxTicks?: number): EChartsOption {
 }
 
 /**
- * Deterministic category-axis thinning (F-t05-010): ECharts' width-dependent
+ * Deterministic category-axis thinning: ECharts' width-dependent
  * auto stride swaps WHICH labels render as the viewport changes, so a tick
  * can read "Aug 24" at one width and "Aug 4" at another. Capping the tick
  * count fixes the stride from the data, stable at every width.
@@ -93,7 +93,7 @@ export function TrendChart({
   height?: number
   area?: boolean
   pctAxis?: boolean
-  /** Cap x-axis ticks to a data-fixed stride (F-t05-010); unset keeps ECharts auto. */
+  /** Cap x-axis ticks to a data-fixed stride; unset keeps ECharts auto. */
   maxTicks?: number
   /** What the values are: money (the default, formatted in the org's
    *  currency) or a plain count (headcount, requests) with no currency sign. */

@@ -12,7 +12,7 @@ import type { PaymentOperationsData } from './view'
  *
  * The native page is a client component, so these composites CANNOT live in a
  * `server-only` sections file the way the [entity] slots do — the four
- * exports below are client components imported by the coordinator's registry
+ * exports below are client components imported by the page spec's registry
  * entries, and the drawer chrome they wrap is itself client
  * state. What the spec cannot express lives here:
  *

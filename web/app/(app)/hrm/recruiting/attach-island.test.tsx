@@ -168,7 +168,7 @@ async function fillAndSubmit(m: Mount, name: string, email: string): Promise<voi
   await flushAsync()
 }
 
-// F3-62: the island attaches through ONE server call — the prospect and
+// The island attaches through ONE server call — the prospect and
 // the candidacy are never split across POSTs, so a failure cannot orphan
 // the prospect.
 test('attaching posts once to the combined endpoint and clears the form', async () => {
@@ -193,7 +193,7 @@ test('attaching posts once to the combined endpoint and clears the form', async 
   }
 })
 
-// F3-62: a same-name duplicate retries once with mergeInto on the same
+// A same-name duplicate retries once with mergeInto on the same
 // combined endpoint — each attempt atomic, the survivor named in the UI.
 test('a same-name duplicate merges into the survivor with one atomic retry', async () => {
   toastInfos.length = 0
@@ -217,7 +217,7 @@ test('a same-name duplicate merges into the survivor with one atomic retry', asy
   }
 })
 
-// F3-62: a different-name duplicate stays refused — no silent absorption.
+// A different-name duplicate stays refused — no silent absorption.
 test('a different-name duplicate refuses without retrying', async () => {
   const m = await mount(async () => {
     return { status: 409, body: { error: 'duplicate-email', candidate: { id: 'cand-9', displayName: 'Somebody Else' } } }

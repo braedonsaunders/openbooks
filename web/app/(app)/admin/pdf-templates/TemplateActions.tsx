@@ -12,7 +12,7 @@ import { promptDialog } from '../../../../lib/prompt'
  * First non-colliding name: the base when free, else "base 2", "base 3", …
  * Digits only — no translatable words, so no catalog keys are needed. The
  * pdf_templates unique index is (org_id, record_type, name): callers pass the
- * taken names for the new template's own record type (F-t13-001 — the offered
+ * taken names for the new template's own record type (the offered
  * default must not collide, or every duplicate-save dies on a 409).
  */
 export function uniqueTemplateName(base: string, taken: Set<string>): string {

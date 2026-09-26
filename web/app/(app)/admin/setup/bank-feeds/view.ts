@@ -101,9 +101,9 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
   if (!featureEnabled(features, 'bankFeeds')) redirect('/admin/setup/features')
 
   // Feed targets read through the one reconcilable-bank membership every
-  // banking surface agrees on (F-t06-001): without the bank/card type filter
+  // banking surface agrees on: without the bank/card type filter
   // a reconcilable non-bank account would be offered as a feed target, and
-  // its statements could never be reconciled (F-t11-005).
+  // its statements could never be reconciled.
   const [conns, eligible, servers, sched, cfg, hdrs] = await Promise.all([
     db.execute<ConnectionRow>(sql`
       select c.id, c.name, c.provider, c.account_id as "accountId", c.status,

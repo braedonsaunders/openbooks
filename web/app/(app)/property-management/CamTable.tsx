@@ -39,7 +39,7 @@ export function CamTable({
 }) {
   // A refused pool action pins the server's reason on that pool's card until
   // the next attempt — the shared act() toast alone let a refused Finalize
-  // read as a dead button (F-t07-007).
+  // read as a dead button.
   const [poolError, setPoolError] = useState<{ poolId: string; message: string } | null>(null);
   const pools = propertyId
     ? data.camPools.filter((pool) => pool.propertyId === propertyId)

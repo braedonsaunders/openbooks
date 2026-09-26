@@ -32,7 +32,7 @@ function findFilters(node: unknown, out: Record<string, unknown>[] = []): Record
   return out
 }
 
-// F3-58: the calendar's department filter offered the queue's
+// The calendar's department filter offered the queue's
 // "not available" string as its "All" option. The spec must carry the
 // dedicated calendar all-departments label instead.
 test('the calendar department filter offers the all-departments label, not the not-available string', () => {

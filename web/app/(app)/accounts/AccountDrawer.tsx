@@ -161,7 +161,7 @@ export function AccountDrawer({
   const [form, setForm] = useState(initial)
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   // A blocked save that only fires a transient toast reads as "nothing
-  // happened" once it dismisses (F-t06-004, the F-t06-018 precedent): the
+  // happened" once it dismisses: the
   // failure also persists as a form-level alert, cleared on the next edit.
   const [fieldError, setFieldError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)

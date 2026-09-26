@@ -108,7 +108,7 @@ async function renderText(): Promise<{ text: string; document: Document; unmount
   }
 }
 
-test('F3-91: the window placeholder names the window, never the life-event field', async () => {
+test('the window placeholder names the window, never the life-event field', async () => {
   const m = await renderText()
   try {
     // The shared Select renders a hidden native proxy: find the select

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F3-88: the forecast's "view undated" link dropped the active owner/team
+// The forecast's "view undated" link dropped the active owner/team
 // scope, widening to the whole org while the exclusion count beside it
 // stayed scoped. The forecast loader must carry the scope on the link, and
 // the opportunities board must honour it. Both halves are loader-proved

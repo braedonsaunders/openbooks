@@ -297,7 +297,7 @@ export async function loadParties(
         })
       : null
 
-  // F-t04-003: the vendor Compliance tab needs the assigned class and the
+  // The vendor Compliance tab needs the assigned class and the
   // active classes — drawer-open only, vendors only, feature on.
   // OM-16: "vendors only" means the vendor ROLE row, never the role filter
   // or the kind column — a ?role=vendor URL on a role-less party must not

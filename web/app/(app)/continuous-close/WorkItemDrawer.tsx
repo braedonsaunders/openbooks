@@ -159,7 +159,7 @@ export function WorkItemDrawer({
   const [assigneeRole, setAssigneeRole] = useState(assignment?.assigneeRole ?? '')
   const [dueDate, setDueDate] = useState(assignment?.dueAt ? assignment.dueAt.slice(0, 10) : '')
   const [noteBody, setNoteBody] = useState('')
-  // I4-webui-98: owner/due/note/reason/feedback drafts live in local state,
+  // Owner/due/note/reason/feedback drafts live in local state,
   // so the shell close asks before discarding them — same house guard as
   // the inventory drawers — and never dismisses an in-flight write.
   const draftGuard = useDirtyClose({

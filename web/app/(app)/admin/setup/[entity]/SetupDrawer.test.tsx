@@ -335,7 +335,7 @@ test('creates mint one idempotency key per mounted session and reuse it across r
 })
 
 test('decimal inputs post canonicalized, unparseable text posts raw for the server to refuse', async () => {
-  // F3-39: the drawer sends canonical decimals (same grammar the server
+  // The drawer sends canonical decimals (same grammar the server
   // coerces with) instead of raw operator text. Anything the grammar cannot
   // parse posts untouched, so the refusal — and its remedy — stays
   // server-side in one place.

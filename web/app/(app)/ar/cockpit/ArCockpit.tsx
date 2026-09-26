@@ -63,7 +63,7 @@ export function ArCockpit({
   const t = useTranslations("ar.cockpit");
   const locale = useLocale();
   // The position is cut as of this business day: future-dated documents are
-  // excluded, and the headline tile says so (F-t02-007). Noon-anchored so a
+  // excluded, and the headline tile says so. Noon-anchored so a
   // bare YYYY-MM-DD never renders a day early west of Greenwich.
   const asOf = t("stats.asOf", {
     date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
@@ -79,7 +79,7 @@ export function ArCockpit({
   );
 
   // Bare number on purpose: the overdueSub message already appends "%",
-  // so formatExactPercent's suffixed value rendered "100%%" (F-t12-003).
+  // so formatExactPercent's suffixed value rendered "100%%".
   const overduePct = overdueOpenPct(data.overdue, data.outstanding);
   const customerQuery = (search.get("customerQ") ?? "")
     .trim()

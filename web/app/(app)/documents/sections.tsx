@@ -13,7 +13,7 @@ import { ChevronRight, Home, Trash2 } from 'lucide-react'
  * actions cluster, the sticky breadcrumb strip, the full-height shell and the
  * tree/list/drawer slots. Interactivity stays where it already lives: the
  * sidebar tree, the file table (checkboxes, context menu, bulk bar), and the
- * drawers are client components owned by the coordinator's registry entries.
+ * drawers are client components owned by the page spec's registry entries.
  * This file only holds the two composites whose markup the spec cannot
  * re-express; the shell itself is plain grids in the spec.
  */

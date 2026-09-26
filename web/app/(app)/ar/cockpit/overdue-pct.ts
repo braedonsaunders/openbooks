@@ -4,7 +4,7 @@ import { cmp as compareMoney, div as divideMoney, formatMoney, mulDecimal } from
  * Overdue share of open receivables as a bare whole-number percent string
  * ("100", never "100%"): the `ar.cockpit.stats.overdueSub` message template
  * already carries the percent sign ("{pct}% of open"), so a pre-suffixed
- * value renders the doubled "100%%" of F-t12-003. Exact-ledger-string math
+ * value renders the doubled "100%%". Exact-ledger-string math
  * throughout — no Number hop.
  */
 export function overdueOpenPct(overdue: string, outstanding: string): string {

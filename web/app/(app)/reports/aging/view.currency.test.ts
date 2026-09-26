@@ -20,7 +20,7 @@ registerHooks({
 
 const { agingSpec } = await import('./view')
 
-// P1 (fleet 8): the aging screen gains an Intacct-style reporting-currency
+// The aging screen gains an Intacct-style reporting-currency
 // selector plus a convert-from basis toggle. These tests pin the spec half:
 // the selector reaches the page as a registry widget carrying the screen
 // selection, and it hides with the paper when rates block the report. (The

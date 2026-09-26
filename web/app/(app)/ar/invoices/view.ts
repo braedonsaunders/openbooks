@@ -28,7 +28,7 @@ import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list
  * rule that put EntityListView behind `entity-list-view` when the accounts
  * page was converted. No such RecordListView slot exists yet, so the spec
  * below names the `record-list-view` widget and the registry entry
- * carries the exact registry entry and slot the coordinator needs to add.
+ * carries the exact registry entry and slot for that future slot to add.
  *
  * Everything else here is loader work copied verbatim from page.tsx: the
  * permission gates, the ?doc= flyout resolution (org guard, subsidiary

@@ -1,5 +1,5 @@
 /**
- * Surveys author-dialog input parsing (F3-54, F3-68).
+ * Surveys author-dialog input parsing.
  *
  * The author dialog posts question cards typed by an operator. Two inputs
  * need parsing before the POST:

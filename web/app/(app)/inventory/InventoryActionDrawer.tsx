@@ -53,7 +53,7 @@ export function InventoryActionDrawer({
   const [busy, setBusy] = useState(false)
   // A refused Post pins its reason on the record until the next submit — a
   // toast alone let 422s for a missing period and insufficient stock read as
-  // silence (F-t07-001). Insufficient stock is a real inventory refusal and
+  // silence. Insufficient stock is a real inventory refusal and
   // must stay visible with the typed values intact.
   const [postError, setPostError] = useState<string | null>(null)
   // The posting date freezes when the drawer opens — the org's business day

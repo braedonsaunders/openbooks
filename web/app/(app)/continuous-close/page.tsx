@@ -16,7 +16,7 @@ export async function generateMetadata() {
  * briefing moves it. ?item= deep links (tools, chat citations, bookmarks)
  * map onto the workbench drawer, so nothing breaks. ?from= tells /agents to
  * explain the move once, on the record, instead of silently bouncing the
- * visitor (F-t13-007).
+ * visitor.
  */
 export default async function ContinuousClosePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams

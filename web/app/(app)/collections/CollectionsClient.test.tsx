@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F1-7: deleting a dunning policy was fire-and-forget — the DELETE ran
+// Deleting a dunning policy was fire-and-forget — the DELETE ran
 // without a status check, so a refusal never surfaced and the row silently
 // reappeared on the next load. Mounts the real CollectionsClient under
 // jsdom, opens the dunning tab, and drives the delete refusal.

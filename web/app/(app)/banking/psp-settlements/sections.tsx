@@ -98,7 +98,7 @@ async function fetchSettlements(
 // Mutations resolve to the server's typed reason on refusal: the previous
 // shape discarded the error body, so every 422 read as a generic
 // "could not import/post" with the real message only in the network log
-// (F-t06-004). The pinned alert below shows the reason until the next action.
+// The pinned alert below shows the reason until the next action.
 async function requestSettlement<T>(
   body: Record<string, unknown>,
 ): Promise<{ ok: true; data: T } | { ok: false; error: string | null }> {
@@ -268,7 +268,7 @@ export function PspSettlementsWorkspace({
 
   // Multi-entity orgs must name the posting entity before the draft exists:
   // an unnamed draft used to strand at Post with a refusal that blamed the
-  // accounts the import already carried (F-t06-004). Single-entity orgs get
+  // accounts the import already carried. Single-entity orgs get
   // no options and post to the root like every other document.
   const needsSubsidiaryChoice = subsidiaries.length > 0
 

@@ -231,7 +231,7 @@ test("unfiltered board carries no undated chip", async (t) => {
   assert.ok(!host.textContent?.includes("Show all"), "no chip without the undated filter");
 });
 
-// F3-73: cents survive the board. The old float formatter with
+// Cents survive the board. The old float formatter with
 // maximumFractionDigits: 0 rendered 1234.56 as $1,235.
 test("deal amounts keep their cents", async (t) => {
   const host = await renderBoard(t, [
@@ -240,7 +240,7 @@ test("deal amounts keep their cents", async (t) => {
   assert.ok(host.textContent?.includes("$1,234.56"), `exact cents must render, got ${host.textContent}`);
 });
 
-// F3-73: binary floats smeared 0.10 + 0.20 into 0.30000000000000004. The
+// Binary floats smeared 0.10 + 0.20 into 0.30000000000000004. The
 // column total sums exact decimal units instead.
 test("column totals sum exactly", async (t) => {
   const host = await renderBoard(t, [
@@ -250,7 +250,7 @@ test("column totals sum exactly", async (t) => {
   assert.ok(host.textContent?.includes("$0.30"), `total must be exactly $0.30, got ${host.textContent}`);
 });
 
-// F3-74: a mixed-currency column totals per currency. The old total priced
+// A mixed-currency column totals per currency. The old total priced
 // every row in the first row's currency, so USD 1000 + EUR 2000 read $3,000.00.
 test("mixed-currency columns total per currency", async (t) => {
   const host = await renderBoard(t, [
@@ -263,7 +263,7 @@ test("mixed-currency columns total per currency", async (t) => {
   assert.ok(!text.includes("$3,000.00"), `rows must not merge into one currency, got ${text}`);
 });
 
-// F3-74 (g58 CRM-UI1 overlap): totals sort by currency code so row order
+// Totals sort by currency code so row order
 // cannot move the figures. EUR sorts before USD in either input order.
 test("mixed-currency totals sort by code regardless of row order", async (t) => {
   const eur = opp("eur", "2026-09-20", { currency: "EUR", projectedAmount: "2000.0000", weightedAmount: "0.0000" });
@@ -298,7 +298,7 @@ test("mixed-currency totals sort by code regardless of row order", async (t) => 
   }
 });
 
-// F3-73/74 (g58 overlap): above-2^53 amounts sum exactly, never through float.
+// Above-2^53 amounts sum exactly, never through float.
 test("column totals stay exact above 2^53", async (t) => {
   const host = await renderBoard(t, [
     opp("big-a", "2026-09-20", { projectedAmount: "9007199254740993.0000", weightedAmount: "0.0000" }),
@@ -313,7 +313,7 @@ test("column totals stay exact above 2^53", async (t) => {
   );
 });
 
-// F3-74 (g58 overlap): a missing currency is refused instead of invented.
+// A missing currency is refused instead of invented.
 // The loader guarantees one, so a blank is corruption that must be loud
 // rather than silently priced as USD.
 test("a missing currency throws instead of defaulting to USD", async (t) => {

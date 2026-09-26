@@ -128,7 +128,7 @@ export interface AgingData {
   labelTransaction: string
   bucketLabels: Record<(typeof BUCKETS)[number], string>
   dashPlaceholder: string
-  /** Set when underived consolidated rates block the report (F-t06-027):
+  /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
   /** False exactly when ratesBlocked is set; the paper hides with it. */
@@ -164,7 +164,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link instead of any
   // numbers. Anything else is a real defect and still throws. Builders run
   // only with a resolved subsidiary scope — never scope-less (fail-closed).
@@ -222,7 +222,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
         summary = await agingByParty(side, asOf, dims, undefined, runOpts)
       }
     } catch (e) {
-      // Same banner contract as underived consolidated rates (F-t06-027): a
+      // Same banner contract as underived consolidated rates: a
       // txn-basis report whose spots are underived renders the derive link,
       // never numbers, and never a throw out of SSR.
       if (!(e instanceof AgingRatesUnavailableError)) throw e
@@ -386,7 +386,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom({ ...sp, period: requestedPeriod }),
     // The export must age as of the date on the screen it leaves from
-    // (F-t07-011): without the resolved as-of the endpoint falls back to the
+    // Without the resolved as-of the endpoint falls back to the
     // fiscal year end and every bucket is wrong.
     exportParams: stringParams({ ...sp, asOf }),
   }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { postRun } from './NewRunButton'
 
-// F3-1: creating a pay run parsed the response body BEFORE checking the
+// Creating a pay run parsed the response body BEFORE checking the
 // status, so a non-JSON error body (a proxy page, an empty 502) threw a
 // SyntaxError out of postRun and the operator read a parse error instead of
 // the failure. The status is now checked first through the canonical client

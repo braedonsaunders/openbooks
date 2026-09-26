@@ -56,7 +56,7 @@ export interface BalanceSheetData {
   periodPhrase: string
   note: string
   wide: boolean
-  /** Set when underived consolidated rates block the statement (F-t06-025):
+  /** Set when underived consolidated rates block the statement:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
   /** False exactly when ratesBlocked is set; the paper hides with it. */
@@ -98,7 +98,7 @@ export async function loadBalanceSheet(
     totalOf: secTotal,
   }
 
-  // Underived consolidated rates must not throw out of SSR (F-t06-025):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link instead of any
   // numbers. Anything else is a real defect and still throws.
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
@@ -253,7 +253,7 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
           balanced: data.balanced,
           label: data.balanceLabel,
         }),
-        // No equation to check while rates block the statement (F-t06-025).
+        // No equation to check while rates block the statement.
         when: f('ratesReady'),
       },
     ],

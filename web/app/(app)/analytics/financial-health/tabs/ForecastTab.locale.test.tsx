@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F2-14b (forecast month labels): the forecast table's future months must
+// Forecast month labels: the forecast table's future months must
 // render in the viewer's locale — "janv." for a French viewer, never a
 // pinned English "Jan". The chart is stubbed out; the assertion rides the
 // real detail table, which renders the same futureLabels array.
@@ -58,7 +58,7 @@ function markup(locale: string): string {
   )
 }
 
-test('forecast future months render in the viewer locale (F2-14b)', () => {
+test('forecast future months render in the viewer locale', () => {
   const en = markup('en-US')
   const fr = markup('fr')
   assert.match(en, /Jan/)

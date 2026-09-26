@@ -120,8 +120,8 @@ export async function loadApBills(
       authz.allowedSubsidiaryIds.has(String((loadedDoc.doc as Record<string, unknown>).subsidiary_id)))
       ? loadedDoc
       : null
-  // Narrow the drawer's reference options to the open document's subsidiary
-  // (I4-webui-345 AR twin cfe03e570): a subsidiary-A caller opening a
+  // Narrow the drawer's reference options to the open document's subsidiary:
+  // a subsidiary-A caller opening a
   // subsidiary-A bill must not see subsidiary-B accounts or dimensions.
   const documentOptionScope = openDoc
     ? new Set([String((openDoc.doc as Record<string, unknown>).subsidiary_id)])

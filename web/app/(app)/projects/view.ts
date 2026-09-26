@@ -75,7 +75,7 @@ export async function loadProjects(
   // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
   const creating = pickString(sp.projectNew) === '1' && canManage
 
-  // I1-refix-125: header and cockpit load in ONE tenant transaction. The
+  // Header and cockpit load in ONE tenant transaction. The
   // header FOR SHARE lock is therefore held across every cockpit read, so a
   // concurrent project rehome serializes instead of moving rows between the
   // header read and the financials/time/billing reads of one response.

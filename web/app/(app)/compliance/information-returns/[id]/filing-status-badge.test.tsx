@@ -23,7 +23,7 @@ const loadCompliance = (locale: string): Record<string, unknown> =>
 
 // A void 1099 filing once wore the green success badge — the same tone as a
 // filed return — so a voided filing passed for a completed one at a glance.
-// (Was F3-86.) The badge tone is asserted through the rendered classes, not
+// The badge tone is asserted through the rendered classes, not
 // the source: secondary is the slate pair, success the green pair, warning
 // the amber pair.
 function worksheetFiling(status: string): FilingDetail {

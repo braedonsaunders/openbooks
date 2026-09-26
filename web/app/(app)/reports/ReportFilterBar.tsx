@@ -178,7 +178,7 @@ export function ReportFilterBar({
 
   // A renamed built-in is tenant data and renders verbatim; a default one
   // resolves to the catalog translation so the toolbar reads naturally in
-  // every locale (F-t07-009).
+  // every locale.
   const builtinBreakoutLabel = (key: string) => {
     const seg = builtinByKey.get(key)
     return seg && !isDefaultSegmentName(seg) ? seg.name : t(`breakoutOpts.${key}`)

@@ -22,7 +22,7 @@ export function QualificationDialog({
   qualificationId: string | null
   recordOpen: boolean
   closeHref: string
-  /** Loader-resolved manage grant (F3-37): Verify, Renew and Revoke render
+  /** Loader-resolved manage grant: Verify, Renew and Revoke render
    * only with it. */
   canManage: boolean
 }) {

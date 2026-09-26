@@ -56,7 +56,7 @@ export interface CashFlowData {
   reconciliationLabel: string
   reconciliationStatus: string
   reconciled: boolean
-  /** Set when underived consolidated rates block the statement (F-t06-025):
+  /** Set when underived consolidated rates block the statement:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
   /** Set when the viewed set spans more than one functional currency: the
@@ -87,7 +87,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  // Underived consolidated rates must not throw out of SSR (F-t06-025):
+  // Underived consolidated rates must not throw out of SSR:
   // the page renders a typed banner with a derive link instead of any
   // numbers. Anything else is a real defect and still throws.
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
@@ -150,7 +150,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
       labelClassName: 'text-center text-slate-400 italic',
     })
   } else if (cf !== null) {
-    // The null guard doubles as the rates-blocked gate (F-t06-025): with no
+    // The null guard doubles as the rates-blocked gate: with no
     // derived rates there is nothing to build, and the banner replaces the
     // paper. TypeScript narrows every cf.* access below through this branch.
     for (const section of SECTION_ORDER) {

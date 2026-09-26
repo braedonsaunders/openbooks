@@ -187,7 +187,7 @@ export const toShellTab = (tab: PartyTab): string => (tab === 'overview' ? SHELL
 export const fromShellTab = (key: string): PartyTab => (key === SHELL_DETAILS_TAB ? 'overview' : key as PartyTab)
 
 /**
- * Records a visited drawer tab for keep-alive panels (F-t08-003): the
+ * Records a visited drawer tab for keep-alive panels: the
  * employee compensation tabs hold unsaved edits in local component state,
  * so once visited they stay mounted (hidden) instead of unmounting on
  * every tab switch and silently discarding those edits. Returns the input

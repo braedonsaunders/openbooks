@@ -66,7 +66,7 @@ export async function loadProjectCockpit(
   projectId: string,
   options: { includeApplicationBilling?: boolean; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<ProjectCockpitData | null> {
-  // I1-refix-125: the cockpit snapshot opens by re-locking the scope-checked
+  // The cockpit snapshot opens by re-locking the scope-checked
   // project row. A concurrent rehome then serializes on this lock instead of
   // moving the project between the header read and these reads. Unknown or
   // out-of-scope projects read as absent, exactly like the header loader.

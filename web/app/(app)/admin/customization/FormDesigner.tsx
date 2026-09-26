@@ -386,7 +386,7 @@ export function FormDesigner({
     const body = { recordType, name, layout, isDefault, isActive }
     // Edits address the member route: PATCH exists only on
     // /form-layouts/[id] (the collection serves GET+POST, so a PATCH there
-    // 405s). F-t10-001.
+    // 405s).
     try {
       const res = await fetch(
         creating ? '/api/customization/form-layouts' : `/api/customization/form-layouts/${def!.id}`,
@@ -416,7 +416,6 @@ export function FormDesigner({
     if (!def?.id) return
     // Deleting the org default silently drops the record type back to the
     // standard layout for every user — confirm first, naming the fallback.
-    // F-t10-004.
     if (def?.isDefault && !window.confirm(t('designer.forms.deleteDefaultConfirm', { name: def.name ?? '' }))) return
     setBusy(true)
     try {

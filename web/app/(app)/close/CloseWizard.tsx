@@ -732,7 +732,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
     }
   }
   // A refused consolidation that only fires a transient toast reads as
-  // "nothing happened" once it dismisses (F-t06-026): the refusal reason
+  // "nothing happened" once it dismisses: the refusal reason
   // also persists inline on the task, cleared on the next attempt.
   const [taskError, setTaskError] = useState<string | null>(null);
   async function runConsolidation() {
@@ -1168,7 +1168,7 @@ export function PublishStage(
               // Reporting packages persist reports as { slug } objects, not
               // bare strings: resolve the slug before keying the i18n lookup
               // or href, or the row renders a raw `close.reports.[object
-              // Object]` key (F-t01-001).
+              // Object]` key.
               const slug = typeof report === "string" ? report : report?.slug;
               const code = typeof slug === "string" && slug ? slug : "";
               return (

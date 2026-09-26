@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F4-5: the switchboard's "Requires X." and "Works best with Y." reason
+// The switchboard's "Requires X." and "Works best with Y." reason
 // lines were inline English template literals around catalog titles, so a
 // non-English locale read English reasons between translated rows. Both now
 // resolve through setup.features.requiresNote / recommendsNote.

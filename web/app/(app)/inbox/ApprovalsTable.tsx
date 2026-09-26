@@ -38,7 +38,7 @@ export interface ApprovalRow {
   /**
    * Flow-gate id for bulk/decide/delegate actions. Document and pay-run rows
    * carry null: they link to their record (whose drawer decides) and never
-   * enter the gate-scoped bulk payload (F-t01-007).
+   * enter the gate-scoped bulk payload.
    */
   gateId: string | null
   documentNumber: string

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F3-69 (data): the coverage matrix hid the 7th+ qualification type behind
+// The coverage matrix hid the 7th+ qualification type behind
 // six fixed spec columns while the loader's truncation flag went unused.
 // The spec now renders one column per required type from the loader data.
 // These tests CALL the spec with eight required types and assert every one
@@ -54,7 +54,7 @@ function coverageTable(): { header: unknown }[] {
   return tables[0] as { header: unknown }[]
 }
 
-test('F3-69: the matrix renders one column per required type', () => {
+test('the matrix renders one column per required type', () => {
   const columns = coverageTable()
   assert.equal(columns.length, 1 + TYPES.length, 'worker plus all eight types, never six fixed')
   assert.deepEqual(

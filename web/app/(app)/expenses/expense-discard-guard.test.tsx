@@ -1,4 +1,4 @@
-// F1-10: the expense drawer never closes silently on unsaved edits. The X
+// The expense drawer never closes silently on unsaved edits. The X
 // button (via TransactionDrawer's beforeClose) and Cancel both ask first
 // when the editor is dirty; a clean editor closes without prompting, and
 // declining the confirm keeps the drawer open with the typed work intact.

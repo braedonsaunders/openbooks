@@ -384,7 +384,7 @@ test("both specs emit the dialog widgets gated on the loader-derived open state"
   );
 });
 
-// F3-27/F3-28/F3-29: the bands, cycles, plans, team-grid and plan-line
+// The bands, cycles, plans, team-grid and plan-line
 // tables headed their columns with hard-coded English literals ('level',
 // 'employee', 'title', …), so every non-English locale still read English.
 // The loaders already resolved the catalog strings; the specs just never
@@ -514,7 +514,7 @@ for (const [name, load, loadedMessage, header, loadSpec, expected, specMessage] 
 }
 
 test("the line drawer arms only the actions the transition table allows", () => {
-  // F3-38: propose while the round is live and the line is undecided;
+  // Propose while the round is live and the line is undecided;
   // decide while the round is live or approved and the line is proposed.
   // Anything else hides the forms — the engine refuses them anyway.
   const cases: Array<[string, string | null, boolean, boolean]> = [

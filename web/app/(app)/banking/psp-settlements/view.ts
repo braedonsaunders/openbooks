@@ -129,7 +129,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
      order by settlement_date desc, created_at desc
   `)
   // The import form's subsidiary picker: same flag gate and caller scope as
-  // the document drawers (F-t06-004). Empty keeps all subsidiary UI hidden
+  // the document drawers. Empty keeps all subsidiary UI hidden
   // and the batch posts to the root like every other document.
   const subsidiaryScope = await subsidiaryUiOptions(authz.user.orgId)
   const subsidiaries = subsidiaryScope

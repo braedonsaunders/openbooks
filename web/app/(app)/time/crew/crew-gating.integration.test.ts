@@ -1,5 +1,5 @@
 /**
- * F2-2: the crew page shows New Batch / Setup iff the server would allow
+ * The crew page shows New Batch / Setup iff the server would allow
  * them. The batch POST requires time.crew.enter and the Setup page requires
  * time.manage — the loader must derive both flags from the caller's session
  * instead of hard-coding them true, and the spec must omit each button when

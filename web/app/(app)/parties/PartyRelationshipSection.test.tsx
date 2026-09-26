@@ -95,7 +95,7 @@ const PROFILE = {
   employee_count: null,
   qualification_score: null,
   next_action_at: null,
-  // The read surfaces the revision token as updated_at (F3-97): every save
+  // The read surfaces the revision token as updated_at: every save
   // must echo it back as expectedUpdatedAt.
   updated_at: "2026-09-17T12:00:00.000000Z",
 };
@@ -203,7 +203,7 @@ test("after a successful start the profile renders and Start tracking is gone", 
   );
 });
 
-// F3-97: the relationship PATCH carries the revision token the read
+// The relationship PATCH carries the revision token the read
 // surfaced as profile.updated_at — the same expectedUpdatedAt contract as
 // the main party and bank-account saves — so a second tab holding older
 // fields 409s instead of silently replacing them.

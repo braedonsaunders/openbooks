@@ -49,7 +49,7 @@ export function RunsPanel({ runs }: { runs: FlowRunRow[] }) {
   const router = useRouter()
   const [busyRunId, setBusyRunId] = useState<string | null>(null)
 
-  // A failed run strands its subject with no live gate (F-t04-004): re-drive
+  // A failed run strands its subject with no live gate: re-drive
   // it through the current graph. Refusals (superseded, unplannable) surface
   // as typed toasts from the retry endpoint.
   async function retryRun(runId: string) {

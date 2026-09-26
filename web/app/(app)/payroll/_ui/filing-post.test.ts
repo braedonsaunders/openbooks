@@ -8,8 +8,8 @@ import {
 import { recordFilingOriginal } from './filing-workspace'
 import { discardParallelRegister } from '../parallel-run/ParallelRunView'
 
-// F3-20 (record-as-filed), F3-21 (amendment preview/issue), F3-23 (parallel
-// register discard), and the slip-drawer / lifecycle fetches: every one
+// Record-as-filed, amendment preview/issue, parallel register discard,
+// and the slip-drawer / lifecycle fetches: every one
 // parsed the response body BEFORE checking the status, so a non-JSON error
 // body threw a SyntaxError and the operator read a parse error instead of
 // the server's refusal. Each now checks the status first through the

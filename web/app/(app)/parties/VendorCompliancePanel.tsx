@@ -15,7 +15,7 @@ export interface ComplianceClassOption {
 }
 
 /**
- * The vendor drawer's Compliance tab (F-t04-003): assigning a compliance
+ * The vendor drawer's Compliance tab: assigning a compliance
  * class is the only path that brings a vendor into the
  * /compliance/vendors matrix (membership = an active vendor_roles row with
  * compliance_class_id set), and the matrix empty state already points here.

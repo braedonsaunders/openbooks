@@ -17,7 +17,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type ListColumn = ListViewConfig["columns"][number];
 
-/** List column key to its translated header (F-t09-017). */
+/** List column key to its translated header. */
 const COLUMN_LABEL_KEYS: Record<string, string> = {
   name: "list.columns.property",
   code: "list.columns.code",

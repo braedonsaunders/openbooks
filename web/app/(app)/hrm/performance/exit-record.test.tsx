@@ -145,7 +145,7 @@ async function mount(opts?: {
   }
 }
 
-test('F3-64: a successful save releases the submit button', async () => {
+test('a successful save releases the submit button', async () => {
   const m = await mount()
   try {
     const { act } = await import('react')
@@ -162,7 +162,7 @@ test('F3-64: a successful save releases the submit button', async () => {
   }
 })
 
-// F3-40: the form records the interview as a pair — held date with
+// The form records the interview as a pair — held date with
 // interviewer — posting both together, or neither.
 test('the interview posts the held date with the picked interviewer', async () => {
   const posts: { url: string; body: Record<string, unknown> }[] = []

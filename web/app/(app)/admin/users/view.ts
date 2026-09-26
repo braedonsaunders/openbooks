@@ -30,7 +30,7 @@ const ORDER: Record<(typeof SORTS)[number], string> = {
   // Alias: the column is labeled "Last sign-in", so sort=last_sign_in must
   // order exactly like last_login. Unknown keys silently fall back to name
   // ordering, which reads as nulls interleaved around sorted dates
-  // (F-t01-012) — never let a label-plausible key fall through.
+  // — never let a label-plausible key fall through.
   last_sign_in: 'u.last_login_at',
 }
 
@@ -77,7 +77,7 @@ export async function loadAdminUsers(
   const t = await getTranslations('admin.users')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
-  // Sign-in timestamps render in the viewer's locale (F-t01-014), not the
+  // Sign-in timestamps render in the viewer's locale, not the
   // en-CA formatter default.
   const locale = await getLocale()
   const orgId = authz.user.orgId

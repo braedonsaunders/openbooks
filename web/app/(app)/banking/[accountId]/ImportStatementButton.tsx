@@ -142,7 +142,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const [mapping, setMapping] = useState<Mapping>(EMPTY_MAPPING)
   const [preview, setPreview] = useState<StatementPreview | null>(null)
   // A refused preview/import that only fires a transient toast reads as
-  // "nothing happened" once it dismisses (F-t05-012): the typed refusal also
+  // "nothing happened" once it dismisses: the typed refusal also
   // persists as a dialog-level alert, cleared on the next edit.
   const [actionError, setActionError] = useState<string | null>(null)
   const [statementDate, setStatementDate] = useState('')
@@ -238,7 +238,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     })
     // The error body may not be JSON (proxy 5xx pages): never let the read
     // itself throw, or the failure surfaces a SyntaxError instead of the
-    // typed reason (F-t05-012).
+    // typed reason.
     const data = (await res.json().catch(() => null)) as (ImportResponse & { error?: unknown }) | null
     if (!res.ok) {
       throw new Error(

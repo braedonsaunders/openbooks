@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F3-87: the open waiver was looked up inside the FILTERED list, so a
+// The open waiver was looked up inside the FILTERED list, so a
 // filter-excluded id opened nothing — a deep link with a direction/status
 // filter silently dropped its drawer. The loader must fetch the open id
 // independently of the list filters while keeping the org/subsidiary scope,

@@ -56,7 +56,7 @@ export function ExitRecordForm({
   const router = useRouter()
   const [reason, setReason] = useState(existing?.reasonKind ?? 'resignation')
   const [voluntary, setVoluntary] = useState(existing?.isVoluntary ?? true)
-  // F3-40: the interview travels as a pair (held date with interviewer),
+  // The interview travels as a pair (held date with interviewer),
   // prefilled from the stored record; empty sends nulls for both.
   const [interviewDate, setInterviewDate] = useState(existing?.interviewHeldOn ?? '')
   const [interviewerId, setInterviewerId] = useState(existing?.interviewerPartyId ?? '')

@@ -28,7 +28,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 const TABS = ['overview', 'intelligence', 'departments', 'items', 'titles', 'employees', 'config'] as const
 type Tab = (typeof TABS)[number]
 const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
-/** Viewer-locale whole hours (F2-14b): one hook so every tab shares it. */
+/** Viewer-locale whole hours: one hook so every tab shares it. */
 function useHrs0() {
   const locale = useLocale()
   return (n: number) => `${countLabel(Math.round(n), locale)}`

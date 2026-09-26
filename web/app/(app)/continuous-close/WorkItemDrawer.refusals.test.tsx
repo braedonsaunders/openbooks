@@ -6,7 +6,7 @@ declare global {
   var __workItemRefreshed: boolean | undefined;
 }
 
-// F4-3: dismiss/resolve/assign/note/rate refusals (invalid_transition,
+// Dismiss/resolve/assign/note/rate refusals (invalid_transition,
 // reason_required, conflict, forbidden — all named by the items route) were
 // thrown away into generic feedback.actionFailed toasts. Like the sibling
 // GateActions, the drawer must pin the named refusal beside the finding until

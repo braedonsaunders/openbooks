@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // The reset request form must never claim the link is on its way when the
-// request itself failed. The fleet probed POST /api/password-reset without a
+// request itself failed. A probe of POST /api/password-reset without a
 // browser Origin header and hit the edge CSRF gate's 403 while the page
 // reported success. Anti-enumeration stays (a reached server always answers
 // 200), so only a failed request may surface an error — proved here through

@@ -5,7 +5,7 @@ import test from 'node:test'
 // Tenants list paging — platformOrganizations must page in SQL (limit/offset)
 // with a stable total, because the list renders server-side from whatever the
 // loader returns: a loader that ignored the page would present a partial
-// fleet as the whole. Seeds three tenants over two pages (within the shared
+// page as the whole. Seeds three tenants over two pages (within the shared
 // fixture pool budget) and asserts page two returns the NEXT rows, the total
 // equals the seeded count, and an out-of-range page returns an empty window
 // with the same total (the house Pagination then offers the last page).
@@ -49,7 +49,7 @@ async function seedTenants(): Promise<{ ids: string[]; cleanup: () => Promise<vo
     const org = await withBypass(() => createScratchOrg())
     ids.push(org.orgId)
   }
-  // Deterministic fleet order for the assertions. The teardown guard only
+  // Deterministic tenant order for the assertions. The teardown guard only
   // drops orgs still named 'Scratch %', so the original names are restored
   // before the drop — a renamed org must never leak.
   const before = (await withBypass(() =>
@@ -88,12 +88,12 @@ test('tenants list pages in sort order with a stable total', async () => {
     assert.deepEqual(
       full.rows.map((row) => row.name),
       Array.from({ length: ORGS }, (_, i) => orgName(i)),
-      'the default fleet order is name-ascending',
+      'the default tenant order is name-ascending',
     )
 
     const first = await platformOrganizations({ q: PREFIX, page: 1, perPage: PAGE_SIZE, dir: 'asc', sort: 'name' })
     const second = await platformOrganizations({ q: PREFIX, page: 2, perPage: PAGE_SIZE, dir: 'asc', sort: 'name' })
-    assert.equal(first.rows.length, PAGE_SIZE, 'page one holds one page, not the fleet')
+    assert.equal(first.rows.length, PAGE_SIZE, 'page one holds one page, not the whole list')
     assert.equal(first.total, ORGS, 'the total is stable across pages')
     assert.equal(second.total, ORGS, 'the total is stable across pages')
     const firstNames = new Set(first.rows.map((row) => row.name))
@@ -101,11 +101,11 @@ test('tenants list pages in sort order with a stable total', async () => {
     assert.deepEqual(
       [...first.rows, ...second.rows].map((row) => row.name),
       full.rows.map((row) => row.name),
-      'pages partition the whole filtered fleet in order',
+      'pages partition the whole filtered list in order',
     )
 
     // The pager total must be the FILTERED count: a search narrowing the
-    // table to one row must report one, never the unfiltered fleet size.
+    // table to one row must report one, never the unfiltered list size.
     const narrowed = await platformOrganizations({ q: orgName(2), page: 1, perPage: 50, dir: 'asc', sort: 'name' })
     assert.equal(narrowed.total, 1, 'a search matching one row reports a total of one')
     assert.deepEqual(
@@ -122,7 +122,7 @@ test('tenants list pages in sort order with a stable total', async () => {
   }
 })
 
-test('tenants environment filter narrows the fleet', async () => {
+test('tenants environment filter narrows the tenant list', async () => {
   const { ids, cleanup } = await seedTenants()
   try {
     await withBypass(() =>

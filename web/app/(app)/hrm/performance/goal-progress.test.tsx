@@ -104,7 +104,7 @@ async function mount(): Promise<{
   }
 }
 
-test('F3-63: out-of-range progress refuses by name without posting', async () => {
+test('out-of-range progress refuses by name without posting', async () => {
   const m = await mount()
   try {
     const { act } = await import('react')
@@ -123,7 +123,7 @@ test('F3-63: out-of-range progress refuses by name without posting', async () =>
   }
 })
 
-test('F3-63: non-numeric progress refuses by name without posting', async () => {
+test('non-numeric progress refuses by name without posting', async () => {
   const m = await mount()
   try {
     const { act } = await import('react')
@@ -140,7 +140,7 @@ test('F3-63: non-numeric progress refuses by name without posting', async () => 
   }
 })
 
-test('F3-63: valid progress posts an integer percent', async () => {
+test('valid progress posts an integer percent', async () => {
   const m = await mount()
   try {
     const { act } = await import('react')

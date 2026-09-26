@@ -119,8 +119,8 @@ export function MatchWorkspace({
   const [offsetId, setOffsetId] = useState('')
   // A refused add-journal that only fires a transient toast reads as
   // "nothing happened" once it dismisses with the dialog left open
-  // (F-t05-019): the typed refusal also persists as a dialog-level alert,
-  // cleared on the next edit — the ImportStatementButton F-t05-012 pattern.
+  // The typed refusal also persists as a dialog-level alert,
+  // cleared on the next edit — the same pattern ImportStatementButton uses.
   const [addError, setAddError] = useState<string | null>(null)
   // Suggest-mode rule proposals for the current account's unmatched lines,
   // keyed by statement line id. Computed live via the rules preview (no post).
@@ -219,7 +219,7 @@ export function MatchWorkspace({
         body: body !== undefined ? JSON.stringify(body) : undefined,
       })
       // Never let the read itself throw: an unreadable error body would
-      // otherwise go silent with an unhandled rejection (F-t05-017/019).
+      // otherwise go silent with an unhandled rejection.
       const d = await res.json().catch(() => null) as MatchActionResult | null
       if (!res.ok) {
         const message = typeof d?.error === 'string' && d.error ? d.error : tBanking('errors.requestFailed')

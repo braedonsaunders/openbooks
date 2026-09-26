@@ -53,7 +53,7 @@ export function StubDrawer({
   const tCommon = useTranslations('common')
   const held = withholding(stub, buckets)
   // The trace heads the filing regime the numbers were computed under
-  // (T4127 for CA, Pub 15-T for US) — never a hardcoded country (F-t08-012).
+  // (T4127 for CA, Pub 15-T for US) — never a hardcoded country.
   const traceEngine = traceEngines[stub.country ?? ''] ?? Object.values(traceEngines)[0] ?? ''
   const factorEntries = Object.entries(stub.factors ?? {}).sort(([a], [b]) => a.localeCompare(b))
   // Labels resolve through the stub country's pack declaration (server-

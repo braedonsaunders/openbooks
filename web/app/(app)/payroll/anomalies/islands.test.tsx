@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F3-14: the flag drawer showed the kind label under Severity and the
+// The flag drawer showed the kind label under Severity and the
 // employment label under Status. Every fact sits under its own heading
 // now: the severity value under Severity, the status value under Status,
 // with kind and employment in their own rows. Mounts the real drawer under

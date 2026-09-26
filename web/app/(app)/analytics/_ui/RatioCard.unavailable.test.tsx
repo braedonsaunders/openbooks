@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F4-9: an unavailable ratio card with no loader note rendered the hardcoded
+// An unavailable ratio card with no loader note rendered the hardcoded
 // English "Data not available" in every locale. The card now falls back to
 // the translated analytics.financialHealth.ratioNotes.unavailable string,
 // while a loader-supplied noDataMsg (already localized via ratioNotes) still

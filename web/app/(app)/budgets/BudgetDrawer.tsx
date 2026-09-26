@@ -377,7 +377,7 @@ export function BudgetDrawer({
 
   // A refusal the operator can trigger (empty submit) pins on the record
   // until the next action — a 4-second toast alone reads as nothing
-  // happening once it dismisses (F-t13-006).
+  // happening once it dismisses.
   const [actionError, setActionError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   function actionRefusal(message: string): string | null {

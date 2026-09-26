@@ -149,7 +149,7 @@ export function LineProposeForm({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
-    // F3-33: the percent rides the exact decimal parser — Number('abc')
+    // The percent rides the exact decimal parser — Number('abc')
     // is NaN, which JSON serializes as null, so an unvalidated typo
     // arrives as an empty proposal. Refuse it here by name and send the
     // canonical decimal string; the route refuses the rest.

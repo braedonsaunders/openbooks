@@ -27,7 +27,7 @@ const ENV_VARIANT = {
  *
  * It replaces the AppKit tenants table, which sorted and filtered
  * client-side over the one fetched page: everything past the first page was
- * unreachable from search AND from sort, while reading as the whole fleet.
+ * unreachable from search AND from sort, while reading as the whole tenant list.
  * Sort, search, the environment filter and the page size all travel on the
  * URL through the house list-params helpers, so refreshes and shared links
  * hold. The row cells stay the shared organizations/sections cells the

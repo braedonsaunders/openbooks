@@ -77,7 +77,7 @@ export function RunBuilder({
   const [applyCredits, setApplyCredits] = useState(true)
   const [busy, setBusy] = useState(false)
   // A blocked create that only fires a transient toast reads as "nothing
-  // happened" once it dismisses (F-t04-005): the failure also persists as a
+  // happened" once it dismisses: the failure also persists as a
   // form-level alert naming the typed server reason, cleared on the next edit.
   const [fieldError, setFieldError] = useState<string | null>(null)
 

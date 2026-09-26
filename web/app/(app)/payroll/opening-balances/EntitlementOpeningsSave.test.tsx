@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F3-4: the bank carry-in grid's Save parsed the response body BEFORE
+// The bank carry-in grid's Save parsed the response body BEFORE
 // checking the status with no catch around the fetch — the same defect as
-// the statutory grid beside it (F3-3). Mounts the real grid under jsdom and
+// the statutory grid beside it. Mounts the real grid under jsdom and
 // drives the failure paths with scripted fetches.
 const { JSDOM } = await import('jsdom')
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {

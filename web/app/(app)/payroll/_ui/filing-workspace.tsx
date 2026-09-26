@@ -68,7 +68,7 @@ export async function recordFilingOriginal(
 /**
  * Per-row issue-declaration key. The filing year is part of every key, so a
  * declaration made for one year's event can never be reused for another
- * year's event for the same employee (I4-webui-59): a new separation event
+ * year's event for the same employee: a new separation event
  * starts with no declaration and requires a deliberate new one.
  */
 const issueKey = (section: YearEndFilingSection, year: number, row: FilingRow) =>
@@ -88,7 +88,7 @@ const fileHref = (section: YearEndFilingSection, year: number) =>
  */
 export function useFilingIssues(year: number) {
   // The selection-limit callout renders through the filing catalog like the
-  // rest of this surface — never an embedded English string (I4-webui-213).
+  // rest of this surface — never an embedded English string.
   const t = useTranslations('payroll.filings')
   // Issue declarations (the ROE's reason for issue) are the employer's own
   // statement: nothing is preselected, and a row without one stays out of
@@ -99,7 +99,7 @@ export function useFilingIssues(year: number) {
   const [downloadBusy, setDownloadBusy] = useState<string | null>(null)
 
   // The hook instance survives query-only year navigation, so declarations
-  // and errors are dropped the moment the year changes (I4-webui-59).
+  // and errors are dropped the moment the year changes.
   const [prevYear, setPrevYear] = useState(year)
   if (prevYear !== year) {
     setPrevYear(year)

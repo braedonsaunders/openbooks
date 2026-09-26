@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F3-33 needs a DOM: the propose form is submitted, not just rendered.
+// Needs a DOM: the propose form is submitted, not just rendered.
 const { JSDOM } = await import("jsdom");
 const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
   url: "http://localhost:4800/hrm/compensation/cycles/cycle-1",
@@ -58,7 +58,7 @@ function renderWithIntl(node: React.ReactElement): string {
   );
 }
 
-// F3-30/F3-31/F3-32: the compensation islands labelled controls with the
+// The compensation islands labelled controls with the
 // wrong strings — the decide reason with the Submit copy (wrong for screen
 // readers too), the cancel audit reason hard-coded in English, and the
 // FTE-rounding select showing raw snake_case codes. Every string now
@@ -172,7 +172,7 @@ test("compensation settings sends the gap threshold as exact decimal text", asyn
   host.remove();
 });
 
-// F3-33: Number('abc') is NaN, which JSON serializes as null — the old
+// Number('abc') is NaN, which JSON serializes as null — the old
 // submit posted an empty proposal the server could only refuse blindly.
 // The form now parses through the exact decimal grammar, refuses
 // garbage and negatives by name without posting, and sends the
@@ -252,7 +252,7 @@ test("a valid percent posts the canonical decimal string", async () => {
   assert.ok(!sent.text.includes(PROPOSE_LABELS.pctInvalid), "no refusal renders for valid input");
 });
 
-// F3-38: the drawer arms only the actions the transition table allows —
+// The drawer arms only the actions the transition table allows —
 // a pushed line offers neither form even to a decider.
 function drawerWith(actions: { canPropose: boolean; canDecideLine: boolean }) {
   return {

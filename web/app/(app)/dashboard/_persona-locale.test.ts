@@ -49,7 +49,7 @@ test('persona HRM attention labels use the viewer locale', async () => {
   const metrics = await loadPersonaMetrics({
     user: { orgId: 'org-1', id: 'user-1' },
     permissions: new Set(['hrm.employment.read']),
-    // Unrestricted scope (null) per the I4-webui-336 admin-summary gate.
+    // Unrestricted scope (null) per the admin-summary gate.
     allowedSubsidiaryIds: null,
   } as never, new Set(['adminAttention']))
 

@@ -246,7 +246,7 @@ export async function loadApprovals(
   const kindLabel = (kind: string) =>
     KIND_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
 
-  // ---- My + All approvals: the unified worklist (F-t01-007) -----------------
+  // ---- My + All approvals: the unified worklist -----------------
   // The dashboard tile counts approvalWorklistForAuthz (Flows gates +
   // gateless document approvals + pending pay runs); the center reads the
   // same reader so same-labeled figures tie by construction. Same doorway
@@ -350,7 +350,7 @@ export async function loadApprovals(
   })
 
   // Budget rows link to the budget drawer, where the checker decision is
-  // recorded; like documents they carry no gate actions (F-t13-005).
+  // recorded; like documents they carry no gate actions.
   const budgetToRow = (b: Extract<ApprovalWorklistItem, { kind: 'budget' }>): ApprovalRow => ({
     key: `budget:${b.id}`,
     gateId: null,
@@ -490,7 +490,7 @@ export async function loadApprovals(
 
     // Budgets submitted through the direct maker/checker path create no flow
     // run, so the query above never sees them. List the caller's own pending
-    // scenarios with the approvers who can decide them (F-t13-005). The flow
+    // scenarios with the approvers who can decide them. The flow
     // leg filters by kind in SQL; this small capped leg filters here.
     if (can(authz, 'budgets.read') && (!kindFilter || kindFilter === 'budget_scenario')) {
       const budgetRes = await db.execute<Record<string, unknown>>(sql`

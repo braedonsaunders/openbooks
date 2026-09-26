@@ -641,7 +641,7 @@ export async function loadDashboardMetrics(
       lineCount: Number(r.line_count),
       totalDebits: r.total_debits,
     })),
-    // Both widgets list the same unified worklist the tile counts (F-t01-007):
+    // Both widgets list the same unified worklist the tile counts:
     // top-5 oldest first, gates + gateless documents + pay runs.
     pendingApprovalList: unionTop5.map((r) => ({ ...r })),
     myApprovalList: unionTop5.map((r) => ({ ...r })),

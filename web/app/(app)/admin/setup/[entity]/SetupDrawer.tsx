@@ -26,7 +26,7 @@ import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
 
-/** Bound for one setup save before the drawer surfaces a timeout (F-t09-016). */
+/** Bound for one setup save before the drawer surfaces a timeout. */
 const SAVE_TIMEOUT_MS = 30_000
 
 export function NewSetupButton({
@@ -131,7 +131,7 @@ export function SetupDrawer({
   // save replays instead of duplicating. Never sent on PATCH.
   const createRequestIdRef = useRef<string | null>(null)
   // A blocked save that only fires a transient toast reads as "nothing
-  // happened" once it dismisses (F-t06-018): the failure also persists as a
+  // happened" once it dismisses: the failure also persists as a
   // form-level alert naming the field, cleared on the next edit.
   const [fieldError, setFieldError] = useState<string | null>(null)
 
@@ -169,7 +169,7 @@ export function SetupDrawer({
       if (!creating && f.lockedOnEdit) continue
       const v = form[f.key]
       // keepDefault columns carry a DB default the server applies to blanks
-      // (F-t06-022): an empty ownership acquisitionRate/nciMeasurement is
+      // An empty ownership acquisitionRate/nciMeasurement is
       // legal input, never a missing requirement.
       if (f.keepDefault && (v === undefined || v === null || String(v).trim() === '')) continue
       if (v === undefined || v === null || String(v).trim() === '') {
@@ -188,7 +188,7 @@ export function SetupDrawer({
     }
     setBusy(true)
     // A response that never arrives wedges the drawer open with zero feedback
-    // and invites blind duplicate retries (F-t09-016): bound the request and
+    // and invites blind duplicate retries: bound the request and
     // surface a timeout as a persistent error. The row may already exist, so
     // the copy points at the table instead of inviting a retry.
     const controller = new AbortController()
@@ -196,7 +196,7 @@ export function SetupDrawer({
     try {
       const body: Record<string, unknown> = { ...form, ...fixedValues }
       // Decimal inputs arrive as raw operator text; canonicalize them through
-      // the same exact-decimal grammar the server coerces with (F3-39), so a
+      // the same exact-decimal grammar the server coerces with, so a
       // band min typed as ".5" posts as "0.5" instead of round-tripping raw.
       // Unparseable text posts untouched for the server to refuse by name.
       for (const field of entity.fields) {
@@ -237,8 +237,8 @@ export function SetupDrawer({
       router.push(closeHref)
       router.refresh()
     } catch (e) {
-      // A rejected transport previously escaped with zero feedback (F-t09-016:
-      // drawer open, no toast, button wedged until remount). Name it inline.
+      // A rejected transport previously escaped with zero feedback:
+      // drawer open, no toast, button wedged until remount. Name it inline.
       const timedOut = e instanceof DOMException && e.name === 'AbortError'
       const message = timedOut ? t('errors.saveTimedOut') : tCommon('feedback.saveFailed')
       setFieldError(message)
@@ -277,7 +277,7 @@ export function SetupDrawer({
   }
 
   function errorMessage(body: unknown): string {
-    // Typed server bodies (F-t06-019, F-t06-023): the code maps stably to
+    // Typed server bodies: the code maps stably to
     // localized copy while a user-language message renders verbatim, so an
     // 'invalid' 400 names its fix instead of echoing a code.
     const record = body as { code?: unknown; error?: unknown } | null | undefined
@@ -293,7 +293,7 @@ export function SetupDrawer({
     if (code === 'invalid-depreciation-formula') return t('errors.invalidDepreciationFormula')
     if (code === 'invalid' && message === 'invalid-recoverable-percent') return t('errors.invalidRecoverablePercent')
     // A server-side required-field refusal still names the registry key
-    // (F-t06-022 follow-up): render it through the field label — exactly as
+    // Render it through the field label — exactly as
     // client-side validate() does — instead of leaking camelCase into the
     // dialog.
     const missingField = code === 'invalid' && typeof message === 'string'
@@ -495,9 +495,9 @@ function FieldControl({
   // below a control is reserved for validation/state messages only.
   const help = field.helpTextKey ? t(field.helpTextKey) : undefined
   const locked = forceLocked || (!creating && field.lockedOnEdit)
-  // Registry-required fields show a marker (F-t06-018) — exactly the set
+  // Registry-required fields show a marker — exactly the set
   // validate() enforces (booleans/multirefs/locked keys are never required,
-  // and blank keepDefault fields are legal input per F-t06-022), so the mark
+  // and blank keepDefault fields are legal input), so the mark
   // cannot lie about what blocks saving.
   const requiredMark = field.required && !locked && field.kind !== 'boolean' && field.kind !== 'multiref' && !field.keepDefault
     ? <span className="text-red-500" aria-hidden="true"> *</span>

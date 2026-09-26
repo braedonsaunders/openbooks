@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F4-8 (form half): the email settings form rendered zero next-intl copy —
+// The email settings form rendered zero next-intl copy —
 // every label, hint and toast was an English literal. The form now resolves
 // all of its own chrome through admin.email keys. (Provider/field labels
 // come from the emails package's provider specs and stay data, like the

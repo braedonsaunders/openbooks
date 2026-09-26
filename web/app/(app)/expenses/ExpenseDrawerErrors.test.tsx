@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F1-3/F1-4: the expense submit/post and delete actions used to parse the
+// The expense submit/post and delete actions used to parse the
 // response body BEFORE checking the status with no try/catch, so a non-JSON
 // 502 page threw a SyntaxError out of the handler (no toast at all, or a
 // parse error instead of the server's refusal) and a thrown fetch left busy

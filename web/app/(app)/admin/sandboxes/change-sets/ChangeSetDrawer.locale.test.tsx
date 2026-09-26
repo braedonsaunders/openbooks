@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F4-6: the change-set drawer rendered entirely in hardcoded English with
+// The change-set drawer rendered entirely in hardcoded English with
 // zero translation hooks. Every label — actions, columns, lifecycle stages,
 // status and op badges, capture notes, the item-count line, the empty state,
 // the confirm prompt and the promotion refusal reasons (now stable codes

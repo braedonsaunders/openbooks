@@ -610,7 +610,7 @@ export function EmploymentTab({
                       employmentId={employmentId}
                       canVerb={canVerb}
                       departmentOptions={departmentOptions}
-                      // F3-36: this branch already renders inside the
+                      // This branch already renders inside the
                       // canManageHrm gate — the grant travels explicitly.
                       canManage={canManageHrm}
                       onChanged={reload}

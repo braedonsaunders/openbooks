@@ -25,7 +25,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 const TABS = ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit', 'config'] as const
 type Tab = (typeof TABS)[number]
-/** Viewer-locale integer grouping (F2-14b): one hook so every tab shares it. */
+/** Viewer-locale integer grouping: one hook so every tab shares it. */
 function useNum() {
   const locale = useLocale()
   return (n: number) => countLabel(n, locale)

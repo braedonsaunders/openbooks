@@ -130,8 +130,8 @@ export function SettingsForm({
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(initial)
   // Save-attempt marker: the required error shows once a save is attempted
-  // with a blank name and clears as soon as typing resumes (F-t01-010 — a
-  // toast alone leaves the field looking saved-but-blank until reload).
+  // with a blank name and clears as soon as typing resumes
+  // (a toast alone leaves the field looking saved-but-blank until reload).
   const [showNameError, setShowNameError] = useState(false)
   const nameInvalid = showNameError && !form.name.trim()
 

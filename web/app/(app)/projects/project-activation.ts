@@ -1,5 +1,5 @@
 /**
- * Placeholder-draft activation (F-t03-001).
+ * Placeholder-draft activation.
  *
  * "New project" starts life as an inactive placeholder (`is_active = false`,
  * status `active`): activation requires a real name. Saving the

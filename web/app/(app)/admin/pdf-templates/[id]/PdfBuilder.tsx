@@ -161,7 +161,7 @@ export default function PdfBuilder({
         grapesjs={grapesjs}
         // cssIcons off: grapesjs otherwise injects a third-party icon font
         // from a public CDN, which the app CSP blocks on every editor load
-        // (F-t10-005). Nothing renders those icon classes, so the dead
+        // Nothing renders those icon classes, so the dead
         // reference goes, not a vendored copy.
         options={{ height: '100%', storageManager: false, fromElement: false, cssIcons: '' }}
         onEditor={(editor: Editor) => {

@@ -23,7 +23,7 @@ import { savedReportPathVisible } from '../../../lib/report-feature-gates'
  * registry entry, so no second component is introduced here. The outer
  * `PageContainer` shell (scroll wrapper + centered container + fade-in) is
  * likewise chrome the grid vocabulary cannot name, so it arrives as a
- * `page-container` frame the coordinator registers around the widget.
+ * `page-container` frame the page spec registers around the widget.
  *
  * Loader work copied verbatim from page.tsx: the reports.create gate, the
  * saved/custom definition queries, the four feature probes, the

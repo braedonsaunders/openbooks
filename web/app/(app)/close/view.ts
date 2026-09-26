@@ -99,7 +99,7 @@ export interface ClosePeriodRow {
   /** Localized "which modules are locked · on which book" line, or null when
    * the selected book holds no closed locks for the period. Locks can exist
    * without any close run (autopilot/provisioner closes, API closes), so the
-   * run badge alone cannot speak for them (F-t02-005). */
+   * run badge alone cannot speak for them. */
   lockLabel: string | null
   readiness: number
   entries: string
@@ -279,7 +279,7 @@ async function loadCloseWizard(
 /**
  * Closed locks are the enforcement truth the run badge cannot see: a period
  * closed outside any run (autopilot month-end, provisioner seed, API) must
- * still name its locked modules on the list (F-t02-005). One row per
+ * still name its locked modules on the list. One row per
  * (period, book, module) is unique by period_locks_scope, so the ordered
  * aggregate is exact with no DISTINCT. Canonical CLOSE_MODULES order keeps
  * the label stable across renders.

@@ -102,7 +102,7 @@ export function postingEventReason(
   const details = event.details ?? {}
   // Per-instruction reasons first: a partially failed posting names who
   // failed and why (the same "payee (reason)" shape as the post toast), so
-  // the clerk can fix and re-post after the toast dismisses (F-t03-005).
+  // the clerk can fix and re-post after the toast dismisses.
   const failures = details.failures
   if (Array.isArray(failures)) {
     const named = failures

@@ -7,12 +7,12 @@ import { isProjectPlaceholderName, shouldAutoActivateProject } from './project-a
 // the draft placeholder gained a real name. Saving the creation-completing
 // name must activate; anything else must not.
 test('the creation-completing save activates the placeholder draft', () => {
-  assert.equal(shouldAutoActivateProject('New project', false, 'Fleet6 Test HQ Build'), true)
+  assert.equal(shouldAutoActivateProject('New project', false, 'Acme Test HQ Build'), true)
 })
 
 test('activation never fires twice and never resurrects a deactivation', () => {
   // Already active: nothing to do.
-  assert.equal(shouldAutoActivateProject('Fleet6 Test HQ Build', true, 'Fleet6 Test HQ Build'), false)
+  assert.equal(shouldAutoActivateProject('Acme Test HQ Build', true, 'Acme Test HQ Build'), false)
   // A real project the operator deactivated stays deactivated across later
   // saves — the deactivate feature must survive ordinary edits.
   assert.equal(shouldAutoActivateProject('Old Job', false, 'Old Job'), false)
@@ -30,5 +30,5 @@ test('placeholder detection ignores surrounding whitespace', () => {
   assert.equal(isProjectPlaceholderName('  New project  '), true)
   assert.equal(isProjectPlaceholderName(''), true)
   assert.equal(isProjectPlaceholderName(null), true)
-  assert.equal(isProjectPlaceholderName('Fleet6 Test HQ Build'), false)
+  assert.equal(isProjectPlaceholderName('Acme Test HQ Build'), false)
 })

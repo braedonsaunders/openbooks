@@ -117,7 +117,7 @@ export async function loadBankingRules(
   // The `criteria_summary` / `outcome_summary` cell text is produced by the
   // native page's `whenSummary` / `outcomeSummary` closures inside
   // EntityListView's `formatValue`. A spec can never carry a function, so the
-  // loader does NOT precompute them — the coordinator's slot addition (see
+  // loader does NOT precompute them — the slot addition (see
   // the registry entry) carries the verbatim logic. Nothing else on this page
   // formats values in the loader.
 

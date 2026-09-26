@@ -175,7 +175,7 @@ async function flushAsync(): Promise<void> {
   })
 }
 
-// F3-61: step deletion goes through the house confirm dialog — the native
+// Step deletion goes through the house confirm dialog — the native
 // confirm must never fire.
 test('deleting a step asks the house confirm dialog, never the native confirm', async () => {
   confirmCalls.length = 0
@@ -198,7 +198,7 @@ test('deleting a step asks the house confirm dialog, never the native confirm', 
   }
 })
 
-// F3-61: an out-of-range due offset refuses by name — nothing is posted.
+// An out-of-range due offset refuses by name — nothing is posted.
 test('an out-of-range due offset refuses by name and posts nothing', async () => {
   toastErrors.length = 0
   const m = await mount()

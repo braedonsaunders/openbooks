@@ -62,7 +62,7 @@ interface LineRow extends Record<string, unknown> {
   departmentId: string
   projectId: string
   /** Warehouse for fulfil/receipt effects; blank unless the line's item is
-   *  stocked (F-t07-003 pickers). */
+   *  stocked. */
   stockLocationId: string
   /** Pricing lineage the line loaded with (client-only, never serialized —
    *  the save payload picks explicit fields). Lets a reopened draft re-send
@@ -467,7 +467,7 @@ export function OrderDrawer({
   // below, and a later declaration would be a TDZ use-before-assign.
   // Saves, statuses, issues, deletes and converts run on the shared action
   // path: a refusal pins here (role=alert) until the next action — a toast
-  // alone never survives attention (F-t03-001) — AND toasts, and busy always
+  // alone never survives attention — AND toasts, and busy always
   // releases through the package's finally.
   const { busy, refusal, execute, refuse, clearRefusal } = useAppAction()
   // Frozen while an action is in flight (the same busy convention the buttons
@@ -1151,7 +1151,7 @@ export function OrderDrawer({
     })
   }
 
-  // -- line warehouse picker (F-t07-003) ------------------------------------
+  // -- line warehouse picker ------------------------------------
   // Stocked lines relieve a warehouse at fulfil/receipt/posting, so an order
   // line for stocked goods must name one. The picker appears only when the
   // choice is real (several active locations) and only on stocked rows; a

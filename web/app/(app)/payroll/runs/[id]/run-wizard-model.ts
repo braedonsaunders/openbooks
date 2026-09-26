@@ -224,7 +224,7 @@ export const GENERIC_FACTOR_LABELS: Record<string, string> = {
 
 /**
  * Withholding splits surfaced as stub-roster columns, read off the stub's
- * own deduction lines through the pack-declared buckets (F-t08-012) — never
+ * own deduction lines through the pack-declared buckets — never
  * off hardcoded CA factor keys, which read zero on a US run while the money
  * hides in the pay lines. Returns per-bucket amounts plus their total, the
  * TAX column: total withholding for the stub.

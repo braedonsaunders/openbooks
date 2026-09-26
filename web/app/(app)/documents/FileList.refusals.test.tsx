@@ -6,7 +6,7 @@ declare global {
   var __fileRefreshed: boolean | undefined;
 }
 
-// F4-2: selecting 5 files where the caller lacks manager on 2 used to toast
+// Selecting 5 files where the caller lacks manager on 2 used to toast
 // the deleted count as full success, clear the whole selection and refresh —
 // the 2 skipped files looked trashed but remained. A partial bulk must toast
 // moved + skipped counts with the reasons, keep exactly the refused rows

@@ -1,4 +1,4 @@
-// F1-2: the journal drawer offers Post, Delete, Void (and Edit/Save) only
+// The journal drawer offers Post, Delete, Void (and Edit/Save) only
 // with gl.post. The server refuses every one of those mutations without
 // the permission, so a drawer that offers them anyway only manufactures
 // refusals. Mounts drive the real drawer: without canPost no mutation

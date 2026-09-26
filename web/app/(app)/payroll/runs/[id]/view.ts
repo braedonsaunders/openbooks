@@ -294,7 +294,7 @@ export async function loadPayRunWizard(
     }
     const stubs = stubsRes.rows.map((stub) => ({ ...stub, lines: linesByStub.get(stub.id) ?? [] }))
 
-    // Register buckets (F-t08-012): the review grid and stub header columns
+    // Register buckets: the review grid and stub header columns
     // come from the installed packs' declared statutory components — labels
     // and order from the declarations, presence from the run's own nonzero
     // deduction lines — never from hardcoded CA factor keys. A run whose

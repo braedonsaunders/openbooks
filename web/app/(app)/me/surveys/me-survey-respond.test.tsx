@@ -95,7 +95,7 @@ async function flush(): Promise<void> {
   })
 }
 
-test('F3-93: a tokenless reissue refuses by name and never navigates', async () => {
+test('a tokenless reissue refuses by name and never navigates', async () => {
   for (const body of [{}, { token: '' }, { token: null }]) {
     const m = await mount(body)
     try {
@@ -109,7 +109,7 @@ test('F3-93: a tokenless reissue refuses by name and never navigates', async () 
   }
 })
 
-test('F3-93: a tokened reissue navigates to the public survey page', async () => {
+test('a tokened reissue navigates to the public survey page', async () => {
   const m = await mount({ token: 'tok-abc' })
   try {
     m.clickRespond()

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F3-92: the 1:1 drawer description rendered the stored ISO instant with
+// The 1:1 drawer description rendered the stored ISO instant with
 // millis (detail.when rode getOneOnOne's scheduledAt verbatim). The loader
 // now formats it as an org-zone wall time. America/New_York stands in for
 // the org zone: 09:00Z must read 04:00, with no T, zone suffix, or millis.
@@ -143,7 +143,7 @@ registerHooks({
 ;(globalThis as Record<string, unknown>).__meOneOnOnesScheduledAt = SCHEDULED_AT
 const { loadMeOneOnOnesPage } = await import('./view')
 
-test('F3-92: the drawer names the org-zone wall time, never the raw ISO instant', async () => {
+test('the drawer names the org-zone wall time, never the raw ISO instant', async () => {
   const data = await loadMeOneOnOnesPage({ one: ONE_ID })
   assert.ok(data.detail, 'the drawer detail resolves')
   assert.equal(data.detail.when, '2026-01-15 04:00')
@@ -151,7 +151,7 @@ test('F3-92: the drawer names the org-zone wall time, never the raw ISO instant'
   assert.ok(data.detail.title.includes('04:00'), 'the drawer title agrees with the description')
 })
 
-test('F3-99: authorMine derives from the delivered author, never a constant', async () => {
+test('authorMine derives from the delivered author, never a constant', async () => {
   const data = await loadMeOneOnOnesPage({ one: ONE_ID })
   assert.ok(data.detail, 'the drawer detail resolves')
   assert.deepEqual(

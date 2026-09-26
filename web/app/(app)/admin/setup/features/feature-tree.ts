@@ -23,7 +23,7 @@ export type FeatureSwitchState = Record<string, boolean>
  * lookup is injected) so the mapping is unit-testable: every typed refusal
  * the route can send resolves to its localized message, and anything else —
  * unknown codes, malformed or empty bodies — falls back to the generic
- * blocked message instead of a raw code or silence (F-t01-015).
+ * blocked message instead of a raw code or silence.
  */
 export function featureToggleRefusalMessage(
   payload: unknown,

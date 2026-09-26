@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
  * and by browser history, which is UI-only enforcement, and the contract
  * requires refusal. Gating in the layout covers every route in this segment
  * at once; the shared gate explains the refusal on the feature-required page
- * instead of 404ing (F-t03-012).
+ * instead of 404ing.
  */
 export default async function SubcontractsLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()

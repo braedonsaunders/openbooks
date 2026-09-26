@@ -218,8 +218,8 @@ export function ApplicationsBillingWorkspace({
       return body;
     } catch (cause) {
       // A billing refusal pins here (role=alert) until the next action — the
-      // workspace-top text alone never survived attention (F-t04-002: the
-      // retainage-control 422 read as a silent no-op at the row).
+      // workspace-top text alone never survived attention (the
+      // retainage-control 422 once read as a silent no-op at the row).
       const message = cause instanceof TypeError ? t("errors.action") : cause instanceof Error ? cause.message : t("errors.action");
       setError(message);
       toast.error(message);
@@ -596,7 +596,7 @@ function ChangeOrdersSection({
   const [formOpen, setFormOpen] = useState(false);
   // Unallocated COs bill through the carried income account: preselect the
   // org project-revenue default so the created SOV line needs no manual edit
-  // (F-t03-002 residual). The empty option keeps the SOV dialog's "default"
+  // The empty option keeps the SOV dialog's "default"
   // meaning — the approval then falls back to the same default server-side.
   const freshForm = (accountId: string | null) => ({ number: "", description: "", amount: "", targetSovLineId: "", incomeAccountId: accountId ?? "" });
   const [form, setForm] = useState(() => freshForm(defaultIncomeAccountId));

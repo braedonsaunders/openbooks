@@ -190,7 +190,7 @@ function ReconcileWorkspaceForId({
       })
       // The error body may not be JSON (empty body, proxy 5xx page): never
       // let the read itself throw, or the failure goes silent with an
-      // unhandled rejection (F-t05-018).
+      // unhandled rejection.
       const data = await res.json().catch(() => null) as ReconciliationActionResult | null
       if (!res.ok) {
         toast.error(data?.error ?? tBanking('errors.requestFailed'))

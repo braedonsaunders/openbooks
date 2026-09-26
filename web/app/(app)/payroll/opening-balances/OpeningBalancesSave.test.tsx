@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F3-3: the adoption grid's Save parsed the response body BEFORE checking
+// The adoption grid's Save parsed the response body BEFORE checking
 // the status with no catch around the fetch: a non-JSON 502 threw a
 // SyntaxError out of the handler (the error panel showed a parse error or
 // nothing), and a thrown fetch escaped as an unhandled rejection while the

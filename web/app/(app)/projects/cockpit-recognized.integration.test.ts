@@ -80,7 +80,7 @@ test("the cockpit sums the live primary book, never a deactivated one", async ()
     assert.equal(live.financials.pricingMethod, fixedPrice.financialProfile.totalPrice.method);
     assert.equal(live.financials.contractValue, "1250.5000");
 
-    // I1-refix-125: a project outside the caller scope reads as absent.
+    // A project outside the caller scope reads as absent.
     const hidden = await loadProjectCockpit(org.orgId, projectId, { allowedSubsidiaryIds: new Set([randomUUID()]) });
     assert.equal(hidden, null);
 

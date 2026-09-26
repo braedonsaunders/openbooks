@@ -201,7 +201,7 @@ async function flushAsync(): Promise<void> {
   })
 }
 
-// F3-54: the options editor must accept several lines — a single-line input
+// The options editor must accept several lines — a single-line input
 // can only ever post one option.
 test('choice options are edited multi-line and every line is posted', async () => {
   const m = await mount()
@@ -228,7 +228,7 @@ test('choice options are edited multi-line and every line is posted', async () =
   }
 })
 
-// F3-68: an unparseable anonymity threshold refuses by name — nothing is
+// An unparseable anonymity threshold refuses by name — nothing is
 // posted, and the dialog names the valid range.
 test('an unparseable group size refuses by name and posts nothing', async () => {
   const m = await mount()

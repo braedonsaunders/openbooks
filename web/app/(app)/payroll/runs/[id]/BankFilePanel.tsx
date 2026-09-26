@@ -116,7 +116,7 @@ export function BankFilePanel({
 
   // Loaded state carries its run id: navigating A → B with B's fetch still
   // pending renders loading, never A's artifacts under B's route
-  // (I4-webui-236). The error below was already keyed the same way.
+  // The error below was already keyed the same way.
   const [state, setState] = useState<{ documentId: string; data: PanelState } | null>(null)
   const [loadError, setLoadError] = useState<{ documentId: string; message: string } | null>(null)
   const [profileId, setProfileId] = useState('')

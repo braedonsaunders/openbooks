@@ -55,7 +55,7 @@ export function QualificationDrawer({
 }: {
   qualificationId: string | null
   recordOpen: boolean
-  /** Loader-resolved manage grant (F3-37): Verify, Renew and Revoke render
+  /** Loader-resolved manage grant: Verify, Renew and Revoke render
    * only with it, never on stored status alone. */
   canManage: boolean
   onClose: () => void
@@ -251,7 +251,7 @@ export function QualificationDrawer({
       const j = (await res.json()) as { qualification?: { id?: string } }
       const nextId = j.qualification?.id
       if (nextId) {
-        // F3-39: renewal writes a new row, so the drawer navigates to the
+        // Renewal writes a new row, so the drawer navigates to the
         // new id (the `qualification` entry-point param, other params
         // preserved) instead of showing the new row under the old id. The
         // dialog remounts on the new key and loads the row fresh.
