@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from RunWizard.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from RunWizard.tsx; moved without behavior changes. */
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'

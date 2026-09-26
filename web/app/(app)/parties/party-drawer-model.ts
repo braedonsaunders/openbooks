@@ -1,4 +1,4 @@
-/** Split from PartyDrawer.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { formatMoney } from '@openbooks/engine/src/money/money.ts'
 

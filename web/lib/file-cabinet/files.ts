@@ -1,4 +1,4 @@
-/** Split from web/lib/file-cabinet.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
 import { enqueueCabinetCleanup, deriveFileType } from './shared'
 import { type FileViewer, type FolderNode, type FileMeta, type FileDetail, type FileVersion, type FileAttachmentLink } from './types'

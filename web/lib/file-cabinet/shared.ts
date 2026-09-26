@@ -1,4 +1,4 @@
-/** Split from web/lib/file-cabinet.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
 import { type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { enqueueStorageCleanup, fileCabinetObjectKey } from '../file-storage'

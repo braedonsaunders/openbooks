@@ -26,7 +26,7 @@ const PROJECT_BUTTON = "web/app/(app)/projects/NewProjectButton.tsx";
 const PROJECT_REDIRECT = "web/app/(app)/projects/NewProjectRedirect.tsx";
 const HRM_BUTTON = "web/app/(app)/hrm/NewHrmButton.tsx";
 const PARTY_DRAWER = "web/app/(app)/parties/PartyDrawer.tsx";
-// ARCH-FILE-SPLIT: the files PartyDrawer.tsx was split into (was just PARTY_DRAWER).
+// The files PartyDrawer.tsx was split into (PARTY_DRAWER is the re-export hub).
 const PARTY_DRAWER_PIECES = [
   "web/app/(app)/parties/party-drawer-model.ts",
   "web/app/(app)/parties/PartySummary.tsx",

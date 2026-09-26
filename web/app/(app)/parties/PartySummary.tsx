@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from PartyDrawer.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { type PartyPayload, field } from './party-drawer-model'
 import { useMoney } from '@/components/money-provider'
 import { useMemo, useState, type ReactNode } from 'react'
