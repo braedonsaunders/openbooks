@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { RevaluationError, RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/src/close/fx-revaluation.ts'
@@ -67,9 +68,8 @@ export async function POST(req: Request) {
     // period, a missing spot rate, an inactive subsidiary, an unbalanced
     // entry. Fail those closed with 422; only systemic throws stay 500.
     if (e instanceof RevaluationError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return apiErrorResponse(e)
   }
 }
