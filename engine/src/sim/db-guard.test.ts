@@ -8,7 +8,7 @@ import {
 
 test("simulator CLI refuses provisioning against a non-loopback database", () => {
   const result = spawnSync(process.execPath, ["--import", "tsx", "engine/src/sim/cli.ts", "provision"], {
-    env: { ...process.env, NODE_ENV: "production", OPENBOOKS_SIM: "1", OPENBOOKS_DB_URL: "postgresql://db.example.invalid/openbooks_prod" },
+    env: { ...process.env, NODE_ENV: "production", OPENBOOKS_SIM: "1", OPENBOOKS_DB_URL: "postgresql://db.example.invalid/openbooks_prod", OPENBOOKS_BYPASS_DB_URL: "postgres://openbooks_bypass:ci-test-bypass-dummy-password@127.0.0.1:5432/openbooks_test_sim" }, // BYPASS passes the production import gate so the loopback guard is what refuses
     encoding: "utf8",
     timeout: 5_000,
   });
