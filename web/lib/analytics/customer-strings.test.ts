@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { registerHooks } from 'node:module'
 import { join } from 'node:path'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
@@ -8,11 +7,6 @@ import {
   customerStrings,
   englishCustomerStrings,
 } from './customer-strings.ts'
-
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-  return next(specifier, context)
-} })
 
 /**
  * Customer-intelligence sentences resolve through the message catalogs.

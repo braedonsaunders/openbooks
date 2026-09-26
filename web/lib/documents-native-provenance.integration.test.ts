@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { isUuid } from "@/lib/list-params";
@@ -12,15 +11,6 @@ import { isUuid } from "@/lib/list-params";
 // receive -> convert -> edit -> post for real and assert the stock posts
 // exactly once. Direct async style (no spawned children): the canonical
 // runner owns lifecycle and typecheck covers this file.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { db, withBypassContext, withOrg, withOrgContext } = await import(
   "@openbooks/engine/src/platform/db.ts"
 );

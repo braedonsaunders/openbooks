@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { REPORT_FILTER_OPERATORS } from '@openbooks/reports'
 
 // custom-reports is server-only in production; this suite runs the one pure
 // export it needs with that guard stubbed.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { url: 'data:text/javascript,export {}', shortCircuit: true }
-    }
-    return nextResolve(specifier, context)
-  },
-})
 const { TEMPORAL_OPS } = await import('./custom-reports.ts')
 
 test('every viewer-override temporal op is a real filter operator', () => {

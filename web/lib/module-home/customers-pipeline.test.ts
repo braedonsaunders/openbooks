@@ -11,7 +11,6 @@ const virtual = (source: string) => ({
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'drizzle-orm' && context.parentURL?.startsWith('data:')) {
       return next(root + 'node_modules/drizzle-orm/index.js', context)
     }
@@ -44,7 +43,6 @@ registerHooks({
       // the reader (the handoff itself is pinned in customers.test.ts).
       return virtual('export async function paymentStats() { return { map: new Map(), globalAvg: 45 } }')
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

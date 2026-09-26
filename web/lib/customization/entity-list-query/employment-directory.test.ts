@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 
@@ -11,15 +10,6 @@ import { sql, type SQL } from "drizzle-orm";
 // is stubbed. Row-shape coverage lives in the companion
 // employees-where-fail-closed.integration.test.ts, which needs a fixture
 // database.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   employeeBaseJoins,

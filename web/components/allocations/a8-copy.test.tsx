@@ -28,14 +28,6 @@ const webRoot = join(process.cwd(), 'web')
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '@openbooks/ui') return { shortCircuit: true, url: worktreeUi }
-    if (specifier.startsWith('@/')) {
-      // Mirror the bundler through the next resolver (not a short-circuit)
-      // so tsx still transforms the resolved source: extensionless app
-      // imports resolve by extension probe.
-      const base = join(webRoot, specifier.slice(2))
-      const file = [base + '.tsx', base + '.ts', base].find((p) => existsSync(p)) ?? base
-      return next(pathToFileURL(file).href, context)
-    }
     if (specifier === 'next/link') {
       return {
         shortCircuit: true,

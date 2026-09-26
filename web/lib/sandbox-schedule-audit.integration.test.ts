@@ -9,7 +9,6 @@ const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __sandboxScheduleUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "next/cache") return { shortCircuit: true, url: "data:text/javascript,export function revalidatePath(){}" };
     if (specifier === "./auth" && context.parentURL?.includes("/web/lib/authz")) return {
       shortCircuit: true,

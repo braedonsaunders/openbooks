@@ -1,10 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
-registerHooks({resolve(specifier,context,next){
-  if(specifier === 'server-only')return {shortCircuit:true,url:'data:text/javascript,export {}'}
-  return next(specifier,context)
-}})
 const { coerceScalar } = await import('./validate')
 
 test('generic API money coercion preserves exact decimal text and refuses excess precision', () => {

@@ -24,17 +24,7 @@
  * keep holding as packs are added.
  */
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true as const, url: 'data:text/javascript,export {}' }
-    }
-    return next(specifier, context)
-  },
-})
 
 const { SETUP_ENTITIES } = (await import('./registry')) as {
   SETUP_ENTITIES: {

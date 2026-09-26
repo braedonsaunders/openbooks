@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // F-coord-004: fulfillment/receipt must refuse a stocked order line with no
@@ -7,15 +6,6 @@ import test from 'node:test'
 // pure so the refusal predicate is pinned here without a database; the
 // end-to-end legacy shape (refuse → assign → fulfill) is covered by
 // order-line-warehouse.integration.test.ts. Only server-only is stubbed.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { missingOrderLineWarehouses, ORDER_LINE_WAREHOUSE_REQUIRED } = await import('./order-cycle.ts')
 
 const PROFILED_NULL = { lineNumber: 1, itemId: 'item-1', hasInventoryProfile: true, stockLocationId: null }

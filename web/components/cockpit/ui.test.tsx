@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
@@ -10,15 +9,6 @@ import test from "node:test";
 // sublines must wrap instead of ellipsis, and the card must yield (min-w-0)
 // so narrow grid columns engage wrapping instead of overflowing the page.
 const root = pathToFileURL(process.cwd() + "/").href;
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier.startsWith("@/")) {
-    const path = root + "web/" + specifier.slice(2);
-    for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
-  return next(specifier, context);
-} });
-
 const React = await import("react");
 const { renderToString } = await import("react-dom/server");
 const { Users } = await import("lucide-react");

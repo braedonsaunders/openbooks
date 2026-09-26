@@ -20,7 +20,6 @@ const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
 const MAIN_ROOT_URL = "file:///Users/braedonsaunders/Documents/openbooks/";
 const WORKTREE_ROOT_URL = new URL("../../", import.meta.url).href;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
   if (specifier === "../../../../../../lib/feature-gates" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/runs/[id]/bank-file/route.ts")) {
     return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(

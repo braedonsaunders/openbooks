@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 
@@ -14,15 +13,6 @@ import { sql, type SQL } from "drizzle-orm";
 // subledger postings out, reversed entries in) lives in the companion
 // journal-scope-agreement.integration.test.ts, which needs a fixture
 // database. Only server-only is stubbed; query building is offline.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { JOURNAL_ENTRY_TABLE, journalEntryWhere, journalScopeWhere } = await import("./journal-entries.ts");
 const { defaultListView } = await import("@openbooks/customization");

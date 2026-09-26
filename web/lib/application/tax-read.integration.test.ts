@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    return next(specifier, context);
-  },
-});
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");

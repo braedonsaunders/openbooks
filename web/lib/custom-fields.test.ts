@@ -1,18 +1,8 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // validateCustomValues is pure. The marker shim matches the repo's
 // integration-test convention so the production module loads under node:test.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { validateCustomValues } = await import("./custom-fields.ts");
 
 const def = {

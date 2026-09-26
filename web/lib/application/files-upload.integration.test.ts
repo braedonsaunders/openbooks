@@ -1,22 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import pg from "pg";
 
 // Exercise upload_file's shared cabinet write, grants, scope, and replay.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");

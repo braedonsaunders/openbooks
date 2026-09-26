@@ -9,7 +9,6 @@ const root = pathToFileURL(process.cwd() + "/").href;
 const control: { user: SessionUser | null; afterRun: (() => Promise<void>) | null } = { user: null, afterRun: null };
 Object.assign(globalThis, { __scriptLifecycle: control });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
     return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__scriptLifecycle.user}" };
   }
@@ -26,7 +25,6 @@ registerHooks({ resolve(specifier, context, next) {
         return outcome;
       }`) };
   }
-  if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");

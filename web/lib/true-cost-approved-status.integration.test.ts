@@ -1,4 +1,3 @@
-import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -11,13 +10,6 @@ import { randomUUID } from 'node:crypto'
  * hours-based burden rate.
  */
 const root = pathToFileURL(process.cwd() + '/').href
-registerHooks({
-  resolve(s, c, next) {
-    if (s === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    if (s.startsWith('@/')) return next(root + 'web/' + s.slice(2) + '.ts', c)
-    return next(s, c)
-  },
-})
 const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')

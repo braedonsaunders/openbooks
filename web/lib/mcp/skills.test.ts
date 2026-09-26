@@ -1,22 +1,12 @@
 // source-pin-contract: MCP skill playbooks must only name registered assistant/MCP tools (or named non-tool terms). The catalog sources import server-only code, so the prose-to-catalog cross-check reads their tool names from source; the subject (skill bodies) is the imported registry, never hand-listed.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
 import { ZodError, z } from "zod";
 import { ApplicationError } from "../application/errors";
 import { AssistantToolFailure, mapMcpError, mcpErrorStatus } from "./errors";
 import { MCP_SKILLS } from "./skills";
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
-    return next(specifier, context);
-  },
-});
 
 /**
  * The skill pack's authoring rule, enforced: every snake_case identifier a

@@ -8,9 +8,6 @@ import type { Block } from "@braedonsaunders/appkit-viewspec";
 // out: the unknown-kind arm under test renders neither.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (/\.(css|scss|sass|less)(\?[^"]*)?$/.test(specifier)) {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export default {}" };
     }

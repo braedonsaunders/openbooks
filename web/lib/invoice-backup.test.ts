@@ -7,9 +7,6 @@ import { toUnits } from '../../engine/src/money/money.ts'
 // allocator can be exercised directly without starting a Next.js server.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier.startsWith('@openbooks/')) {
       const [packageName, ...packagePath] = specifier.slice('@openbooks/'.length).split('/')
       if (packageName !== 'engine' && packageName !== 'schema') {

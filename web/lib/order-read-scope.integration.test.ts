@@ -13,7 +13,6 @@ Object.assign(globalThis, { __orderScopeRead: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 const orderLib = new URL('../app/api/_order/lib.ts', import.meta.url).href
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return virtual('export {}')
   if (specifier === './authz' && context.parentURL?.endsWith('/lib/feature-gates.ts')) {
     return virtual('export async function guardPermission(){ return globalThis.__orderScopeRead.gate }')
   }

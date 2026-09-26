@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { Authz } from "./authz";
@@ -10,11 +9,6 @@ import type { SessionUser } from "./auth";
 // orphaned origin='payroll' with no document link) searched total zero even
 // though the dashboard shows them. An exact entry number must always
 // resolve its entry — the same bypass the documents legs already have.
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-  return next(specifier, context);
-} });
-
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { globalSearch } = await import("./search");

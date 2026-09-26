@@ -29,7 +29,6 @@ function sqlText(query: unknown): string {
 const pdfLibUrl = import.meta.resolve('pdf-lib')
 
 const mockSources = new Map<string, string>([
-  ['mock:server-only', 'export {}'],
   [
     'mock:intl',
     'export async function getTranslations() { return (key) => key }',
@@ -124,7 +123,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['server-only', 'mock:server-only'],
   ['next-intl/server', 'mock:intl'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
   ['@openbooks/engine/src/reports/ensure-report-definitions.ts', 'mock:ensure-definitions'],

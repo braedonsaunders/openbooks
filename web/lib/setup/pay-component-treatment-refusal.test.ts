@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // With the storage layer constraining only the treatment SHAPE (migration
@@ -8,15 +7,6 @@ import test from 'node:test'
 // names the treatments the scope declares rather than surfacing a
 // constraint name. The create path must never touch storage, so the stub
 // throws on any query. Only server-only is stubbed.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { validateEntityIntegrity } = await import('./write.ts')
 const { SETUP_ENTITY_BY_KEY } = await import('./registry.ts')
 

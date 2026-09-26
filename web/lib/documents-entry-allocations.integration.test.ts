@@ -1,22 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // applyDocumentEdit is server-only code exercised through the same module
 // hooks as the neighbouring documents suites.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(

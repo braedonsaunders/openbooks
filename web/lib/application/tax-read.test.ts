@@ -21,7 +21,6 @@ const mockDb = `
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mockDb) };
     }

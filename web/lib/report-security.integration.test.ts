@@ -9,8 +9,6 @@ const state: { user: import('./auth').SessionUser | null } = { user: null }
 Object.assign(globalThis, { __reviewState: state })
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'server-only')
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (s === 'next-intl/server')
       return {
         shortCircuit: true,
@@ -34,7 +32,6 @@ registerHooks({
               'export async function validateSessionToken(){return null;}',
           ),
       }
-    if (s.startsWith('@/')) return next(root + 'web/' + s.slice(2) + '.ts', c)
     return next(s, c)
   },
 })

@@ -91,17 +91,11 @@ const mockSources = new Map<string, string>([
 const webRoot = new URL("../", import.meta.url);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { shortCircuit: true, url: "mock:db" };
     }
     if (specifier === "../../../lib/authz") {
       return { shortCircuit: true, url: "mock:authz" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context);
     }
     return nextResolve(specifier, context);
   },
@@ -131,9 +125,6 @@ const behavioralState: BehavioralState = { user: null };
 
 const behavioralHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "./auth" && context.parentURL?.includes("lib/authz.ts")) {
       return {
         shortCircuit: true,

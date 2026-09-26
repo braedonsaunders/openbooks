@@ -1,18 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { registerHooks } from 'node:module'
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { INDUSTRY_BY_KEY } = await import('./industries.ts')
-hooks.deregister()
 
 test('nonprofit preset has unique net-asset account numbers', () => {
   const nonprofit = INDUSTRY_BY_KEY.get('nonprofit')

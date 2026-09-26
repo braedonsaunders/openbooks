@@ -8,7 +8,6 @@ const state: { gate: Authz | null } = { gate: null };
 registerHooks({ resolve(specifier, context, next) {
   const parent = decodeURIComponent(context.parentURL ?? "");
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
-  if (specifier === "server-only") return virtual("export {}");
   if (specifier.endsWith("/lib/feature-gates") && parent.endsWith("/costing/route.ts")) return virtual(
     "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.costing-feature-race')].gate}");
   return next(specifier, context);

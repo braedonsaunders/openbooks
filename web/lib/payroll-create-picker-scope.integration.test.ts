@@ -19,7 +19,6 @@ const state: { gate: Authz | null } = { gate: null };
 registerHooks({ resolve(specifier, context, next) {
   const parent = decodeURIComponent(context.parentURL ?? "");
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
-  if (specifier === "server-only") return virtual("export {}");
   if (specifier === "next-intl/server") return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}");
   // A page is its `page.tsx` AND its `view.ts`: the loader these stubs were
   // written against now lives in the sibling module.

@@ -11,9 +11,6 @@ import { sql } from "drizzle-orm";
 // feature/permission gate is seammed.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.endsWith("/lib/authz")) {
       return { shortCircuit: true, url: "mock:budget-export-gate" };
     }

@@ -1,23 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // A v1 order create for a restricted key must never mint a NULL-subsidiary
 // draft the same key cannot GET/list: the subsidiary is required (explicit)
 // or derived (single visible subsidiary), otherwise refused.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");

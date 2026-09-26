@@ -19,7 +19,6 @@ const state: { gate: Authz | null } = { gate: null };
 registerHooks({ resolve(specifier, context, next) {
   const parent = decodeURIComponent(context.parentURL ?? "");
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
-  if (specifier === "server-only") return virtual("export {}");
   if (specifier === "next-intl/server") return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'};export async function getFormatter(){return {dateTime:date=>date.toISOString()}}");
   if (specifier.endsWith("/lib/feature-gates") && parent.endsWith("/api/payroll/runs/route.ts")) return virtual(
     "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-run-population-scope')].gate}");

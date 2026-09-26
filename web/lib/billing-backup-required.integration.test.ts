@@ -23,12 +23,10 @@ const pdfStub = {
 }
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === '@openbooks/pdf') return pdfStub
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__billingBackupSession.user}' }
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

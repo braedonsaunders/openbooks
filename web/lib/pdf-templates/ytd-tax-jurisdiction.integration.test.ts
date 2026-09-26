@@ -6,7 +6,6 @@ import test from 'node:test'
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '../locale' && context.parentURL?.includes('/pdf-templates/values')) return { shortCircuit: true, url: 'data:text/javascript,export async function resolveLocale(){return "en-CA"}' }
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     return next(specifier, context)
   },
 })

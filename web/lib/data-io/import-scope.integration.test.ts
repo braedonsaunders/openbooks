@@ -39,12 +39,6 @@ const mockAuthz = `
 const webRoot = new URL("../../", import.meta.url);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`.${specifier.slice(1)}.ts`, webRoot).href, context);
-    }
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/data/import/")) {
       return { url: "mock:authz", shortCircuit: true };
     }

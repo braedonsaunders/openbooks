@@ -11,7 +11,6 @@ import type { InsightQuery } from "@openbooks/analytics";
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "next/navigation") {
       return {
         shortCircuit: true,

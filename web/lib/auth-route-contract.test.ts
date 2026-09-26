@@ -1,26 +1,9 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextRequest, NextResponse } from "next/server";
 import { isPublicPath } from "./proxy-policy";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      const path = `../${specifier.slice(2)}`;
-      return {
-        shortCircuit: true,
-        url: new URL(path.endsWith(".ts") ? path : `${path}.ts`, import.meta.url).href,
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
 
 const { proxy } = await import("../proxy.ts");
 const { mintSigningToken, verifySigningToken } = await import("./field-ticket-token.ts");

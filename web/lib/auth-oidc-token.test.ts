@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { verifyOidcIdToken } from "./auth-oidc-token";
 
@@ -9,15 +8,6 @@ import { verifyOidcIdToken } from "./auth-oidc-token";
 // marker package gates only RSC bundling; shimming it to an empty module lets
 // these tests exercise the production flow directly. node's test runner
 // isolates each file in its own process, so the hook cannot leak elsewhere.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { beginOidcAuthorization, completeOidcAuthorization, oidcEnabled } = await import("./auth-oidc");
 
 // auth-oidc reads its config live from process.env (never the engine db.ts

@@ -112,14 +112,8 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // Next's webpack alias (`@/*` → `web/*`): this suite lives in web/lib/,
     // so `@/lib/x` is the sibling `./x`.
-    if (specifier.startsWith('@/lib/') && context.parentURL) {
-      return nextResolve(new URL(`./${specifier.slice('@/lib/'.length)}.ts`, context.parentURL).href, context)
-    }
     // Engine modules import the pool through relative paths (`./db.ts` inside
     // platform/, `../platform/db.ts` elsewhere), not the workspace
     // specifier: normalize every load of the platform pool to the double, or

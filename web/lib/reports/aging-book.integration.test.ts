@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
@@ -8,15 +7,6 @@ import { sql } from 'drizzle-orm'
 // aging: a primary $500 invoice plus a secondary-book $500 mirror used to
 // age as $1,000, because the control residual summed journal lines across
 // every book while the document side rebuilt only each posted entry.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'

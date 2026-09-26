@@ -12,7 +12,6 @@ import test from 'node:test';
 // dimensions leaked in, while your own undimensioned lines were denied —
 // even though the report and the list right beside the drill showed them.
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') {
     return { shortCircuit: true, url: `data:text/javascript,export async function getTranslations() { return (key) => key }` };
   }

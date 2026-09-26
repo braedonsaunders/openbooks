@@ -13,9 +13,6 @@ import { sql } from 'drizzle-orm'
 // shared gate state.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../lib/authz') {
       return { shortCircuit: true, url: 'mock:drill-gate' }
     }

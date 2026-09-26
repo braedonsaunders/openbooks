@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 registerHooks({ resolve(specifier,context,next) {
-  if(specifier === 'server-only')return {shortCircuit:true,url:'data:text/javascript,export {}'};
   if(specifier === '../money-server' && context.parentURL?.includes('/analytics/'))return {shortCircuit:true,url:'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}'};
   return next(specifier,context);
 } });

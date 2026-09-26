@@ -13,12 +13,6 @@ import test from "node:test";
 // as a document like every other payable.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a
     // second db pool without the test bypass). Pin them to this checkout —

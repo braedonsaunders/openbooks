@@ -1,19 +1,9 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
 
 // tax-filing.ts is server-only in production. Shim the marker so this pure
 // adapter can be exercised directly by Node's test runner.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { taxReturnExportData } = await import('./tax-filing.ts')
 
 const result: TaxReturnResult = {

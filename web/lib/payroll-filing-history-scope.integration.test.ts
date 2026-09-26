@@ -5,8 +5,6 @@ import test from "node:test";
 import type { Authz } from "./authz";
 registerHooks({
   resolve(s, c, n) {
-    if (s === "server-only")
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
     return n(s, c);
   },
 });

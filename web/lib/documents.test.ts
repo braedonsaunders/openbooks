@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
@@ -11,15 +10,6 @@ import { isUuid } from '@/lib/list-params'
 // marker package gates only RSC bundling; shimming it to an empty module lets
 // these tests exercise the production services directly. node's test runner
 // isolates each file in its own process, so the hook cannot leak elsewhere.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { applyDocumentEdit, createPostedCorrectionDraft, runPostedCorrectionDraftFlows, validateEditableDocumentLines } = await import("./documents.ts"), { buildReversalLinkEvidence, DocumentEditError, runDocumentVersionedTransaction, validateCorrectionReason } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
 const { computeBillTotals } = await import("./bills.ts");
 const { createRecord } = await import('./api/writers.ts')

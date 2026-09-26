@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { join } from 'node:path'
 import test from 'node:test'
-registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context) } })
 const { CONTINUOUS_CLOSE_AGENT_KEYS, agentPackMeta, agentPackMetas } = await import('./agents.ts')
 
 /**
@@ -73,9 +72,6 @@ const gateMocks = new Map<string, string>([
 ])
 const gateHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     const mocked = gateMocks.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

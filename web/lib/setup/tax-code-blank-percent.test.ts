@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // A blank Recoverable % on a new tax code was refused with the
@@ -8,15 +7,6 @@ import test from 'node:test'
 // them — the integrity check read the raw body instead. The validator takes
 // an executor; the create-blank path must never touch storage, so the stub
 // throws on any query. Only server-only is stubbed.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { validateEntityIntegrity } = await import('./write.ts')
 
 import type { SetupEntity } from './registry.ts'

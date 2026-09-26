@@ -1,14 +1,6 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    return next(specifier, context)
-  },
-})
 
 // Every template resolution carries immutable evidence of the design it
 // returned: the saved template's id + revision plus the sha256 of the

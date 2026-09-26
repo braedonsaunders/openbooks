@@ -1,18 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    if (specifier.startsWith('@/')) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context)
-    }
-    return nextResolve(specifier, context)
-  },
-})
 
 function errorMessage(error: unknown): string {
   let current: unknown = error

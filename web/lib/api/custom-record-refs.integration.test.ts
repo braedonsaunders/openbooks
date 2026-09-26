@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { ApiField, ResolvedApiType } from "./registry-data.ts";
@@ -12,15 +11,6 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // the same gap with a batched per-table ownership check and refuse with a
 // tenant-opaque 404 — the metadata-driven record path must fail closed the
 // same way, on create and on update, for header and repeating-row fields.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { createRecord, updateRecord } = await import("./writers.ts");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
 

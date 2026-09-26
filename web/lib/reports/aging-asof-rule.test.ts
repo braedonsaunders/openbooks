@@ -1,13 +1,6 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-registerHooks({
-  resolve(s, c, next) {
-    if (s === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    return next(s, c)
-  },
-})
 const { resolveAgingAsOf } = await import('./aging.ts')
 
 // The aging CSV disagreed with its screen because

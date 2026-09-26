@@ -13,9 +13,6 @@ import { sql } from 'drizzle-orm'
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // Resolve this worktree's engine directly, even when node_modules is shared.
     if (specifier.startsWith('@openbooks/engine/')) {
       const engineRoot = new URL('../../engine/', import.meta.url)

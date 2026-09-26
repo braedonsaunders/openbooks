@@ -34,7 +34,6 @@ registerHooks({
         return snapshot;
       }
     `)
-    if (specifier === 'server-only') return moduleSource('export {}')
     if (specifier === 'next-intl/server')
       return moduleSource(
         'export async function getTranslations(){ const t=(key)=>key; t.rich=(key)=>key; return t }; export async function getLocale(){ return "en" }',
@@ -91,8 +90,6 @@ registerHooks({
             .join('\n'),
         )
     }
-    if (specifier.startsWith('@/'))
-      return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

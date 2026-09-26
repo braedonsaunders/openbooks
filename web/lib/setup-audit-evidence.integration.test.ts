@@ -13,11 +13,9 @@ const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: 
 Object.assign(globalThis, { __setupEvidence: state });
 const root = pathToFileURL(process.cwd() + '/').href;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/')) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__setupEvidence.gate}' };
   }
-  if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context);
   return next(specifier, context);
 } });
 const { POST, PATCH, DELETE } = await import('../app/api/admin/setup/[entity]/route');

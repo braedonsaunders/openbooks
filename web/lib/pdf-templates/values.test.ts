@@ -80,7 +80,6 @@ const harness = {
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('openbooks.pay-stub-values-test')] = harness
 
 const mockSources = new Map<string, string>([
-  ['mock:server-only', 'export {}'],
   [
     'mock:drizzle-orm',
     `
@@ -176,7 +175,6 @@ registerHooks({
       return nextResolve(specifier, { ...context, parentURL: import.meta.url })
     }
     const mocks: Record<string, string> = {
-      'server-only': 'mock:server-only',
       'drizzle-orm': 'mock:drizzle-orm',
       '@openbooks/engine/src/platform/db.ts': 'mock:db',
       '@openbooks/engine/src/payroll/packs.ts': 'mock:packs',

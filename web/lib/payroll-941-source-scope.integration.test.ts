@@ -3,8 +3,6 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 registerHooks({
   resolve(s, c, n) {
-    if (s === "server-only")
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
     return n(s, c);
   },
 });

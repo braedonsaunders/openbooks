@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Live-Postgres regression: document_lines.unit_price is numeric(28,8), so a
@@ -11,18 +10,6 @@ import test from "node:test";
 // DocumentDrawer sends on every reload-then-save — failed with a 422
 // ('unit price is not a valid amount') instead of round-tripping. Input
 // validation must accept the column's own scale.
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");

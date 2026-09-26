@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { registerHooks } from 'node:module';
 import { buildSchedule, runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts';
 import { toUnits } from '@openbooks/engine/src/money/money.ts';
 import { sql } from 'drizzle-orm';
@@ -26,10 +25,6 @@ async function eventFor(orgId: string, entryId: string) {
 }
 
 
-registerHooks({resolve(specifier,context,next){
- if(specifier==='server-only')return {shortCircuit:true,url:'data:text/javascript,export {}'};
- return next(specifier,context);
-}});
 const {loadAsset}=await import('../app/api/assets/_lib');
 const cases=['plain','depreciation','impairment','revaluation','reversed impairment','disposal','write-off','reversed disposal','reversed write-off','impaired disposal','future impairment','alternate book','dated reversal'] as const;
 for(const scenario of cases){

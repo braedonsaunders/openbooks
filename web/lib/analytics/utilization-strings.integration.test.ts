@@ -1,15 +1,9 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { registerHooks } from 'node:module'
 import { join } from 'node:path'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
-
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-  return next(specifier, context)
-} })
 
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 /**
@@ -9,15 +8,6 @@ import test from "node:test";
  * remedy — never raw Postgres exclusion text, and never a silent second
  * window the balance then resolves arbitrarily.
  */
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypass } = await import("@openbooks/engine/src/platform/db.ts");

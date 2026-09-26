@@ -8,7 +8,6 @@ import type { Authz } from "./authz";
 const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.project-percent-feature-race")] = state;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "../../../../../lib/authz" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/projects/[id]/percent-complete/route.ts")) {
     return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
       "export async function guardPermission(){return globalThis[Symbol.for('openbooks.project-percent-feature-race')].gate}") };

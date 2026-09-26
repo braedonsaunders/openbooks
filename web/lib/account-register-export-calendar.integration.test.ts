@@ -13,21 +13,11 @@ import { sql } from "drizzle-orm";
 // translations) is seammed.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.endsWith("/lib/authz")) {
       return { shortCircuit: true, url: "mock:register-export-gate" };
     }
     if (specifier === "next-intl/server") {
       return { shortCircuit: true, url: "mock:register-export-intl" };
-    }
-    if (specifier.startsWith("@/")) {
-      const path = `../${specifier.slice(2)}`;
-      return {
-        shortCircuit: true,
-        url: new URL(path.endsWith(".ts") ? path : `${path}.ts`, import.meta.url).href,
-      };
     }
     return nextResolve(specifier, context);
   },

@@ -13,7 +13,6 @@ import test from 'node:test'
 
 registerHooks({
   resolve(specifier, _context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     return next(specifier)
   },
 })

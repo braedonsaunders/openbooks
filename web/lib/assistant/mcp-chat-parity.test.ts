@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import type { Authz } from "../authz.ts";
 
@@ -8,19 +7,6 @@ import type { Authz } from "../authz.ts";
 // application tests by shimming only the marker package (same shim as
 // web/lib/application/tool-catalog.test.ts). The `@/lib` alias resolves via
 // TSX_TSCONFIG_PATH=web/tsconfig.json, which scripts/test-suite.mjs sets.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { buildToolRegistry, executeAssistantTool } = await import("./registry.ts");
 const { FEATURES } = await import("../../../engine/src/organization/feature-registry.ts");
 

@@ -56,9 +56,6 @@ const featureGatesMock = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Web modules carry the server-only client guard; plain node runs stub it.
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (context.parentURL?.includes("api-keys/route.ts")) {
       // Only the session boundary is seammed; the JSON body boundary stays real.
       if (specifier === "../../../../lib/feature-gates") {

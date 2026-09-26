@@ -33,9 +33,6 @@ function sqlText(query: unknown): string {
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '@openbooks/engine/src/extensions/projections.ts') {
       return {
         shortCircuit: true,

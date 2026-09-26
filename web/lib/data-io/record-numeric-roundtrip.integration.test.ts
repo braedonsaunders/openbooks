@@ -1,19 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { FormSection } from '@openbooks/forms-core'
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    return nextResolve(specifier, context)
-  },
-})
 const { getResource } = await import('./resources.ts')
 const { toCsv } = await import('./serialize.ts')
 const { parseImportFile } = await import('./parse.ts')
-hooks.deregister()
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')

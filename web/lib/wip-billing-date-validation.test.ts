@@ -4,11 +4,9 @@ import test from 'node:test'
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
     return nextLoad(url, context)
   },
 })

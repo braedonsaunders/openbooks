@@ -1,25 +1,12 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../auth';
 import type { ApplicationContext } from '../application/context';
 
 const root = pathToFileURL(process.cwd() + '/').href;
-registerHooks({ resolve(specifier, context, nextResolve) {
-  if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' };
-  if (specifier.startsWith('@/')) {
-    const path = root + 'web/' + specifier.slice(2);
-    for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) {
-      if (existsSync(new URL(path + suffix))) return nextResolve(path + suffix, context);
-    }
-    return nextResolve(path, context);
-  }
-  return nextResolve(specifier, context);
-} });
-
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');

@@ -9,9 +9,6 @@ import test from "node:test";
 // must explode exactly like an interactive save.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next-intl/server") {
       return {
         shortCircuit: true,

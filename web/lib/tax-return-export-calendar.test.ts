@@ -74,9 +74,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next-intl/server') {
       return {
         shortCircuit: true,

@@ -23,13 +23,6 @@ import type { Authz } from "./authz";
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     // The assistant tool file checks the payroll feature switch; the scratch
     // org has payroll off by default and the switch is not what is under test.
     if (

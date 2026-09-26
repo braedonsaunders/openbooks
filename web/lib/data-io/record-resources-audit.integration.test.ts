@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { FormSection } from '@openbooks/forms-core'
@@ -9,15 +8,6 @@ import type { FormSection } from '@openbooks/forms-core'
 // audit_log evidence — only the import_jobs run row records the batch.
 // Every updated or created row must carry its own actor + before/after
 // evidence (same source:'import' shape as the setup import resource).
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'

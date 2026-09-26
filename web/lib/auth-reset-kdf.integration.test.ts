@@ -21,7 +21,6 @@ const state = {
 // Observe the real KDF boundary; all token reads, locks and writes use PostgreSQL.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (context.parentURL?.includes("auth-reset.ts") && specifier === "./auth") {
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`
         export function authContextHashes() { throw new Error('No reset email delivery in this test'); }

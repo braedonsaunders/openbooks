@@ -62,7 +62,6 @@ const stateKey = Symbol.for("openbooks.auth-reset-test");
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
-  ["mock:server-only", "export {}"],
   [
     "mock:drizzle-orm",
     `
@@ -147,7 +146,6 @@ const mockSources = new Map<string, string>([
 registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
-      "server-only": "mock:server-only",
       "drizzle-orm": "mock:drizzle-orm",
       "@openbooks/engine/src/platform/db.ts": "mock:db",
       "@openbooks/emails": "mock:emails",

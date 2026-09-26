@@ -1,20 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { url: "data:text/javascript,export {}", format: "module", shortCircuit: true };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { vendorData } = await import("./vendor-data.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import type { Authz } from './authz'
@@ -8,15 +7,6 @@ import type { Authz } from './authz'
 // stubbed so the missing-entity refusal is the real function, not a source
 // grep — a grep would still pass if the guard called canRunReportEntity and
 // then returned allow anyway.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { canRunReportEntity, canSeeReportDefinition, guardReportEntity } = await import('./report-authz.ts')
 
 /**

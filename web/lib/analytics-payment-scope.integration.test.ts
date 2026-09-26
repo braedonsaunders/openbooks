@@ -4,7 +4,6 @@ import { registerHooks } from 'node:module';
 import test from 'node:test';
 registerHooks({ resolve(specifier,context,next) {
   if (specifier === '../money-server' && context.parentURL?.includes('/analytics/')) return {shortCircuit:true,url:'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}'};
-  if (specifier === 'server-only') return {shortCircuit:true,url:'data:text/javascript,export {}'};
   return next(specifier,context);
 } });
 const {sql} = await import('drizzle-orm');

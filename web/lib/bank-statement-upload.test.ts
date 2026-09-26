@@ -238,18 +238,8 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
-    if (specifier.startsWith('@/')) {
-      const path = `../${specifier.slice(2)}`
-      return {
-        shortCircuit: true,
-        url: new URL(path.endsWith('.ts') ? path : `${path}.ts`, import.meta.url).href,
-      }
-    }
     if (context.parentURL?.includes('ImportStatementButton.tsx')) {
       if (specifier === 'react') return { url: 'mock:react', shortCircuit: true }
       if (specifier === 'react/jsx-runtime' || specifier === 'react/jsx-dev-runtime') {

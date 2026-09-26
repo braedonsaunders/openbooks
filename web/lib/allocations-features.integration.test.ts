@@ -10,7 +10,6 @@ import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/
 // `server-only` marker (this file runs from the root, one file per process).
 const root = pathToFileURL(process.cwd() + '/').href
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   void root
   return next(specifier, context)
 } })

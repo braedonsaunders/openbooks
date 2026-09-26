@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
@@ -12,19 +11,9 @@ import { sql } from "drizzle-orm";
 // non-boolean falls back to default) reads the feature cleanly off. The gate
 // must call the canonical resolver: non-boolean values read as the canonical
 // result with no 500, and a disabled projects parent disables subcontracts.
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { guardSubcontractsFeature } = (await import("./subcontracts-gate.ts")) as typeof import(
   "./subcontracts-gate.ts"
 );
-hooks.deregister();
 
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(

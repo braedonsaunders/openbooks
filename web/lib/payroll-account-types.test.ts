@@ -24,20 +24,10 @@
  * revenue account is rightly refused as wage expense.
  */
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // industries.ts is server-only; the house shim for reading a server module
 // from a plain node test (same pattern as the payroll profiles route test).
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true as const, url: 'data:text/javascript,export {}' }
-    }
-    return next(specifier, context)
-  },
-})
-
 const { INDUSTRIES } = (await import('./industries')) as {
   INDUSTRIES: { key: string }[]
 }

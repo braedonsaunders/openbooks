@@ -10,11 +10,9 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment 
 const state: {gate: {user: {orgId: string; id: string}} | null} = {gate: null};
 Object.assign(globalThis, {__payrollPolicySetup: state});
 registerHooks({resolve(specifier, context, next) {
-  if (specifier === 'server-only') return {shortCircuit: true, url: 'data:text/javascript,export {}'};
   if (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/')) {
     return {shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__payrollPolicySetup.gate}'};
   }
-  if (specifier.startsWith('@/')) return next(pathToFileURL(process.cwd()+'/web/'+specifier.slice(2)+'.ts').href, context);
   return next(specifier, context);
 }});
 const {PATCH, DELETE} = await import('../app/api/admin/setup/[entity]/route');

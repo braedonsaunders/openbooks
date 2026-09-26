@@ -1,19 +1,9 @@
-import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const root = pathToFileURL(process.cwd() + "/").href;
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = (await import(root + "engine/src/platform/db.ts")) as typeof import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = (await import(root + "engine/src/testing/fixtures.ts")) as typeof import("@openbooks/engine/src/testing/fixtures.ts");

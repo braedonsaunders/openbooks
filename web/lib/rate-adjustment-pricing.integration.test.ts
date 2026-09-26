@@ -45,15 +45,6 @@ test(
   async (t) => {
     const hooks = registerHooks({
       resolve(specifier, context, nextResolve) {
-        if (specifier === "server-only") {
-          return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-        }
-        if (specifier.startsWith("@/") && context.parentURL) {
-          return nextResolve(
-            new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href,
-            context,
-          );
-        }
         if (
           specifier === "../../../../../lib/authz" &&
           context.parentURL?.includes("setup/payment-providers")

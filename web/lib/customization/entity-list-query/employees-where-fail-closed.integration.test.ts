@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
@@ -8,15 +7,6 @@ import { sql } from "drizzle-orm";
 // view holding one) must fail closed to an empty row set instead of dying
 // as a raw throw and 500ing the page. SQL builders and storage are real;
 // only server-only is stubbed. Runs in the database partition.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { employeeBaseJoins, employeeWhere } = await import("./employment-directory.ts");

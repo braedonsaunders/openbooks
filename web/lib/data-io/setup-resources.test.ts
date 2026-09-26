@@ -1,26 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
 // Server-only shim so this DB test can import the resource under node.
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export {}',
-      }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { setupResource } = (await import('./setup-resources.ts')) as typeof import('./setup-resources.ts')
 const { SETUP_ENTITY_BY_KEY } = await import('../setup/registry.ts')
-hooks.deregister()
 
 const { db, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')

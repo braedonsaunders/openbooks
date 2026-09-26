@@ -24,12 +24,10 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { gate: { user:{orgId:string;id:string};allowedSubsidiaryIds:null } | null; builds:number }={gate:null,builds:0};
 Object.assign(globalThis,{__assetLifeBounds:state});
 registerHooks({resolve(specifier,context,next){
- if(specifier==='server-only')return {shortCircuit:true,url:'data:text/javascript,export {}'};
  if(context.parentURL?.includes('/api/assets/') && specifier.endsWith('/lib/feature-gates'))return {shortCircuit:true,url:'data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetLifeBounds.gate}'};
  // Do not execute the dangerous workload if a boundary regression reappears.
  // Database writes, authorization context and response loading remain real.
  if(decodeURIComponent(context.parentURL ?? '').endsWith('/api/assets/[id]/route.ts') && specifier.endsWith('/depreciation.ts'))return {shortCircuit:true,url:'data:text/javascript,export async function buildAllSchedulesWithRunner(){globalThis.__assetLifeBounds.builds++}'};
- if(specifier.startsWith('@/'))return next(root+'web/'+specifier.slice(2)+'.ts',context);
  return next(specifier,context);
 }});
 const {PATCH}=await import('../app/api/assets/[id]/route');

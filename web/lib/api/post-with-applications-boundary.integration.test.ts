@@ -11,9 +11,6 @@ import test from "node:test";
 // document lookup, and the database are real.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../lib/authz") {
       return { shortCircuit: true, url: "mock:posting-gate" };
     }

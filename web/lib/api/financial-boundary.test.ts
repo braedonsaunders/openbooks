@@ -1,6 +1,5 @@
 // source-pin-contract: every JSON mutation route parses its body through the shared zod boundary; subjects derived by walking web/app/api
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import test from "node:test";
@@ -11,15 +10,6 @@ import { fileURLToPath } from "node:url";
 // tests exercise the real shared boundary at runtime instead of trusting its
 // source text. node's test runner isolates each file in its own process, so
 // the hook cannot leak elsewhere.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { jsonObject, parseJsonBody } = await import("./json");
 
 /**

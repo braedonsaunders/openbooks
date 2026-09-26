@@ -1,21 +1,11 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // Briefing roles (b06): the narrative's focus follows the caller's grants —
 // clerks get their lane, stewards and owners get everything.
 const root = pathToFileURL(process.cwd() + "/").href;
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-  if (specifier.startsWith("@/")) {
-    const path = root + "web/" + specifier.slice(2);
-    for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
-  return next(specifier, context);
-} });
 const { briefingRole, briefingReadAuthz, BRIEFING_SCOPE, BRIEFING_MAX_STEPS } = await import("./briefing");
 import type { Authz } from "../authz";
 

@@ -6,7 +6,6 @@ import type { ReportCustomQuery, ReportRuleGroup } from "@openbooks/reports";
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "next/navigation") {
       return {
         shortCircuit: true,

@@ -1,24 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // The application context is server-only, but this contract test runs with
 // Node's plain test runner. Keep the module graph identical to the other
 // application tests by shimming only the marker package.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { assertSubsidiaryAccess } = await import("./context.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;

@@ -38,12 +38,10 @@ const pdfIndexUrl = pathToFileURL(
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     if (specifier === '@openbooks/pdf') return { url: 'mock:openbooks-pdf', shortCircuit: true }
     return nextResolve(specifier, _context)
   },
   load(url, _context, nextLoad) {
-    if (url === 'mock:server-only') return { format: 'module', source: 'export {}', shortCircuit: true }
     if (url === 'mock:openbooks-pdf') {
       return {
         format: 'module',

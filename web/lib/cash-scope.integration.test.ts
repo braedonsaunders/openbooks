@@ -10,7 +10,6 @@ const root = pathToFileURL(process.cwd()+'/').href;
 const state: { user: SessionUser | null; subIds: string[] } = { user: null, subIds: [] };
 Object.assign(globalThis, { __cashScope: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__cashScope.user}' };
   // A page is its `page.tsx` AND its `view.ts`. These stubs are scoped to the

@@ -25,9 +25,6 @@ const subsidiaryModule = 'export const subsidiaryVisibleFilter = globalThis.inve
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '@openbooks/engine/src/platform/db.ts') {
       return {
         shortCircuit: true,

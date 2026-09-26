@@ -13,7 +13,6 @@ import { pathToFileURL } from 'node:url';
 // is scripted.
 const root = pathToFileURL(process.cwd() + "/").href;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   const app = resolveAppModule(specifier, context, next, root);
   if (app) return app;
   return next(specifier,context);

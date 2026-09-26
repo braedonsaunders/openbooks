@@ -49,7 +49,6 @@ const reportRunMock = "data:text/javascript," + encodeURIComponent(`
 const nextIntlMock = "data:text/javascript," + encodeURIComponent(
   "export async function getTranslations(){return ((key) => key)}");
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "next-intl/server") return { shortCircuit: true, url: nextIntlMock };
   if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
   const parent = decodeURIComponent(context.parentURL ?? "");

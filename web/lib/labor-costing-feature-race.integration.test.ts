@@ -64,7 +64,6 @@ async function seedBooks(org: ScratchOrg, actorId: string) {
 const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.labor-feature-race")] = state;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "../../../../../lib/authz" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/admin/setup/labor-costing/route.ts")) {
     return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
       `export * from ${JSON.stringify(new URL("./authz.ts", import.meta.url).href)};

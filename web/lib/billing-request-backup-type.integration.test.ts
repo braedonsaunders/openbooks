@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
@@ -9,14 +8,6 @@ import test from 'node:test'
 // would issue the customer a packet nobody asked for, or no packet where
 // the approver required one.
 const root = pathToFileURL(process.cwd() + '/').href
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
-    return next(specifier, context)
-  },
-})
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')

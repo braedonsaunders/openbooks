@@ -1,23 +1,9 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import type { generateText, LanguageModel } from "ai";
 
 // Same module-graph shim as the other assistant tests: the title module is
 // server-only, which plain node cannot import without it.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const {
   TITLE_MAX_WORDS,
   TITLE_TIMEOUT_MS,

@@ -227,14 +227,8 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // Next.js-style aliases forwarded to the real modules they point at
     // (web/lib/api/json.ts etc. relative to this web/lib test file).
-    if (specifier.startsWith('@/lib/') && context.parentURL) {
-      return nextResolve(new URL('./' + specifier.slice('@/lib/'.length) + '.ts', import.meta.url).href, context)
-    }
     // Swap the persistence and authorization seams for scripted doubles.
     if (specifier === '@openbooks/engine/src/platform/db.ts'
       || specifier.endsWith('/lib/feature-gates')

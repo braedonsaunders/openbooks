@@ -14,7 +14,6 @@ const key = Symbol.for("openbooks.reset-concurrency-test");
 // reset-token persistence and password changes use the real implementation.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (context.parentURL?.includes("auth-reset.ts") && specifier === "@openbooks/emails") {
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`
         export const deriveEmailDeliveryKey = () => 'isolated-delivery';
