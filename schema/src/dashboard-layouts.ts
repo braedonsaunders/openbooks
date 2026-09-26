@@ -1,5 +1,3 @@
-import { id } from "./helpers";
-
 /**
  * Per-user and per-role dashboard widget layouts. The home page resolves a
  * layout via: the user's saved row → their role's saved row → shipped tier
