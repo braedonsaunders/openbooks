@@ -218,6 +218,12 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "(employee_party_id, unconstrained). Needs a payroll-domain gatherer.",
   },
   {
+    table: "payroll_opening_account_bases",
+    reason:
+      "SUBJECT DATA — gatherer pending: filing-account-scoped YTD bases " +
+      "(employee_party_id, unconstrained). Needs a payroll-domain gatherer.",
+  },
+  {
     table: "pay_run_adjustments",
     reason:
       "SUBJECT DATA — gatherer pending: per-employee run adjustments " +
