@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
+import { stubModules } from "../../../../testing/stub-modules";
 
 // /me/compensation collapsed two states into one refusal — a viewer
 // whose person IS linked but has NO employment saw "no person is linked".
 // The seams below stub I/O only (the database transport, feature switches,
-// navigation, the server-only marker); translations ride the REAL en
+// navigation; the server-only marker rides the shared test preset);
+// translations ride the REAL en
 // catalog, and the loader, refusal builder, and engine person reads are
 // all real.
 const hrmCatalog = JSON.parse(readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8")) as Record<
@@ -15,48 +16,37 @@ const hrmCatalog = JSON.parse(readFileSync(new URL("../../../../messages/en/hrm.
 >;
 (globalThis as Record<string, unknown>).__myCompCatalogs = { hrm: hrmCatalog };
 
-registerHooks({
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter() { return { push() {}, replace() {}, refresh() {} }; }" +
+      'export function redirect() { throw new Error("redirect"); }' +
+      'export function notFound() { throw new Error("not-found"); }',
+  },
+  intl: `export async function getTranslations(ns) {
+    const catalogs = globalThis.__myCompCatalogs;
+    const lookup = (key) => {
+      let node = catalogs[ns];
+      for (const part of String(key).split(".")) {
+        if (node !== null && typeof node === "object") node = node[part];
+        else return key;
+      }
+      return typeof node === "string" ? node : key;
+    };
+    const t = (key, params) => lookup(key);
+    t.has = (key) => lookup(key) !== key;
+    return t;
+  }`,
+  authz: false,
+  features: false,
+});
+
+// Transport and feature-switch doubles stay in a slim hook: the database
+// double re-exports the real module with only `db` overridden, and the
+// feature double matches relative spellings stubModules does not cover.
+const { registerHooks: registerIoHooks } = await import("node:module");
+registerIoHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            `export function useRouter() { return { push() {}, replace() {}, refresh() {} }; }
-             export function redirect() { throw new Error("redirect"); }
-             export function notFound() { throw new Error("not-found"); }`,
-          ),
-      };
-    }
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            `export async function getTranslations(ns) {
-              const catalogs = globalThis.__myCompCatalogs;
-              const lookup = (key) => {
-                let node = catalogs[ns];
-                for (const part of String(key).split(".")) {
-                  if (node !== null && typeof node === "object") node = node[part];
-                  else return key;
-                }
-                return typeof node === "string" ? node : key;
-              };
-              const t = (key, params) => lookup(key);
-              t.has = (key) => lookup(key) !== key;
-              return t;
-            }`,
-          ),
-      };
-    }
     // Transport stub for the whole process: no path in this test may reach
     // a real database. The real module is re-exported untouched and only
     // `db` is overridden; planned pages are consumed in order and anything

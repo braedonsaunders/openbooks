@@ -1,47 +1,25 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
 // C-9: the employer carry-in section renders one row per pack-declared levy
 // with its stored base, and renders nothing when no pack declares a levy
 // (the engine refuses undeclared carry-ins, so an empty grid would be a lie).
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/payroll/opening-balances',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/opening-balances' })
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}',
-      }
-    }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}',
-      }
-    }
-    return next(specifier, context)
+stubModules({
+  navigation: {
+    source: 'export function useRouter(){return {refresh(){}}}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner: 'export const toast={success(){},error(){},info(){}};export function Toaster(){return null}',
   },
 })
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

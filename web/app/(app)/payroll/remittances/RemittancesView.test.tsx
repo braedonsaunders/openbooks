@@ -1,39 +1,24 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
 // Exercise the real client view: a refusal must never look like a zero balance.
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/link') return {
-      shortCircuit: true,
-      url: 'data:text/javascript,export default function Link(props){return globalThis.React.createElement("a",{href:props.href},props.children)}',
-    }
-    if (specifier === 'next/navigation') return {
-      shortCircuit: true,
-      url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}',
-    }
-    if (specifier === 'sonner') return {
-      shortCircuit: true,
-      url: 'data:text/javascript,export const toast={success(){},error(){}}',
-    }
-    return next(specifier, context)
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/remittances', matchMediaMatches: false })
+
+stubModules({
+  navigation: {
+    source: 'export function useRouter(){return {refresh(){}}}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(props){return globalThis.React.createElement("a",{href:props.href},props.children)}',
+    sonner: 'export const toast={success(){},error(){}}',
   },
 })
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/payroll/remittances',
-})
-const domGlobals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'MouseEvent', 'self']) {
-  if (domGlobals[key] === undefined) domGlobals[key] = domWindow[key]
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
 
 const React = await import('react')
 const { renderToStaticMarkup } = await import('react-dom/server')

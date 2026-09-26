@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Behaviour contract for the profile page (/me/profile). The spec builder
@@ -8,15 +7,6 @@ import test from "node:test";
 // its dialog data. Proposal validation stays covered by
 // engine/src/hrm/self-service/scope.test.ts ('profile proposals validate
 // field by field'), which owns the profile write contract.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { meProfileSpec } = await import("./view.ts");
 
 function specJson(data: Record<string, unknown>): string {

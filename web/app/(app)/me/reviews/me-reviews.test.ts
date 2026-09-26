@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Behaviour contract for the reviews page (/me/reviews). The spec builder
@@ -10,15 +9,6 @@ import test from "node:test";
 // ('a shared manager review reaches the subject with calibration
 // stripped'), which owns the service shape — the spec renders what the
 // loader carries, never more.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { meReviewsSpec } = await import("./view.ts");
 
 function specJson(data: Record<string, unknown>): string {

@@ -1,23 +1,20 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
+import { stubModules } from '../../../testing/stub-modules'
 import type { SessionUser } from '../../../lib/auth'
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __partiesFilteredEmptyUser: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-registerHooks({
+stubModules({ navigation: false, authz: false, features: false })
+
+// The session double stays conditioned: it answers only the authz module's
+// own auth import, which no shared stub shape matches.
+const { registerHooks: registerSessionHook } = await import('node:module')
+registerSessionHook({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
-    if (specifier === 'next-intl/server') {
-      return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
-    }
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-      return virtual('export async function currentUser(){return globalThis.__partiesFilteredEmptyUser.user}')
+      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent('export async function currentUser(){return globalThis.__partiesFilteredEmptyUser.user}') }
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

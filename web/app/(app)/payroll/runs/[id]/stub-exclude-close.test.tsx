@@ -1,47 +1,31 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
+import { stubModules } from '../../../../../testing/stub-modules'
 
-const { registerHooks } = await import('node:module')
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next/navigation') return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return {push(){},refresh(){},replace(){},back(){}}};export function usePathname(){return "/payroll/runs/run-1"};export function useSearchParams(){return new URLSearchParams()};export function useParams(){return {}}' }
-  if (specifier === 'next/link') return { shortCircuit: true, url: 'data:text/javascript,export default function Link(p){return globalThis.React.createElement("a",{href:p.href},p.children)}' }
-  if (specifier === 'sonner') return { shortCircuit: true, url: 'data:text/javascript,export const toast={success(){},error(){},warning(){}}' }
-  return next(specifier, context)
-} })
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return {push(){},refresh(){},replace(){},back(){}}};' +
+      'export function usePathname(){return "/payroll/runs/run-1"};' +
+      'export function useSearchParams(){return new URLSearchParams()};' +
+      'export function useParams(){return {}}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return globalThis.React.createElement("a",{href:p.href},p.children)}',
+    sonner: 'export const toast={success(){},error(){},warning(){}}',
+  },
+})
 
 // Excluding a stub closed the drawer even when the exclusion
 // FAILED, stranding the typed adjustments with the stub that still holds
 // them. The drawer closes only on a successful exclusion now. Mounts the
 // real drawer under jsdom with an onAdjust that reports success or failure
 // and asserts the close follows the outcome, not the click.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/payroll/runs/doc-1',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/runs/doc-1', matchMediaMatches: false })
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

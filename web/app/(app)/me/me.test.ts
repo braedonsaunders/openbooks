@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Behaviour contract for the /me overview. The spec builder runs over
@@ -9,15 +8,6 @@ import test from "node:test";
 // login and license/notes redaction stay covered by
 // engine/src/hrm/self-service/scope.test.ts and the qualifications
 // workspace tests, which own the service reads.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { meSpec } = await import("./view.ts");
 
 function specJson(data: Record<string, unknown>): string {

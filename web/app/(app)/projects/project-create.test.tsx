@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isUuid } from "@/lib/list-params";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __projectCreateToasts: { kind: string; message: string }[] | undefined;
@@ -14,60 +16,24 @@ declare global {
 // exactly one idempotent POST with active defaulting true.
 
 // jsdom first: the drawer reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/projects",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof window.requestAnimationFrame !== "function") {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/projects", matchMediaMatches: false });
 
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier.startsWith("@/")) {
-      return next(new URL(`../../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return {push(u){globalThis.__projectCreateRouter.pushes.push(String(u))},replace(u){globalThis.__projectCreateRouter.replaces.push(String(u))},refresh(){globalThis.__projectCreateRouter.refreshes+=1}}}export function usePathname(){return '/projects'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
-    if (specifier === "next/link") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return p.children}",
-      };
-    }
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__projectCreateToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__projectCreateToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__projectCreateToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
-      };
-    }
-    return next(specifier, context);
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return {push(u){globalThis.__projectCreateRouter.pushes.push(String(u))},replace(u){globalThis.__projectCreateRouter.replaces.push(String(u))},refresh(){globalThis.__projectCreateRouter.refreshes+=1}}}" +
+      "export function usePathname(){return '/projects'}" +
+      "export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "next/link": "export default function Link(p){return p.children}",
+    sonner:
+      "export const toast={success(m){(globalThis.__projectCreateToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__projectCreateToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__projectCreateToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
   },
 });
-
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

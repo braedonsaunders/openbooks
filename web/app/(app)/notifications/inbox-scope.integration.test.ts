@@ -25,18 +25,11 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (
       specifier === "../../../lib/authz" &&
       context.parentURL?.includes("/api/notifications/")
     ) {
       return { url: "mock:notifications-scope-authz", shortCircuit: true };
-    }
-    if (specifier.startsWith("@/")) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 5);
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context);
     }
     // node_modules is shared with the main checkout: pin bare self-imports
     // to this checkout so the route and the test share one db context.

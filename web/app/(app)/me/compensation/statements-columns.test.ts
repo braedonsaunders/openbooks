@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // The statements table headers were hardcoded English ('period',
@@ -7,15 +6,6 @@ import test from 'node:test'
 // statementsColumns in all 7 locales. The spec now reads the headers from
 // the loader data. French labels below prove the header comes from the
 // data, never the source text.
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return next(specifier, context)
-  },
-})
 
 const { myCompSpec } = await import('./view')
 

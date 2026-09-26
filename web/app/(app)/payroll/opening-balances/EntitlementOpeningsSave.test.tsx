@@ -1,36 +1,13 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
 // The bank carry-in grid's Save parsed the response body BEFORE
 // checking the status with no catch around the fetch — the same defect as
 // the statutory grid beside it. Mounts the real grid under jsdom and
 // drives the failure paths with scripted fetches.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/payroll/opening-balances',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/opening-balances', matchMediaMatches: false })
 
 const toasts: { kind: string; message: string }[] = []
 const errorToasts = () => toasts.filter((entry) => entry.kind === 'error').map((entry) => entry.message)
@@ -43,32 +20,22 @@ Object.assign(globalThis, {
     prefetch() {},
   },
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__entitlementTestRouter}export function usePathname(){return "/payroll/opening-balances"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    if (specifier === 'next/link') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(m){(globalThis.__entitlementTestToasts ?? []).push({kind:"success",message:String(m)})},error(m){(globalThis.__entitlementTestToasts ?? []).push({kind:"error",message:String(m)})},warning(m){(globalThis.__entitlementTestToasts ?? []).push({kind:"warning",message:String(m)})}};export function Toaster(){return null}',
-      }
-    }
-    return next(specifier, context)
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return globalThis.__entitlementTestRouter}' +
+      'export function usePathname(){return "/payroll/opening-balances"}' +
+      'export function useSearchParams(){return new URLSearchParams()}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
+    sonner:
+      'export const toast={success(m){(globalThis.__entitlementTestToasts ?? []).push({kind:"success",message:String(m)})},error(m){(globalThis.__entitlementTestToasts ?? []).push({kind:"error",message:String(m)})},warning(m){(globalThis.__entitlementTestToasts ?? []).push({kind:"warning",message:String(m)})}};export function Toaster(){return null}',
   },
 })
-
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

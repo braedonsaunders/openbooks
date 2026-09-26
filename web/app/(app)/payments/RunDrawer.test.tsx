@@ -1,38 +1,37 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
 declare global {
   var __runDrawerConfirmCalls: { message?: string }[] | undefined
 }
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost:4800/payments' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
-if (typeof window.requestAnimationFrame !== 'function') {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payments', matchMediaMatches: false })
 
-const { registerHooks } = await import('node:module')
-registerHooks({
+stubModules({
+  navigation: {
+    source: 'export function useRouter(){return {refresh(){}}}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
+    'next-intl': 'export function useTranslations(){const t=(key,values)=>key.endsWith("confirmPost")?`Post ${values.count} payments totalling ${values.total}`:key;t.rich=(key,values)=>key;return t}export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}export function useFormatter(){return {dateTime(value){return String(value)}}}',
+    sonner: 'export const toast={success(){},error(){}}',
+  },
+})
+
+// The confirm double stays suffix-wired: shared components import it through
+// several relative spellings plus `@/`, which one exact key cannot name.
+const { registerHooks: registerConfirmHook } = await import('node:module')
+registerConfirmHook({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}' }
-    if (specifier === 'next/link') return { shortCircuit: true, url: 'data:text/javascript,export default function Link(p){return p.children}' }
-    if (specifier === 'next-intl') return { shortCircuit: true, url: 'data:text/javascript,export function useTranslations(){const t=(key,values)=>key.endsWith("confirmPost")?`Post ${values.count} payments totalling ${values.total}`:key;t.rich=(key,values)=>key;return t}export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}export function useFormatter(){return {dateTime(value){return String(value)}}}' }
-    if (specifier === 'sonner') return { shortCircuit: true, url: 'data:text/javascript,export const toast={success(){},error(){}}' }
     if (specifier.endsWith('/lib/confirm')) return { shortCircuit: true, url: 'data:text/javascript,export async function confirmDialog(options){(globalThis.__runDrawerConfirmCalls??=[]).push(options);return false}' }
     return next(specifier, context)
   },
 })
-
-;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

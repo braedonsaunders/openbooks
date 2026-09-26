@@ -1,36 +1,14 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
 // The workspace load parsed the body before the status and threw
 // new Error(body.error) — an error body without an error field became
 // new Error(undefined) with an empty toast. The load now checks the status
 // first through readApiErrorMessage. Mounts the real workspace under jsdom
 // and drives both failure shapes.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/property-management',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/property-management', matchMediaMatches: false })
 
 const script = {
   errors: [] as string[],
@@ -44,26 +22,21 @@ Object.assign(globalThis, {
     prefetch() {},
   },
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__propertyTestRouter}export function usePathname(){return "/property-management"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(m){(globalThis.__propertyErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}',
-      }
-    }
-    return next(specifier, context)
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return globalThis.__propertyTestRouter}' +
+      'export function usePathname(){return "/property-management"}' +
+      'export function useSearchParams(){return new URLSearchParams()}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner:
+      'export const toast={success(){},error(m){(globalThis.__propertyErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}',
   },
 })
-
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

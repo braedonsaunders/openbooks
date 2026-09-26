@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state = {
   authz: {
     user: { orgId: 'org-visible', id: 'actor-visible' },
@@ -14,18 +12,25 @@ const state = {
 const key = Symbol.for('openbooks.parallel-run-view-scope')
 Object.assign(globalThis, { [key]: state })
 
-registerHooks({
+stubModules({
+  navigation: {
+    source: "export function notFound(){throw new Error('NEXT_NOT_FOUND')}",
+  },
+  intl: 'export async function getTranslations(){return {has:()=>false}}',
+  authz: false,
+  features: false,
+})
+
+// Scope doubles stay parent-conditioned: they answer only the parallel-run
+// view's own imports, which no shared stub shape matches.
+const { registerHooks: registerScopeHooks } = await import('node:module')
+registerScopeHooks({
   resolve(specifier, context, next) {
     const parent = decodeURIComponent(context.parentURL ?? '')
     const virtual = (source: string) => ({
       shortCircuit: true,
       url: `data:text/javascript,${encodeURIComponent(source)}`,
     })
-    if (specifier === 'server-only') return virtual('export {}')
-    if (specifier === 'next/navigation') return virtual("export function notFound(){throw new Error('NEXT_NOT_FOUND')}")
-    if (specifier === 'next-intl/server') {
-      return virtual("export async function getTranslations(){return {has:()=>false}}")
-    }
     if (parent.endsWith('/payroll/parallel-run/view.ts')) {
       if (specifier.endsWith('/lib/authz')) {
         return virtual(`
@@ -52,10 +57,6 @@ registerHooks({
           export async function comparableSlots(){calls.push('slots');return []}
         `)
       }
-    }
-    if (specifier.startsWith('@/')) {
-      const path = root + 'web/' + specifier.slice(2)
-      return next(path, context)
     }
     return next(specifier, context)
   },

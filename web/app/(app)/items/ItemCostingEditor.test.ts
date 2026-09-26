@@ -1,37 +1,18 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
-import { registerHooks } from 'node:module'
-import { JSDOM } from 'jsdom'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/items/item-1' })
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'MouseEvent', 'self']) {
-  if ((globalThis as Record<string, unknown>)[key] === undefined) {
-    ;(globalThis as Record<string, unknown>)[key] = domWindow[key]
-  }
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: true, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
-if (typeof (globalThis as Record<string, unknown>).ResizeObserver !== 'function') {
-  ;(globalThis as Record<string, unknown>).ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+await bootJsdomEnvironment({ url: 'http://localhost/items/item-1' })
 
-const virtual = (source: string) => ({ shortCircuit: true as const, url: `data:text/javascript,${encodeURIComponent(source)}` })
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next-intl') return virtual('export function useTranslations() { return (key) => key }')
-    if (specifier === 'sonner') return virtual('export const toast = { success() {}, error() {} }')
-    return next(specifier, context)
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next-intl': 'export function useTranslations() { return (key) => key }',
+    sonner: 'export const toast = { success() {}, error() {} }',
   },
 })
 

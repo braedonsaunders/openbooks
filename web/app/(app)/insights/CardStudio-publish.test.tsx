@@ -1,35 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
 // CardStudio E45 (preview ~159 plus publish ~325): both fetched and called
 // res.json before checking res.ok, so a non-JSON error body threw a
 // SyntaxError that lost the server's named refusal. The status is checked
 // first through the shared helper; busy always releases in finally.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/insights?card=card-1',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/insights?card=card-1' })
 
 declare global {
   var __studioToasts: { kind: string; message: string }[] | undefined
@@ -44,32 +22,23 @@ Object.assign(globalThis, {
   __studioQueryImpl: undefined as (() => Promise<Response>) | undefined,
   __studioDeleteImpl: undefined as (() => Promise<Response>) | undefined,
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){},push(){},replace(){}}}export function usePathname(){return "/insights"}export function useSearchParams(){return new URLSearchParams("card=card-1")}',
-      }
-    }
-    if (specifier === 'next/link') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__studioToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__studioToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
-      }
-    }
-    return next(specifier, context)
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return {refresh(){},push(){},replace(){}}}' +
+      'export function usePathname(){return "/insights"}' +
+      'export function useSearchParams(){return new URLSearchParams("card=card-1")}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
+    sonner:
+      "export const toast={success(m){(globalThis.__studioToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__studioToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
