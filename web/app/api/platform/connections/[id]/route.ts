@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
@@ -22,6 +23,19 @@ import {
 } from "../_connector-guard";
 
 export const runtime = "nodejs";
+
+/**
+ * An unparseable mirror schedule refuses at 400 with the reason intact.
+ * nextMirrorAt throws it as a plain Error, which the sanitizer would
+ * otherwise genericize to a 500.
+ */
+class MirrorScheduleRefusal extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "MirrorScheduleRefusal";
+  }
+}
 
 /**
  * Update a connection: rename, edit config, rotate/add secrets, toggle mirror,
@@ -153,10 +167,7 @@ export async function PATCH(
       try {
         nextMirrorAt(body.mirrorSchedule, new Date());
       } catch (error) {
-        return NextResponse.json(
-          { error: (error as Error).message },
-          { status: 400 },
-        );
+        return apiErrorResponse(error instanceof Error ? new MirrorScheduleRefusal(error.message) : error);
       }
       updates.mirrorSchedule = body.mirrorSchedule;
     }

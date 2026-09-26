@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -50,9 +51,9 @@ async function resolveProject(gate: Gate, projectId: string | null) {
   return { projectId: row.id }
 }
 
-function handleError(error: unknown) {
+function handleError(error: unknown): Promise<NextResponse> {
   if (error instanceof ScheduleError) {
-    return NextResponse.json({ error: error.message }, { status: error.status })
+    return apiErrorResponse(error)
   }
   throw error
 }

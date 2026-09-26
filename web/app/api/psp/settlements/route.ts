@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -248,18 +249,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     if (e instanceof PspSettlementConflictError) {
-      return NextResponse.json(
-        { error: e.message, batch: e.persistedBatch },
-        { status: 409 },
-      );
+      return apiErrorResponse(e, { safeStatus: 409, details: { batch: e.persistedBatch } });
     }
     if (e instanceof UnrestrictedScopeError) {
       return NextResponse.json({ error: "requires unrestricted subsidiary access" }, { status: 403 });
     }
-    const status = e instanceof PspSettlementError ? 422 : 500;
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e) },
-      { status },
-    );
+    if (e instanceof PspSettlementError) {
+      return apiErrorResponse(e, { safeStatus: 422 });
+    }
+    return apiErrorResponse(e);
   }
 }

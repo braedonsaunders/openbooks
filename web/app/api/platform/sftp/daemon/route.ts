@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
@@ -9,6 +10,7 @@ import {
   updateDaemonConfig,
 } from "@openbooks/engine/src/sftp/manager.ts";
 import { auditSetupChange } from "../../../../../lib/setup/audit";
+import { sftpStartupFailureText } from "../../../../../lib/sftp-daemon";
 import { guardSuperAdmin, lockSuperAdminActor, SuperAdminAuthorityError } from "../../../../../lib/super-admin";
 
 export const runtime = "nodejs";
@@ -76,7 +78,7 @@ export async function PATCH(req: Request) {
     // as a 403, never a 500 with the refusal dropped on the way out.
     // Anything else is an unexpected fault and still throws.
     if (e instanceof SuperAdminAuthorityError) {
-      return NextResponse.json({ error: e.message }, { status: e.status });
+      return apiErrorResponse(e);
     }
     throw e;
   }
@@ -86,12 +88,15 @@ export async function PATCH(req: Request) {
     // The configuration committed, but no listener could be brought up to
     // serve it (bad/conflicting port, daemon startup failure). Never answer
     // ok:true here: the operator gets a structured degraded response naming
-    // the failure and the exact configuration the database now holds.
+    // the failure and the exact configuration the database now holds. The
+    // failure text is narrowed in the sftp-daemon lib: a named storage
+    // misconfiguration keeps its remedy, anything else stays generic.
+    console.error("[platform] SFTP listener failed to start", e);
     return NextResponse.json(
       {
         ok: false,
         degraded: true,
-        error: (e as Error).message,
+        error: sftpStartupFailureText(e),
         config: { enabled: cfg.enabled, port: cfg.port, advertisedHost: cfg.advertisedHost },
       },
       { status: 502 },

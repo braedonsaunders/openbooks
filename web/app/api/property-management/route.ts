@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -666,10 +667,7 @@ export async function POST(request: Request) {
     if (error instanceof ScopeNotFoundError)
       return NextResponse.json({ error: "not found" }, { status: 404 });
     if (error instanceof PropertyManagementError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      );
+      return apiErrorResponse(error);
     // Drizzle wraps driver errors, so the PostgreSQL code can sit on `cause`.
     const pgCode = error as { code?: string; cause?: { code?: string } };
     const code = pgCode.code ?? pgCode.cause?.code;
