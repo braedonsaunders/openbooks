@@ -1,4 +1,4 @@
-import * as authzModule from "@/lib/authz";
+import { getAuthz, guardPermission, guardRootSubsidiaryScope, guardUnrestrictedScope } from "@/lib/authz";
 import type { Authz } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
@@ -136,7 +136,7 @@ export function defineRoute(options: LooseOptions) {
         } else if (feature !== undefined) {
           // An always-on surface: the `{ none: "<reason>" }` reason is
           // enforced by the coverage check, not at request time.
-          const gate = await authzModule.guardPermission(permission);
+          const gate = await guardPermission(permission);
           if (gate instanceof NextResponse) return gate;
           authz = gate;
         } else {
@@ -147,7 +147,7 @@ export function defineRoute(options: LooseOptions) {
       } else if (options.public === "token") {
         authz = null;
       } else {
-        const session = await authzModule.getAuthz();
+        const session = await getAuthz();
         if (!session) {
           return NextResponse.json({ error: "unauthorized" }, { status: 401 });
         }
@@ -156,10 +156,10 @@ export function defineRoute(options: LooseOptions) {
 
       const scope = options.scope;
       if (authz && scope === "unrestricted") {
-        const denied = authzModule.guardUnrestrictedScope(authz);
+        const denied = guardUnrestrictedScope(authz);
         if (denied) return denied;
       } else if (authz && scope === "root") {
-        const denied = await authzModule.guardRootSubsidiaryScope(authz);
+        const denied = await guardRootSubsidiaryScope(authz);
         if (denied) return denied;
       } else if (scope !== undefined) {
         // The type admits only "unrestricted" and "root". Record-level
