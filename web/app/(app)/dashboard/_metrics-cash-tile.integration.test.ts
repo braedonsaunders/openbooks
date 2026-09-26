@@ -17,9 +17,10 @@ import test from "node:test";
 // removal) and the tile MUST agree on a simple single-currency
 // single-subsidiary org, and MUST disagree in exactly the three fixed ways
 // (scope, account population, translation) on a complicated one.
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
 
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a

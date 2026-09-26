@@ -2,12 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>')
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  Object.defineProperty(globalThis, key, { value: (dom.window as unknown as Record<string, unknown>)[key], configurable: true })
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'about:blank', scrollIntoView: false, resizeObserver: false })
+
 Object.assign(globalThis, { React })
 
 const { registerHooks } = await import('node:module')

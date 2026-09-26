@@ -5,9 +5,10 @@ import test from "node:test";
 
 // The recon tile reads bankingHome.unmatchedLines — the same reader as the
 // /banking cockpit and its Match-button count — never a parallel count.
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
 
     if (specifier.startsWith("@openbooks/engine/")) {
       return nextResolve(

@@ -5,10 +5,10 @@ import test from 'node:test'
 const denied = { kind: 'notFound' }
 Object.assign(globalThis, { __payrollSetupLauncherCalled: false })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: `data:text/javascript,${encodeURIComponent(source)}` })
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export function notFound(){ throw globalThis.__payrollSetupDenied }', intl: true, extra: { 'server-only': 'export {}' } })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return virtual('export {}')
-  if (specifier === 'next/navigation') return virtual('export function notFound(){ throw globalThis.__payrollSetupDenied }')
-  if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}')
+
   if (specifier.endsWith('/lib/authz') && (context.parentURL ?? '').endsWith('/admin/setup/payroll/view.ts')) {
     return virtual('export async function requirePermission(){return {user:{orgId:"org-a"},allowedSubsidiaryIds:new Set(["sub-a"])}}; export async function guardRootSubsidiaryScope(){return globalThis.__payrollSetupDenied}; export function can(){return false}')
   }

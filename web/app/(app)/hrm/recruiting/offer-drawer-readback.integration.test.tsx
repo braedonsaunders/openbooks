@@ -16,11 +16,11 @@ import type { CandidateDrawerData, OfferDrawerData } from "./sections.tsx";
  * web-integration pattern.
  */
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export function redirect() {}; export function notFound() {}; export function useRouter() { return { refresh() {} } }; export function usePathname() { return '' }" });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
-    if (specifier === "next/navigation")
-      return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() { return { refresh() {} } }; export function usePathname() { return '' }");
+
     if (specifier === "next/link")
       return virtual("export default function Link(p) { return p.children }");
     return next(specifier, context);

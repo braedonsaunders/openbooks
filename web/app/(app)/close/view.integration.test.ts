@@ -29,10 +29,11 @@ const translationsMock = `
     };
   }
 `
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function notFound() { throw new Error(\'notFound\') }', extra: { 'server-only': 'export {}' } })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
-    if (specifier === 'next/navigation') return virtual(`export function notFound() { throw new Error('notFound') }`)
+
     if (specifier === 'next-intl/server') return virtual(translationsMock)
     if (specifier === '@braedonsaunders/appkit-viewspec') return virtual(`
       export const badge = () => ({});

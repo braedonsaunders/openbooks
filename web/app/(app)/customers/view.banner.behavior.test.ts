@@ -4,10 +4,11 @@ import test from 'node:test'
 
 const state = { genericFailure: false, customerHomeCalls: 0 }
 Object.assign(globalThis, { __customerRatesBannerTest: state })
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: 'export function redirect(path){throw new Error(`redirect:${path}`)}', extra: { 'server-only': 'export {}' } })
 registerHooks({
   resolve(specifier, context, next) {
 
-    if (specifier === 'next/navigation') return { shortCircuit: true, url: 'data:text/javascript,export function redirect(path){throw new Error(`redirect:${path}`)}' }
     if (specifier === 'next-intl/server') {
       return {
         shortCircuit: true,

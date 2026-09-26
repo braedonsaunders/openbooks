@@ -4,24 +4,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // Needs a DOM: the propose form is submitted, not just rendered.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/hrm/compensation/cycles/cycle-1",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-globals.IS_REACT_ACT_ENVIRONMENT = true;
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/compensation/cycles/cycle-1", scrollIntoView: false, resizeObserver: false });
 
 const React = await import("react");
 // The shared @openbooks/ui Select compiles against a global React.

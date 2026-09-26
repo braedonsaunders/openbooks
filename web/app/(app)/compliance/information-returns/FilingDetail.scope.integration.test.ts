@@ -1,6 +1,8 @@
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: 'export function redirect(url){ throw new Error("REDIRECT:" + url) }', extra: { 'server-only': 'export {}' } })
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
+
 import test from 'node:test'
 
 // The detail loader must forward the caller's subsidiary scope into the
@@ -10,17 +12,6 @@ import test from 'node:test'
 const virtual = (source: string) => ({
   shortCircuit: true as const,
   url: 'data:text/javascript,' + encodeURIComponent(source),
-})
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
-    if (specifier === 'next/navigation') {
-      return virtual(
-        'export function redirect(url){ throw new Error("REDIRECT:" + url) }',
-      )
-    }
-    return next(specifier, context)
-  },
 })
 
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
