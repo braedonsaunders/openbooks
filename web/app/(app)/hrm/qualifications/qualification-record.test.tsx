@@ -23,6 +23,7 @@ const { BusinessDateProvider } = await import('../../../../components/business-d
 const { QualificationDrawer } = await import('./QualificationDrawer')
 // tsx compiles JSX classic: the island never imports React, so the test bridges it.
 Object.assign(globalThis, { React })
+const { act } = await import('react')
 
 const hrmMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8'))
 const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
@@ -78,7 +79,6 @@ async function mount(
   }
   const doc = dom.window.document
   const { createRoot } = await import('react-dom/client')
-  const { act } = await import('react')
   const root = createRoot(doc.getElementById('root')!)
   const calls: FetchCall[] = []
   ;(globalThis as Record<string, unknown>).fetch = async (input: unknown, init?: { method?: string; body?: string }) => {
@@ -143,7 +143,6 @@ async function mount(
 }
 
 async function flushAsync(): Promise<void> {
-  const { act } = await import('react')
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
@@ -168,16 +167,15 @@ test('the record form submits the picked worker and required evidence file', asy
     throw new Error(`unexpected fetch ${method} ${url}`)
   })
   try {
-    const { act } = await import('react')
     await flushAsync()
-    const natives = [...m.document.querySelectorAll('select')]
-    const employment = natives[0] as HTMLSelectElement
-    const type = natives[1] as HTMLSelectElement
+    const type = m.document.querySelector('select') as HTMLSelectElement
     await act(async () => {
-      m.setSelect(employment, 'emp-1')
+      m.click(m.document.getElementById('q-employment')!)
       m.setSelect(type, 'type-1')
       m.setInput(m.document.getElementById('q-issued') as HTMLInputElement, '2026-09-01')
     })
+    const ada = [...m.document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes('Ada Lovelace'))!
+    await act(async () => m.click(ada))
     await act(async () => m.click(m.document.getElementById('q-evidence')!))
     const search = m.document.querySelector('input[placeholder="Search files…"]') as HTMLInputElement
     await act(async () => { m.setInput(search, 'Safety'); await new Promise((resolve) => setTimeout(resolve, 300)) })
@@ -215,7 +213,6 @@ test('a picker failure renders the translated error with retry', async () => {
     throw new Error(`unexpected fetch ${url}`)
   })
   try {
-    const { act } = await import('react')
     await flushAsync()
     assert.match(m.document.body.textContent ?? '', /Employees could not be loaded/, 'the picker failure names itself')
     const retry = [...m.document.querySelectorAll('button')].find((b) => b.textContent === 'Retry')
@@ -225,6 +222,7 @@ test('a picker failure renders the translated error with retry', async () => {
     })
     await flushAsync()
     assert.equal(attempts, 2, 'retry reloads the picker')
+    await act(async () => m.click(m.document.getElementById('q-employment')!))
     assert.match(m.document.body.textContent ?? '', /Ada Lovelace/, 'the reloaded picker names people')
   } finally {
     await m.unmount()
@@ -243,7 +241,6 @@ test('a qualification type list failure is named and can be retried', async () =
     throw new Error(`unexpected fetch ${url}`)
   })
   try {
-    const { act } = await import('react')
     await flushAsync()
     assert.match(m.document.body.textContent ?? '', /Qualification types could not be loaded/)
     const retry = [...m.document.querySelectorAll('button')].find((b) => b.textContent === 'Retry')
@@ -254,7 +251,7 @@ test('a qualification type list failure is named and can be retried', async () =
     await flushAsync()
     assert.equal(attempts, 2, 'retry reloads the type list')
     const nativeSelects = [...m.document.querySelectorAll('select')]
-    assert.match(nativeSelects[1]?.textContent ?? '', /FIRST-AID · First aid/, 'the recovered list populates the type picker')
+    assert.match(nativeSelects[0]?.textContent ?? '', /FIRST-AID · First aid/, 'the recovered list populates the type picker')
   } finally {
     await m.unmount()
   }
@@ -337,7 +334,6 @@ test('renew navigates to the renewed row, preserving the other params', async ()
     // The renewal date comes from the operator prompt, never the browser day.
     const win = g.window as unknown as { prompt?: (message: string, def?: string) => string | null }
     win.prompt = () => '2026-09-20'
-    const { act } = await import('react')
     await act(async () => {
       const renew = [...m.document.querySelectorAll('button')].find((b) => b.textContent === 'Renew')
       assert.ok(renew, 'Renew renders for the manage grant')
