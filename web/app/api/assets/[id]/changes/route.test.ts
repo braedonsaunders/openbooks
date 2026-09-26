@@ -57,7 +57,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export async function proposeAssetChange(...args){const s=globalThis[Symbol.for('asset-change-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return 'change'}`,
+        source: `class AssetValidationError extends Error{};export async function proposeAssetChange(...args){const s=globalThis[Symbol.for('asset-change-route')];s.calls.push(args);if(s.refusal)throw new AssetValidationError(s.refusal);return 'change'}`,
       };
     if (url === "mock:asset-change-route-db")
       return {

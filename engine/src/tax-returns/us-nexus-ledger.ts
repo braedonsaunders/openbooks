@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '../platform/db.ts'
 import { add, cmp, mulRate, normalizeDecimal, roundMoney } from '../money/money.ts'
 import { IncomeTaxProvisionError, spotRateToPresentation } from './income-tax-provision.ts'
+import { TaxRequestValidationError } from '../tax/request-validation.ts'
 import { uuidArray } from '../organization/subsidiaries.ts'
 import { evaluateUsNexus, thresholdForState, US_NEXUS_MEASUREMENT_MONTHS, type NexusEvaluation, type StateNexusThreshold, type StateSales } from '../tax/us-nexus.ts'
 
@@ -62,23 +63,23 @@ async function resolveEntityScope(
 ): Promise<{ subsidiaryIds: string[] | null; currency: string }> {
   const rateType = opts.rateType ?? 'spot'
   if (!NEXUS_RATE_TYPE_RE.test(rateType)) {
-    throw new Error(`nexus rateType "${opts.rateType}" is not a valid rate source`)
+    throw new TaxRequestValidationError(`nexus rateType "${opts.rateType}" is not a valid rate source`)
   }
   if (opts.rateDate !== undefined && !NEXUS_DATE_RE.test(opts.rateDate)) {
-    throw new Error(`nexus rateDate "${opts.rateDate}" is not an ISO date (YYYY-MM-DD)`)
+    throw new TaxRequestValidationError(`nexus rateDate "${opts.rateDate}" is not an ISO date (YYYY-MM-DD)`)
   }
   if (opts.currency !== undefined && !NEXUS_CURRENCY_RE.test(opts.currency)) {
-    throw new Error(`nexus currency "${opts.currency}" is not a valid 3-letter currency code`)
+    throw new TaxRequestValidationError(`nexus currency "${opts.currency}" is not a valid 3-letter currency code`)
   }
   if (!opts.subsidiaryIds) return { subsidiaryIds: null, currency: opts.currency ?? 'USD' }
   if (opts.subsidiaryIds.length === 0) {
-    throw new Error('nexus filing entity must name at least one subsidiary')
+    throw new TaxRequestValidationError('nexus filing entity must name at least one subsidiary')
   }
   const ids = [...new Set(opts.subsidiaryIds)]
   try {
     uuidArray(ids)
   } catch (e) {
-    throw new Error(`nexus filing entity names an invalid subsidiary id (${e instanceof Error ? e.message : String(e)})`)
+    throw new TaxRequestValidationError(`nexus filing entity names an invalid subsidiary id (${e instanceof Error ? e.message : String(e)})`)
   }
   const rows = (await db.execute<{ id: string; base_currency: string; is_elimination: boolean }>(sql`
     select id, base_currency, is_elimination from subsidiaries
@@ -86,16 +87,16 @@ async function resolveEntityScope(
   const known = new Set(rows.rows.map((r) => r.id))
   const unknown = ids.filter((id) => !known.has(id))
   if (unknown.length > 0) {
-    throw new Error(`nexus filing entity references subsidiaries outside this organization: ${unknown.join(', ')}`)
+    throw new TaxRequestValidationError(`nexus filing entity references subsidiaries outside this organization: ${unknown.join(', ')}`)
   }
   const elimination = rows.rows.filter((r) => r.is_elimination)
   if (elimination.length > 0) {
-    throw new Error('nexus filing entity cannot include an elimination entity — only legal filers hold nexus')
+    throw new TaxRequestValidationError('nexus filing entity cannot include an elimination entity — only legal filers hold nexus')
   }
   if (!opts.currency) {
     const currencies = [...new Set(rows.rows.map((r) => r.base_currency))]
     if (currencies.length > 1) {
-      throw new Error(
+      throw new TaxRequestValidationError(
         `nexus filing entity spans functional currencies (${currencies.sort().join(' and ')}) — pass currency to declare the working currency`,
       )
     }
@@ -232,7 +233,7 @@ export async function computeUsNexusStatus(
         return (await spotRateToPresentation(db, orgId, fromCurrency, target, asOf, rateType)).rate
       } catch (e) {
         if (e instanceof IncomeTaxProvisionError) {
-          throw new Error(
+          throw new TaxRequestValidationError(
             `no ${rateType} rate for ${fromCurrency}→${target} on or before ${asOf} — configure exchange rates before measuring nexus in ${target}`,
           )
         }
@@ -287,7 +288,7 @@ export async function computeUsNexusStatus(
     ({ rate: policyRate, asOf: policyAsOf } = await spotRateToPresentation(db, orgId, 'USD', target, rateDate, rateType))
   } catch (e) {
     if (e instanceof IncomeTaxProvisionError) {
-      throw new Error(
+      throw new TaxRequestValidationError(
         `cannot translate nexus thresholds USD→${target} (${e.message})`,
       )
     }

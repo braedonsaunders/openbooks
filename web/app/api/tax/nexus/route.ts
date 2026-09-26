@@ -1,5 +1,4 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { invalidInput } from '../../../../lib/application/errors'
 import { NextResponse } from 'next/server'
 import { computeUsNexusStatus } from '@openbooks/engine/src/tax-returns/us-nexus-ledger.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
@@ -44,10 +43,6 @@ export async function GET(req: Request) {
       ...(rateDate ? { rateDate } : {}),
     }))
   } catch (e: unknown) {
-    // computeUsNexusStatus signals request-state validation (rate source,
-    // date, currency, filing entity) with bare Errors carrying curated
-    // operator text; only those travel as 422s with their message.
-    if (e instanceof Error && e.constructor === Error) return apiErrorResponse(invalidInput(e.message))
     return apiErrorResponse(e, { safeStatus: 422 })
   }
 }

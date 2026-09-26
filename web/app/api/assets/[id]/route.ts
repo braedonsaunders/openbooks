@@ -9,7 +9,6 @@ import { FixedAssetEquipmentLinkConflict, refuseFixedAssetRehomeWithEquipment } 
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import { invalidInput } from '../../../../lib/application/errors'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
@@ -62,6 +61,9 @@ interface ExistingAsset extends Record<string, unknown> {
 
 /** Raised inside the save transaction when a posting won the basis race. */
 class PostedBasisEditConflict extends Error {}
+
+/** The locked row vanished between the lock and the write: a concurrent disappearance. */
+class AssetNotFoundError extends Error {}
 
 /** A concurrent disappearance during DELETE is the only transaction refusal mapped to 404. */
 class AssetDeleteNotFoundError extends Error {}
@@ -429,7 +431,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
            ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
          for update`))
       const lockedExisting = lockedRes.rows[0]
-      if (!lockedExisting) throw new Error('asset not found')
+      if (!lockedExisting) throw new AssetNotFoundError('asset not found')
       await refuseFixedAssetRehomeWithEquipment(
         tx,
         user.orgId,
@@ -525,7 +527,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         where id = ${id} and org_id = ${user.orgId}
         returning fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at,
                   ${documentRevisionSql(sql`created_at`)} as created_at`)).rows[0]
-      if (!updated) throw new Error('asset not found')
+      if (!updated) throw new AssetNotFoundError('asset not found')
       await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${user.orgId}, 'fixed_assets', ${id}, 'update',
@@ -566,10 +568,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (error instanceof FixedAssetEquipmentLinkConflict) {
       return apiErrorResponse(error, { safeStatus: 409 })
     }
-    // The save reports a concurrent disappearance with a bare Error carrying
-    // curated text (pinned by route tests); only those travel as 422s with
-    // their message, everything named sanitizes.
-    if (error instanceof Error && error.constructor === Error) return apiErrorResponse(invalidInput(error.message))
     return apiErrorResponse(error, { safeStatus: 422 })
   }
 
