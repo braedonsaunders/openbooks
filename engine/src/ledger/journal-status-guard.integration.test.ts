@@ -249,6 +249,9 @@ test("je_guard source contract pins every branch by name", { skip: !DB }, async 
     assert.match(body, /Branch: reversal-evidence/, "reversal-evidence branch");
     assert.match(body, /Branch: reversed-immutable/, "reversed-immutability branch");
     assert.match(body, /Branch: draft-post/, "draft-post branch");
+    assert.match(body, /Branch: connector-replay-authorization/, "connector replay authorization branch");
+    assert.match(body, /openbooks_connector_replay_authorized/, "replay authorization predicate");
+    assert.match(body, /openbooks\.connector_replay_authorization/, "replay authorization grant pointer");
     assert.match(body, /openbooks_reversal_mirrors/, "mirror predicate");
     assert.match(body, /without other changes/, "header-freeze rule");
     assert.match(body, /period_posting_fence/, "period fence");
