@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from PartyDrawer.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { type BankAccountClient, field } from './party-drawer-model'
 import { SublistHeading, SublistEmpty } from './PartySummary'
 import { useMemo, useState } from 'react'

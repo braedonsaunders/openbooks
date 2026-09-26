@@ -1,4 +1,4 @@
-/** Cabinet-first document management, split into modules (ARCH-FILE-SPLIT).
+/** Cabinet-first document management, split into modules.
  *
  * This index re-exports the exact public API of the former web/lib/file-cabinet.ts,
  * so `@/lib/file-cabinet` keeps resolving with zero importer churn.

@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from RunWizard.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from RunWizard.tsx; moved without behavior changes. */
 import { type RunHeader, type StubRow, type RosterRow, type AdjustmentRow, ROSTER_DIMENSIONS, type RosterDimension, dimensionOptions, runTypeLabel } from '../run-wizard-model'
 import { HeaderFact } from '../run-wizard-controls'
 import { useState } from 'react'

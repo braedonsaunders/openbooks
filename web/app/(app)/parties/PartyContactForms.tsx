@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from PartyDrawer.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { type AddressRow, type ContactRow, field } from './party-drawer-model'
 import { Input, Label, SearchSelect, Select } from '@openbooks/ui'
 

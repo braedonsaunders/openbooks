@@ -1,4 +1,4 @@
-/** Split from RunWizard.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from RunWizard.tsx; moved without behavior changes. */
 import type { useTranslations } from 'next-intl'
 import { decimalSum } from '../../../../../lib/statement-format'
 import { bucketAmounts, type RegisterBucket } from '../../../../../lib/payroll-register-buckets'

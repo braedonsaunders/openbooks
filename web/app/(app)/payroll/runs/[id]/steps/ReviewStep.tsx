@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from RunWizard.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from RunWizard.tsx; moved without behavior changes. */
 import { type StubChange, type StubRow, type RosterRow, type AdjustmentRow, type ComponentOption, VARIANCE_FLAG_PERCENT, withholding } from '../run-wizard-model'
 import { BulkEditDrawer } from '../BulkEditDrawer'
 import { StubDrawer } from '../StubDrawer'

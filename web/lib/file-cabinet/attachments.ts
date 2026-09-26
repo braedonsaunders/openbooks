@@ -1,4 +1,4 @@
-/** Split from web/lib/file-cabinet.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
 import { ensureRecordFolder } from './system-folders'
 import { createFile, RETAINED_ATTACHMENT, lockRetainedAttachmentTarget } from './files'

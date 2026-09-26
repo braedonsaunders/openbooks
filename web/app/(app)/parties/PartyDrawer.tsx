@@ -1795,7 +1795,7 @@ export function PartyDrawer({
   )
 }
 
-// Split from this file (ARCH-FILE-SPLIT): the same exports from the same path.
+// Split from this file; the same exports stay available from this path.
 export type { PartyTab } from './party-drawer-model'
 export { formatCreditLimit, rememberDrawerTab } from './party-drawer-model'
 export { ActivitySublist } from './PartyActivitySublist'

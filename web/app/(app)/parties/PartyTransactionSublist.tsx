@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from PartyDrawer.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { SublistHeading, SublistEmpty } from './PartySummary'
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'

@@ -1,6 +1,6 @@
 'use client'
 
-/** Split from RunWizard.tsx (ARCH-FILE-SPLIT; pure moves only). */
+/** Split from RunWizard.tsx; moved without behavior changes. */
 import { type Funding, type RunHeader, type RemittanceRow } from '../run-wizard-model'
 import { FundingPanel } from '../FundingPanel'
 import { AttributeEntityControl, RecordPaymentControl } from '../run-wizard-controls'

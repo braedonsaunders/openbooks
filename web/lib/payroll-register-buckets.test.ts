@@ -68,8 +68,8 @@ test('bucket amounts sum the stub deduction lines by component code', () => {
 })
 
 test('the run wizard renders register columns from the declared buckets', () => {
-  // ARCH-FILE-SPLIT: the review grid lives in steps/ReviewStep.tsx and the
-  // stub drawer in StubDrawer.tsx; read both (was RunWizard.tsx).
+  // The review grid lives in steps/ReviewStep.tsx and the stub drawer in
+  // StubDrawer.tsx; both were split from RunWizard.tsx, so read both.
   const source = [
     '../app/(app)/payroll/runs/[id]/steps/ReviewStep.tsx',
     '../app/(app)/payroll/runs/[id]/StubDrawer.tsx',
