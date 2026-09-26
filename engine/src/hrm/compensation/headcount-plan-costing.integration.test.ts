@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  setCompensationSettings,
+  setupHarness,
+  withHarness,
+} from "../../testing/hrm-harness.ts";
 import { CompensationError } from "./errors.ts";
 import {
   createJobFamily,
@@ -95,43 +96,11 @@ test("F04: invalid and overprecision burden rates refuse by name", () => {
   });
 });
 
-type Harness = { org: ScratchOrg; hrId: string };
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${org.orgId}`);
-  const hrId = await createScratchUser(org.orgId, "F04 HR", "f04_hr");
-  for (const permission of ["hrm.compensation.read", "hrm.compensation.manage"]) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${org.orgId}, ${hrId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-  return { org, hrId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function setCompensationSettings(orgId: string, patch: Record<string, unknown>): Promise<void> {
-  const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`)).rows[0]?.settings ?? {};
-  const next = {
-    ...(current as Record<string, unknown>),
-    compensation: { ...((current as Record<string, unknown>).compensation as Record<string, unknown> ?? {}), ...patch },
-  };
-  await db.execute(sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`);
-}
+const HEADCOUNT_PLAN_COSTING_SPEC = {
+  users: [
+    { key: "hrId", name: "F04 HR", handle: "f04_hr", permissions: ["hrm.compensation.read", "hrm.compensation.manage"] },
+  ],
+} as const;
 
 async function setLaborCostingComponents(orgId: string, components: Record<string, unknown>[]): Promise<void> {
   const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
@@ -175,7 +144,7 @@ async function seedBand(orgId: string, hrId: string, _subsidiaryId: string) {
 }
 
 test("F04: configured 14% burden costs end to end with audit evidence", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
     await setCompensationSettings(org.orgId, { burdenRate: "0.1400" });
@@ -218,7 +187,7 @@ test("F04: configured 14% burden costs end to end with audit evidence", async ()
 });
 
 test("F04: fallback labor-costing percents cost end to end, empty means zero", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
     await setCompensationSettings(org.orgId, { burdenRate: null });
@@ -277,7 +246,7 @@ test("F04: fallback labor-costing percents cost end to end, empty means zero", a
 });
 
 test("F04: undeclared burden rate refuses by name and writes nothing", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
     await setCompensationSettings(org.orgId, { burdenRate: "fourteen-percent" });

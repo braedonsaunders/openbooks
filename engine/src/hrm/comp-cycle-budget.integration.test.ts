@@ -5,12 +5,21 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { mulDecimal } from "../money/money.ts";
 import {
-  createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  grantPermissions,
+  linkPerson,
+  refusalMatches,
+  seedFx,
+  seedPositionedEmployment,
+  seedWage,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { decideGate } from "../flows/gates.ts";
 import { CompensationError } from "./compensation/errors.ts";
@@ -65,127 +74,12 @@ installEngineSeams();
  * by the scope worker (but is run for validation).
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type Harness = {
-  org: ScratchOrg;
-  hrId: string;
-};
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Person ${id.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${id} where id = ${userId} and org_id = ${orgId}`);
-  return id;
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${org.orgId}`);
-  const hrId = await createScratchUser(org.orgId, "Budget HR", "budget_hr");
-  await grantPermissions(org.orgId, hrId, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"]);
-  await linkPerson(org.orgId, hrId);
-  return { org, hrId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function seedPositionedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  opts: { workerPartyId?: string; levelId?: string | null },
-): Promise<{ employmentId: string; workerPartyId: string }> {
-  const workerPartyId = opts.workerPartyId ?? randomUUID();
-  if (!opts.workerPartyId) {
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${workerPartyId}, ${orgId}, 'person', 'Budget Worker', true, '{}'::jsonb)
-    `);
-  }
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  if (opts.levelId !== undefined) {
-    const positionId = randomUUID();
-    await db.execute(sql`
-      insert into positions (id, org_id, position_code, revision)
-      values (${positionId}, ${orgId}, ${`POS-${positionId.slice(0, 6)}`}, 1)
-    `);
-    await db.execute(sql`
-      insert into position_versions (org_id, position_id, version_no, title, department_id, location_id,
-        employer_subsidiary_id, planned_fte, status, effective_from, job_level_id)
-      values (${orgId}, ${positionId}, 1, 'Engineer', null, null,
-        ${subsidiaryId}, 1, 'filled', '2020-01-01', ${opts.levelId})
-    `);
-    const assignmentId = randomUUID();
-    await db.execute(sql`
-      insert into employment_assignments (id, org_id, employment_id, assignment_key)
-      values (${assignmentId}, ${orgId}, ${employmentId}, 'primary')
-    `);
-    await db.execute(sql`
-      insert into employment_assignment_versions (org_id, assignment_id, employment_id, version_no,
-        job_title, department_id, fte, is_primary, effective_from, position_id)
-      values (${orgId}, ${assignmentId}, ${employmentId}, 1,
-        'Engineer', null, 1, true, '2020-01-01', ${positionId})
-    `);
-  }
-  return { employmentId, workerPartyId };
-}
-
-async function seedWage(
-  orgId: string,
-  actorId: string,
-  workerPartyId: string,
-  rate: string,
-  opts?: { currency?: string; basis?: "hour" | "year"; annualHours?: string; from?: string },
-): Promise<void> {
-  const { withOrgTransaction } = await import("../platform/db.ts");
-  const { supersedeLaborCostRate } = await import("../projects/labor-cost-rates.ts");
-  await withOrgTransaction(orgId, async () => {
-    await supersedeLaborCostRate({
-      orgId,
-      actorId,
-      scope: { employeePartyId: workerPartyId, jobTitle: null, tradeId: null, departmentId: null, subsidiaryId: null },
-      effectiveFrom: opts?.from ?? "2020-01-01",
-      rate,
-      currency: opts?.currency ?? "CAD",
-      basis: opts?.basis ?? "year",
-      annualHours: opts?.annualHours ?? "2080",
-      notes: null,
-      reason: "budget test wage",
-    });
-  });
-}
+const COMP_CYCLE_BUDGET_SPEC = {
+  users: [
+    { key: "hrId", name: "Budget HR", handle: "budget_hr", permissions: ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"], link: true },
+  ],
+} as const;
 
 async function seedArchitecture(orgId: string, hrId: string) {
   const family = await createJobFamily({ orgId, actorId: hrId, code: "ENG", name: "Engineering" });
@@ -232,26 +126,6 @@ const GUIDELINE = {
   unratedRow: "meets",
 };
 
-async function seedFx(orgId: string, from: string, to: string, asOf: string, rate: string, source = "manual"): Promise<void> {
-  await db.execute(sql`
-    insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
-    values (${orgId}, ${from}, ${to}, ${asOf}::date, 'spot', ${rate}, ${source})
-  `);
-}
-
-/** Trigger refusals arrive wrapped: Drizzle carries the pg message on the cause chain. */
-function refusalMatches(pattern: RegExp): (e: unknown) => boolean {
-  return (e: unknown) => {
-    let current: unknown = e;
-    for (let depth = 0; depth < 5 && current !== null && typeof current === "object"; depth += 1) {
-      const message = (current as { message?: unknown }).message;
-      if (typeof message === "string" && pattern.test(message)) return true;
-      current = (current as { cause?: unknown }).cause ?? null;
-    }
-    return false;
-  };
-}
-
 async function storedLine(orgId: string, lineId: string): Promise<Record<string, string | null>> {
   const row = (await db.execute<Record<string, string | null>>(sql`
     select status, proposed_rate::text as proposed_rate, proposed_pct::text as proposed_pct,
@@ -266,13 +140,13 @@ async function storedLine(orgId: string, lineId: string): Promise<Record<string,
 }
 
 test("F02 hourly raises freeze the wage row's annual-hours at open", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
     // $25/hr on a 2000-hour row (deliberately not 2080: the pacing must
     // use the frozen row value, never a fabricated default).
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "25", { basis: "hour", annualHours: "2000" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "25", { basis: "hour", annualHours: "2000", reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "1000",
@@ -308,13 +182,13 @@ test("F02 hourly raises freeze the wage row's annual-hours at open", { skip: !DB
 });
 
 test("F02 mixed hourly/annual bases pace in one annual envelope", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const hourly = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, hourly.workerPartyId, "25", { basis: "hour", annualHours: "2000" });
-    const annual = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, annual.workerPartyId, "90000");
+    const hourly = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, hourly.workerPartyId, "25", { basis: "hour", annualHours: "2000", reason: "budget test wage" });
+    const annual = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, annual.workerPartyId, "90000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "5000",
@@ -334,11 +208,11 @@ test("F02 mixed hourly/annual bases pace in one annual envelope", { skip: !DB },
 });
 
 test("F02 cross-currency lines freeze the oriented quote at open", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000", { currency: "USD" });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000", { currency: "USD", reason: "budget test wage" });
     await seedFx(org.orgId, "USD", "CAD", "2025-01-01", "1.35", "bank");
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
@@ -362,13 +236,13 @@ test("F02 cross-currency lines freeze the oriented quote at open", { skip: !DB }
 });
 
 test("F02 frozen evidence survives same-date rewrites, late rows, supersession", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const hourly = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, hourly.workerPartyId, "25", { basis: "hour", annualHours: "2000" });
-    const usd = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, usd.workerPartyId, "100000", { currency: "USD" });
+    const hourly = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, hourly.workerPartyId, "25", { basis: "hour", annualHours: "2000", reason: "budget test wage" });
+    const usd = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, usd.workerPartyId, "100000", { currency: "USD", reason: "budget test wage" });
     await seedFx(org.orgId, "USD", "CAD", "2025-01-01", "1.35", "bank");
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
@@ -395,7 +269,7 @@ test("F02 frozen evidence survives same-date rewrites, late rows, supersession",
     await db.execute(sql`
       update labor_cost_rates set annual_hours = '1000'
        where org_id = ${org.orgId} and employee_party_id = ${hourly.workerPartyId} and is_active`);
-    await seedWage(org.orgId, h.hrId, hourly.workerPartyId, "30", { basis: "hour", annualHours: "1500", from: "2025-02-01" });
+    await seedWage(org.orgId, h.hrId, hourly.workerPartyId, "30", { basis: "hour", annualHours: "1500", from: "2025-02-01", reason: "budget test wage" });
     const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
       select settings from orgs where id = ${org.orgId}`)).rows[0]?.settings ?? {};
     await db.execute(sql`
@@ -416,11 +290,11 @@ test("F02 frozen evidence survives same-date rewrites, late rows, supersession",
 });
 
 test("F02 inverse quotes freeze oriented; unconfigured currency fails the open", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000", { reason: "budget test wage" });
     // Only the USD→CAD direction is quoted; the USD-envelope cycle
     // freezes the exact inverse for its CAD line.
     await seedFx(org.orgId, "USD", "CAD", "2025-01-01", "1.35", "bank");
@@ -444,8 +318,8 @@ test("F02 inverse quotes freeze oriented; unconfigured currency fails the open",
     // An enveloped cycle with an unconfigured currency fails the open
     // atomically: the draft survives with no lines for retry, instead
     // of opening a round that can never price.
-    const eur = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, eur.workerPartyId, "80000", { currency: "EUR" });
+    const eur = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, eur.workerPartyId, "80000", { currency: "EUR", reason: "budget test wage" });
     const eurCycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit EUR", kind: "merit",
       effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "10000",
@@ -471,11 +345,11 @@ test("F02 inverse quotes freeze oriented; unconfigured currency fails the open",
 });
 
 test("F02 legacy lines without frozen evidence refuse by name, history preserved", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const annualEmp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    const hourlyEmp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const annualEmp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    const hourlyEmp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
     const mkLegacyCycle = async (name: string): Promise<string> => {
       const created = await createCycle({
         orgId: org.orgId, actorId: h.hrId, name, kind: "merit",
@@ -520,11 +394,11 @@ test("F02 legacy lines without frozen evidence refuse by name, history preserved
 });
 
 test("F02 frozen inputs and headers cannot be rewritten; reopen does not reprice", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "25", { basis: "hour", annualHours: "2000" });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "25", { basis: "hour", annualHours: "2000", reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "100000",
@@ -626,11 +500,11 @@ test("F02 frozen inputs and headers cannot be rewritten; reopen does not reprice
 });
 
 test("F03 a zero envelope is real: positive increases are over with no percentage", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "0",
@@ -661,11 +535,11 @@ test("F03 a zero envelope is real: positive increases are over with no percentag
 });
 
 test("F03 a null envelope is absence: never over, even for large raises", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -687,11 +561,11 @@ test("F03 a null envelope is absence: never over, even for large raises", { skip
 });
 
 test("F02/F03 exact comparison at large boundary values", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "1000000000000.0000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "1000000000000.0000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "50000000000.0000",
@@ -713,11 +587,11 @@ test("F02/F03 exact comparison at large boundary values", { skip: !DB }, async (
 });
 
 test("F11 six-decimal percents store consistent rate evidence; deeper refuses", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -744,8 +618,8 @@ test("F11 six-decimal percents store consistent rate evidence; deeper refuses", 
     assert.equal((await storedLine(org.orgId, line!.id)).proposed_pct, stored.proposed_pct);
     // 7 meaningful places refuse with a usable remedy, never a silent
     // rounding of one evidence against the other.
-    const emp2 = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp2.workerPartyId, "90000");
+    const emp2 = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp2.workerPartyId, "90000", { reason: "budget test wage" });
     const cycle2 = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -765,11 +639,11 @@ test("F11 six-decimal percents store consistent rate evidence; deeper refuses", 
 });
 
 test("high-magnitude decimal-text percent preserves exact stored percent and wage", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Precision 2025", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -790,11 +664,11 @@ test("high-magnitude decimal-text percent preserves exact stored percent and wag
 });
 
 test("per-line approval racing a cycle push returns only named outcomes", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Concurrent decision 2025", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -841,13 +715,13 @@ test("per-line approval racing a cycle push returns only named outcomes", { skip
 });
 
 test("F11 proposal wages round once, exactly, and the push carries them", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const penny = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, penny.workerPartyId, "100.0050");
-    const heavy = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, heavy.workerPartyId, "60000.0001");
+    const penny = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, penny.workerPartyId, "100.0050", { reason: "budget test wage" });
+    const heavy = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, heavy.workerPartyId, "60000.0001", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -869,8 +743,8 @@ test("F11 proposal wages round once, exactly, and the push carries them", { skip
     assert.equal(heavyStored.proposed_pct, "50.000000");
     assert.equal(mulDecimal("60000.0001", "1.50000000"), heavyStored.proposed_rate);
     // The typed-rate direction derives its percent exactly too.
-    const annual = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, annual.workerPartyId, "90000");
+    const annual = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, annual.workerPartyId, "90000", { reason: "budget test wage" });
     const cycle2 = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -911,11 +785,11 @@ test("F11 proposal wages round once, exactly, and the push carries them", { skip
 });
 
 test("F11 guideline limits assess the exact ratio, not the display rounding", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -937,11 +811,11 @@ test("F11 guideline limits assess the exact ratio, not the display rounding", { 
 });
 
 test("F11 a raise off a zero current rate is explicit, never fabricated", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "0");
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "0", { reason: "budget test wage" });
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
@@ -964,7 +838,7 @@ test("F11 a raise off a zero current rate is explicit, never fabricated", { skip
 });
 
 test("F02/F03 the public read stays lens-scoped while the write control sees the whole cycle", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
     const subB = randomUUID();
@@ -972,10 +846,10 @@ test("F02/F03 the public read stays lens-scoped while the write control sees the
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id });
-    await seedWage(org.orgId, h.hrId, empA.workerPartyId, "90000");
-    await seedWage(org.orgId, h.hrId, empB.workerPartyId, "100000");
+    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Budget Worker" });
+    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id, displayName: "Budget Worker" });
+    await seedWage(org.orgId, h.hrId, empA.workerPartyId, "90000", { reason: "budget test wage" });
+    await seedWage(org.orgId, h.hrId, empB.workerPartyId, "100000", { reason: "budget test wage" });
     const readerA = await createScratchUser(org.orgId, "Budget Reader A", "budget_reader_a");
     await db.execute(sql`
       update app_roles
@@ -1005,7 +879,7 @@ test("F02/F03 the public read stays lens-scoped while the write control sees the
 });
 
 test("pacing and lines refuse a missing round instead of reading an empty envelope", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMP_CYCLE_BUDGET_SPEC), async (h) => {
     const { org } = h;
     // A real round with no envelope keeps its shape: null percent, never over.
     const cycle = await createCycle({
@@ -1017,7 +891,7 @@ test("pacing and lines refuse a missing round instead of reading an empty envelo
     // A deleted round and another org's round are indistinguishable from
     // missing: both refuse NOT_FOUND (404 at the route), never the
     // no-envelope shape above.
-    const other = await setupHarness();
+    const other = await setupHarness(COMP_CYCLE_BUDGET_SPEC);
     try {
       const foreign = await createCycle({
         orgId: other.org.orgId, actorId: other.hrId, name: "Foreign", kind: "merit",

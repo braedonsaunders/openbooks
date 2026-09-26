@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
@@ -9,7 +8,15 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
-import { HrmPerformanceError } from "./errors.ts";
+import {
+  enableHrm,
+  grant,
+  linkPerson,
+  mkEmployment,
+  mkReporting,
+  mkReviewTemplate,
+  perfError,
+} from "../../testing/hrm-harness.ts";
 import { createCycle, openCycle } from "./review-cycles.ts";
 import { submitReview } from "./reviews.ts";
 import {
@@ -40,79 +47,19 @@ type Harness = {
   cycleId: string;
 };
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function enableCalibration(orgId: string): Promise<void> {
-  for (const key of ["hrm", "hrmPerformance", "hrmCalibration"] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  const employmentId = (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date)`);
-  return employmentId;
-}
-
-async function mkTemplate(orgId: string, actorId: string): Promise<string> {
-  const templateId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${orgId}, 'Annual', '{"min": 1, "max": 5, "labels": ["low", "high"]}'::jsonb, ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  const sectionId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
-    values (${orgId}, ${templateId}, 0, 'Impact', 'competency', ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into hrm_review_template_questions
-      (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
-    values (${orgId}, ${sectionId}, 0, 'Customer impact', 'rating_and_text', true, ${actorId}, ${actorId})
-  `);
-  return templateId;
-}
-
-async function setupHarness(): Promise<Harness> {
+async function setupScalesHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableCalibration(org.orgId);
+  await enableHrm(org.orgId, "hrmPerformance", "hrmCalibration");
   const hrId = await createScratchUser(org.orgId, "Scale HR", "scale_hr");
   await grant(org.orgId, hrId, ["hrm.performance.manage"]);
   const managerUser = await createScratchUser(org.orgId, "Scale Manager", "scale_manager");
   const managerParty = await linkPerson(org.orgId, managerUser);
-  const managerEmployment = await mkEmployment(org.orgId, managerParty, org.subsidiaryId);
+  const managerEmployment = await mkEmployment(org.orgId, managerParty, org.subsidiaryId, {});
   const workerUser = await createScratchUser(org.orgId, "Scale Worker", "scale_worker");
   const workerParty = await linkPerson(org.orgId, workerUser);
-  const workerEmployment = await mkEmployment(org.orgId, workerParty, org.subsidiaryId);
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from)
-    values (${org.orgId}, ${workerEmployment}, ${managerEmployment}, 'line', ${randomUUID()}, 1, '2020-01-01'::date)
-  `);
-  const templateId = await mkTemplate(org.orgId, hrId);
+  const workerEmployment = await mkEmployment(org.orgId, workerParty, org.subsidiaryId, {});
+  await mkReporting(org.orgId, workerEmployment, managerEmployment);
+  const templateId = await mkReviewTemplate(org.orgId, hrId);
   const cycle = await createCycle({
     orgId: org.orgId,
     actorId: hrId,
@@ -151,13 +98,8 @@ async function openEntryId(h: Harness): Promise<string> {
   return opened.entries[0]!.id;
 }
 
-function perfError(error: unknown): HrmPerformanceError {
-  assert.ok(error instanceof HrmPerformanceError, `expected HrmPerformanceError, got ${String(error)}`);
-  return error;
-}
-
 test("decided ratings and potential keys validate against the cycle scales", async () => {
-  const h = await setupHarness();
+  const h = await setupScalesHarness();
   try {
     const entryId = await openEntryId(h);
     // Off-scale and non-numeric ratings name the scale.
@@ -216,7 +158,7 @@ test("decided ratings and potential keys validate against the cycle scales", asy
 test("the calibration editor offers the cycle scale labels and saves one", async () => {
   // F3-34: the editor's options come from the same template labels
   // setPotential enforces, so an offered option always saves.
-  const h = await setupHarness();
+  const h = await setupScalesHarness();
   try {
     const entryId = await openEntryId(h);
     const sessionId = (await db.execute<{ sessionId: string }>(sql`
@@ -237,7 +179,7 @@ test("the calibration editor offers the cycle scale labels and saves one", async
 test("a template with no scale labels offers no potential options", async () => {
   // F3-34: the missing arm degrades openly — the editor offers nothing
   // instead of inventing options the server would refuse.
-  const h = await setupHarness();
+  const h = await setupScalesHarness();
   try {
     const templateId = (await db.execute<{ id: string }>(sql`
       insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)

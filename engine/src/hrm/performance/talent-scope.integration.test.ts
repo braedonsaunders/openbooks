@@ -6,11 +6,18 @@ import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  grant,
+  mkEmployment,
+  mkParty,
+  perfError,
+  restrictRole,
+  withHarness,
+} from "../../testing/hrm-harness.ts";
 import { createPosition } from "../positions.ts";
-import { HrmPerformanceError } from "./errors.ts";
 import { createCycle } from "./review-cycles.ts";
 import {
   addSuccessionCandidate,
@@ -38,44 +45,6 @@ type Harness = {
   empB: string;
 };
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function restrictRole(orgId: string, roleKey: string, restriction: Record<string, unknown>): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.performance.manage"]'::jsonb,
-           subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function enableTalent(orgId: string): Promise<void> {
-  for (const key of ["hrm", "hrmPerformance", "hrmSuccession"] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
-async function mkParty(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
-
 async function mkTemplate(orgId: string, actorId: string): Promise<string> {
   // Template names are unique per org: every call mints its own, since the
   // harness already owns one 'Annual' and several tests mint more.
@@ -96,9 +65,9 @@ async function mkTemplate(orgId: string, actorId: string): Promise<string> {
   return templateId;
 }
 
-async function setupHarness(): Promise<Harness> {
+async function setupTalentScopeHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableTalent(org.orgId);
+  await enableHrm(org.orgId, "hrmPerformance", "hrmSuccession");
   const hrAll = await createScratchUser(org.orgId, "Talent HR All", "talent_hr_all");
   await grant(org.orgId, hrAll, ["hrm.performance.manage", "hrm.position.manage"]);
   // A second legal entity under the same org.
@@ -110,29 +79,15 @@ async function setupHarness(): Promise<Harness> {
   // Scoped HR: the manage grant with the subsidiary lens on the first entity.
   const hrA = await createScratchUser(org.orgId, "Talent HR A", "talent_hr_a");
   await grant(org.orgId, hrA, ["hrm.performance.manage"]);
-  await restrictRole(org.orgId, "talent_hr_a", { mode: "list", subsidiaryIds: [org.subsidiaryId] });
+  await restrictRole(org.orgId, "talent_hr_a", { mode: "list", subsidiaryIds: [org.subsidiaryId] }, ["hrm.performance.manage"]);
   const hrEmpty = await createScratchUser(org.orgId, "Talent HR Empty", "talent_hr_empty");
   await grant(org.orgId, hrEmpty, ["hrm.performance.manage"]);
-  await restrictRole(org.orgId, "talent_hr_empty", { mode: "list", subsidiaryIds: [] });
+  await restrictRole(org.orgId, "talent_hr_empty", { mode: "list", subsidiaryIds: [] }, ["hrm.performance.manage"]);
   const empA = await mkEmployment(org.orgId, await mkParty(org.orgId, "Employee A"), org.subsidiaryId);
   const empB = await mkEmployment(org.orgId, await mkParty(org.orgId, "Employee B"), subB);
   const templateId = await mkTemplate(org.orgId, hrAll);
   const cycle = await createCycle({ orgId: org.orgId, actorId: hrAll, templateId, name: "Talent cycle", periodStartOn: "2026-01-01", periodEndOn: "2026-12-31" });
   return { org, cycleId: cycle.id, subB, hrAll, hrA, hrEmpty, empA, empB };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-function perfError(error: unknown): HrmPerformanceError {
-  assert.ok(error instanceof HrmPerformanceError, `expected HrmPerformanceError, got ${String(error)}`);
-  return error;
 }
 
 function recordArgs(h: Harness, employmentId: string, actorId: string) {
@@ -149,7 +104,7 @@ function recordArgs(h: Harness, employmentId: string, actorId: string) {
 }
 
 test("talent reviews record inside the fence and refuse outside it", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupTalentScopeHarness(), async (h) => {
     const mine = await recordTalentReview(recordArgs(h, h.empA, h.hrA));
     assert.equal(mine.employmentId, h.empA);
     const error = perfError(await recordTalentReview(recordArgs(h, h.empB, h.hrA)).then(
@@ -165,7 +120,7 @@ test("talent reviews record inside the fence and refuse outside it", async () =>
 });
 
 test("talent review lists and the directory filter to allowed subsidiaries", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupTalentScopeHarness(), async (h) => {
     await recordTalentReview(recordArgs(h, h.empA, h.hrAll));
     await recordTalentReview(recordArgs(h, h.empB, h.hrAll));
     const scoped = await listTalentReviews({ orgId: h.org.orgId, actorId: h.hrA });
@@ -187,7 +142,7 @@ test("talent review lists and the directory filter to allowed subsidiaries", asy
 });
 
 test("talent scales refuse a cycle scoped to another subsidiary", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupTalentScopeHarness(), async (h) => {
     const templateId = await mkTemplate(h.org.orgId, h.hrAll);
     const cycleB = await createCycle({
       orgId: h.org.orgId,
@@ -223,7 +178,7 @@ test("talent scales refuse a cycle scoped to another subsidiary", async () => {
 });
 
 test("succession plans and candidates stay inside the fence", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupTalentScopeHarness(), async (h) => {
     const positionB = await createPosition({
       orgId: h.org.orgId,
       actorId: h.hrAll,

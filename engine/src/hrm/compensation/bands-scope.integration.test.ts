@@ -9,6 +9,12 @@ import {
   dropScratchOrg,
 } from "../../testing/fixtures.ts";
 import {
+  DB,
+  grantPermissions,
+  refusalOf,
+  scopeRole,
+} from "../../testing/hrm-harness.ts";
+import {
   createJobFamily,
   createJobLevel,
 } from "./architecture.ts";
@@ -33,34 +39,6 @@ import {
  * through the service, never from its internals.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function scopeRole(orgId: string, roleKey: string, permissions: string[], subsidiaryIds: string[]): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = ${JSON.stringify(permissions)}::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function refusalOf(promise: Promise<unknown>): Promise<{ name: string; message: string }> {
-  try {
-    await promise;
-  } catch (e) {
-    return { name: (e as Error).name, message: (e as Error).message };
-  }
-  throw new Error("expected a refusal, the call succeeded");
-}
 
 test("H-PAYBANDS: band reads fence B-anchored figures to the actor's lens", { skip: !DB }, async () => {
   const org = await createScratchOrg();

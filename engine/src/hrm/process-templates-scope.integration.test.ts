@@ -9,6 +9,13 @@ import {
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 import {
+  DB,
+  enableHrm,
+  grant,
+  refusalOf,
+  scopeRole,
+} from "../testing/hrm-harness.ts";
+import {
   createProcessTemplate,
   deleteProcessTemplate,
   deleteProcessTemplateStep,
@@ -33,41 +40,6 @@ import {
  * rows.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'`);
-  }
-}
-
-async function scopeRole(orgId: string, roleKey: string, permissions: string[], subsidiaryIds: string[]): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = ${JSON.stringify(permissions)}::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function refusalOf(promise: Promise<unknown>): Promise<{ name: string; code: string; message: string }> {
-  try {
-    await promise;
-  } catch (e) {
-    const code = (e as { code?: unknown }).code;
-    return { name: (e as Error).name, code: typeof code === "string" ? code : "", message: (e as Error).message };
-  }
-  throw new Error("expected a refusal, the call succeeded");
-}
 
 const STEP = { position: 0, title: "Collect documents", ownerKind: "hr" as const };
 

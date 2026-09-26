@@ -8,6 +8,15 @@ import {
   createScratchUser,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  enableHrm,
+  grantPermissions,
+  refusalOf,
+  scopeRole,
+  seedEmployment,
+  seedPlan,
+} from "../testing/hrm-harness.ts";
 import { electEnrollment } from "./benefits/enrollments.ts";
 import { listEnrollmentWindows } from "./benefits/benefits-read.ts";
 import {
@@ -32,89 +41,12 @@ import {
  * service, never from its internals.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function scopeRole(orgId: string, roleKey: string, permissions: string[], subsidiaryIds: string[]): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = ${JSON.stringify(permissions)}::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function seedEmployment(orgId: string, subsidiaryId: string): Promise<string> {
-  const party = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${party}, ${orgId}, 'person', 'Benefits Worker', true, '{}'::jsonb)`);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${party}, ${subsidiaryId}, 1)`);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
-  return employmentId;
-}
-
-async function seedComponent(orgId: string, code: string, kind: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into pay_components (id, org_id, code, name, kind, is_active)
-    values (${id}, ${orgId}, ${code}, ${code}, ${kind}, true)`);
-  return id;
-}
-
-async function seedPlan(orgId: string, requiresApproval: boolean): Promise<string> {
-  const employeeComponentId = await seedComponent(orgId, `DED_${randomUUID().slice(0, 6)}`, "deduction");
-  const employerComponentId = await seedComponent(orgId, `ER_${randomUUID().slice(0, 6)}`, "employer_contribution");
-  const planId = randomUUID();
-  const code = `MED_${randomUUID().slice(0, 6)}`;
-  await db.execute(sql`
-    insert into hrm_benefit_plans
-      (id, org_id, code, name, kind, currency, employee_cost_basis, employee_cost,
-       employer_cost_basis, employer_cost, employee_pay_component_id,
-       employer_pay_component_id, proration_basis, waiting_period_days,
-       requires_approval, is_active, effective_from)
-    values (${planId}, ${orgId}, ${code}, ${code}, 'health', 'USD',
-            'per_month', '250.0000', 'per_month', '500.0000',
-            ${employeeComponentId}, ${employerComponentId},
-            'full_month', 0, ${requiresApproval}, true, '2020-01-01')`);
-  return planId;
-}
 
 const WINDOW_DATES = {
   opensOn: "2026-01-01",
   closesOn: "2026-12-31",
   planYearStartOn: "2026-01-01",
 };
-
-async function refusalOf(promise: Promise<unknown>): Promise<{ name: string; code: string; message: string }> {
-  try {
-    await promise;
-  } catch (e) {
-    const code = (e as { code?: unknown }).code;
-    return { name: (e as Error).name, code: typeof code === "string" ? code : "", message: (e as Error).message };
-  }
-  throw new Error("expected a refusal, the call succeeded");
-}
 
 test("H-BENEFITS: window reads fence B's windows and counts to the lens", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -127,8 +59,8 @@ test("H-BENEFITS: window reads fence B's windows and counts to the lens", { skip
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const empA = await seedEmployment(org.orgId, org.subsidiaryId);
-    const empB = await seedEmployment(org.orgId, subB);
+    const empA = (await seedEmployment(org.orgId, org.subsidiaryId, { displayName: "Benefits Worker" })).employmentId;
+    const empB = (await seedEmployment(org.orgId, subB, { displayName: "Benefits Worker" })).employmentId;
     const windowA = await createEnrollmentWindow({
       orgId: org.orgId, actorId: adminId, name: "A window", kind: "open_enrollment",
       ...WINDOW_DATES, employerSubsidiaryId: org.subsidiaryId,
@@ -137,7 +69,7 @@ test("H-BENEFITS: window reads fence B's windows and counts to the lens", { skip
       orgId: org.orgId, actorId: adminId, name: "B window", kind: "open_enrollment",
       ...WINDOW_DATES, employerSubsidiaryId: subB,
     });
-    const planApproving = await seedPlan(org.orgId, true);
+    const planApproving = (await seedPlan(org.orgId, { requires_approval: true })).planId;
     await openEnrollmentWindow({ orgId: org.orgId, actorId: adminId, windowId: windowA.id });
     await openEnrollmentWindow({ orgId: org.orgId, actorId: adminId, windowId: windowB.id });
     await electEnrollment({

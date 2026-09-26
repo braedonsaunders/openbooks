@@ -4,11 +4,10 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import { setupHarness } from "../../testing/hrm-harness.ts";
 import {
   createRequisition,
   openRequisition,
@@ -30,50 +29,25 @@ import {
  * withdrawn consent. Proofs are read back from storage.
  */
 
-type Harness = {
-  org: ScratchOrg;
-  recruiterId: string;
-};
+const POSTINGS_APPLY_CONSENT_SPEC = {
+  features: ["hrm", "hrmRecruiting", "hrmJobBoards"],
+  users: [
+    { key: "recruiterId", name: "Apply Recruiter", handle: "apply_recruiter", permissions: ["hrm.recruiting.read", "hrm.recruiting.manage"] },
+  ],
+} as const;
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function enableBoards(orgId: string): Promise<void> {
-  for (const key of ["hrm", "hrmRecruiting", "hrmJobBoards"] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableBoards(org.orgId);
-  const recruiterId = await createScratchUser(org.orgId, "Apply Recruiter", "apply_recruiter");
-  await grant(org.orgId, recruiterId, ["hrm.recruiting.read", "hrm.recruiting.manage"]);
-  return { org, recruiterId };
-}
-
-async function seedPublishedPosting(h: Harness, title: string): Promise<string> {
+async function seedPublishedPosting(org: ScratchOrg, recruiterId: string, title: string): Promise<string> {
   const requisition = await createRequisition({
-    orgId: h.org.orgId,
-    actorId: h.recruiterId,
+    orgId: org.orgId,
+    actorId: recruiterId,
     title,
-    employerSubsidiaryId: h.org.subsidiaryId,
+    employerSubsidiaryId: org.subsidiaryId,
     headcount: 1,
   });
-  const opened = await openRequisition({ orgId: h.org.orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+  const opened = await openRequisition({ orgId: org.orgId, actorId: recruiterId, requisitionId: requisition.id });
   const posting = await publishPosting({
-    orgId: h.org.orgId,
-    actorId: h.recruiterId,
+    orgId: org.orgId,
+    actorId: recruiterId,
     requisitionId: opened.id,
     boardKey: "internal",
   });
@@ -91,7 +65,7 @@ async function consentRows(orgId: string, candidateId: string): Promise<{ purpos
 }
 
 test("anonymous apply never reinstates a withdrawn consent", async () => {
-  const h = await setupHarness();
+  const h = await setupHarness(POSTINGS_APPLY_CONSENT_SPEC);
   try {
     const orgId = h.org.orgId;
     const email = `known-${randomUUID()}@example.test`;
@@ -109,7 +83,7 @@ test("anonymous apply never reinstates a withdrawn consent", async () => {
               now() - interval '30 days', now() - interval '1 day')
     `);
     const before = (await consentRows(orgId, candidate.id)).find((row) => row.purpose === "future_roles")!;
-    const postingId = await seedPublishedPosting(h, "Backend engineer");
+    const postingId = await seedPublishedPosting(h.org, h.recruiterId, "Backend engineer");
     // A stranger types the known address and ticks every consent box.
     const applied = await applyViaPosting({
       orgId,
@@ -131,7 +105,7 @@ test("anonymous apply never reinstates a withdrawn consent", async () => {
 });
 
 test("anonymous apply writes no consent for a matched candidate without prior consent", async () => {
-  const h = await setupHarness();
+  const h = await setupHarness(POSTINGS_APPLY_CONSENT_SPEC);
   try {
     const orgId = h.org.orgId;
     const email = `known-${randomUUID()}@example.test`;
@@ -142,7 +116,7 @@ test("anonymous apply writes no consent for a matched candidate without prior co
       email,
       source: "direct",
     });
-    const postingId = await seedPublishedPosting(h, "Backend engineer");
+    const postingId = await seedPublishedPosting(h.org, h.recruiterId, "Backend engineer");
     const applied = await applyViaPosting({
       orgId,
       postingId,
@@ -158,11 +132,11 @@ test("anonymous apply writes no consent for a matched candidate without prior co
 });
 
 test("concurrent public applications with the same email reuse one candidate row", async () => {
-  const h = await setupHarness();
+  const h = await setupHarness(POSTINGS_APPLY_CONSENT_SPEC);
   try {
     const email = `concurrent-${randomUUID()}@example.test`;
-    const firstPosting = await seedPublishedPosting(h, "Backend engineer");
-    const secondPosting = await seedPublishedPosting(h, "Platform engineer");
+    const firstPosting = await seedPublishedPosting(h.org, h.recruiterId, "Backend engineer");
+    const secondPosting = await seedPublishedPosting(h.org, h.recruiterId, "Platform engineer");
     const [first, second] = await Promise.all([
       applyViaPosting({ orgId: h.org.orgId, postingId: firstPosting, displayName: "Applicant One", email }),
       applyViaPosting({ orgId: h.org.orgId, postingId: secondPosting, displayName: "Applicant Two", email: email.toUpperCase() }),

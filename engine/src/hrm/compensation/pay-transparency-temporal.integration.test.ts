@@ -6,9 +6,16 @@ import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  grantPermissions,
+  linkPerson,
+  seedPayGapWorker,
+  setCompensationSettings,
+  withHarness as runWithHarness,
+} from "../../testing/hrm-harness.ts";
 import {
   createJobFamily,
   createJobLevel,
@@ -38,43 +45,6 @@ import {
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Person ${id.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${id} where id = ${userId} and org_id = ${orgId}`);
-  return id;
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function setCompensationSettings(orgId: string, patch: Record<string, unknown>): Promise<void> {
-  const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`)).rows[0]?.settings ?? {};
-  const next = {
-    ...(current as Record<string, unknown>),
-    compensation: { ...((current as Record<string, unknown>).compensation as Record<string, unknown> ?? {}), ...patch },
-  };
-  await db.execute(sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`);
-}
 
 type Harness = {
   org: ScratchOrg;
@@ -115,66 +85,7 @@ async function seedWorker(
   // rows are append-only, so a bounded first slice is seeded bounded).
   assignmentTo?: string,
 ): Promise<{ employmentId: string; workerPartyId: string }> {
-  const partyId = workerPartyId ?? randomUUID();
-  if (!workerPartyId) {
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${partyId}, ${orgId}, 'person', ${`W ${partyId.slice(0, 6)}`}, true,
-              ${JSON.stringify({ eeo_group: group })}::jsonb)
-    `);
-  } else {
-    await db.execute(sql`
-      update parties set custom = ${JSON.stringify({ eeo_group: group })}::jsonb
-       where id = ${partyId} and org_id = ${orgId}`);
-  }
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  const positionId = randomUUID();
-  await db.execute(sql`
-    insert into positions (id, org_id, position_code, revision)
-    values (${positionId}, ${orgId}, ${`POS-${positionId.slice(0, 6)}`}, 1)
-  `);
-  await db.execute(sql`
-    insert into position_versions (org_id, position_id, version_no, title, department_id, location_id,
-      employer_subsidiary_id, planned_fte, status, effective_from, job_level_id)
-    values (${orgId}, ${positionId}, 1, 'Engineer', null, null,
-      ${subsidiaryId}, 1, 'filled', '2020-01-01', ${levelId})
-  `);
-  const assignmentId = randomUUID();
-  await db.execute(sql`
-    insert into employment_assignments (id, org_id, employment_id, assignment_key)
-    values (${assignmentId}, ${orgId}, ${employmentId}, 'primary')
-  `);
-  await db.execute(sql`
-    insert into employment_assignment_versions (org_id, assignment_id, employment_id, version_no,
-      job_title, department_id, fte, is_primary, effective_from, effective_to, position_id)
-    values (${orgId}, ${assignmentId}, ${employmentId}, 1,
-      'Engineer', null, 1, true, '2020-01-01', ${assignmentTo ?? null}::date, ${positionId})
-  `);
-  const { withOrgTransaction } = await import("../../platform/db.ts");
-  const { supersedeLaborCostRate } = await import("../../projects/labor-cost-rates.ts");
-  await withOrgTransaction(orgId, async () => {
-    await supersedeLaborCostRate({
-      orgId,
-      actorId,
-      scope: { employeePartyId: partyId, jobTitle: null, tradeId: null, departmentId: null, subsidiaryId: null },
-      effectiveFrom: "2020-01-01",
-      rate: group === "G1" ? "100000" : "80000",
-      currency: "CAD",
-      basis: "year",
-      annualHours: "2080",
-      notes: null,
-      reason: "test wage",
-    });
-  });
-  return { employmentId, workerPartyId: partyId };
+  return seedPayGapWorker(orgId, actorId, subsidiaryId, levelId, group, { workerPartyId, assignmentTo });
 }
 
 /** Promote an employment to a fresh position at a new level (INSERT-only: the first slice was seeded ending `effectiveFrom`). */
@@ -213,7 +124,7 @@ async function promoteWorker(
   `);
 }
 
-async function setupHarness(workerAssignmentTo?: string): Promise<Harness> {
+async function setupTemporalHarness(workerAssignmentTo?: string): Promise<Harness> {
   const org = await createScratchOrg();
   await enableHrm(org.orgId);
   const hrId = await createScratchUser(org.orgId, "Temporal HR", "temporal_hr");
@@ -232,14 +143,8 @@ async function setupHarness(workerAssignmentTo?: string): Promise<Harness> {
   return { org, hrId, workerId, workerEmploymentId: workerEmp.employmentId, ic3Id, ic4Id };
 }
 
-async function withHarness(fn: (h: Harness) => Promise<void>, workerAssignmentTo?: string): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness(workerAssignmentTo);
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+function withHarness(fn: (h: Harness) => Promise<void>, workerAssignmentTo?: string): Promise<void> {
+  return runWithHarness(() => setupTemporalHarness(workerAssignmentTo), fn);
 }
 
 async function storedRequest(

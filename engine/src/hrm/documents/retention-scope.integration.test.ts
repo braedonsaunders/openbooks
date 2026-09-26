@@ -5,9 +5,13 @@ import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableFeatures,
+  scopeRole,
+  withHarness,
+} from "../../testing/hrm-harness.ts";
 import { UnrestrictedScopeError } from "../../organization/subsidiary-scope.ts";
 import { saveCategory } from "./categories.ts";
 import { listSchedules, saveSchedule } from "./retention.ts";
@@ -21,46 +25,20 @@ import { listSchedules, saveSchedule } from "./retention.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableFeatures(orgId: string): Promise<void> {
-  for (const feature of ["hrm", "hrmDocuments", "hrmDocumentRetention"]) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
-    `);
-  }
-}
-
 type Harness = { org: ScratchOrg; adminId: string; managerAId: string };
 
-async function setupHarness(): Promise<Harness> {
+async function setupRetentionHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableFeatures(org.orgId);
+  await enableFeatures(org.orgId, ["hrm", "hrmDocuments", "hrmDocumentRetention"]);
   const adminId = await createScratchUser(org.orgId, "Ada Admin", "ret_admin");
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.documents.read", "hrm.documents.manage"]'::jsonb,
-           subsidiary_restriction = '{"mode": "all"}'::jsonb
-     where org_id = ${org.orgId} and key = 'ret_admin'`);
+  await scopeRole(org.orgId, "ret_admin", ["hrm.documents.read", "hrm.documents.manage"], "all");
   const managerAId = await createScratchUser(org.orgId, "Mara Manager", "ret_manager_a");
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.documents.read", "hrm.documents.manage"]'::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
-     where org_id = ${org.orgId} and key = 'ret_manager_a'`);
+  await scopeRole(org.orgId, "ret_manager_a", ["hrm.documents.read", "hrm.documents.manage"], [org.subsidiaryId]);
   await saveCategory({ orgId: org.orgId, actorId: adminId, key: "contract", label: "Contracts" });
   return { org, adminId, managerAId };
 }
 
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
+
 
 async function scheduleCount(orgId: string): Promise<number> {
   return Number(
@@ -80,7 +58,7 @@ const SAVE = {
 } as const;
 
 test("a subsidiary-restricted manager cannot write org-wide retention policy", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(setupRetentionHarness, async (h: Harness) => {
     const before = await scheduleCount(h.org.orgId);
     await assert.rejects(
       saveSchedule({ orgId: h.org.orgId, actorId: h.managerAId, ...SAVE }),
@@ -92,7 +70,7 @@ test("a subsidiary-restricted manager cannot write org-wide retention policy", {
 });
 
 test("the unrestricted admin still writes, and the read list stays open", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(setupRetentionHarness, async (h: Harness) => {
     const saved = await saveSchedule({ orgId: h.org.orgId, actorId: h.adminId, ...SAVE });
     assert.equal(saved.categoryKey, "contract");
     const listed = await listSchedules({ orgId: h.org.orgId, actorId: h.managerAId });

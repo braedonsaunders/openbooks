@@ -8,10 +8,17 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
-import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
+import {
+  DB,
+  gateOf,
+  grantPermissions,
+  linkPerson,
+  seedEmployment,
+  seedLeaveFlow,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { decideGate } from "../flows/gates.ts";
 import { LeaveError } from "./leave-errors.ts";
 import {
@@ -57,83 +64,15 @@ installEngineSeams();
  * values alone; every refusal asserts the writes that must NOT exist.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type Harness = {
-  org: ScratchOrg;
-  employeeId: string;
-  managerId: string;
-  approverId: string;
-  outsiderId: string;
-};
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string, partyId?: string): Promise<string> {
-  const id = partyId ?? randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Person ${id.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${id} where id = ${userId} and org_id = ${orgId}`);
-  return id;
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const employeeId = await createScratchUser(org.orgId, "Leave Employee", "leave_employee");
-  const managerId = await createScratchUser(org.orgId, "Leave Manager", "leave_manager");
-  const approverId = await createScratchUser(org.orgId, "Leave Approver", "leave_approver");
-  const outsiderId = await createScratchUser(org.orgId, "Leave Outsider", "leave_outsider");
-  await grantPermissions(org.orgId, employeeId, ["hrm.leave.request"]);
-  await grantPermissions(org.orgId, managerId, ["hrm.leave.read", "hrm.leave.manage"]);
-  await grantPermissions(org.orgId, approverId, ["hrm.leave.read", "hrm.leave.approve"]);
-  await linkPerson(org.orgId, managerId);
-  await linkPerson(org.orgId, approverId);
-  await linkPerson(org.orgId, outsiderId);
-  return { org, employeeId, managerId, approverId, outsiderId };
-}
-
-/** Worker employment with one live version (no closures, no evidence rows). */
-async function seedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  opts: { workerPartyId?: string; status?: string; from?: string; to?: string | null } = {},
-): Promise<{ employmentId: string; workerPartyId: string }> {
-  const workerPartyId = opts.workerPartyId ?? randomUUID();
-  if (!opts.workerPartyId) {
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${workerPartyId}, ${orgId}, 'person', 'Leave Worker', true, '{}'::jsonb)
-    `);
-  }
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, ${opts.status ?? "active"}, ${opts.from ?? "2020-01-01"}::date, ${opts.to ?? null}::date, now())
-  `);
-  return { employmentId, workerPartyId };
-}
+const LEAVE_SPEC = {
+  users: [
+    { key: "employeeId", name: "Leave Employee", handle: "leave_employee", permissions: ["hrm.leave.request"] },
+    { key: "managerId", name: "Leave Manager", handle: "leave_manager", permissions: ["hrm.leave.read", "hrm.leave.manage"], link: true },
+    { key: "approverId", name: "Leave Approver", handle: "leave_approver", permissions: ["hrm.leave.read", "hrm.leave.approve"], link: true },
+    { key: "outsiderId", name: "Leave Outsider", handle: "leave_outsider", link: true },
+  ],
+} as const;
 
 async function seedType(orgId: string, actorId: string, overrides: Record<string, unknown> = {}) {
   return createLeaveType({
@@ -159,31 +98,6 @@ async function seedPolicy(orgId: string, actorId: string, leaveTypeId: string, o
     effectiveFrom: "2020-01-01",
     ...overrides,
   });
-}
-
-async function seedFlow(orgId: string, approverId: string): Promise<void> {
-  await seedApprovalFlow(orgId, {
-    subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
-    assignees: [{ type: "user", userId: approverId }],
-    mode: "any",
-  });
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function gateOf(requestId: string): Promise<{ id: string; status: string }> {
-  const rows = (await db.execute<{ id: string; status: string }>(sql`
-    select id, status from flow_gates where subject_id = ${requestId} order by created_at
-  `)).rows;
-  assert.equal(rows.length, 1, "exactly one gate decides the request");
-  return rows[0]!;
 }
 
 async function absencesOf(requestId: string): Promise<Array<{ on_date: string; hours: string; reversal_of: string | null }>> {
@@ -221,7 +135,7 @@ async function assertLeaveRefusal(fn: () => Promise<unknown>, pattern: RegExp, a
 }
 
 test("0194 tables exist under org_isolation RLS with no amount column on inputs", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     for (const table of ["hrm_leave_types", "hrm_leave_policies", "hrm_leave_requests", "hrm_absences", "hrm_payroll_inputs"]) {
       const policy = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pg_policies
@@ -239,7 +153,7 @@ test("0194 tables exist under org_isolation RLS with no amount column on inputs"
 });
 
 test("org leave queue batches visible requests and refuses actors without the read grant", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -265,8 +179,8 @@ test("org leave queue batches visible requests and refuses actors without the re
 });
 
 test("happy path: file → submit → decide → approved writes absences plus pending inputs", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -312,7 +226,7 @@ test("happy path: file → submit → decide → approved writes absences plus p
 });
 
 test("submit refused outside live employment, with no rows written", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     // Version starts after the requested range: no live day.
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty, from: "2026-10-01" });
@@ -330,8 +244,8 @@ test("submit refused outside live employment, with no rows written", { skip: !DB
 });
 
 test("submit refused on approved overlap and on insufficient time balance", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -368,7 +282,7 @@ test("submit refused on approved overlap and on insufficient time balance", { sk
 });
 
 test("short notice refused to the worker, filed by the manager with a reason", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty, from: "2020-01-01" });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -394,7 +308,7 @@ test("short notice refused to the worker, filed by the manager with a reason", {
 });
 
 test("requires_attachment refused at submit until evidence is recorded", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none", requiresAttachment: true });
@@ -458,7 +372,7 @@ test("requires_attachment refused at submit until evidence is recorded", { skip:
     await recordLeaveAttachment({
       orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId,
     });
-    await seedFlow(h.org.orgId, h.approverId);
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const submitted = await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id });
     assert.equal(submitted.status, "submitted");
   });
@@ -515,8 +429,8 @@ async function rejectThroughGate(orgId: string, approverId: string, requestId: s
 }
 
 test("approval refused with the retro remedy when a committed run covers the day — and writes nothing", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -555,8 +469,8 @@ test("approval refused with the retro remedy when a committed run covers the day
 });
 
 test("cancel voids pending inputs and reverses absences; committed consumption refuses", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -632,8 +546,8 @@ test("cancel voids pending inputs and reverses absences; committed consumption r
 });
 
 test("withdraw ends drafts and in-flight approvals; the gate cannot release after", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -663,8 +577,8 @@ test("withdraw ends drafts and in-flight approvals; the gate cannot release afte
 });
 
 test("consume is idempotent per run, refuses foreign runs and stale parties; release counts", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -744,8 +658,8 @@ test("consume is idempotent per run, refuses foreign runs and stale parties; rel
 });
 
 test("commit gate refuses pending rows until the run consumes them", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -775,7 +689,7 @@ test("commit gate refuses pending rows until the run consumes them", { skip: !DB
 });
 
 test("RLS: a foreign org session sees zero leave rows", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -809,7 +723,7 @@ test("RLS: a foreign org session sees zero leave rows", { skip: !DB }, async () 
 });
 
 test("self-service scope: an employee reads only their own requests", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const partyA = await linkPerson(h.org.orgId, h.employeeId);
     const empA = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: partyA });
     const employeeB = await createScratchUser(h.org.orgId, "Leave Employee Two", "leave_employee_two");
@@ -851,8 +765,8 @@ test("self-service scope: an employee reads only their own requests", { skip: !D
 });
 
 test("rejected requests decide with a reason and write no absences or inputs", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -872,7 +786,7 @@ test("rejected requests decide with a reason and write no absences or inputs", {
 });
 
 test("after-the-fact recording writes the absence record and never a pay input", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
@@ -901,7 +815,7 @@ test("after-the-fact recording writes the absence record and never a pay input",
 });
 
 test("mid-year policy change accrues per segment, never the current rule backdated", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -924,7 +838,7 @@ test("mid-year policy change accrues per segment, never the current rule backdat
 });
 
 test("same-scope overlapping policies refuse by name; other scopes and adjacent windows stay legal", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -1006,7 +920,7 @@ function daysFromNow(n: number): string {
 }
 
 test("a department-only policy covers its department worker at file time", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const departmentId = randomUUID();
@@ -1035,7 +949,7 @@ test("a department-only policy covers its department worker at file time", { ski
 });
 
 test("org-wide unlimited never launders a department cap at file time", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const departmentId = randomUUID();
@@ -1085,7 +999,7 @@ test("org-wide unlimited never launders a department cap at file time", { skip: 
 });
 
 test("a department minimum notice binds its workers at file time", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const departmentId = randomUUID();
@@ -1127,8 +1041,8 @@ test("a department minimum notice binds its workers at file time", { skip: !DB }
 });
 
 test("concurrent approvals cannot spend one entitlement twice", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.approverId);
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    await seedLeaveFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -1177,7 +1091,7 @@ test("concurrent approvals cannot spend one entitlement twice", { skip: !DB }, a
 });
 
 test("a request tail past its policy's end refuses naming the first uncovered day", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -1208,7 +1122,7 @@ test("a request tail past its policy's end refuses naming the first uncovered da
 });
 
 test("a stricter successor prices the tail it governs, not the first day's grant", async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -1256,7 +1170,7 @@ test("a stricter successor prices the tail it governs, not the first day's grant
 });
 
 test("carryover is earned under the prior-year policy, not the successor", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
@@ -1282,10 +1196,10 @@ test("carryover is earned under the prior-year policy, not the successor", { ski
 });
 
 test("OM-11: manager on-behalf filing succeeds for a managed employment and refuses an unmanaged one", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty, from: "2020-01-01" });
-    const { employmentId: otherEmploymentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { from: "2020-01-01" });
+    const { employmentId: otherEmploymentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { from: "2020-01-01", displayName: "Leave Worker" });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
     await seedPolicy(h.org.orgId, h.managerId, type.id);
 
@@ -1344,7 +1258,7 @@ test("OM-11: manager on-behalf filing succeeds for a managed employment and refu
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${childSubsidiaryId}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'Child entity', base_currency, country
         from subsidiaries where id = ${h.org.subsidiaryId} and org_id = ${h.org.orgId}`);
-    const { employmentId: childEmploymentId } = await seedEmployment(h.org.orgId, childSubsidiaryId, { from: "2020-01-01" });
+    const { employmentId: childEmploymentId } = await seedEmployment(h.org.orgId, childSubsidiaryId, { from: "2020-01-01", displayName: "Leave Worker" });
     await db.execute(sql`
       update app_roles
          set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [h.org.subsidiaryId] })}::jsonb
@@ -1376,7 +1290,7 @@ test("eight concurrent recordings of one day produce one row and seven named ref
   // row per employment and day) settles the race in storage; every loser —
   // whether it loses at the count check or at the unique index — is refused
   // by name, never a raw 23505.
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);

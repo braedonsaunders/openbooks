@@ -8,8 +8,12 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  grant,
+  perfError,
+} from "../../testing/hrm-harness.ts";
 import { createPosition } from "../positions.ts";
-import { HrmPerformanceError } from "./errors.ts";
 import {
   addSuccessionCandidate,
   createSuccessionPlan,
@@ -36,28 +40,9 @@ type Harness = {
   candidateId: string;
 };
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function enableTalent(orgId: string): Promise<void> {
-  for (const key of ["hrm", "hrmPerformance", "hrmSuccession"] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
-async function setupHarness(): Promise<Harness> {
+async function setupSuccessionRemoveHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableTalent(org.orgId);
+  await enableHrm(org.orgId, "hrmPerformance", "hrmSuccession");
   const hrId = await createScratchUser(org.orgId, "Succession HR", "succession_hr");
   await grant(org.orgId, hrId, ["hrm.performance.manage", "hrm.position.manage"]);
   const partyId = (await db.execute<{ id: string }>(sql`
@@ -87,11 +72,6 @@ async function setupHarness(): Promise<Harness> {
   return { org, hrId, employmentId, planId: plan.id, candidateId: candidate.id };
 }
 
-function perfError(error: unknown): HrmPerformanceError {
-  assert.ok(error instanceof HrmPerformanceError, `expected HrmPerformanceError, got ${String(error)}`);
-  return error;
-}
-
 async function candidateCount(orgId: string, planId: string): Promise<string> {
   return (await db.execute<{ n: string }>(sql`
     select count(*)::text as n from hrm_succession_candidates
@@ -99,7 +79,7 @@ async function candidateCount(orgId: string, planId: string): Promise<string> {
 }
 
 test("removing a candidate from an active or archived plan is refused", async () => {
-  const h = await setupHarness();
+  const h = await setupSuccessionRemoveHarness();
   try {
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrId, id: h.planId, status: "active" });
     for (const status of ["active", "archived"] as const) {

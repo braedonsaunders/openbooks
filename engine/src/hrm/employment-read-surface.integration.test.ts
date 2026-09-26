@@ -15,6 +15,14 @@ import {
   createScratchUser,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  enableHrm,
+  grantRead,
+  mkDepartment,
+  mkEmployment,
+  mkParty,
+  mkVersion,
+} from "../testing/hrm-harness.ts";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 
@@ -24,51 +32,6 @@ const skip = !process.env.OPENBOOKS_DB_URL;
 // Runs against the reviewer's own database; never touches shared fixtures.
 
 const KNOWN_AT = "2026-07-01T00:00:00.000001Z";
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function grantRead(orgId: string, roleKey: string): Promise<void> {
-  await db.execute(sql`
-    update app_roles set permissions = '["hrm.employment.read"]'::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function mkParty(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name)
-    values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkDepartment(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
-
-async function mkVersion(
-  orgId: string,
-  employmentId: string,
-  versionNo: number,
-  status: string,
-  from: string,
-  to: string | null,
-  recordedAt: string,
-): Promise<void> {
-  await db.execute(sql`
-    insert into worker_employment_versions
-      (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, ${versionNo}, ${status}, ${from}::date, ${to}::date, ${recordedAt}::timestamptz)`);
-}
 
 async function mkAssignment(
   orgId: string,
@@ -105,7 +68,7 @@ test("headcount groups live employments by subsidiary and department", { skip },
     const dept = await mkDepartment(org.orgId, "Front");
     const party = await mkParty(org.orgId, "Counted worker");
     const employmentId = await mkEmployment(org.orgId, party, org.subsidiaryId);
-    await mkVersion(org.orgId, employmentId, 1, "active", "2026-01-01", null, "2026-01-01T00:00:00.000001Z");
+    await mkVersion(org.orgId, employmentId, { versionNo: 1, status: "active", from: "2026-01-01", to: null, recordedAt: "2026-01-01T00:00:00.000001Z" });
     await mkAssignment(org.orgId, employmentId, dept, true);
 
     const dto = await getHeadcountAsOf({ orgId: org.orgId, actorId: actor, effectiveDate: "2026-06-15", knownAt: KNOWN_AT });
@@ -128,8 +91,8 @@ test("record carries episodes, the resolved as-of, and the change-request list",
     await enableHrm(org.orgId);
     const party = await mkParty(org.orgId, "Record worker");
     const employmentId = await mkEmployment(org.orgId, party, org.subsidiaryId);
-    await mkVersion(org.orgId, employmentId, 1, "active", "2026-01-01", "2026-05-01", "2026-01-01T00:00:00.000001Z");
-    await mkVersion(org.orgId, employmentId, 2, "on_leave", "2026-05-01", null, "2026-05-01T00:00:00.000001Z");
+    await mkVersion(org.orgId, employmentId, { versionNo: 1, status: "active", from: "2026-01-01", to: "2026-05-01", recordedAt: "2026-01-01T00:00:00.000001Z" });
+    await mkVersion(org.orgId, employmentId, { versionNo: 2, status: "on_leave", from: "2026-05-01", to: null, recordedAt: "2026-05-01T00:00:00.000001Z" });
     const requestId = await mkDraftRequest(org.orgId, employmentId);
 
     const record = await getEmploymentRecord({
@@ -163,7 +126,7 @@ test("record carries a missing-version refusal as data beside live episodes", { 
     await enableHrm(org.orgId);
     const party = await mkParty(org.orgId, "Future worker");
     const employmentId = await mkEmployment(org.orgId, party, org.subsidiaryId);
-    await mkVersion(org.orgId, employmentId, 1, "offered", "2027-01-01", null, "2026-06-01T00:00:00.000001Z");
+    await mkVersion(org.orgId, employmentId, { versionNo: 1, status: "offered", from: "2027-01-01", to: null, recordedAt: "2026-06-01T00:00:00.000001Z" });
 
     const record = await getEmploymentRecord({
       orgId: org.orgId,
@@ -201,7 +164,7 @@ test("storage refuses an overlapping live version; the ambiguous write never lan
     await enableHrm(org.orgId);
     const party = await mkParty(org.orgId, "Forked worker");
     const employmentId = await mkEmployment(org.orgId, party, org.subsidiaryId);
-    await mkVersion(org.orgId, employmentId, 1, "active", "2026-01-01", null, "2026-01-01T00:00:00.000001Z");
+    await mkVersion(org.orgId, employmentId, { versionNo: 1, status: "active", from: "2026-01-01", to: null, recordedAt: "2026-01-01T00:00:00.000001Z" });
     // Drizzle nests the Postgres code under cause; walk it like the
     // schema-owned HRM proofs do.
     const pgCode = (error: unknown): string | undefined => {
@@ -213,7 +176,7 @@ test("storage refuses an overlapping live version; the ambiguous write never lan
       return undefined;
     };
     await assert.rejects(
-      mkVersion(org.orgId, employmentId, 2, "active", "2026-03-01", null, "2026-03-01T00:00:00.000001Z"),
+      mkVersion(org.orgId, employmentId, { versionNo: 2, status: "active", from: "2026-03-01", to: null, recordedAt: "2026-03-01T00:00:00.000001Z" }),
       (error: unknown) => pgCode(error) === "23P01",
     );
   } finally {
@@ -228,7 +191,7 @@ test("gate off and missing grant refuse the public boundaries", { skip }, async 
     await grantRead(org.orgId, "hrm_reader");
     const party = await mkParty(org.orgId, "Gated worker");
     const employmentId = await mkEmployment(org.orgId, party, org.subsidiaryId);
-    await mkVersion(org.orgId, employmentId, 1, "active", "2026-01-01", null, "2026-01-01T00:00:00.000001Z");
+    await mkVersion(org.orgId, employmentId, { versionNo: 1, status: "active", from: "2026-01-01", to: null, recordedAt: "2026-01-01T00:00:00.000001Z" });
 
     // Gate off: every boundary names the Features remedy.
     await assert.rejects(
@@ -262,7 +225,7 @@ test("a stranger's employment id is refused, never resolved", { skip }, async ()
     await enableHrm(org.orgId);
     const party = await mkParty(other.orgId, "Other worker");
     const employmentId = await mkEmployment(other.orgId, party, other.subsidiaryId);
-    await mkVersion(other.orgId, employmentId, 1, "active", "2026-01-01", null, "2026-01-01T00:00:00.000001Z");
+    await mkVersion(other.orgId, employmentId, { versionNo: 1, status: "active", from: "2026-01-01", to: null, recordedAt: "2026-01-01T00:00:00.000001Z" });
     await assert.rejects(
       getEmploymentRecord({
         orgId: org.orgId,

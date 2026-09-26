@@ -10,6 +10,14 @@ import {
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
 import {
+  enableHrm,
+  grantPermissions,
+  linkPerson,
+  scopeRole,
+  seedEmployment,
+  seedWage,
+} from "../../testing/hrm-harness.ts";
+import {
   attachStatementPdf,
   generateStatement,
   listStatements,
@@ -28,85 +36,6 @@ import {
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Person ${id.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${id} where id = ${userId} and org_id = ${orgId}`);
-  return id;
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function seedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  workerPartyId?: string,
-): Promise<{ employmentId: string; workerPartyId: string }> {
-  let party = workerPartyId;
-  if (!party) {
-    party = randomUUID();
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${party}, ${orgId}, 'person', 'Stmt Worker', true, '{}'::jsonb)
-    `);
-  }
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${party}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  return { employmentId, workerPartyId: party };
-}
-
-async function seedWage(orgId: string, actorId: string, workerPartyId: string, rate: string): Promise<void> {
-  const { withOrgTransaction } = await import("../../platform/db.ts");
-  const { supersedeLaborCostRate } = await import("../../projects/labor-cost-rates.ts");
-  await withOrgTransaction(orgId, async () => {
-    await supersedeLaborCostRate({
-      orgId,
-      actorId,
-      scope: { employeePartyId: workerPartyId, jobTitle: null, tradeId: null, departmentId: null, subsidiaryId: null },
-      effectiveFrom: "2020-01-01",
-      rate,
-      currency: "CAD",
-      basis: "year",
-      annualHours: "2080",
-      notes: null,
-      reason: "test wage",
-    });
-  });
-}
-
-async function scopeRole(orgId: string, roleKey: string, permissions: string[], subsidiaryIds: string[]): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = ${JSON.stringify(permissions)}::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
 
 async function countRows(orgId: string, table: "hrm_comp_statements" | "files"): Promise<number> {
   const target = table === "files" ? sql`files` : sql`hrm_comp_statements`;
@@ -141,7 +70,7 @@ type Harness = {
   statementBId: string;
 };
 
-async function setupHarness(): Promise<Harness> {
+async function setupStatementsHarness(): Promise<Harness> {
   const org = await createScratchOrg();
   await enableHrm(org.orgId);
   const hrId = await createScratchUser(org.orgId, "Stmt HR", "stmt_hr");
@@ -152,8 +81,8 @@ async function setupHarness(): Promise<Harness> {
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
       from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-  const empA = await seedEmployment(org.orgId, org.subsidiaryId);
-  const empB = await seedEmployment(org.orgId, subB);
+  const empA = await seedEmployment(org.orgId, org.subsidiaryId, { displayName: "Stmt Worker" });
+  const empB = await seedEmployment(org.orgId, subB, { displayName: "Stmt Worker" });
   await seedWage(org.orgId, hrId, empA.workerPartyId, "90000");
   await seedWage(org.orgId, hrId, empB.workerPartyId, "100000");
   const statementA = await generateStatement({
@@ -175,7 +104,7 @@ async function setupHarness(): Promise<Harness> {
   const ownerBId = await createScratchUser(org.orgId, "Stmt Owner B", "stmt_owner_b");
   await grantPermissions(org.orgId, ownerBId, ["hrm.self.read"]);
   const ownerParty = await linkPerson(org.orgId, ownerBId);
-  await seedEmployment(org.orgId, subB, ownerParty);
+  await seedEmployment(org.orgId, subB, { workerPartyId: ownerParty, displayName: "Stmt Worker" });
   // Mixed grants: restricted HR read+manage lens over A plus self.read,
   // with the actor's own employment in B. The restricted grants must not
   // remove self-service for the actor's own rows nor widen it to others.
@@ -183,7 +112,7 @@ async function setupHarness(): Promise<Harness> {
   await scopeRole(org.orgId, "stmt_mixed", ["hrm.compensation.read", "hrm.compensation.manage"], [org.subsidiaryId]);
   await grantPermissions(org.orgId, mixedId, ["hrm.self.read"]);
   const mixedParty = await linkPerson(org.orgId, mixedId);
-  await seedEmployment(org.orgId, subB, mixedParty);
+  await seedEmployment(org.orgId, subB, { workerPartyId: mixedParty, displayName: "Stmt Worker" });
   const strangerId = await createScratchUser(org.orgId, "Stmt Stranger", "stmt_stranger");
   await linkPerson(org.orgId, strangerId);
   return {
@@ -198,7 +127,7 @@ async function withHarness(
   fn: (h: Harness & { ownB: OwnEmployment; mixedOwn: OwnEmployment }) => Promise<void>,
 ): Promise<void> {
   if (!DB) return;
-  const h = await setupHarness();
+  const h = await setupStatementsHarness();
   try {
     const ownOf = async (userId: string): Promise<OwnEmployment> => {
       const party = (await db.execute<{ party_id: string }>(sql`select party_id from users where id = ${userId}`))

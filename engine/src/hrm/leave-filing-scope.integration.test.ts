@@ -1,14 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  mkSecondSubsidiary,
+  scopeRole,
+  seedEmployment,
+  setupHarness,
+} from "../testing/hrm-harness.ts";
 import { listLeaveFilingEmploymentOptions } from "./leave-read.ts";
 
 /**
@@ -18,51 +20,30 @@ import { listLeaveFilingEmploymentOptions } from "./leave-read.ts";
  * not displace the fileable in-scope one into an empty page.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function seedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  displayName: string,
-): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${displayName}, true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)
-  `);
-  return employmentId;
-}
+const LEAVE_FILING_SCOPE_SPEC = {
+  features: [],
+  users: [
+    { key: "managerAId", name: "Mara Manager", handle: "leave_manager_a" },
+  ],
+} as const;
 
-type Harness = { org: ScratchOrg; subB: string; managerAId: string; inScopeEmploymentId: string };
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  const subB = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
-  // Twenty-five out-of-scope employments sorting before the in-scope one.
-  for (let i = 0; i < 25; i++) {
-    await seedEmployment(org.orgId, subB, `Aardvark ${String(i).padStart(2, "0")}`);
-  }
-  const inScopeEmploymentId = await seedEmployment(org.orgId, org.subsidiaryId, "Zed Zebulon");
-  const managerAId = await createScratchUser(org.orgId, "Mara Manager", "leave_manager_a");
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.leave.manage"]'::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
-     where org_id = ${org.orgId} and key = 'leave_manager_a'`);
-  return { org, subB, managerAId, inScopeEmploymentId };
+async function setupFilingScopeHarness() {
+  return setupHarness(LEAVE_FILING_SCOPE_SPEC, async (base) => {
+    const subB = await mkSecondSubsidiary(base.org.orgId, base.org.subsidiaryId, { currency: "USD", country: "US" });
+    // Twenty-five out-of-scope employments sorting before the in-scope one.
+    for (let i = 0; i < 25; i++) {
+      await seedEmployment(base.org.orgId, subB, { displayName: `Aardvark ${String(i).padStart(2, "0")}`, withVersion: false });
+    }
+    const inScopeEmploymentId = (await seedEmployment(base.org.orgId, base.org.subsidiaryId, { displayName: "Zed Zebulon", withVersion: false })).employmentId;
+    await scopeRole(base.org.orgId, "leave_manager_a", ["hrm.leave.manage"], [base.org.subsidiaryId]);
+    return { subB, inScopeEmploymentId };
+  });
 }
 
 test("out-of-scope rows cannot displace the fileable in-scope picker option", { skip: !DB }, async () => {
   if (!DB) return;
-  const h = await setupHarness();
+  const h = await setupFilingScopeHarness();
   try {
     const options = await listLeaveFilingEmploymentOptions({ orgId: h.org.orgId, actorId: h.managerAId });
     const ids = options.map((o) => o.employmentId);

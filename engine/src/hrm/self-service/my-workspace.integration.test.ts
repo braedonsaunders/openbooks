@@ -6,10 +6,19 @@ import { db } from "../../platform/db.ts";
 import { listInbox } from "../../inbox/index.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
-  type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  DB,
+  enableHrm,
+  linkPerson,
+  mkEmployment,
+  mkReporting,
+  mkReviewTemplate,
+  seedPlan,
+  seedWindow,
+  setupHarness,
+} from "../../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { SelfServiceError } from "./actor.ts";
 import { HrmPerformanceError } from "../performance/errors.ts";
@@ -44,152 +53,36 @@ import {
  * values alone.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
+const MY_WORKSPACE_SPEC = {
+  users: [
+    { key: "hrId", name: "HR-10 HR", handle: "hr10_hr", permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.benefits.manage"], link: "HR-10 HR Person" },
+    { key: "workerId", name: "HR-10 Worker", handle: "hr10_worker", permissions: ["hrm.self.read", "hrm.self.request"], link: "HR-10 Worker Person", partyKey: "workerParty" },
+    { key: "managerId", name: "HR-10 Manager", handle: "hr10_manager", permissions: ["hrm.self.read", "hrm.self.request"], link: "HR-10 Manager Person", partyKey: "managerParty" },
+    { key: "outsiderId", name: "HR-10 Outsider", handle: "hr10_outsider", permissions: ["hrm.self.read", "hrm.self.request"] },
+    { key: "noLinkId", name: "HR-10 NoLink", handle: "hr10_nolink", permissions: ["hrm.self.read", "hrm.self.request"] },
+  ],
+} as const;
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string, name: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  const employmentId = (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null)`);
-  return employmentId;
-}
-
-async function mkReporting(orgId: string, employmentId: string, managerEmploymentId: string): Promise<void> {
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from)
-    values (${orgId}, ${employmentId}, ${managerEmploymentId}, 'line', ${randomUUID()}, 1, '2020-01-01'::date)
-  `);
-}
-
-async function mkTemplate(orgId: string, actorId: string): Promise<string> {
-  const templateId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${orgId}, 'Annual review', '{"min": 1, "max": 5}'::jsonb, ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  const sectionId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
-    values (${orgId}, ${templateId}, 0, 'Impact', 'competency', ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into hrm_review_template_questions
-      (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
-    values (${orgId}, ${sectionId}, 0, 'Customer impact', 'rating_and_text', true, ${actorId}, ${actorId})
-  `);
-  return templateId;
-}
-
-async function seedComponent(orgId: string, code: string, kind: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into pay_components (org_id, code, name, kind, is_active)
-    values (${orgId}, ${code}, ${code}, ${kind}, true) returning id`)).rows[0]!.id;
-}
-
-async function seedPlan(orgId: string): Promise<string> {
-  const ded = await seedComponent(orgId, `DED_${randomUUID().slice(0, 6)}`, "deduction");
-  const er = await seedComponent(orgId, `ER_${randomUUID().slice(0, 6)}`, "employer_contribution");
-  return (await db.execute<{ id: string }>(sql`
-    insert into hrm_benefit_plans
-      (org_id, code, name, kind, currency, employee_cost_basis, employee_cost,
-       employer_cost_basis, employer_cost, employee_pay_component_id,
-       employer_pay_component_id, proration_basis, waiting_period_days,
-       requires_approval, is_active, effective_from)
-    values (${orgId}, ${`MED_${randomUUID().slice(0, 6)}`}, 'Health', 'health', 'USD',
-            'per_month', '250.0000', 'per_month', '500.0000', ${ded}, ${er},
-            'full_month', 0, false, true, '2020-01-01') returning id`)).rows[0]!.id;
-}
-
-async function seedWindow(orgId: string, status: string, appliesTo: unknown = {}): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into hrm_enrollment_windows
-      (org_id, name, kind, opens_on, closes_on, plan_year_start_on, applies_to, status)
-    values (${orgId}, ${`Window ${randomUUID().slice(0, 6)}`}, 'open_enrollment',
-            '2020-01-01'::date, '2030-12-31'::date, '2026-01-01'::date,
-            ${JSON.stringify(appliesTo)}::jsonb, ${status}) returning id`)).rows[0]!.id;
-}
-
-type Harness = {
-  org: ScratchOrg;
-  hrId: string;
-  workerId: string;
-  managerId: string;
-  outsiderId: string;
-  noLinkId: string;
-  workerParty: string;
-  managerParty: string;
-  workerEmployment: string;
-  managerEmployment: string;
-  outsiderEmployment: string;
-  cycleId: string;
-};
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const hrId = await createScratchUser(org.orgId, "HR-10 HR", "hr10_hr");
-  // The employee holds ONLY the self-service keys: no hrm.performance.*,
-  // no hrm.benefits.*. Every self write below must succeed on those.
-  const workerId = await createScratchUser(org.orgId, "HR-10 Worker", "hr10_worker");
-  const managerId = await createScratchUser(org.orgId, "HR-10 Manager", "hr10_manager");
-  const outsiderId = await createScratchUser(org.orgId, "HR-10 Outsider", "hr10_outsider");
-  const noLinkId = await createScratchUser(org.orgId, "HR-10 NoLink", "hr10_nolink");
-  await grant(org.orgId, hrId, ["hrm.performance.read", "hrm.performance.manage", "hrm.benefits.manage"]);
-  await grant(org.orgId, workerId, ["hrm.self.read", "hrm.self.request"]);
-  await grant(org.orgId, managerId, ["hrm.self.read", "hrm.self.request"]);
-  await grant(org.orgId, outsiderId, ["hrm.self.read", "hrm.self.request"]);
-  await grant(org.orgId, noLinkId, ["hrm.self.read", "hrm.self.request"]);
-  await linkPerson(org.orgId, hrId, "HR-10 HR Person");
-  const workerParty = await linkPerson(org.orgId, workerId, "HR-10 Worker Person");
-  const managerParty = await linkPerson(org.orgId, managerId, "HR-10 Manager Person");
-  const outsiderParty = await linkPerson(org.orgId, outsiderId, "HR-10 Outsider Person");
-  const workerEmployment = await mkEmployment(org.orgId, workerParty, org.subsidiaryId);
-  const managerEmployment = await mkEmployment(org.orgId, managerParty, org.subsidiaryId);
-  const outsiderEmployment = await mkEmployment(org.orgId, outsiderParty, org.subsidiaryId);
-  await mkReporting(org.orgId, workerEmployment, managerEmployment);
-  const templateId = await mkTemplate(org.orgId, hrId);
-  const cycle = await createCycle({
-    orgId: org.orgId,
-    actorId: hrId,
-    templateId,
-    name: "FY26 annual",
-    periodStartOn: "2026-01-01",
-    periodEndOn: "2026-06-30",
+async function setupWorkspaceHarness() {
+  return setupHarness(MY_WORKSPACE_SPEC, async (base) => {
+    const workerEmployment = await mkEmployment(base.org.orgId, base.workerParty, base.org.subsidiaryId, {});
+    const managerEmployment = await mkEmployment(base.org.orgId, base.managerParty, base.org.subsidiaryId, {});
+    const outsiderParty = await linkPerson(base.org.orgId, base.outsiderId, "HR-10 Outsider Person");
+    const outsiderEmployment = await mkEmployment(base.org.orgId, outsiderParty, base.org.subsidiaryId, {});
+    await mkReporting(base.org.orgId, workerEmployment, managerEmployment);
+    const templateId = await mkReviewTemplate(base.org.orgId, base.hrId, { name: "Annual review", scaleLabels: null });
+    const cycle = await createCycle({
+      orgId: base.org.orgId,
+      actorId: base.hrId,
+      templateId,
+      name: "FY26 annual",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+    });
+    await openCycle({ orgId: base.org.orgId, actorId: base.hrId, cycleId: cycle.id });
+    return { workerEmployment, managerEmployment, outsiderEmployment, cycleId: cycle.id };
   });
-  await openCycle({ orgId: org.orgId, actorId: hrId, cycleId: cycle.id });
-  return {
-    org, hrId, workerId, managerId, outsiderId, noLinkId,
-    workerParty, managerParty, workerEmployment, managerEmployment, outsiderEmployment,
-    cycleId: cycle.id,
-  };
 }
 
 async function reviewRows(orgId: string, cycleId: string): Promise<Array<{ id: string; kind: string; status: string; reviewer: string; subject: string }>> {
@@ -205,7 +98,7 @@ async function answerIds(reviewId: string): Promise<string[]> {
 }
 
 test("an unlinked login gets the named NO_LINK refusal on every entry, never an empty list", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
     for (const fn of [
       () => getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.noLinkId }),
@@ -230,7 +123,7 @@ test("an unlinked login gets the named NO_LINK refusal on every entry, never an 
 });
 
 test("the workspace shows the owed self-assessment but never an unshared manager review", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
     const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
     assert.equal(workspace.cycles.length, 1);
@@ -257,7 +150,7 @@ test("the workspace shows the owed self-assessment but never an unshared manager
 });
 
 test("a shared manager review reaches the subject with calibration stripped", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
     const rows = await reviewRows(h.org.orgId, h.cycleId);
     const managerReview = rows.find((r) => r.kind === "manager" && r.subject === h.workerParty)!;
@@ -287,7 +180,7 @@ test("a shared manager review reaches the subject with calibration stripped", { 
 });
 
 test("submit and acknowledge ride the existing services with storage proof", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
     const rows = await reviewRows(h.org.orgId, h.cycleId);
     const selfReview = rows.find((r) => r.kind === "self" && r.subject === h.workerParty)!;
@@ -346,7 +239,7 @@ test("submit and acknowledge ride the existing services with storage proof", { s
 });
 
 test("goal progress rides the existing service; another person's goal refuses", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
     const goal = await createGoal({ orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment, title: "Ship the migration" });
     const moved = await updateMyGoalProgress({ orgId: h.org.orgId, actorId: h.workerId, goalId: goal.id, progressPercent: 50, note: "halfway" });
@@ -376,7 +269,7 @@ test("goal progress rides the existing service; another person's goal refuses", 
 });
 
 test("the manager owes pending reviews for direct reports in the open cycle", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
     const owed = await loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.managerId });
     assert.equal(owed.length, 1);
@@ -393,11 +286,11 @@ test("the manager owes pending reviews for direct reports in the open cycle", { 
 });
 
 test("self-service elects inside an open window on the self keys alone, with stored amounts", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
-    const planId = await seedPlan(h.org.orgId);
-    const windowId = await seedWindow(h.org.orgId, "open");
-    const outOfScopeWindowId = await seedWindow(h.org.orgId, "open", { employer_subsidiary_id: randomUUID() });
+    const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
+    const windowId = await seedWindow(h.org.orgId, { status: "open", opensOn: "2020-01-01", closesOn: "2030-12-31" });
+    const outOfScopeWindowId = await seedWindow(h.org.orgId, { status: "open", appliesTo: { employer_subsidiary_id: randomUUID() }, opensOn: "2020-01-01", closesOn: "2030-12-31" });
     await db.execute(sql`
       insert into hrm_benefit_dependents (org_id, employment_id, relationship, display_name, is_active)
       values (${h.org.orgId}, ${h.workerEmployment}, 'spouse', 'Alex Worker', true)`);
@@ -428,10 +321,10 @@ test("self-service elects inside an open window on the self keys alone, with sto
 });
 
 test("a closed window refuses elect and change by name; another employment id refuses", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
-    const planId = await seedPlan(h.org.orgId);
-    const closedId = await seedWindow(h.org.orgId, "closed");
+    const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
+    const closedId = await seedWindow(h.org.orgId, { status: "closed", opensOn: "2020-01-01", closesOn: "2030-12-31" });
     // Electing against a closed window: the entry gate refuses by name.
     await assert.rejects(
       electMyBenefit({
@@ -458,7 +351,7 @@ test("a closed window refuses elect and change by name; another employment id re
       },
     );
     // The hostile employment id: another person's employment never elects.
-    const openId = await seedWindow(h.org.orgId, "open");
+    const openId = await seedWindow(h.org.orgId, { status: "open", opensOn: "2020-01-01", closesOn: "2030-12-31" });
     await assert.rejects(
       electMyBenefit({
         orgId: h.org.orgId, actorId: h.workerId, employmentId: h.outsiderEmployment,
@@ -512,7 +405,7 @@ test("a closed window refuses elect and change by name; another employment id re
 });
 
 test("tab capabilities read facts: cycles and plans present here, absent on a fresh org", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupWorkspaceHarness();
   try {
     const caps = await selfWorkspaceCapabilities(h.org.orgId);
     assert.equal(caps.hasReviewCycles, true);

@@ -8,8 +8,18 @@ import {
   createScratchUser,
   dropScratchOrg,
   seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  grantPermissions,
+  linkPerson,
+  refusalMatches,
+  seedPositionedEmployment,
+  seedWage,
+  setCompensationSettings,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { revisePosition } from "./positions.ts";
 import { decideGate } from "../flows/gates.ts";
@@ -70,138 +80,8 @@ installEngineSeams();
  * return values alone.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string, partyId?: string): Promise<string> {
-  const id = partyId ?? randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Person ${id.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${id} where id = ${userId} and org_id = ${orgId}`);
-  return id;
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function setCompensationSettings(orgId: string, patch: Record<string, unknown>): Promise<void> {
-  const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`)).rows[0]?.settings ?? {};
-  const next = { ...(current as Record<string, unknown>), compensation: { ...((current as Record<string, unknown>).compensation as Record<string, unknown> ?? {}), ...patch } };
-  await db.execute(sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`);
-}
-
-type Harness = {
-  org: ScratchOrg;
-  hrId: string;
-  managerId: string;
-  employeeId: string;
-  outsiderId: string;
-};
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const hrId = await createScratchUser(org.orgId, "Comp HR", "comp_hr");
-  const managerId = await createScratchUser(org.orgId, "Comp Manager", "comp_manager");
-  const employeeId = await createScratchUser(org.orgId, "Comp Employee", "comp_employee");
-  const outsiderId = await createScratchUser(org.orgId, "Comp Outsider", "comp_outsider");
-  await grantPermissions(org.orgId, hrId, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve", "hrm.recruiting.manage"]);
-  await grantPermissions(org.orgId, managerId, ["hrm.compensation.read", "hrm.self.read", "hrm.compensation.approve"]);
-  await grantPermissions(org.orgId, employeeId, ["hrm.self.read", "hrm.self.request"]);
-  await linkPerson(org.orgId, hrId);
-  await linkPerson(org.orgId, managerId);
-  await linkPerson(org.orgId, employeeId);
-  await linkPerson(org.orgId, outsiderId);
-  return { org, hrId, managerId, employeeId, outsiderId };
-}
 
 /** Worker employment with one live version plus a primary positioned assignment. */
-async function seedPositionedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  opts: { workerPartyId?: string; status?: string; from?: string; positionCode?: string; levelId?: string | null; departmentId?: string | null },
-): Promise<{ employmentId: string; workerPartyId: string; positionId: string | null }> {
-  const workerPartyId = opts.workerPartyId ?? randomUUID();
-  if (!opts.workerPartyId) {
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${workerPartyId}, ${orgId}, 'person', 'Comp Worker', true, '{}'::jsonb)
-    `);
-  }
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, ${opts.status ?? "active"}, ${opts.from ?? "2020-01-01"}::date, null, now())
-  `);
-  let positionId: string | null = null;
-  if (opts.levelId !== undefined) {
-    positionId = randomUUID();
-    await db.execute(sql`
-      insert into positions (id, org_id, position_code, revision)
-      values (${positionId}, ${orgId}, ${opts.positionCode ?? `POS-${positionId.slice(0, 6)}`}, 1)
-    `);
-    await db.execute(sql`
-      insert into position_versions (org_id, position_id, version_no, title, department_id, location_id,
-        employer_subsidiary_id, planned_fte, status, effective_from, job_level_id)
-      values (${orgId}, ${positionId}, 1, 'Engineer', ${opts.departmentId ?? null}, null,
-        ${subsidiaryId}, 1, 'filled', '2020-01-01', ${opts.levelId})
-    `);
-    const assignmentId = randomUUID();
-    await db.execute(sql`
-      insert into employment_assignments (id, org_id, employment_id, assignment_key)
-      values (${assignmentId}, ${orgId}, ${employmentId}, 'primary')
-    `);
-    await db.execute(sql`
-      insert into employment_assignment_versions (org_id, assignment_id, employment_id, version_no,
-        job_title, department_id, fte, is_primary, effective_from, position_id)
-      values (${orgId}, ${assignmentId}, ${employmentId}, 1,
-        'Engineer', ${opts.departmentId ?? null}, 1, true, '2020-01-01', ${positionId})
-    `);
-  }
-  return { employmentId, workerPartyId, positionId };
-}
-
-async function seedWage(orgId: string, actorId: string, workerPartyId: string, rate: string, from = "2020-01-01"): Promise<void> {
-  // Through the canonical writer: overlapping inserts are refused by
-  // the exclusion constraint, so every new start supersedes properly.
-  const { withOrgTransaction } = await import("../platform/db.ts");
-  const { supersedeLaborCostRate } = await import("../projects/labor-cost-rates.ts");
-  await withOrgTransaction(orgId, async () => {
-    await supersedeLaborCostRate({
-      orgId,
-      actorId,
-      scope: { employeePartyId: workerPartyId, jobTitle: null, tradeId: null, departmentId: null, subsidiaryId: null },
-      effectiveFrom: from,
-      rate: rate,
-      currency: "CAD",
-      basis: "year",
-      annualHours: "2080",
-      notes: null,
-      reason: "test wage",
-    });
-  });
-}
-
 async function seedManagerLink(orgId: string, employmentId: string, managerEmploymentId: string): Promise<void> {
   const relationshipId = randomUUID();
   await db.execute(sql`
@@ -211,28 +91,14 @@ async function seedManagerLink(orgId: string, employmentId: string, managerEmplo
   `);
 }
 
-/** Trigger refusals arrive wrapped: Drizzle carries the pg message on the cause chain. */
-function triggerRefusal(pattern: RegExp): (e: unknown) => boolean {
-  return (e: unknown) => {
-    let current: unknown = e;
-    for (let depth = 0; depth < 5 && current !== null && typeof current === "object"; depth += 1) {
-      const message = (current as { message?: unknown }).message;
-      if (typeof message === "string" && pattern.test(message)) return true;
-      current = (current as { cause?: unknown }).cause ?? null;
-    }
-    return false;
-  };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
+const COMPENSATION_SPEC = {
+  users: [
+    { key: "hrId", name: "Comp HR", handle: "comp_hr", permissions: ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve", "hrm.recruiting.manage"], link: true },
+    { key: "managerId", name: "Comp Manager", handle: "comp_manager", permissions: ["hrm.compensation.read", "hrm.self.read", "hrm.compensation.approve"], link: true },
+    { key: "employeeId", name: "Comp Employee", handle: "comp_employee", permissions: ["hrm.self.read", "hrm.self.request"], link: true },
+    { key: "outsiderId", name: "Comp Outsider", handle: "comp_outsider", link: true },
+  ],
+} as const;
 
 async function seedArchitecture(orgId: string, hrId: string) {
   const family = await createJobFamily({ orgId, actorId: hrId, code: "ENG", name: "Engineering" });
@@ -266,7 +132,7 @@ async function seedArchitecture(orgId: string, hrId: string) {
 }
 
 test("HR-12 architecture refuses duplicate codes and unconfigured families", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const family = await createJobFamily({ orgId: org.orgId, actorId: h.hrId, code: "ENG", name: "Engineering" });
     assert.equal(family.code, "ENG");
@@ -293,7 +159,7 @@ test("HR-12 architecture refuses duplicate codes and unconfigured families", { s
 });
 
 test("HR-12 bands version and place employments, refusing no-band and no-wage by name", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level, band } = await seedArchitecture(org.orgId, h.hrId);
     assert.equal(band.target, "100000.0000");
@@ -307,14 +173,14 @@ test("HR-12 bands version and place employments, refusing no-band and no-wage by
       }),
       /not ordered min <= target <= max/,
     );
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
     const placed = await compaRatioFor(org.orgId, h.hrId, emp.employmentId, "2024-06-01");
     assert.equal(placed.placement, "in_range");
     assert.equal(placed.compaRatio, "0.9000000000");
     assert.equal(placed.band?.id, band.id);
     // Below-min placement names its side.
-    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "95000", "2024-01-01");
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "95000", { from: "2024-01-01" });
     const placed2 = await compaRatioFor(org.orgId, h.hrId, emp.employmentId, "2025-06-01");
     assert.equal(placed2.compaRatio, "0.9500000000");
     // No band for another level refuses by name (never zero).
@@ -323,14 +189,14 @@ test("HR-12 bands version and place employments, refusing no-band and no-wage by
       orgId: org.orgId, actorId: h.hrId, familyId: otherFamily.id, code: "D1", name: "Designer", rank: 1,
       equalValueCriteria: [{ criterion: "skills", weight: "1" }],
     });
-    const emp2 = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: otherLevel.id });
+    const emp2 = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: otherLevel.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp2.workerPartyId, "70000");
     await assert.rejects(
       compaRatioFor(org.orgId, h.hrId, emp2.employmentId, "2024-06-01"),
       /no band covers this employment/,
     );
     // No wage refuses by name.
-    const emp3 = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp3 = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await assert.rejects(
       compaRatioFor(org.orgId, h.hrId, emp3.employmentId, "2024-06-01"),
       /no payroll-side wage covers/,
@@ -353,10 +219,10 @@ test("HR-12 bands version and place employments, refusing no-band and no-wage by
 });
 
 test("HR-12 cycle open proposes within guideline, flags outside, and refuses empty scope", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
     // Manager holds the structural scope over the employee.
     const mgrParty = (await db.execute<{ party_id: string }>(sql`
@@ -421,10 +287,10 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
 });
 
 test("HR-12 cycle approval runs through Flows and push writes each wage once", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
@@ -506,10 +372,10 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
   // propose, decide, and reopen all refuse past push), and an approved
   // line that changes nothing refuses the push instead of writing a
   // redundant wage row. The pushed audit event names the count.
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
     const cycleApprover = await createScratchUser(org.orgId, "Comp Cycle Approver", "comp_cycle_approver");
     await grantPermissions(org.orgId, cycleApprover, ["hrm.compensation.read", "hrm.compensation.approve"]);
@@ -596,10 +462,10 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
 });
 
 test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "X", kind: "adjustment",
@@ -655,7 +521,7 @@ test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB },
 });
 
 test("HR-12 headcount plan lines cost from bands and approve into requisitions", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
     await setCompensationSettings(org.orgId, { burdenRate: "0.20" });
@@ -739,7 +605,7 @@ test("HR-12 headcount plan lines cost from bands and approve into requisitions",
       /names no position until approval/,
     );
     // Terminate lines are informational: approving one opens no requisition.
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     const termLine = await createPlanLine({
       orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "terminate", positionId: emp.positionId,
       title: "Sunset role", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
@@ -765,7 +631,7 @@ test("HR-12 headcount plan lines cost from bands and approve into requisitions",
 });
 
 test("HR-12 gap snapshots measure a known unexplained gap and flag joint assessment", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     // Unconfigured comparison attribute refuses by name.
     await assert.rejects(
@@ -808,13 +674,13 @@ test("HR-12 gap snapshots measure a known unexplained gap and flag joint assessm
     // Frozen: updates refused on every path.
     await assert.rejects(
       db.execute(sql`update hrm_pay_gap_snapshots set metrics = '{}'::jsonb where id = ${snapshot.id}`),
-      triggerRefusal(/frozen/),
+      refusalMatches(/frozen/),
     );
   });
 });
 
 test("HR-12 pay information requests need a window and answer from snapshots", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
     const empPartyRow = (await db.execute<{ party_id: string }>(sql`
@@ -845,10 +711,10 @@ test("HR-12 pay information requests need a window and answer from snapshots", {
 });
 
 test("HR-12 statements freeze the total-rewards payload", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
     const statement = await generateStatement({
       orgId: org.orgId, actorId: h.hrId, employmentId: emp.employmentId,
@@ -874,10 +740,10 @@ test("HR-12 statements freeze the total-rewards payload", { skip: !DB }, async (
 });
 
 test("HR-12 compensation events are append-only and RLS-isolated", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "E", kind: "cola",
@@ -891,7 +757,7 @@ test("HR-12 compensation events are append-only and RLS-isolated", { skip: !DB }
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     await assert.rejects(
       db.execute(sql`update hrm_comp_events set reason = 'rewritten' where cycle_id = ${cycle.id}`),
-      triggerRefusal(/append-only/),
+      refusalMatches(/append-only/),
     );
     // RLS: a second org sees none of the first org's rows.
     const other = await createScratchOrg();
@@ -906,7 +772,7 @@ test("HR-12 compensation events are append-only and RLS-isolated", { skip: !DB }
 });
 
 test("HR-12 cycle reads fence salaries to the actor's subsidiary lens", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
     // A second legal entity in the same org.
@@ -915,8 +781,8 @@ test("HR-12 cycle reads fence salaries to the actor's subsidiary lens", { skip: 
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id });
+    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
+    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, empA.workerPartyId, "90000");
     await seedWage(org.orgId, h.hrId, empB.workerPartyId, "100000");
     // A compensation reader scoped to subsidiary A only, and one scoped nowhere.
@@ -1024,10 +890,10 @@ test("HR-12 cycle reads fence salaries to the actor's subsidiary lens", { skip: 
 });
 
 test("HR-12 cycle propose stays open to grant-less structural managers", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
-    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
     // A structural manager holding only team-scoped grants: no
     // hrm.compensation.read, manage, or approve anywhere.
@@ -1076,7 +942,7 @@ test("HR-12 cycle propose stays open to grant-less structural managers", { skip:
 });
 
 test("HR-12 restricted proposers still face the whole-cycle budget control", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
     const subB = randomUUID();
@@ -1084,8 +950,8 @@ test("HR-12 restricted proposers still face the whole-cycle budget control", { s
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id });
+    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
+    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, empA.workerPartyId, "90000");
     await seedWage(org.orgId, h.hrId, empB.workerPartyId, "100000");
     // A proposer with the manage grant but a subsidiary-A lens.

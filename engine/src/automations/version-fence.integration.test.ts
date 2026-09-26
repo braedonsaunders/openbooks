@@ -1,13 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import {
   createAutomation,
   updateAutomation,
@@ -24,38 +25,21 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
+const FENCE_SPEC = {
+  // Only the automations flag: the original setup enabled exactly this key.
+  features: ["automations"],
+  users: [
+    {
+      key: "adminId",
+      name: "Automation Fence Admin",
+      handle: "auto_fence_admin",
+      permissions: ["automations.read", "automations.manage"],
+    },
+  ],
+} as const;
 
-async function setupHarness(): Promise<{ org: ScratchOrg; adminId: string }> {
-  const org = await createScratchOrg();
-  const adminId = await createScratchUser(org.orgId, "Automation Fence Admin", "auto_fence_admin");
-  await grant(org.orgId, adminId, ["automations.read", "automations.manage"]);
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(
-         coalesce(settings, '{}'::jsonb), '{features}',
-         coalesce(settings -> 'features', '{}'::jsonb) || '{"automations":true}'::jsonb
-       )
-     where id = ${org.orgId}
-  `);
-  return { org, adminId };
-}
-
-async function withHarness(fn: (h: { org: ScratchOrg; adminId: string }) => Promise<void>): Promise<void> {
-  const h = await withBypassContext(() => setupHarness());
-  try {
-    await fn(h);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(h.org.orgId));
-  }
+async function setupFenceHarness(): Promise<{ org: ScratchOrg; adminId: string }> {
+  return setupHarness(FENCE_SPEC);
 }
 
 async function storedName(orgId: string, id: string): Promise<{ name: string; version: number }> {
@@ -68,7 +52,7 @@ async function storedName(orgId: string, id: string): Promise<{ name: string; ve
 }
 
 test("a fresh save writes and bumps the version", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupFenceHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -87,11 +71,11 @@ test("a fresh save writes and bumps the version", { skip: !DB }, async () => {
     });
     assert.equal(saved.version, recipe.version + 1);
     assert.equal((await storedName(h.org.orgId, recipe.id)).name, "fence probe renamed");
-  });
+  }, { bypass: true });
 });
 
 test("a save over a moved recipe writes nothing and names the stored version", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupFenceHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -128,11 +112,11 @@ test("a save over a moved recipe writes nothing and names the stored version", {
       name: "winner",
       version: winner.version,
     });
-  });
+  }, { bypass: true });
 });
 
 test("a save without a version keeps the old behavior", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupFenceHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -149,5 +133,5 @@ test("a save without a version keeps the old behavior", { skip: !DB }, async () 
       name: "legacy save",
     });
     assert.equal(saved.version, recipe.version + 1);
-  });
+  }, { bypass: true });
 });

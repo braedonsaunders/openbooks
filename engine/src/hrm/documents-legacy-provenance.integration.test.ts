@@ -4,19 +4,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import {
+  DB,
+  enableFeatures,
+} from "../testing/hrm-harness.ts";
 import { getDocumentDetail } from "./documents/documents.ts";
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function enableHrm(orgId: string) {
-  for (const feature of ["hrm", "hrmDocuments", "hrmDocumentRetention"]) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
-    `);
-  }
-}
 
 /**
  * 0274 froze the retention action from the live schedule, so completions
@@ -27,7 +20,7 @@ async function enableHrm(orgId: string) {
  */
 test("an inherited completion reads unverified; a frozen one reads current", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  await enableHrm(org.orgId);
+  await enableFeatures(org.orgId, ["hrm", "hrmDocuments", "hrmDocumentRetention"]);
   const actorId = await createScratchUser(org.orgId, "HR Reader", "hr_admin");
   await db.execute(sql`
     insert into user_permission_overrides (org_id, user_id, permission, effect)

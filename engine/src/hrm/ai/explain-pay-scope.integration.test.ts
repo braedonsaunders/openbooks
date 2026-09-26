@@ -8,6 +8,14 @@ import {
   createScratchUser,
   dropScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  DB,
+  enableFeatures,
+  grant,
+  refusalOf,
+  scopeRole,
+  seedEmployment,
+} from "../../testing/hrm-harness.ts";
 import { explainPay } from "./explain-pay.ts";
 import { AiRailsError } from "./errors.ts";
 
@@ -31,65 +39,18 @@ import { AiRailsError } from "./errors.ts";
  * proof, read back through the service.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function enableExplainPay(orgId: string): Promise<void> {
-  for (const key of ["hrm", "payroll", "hrmAiAssist", "hrmExplainPay"]) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${key}}`}, 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
-async function grant(orgId: string, userId: string, permission: string): Promise<void> {
-  await db.execute(sql`
-    insert into user_permission_overrides (org_id, user_id, permission, effect)
-    values (${orgId}, ${userId}, ${permission}, 'grant')
-    on conflict (user_id, permission) do update set effect = 'grant'`);
-}
-
-async function scopeRole(orgId: string, roleKey: string, permissions: string[], subsidiaryIds: string[]): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = ${JSON.stringify(permissions)}::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function seedEmployment(orgId: string, subsidiaryId: string): Promise<string> {
-  const party = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${party}, ${orgId}, 'person', 'Explain Worker', true, '{}'::jsonb)`);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${party}, ${subsidiaryId}, 1)`);
-  return employmentId;
-}
-
-async function refusalOf(promise: Promise<unknown>): Promise<{ code: string; message: string }> {
-  try {
-    await promise;
-  } catch (e) {
-    assert.ok(e instanceof AiRailsError, `expected AiRailsError, got ${(e as Error)?.constructor?.name}`);
-    return { code: e.code, message: e.message };
-  }
-  throw new Error("expected a refusal, the call succeeded");
-}
 
 test("H-EXPLAINPAY: elevated grants do not open another entity's pay", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    await enableExplainPay(org.orgId);
+    await enableFeatures(org.orgId, ["hrm", "payroll", "hrmAiAssist", "hrmExplainPay"]);
     const subB = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const empA = await seedEmployment(org.orgId, org.subsidiaryId);
-    const empB = await seedEmployment(org.orgId, subB);
+    const empA = (await seedEmployment(org.orgId, org.subsidiaryId, { displayName: "Explain Worker", withVersion: false })).employmentId;
+    const empB = (await seedEmployment(org.orgId, subB, { displayName: "Explain Worker", withVersion: false })).employmentId;
     const fabricated = randomUUID();
 
     const payrollA = await createScratchUser(org.orgId, "Payroll A", "explain_payroll_a");
@@ -100,14 +61,14 @@ test("H-EXPLAINPAY: elevated grants do not open another entity's pay", { skip: !
     for (const [name, actorId] of [["payroll.manage", payrollA], ["hrm.employment.read", hrA]] as const) {
       // B's employment refuses exactly like a fabricated id: the scoped
       // holder learns neither existence nor pay coverage.
-      const hidden = await refusalOf(explainPay(db, { orgId: org.orgId, actorId, employmentId: empB }));
-      const unknown = await refusalOf(explainPay(db, { orgId: org.orgId, actorId, employmentId: fabricated }));
+      const hidden = await refusalOf(explainPay(db, { orgId: org.orgId, actorId, employmentId: empB }), AiRailsError);
+      const unknown = await refusalOf(explainPay(db, { orgId: org.orgId, actorId, employmentId: fabricated }), AiRailsError);
       assert.deepEqual(hidden, unknown, `${name}: B must refuse identically to unknown`);
       assert.equal(hidden.code, "ai_subject_missing");
       // The in-scope employment passes the gate and reaches the stub
       // lookup instead — no payslip exists, which is a different code.
       // That differential proves the B refusal is the scope gate firing.
-      const inScope = await refusalOf(explainPay(db, { orgId: org.orgId, actorId, employmentId: empA }));
+      const inScope = await refusalOf(explainPay(db, { orgId: org.orgId, actorId, employmentId: empA }), AiRailsError);
       assert.equal(inScope.code, "ai_no_payslip", `${name}: in-scope employment must pass scope`);
     }
   } finally {
@@ -118,18 +79,19 @@ test("H-EXPLAINPAY: elevated grants do not open another entity's pay", { skip: !
 test("H-EXPLAINPAY: unrestricted HR reads keep working without a stub", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    await enableExplainPay(org.orgId);
+    await enableFeatures(org.orgId, ["hrm", "payroll", "hrmAiAssist", "hrmExplainPay"]);
     const subB = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-    const empB = await seedEmployment(org.orgId, subB);
+    const empB = (await seedEmployment(org.orgId, subB, { displayName: "Explain Worker", withVersion: false })).employmentId;
     const hrFull = await createScratchUser(org.orgId, "HR Full", "explain_hr_full");
     await grant(org.orgId, hrFull, "hrm.employment.read");
     // Unrestricted scope passes the gate; the missing stub is the refusal.
     const missing = await refusalOf(
       explainPay(db, { orgId: org.orgId, actorId: hrFull, employmentId: empB }),
+      AiRailsError,
     );
     assert.equal(missing.code, "ai_no_payslip");
   } finally {

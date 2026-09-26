@@ -7,9 +7,16 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  seedApprovalFlow,
 } from "../testing/fixtures.ts";
-import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
+import {
+  DB,
+  enableHrm,
+  grantPermissions,
+  linkPerson,
+  scopeRole,
+  seedEmployment,
+  seedLeaveFlow,
+} from "../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import {
   createLeavePolicy,
@@ -34,52 +41,6 @@ import {
  * submission (a seeded approval flow gates submit).
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function scopeRole(orgId: string, roleKey: string, subsidiaryIds: string[]): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Person ${id.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${id} where id = ${userId} and org_id = ${orgId}`);
-  return id;
-}
-
-async function seedEmployment(orgId: string, subsidiaryId: string, workerPartyId: string): Promise<string> {
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)`);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
-  return employmentId;
-}
 
 test("OM-11: a manager-created on-behalf draft submits; scope still refuses", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -100,10 +61,10 @@ test("OM-11: a manager-created on-behalf draft submits; scope still refuses", { 
       select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
     // Ana manages A in scope; the scoped-out manager holds the grant for B only.
-    await scopeRole(org.orgId, "om11_ana", [org.subsidiaryId]);
-    await scopeRole(org.orgId, "om11_scoped_out", [subB]);
+    await scopeRole(org.orgId, "om11_ana", null, [org.subsidiaryId]);
+    await scopeRole(org.orgId, "om11_scoped_out", null, [subB]);
     const quinnParty = await linkPerson(org.orgId, quinnId);
-    const quinnEmployment = await seedEmployment(org.orgId, org.subsidiaryId, quinnParty);
+    const quinnEmployment = (await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: quinnParty })).employmentId;
     const type = await createLeaveType({
       orgId: org.orgId, actorId: anaId, code: "PPL-VAC", name: "Vacation",
       paid: true, valueCrossing: "none",
@@ -116,11 +77,7 @@ test("OM-11: a manager-created on-behalf draft submits; scope still refuses", { 
       minimumNoticeDays: 0,
       effectiveFrom: "2020-01-01",
     });
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
-      assignees: [{ type: "user", userId: approverId }],
-      mode: "any",
-    });
+    await seedLeaveFlow(org.orgId, approverId);
 
     // THE defect: Ana files for Quinn (works), then submits her own
     // draft — pre-fix this refused 403 'self-service only' because the

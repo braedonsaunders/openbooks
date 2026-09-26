@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
@@ -9,6 +8,17 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  addLiveVersion,
+  enableHrm,
+  grant,
+  linkPerson,
+  mkEmployment,
+  mkParty,
+  mkReporting,
+  mkReviewTemplate,
+  mkVersion,
+} from "../../testing/hrm-harness.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, openCycle } from "./review-cycles.ts";
 import { acknowledgeReview, shareReview, submitReview } from "./reviews.ts";
@@ -37,149 +47,9 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkParty(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
-
-async function mkVersion(
-  orgId: string,
-  employmentId: string,
-  versionNo: number,
-  from: string,
-  status = "active",
-  recordedAt: string | null = null,
-): Promise<void> {
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at)
-    values (${orgId}, ${employmentId}, ${versionNo}, ${status}, ${from}::date,
-      ${recordedAt === null ? sql`now()` : sql`${recordedAt}::timestamptz`})`);
-}
-
-/**
- * Append one live version through the test-only canonical writer: the
- * prior live row closes with its evidence event in the same transaction,
- * exactly like the governed apply path. Raw version updates are refused
- * by the closure guard by design, so tests never write them either.
- */
-async function addLiveVersion(
-  orgId: string,
-  employmentId: string,
-  args: { status: string; from: string; to?: string | null; recordedAt?: string | null },
-): Promise<void> {
-  const maxRow = (await db.execute<{ n: number }>(sql`
-    select coalesce(max(version_no), 0)::int as n from worker_employment_versions
-     where org_id = ${orgId} and employment_id = ${employmentId}
-  `)).rows[0];
-  const versionNo = (maxRow?.n ?? 0) + 1;
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`set constraints worker_employment_versions_change_tenant_fkey deferred`);
-    // A fixture-recorded stamp (prompt recording, near effective) instead
-    // of test-time now: turnover legs read as known at their own date, so
-    // a now-stamped closure would hide the leaver from the start leg.
-    const now = args.recordedAt ?? (await tx.execute<{ now: Date }>(sql`select now() as now`)).rows[0]!.now;
-    const prior = (await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
-      select id, version_no, to_jsonb(worker_employment_versions) as before
-        from worker_employment_versions
-       where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-       order by version_no
-    `)).rows;
-    const newRevision = (await tx.execute<{ revision: number }>(sql`
-      select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}
-    `)).rows[0]!.revision + 1;
-    const changeId = (await tx.execute<{ id: string }>(sql`
-      insert into employment_changes
-        (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
-         recorded_source, recorded_source_ref, closed_versions)
-      values (${orgId}, ${employmentId}, ${newRevision},
-              'corrected', '{}'::jsonb, 'test seed',
-              'system', 'hr7-seed',
-              ${JSON.stringify(prior.map((row) => ({
-                table: "worker_employment_versions",
-                identity: employmentId,
-                version_no: row.version_no,
-                row_id: row.id,
-                before: row.before,
-              })))}::jsonb)
-      returning id
-    `)).rows[0]!.id;
-    for (const row of prior) {
-      await tx.execute(sql`
-        update worker_employment_versions
-           set recorded_until = ${now}, superseded_by = ${versionNo}, closed_by_change_id = ${changeId}
-         where id = ${row.id}
-      `);
-    }
-    await tx.execute(sql`
-      insert into worker_employment_versions
-        (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-      values (${orgId}, ${employmentId}, ${versionNo}, ${args.status},
-              ${args.from}::date, ${args.to ?? null}::date, ${now})
-    `);
-    await tx.execute(sql`
-      update worker_employments set revision = ${newRevision}, updated_at = now()
-       where org_id = ${orgId} and id = ${employmentId}
-    `);
-  });
-}
-
-async function mkReporting(orgId: string, employmentId: string, managerEmploymentId: string): Promise<void> {
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from)
-    values (${orgId}, ${employmentId}, ${managerEmploymentId}, 'line', ${randomUUID()}, 1, '2020-01-01'::date)
-  `);
-}
-
-async function mkTemplate(orgId: string, actorId: string): Promise<string> {
-  const templateId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${orgId}, 'Annual', '{"min": 1, "max": 5, "labels": []}'::jsonb, ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  const sectionId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
-    values (${orgId}, ${templateId}, 0, 'Impact', 'competency', ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into hrm_review_template_questions
-      (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
-    values (${orgId}, ${sectionId}, 0, 'Customer impact', 'rating_and_text', true, ${actorId}, ${actorId})
-  `);
-  return templateId;
-}
+// Shared HRM seeding helpers (scratch org setup, grants, employments,
+// versions, reporting lines, review templates) live in
+// engine/src/testing/hrm-harness.ts; only file-specific seeders stay here.
 
 type Harness = {
   org: ScratchOrg;
@@ -195,7 +65,7 @@ type Harness = {
   managerReviewId: string;
 };
 
-async function setupHarness(): Promise<Harness> {
+async function setupReadHarness(): Promise<Harness> {
   const org = await createScratchOrg();
   await enableHrm(org.orgId);
   const hrId = await createScratchUser(org.orgId, "HRM Read HR", "hrm_read_hr");
@@ -209,15 +79,19 @@ async function setupHarness(): Promise<Harness> {
   const managerUserId = await createScratchUser(org.orgId, "Read Manager", "read_manager");
   const managerPartyId = await linkPerson(org.orgId, managerUserId);
   const managerEmploymentId = await mkEmployment(org.orgId, managerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, managerEmploymentId, 1, "2020-01-01", "active", "2020-01-01T09:00:00Z");
+  await mkVersion(org.orgId, managerEmploymentId, {
+    versionNo: 1, from: "2020-01-01", status: "active", recordedAt: "2020-01-01T09:00:00Z",
+  });
   const workerUserId = await createScratchUser(org.orgId, "Read Worker", "read_worker");
   const workerPartyId = await linkPerson(org.orgId, workerUserId);
   const workerEmploymentId = await mkEmployment(org.orgId, workerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, workerEmploymentId, 1, "2020-01-01", "active", "2020-01-01T09:00:00Z");
+  await mkVersion(org.orgId, workerEmploymentId, {
+    versionNo: 1, from: "2020-01-01", status: "active", recordedAt: "2020-01-01T09:00:00Z",
+  });
   await mkReporting(org.orgId, workerEmploymentId, managerEmploymentId);
   const peerUserId = await createScratchUser(org.orgId, "Read Peer", "read_peer");
   await linkPerson(org.orgId, peerUserId);
-  const templateId = await mkTemplate(org.orgId, hrId);
+  const templateId = await mkReviewTemplate(org.orgId, hrId, { name: "Annual", scaleLabels: [] });
   const cycle = await createCycle({
     orgId: org.orgId,
     actorId: hrId,
@@ -247,7 +121,7 @@ async function answerId(orgId: string, reviewId: string): Promise<string> {
 }
 
 test("the subject reads only shared reviews, a peer reads nothing", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupReadHarness();
   try {
     // Before sharing: the subject's own self review is submittable but the
     // manager review is invisible — NOT_FOUND, not forbidden.
@@ -297,7 +171,7 @@ test("the subject reads only shared reviews, a peer reads nothing", { skip: !DB 
 });
 
 test("a manager reads only the reviews they author, never a report's self review", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupReadHarness();
   try {
     await submitReview({
       orgId: h.org.orgId,
@@ -339,7 +213,7 @@ test("a manager reads only the reviews they author, never a report's self review
 });
 
 test("my reviews splits subject and reviewer inboxes", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupReadHarness();
   try {
     await submitReview({
       orgId: h.org.orgId,
@@ -374,7 +248,7 @@ test("my reviews splits subject and reviewer inboxes", { skip: !DB }, async () =
 });
 
 test("an HR reader with an empty subsidiary scope sees no cycle reviews", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupReadHarness();
   try {
     await db.execute(sql`
       update app_roles
@@ -393,7 +267,7 @@ test("an HR reader with an empty subsidiary scope sees no cycle reviews", { skip
 });
 
 test("turnover divides terminations by average headcount per period", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupReadHarness();
   try {
     // Fixed series: manager + worker in service from 2020; a leaver
     // terminated 2026-03-15 with service from 2024-03-15 (tenure 730 days:
@@ -402,11 +276,14 @@ test("turnover divides terminations by average headcount per period", { skip: !D
     // the closure guard refuses raw version updates by design.
     const leaverParty = await mkParty(h.org.orgId, "Leaver");
     const leaverEmployment = await mkEmployment(h.org.orgId, leaverParty, h.org.subsidiaryId);
-    await mkVersion(h.org.orgId, leaverEmployment, 1, "2024-03-15", "active", "2024-03-15T09:00:00Z");
+    await mkVersion(h.org.orgId, leaverEmployment, {
+      versionNo: 1, from: "2024-03-15", status: "active", recordedAt: "2024-03-15T09:00:00Z",
+    });
     await addLiveVersion(h.org.orgId, leaverEmployment, {
       status: "terminated",
       from: "2026-03-15",
       recordedAt: "2026-03-16T09:00:00Z",
+      sourceRef: "hr7-seed",
     });
     await recordExit({
       orgId: h.org.orgId,
@@ -437,11 +314,14 @@ test("turnover divides terminations by average headcount per period", { skip: !D
     assert.equal(row.exitCoverage, 1);
     const missingParty = await mkParty(h.org.orgId, "Named Missing Exit");
     const missingEmployment = await mkEmployment(h.org.orgId, missingParty, h.org.subsidiaryId);
-    await mkVersion(h.org.orgId, missingEmployment, 1, "2024-01-01", "active", "2024-01-01T09:00:00Z");
+    await mkVersion(h.org.orgId, missingEmployment, {
+      versionNo: 1, from: "2024-01-01", status: "active", recordedAt: "2024-01-01T09:00:00Z",
+    });
     await addLiveVersion(h.org.orgId, missingEmployment, {
       status: "terminated",
       from: "2026-04-01",
       recordedAt: "2026-04-02T09:00:00Z",
+      sourceRef: "hr7-seed",
     });
     const departmentId = (await db.execute<{ id: string }>(sql`
       insert into departments (org_id, name, subsidiary_id)
@@ -474,7 +354,7 @@ test("turnover divides terminations by average headcount per period", { skip: !D
 });
 
 test("reads are invisible from a second organization", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupReadHarness();
   const other = await createScratchOrg();
   try {
     await enableHrm(other.orgId);

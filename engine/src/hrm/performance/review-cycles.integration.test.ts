@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
@@ -9,6 +8,16 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  grant,
+  linkPerson,
+  mkEmployment,
+  mkParty,
+  mkReporting,
+  mkReviewTemplate,
+  mkVersion,
+} from "../../testing/hrm-harness.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import {
   closeCycle,
@@ -30,86 +39,9 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkParty(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
-
-async function mkVersion(
-  orgId: string,
-  employmentId: string,
-  versionNo: number,
-  from: string,
-  status = "active",
-  to: string | null = null,
-): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to)
-    values (${orgId}, ${employmentId}, ${versionNo}, ${status}, ${from}::date, ${to}::date) returning id`)).rows[0]!.id;
-}
-
-async function mkReporting(
-  orgId: string,
-  employmentId: string,
-  managerEmploymentId: string,
-  from: string,
-): Promise<void> {
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from)
-    values (${orgId}, ${employmentId}, ${managerEmploymentId}, 'line', ${randomUUID()}, 1, ${from}::date)
-  `);
-}
-
-async function mkTemplate(orgId: string, actorId: string, name: string): Promise<string> {
-  const templateId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${orgId}, ${name}, '{"min": 1, "max": 5, "labels": ["low", "high"]}'::jsonb, ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  const sectionId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
-    values (${orgId}, ${templateId}, 0, 'Impact', 'competency', ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into hrm_review_template_questions
-      (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
-    values (${orgId}, ${sectionId}, 0, 'Customer impact', 'rating_and_text', true, ${actorId}, ${actorId})
-  `);
-  return templateId;
-}
+// Shared HRM seeding helpers (grants, employments, versions, reporting
+// lines, review templates) live in engine/src/testing/hrm-harness.ts; this
+// file keeps only its cycle-specific assertions.
 
 type Harness = {
   org: ScratchOrg;
@@ -121,7 +53,7 @@ type Harness = {
   templateId: string;
 };
 
-async function setupHarness(): Promise<Harness> {
+async function setupCyclesHarness(): Promise<Harness> {
   const org = await createScratchOrg();
   await enableHrm(org.orgId);
   const hrId = await createScratchUser(org.orgId, "HRM Review HR", "hrm_review_hr");
@@ -129,12 +61,12 @@ async function setupHarness(): Promise<Harness> {
   await linkPerson(org.orgId, hrId);
   const managerPartyId = await mkParty(org.orgId, "Review Manager");
   const managerEmploymentId = await mkEmployment(org.orgId, managerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, managerEmploymentId, 1, "2020-01-01");
+  await mkVersion(org.orgId, managerEmploymentId, { versionNo: 1, from: "2020-01-01", to: null });
   const workerPartyId = await mkParty(org.orgId, "Review Worker");
   const workerEmploymentId = await mkEmployment(org.orgId, workerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, workerEmploymentId, 1, "2020-01-01");
+  await mkVersion(org.orgId, workerEmploymentId, { versionNo: 1, from: "2020-01-01", to: null });
   await mkReporting(org.orgId, workerEmploymentId, managerEmploymentId, "2020-01-01");
-  const templateId = await mkTemplate(org.orgId, hrId, "Annual review");
+  const templateId = await mkReviewTemplate(org.orgId, hrId, { name: "Annual review" });
   return { org, hrId, managerPartyId, managerEmploymentId, workerPartyId, workerEmploymentId, templateId };
 }
 
@@ -173,7 +105,7 @@ test("0196 migration exposes ten org-isolated tables with the review unique", { 
 });
 
 test("open instantiates self and manager reviews with snapshots in one transaction", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCyclesHarness();
   try {
     const cycle = await createCycle({
       orgId: h.org.orgId,
@@ -216,7 +148,7 @@ test("open instantiates self and manager reviews with snapshots in one transacti
 });
 
 test("open refuses a template with no required question and an inverted period", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCyclesHarness();
   try {
     await assert.rejects(
       createCycle({
@@ -266,7 +198,7 @@ test("open refuses a template with no required question and an inverted period",
 });
 
 test("a second open is refused and a calibrating move needs pending reviews resolved or forced", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCyclesHarness();
   try {
     const cycle = await createCycle({
       orgId: h.org.orgId,
@@ -327,7 +259,7 @@ test("a second open is refused and a calibrating move needs pending reviews reso
 });
 
 test("cycles are invisible from a second organization", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCyclesHarness();
   const other = await createScratchOrg();
   try {
     await enableHrm(other.orgId);

@@ -8,8 +8,17 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  enableFeatures,
+  grantPermissions,
+  seedComponent,
+  seedNamedWorker,
+  seedProject,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { HrmConstructionError } from "./construction/errors.ts";
 import {
@@ -56,87 +65,18 @@ import {
  * alone.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const FEATURES = [
-  "hrm",
-  "payroll",
-  "projects",
-  "timeTracking",
-  "hrmConstructionCompliance",
-  "hrmPrevailingWage",
-  "hrmCertifiedPayroll",
-  "hrmWorkersCompClasses",
-  "hrmApprenticeRatios",
-  "hrmPerDiem",
-];
 
-async function enableConstruction(orgId: string): Promise<void> {
-  for (const feature of FEATURES) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
-    `);
-  }
-  await db.execute(sql`update orgs set country = 'US' where id = ${orgId}`);
-}
+const CONSTRUCTION_FEATURES = ["hrm", "payroll", "projects", "timeTracking", "hrmConstructionCompliance", "hrmPrevailingWage", "hrmCertifiedPayroll", "hrmWorkersCompClasses", "hrmApprenticeRatios", "hrmPerDiem"] as const;
 
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-type Harness = { org: ScratchOrg; adminId: string; outsiderId: string };
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableConstruction(org.orgId);
-  const adminId = await createScratchUser(org.orgId, "Construction Admin", "construction_admin");
-  const outsiderId = await createScratchUser(org.orgId, "Construction Outsider", "construction_outsider");
-  await grantPermissions(org.orgId, adminId, ["hrm.construction.read", "hrm.construction.manage"]);
-  return { org, adminId, outsiderId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function seedWorker(orgId: string, subsidiaryId: string, name: string): Promise<{ employmentId: string; partyId: string }> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  return { employmentId, partyId };
-}
-
-async function seedProject(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into projects (id, org_id, name, status) values (${id}, ${orgId}, ${name}, 'active')
-  `);
-  return id;
-}
+const CONSTRUCTION_SPEC = {
+  features: CONSTRUCTION_FEATURES,
+  country: "US",
+  users: [
+    { key: "adminId", name: "Construction Admin", handle: "construction_admin", permissions: ["hrm.construction.read", "hrm.construction.manage"] },
+    { key: "outsiderId", name: "Construction Outsider", handle: "construction_outsider" },
+  ],
+} as const;
 
 async function seedTime(
   orgId: string,
@@ -151,15 +91,6 @@ async function seedTime(
   `);
 }
 
-async function seedComponent(orgId: string, kind: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into pay_components (id, org_id, code, name, kind, is_active)
-    values (${id}, ${orgId}, ${`PD_${id.slice(0, 6)}`}, 'Per diem', ${kind}, true)
-  `);
-  return id;
-}
-
 async function assertConstructionRefusal(fn: () => Promise<unknown>, pattern: RegExp): Promise<void> {
   try {
     await fn();
@@ -172,7 +103,7 @@ async function assertConstructionRefusal(fn: () => Promise<unknown>, pattern: Re
 }
 
 test("migrations 0223/0224 bootstrap: thirteen tables, RLS forced, seam pairing", { skip: !DB }, async () => {
-  await withHarness(async () => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async () => {
     const tables = [
       "hrm_work_classifications",
       "hrm_rate_schedules",
@@ -225,7 +156,7 @@ test("feature-off and grant refusals fire by name", { skip: !DB }, async () => {
       () => createClassification(db, { orgId: org.orgId, actorId: adminId, code: "X", name: "X", trade: "X" }),
       /hrmConstructionCompliance feature is off/,
     );
-    await enableConstruction(org.orgId);
+    await enableFeatures(org.orgId, CONSTRUCTION_FEATURES);
     const outsider = await createScratchUser(org.orgId, "Off Outsider", "off_outsider");
     try {
       await listFindings(db, org.orgId, outsider);
@@ -239,9 +170,9 @@ test("feature-off and grant refusals fire by name", { skip: !DB }, async () => {
 });
 
 test("resolver: scope precedence, reciprocity, as-of, missing writes a finding", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
-    const { employmentId } = await seedWorker(org.orgId, org.subsidiaryId, "Resolver Worker");
+    const { employmentId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Resolver Worker");
     const projectId = await seedProject(org.orgId, "Resolver Job");
     const journey = await createClassification(db, {
       orgId: org.orgId, actorId: adminId, code: "ELEC-J", name: "Electrician journey", trade: "Electrical",
@@ -290,7 +221,7 @@ test("resolver: scope precedence, reciprocity, as-of, missing writes a finding",
     assert.equal(priced.base, "60.0000");
     assert.equal(priced.source, "union");
     // Unassigned employment: refusal names assignment AND writes a missing_rate finding.
-    const { employmentId: bare } = await seedWorker(org.orgId, org.subsidiaryId, "Bare Worker");
+    const { employmentId: bare } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Bare Worker");
     await assertConstructionRefusal(
       () => resolveWage(db, { orgId: org.orgId, actorId: adminId, employmentId: bare, projectId, workedOn: "2026-09-08" }),
       /no work classification/,
@@ -325,13 +256,13 @@ test("resolver: scope precedence, reciprocity, as-of, missing writes a finding",
 });
 
 test("per-diem: brackets price the day, approval crosses the seam, voids carry reason", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
-    const { employmentId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Per Diem Worker");
+    const { employmentId, partyId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Per Diem Worker");
     const projectId = await seedProject(org.orgId, "Remote Job");
-    const componentId = await seedComponent(org.orgId, "earning");
+    const componentId = await seedComponent(org.orgId, { kind: "earning" });
     // A non-earning component refuses at policy creation.
-    const wageComponent = await seedComponent(org.orgId, "deduction");
+    const wageComponent = await seedComponent(org.orgId, { kind: "deduction" });
     await assertConstructionRefusal(
       () => createPolicy(db, {
         orgId: org.orgId, actorId: adminId, name: "Bad link", basis: "flat_daily",
@@ -381,10 +312,10 @@ test("per-diem: brackets price the day, approval crosses the seam, voids carry r
 });
 
 test("ratios breach the day and reprice apprentices at journey", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
-    const journeyWorker = await seedWorker(org.orgId, org.subsidiaryId, "Journey Worker");
-    const apprenticeWorker = await seedWorker(org.orgId, org.subsidiaryId, "Apprentice Worker");
+    const journeyWorker = await seedNamedWorker(org.orgId, org.subsidiaryId, "Journey Worker");
+    const apprenticeWorker = await seedNamedWorker(org.orgId, org.subsidiaryId, "Apprentice Worker");
     const projectId = await seedProject(org.orgId, "Ratio Job");
     const journey = await createClassification(db, {
       orgId: org.orgId, actorId: adminId, code: "CARP-J", name: "Carpenter journey", trade: "Carpentry",
@@ -441,9 +372,9 @@ test("ratios breach the day and reprice apprentices at journey", { skip: !DB }, 
 });
 
 test("comp classes resolve by priority and refuse when nothing matches", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
-    const { employmentId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Comp Worker");
+    const { employmentId, partyId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Comp Worker");
     const projectId = await seedProject(org.orgId, "Comp Job");
     const roofing = await createCompClass(db, {
       orgId: org.orgId, actorId: adminId, code: "ROOF-5551", name: "Roofing", ratePer100: "12.5000", effectiveFrom: "2026-01-01",
@@ -488,7 +419,7 @@ test("comp classes resolve by priority and refuse when nothing matches", { skip:
 });
 
 test("certified payroll offers the US pack's declared files and refuses an empty week by name", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
     const projectId = await seedProject(org.orgId, "Certified Job");
     const listed = await listFormats(db, org.orgId, adminId);
@@ -518,9 +449,9 @@ test("certified payroll offers the US pack's declared files and refuses an empty
 });
 
 test("certified payroll resolves one employment per day and refuses history fan-out", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
-    const { employmentId: firstId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Certified Worker");
+    const { employmentId: firstId, partyId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Certified Worker");
     const resolve = (day: string) => resolveCertifiedEmployment(db, org.orgId, partyId, day);
     assert.equal(await resolve("2026-09-08"), firstId);
     // Retire v1 through the lawful 0184 closing transition: live version
@@ -566,9 +497,9 @@ test("certified payroll resolves one employment per day and refuses history fan-
 });
 
 test("labor-costing hook prices in-scope hours first and leaves the standard path alone", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
-    const { employmentId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Hook Worker");
+    const { employmentId, partyId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Hook Worker");
     const projectId = await seedProject(org.orgId, "Hook Job");
     const journey = await createClassification(db, {
       orgId: org.orgId, actorId: adminId, code: "HOOK-J", name: "Hook journey", trade: "Hook",
@@ -613,11 +544,11 @@ test("labor-costing hook prices in-scope hours first and leaves the standard pat
 });
 
 test("travel pay computes hourly and per-km; second org sees zero rows", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
-    const { employmentId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Travel Worker");
+    const { employmentId, partyId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Travel Worker");
     const projectId = await seedProject(org.orgId, "Travel Job");
-    const componentId = await seedComponent(org.orgId, "earning");
+    const componentId = await seedComponent(org.orgId, { kind: "earning" });
     await createPolicy(db, {
       orgId: org.orgId, actorId: adminId, name: "Travel policy", basis: "hours_threshold",
       rules: { min_hours: 6, amount_for_hours: "20.0000", amount_per_km: "0.6700" },

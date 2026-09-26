@@ -8,9 +8,18 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  addLiveVersion,
+  DB,
+  gateOf,
+  grantPermissions,
+  linkPerson,
+  seedEmployment,
+  seedFlow,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import {
   countChangeRequests,
   createChangeRequestDraft,
@@ -21,7 +30,6 @@ import {
   updateChangeRequestPayload,
   withdrawChangeRequest,
 } from "./change-requests.ts";
-import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate, GateError, ReleaseError } from "../flows/gates.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
@@ -44,155 +52,18 @@ installEngineSeams();
  * asserts the writes that must NOT exist.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-type Harness = {
-  org: ScratchOrg;
-  submitterId: string;
-  approver1Id: string;
-  approver2Id: string;
-  outsiderId: string;
-};
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  const submitterId = await createScratchUser(org.orgId, "HRM Submitter", "hrm_author");
-  const approver1Id = await createScratchUser(org.orgId, "HRM Approver One", "hrm_decider");
-  const approver2Id = await createScratchUser(org.orgId, "HRM Approver Two", "hrm_decider_two");
-  const outsiderId = await createScratchUser(org.orgId, "HRM Outsider", "hrm_viewer");
-  await grantPermissions(org.orgId, submitterId, ["hrm.employment.read", "hrm.employment.manage"]);
-  await grantPermissions(org.orgId, approver1Id, ["hrm.employment.read", "hrm.employment.approve"]);
-  await grantPermissions(org.orgId, approver2Id, ["hrm.employment.read", "hrm.employment.approve"]);
-  await linkPerson(org.orgId, submitterId);
-  await linkPerson(org.orgId, approver1Id);
-  await linkPerson(org.orgId, approver2Id);
-  await linkPerson(org.orgId, outsiderId);
-  return { org, submitterId, approver1Id, approver2Id, outsiderId };
-}
+const CHANGE_REQUESTS_SPEC = {
+  features: [],
+  users: [
+    { key: "submitterId", name: "HRM Submitter", handle: "hrm_author", permissions: ["hrm.employment.read", "hrm.employment.manage"], link: true },
+    { key: "approver1Id", name: "HRM Approver One", handle: "hrm_decider", permissions: ["hrm.employment.read", "hrm.employment.approve"], link: true },
+    { key: "approver2Id", name: "HRM Approver Two", handle: "hrm_decider_two", permissions: ["hrm.employment.read", "hrm.employment.approve"], link: true },
+    { key: "outsiderId", name: "HRM Outsider", handle: "hrm_viewer", link: true },
+  ],
+} as const;
 
 /** A reserved employment identity: stable row at revision 1, no versions. */
-async function seedReservedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  linkedPartyId?: string,
-): Promise<{ employmentId: string; workerPartyId: string }> {
-  const workerPartyId = linkedPartyId ?? randomUUID();
-  if (linkedPartyId === undefined) {
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${workerPartyId}, ${orgId}, 'person', 'Hired Worker', true, '{}'::jsonb)
-    `);
-  }
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  return { employmentId, workerPartyId };
-}
-
 /** Append one live version (test-only canonical writer, same shape as apply). */
-async function addLiveVersion(
-  orgId: string,
-  employmentId: string,
-  args: { status: string; from: string; to?: string | null },
-): Promise<{ id: string; versionNo: number }> {
-  const maxRow = (await db.execute<{ n: number }>(sql`
-    select coalesce(max(version_no), 0)::int as n from worker_employment_versions
-     where org_id = ${orgId} and employment_id = ${employmentId}
-  `)).rows[0];
-  const versionNo = (maxRow?.n ?? 0) + 1;
-  // One transaction like the service: the deferred evidence guards prove at
-  // commit, so the close, the successor, and the event must commit together
-  // (a per-statement commit would fire the reverse proof before the close).
-  const id = await db.transaction(async (tx) => {
-    await tx.execute(sql`set constraints worker_employment_versions_change_tenant_fkey deferred`);
-    const now = (await tx.execute<{ now: Date }>(sql`select now() as now`)).rows[0]!.now;
-    const prior = (await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
-      select id, version_no, to_jsonb(worker_employment_versions) as before
-        from worker_employment_versions
-       where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-       order by version_no
-    `)).rows;
-    const newRevision = (await tx.execute<{ revision: number }>(sql`
-      select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}
-    `)).rows[0]!.revision + 1;
-    const changeId = (await tx.execute<{ id: string }>(sql`
-      insert into employment_changes
-        (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
-         recorded_source, recorded_source_ref, closed_versions)
-      values (${orgId}, ${employmentId}, ${newRevision},
-              'corrected', '{}'::jsonb, 'test seed',
-              'system', 'slice-a-seed',
-              ${JSON.stringify(prior.map((row) => ({
-                table: "worker_employment_versions",
-                identity: employmentId,
-                version_no: row.version_no,
-                row_id: row.id,
-                before: row.before,
-              })))}::jsonb)
-      returning id
-    `)).rows[0]!.id;
-    for (const row of prior) {
-      await tx.execute(sql`
-        update worker_employment_versions
-           set recorded_until = ${now}, superseded_by = ${versionNo}, closed_by_change_id = ${changeId}
-         where id = ${row.id}
-      `);
-    }
-    const inserted = (await tx.execute<{ id: string }>(sql`
-      insert into worker_employment_versions
-        (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-      values (${orgId}, ${employmentId}, ${versionNo}, ${args.status},
-              ${args.from}::date, ${args.to ?? null}::date, ${now})
-      returning id
-    `)).rows[0]!.id;
-    await tx.execute(sql`
-      update worker_employments set revision = ${newRevision}, updated_at = now()
-       where org_id = ${orgId} and id = ${employmentId}
-    `);
-    return inserted;
-  });
-  return { id, versionNo };
-}
-
-async function seedFlow(orgId: string, approverId: string): Promise<void> {
-  await seedApprovalFlow(orgId, {
-    subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
-    assignees: [{ type: "user", userId: approverId }],
-    mode: "any",
-  });
-}
-
-async function gateOf(requestId: string): Promise<{ id: string; status: string; runId: string }> {
-  const rows = (await db.execute<{ id: string; status: string; runId: string }>(sql`
-    select id, status, run_id as "runId" from flow_gates
-     where subject_id = ${requestId} order by created_at
-  `)).rows;
-  assert.equal(rows.length, 1, "exactly one gate decides the request");
-  return rows[0]!;
-}
-
 async function requestStatus(requestId: string): Promise<string> {
   const rows = (await db.execute<{ status: string }>(sql`
     select status from hrm_employment_change_requests where id = ${requestId}
@@ -227,19 +98,10 @@ async function decisionAuditCount(gateId: string): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
 test("hire happy path: draft → submit → decide → applied with real 0184 rows", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
 
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId,
@@ -303,10 +165,10 @@ test("hire happy path: draft → submit → decide → applied with real 0184 ro
 });
 
 test("status change closes the live version with its exact before-image", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    const first = await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    const first = await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", sourceRef: "slice-a-seed" });
 
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId,
@@ -353,10 +215,10 @@ test("status change closes the live version with its exact before-image", { skip
 });
 
 test("assignment issue then supersede, with department and location refs", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", sourceRef: "slice-a-seed" });
     const deptId = randomUUID();
     await db.execute(sql`
       insert into departments (id, org_id, name) values (${deptId}, ${h.org.orgId}, 'Engineering')
@@ -409,10 +271,10 @@ test("assignment issue then supersede, with department and location refs", { ski
 });
 
 test("termination applies and a second termination is refused", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", sourceRef: "slice-a-seed" });
 
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId,
@@ -442,12 +304,12 @@ test("termination applies and a second termination is refused", { skip: !DB }, a
 });
 
 test("manager repoint closes the reporting line in the same aggregate event", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01" });
-    const managerA = (await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId)).employmentId;
-    const managerB = (await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId)).employmentId;
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", sourceRef: "slice-a-seed" });
+    const managerA = (await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" })).employmentId;
+    const managerB = (await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" })).employmentId;
 
     const first = await createChangeRequestDraft({
       orgId: h.org.orgId,
@@ -499,10 +361,10 @@ test("manager repoint closes the reporting line in the same aggregate event", { 
 });
 
 test("stale revision is refused at apply with nothing written", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", sourceRef: "slice-a-seed" });
 
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId,
@@ -515,7 +377,7 @@ test("stale revision is refused at apply with nothing written", { skip: !DB }, a
     const gate = await gateOf(draft.id);
 
     // A concurrent governed write lands first: the proposal is now stale.
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-02-01" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-02-01", sourceRef: "slice-a-seed" });
 
     await assert.rejects(
       decideGate({ gateId: gate.id, decision: "approved", userId: h.approver1Id }),
@@ -546,9 +408,9 @@ test("stale revision is refused at apply with nothing written", { skip: !DB }, a
 });
 
 test("a hire raced by a landed version rolls the whole decision back", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
 
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId,
@@ -558,7 +420,7 @@ test("a hire raced by a landed version rolls the whole decision back", { skip: !
     });
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "hire" });
     const gate = await gateOf(draft.id);
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-09-01" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-09-01", sourceRef: "slice-a-seed" });
 
     await assert.rejects(
       decideGate({ gateId: gate.id, decision: "approved", userId: h.approver1Id }),
@@ -578,9 +440,9 @@ test("a hire raced by a landed version rolls the whole decision back", { skip: !
 });
 
 test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
 
     const draftOnly = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
@@ -618,7 +480,7 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
     assert.equal(cancelledGate, "cancelled", "withdrawal cancels the dangling gate");
 
     // Terminal states never resurrect through withdraw.
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-09-01" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-09-01", sourceRef: "slice-a-seed" });
     const toApprove = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "status_change", status: "suspended", effectiveFrom: "2026-09-01" },
@@ -645,10 +507,10 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
 });
 
 test("rejection writes the snapshot and no canonical rows", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", sourceRef: "slice-a-seed" });
 
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
@@ -667,11 +529,11 @@ test("rejection writes the snapshot and no canonical rows", { skip: !DB }, async
 });
 
 test("identity separation: the submitter cannot decide their own submission", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     // The submitter is a routed approver here, so the refusal comes from
     // separation of duties — not from missing gate assignment.
     await seedFlow(h.org.orgId, h.submitterId);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
@@ -688,11 +550,11 @@ test("identity separation: the submitter cannot decide their own submission", { 
 });
 
 test("identity separation: an approver with no linked person is refused with the remedy", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     const unlinkedId = await createScratchUser(h.org.orgId, "HRM Ghost", "hrm_ghost");
     await grantPermissions(h.org.orgId, unlinkedId, ["hrm.employment.read", "hrm.employment.approve"]);
     await seedFlow(h.org.orgId, unlinkedId);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
@@ -714,8 +576,8 @@ test("identity separation: an approver with no linked person is refused with the
 });
 
 test("identity separation: the affected worker cannot approve their own change", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId, workerPartyId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     // The decider IS the subject worker behind a different login.
     await db.execute(sql`update users set party_id = ${workerPartyId} where id = ${h.approver2Id}`);
     await seedFlow(h.org.orgId, h.approver2Id);
@@ -738,8 +600,8 @@ test("identity separation: the affected worker cannot approve their own change",
 });
 
 test("submit without a configured flow is refused, never auto-approved", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
@@ -762,9 +624,9 @@ test("submit without a configured flow is refused, never auto-approved", { skip:
 });
 
 test("draft edits bump the revision and move the digest; submit freezes both", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "offered", effectiveFrom: "2026-09-01" },
@@ -795,9 +657,9 @@ test("draft edits bump the revision and move the digest; submit freezes both", {
 // unchanged canonical payload is now a touch: no write, no bump, and the
 // submit that follows lands.
 test("an unchanged draft edit is a touch: no revision bump, submit still works", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const payload = { kind: "hire", status: "offered", effectiveFrom: "2026-09-01" };
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
@@ -821,9 +683,9 @@ test("an unchanged draft edit is a touch: no revision bump, submit still works",
 });
 
 test("reads are org-scoped and employment-gated", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
@@ -868,14 +730,14 @@ test("reads are org-scoped and employment-gated", { skip: !DB }, async () => {
 });
 
 test("change-request list applies subsidiary scope before its visible-row limit", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     const secondSubsidiary = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       select ${secondSubsidiary}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'Hidden entity', base_currency, country
         from subsidiaries where id = ${h.org.subsidiaryId} and org_id = ${h.org.orgId}`);
-    const visibleEmployment = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    const hiddenEmployment = await seedReservedEmployment(h.org.orgId, secondSubsidiary);
+    const visibleEmployment = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    const hiddenEmployment = await seedEmployment(h.org.orgId, secondSubsidiary, { withVersion: false, displayName: "Hired Worker" });
     const visibleRequest = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId: visibleEmployment.employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
@@ -900,8 +762,8 @@ test("change-request list applies subsidiary scope before its visible-row limit"
     assert.deepEqual(listed.map((request) => request.id), [visibleRequest.id]);
 
     const ownParty = await linkPerson(h.org.orgId, scopedReader);
-    const ownEmployment = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId, ownParty);
-    await addLiveVersion(h.org.orgId, ownEmployment.employmentId, { status: "active", from: "2020-01-01" });
+    const ownEmployment = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: ownParty, withVersion: false });
+    await addLiveVersion(h.org.orgId, ownEmployment.employmentId, { status: "active", from: "2020-01-01", sourceRef: "slice-a-seed" });
     const ownProfileRequest = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: scopedReader, employmentId: ownEmployment.employmentId,
       payload: { kind: "profile_change", phone: "+1 555 0109" },
@@ -914,8 +776,8 @@ test("change-request list applies subsidiary scope before its visible-row limit"
 });
 
 test("RLS hides one org's requests from another org's session", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
@@ -945,10 +807,10 @@ test("RLS hides one org's requests from another org's session", { skip: !DB }, a
 });
 
 test("concurrent two-session apply: exactly one wins", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);
-    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", sourceRef: "slice-a-seed" });
 
     const first = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,

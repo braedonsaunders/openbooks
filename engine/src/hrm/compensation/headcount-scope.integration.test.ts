@@ -7,8 +7,15 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  DB,
+  grantPermissions,
+  restrictRole,
+  setCompensationSettings,
+  setupHarness,
+  withHarness,
+} from "../../testing/hrm-harness.ts";
 import {
   createJobFamily,
   createJobLevel,
@@ -37,132 +44,76 @@ import {
  * Proofs are read back through the service, never from its internals.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type Harness = {
-  org: ScratchOrg;
-  subB: string;
-  hrId: string;
-  readerA: string;
-  readerB: string;
-  readerSub: string;
-  readerNone: string;
-  planId: string;
-  lineAId: string;
-  lineBId: string;
-};
+const headcountScopeSpecFor = (rolePrefix: string) => ({
+  users: [
+    { key: "hrId", name: "F08 HR", handle: `${rolePrefix}_hr`, permissions: ["hrm.compensation.read", "hrm.compensation.manage"] },
+    { key: "readerA", name: "F08 Reader A", handle: `${rolePrefix}_reader_a` },
+    { key: "readerB", name: "F08 Reader B", handle: `${rolePrefix}_reader_b` },
+    { key: "readerSub", name: "F08 Reader Subtree", handle: `${rolePrefix}_reader_sub` },
+    { key: "readerNone", name: "F08 Reader None", handle: `${rolePrefix}_reader_none` },
+  ],
+} as const);
 
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
+async function setupHeadcountScopeHarness(rolePrefix: string) {
+  return setupHarness(headcountScopeSpecFor(rolePrefix), async (base) => {
+    const subB = randomUUID();
     await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function restrictRole(orgId: string, roleKey: string, restriction: Record<string, unknown>): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.compensation.read"]'::jsonb,
-           subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function setCompensationSettings(orgId: string, patch: Record<string, unknown>): Promise<void> {
-  const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`)).rows[0]?.settings ?? {};
-  const next = {
-    ...(current as Record<string, unknown>),
-    compensation: { ...((current as Record<string, unknown>).compensation as Record<string, unknown> ?? {}), ...patch },
-  };
-  await db.execute(sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`);
-}
-
-async function setupHarness(rolePrefix: string): Promise<Harness> {
-  const org = await createScratchOrg();
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${org.orgId}`);
-  const hrId = await createScratchUser(org.orgId, "F08 HR", `${rolePrefix}_hr`);
-  await grantPermissions(org.orgId, hrId, ["hrm.compensation.read", "hrm.compensation.manage"]);
-  // A second legal entity under the same org.
-  const subB = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
-      from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-  // Readers holding the read grant under different subsidiary lenses.
-  const readerA = await createScratchUser(org.orgId, "F08 Reader A", `${rolePrefix}_reader_a`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_a`, { mode: "list", subsidiaryIds: [org.subsidiaryId] });
-  const readerB = await createScratchUser(org.orgId, "F08 Reader B", `${rolePrefix}_reader_b`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_b`, { mode: "list", subsidiaryIds: [subB] });
-  const readerSub = await createScratchUser(org.orgId, "F08 Reader Subtree", `${rolePrefix}_reader_sub`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_sub`, { mode: "subtree", subsidiaryId: org.subsidiaryId });
-  const readerNone = await createScratchUser(org.orgId, "F08 Reader None", `${rolePrefix}_reader_none`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_none`, { mode: "list", subsidiaryIds: [] });
-  // One global band so both subsidiaries cost from a known target; the
-  // burden is pinned to zero so the fenced amounts are exact.
-  const family = await createJobFamily({ orgId: org.orgId, actorId: hrId, code: "ENG", name: "Engineering" });
-  const level = await createJobLevel({
-    orgId: org.orgId,
-    actorId: hrId,
-    familyId: family.id,
-    code: "IC3",
-    name: "Engineer III",
-    rank: 3,
-    equalValueCriteria: [
-      { criterion: "skills", weight: "3" },
-      { criterion: "effort", weight: "2" },
-      { criterion: "responsibility", weight: "3" },
-      { criterion: "working_conditions", weight: "1" },
-    ],
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${subB}, ${base.org.orgId}, ${base.org.subsidiaryId}, 'Second entity', base_currency, country
+        from subsidiaries where id = ${base.org.subsidiaryId} and org_id = ${base.org.orgId}`);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_a`, { mode: "list", subsidiaryIds: [base.org.subsidiaryId] }, ["hrm.compensation.read"]);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_b`, { mode: "list", subsidiaryIds: [subB] }, ["hrm.compensation.read"]);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_sub`, { mode: "subtree", subsidiaryId: base.org.subsidiaryId }, ["hrm.compensation.read"]);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_none`, { mode: "list", subsidiaryIds: [] }, ["hrm.compensation.read"]);
+    const family = await createJobFamily({ orgId: base.org.orgId, actorId: base.hrId, code: "ENG", name: "Engineering" });
+    const level = await createJobLevel({
+      orgId: base.org.orgId,
+      actorId: base.hrId,
+      familyId: family.id,
+      code: "IC3",
+      name: "Engineer III",
+      rank: 3,
+      equalValueCriteria: [
+        { criterion: "skills", weight: "3" },
+        { criterion: "effort", weight: "2" },
+        { criterion: "responsibility", weight: "3" },
+        { criterion: "working_conditions", weight: "1" },
+      ],
+    });
+    await createPayBand({
+      orgId: base.org.orgId,
+      actorId: base.hrId,
+      scope: { familyId: family.id, levelId: level.id, employerSubsidiaryId: null, locationId: null },
+      currency: "CAD",
+      basis: "annual",
+      min: "80000",
+      target: "100000",
+      max: "120000",
+      effectiveFrom: "2020-01-01",
+      reason: "F08 band",
+    });
+    await setCompensationSettings(base.org.orgId, { burdenRate: "0" });
+    const plan = await createPlan({
+      orgId: base.org.orgId, actorId: base.hrId, name: "FY26 mixed plan",
+      fiscalPeriodFrom: "2026-01-01", fiscalPeriodTo: "2026-12-31",
+    });
+    const lineA = await createPlanLine({
+      orgId: base.org.orgId, actorId: base.hrId, planId: plan.id, kind: "create",
+      title: "Engineer III A", employerSubsidiaryId: base.org.subsidiaryId, jobLevelId: level.id,
+      plannedFte: "1", startOn: "2026-03-01", currency: "CAD", reason: "growth A",
+    });
+    const lineB = await createPlanLine({
+      orgId: base.org.orgId, actorId: base.hrId, planId: plan.id, kind: "create",
+      title: "Engineer III B", employerSubsidiaryId: subB, jobLevelId: level.id,
+      plannedFte: "0.5", startOn: "2026-03-01", currency: "CAD", reason: "growth B",
+    });
+    return { subB, planId: plan.id, lineAId: lineA.id, lineBId: lineB.id };
   });
-  await createPayBand({
-    orgId: org.orgId,
-    actorId: hrId,
-    scope: { familyId: family.id, levelId: level.id, employerSubsidiaryId: null, locationId: null },
-    currency: "CAD",
-    basis: "annual",
-    min: "80000",
-    target: "100000",
-    max: "120000",
-    effectiveFrom: "2020-01-01",
-    reason: "F08 band",
-  });
-  await setCompensationSettings(org.orgId, { burdenRate: "0" });
-  // A mixed plan: one staffing line per legal entity.
-  const plan = await createPlan({
-    orgId: org.orgId, actorId: hrId, name: "FY26 mixed plan",
-    fiscalPeriodFrom: "2026-01-01", fiscalPeriodTo: "2026-12-31",
-  });
-  const lineA = await createPlanLine({
-    orgId: org.orgId, actorId: hrId, planId: plan.id, kind: "create",
-    title: "Engineer III A", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-    plannedFte: "1", startOn: "2026-03-01", currency: "CAD", reason: "growth A",
-  });
-  const lineB = await createPlanLine({
-    orgId: org.orgId, actorId: hrId, planId: plan.id, kind: "create",
-    title: "Engineer III B", employerSubsidiaryId: subB, jobLevelId: level.id,
-    plannedFte: "0.5", startOn: "2026-03-01", currency: "CAD", reason: "growth B",
-  });
-  return { org, subB, hrId, readerA, readerB, readerSub, readerNone, planId: plan.id, lineAId: lineA.id, lineBId: lineB.id };
-}
-
-async function withHarness(rolePrefix: string, fn: (h: Harness) => Promise<void>): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness(rolePrefix);
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
 }
 
 test("F08: headcount plan lines fence salaries to the actor's subsidiary lens", { skip: !DB }, async () => {
-  await withHarness("f08_lines", async (h) => {
+  await withHarness(() => setupHeadcountScopeHarness("f08_lines"), async (h) => {
     const q = { orgId: h.org.orgId, planId: h.planId };
     // The unrestricted reader sees both staffing lines with their costed
     // figures and cost evidence.
@@ -214,7 +165,7 @@ test("F08: headcount plan lines fence salaries to the actor's subsidiary lens", 
 });
 
 test("F08: plan discovery hides scoped plans but preserves mixed-plan partial reads", { skip: !DB }, async () => {
-  await withHarness("f08_plans", async (h) => {
+  await withHarness(() => setupHeadcountScopeHarness("f08_plans"), async (h) => {
     const orgId = h.org.orgId;
     // A plan scoped to subsidiary B through the 0222 scope shape.
     const scopedB = await createPlan({

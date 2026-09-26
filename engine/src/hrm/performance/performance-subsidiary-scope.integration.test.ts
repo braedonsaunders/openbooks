@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
@@ -9,6 +8,16 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  linkPerson,
+  mkEmployment,
+  mkHr,
+  mkReporting,
+  mkReviewTemplate,
+  mkSecondSubsidiary,
+  mkVersion,
+} from "../../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
@@ -45,97 +54,18 @@ import { getExitRecord, listExitRecords, recordExit, updateExitRecord } from "./
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmPerformance}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmFeedback}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCompetencies}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
+// Shared HRM seeding helpers (feature flags, person links, scoped HR users,
+// employments, versions, reporting lines, second subsidiaries, review
+// templates) live in engine/src/testing/hrm-harness.ts; only the
+// file-specific seeders below stay local.
 
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkHr(
-  orgId: string,
-  name: string,
-  roleKey: string,
-  subsidiaryIds: string[] | null,
-): Promise<string> {
-  const userId = await createScratchUser(orgId, name, roleKey);
-  await linkPerson(orgId, userId);
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.performance.read", "hrm.performance.manage", "hrm.retention.read", "hrm.self.read", "hrm.employment.read"]'::jsonb,
-           subsidiary_restriction = ${subsidiaryIds === null ? JSON.stringify({ mode: "all" }) : JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-  return userId;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
-
-async function mkVersion(orgId: string, employmentId: string, from: string, status = "active"): Promise<void> {
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from)
-    values (${orgId}, ${employmentId}, 1, ${status}, ${from}::date)`);
-}
-
-async function mkReporting(orgId: string, employmentId: string, managerEmploymentId: string): Promise<void> {
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from)
-    values (${orgId}, ${employmentId}, ${managerEmploymentId}, 'line', ${randomUUID()}, 1, '2020-01-01'::date)
-  `);
-}
-
-async function mkSecondSubsidiary(orgId: string, parentId: string): Promise<string> {
-  // One root per org: the scratch fixture already created it, so the
-  // second legal entity hangs under the root like every other test entity.
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${id}, ${orgId}, ${parentId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-  return id;
-}
-
-async function mkTemplate(orgId: string, actorId: string): Promise<string> {
-  const templateId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${orgId}, 'Annual', '{"min": 1, "max": 5, "labels": []}'::jsonb, ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  const sectionId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
-    values (${orgId}, ${templateId}, 0, 'Impact', 'competency', ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into hrm_review_template_questions
-      (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
-    values (${orgId}, ${sectionId}, 0, 'Customer impact', 'rating_and_text', true, ${actorId}, ${actorId})
-  `);
-  return templateId;
-}
+const SCOPED_HR_PERMISSIONS = [
+  "hrm.performance.read",
+  "hrm.performance.manage",
+  "hrm.retention.read",
+  "hrm.self.read",
+  "hrm.employment.read",
+];
 
 async function mkChange(orgId: string, employmentId: string, kind: string, actorId: string): Promise<string> {
   // employment_changes carries a per-employment revision unique: successive
@@ -162,11 +92,11 @@ async function mkSide(orgId: string, label: string, subsidiaryId: string): Promi
   const userId = await createScratchUser(orgId, `Worker ${label}`, `worker_${label}`);
   const partyId = await linkPerson(orgId, userId);
   const employmentId = await mkEmployment(orgId, partyId, subsidiaryId);
-  await mkVersion(orgId, employmentId, "2020-01-01");
+  await mkVersion(orgId, employmentId, { from: "2020-01-01" });
   const managerUserId = await createScratchUser(orgId, `Manager ${label}`, `manager_${label}`);
   const managerPartyId = await linkPerson(orgId, managerUserId);
   const managerEmploymentId = await mkEmployment(orgId, managerPartyId, subsidiaryId);
-  await mkVersion(orgId, managerEmploymentId, "2020-01-01");
+  await mkVersion(orgId, managerEmploymentId, { from: "2020-01-01" });
   await mkReporting(orgId, employmentId, managerEmploymentId);
   return { userId, partyId, employmentId, managerUserId, managerPartyId, managerEmploymentId };
 }
@@ -181,20 +111,20 @@ type Harness = {
   b: Side;
 };
 
-async function setupHarness(): Promise<Harness> {
+async function setupSubsidiaryScopeHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableHrm(org.orgId);
+  await enableHrm(org.orgId, "hrmPerformance", "hrmFeedback", "hrmCompetencies");
   const subB = await mkSecondSubsidiary(org.orgId, org.subsidiaryId);
-  const hrFull = await mkHr(org.orgId, "HR Full", "hr_full", null);
-  const hrA = await mkHr(org.orgId, "HR A", "hr_a", [org.subsidiaryId]);
-  const hrB = await mkHr(org.orgId, "HR B", "hr_b", [subB]);
+  const hrFull = await mkHr(org.orgId, "HR Full", "hr_full", null, SCOPED_HR_PERMISSIONS);
+  const hrA = await mkHr(org.orgId, "HR A", "hr_a", [org.subsidiaryId], SCOPED_HR_PERMISSIONS);
+  const hrB = await mkHr(org.orgId, "HR B", "hr_b", [subB], SCOPED_HR_PERMISSIONS);
   const a = await mkSide(org.orgId, "a", org.subsidiaryId);
   const b = await mkSide(org.orgId, "b", subB);
   return { org, subB, hrFull, hrA, hrB, a, b };
 }
 
 async function openScopedCycle(h: Harness): Promise<string> {
-  const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+  const templateId = await mkReviewTemplate(h.org.orgId, h.hrFull, { name: "Annual", scaleLabels: [] });
   const cycle = await createCycle({
     orgId: h.org.orgId,
     actorId: h.hrFull,
@@ -231,7 +161,7 @@ async function submitManagerReview(h: Harness, cycleId: string, side: Side): Pro
 }
 
 test("a restricted HR calibrates and reopens only inside their legal-entity scope", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const cycleId = await openScopedCycle(h);
     const reviewId = await submitManagerReview(h, cycleId, h.a);
@@ -271,7 +201,7 @@ test("a restricted HR calibrates and reopens only inside their legal-entity scop
 });
 
 test("a restricted HR shares only inside their legal-entity scope", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const cycleId = await openScopedCycle(h);
     const reviewId = await submitManagerReview(h, cycleId, h.a);
@@ -291,7 +221,7 @@ test("a restricted HR shares only inside their legal-entity scope", { skip: !DB 
 });
 
 test("sharing waits for the cycle transition and refuses once calibration starts", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const cycleId = await openScopedCycle(h);
     const reviewId = await submitManagerReview(h, cycleId, h.a);
@@ -328,7 +258,7 @@ test("sharing waits for the cycle transition and refuses once calibration starts
 });
 
 test("a restricted HR reads only the feedback whose subject they cover", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     await writeFeedback({
       orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
@@ -350,7 +280,7 @@ test("a restricted HR reads only the feedback whose subject they cover", { skip:
 });
 
 test("a restricted HR moves only the cycles they cover", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const cycleId = await openScopedCycle(h);
     // HR-B cannot force calibration on an A-scoped cycle — the scope
@@ -379,9 +309,9 @@ test("a restricted HR moves only the cycles they cover", { skip: !DB }, async ()
 });
 
 test("restricted HR must choose a legal entity when creating a review cycle", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
-    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const templateId = await mkReviewTemplate(h.org.orgId, h.hrFull, { name: "Annual", scaleLabels: [] });
     await assert.rejects(
       createCycle({
         orgId: h.org.orgId,
@@ -413,9 +343,9 @@ test("restricted HR must choose a legal entity when creating a review cycle", { 
 });
 
 test("restricted HR cannot open an existing org-wide draft cycle", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
-    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const templateId = await mkReviewTemplate(h.org.orgId, h.hrFull, { name: "Annual", scaleLabels: [] });
     const cycle = await createCycle({
       orgId: h.org.orgId,
       actorId: h.hrFull,
@@ -446,9 +376,9 @@ test("restricted HR cannot open an existing org-wide draft cycle", { skip: !DB }
 });
 
 test("cycle department subsidiary must match cycle and actor scope", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
-    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const templateId = await mkReviewTemplate(h.org.orgId, h.hrFull, { name: "Annual", scaleLabels: [] });
     const departmentId = (await db.execute<{ id: string }>(sql`
       insert into departments (org_id, name, subsidiary_id)
       values (${h.org.orgId}, 'B-only department', ${h.subB}) returning id
@@ -494,9 +424,9 @@ test("cycle department subsidiary must match cycle and actor scope", { skip: !DB
 });
 
 test("restricted HR cycle lists and details hide other subsidiaries and scope org-wide progress", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
-    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const templateId = await mkReviewTemplate(h.org.orgId, h.hrFull, { name: "Annual", scaleLabels: [] });
     const cycleB = await createCycle({
       orgId: h.org.orgId,
       actorId: h.hrFull,
@@ -549,9 +479,9 @@ test("restricted HR cycle lists and details hide other subsidiaries and scope or
 });
 
 test("goal creation refuses a cycle whose scope excludes the subject employment", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
-    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const templateId = await mkReviewTemplate(h.org.orgId, h.hrFull, { name: "Annual", scaleLabels: [] });
     const cycle = await createCycle({
       orgId: h.org.orgId,
       actorId: h.hrFull,
@@ -586,7 +516,7 @@ test("goal creation refuses a cycle whose scope excludes the subject employment"
 });
 
 test("subject-facing reads strip the calibration justification; HR and reviewer keep it", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const cycleId = await openScopedCycle(h);
     const reviewId = await submitManagerReview(h, cycleId, h.a);
@@ -616,7 +546,7 @@ test("subject-facing reads strip the calibration justification; HR and reviewer 
 });
 
 test("share and acknowledge responses apply the caller's review privacy projection", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const cycleId = await openScopedCycle(h);
     const reviewId = await submitManagerReview(h, cycleId, h.a);
@@ -640,7 +570,7 @@ test("share and acknowledge responses apply the caller's review privacy projecti
 });
 
 test("fulfilling a request twice returns the one fulfilment", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const request = await writeFeedback({
       orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
@@ -676,7 +606,7 @@ test("fulfilling a request twice returns the one fulfilment", { skip: !DB }, asy
 });
 
 test("a restricted HR retracts feedback only inside their legal-entity scope", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     await assert.rejects(writeFeedback({
       orgId: h.org.orgId, actorId: h.hrA, subjectEmploymentId: h.b.employmentId,
@@ -711,7 +641,7 @@ test("a restricted HR retracts feedback only inside their legal-entity scope", {
 });
 
 test("a restricted HR fulfils requests only inside their legal-entity scope", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const request = await writeFeedback({
       orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.b.employmentId,
@@ -760,13 +690,13 @@ async function mkLeaver(
   const userId = await createScratchUser(h.org.orgId, `Leaver ${label}`, key);
   const partyId = await linkPerson(h.org.orgId, userId);
   const employmentId = await mkEmployment(h.org.orgId, partyId, subsidiaryId);
-  await mkVersion(h.org.orgId, employmentId, "2026-01-01", "terminated");
+  await mkVersion(h.org.orgId, employmentId, { from: "2026-01-01", status: "terminated" });
   return { employmentId };
 }
 
 
 test("a restricted HR reads only the exit records they cover", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const leaverA = await mkLeaver(h, "leaver-a", h.org.subsidiaryId);
     const leaverB = await mkLeaver(h, "leaver-b", h.subB);
@@ -806,7 +736,7 @@ test("a restricted HR reads only the exit records they cover", { skip: !DB }, as
 });
 
 test("a divergent second fulfilment is refused, never silently dropped", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const request = await writeFeedback({
       orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
@@ -869,7 +799,7 @@ test("a divergent second fulfilment is refused, never silently dropped", { skip:
 });
 
 test("HR-A's turnover and overview count only A's leavers and gaps", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const leaverA = await mkLeaver(h, "t-a", h.org.subsidiaryId);
     await recordExit({
@@ -915,7 +845,7 @@ test("HR-A's turnover and overview count only A's leavers and gaps", { skip: !DB
 });
 
 test("the termination link must be this employment's own termination", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const leaverA = await mkLeaver(h, "leaver-a", h.org.subsidiaryId);
     const leaverB = await mkLeaver(h, "leaver-b", h.subB);
@@ -960,7 +890,7 @@ test("the termination link must be this employment's own termination", { skip: !
 });
 
 test("corrections clear explicit nulls, require the read revision, and append audit events", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const leaver = await mkLeaver(h, "leaver", h.org.subsidiaryId);
     const exit = await recordExit({
@@ -1010,10 +940,10 @@ test("corrections clear explicit nulls, require the read revision, and append au
 });
 
 test("a restricted HR reads only the competency profiles they cover", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     // Org-wide cycle so both sides hold a calibrated, shared manager review.
-    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const templateId = await mkReviewTemplate(h.org.orgId, h.hrFull, { name: "Annual", scaleLabels: [] });
     const sectionId = (await db.execute<{ id: string }>(sql`
       select id from hrm_review_template_sections
        where org_id = ${h.org.orgId} and template_id = ${templateId}`)).rows[0]!.id;
@@ -1105,7 +1035,7 @@ test("a restricted HR reads only the competency profiles they cover", { skip: !D
 });
 
 test("competency framework reads and writes obey the subsidiary applicability", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupSubsidiaryScopeHarness();
   try {
     const frameworkA = await createFramework({
       orgId: h.org.orgId, actorId: h.hrFull, name: "A framework",

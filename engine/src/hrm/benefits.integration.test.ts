@@ -9,8 +9,18 @@ import {
   createScratchUser,
   dropScratchOrg,
   seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  grantPermissions,
+  linkPerson,
+  seedComponent,
+  seedEmployment,
+  seedPlan,
+  seedWindow,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate } from "../flows/gates.ts";
 import {
@@ -65,154 +75,13 @@ installEngineSeams();
  * values alone; every refusal asserts the writes that must NOT exist.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-type Harness = {
-  org: ScratchOrg;
-  adminId: string;
-  employeeId: string;
-  outsiderId: string;
-};
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string, partyId?: string): Promise<string> {
-  const id = partyId ?? randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${`Person ${id.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${id} where id = ${userId} and org_id = ${orgId}`);
-  return id;
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const adminId = await createScratchUser(org.orgId, "Benefits Admin", "benefits_admin");
-  const employeeId = await createScratchUser(org.orgId, "Benefits Employee", "benefits_employee");
-  const outsiderId = await createScratchUser(org.orgId, "Benefits Outsider", "benefits_outsider");
-  await grantPermissions(org.orgId, adminId, ["hrm.benefits.read", "hrm.benefits.manage"]);
-  await grantPermissions(org.orgId, employeeId, ["hrm.benefits.read"]);
-  await linkPerson(org.orgId, adminId);
-  await linkPerson(org.orgId, outsiderId);
-  return { org, adminId, employeeId, outsiderId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function seedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  opts: { workerPartyId?: string; status?: string; from?: string; to?: string | null } = {},
-): Promise<{ employmentId: string; workerPartyId: string }> {
-  const workerPartyId = opts.workerPartyId ?? randomUUID();
-  if (!opts.workerPartyId) {
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${workerPartyId}, ${orgId}, 'person', 'Benefits Worker', true, '{}'::jsonb)
-    `);
-  }
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, ${opts.status ?? "active"}, ${opts.from ?? "2020-01-01"}::date, ${opts.to ?? null}::date, now())
-  `);
-  return { employmentId, workerPartyId };
-}
-
-async function seedComponent(orgId: string, code: string, kind: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into pay_components (id, org_id, code, name, kind, is_active)
-    values (${id}, ${orgId}, ${code}, ${code}, ${kind}, true)
-  `);
-  return id;
-}
-
-interface PlanSeed {
-  readonly planId: string;
-  readonly employeeComponentId: string;
-  readonly employerComponentId: string;
-}
-
-async function seedPlan(
-  orgId: string,
-  overrides: Record<string, unknown> = {},
-): Promise<PlanSeed> {
-  const employeeComponentId = await seedComponent(orgId, `DED_${randomUUID().slice(0, 6)}`, "deduction");
-  const employerComponentId = await seedComponent(orgId, `ER_${randomUUID().slice(0, 6)}`, "employer_contribution");
-  const planId = randomUUID();
-  const code = `MED_${randomUUID().slice(0, 6)}`;
-  await db.execute(sql`
-    insert into hrm_benefit_plans
-      (id, org_id, code, name, kind, currency, employee_cost_basis, employee_cost,
-       employer_cost_basis, employer_cost, employee_pay_component_id,
-       employer_pay_component_id, proration_basis, waiting_period_days,
-       requires_approval, is_active, effective_from)
-    values (${planId}, ${orgId}, ${code}, ${code}, 'health', 'USD',
-            'per_month', '250.0000', 'per_month', '500.0000',
-            ${employeeComponentId}, ${employerComponentId},
-            'full_month', 0, false, true, '2020-01-01')
-  `);
-  if (overrides.levels === true) {
-    await db.execute(sql`
-      insert into hrm_benefit_plan_levels (org_id, plan_id, level_key, label, employee_cost, employer_cost, position)
-      values (${orgId}, ${planId}, 'single', 'Employee only', '250.0000', '500.0000', 0),
-             (${orgId}, ${planId}, 'family', 'Family', '600.0000', '900.0000', 1)
-    `);
-  }
-  for (const [column, value] of Object.entries(overrides)) {
-    if (column === "levels") continue;
-    await db.execute(sql`
-      update hrm_benefit_plans set ${sql.identifier(column)} = ${value as string}
-       where org_id = ${orgId} and id = ${planId}
-    `);
-  }
-  return { planId, employeeComponentId, employerComponentId };
-}
-
-async function seedWindow(
-  orgId: string,
-  overrides: { status?: string; kind?: string; opensOn?: string; closesOn?: string } = {},
-): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into hrm_enrollment_windows
-      (id, org_id, name, kind, opens_on, closes_on, plan_year_start_on, applies_to, status)
-    values (${id}, ${orgId}, ${`Window ${id.slice(0, 6)}`},
-            ${overrides.kind ?? "open_enrollment"}, ${overrides.opensOn ?? "2026-01-01"}::date,
-            ${overrides.closesOn ?? "2026-12-31"}::date, '2026-01-01'::date,
-            '{}'::jsonb, ${overrides.status ?? "open"})
-  `);
-  return id;
-}
+const BENEFITS_SPEC = {
+  users: [
+    { key: "adminId", name: "Benefits Admin", handle: "benefits_admin", permissions: ["hrm.benefits.read", "hrm.benefits.manage"], link: true },
+    { key: "employeeId", name: "Benefits Employee", handle: "benefits_employee", permissions: ["hrm.benefits.read"] },
+    { key: "outsiderId", name: "Benefits Outsider", handle: "benefits_outsider", link: true },
+  ],
+} as const;
 
 async function seedSchedule(orgId: string, periodsPerYear: number): Promise<string> {
   const id = randomUUID();
@@ -286,7 +155,7 @@ async function enrollmentCount(orgId: string): Promise<number> {
 }
 
 test("migration 0197 bootstraps: eight tables, RLS forced, 0194 intact", { skip: !DB }, async () => {
-  await withHarness(async () => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async () => {
     const tables = [
       "hrm_benefit_plans",
       "hrm_benefit_plan_levels",
@@ -334,8 +203,8 @@ test("migration 0197 bootstraps: eight tables, RLS forced, 0194 intact", { skip:
 });
 
 test("elect happy path stores basis amounts and evidences activation", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId);
     const windowId = await seedWindow(h.org.orgId);
     const dto = await electEnrollment({
@@ -361,8 +230,8 @@ test("elect happy path stores basis amounts and evidences activation", { skip: !
 });
 
 test("approval-required plans pend then approve; double approve refused", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId, { requires_approval: true });
     const windowId = await seedWindow(h.org.orgId);
     const dto = await electEnrollment({
@@ -385,8 +254,8 @@ test("approval-required plans pend then approve; double approve refused", { skip
 });
 
 test("elect refusals leave no rows: plan, employment, window, tier, component", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId);
     const windowId = await seedWindow(h.org.orgId);
     const base = {
@@ -404,7 +273,7 @@ test("elect refusals leave no rows: plan, employment, window, tier, component", 
       /no employment episode covers/,
       count,
     );
-    const { employmentId: terminatedId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { status: "terminated" });
+    const { employmentId: terminatedId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { status: "terminated", displayName: "Benefits Worker" });
     await assertBenefitsRefusal(
       () => electEnrollment({ ...base, employmentId: terminatedId }),
       /is terminated on/,
@@ -492,7 +361,7 @@ test("elect refusals leave no rows: plan, employment, window, tier, component", 
       /names no employee pay component/,
       async () => (await enrollmentCount(h.org.orgId)) - 2,
     );
-    const wrongKind = await seedComponent(h.org.orgId, `W_${randomUUID().slice(0, 6)}`, "deduction");
+    const wrongKind = await seedComponent(h.org.orgId, { code: `W_${randomUUID().slice(0, 6)}`, kind: "deduction" });
     const badEmployer = await seedPlan(h.org.orgId, {});
     await db.execute(sql`update hrm_benefit_plans set employer_pay_component_id = ${wrongKind} where id = ${badEmployer.planId}`);
     await assertBenefitsRefusal(
@@ -504,8 +373,8 @@ test("elect refusals leave no rows: plan, employment, window, tier, component", 
 });
 
 test("waive evidences decline; reason required", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId);
     const windowId = await seedWindow(h.org.orgId);
     const dto = await waiveEnrollment({
@@ -536,8 +405,8 @@ test("waive evidences decline; reason required", { skip: !DB }, async () => {
 });
 
 test("change ends and opens anew; end and cancel hold their boundaries", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId, { levels: true });
     const windowId = await seedWindow(h.org.orgId);
     const first = await electEnrollment({
@@ -611,7 +480,7 @@ test("change ends and opens anew; end and cancel hold their boundaries", { skip:
 });
 
 test("windows open with overlap refusal; close cancels pendings with events", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
     const draftId = await seedWindow(h.org.orgId, { status: "draft" });
     const opened = await openEnrollmentWindow({ orgId: h.org.orgId, actorId: h.adminId, windowId: draftId });
     assert.equal(opened.status, "open");
@@ -625,7 +494,7 @@ test("windows open with overlap refusal; close cancels pendings with events", { 
       (e: unknown) => e instanceof BenefitsError && /overlaps open window/.test(e.message),
     );
     // Pending election cancelled with its own event on close.
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId, { requires_approval: true });
     const pending = await electEnrollment({
       orgId: h.org.orgId,
@@ -655,8 +524,8 @@ test("windows open with overlap refusal; close cancels pendings with events", { 
 });
 
 test("generation writes monthly rows, prorates daily, idempotent on retry", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const seed = await seedPlan(h.org.orgId, {});
     const windowId = await seedWindow(h.org.orgId);
     const dto = await electEnrollment({
@@ -699,8 +568,8 @@ test("generation writes monthly rows, prorates daily, idempotent on retry", { sk
 });
 
 test("concurrent generators for one month share one row per kind without aborting", async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const seed = await seedPlan(h.org.orgId, {});
     const windowId = await seedWindow(h.org.orgId);
     const dto = await electEnrollment({
@@ -734,8 +603,8 @@ test("concurrent generators for one month share one row per kind without abortin
 });
 
 test("generation converts per_period by schedule and refuses guesses", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const windowId = await seedWindow(h.org.orgId);
     const periodic = await seedPlan(h.org.orgId, { employee_cost_basis: "per_period", employer_cost_basis: "per_period" });
     await db.execute(sql`
@@ -786,8 +655,8 @@ test("generation converts per_period by schedule and refuses guesses", { skip: !
 });
 
 test("consumed months refuse, voided months stay voided, void keeps the link", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId);
     const windowId = await seedWindow(h.org.orgId);
     const dto = await electEnrollment({
@@ -859,9 +728,9 @@ async function inputIdOf(enrollmentId: string, kind: string): Promise<string> {
 }
 
 test("dependents link within one employment and refuse across it", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const empA = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
-    const empB = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const empA = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
+    const empB = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId);
     const windowId = await seedWindow(h.org.orgId);
     const election = await electEnrollment({
@@ -904,7 +773,7 @@ test("dependents link within one employment and refuse across it", { skip: !DB }
 });
 
 test("termination ends live enrolments in the same transaction", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
     await grantPermissions(h.org.orgId, h.adminId, ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"]);
     const deciderId = await createScratchUser(h.org.orgId, "Benefits Decider", "benefits_decider");
     await grantPermissions(h.org.orgId, deciderId, ["hrm.employment.read", "hrm.employment.approve"]);
@@ -995,7 +864,7 @@ test("termination ends live enrolments in the same transaction", { skip: !DB }, 
 });
 
 test("RLS isolates orgs and self scope holds", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const { planId } = await seedPlan(h.org.orgId);
@@ -1010,7 +879,7 @@ test("RLS isolates orgs and self scope holds", { skip: !DB }, async () => {
       selfService: true,
     });
     assert.equal(mine.status, "active");
-    const { employmentId: otherId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { employmentId: otherId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     await assert.rejects(
       electEnrollment({
         orgId: h.org.orgId,
@@ -1023,10 +892,10 @@ test("RLS isolates orgs and self scope holds", { skip: !DB }, async () => {
       }),
       (e: unknown) => e instanceof HrmAuthorizationError && /your own employment/.test(e.message),
     );
-    const own = await withOrgContext(h.org.orgId, () => myEnrollments(db, h.org.orgId, h.employeeId));
+    const own = await withOrgTransaction(h.org.orgId, () => myEnrollments(db, h.org.orgId, h.employeeId));
     assert.deepEqual(own.map((e) => e.id), [mine.id]);
     await assert.rejects(
-      withOrgContext(h.org.orgId, () => listEnrollments(db, h.org.orgId, h.outsiderId)),
+      withOrgTransaction(h.org.orgId, () => listEnrollments(db, h.org.orgId, h.outsiderId)),
       (e: unknown) => e instanceof HrmAuthorizationError,
     );
     // Second org sees zero rows at the storage floor.
@@ -1047,13 +916,9 @@ test("RLS isolates orgs and self scope holds", { skip: !DB }, async () => {
   });
 });
 
-async function withOrgContext<T>(orgId: string, fn: () => Promise<T>): Promise<T> {
-  return withOrgTransaction(orgId, fn);
-}
-
 test("storage guards refuse event rewrites and history deletes", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId);
     const windowId = await seedWindow(h.org.orgId);
     const dto = await electEnrollment({

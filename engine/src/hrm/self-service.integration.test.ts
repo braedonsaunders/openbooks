@@ -8,9 +8,16 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  gateOf,
+  grantPermissions,
+  linkPerson,
+  seedFlow,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { decideGate, ReleaseError } from "../flows/gates.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
@@ -43,50 +50,20 @@ installEngineSeams();
  * profile_changed event with its before-images.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-type Harness = {
-  org: ScratchOrg;
-  personAId: string;
-  personBId: string;
-  managerId: string;
-  manager2Id: string;
-  hrId: string;
-  hr2Id: string;
-  noLinkId: string;
-  partyA: string;
-  partyB: string;
-  partyM: string;
-  partyM2: string;
-  partyHR: string;
-  employmentA: string;
-  employmentB: string;
-  employmentM: string;
-  employmentM2: string;
-  employmentC: string;
-};
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string, displayName: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${displayName}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
 
 /** A live employment identity with one active version from 2026-01-01. */
+const SELF_SERVICE_SPEC = {
+  users: [
+    { key: "personAId", name: "Self Person A", handle: "self_a", permissions: ["hrm.self.read", "hrm.self.request"], link: "Person A", partyKey: "partyA" },
+    { key: "personBId", name: "Self Person B", handle: "self_b", permissions: ["hrm.self.read", "hrm.self.request"], link: "Person B", partyKey: "partyB" },
+    { key: "managerId", name: "Self Manager", handle: "self_mgr", permissions: ["hrm.self.read"], link: "Manager M", partyKey: "partyM" },
+    { key: "manager2Id", name: "Self Manager Two", handle: "self_mgr2", permissions: ["hrm.self.read"], link: "Manager Two", partyKey: "partyM2" },
+    { key: "hrId", name: "Self HR", handle: "self_hr", permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"], link: "HR Decider", partyKey: "partyHR" },
+    { key: "hr2Id", name: "Self HR Two", handle: "self_hr2", permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"], link: "HR Decider Two" },
+    { key: "noLinkId", name: "Self No Link", handle: "self_nolink", permissions: ["hrm.self.read", "hrm.self.request"] },
+  ],
+} as const;
+
 async function seedLiveEmployment(orgId: string, subsidiaryId: string, workerPartyId: string): Promise<string> {
   const employmentId = randomUUID();
   await db.execute(sql`
@@ -152,80 +129,25 @@ async function seedEmployeeStep(
   return stepId;
 }
 
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  // Self-service reads recheck the HRM feature gate inside their
-  // transaction like every other HRM read boundary.
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${org.orgId}
-  `);
-  const personAId = await createScratchUser(org.orgId, "Self Person A", "self_a");
-  const personBId = await createScratchUser(org.orgId, "Self Person B", "self_b");
-  const managerId = await createScratchUser(org.orgId, "Self Manager", "self_mgr");
-  const manager2Id = await createScratchUser(org.orgId, "Self Manager Two", "self_mgr2");
-  const hrId = await createScratchUser(org.orgId, "Self HR", "self_hr");
-  const hr2Id = await createScratchUser(org.orgId, "Self HR Two", "self_hr2");
-  const noLinkId = await createScratchUser(org.orgId, "Self No Link", "self_nolink");
-  await grantPermissions(org.orgId, personAId, ["hrm.self.read", "hrm.self.request"]);
-  await grantPermissions(org.orgId, personBId, ["hrm.self.read", "hrm.self.request"]);
-  await grantPermissions(org.orgId, managerId, ["hrm.self.read"]);
-  await grantPermissions(org.orgId, manager2Id, ["hrm.self.read"]);
-  await grantPermissions(org.orgId, hrId, ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"]);
-  await grantPermissions(org.orgId, hr2Id, ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"]);
-  await grantPermissions(org.orgId, noLinkId, ["hrm.self.read", "hrm.self.request"]);
-  const partyA = await linkPerson(org.orgId, personAId, "Person A");
-  const partyB = await linkPerson(org.orgId, personBId, "Person B");
-  const partyM = await linkPerson(org.orgId, managerId, "Manager M");
-  const partyM2 = await linkPerson(org.orgId, manager2Id, "Manager Two");
-  const partyHR = await linkPerson(org.orgId, hrId, "HR Decider");
-  await linkPerson(org.orgId, hr2Id, "HR Decider Two");
-  // noLinkId deliberately keeps users.party_id null.
-  const employmentA = await seedLiveEmployment(org.orgId, org.subsidiaryId, partyA);
-  const employmentB = await seedLiveEmployment(org.orgId, org.subsidiaryId, partyB);
-  const employmentM = await seedLiveEmployment(org.orgId, org.subsidiaryId, partyM);
-  const employmentM2 = await seedLiveEmployment(org.orgId, org.subsidiaryId, partyM2);
-  const partyC = await linkPerson(org.orgId, await createScratchUser(org.orgId, "Self Person C", "self_c"), "Person C");
-  const employmentC = await seedLiveEmployment(org.orgId, org.subsidiaryId, partyC);
-  // A reports to M; B reports to M2; C reports to A (transitive, invisible to M).
-  await seedLine(org.orgId, employmentA, employmentM);
-  await seedLine(org.orgId, employmentB, employmentM2);
-  await seedLine(org.orgId, employmentC, employmentA);
-  return {
-    org, personAId, personBId, managerId, manager2Id, hrId, hr2Id, noLinkId,
-    partyA, partyB, partyM, partyM2, partyHR,
-    employmentA, employmentB, employmentM, employmentM2, employmentC,
-  };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function seedFlow(orgId: string, ...approverIds: string[]): Promise<void> {
-  await seedApprovalFlow(orgId, {
-    subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
-    assignees: approverIds.map((userId) => ({ type: "user" as const, userId })),
-    mode: "any",
+async function setupSelfServiceHarness() {
+  return setupHarness(SELF_SERVICE_SPEC, async (base) => {
+    const employmentA = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyA);
+    const employmentB = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyB);
+    const employmentM = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyM);
+    const employmentM2 = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, base.partyM2);
+    const personCId = await createScratchUser(base.org.orgId, "Self Person C", "self_c");
+    const partyC = await linkPerson(base.org.orgId, personCId, "Person C");
+    const employmentC = await seedLiveEmployment(base.org.orgId, base.org.subsidiaryId, partyC);
+    // A reports to M; B reports to M2; C reports to A (transitive, invisible to M).
+    await seedLine(base.org.orgId, employmentA, employmentM);
+    await seedLine(base.org.orgId, employmentB, employmentM2);
+    await seedLine(base.org.orgId, employmentC, employmentA);
+    return { employmentA, employmentB, employmentM, employmentM2, employmentC };
   });
 }
 
-async function gateOf(requestId: string): Promise<{ id: string; status: string }> {
-  const rows = (await db.execute<{ id: string; status: string }>(sql`
-    select id, status from flow_gates where subject_id = ${requestId} order by created_at
-  `)).rows;
-  assert.equal(rows.length, 1, "exactly one gate decides the request");
-  return rows[0]!;
-}
-
 test("no linked person is a named refusal, never an empty page", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
     for (const call of [
       () => getMyProfile({ orgId: h.org.orgId, actorId: h.noLinkId }),
       () => getMySteps({ orgId: h.org.orgId, actorId: h.noLinkId }),
@@ -248,7 +170,7 @@ test("no linked person is a named refusal, never an empty page", { skip: !DB }, 
 });
 
 test("self scope: a second person's rows are never returned", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
     const stepA = await seedEmployeeStep(h.org.orgId, h.employmentA, "Acknowledge the handbook");
     await seedEmployeeStep(h.org.orgId, h.employmentB, "B's private step");
     const profile = await getMyProfile({ orgId: h.org.orgId, actorId: h.personAId });
@@ -269,7 +191,7 @@ test("self scope: a second person's rows are never returned", { skip: !DB }, asy
 });
 
 test("RLS hides one org's self-service rows from another org's session", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
     const foreign = await createScratchOrg();
     try {
       // Raw constrained sessions (no test bypass): the policy itself is the
@@ -299,7 +221,7 @@ test("RLS hides one org's self-service rows from another org's session", { skip:
 });
 
 test("team scope: a manager of A is not a manager of B, and a report's report is not visible", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
     assert.equal(await actorHasTeam({ orgId: h.org.orgId, actorId: h.managerId }), true);
     const teamM = await getTeamView({ orgId: h.org.orgId, actorId: h.managerId });
     assert.deepEqual(teamM.reports.map((row) => row.employmentId), [h.employmentA]);
@@ -324,7 +246,7 @@ test("team scope: a manager of A is not a manager of B, and a report's report is
 });
 
 test("a manager reads a direct report's employment record, and nothing else", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
     const { getEmploymentRecord } = await import("./employment-read.ts");
     const record = await getEmploymentRecord({
       orgId: h.org.orgId, actorId: h.managerId, employmentId: h.employmentA,
@@ -358,8 +280,8 @@ test("a manager reads a direct report's employment record, and nothing else", { 
 });
 
 test("profile_change files, approves, and applies onto the party with evidence", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.hrId);
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
+    await seedFlow(h.org.orgId, [h.hrId]);
     const revisionBefore = (await db.execute<{ revision: number }>(sql`
       select revision from worker_employments where id = ${h.employmentA}
     `)).rows[0]!.revision;
@@ -411,8 +333,8 @@ test("profile_change files, approves, and applies onto the party with evidence",
 });
 
 test("a stale profile approval refuses with the party untouched", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    await seedFlow(h.org.orgId, h.hrId, h.hr2Id);
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
+    await seedFlow(h.org.orgId, [h.hrId, h.hr2Id]);
     const filed = await fileProfileChangeRequest({
       orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
       changes: { kind: "profile_change", phone: "+1 555 0199" },
@@ -461,7 +383,7 @@ test("a stale profile approval refuses with the party untouched", { skip: !DB },
 });
 
 test("authoring gates are kind-aware in both directions", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
     // HR holds employment.manage but no self grant: a profile draft refuses
     // with the authorization remedy (an HrmAuthorizationError, the same
     // class every other permission refusal in this service carries).
@@ -503,7 +425,7 @@ test("authoring gates are kind-aware in both directions", { skip: !DB }, async (
     // HR reads every row including profile proposals; the person reads
     // their own proposal but never another's. The submit inside filing
     // needs the approval flow seeded like every other submit.
-    await seedFlow(h.org.orgId, h.hrId);
+    await seedFlow(h.org.orgId, [h.hrId]);
     await grantPermissions(h.org.orgId, h.personAId, ["hrm.self.read"]);
     const { getChangeRequest } = await import("./change-requests.ts");
     const filed = await fileProfileChangeRequest({
