@@ -79,6 +79,7 @@ interface PostedFixture {
   employeeId: string
   cogs: string
   id: string
+  control: { ar: string; ap: string; bank: string; employeePayable: string }
   cleanup: () => Promise<void>
 }
 
@@ -129,16 +130,17 @@ async function postedFixture(opts: { stopBeforePosting?: boolean } = {}): Promis
     await db.execute(sql`delete from users where org_id = ${org.orgId}`)
     await db.execute(sql`delete from app_roles where org_id = ${org.orgId}`)
   }
-  if (opts.stopBeforePosting) return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, cleanup }
-  await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable } })
+  const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable }
+  if (opts.stopBeforePosting) return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
+  await postDocument(id, { control })
   assert.equal(await statusOf(id), 'posted')
-  return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, cleanup }
+  return { orgId: org.orgId, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
 }
 
 const REASON = 'correct the travel total after the final receipts arrived'
 
 test('correct creates the correcting revision and voids the posted source', async () => {
-  const { actorId, cogs, id, cleanup } = await postedFixture()
+  const { actorId, cogs, id, control, cleanup } = await postedFixture()
   try {
     as(actorId)
     const response = await correct(id, {
@@ -173,6 +175,52 @@ test('correct creates the correcting revision and voids the posted source', asyn
     )).rows[0]
     assert.equal(link?.linkType, 'reverses')
     assert.equal(link?.reason, REASON)
+    // The void is an exact append-only reversal: the reversal entry mirrors
+    // the source entry line for line with debits and credits swapped, and
+    // source, reversal, and replacement entries are all retained.
+    const sourceEntry = (await db.execute<{ id: string }>(
+      sql`select posted_entry_id as id from documents where id = ${id} and org_id = ${state.orgId}`,
+    )).rows[0]!.id
+    const reversalEntry = (await db.execute<{ id: string }>(
+      sql`select id from journal_entries where reverses_entry_id = ${sourceEntry} and org_id = ${state.orgId}`,
+    )).rows[0]?.id
+    assert.ok(reversalEntry, 'the void posts a reversal entry linked to the source entry')
+    type EntryLine = { account: string; amount: string; txn: string }
+    const entryLines = async (entryId: string): Promise<EntryLine[]> =>
+      (await db.execute<EntryLine>(sql`select account_id as account, amount::text as amount, txn_amount::text as txn
+        from journal_lines where entry_id = ${entryId} and org_id = ${state.orgId} order by line_number`)).rows
+    const sourceLines = await entryLines(sourceEntry)
+    assert.ok(sourceLines.length > 0, 'the source entry carries lines')
+    const negate = (v: string): string => (v.startsWith('-') ? v.slice(1) : `-${v}`)
+    assert.deepEqual(
+      await entryLines(reversalEntry),
+      sourceLines.map((l) => ({ account: l.account, amount: negate(l.amount), txn: negate(l.txn) })),
+    )
+    await withOrgContext(state.orgId, () => submitAndReleaseIfUngated('expense_report', correctionId, actorId))
+    const replacementEntry = await postDocument(correctionId, { control })
+    assert.equal(await statusOf(correctionId), 'posted')
+    const retained = (await db.execute<{ id: string; status: string }>(
+      sql`select id, status from journal_entries
+        where id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}`,
+    )).rows
+    const byId = (rows: { id: string; status: string }[]) =>
+      rows.map((r) => [r.id, r.status] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    assert.deepEqual(
+      byId(retained),
+      byId([
+        { id: sourceEntry, status: 'reversed' },
+        { id: reversalEntry, status: 'posted' },
+        { id: replacementEntry, status: 'posted' },
+      ]),
+    )
+    const net = (await db.execute<{ account: string; amount: string }>(
+      sql`select account_id as account, sum(amount)::text as amount from journal_lines
+        where entry_id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}
+        group by account_id having sum(amount) <> 0 order by account_id`,
+    )).rows
+    const byAccount = (rows: { account: string; amount: string }[]) =>
+      rows.map((r) => [r.account, r.amount] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    assert.deepEqual(byAccount(net), byAccount(await entryLines(replacementEntry)))
   } finally {
     await cleanup()
   }
