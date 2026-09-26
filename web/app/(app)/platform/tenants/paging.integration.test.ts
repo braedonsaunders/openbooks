@@ -5,10 +5,10 @@ import test from 'node:test'
 // Tenants list paging — platformOrganizations must page in SQL (limit/offset)
 // with a stable total, because the list renders server-side from whatever the
 // loader returns: a loader that ignored the page would present a partial
-// fleet as the whole. Seeds more organizations than one page holds and
-// asserts page two returns the NEXT rows, the total equals the seeded count,
-// and an out-of-range page returns an empty window with the same total (the
-// house Pagination then offers the last page — the out-of-range rule).
+// fleet as the whole. Seeds three tenants over two pages (within the shared
+// fixture pool budget) and asserts page two returns the NEXT rows, the total
+// equals the seeded count, and an out-of-range page returns an empty window
+// with the same total (the house Pagination then offers the last page).
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -36,8 +36,8 @@ const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src
 const { platformOrganizations } = await import('../../../../lib/platform-admin.ts')
 
 const PREFIX = 'W93T'
-const ORGS = 7
-const PAGE_SIZE = 5
+const ORGS = 3
+const PAGE_SIZE = 2
 
 function orgName(i: number): string {
   return `${PREFIX} Org ${String(i).padStart(2, '0')}`
@@ -109,11 +109,11 @@ test('tenants list pages in sort order with a stable total', async () => {
 
     // The pager total must be the FILTERED count: a search narrowing the
     // table to one row must report one, never the unfiltered fleet size.
-    const narrowed = await platformOrganizations({ q: orgName(3), page: 1, perPage: 50, dir: 'asc', sort: 'name' })
+    const narrowed = await platformOrganizations({ q: orgName(2), page: 1, perPage: 50, dir: 'asc', sort: 'name' })
     assert.equal(narrowed.total, 1, 'a search matching one row reports a total of one')
     assert.deepEqual(
       narrowed.rows.map((row) => row.name),
-      [orgName(3)],
+      [orgName(2)],
       'the narrowed window holds exactly the matching row',
     )
 
