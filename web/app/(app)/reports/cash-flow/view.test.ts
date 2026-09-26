@@ -2,21 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CashFlowData } from './view'
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    // Platform boundary, not our own module: lets the unit partition import
-    // the pure spec builder without a Next server runtime.
-    if (specifier === 'server-only') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default {}',
-      }
-    }
-    return next(specifier, context)
-  },
-})
-
 const { cashFlowSpec } = await import('./view')
 
 // enabling Multi-subsidiary crashed the cash flow statement with

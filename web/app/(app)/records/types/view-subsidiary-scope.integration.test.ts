@@ -21,18 +21,11 @@ const mockIntl = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/records/types/')) {
       return { url: 'mock:record-type-view-scope-authz', shortCircuit: true }
     }
     if (specifier === 'next-intl/server') {
       return { url: 'mock:record-type-view-scope-intl', shortCircuit: true }
-    }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 5)
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context)
     }
     if (context.parentURL?.startsWith('mock:')) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url })

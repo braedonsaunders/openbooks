@@ -3,15 +3,13 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// Page loaders import server-only and Next navigation helpers; stub the
-// module boundary so the loader loads under plain node (the journal drawer
-// and ref-options vendors tests stub them the same way). Only the refusal
-// path runs here — no translations, no session — so the stubs never fire.
+// Page loaders import the server-only marker (stubbed by the shared test
+// hooks) and Next navigation helpers; stub the navigation boundary so the
+// loader loads under plain node (the journal drawer and ref-options vendors
+// tests stub them the same way). Only the refusal path runs here — no
+// translations, no session — so the stubs never fire.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next/navigation') {
       return {
         shortCircuit: true,

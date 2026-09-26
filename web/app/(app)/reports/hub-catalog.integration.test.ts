@@ -35,9 +35,6 @@ const mockIntl = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../lib/authz' && context.parentURL?.includes('/reports/view.ts')) {
       return { url: 'mock:hub-catalog-authz', shortCircuit: true }
     }

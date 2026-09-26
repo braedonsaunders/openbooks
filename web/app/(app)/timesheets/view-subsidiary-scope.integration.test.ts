@@ -24,7 +24,6 @@ const mockHrmRails = `export async function loadOpenFlagsForWeek() { return [] }
 
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:timesheets-scope-intl' }
     if (specifier === '../../../lib/authz') return { shortCircuit: true, url: 'mock:timesheets-scope-authz' }
     if (specifier === '../../../lib/features') return { shortCircuit: true, url: 'mock:timesheets-scope-features' }

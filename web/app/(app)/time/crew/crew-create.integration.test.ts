@@ -14,17 +14,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import type { SessionUser } from '../../../../lib/auth'
 
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __crewCreate: session })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === 'next-intl/server') {
       return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en'}" }
     }
@@ -34,7 +31,6 @@ registerHooks({
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__crewCreate.user}' }
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

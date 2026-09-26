@@ -69,9 +69,6 @@ const FEATURES_MOCK = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(NAV_MOCK) };
     }
