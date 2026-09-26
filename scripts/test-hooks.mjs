@@ -26,3 +26,33 @@ registerHooks({
     return nextLoad(url, context)
   },
 })
+
+// Per-file registration receipt. scripts/test-suite.mjs also loads this
+// module as a test reporter (`--test-reporter ./scripts/test-hooks.mjs`)
+// so every shard accounts for its own files.
+//
+// Neither the spec nor the TAP reporter names the files that passed: both
+// print test names only, and spec adds a file path solely for a file that
+// fails to load. The test event stream is the only per-file signal. Every
+// genuine test node (pass, fail, skip, todo) carries the entryFile of the
+// file that registered it, while the file-level pseudo events a zero-test or
+// load-dead file emits carry none. One receipt line per file, carrying its
+// path and test count, therefore proves registration file by file, including
+// the silent-zero shape (loads fine, registers nothing, exits zero) that no
+// exit code sees. scripts/verify-test-registration.mjs reads this receipt.
+export default async function* fileRegistrationReceipt(source) {
+  const counts = new Map()
+  for await (const event of source) {
+    if (event?.type !== 'test:pass' && event?.type !== 'test:fail') continue
+    const file = event?.data?.entryFile
+    if (typeof file !== 'string' || file.length === 0) continue
+    const entry = counts.get(file) ?? { tests: 0, failed: 0 }
+    entry.tests += 1
+    if (event.type === 'test:fail') entry.failed += 1
+    counts.set(file, entry)
+  }
+  for (const file of [...counts.keys()].sort()) {
+    const { tests, failed } = counts.get(file)
+    yield `${JSON.stringify({ file, tests, failed })}\n`
+  }
+}

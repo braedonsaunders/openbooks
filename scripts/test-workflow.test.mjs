@@ -61,6 +61,15 @@ test('units, database shards and simulation run independently without omitted te
   // Pinned here so all three move together or none do.
   assert.match(namedStep('Verify every test file ran exactly once'), /\['unit',\s*5,/)
   assert.match(namedStep('Verify every test file ran exactly once'), /\['integration',\s*16,/)
+  // The gate reads the registration receipt, not reporter text: spec and TAP
+  // name only tests, never the files that passed. Both shard jobs must
+  // upload the receipt their shards write.
+  const exactlyOnce = namedStep('Verify every test file ran exactly once')
+  assert.match(exactlyOnce, /scripts\/verify-test-registration\.mjs/)
+  assert.match(exactlyOnce, /\.local\/\$\{receipt\}/)
+  for (const job of ['unit', 'database']) {
+    assert.match(topLevelJob(job), /\.local\/test-file-registration\.jsonl/)
+  }
   assert.match(integration, /npm run test:integration/)
   assert.doesNotMatch(integration, /npm test\b|npm run test:unit/)
   assert.match(integration, /shard: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16\]/)
