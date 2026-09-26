@@ -9,7 +9,13 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
-import { RecruitingError } from "./errors.ts";
+import {
+  enableDepth,
+  grant,
+  linkPerson,
+  mkEmployment,
+  recruitingError,
+} from "../../testing/hrm-harness.ts";
 import {
   createRequisition,
   openRequisition,
@@ -42,41 +48,21 @@ type Harness = {
   interviewerPartyId: string;
 };
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
+const SCHEDULING_DEPTH_KEYS = [
+  "hrm",
+  "hrmRecruiting",
+  "hrmStructuredInterviews",
+  "hrmInterviewScheduling",
+];
 
-async function enableDepth(orgId: string): Promise<void> {
-  for (const key of ["hrm", "hrmRecruiting", "hrmStructuredInterviews", "hrmInterviewScheduling"] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
-async function setupHarness(): Promise<Harness> {
+async function setupSchedulingHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableDepth(org.orgId);
+  await enableDepth(org.orgId, SCHEDULING_DEPTH_KEYS);
   const recruiterId = await createScratchUser(org.orgId, "Scheduling Recruiter", "scheduling_recruiter");
   const interviewerId = await createScratchUser(org.orgId, "Scheduling Interviewer", "scheduling_interviewer");
   await grant(org.orgId, recruiterId, ["hrm.recruiting.read", "hrm.recruiting.manage"]);
-  const interviewerPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${interviewerPartyId}, ${org.orgId}, 'person', 'Scheduling Interviewer', true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${interviewerPartyId} where id = ${interviewerId} and org_id = ${org.orgId}`);
-  await db.execute(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${org.orgId}, ${interviewerPartyId}, ${org.subsidiaryId})
-  `);
+  const interviewerPartyId = await linkPerson(org.orgId, interviewerId, "Scheduling Interviewer");
+  await mkEmployment(org.orgId, interviewerPartyId, org.subsidiaryId);
   return { org, recruiterId, interviewerPartyId };
 }
 
@@ -120,13 +106,8 @@ async function seedProposed(h: Harness): Promise<{ interviewId: string; token: s
   return { interviewId: interview.id, token: proposed.bookingToken, slotId: proposed.slots[0]!.id };
 }
 
-function recruitingError(error: unknown): RecruitingError {
-  assert.ok(error instanceof RecruitingError, `expected RecruitingError, got ${String(error)}`);
-  return error;
-}
-
 test("cancelling an interview kills the outstanding booking link", async () => {
-  const h = await setupHarness();
+  const h = await setupSchedulingHarness();
   try {
     const { interviewId, token, slotId } = await seedProposed(h);
     const orgId = h.org.orgId;
@@ -165,7 +146,7 @@ test("cancelling an interview kills the outstanding booking link", async () => {
 });
 
 test("booking a cancelled interview is refused by name even when the link resolves", async () => {
-  const h = await setupHarness();
+  const h = await setupSchedulingHarness();
   try {
     const { interviewId, token, slotId } = await seedProposed(h);
     const orgId = h.org.orgId;
@@ -200,7 +181,7 @@ test("booking a cancelled interview is refused by name even when the link resolv
   }
 });
 test("public booking tokens refuse after interview scheduling is disabled", async () => {
-  const h = await setupHarness();
+  const h = await setupSchedulingHarness();
   try {
     const { token, slotId } = await seedProposed(h);
     await db.execute(sql`
@@ -227,7 +208,7 @@ test("public booking tokens refuse after interview scheduling is disabled", asyn
 });
 
 test("concurrent bookings across different slots still book only one sitting", async () => {
-  const h = await setupHarness();
+  const h = await setupSchedulingHarness();
   try {
     const { interviewId } = await seedProposed(h);
     const proposed = await proposeSlots({
@@ -257,7 +238,7 @@ test("concurrent bookings across different slots still book only one sitting", a
 });
 
 test("concurrent proposals leave only the final booking link live", async () => {
-  const h = await setupHarness();
+  const h = await setupSchedulingHarness();
   try {
     const { interviewId } = await seedProposed(h);
     const batches = await Promise.all([0, 1].map((day) => proposeSlots({

@@ -4,11 +4,13 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { createAutomation, setAutomationStatus, updateAutomation } from "./services.ts";
 import { runAutomationTick, MAX_AUTOMATION_EVENT_ATTEMPTS } from "./tick.ts";
 import { stageAutomationEvent } from "./tick.ts";
@@ -28,42 +30,20 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 type Harness = { org: ScratchOrg; adminId: string };
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
+const TICK_SPEC = {
+  features: ["hrm", "automations"],
+  users: [
+    {
+      key: "adminId",
+      name: "Tick Failure Admin",
+      handle: "tick_fail_admin",
+      permissions: ["automations.read", "automations.manage", "automations.run"],
+    },
+  ],
+} as const;
 
-async function setFeatures(orgId: string, features: Record<string, boolean>): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(
-         coalesce(settings, '{}'::jsonb), '{features}',
-         coalesce(settings -> 'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb
-       )
-     where id = ${orgId}
-  `);
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  const adminId = await createScratchUser(org.orgId, "Tick Failure Admin", "tick_fail_admin");
-  await grant(org.orgId, adminId, ["automations.read", "automations.manage", "automations.run"]);
-  await setFeatures(org.orgId, { hrm: true, automations: true });
-  return { org, adminId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await withBypassContext(() => setupHarness());
-  try {
-    await fn(h);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(h.org.orgId));
-  }
+async function setupTickHarness(): Promise<Harness> {
+  return setupHarness(TICK_SPEC);
 }
 
 async function seedEmployment(orgId: string, subsidiaryId: string, serviceStart: string): Promise<string> {
@@ -103,18 +83,25 @@ const FAILING_ACTION = { kind: "update_field", entity: "employment", field: "dep
 
 /** An org whose OLDEST active user holds no automation permission at all. */
 async function setupUnpermittedElderHarness(): Promise<Harness & { elderId: string }> {
-  return withBypassContext(async () => {
-    const org = await createScratchOrg();
-    const elderId = await createScratchUser(org.orgId, "Unpermitted Elder", "tick_elder");
-    const adminId = await createScratchUser(org.orgId, "Tick Publisher", "tick_publisher");
-    await grant(org.orgId, adminId, ["automations.read", "automations.manage", "automations.run"]);
-    await setFeatures(org.orgId, { hrm: true, automations: true });
-    return { org, adminId, elderId };
-  });
+  return withBypassContext(() =>
+    setupHarness({
+      features: ["hrm", "automations"],
+      users: [
+        // Creation order matters: the elder is the oldest user in the org.
+        { key: "elderId", name: "Unpermitted Elder", handle: "tick_elder" },
+        {
+          key: "adminId",
+          name: "Tick Publisher",
+          handle: "tick_publisher",
+          permissions: ["automations.read", "automations.manage", "automations.run"],
+        },
+      ],
+    } as const),
+  );
 }
 
 test("a date_relative scan visits every match past row 200", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupTickHarness, async (h) => {
     const today = new Date().toISOString().slice(0, 10);
     const COUNT = 210;
     // One statement seeds the whole population: parties, employments,
@@ -168,7 +155,7 @@ test("a date_relative scan visits every match past row 200", { skip: !DB }, asyn
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
     `)).rows[0]!.n;
     assert.equal(runs, COUNT, "every match past row 200 fires exactly once");
-  });
+  }, { bypass: true });
 });
 
 test("the tick fires as the publisher when the oldest user holds no permission", { skip: !DB }, async () => {
@@ -234,7 +221,7 @@ test("a publisher who lost automations.run fails loudly with the remedy", { skip
 });
 
 test("a failed schedule firing keeps its run, holds the cursor, and counts failed", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupTickHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -254,11 +241,11 @@ test("a failed schedule firing keeps its run, holds the cursor, and counts faile
     `)).rows[0]!;
     assert.equal(row.status, "failed", "the durable run row keeps the failure");
     assert.equal(row.lastRunAt, null, "the schedule cursor does not advance on failure");
-  });
+  }, { bypass: true });
 });
 
 test("an invalid schedule cron refuses at create, update, and enable", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupTickHarness, async (h) => {
     const action = { kind: "send_notification", to: "manager", body: "hi" };
     await assert.rejects(
       createAutomation({
@@ -303,11 +290,11 @@ test("an invalid schedule cron refuses at create, update, and enable", { skip: !
       setAutomationStatus({ orgId: h.org.orgId, actorId: h.adminId, automationId: legacyId, status: "enabled" }),
       /cron 'never-fires' is not a valid cron expression/,
     );
-  });
+  }, { bypass: true });
 });
 
 test("a stored invalid schedule cron records a failed run and parks the recipe", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupTickHarness, async (h) => {
     const legacyId = randomUUID();
     await db.execute(sql`
       insert into automations (id, org_id, name, status, trigger, rules, conditions, actions, priority, created_by, updated_by, created_at)
@@ -345,11 +332,11 @@ test("a stored invalid schedule cron records a failed run and parks the recipe",
       select count(*)::int as n from automation_runs where automation_id = ${legacyId}
     `)).rows[0]!.n;
     assert.equal(runs, 1);
-  });
+  }, { bypass: true });
 });
 
 test("event-sourced recipes refuse enabling by name; firable recipes still enable", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupTickHarness, async (h) => {
     const action = { kind: "send_notification", to: "manager", body: "hi" };
     // Drafts save fine — the refusal arms only at enable time.
     const draft = await createAutomation({
@@ -387,11 +374,11 @@ test("event-sourced recipes refuse enabling by name; firable recipes still enabl
       }),
       /trigger kind 'event' is not available yet/,
     );
-  });
+  }, { bypass: true });
 });
 
 test("a failed date_relative subject is not counted fired", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupTickHarness, async (h) => {
     const today = new Date().toISOString().slice(0, 10);
     await seedEmployment(h.org.orgId, h.org.subsidiaryId, today);
     const recipe = await createAutomation({
@@ -411,11 +398,11 @@ test("a failed date_relative subject is not counted fired", { skip: !DB }, async
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id} and status = 'failed'
     `)).rows[0]!.n;
     assert.equal(failed, 1, "the failed subject keeps its run row");
-  });
+  }, { bypass: true });
 });
 
 test("a failed event backs off, is not reclaimed early, and parks dead at the ceiling", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupTickHarness, async (h) => {
     const today = new Date().toISOString().slice(0, 10);
     const employmentId = await seedEmployment(h.org.orgId, h.org.subsidiaryId, today);
     const recipe = await createAutomation({
@@ -473,5 +460,5 @@ test("a failed event backs off, is not reclaimed early, and parks dead at the ce
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id} and status = 'failed'
     `)).rows[0]!.n;
     assert.ok(failedRuns >= 1, "every failed firing keeps its durable run row");
-  });
+  }, { bypass: true });
 });

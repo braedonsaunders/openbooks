@@ -4,16 +4,21 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
-  createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
   seedApprovalFlow,
   seedDraftDocument,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  addLiveVersion,
+  grant,
+  seedEmployment,
+  setFeatures,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { submitForApproval } from "../flows/submit.ts";
 import { saveApprovalSettings } from "./services.ts";
-import { withBypassContext } from "../platform/db.ts";
 import {
   createAutomation,
   automationsFeatureOn,
@@ -46,120 +51,27 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 type Harness = { org: ScratchOrg; adminId: string };
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
+const AUTOMATIONS_SPEC = {
+  features: ["hrm", "automations", "hrmActionReasons", "hrmEventVerbs"],
+  users: [
+    {
+      key: "adminId",
+      name: "HRM Automation Admin",
+      handle: "hrm_auto_admin",
+      permissions: [
+        "automations.read",
+        "automations.manage",
+        "automations.run",
+        "hrm.employment.read",
+        "hrm.employment.manage",
+        "hrm.employment.approve",
+      ],
+    },
+  ],
+} as const;
 
-async function setFeatures(orgId: string, features: Record<string, boolean>): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(
-         coalesce(settings, '{}'::jsonb), '{features}',
-         coalesce(settings -> 'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb
-       )
-     where id = ${orgId}
-  `);
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  const adminId = await createScratchUser(org.orgId, "HRM Automation Admin", "hrm_auto_admin");
-  await grant(org.orgId, adminId, [
-    "automations.read",
-    "automations.manage",
-    "automations.run",
-    "hrm.employment.read",
-    "hrm.employment.manage",
-    "hrm.employment.approve",
-  ]);
-  await setFeatures(org.orgId, { hrm: true, automations: true, hrmActionReasons: true, hrmEventVerbs: true });
-  return { org, adminId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await withBypassContext(() => setupHarness());
-  try {
-    await fn(h);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(h.org.orgId));
-  }
-}
-
-async function seedReservedEmployment(orgId: string, subsidiaryId: string): Promise<string> {
-  const workerPartyId = randomUUID();
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${workerPartyId}, ${orgId}, 'person', 'Automation Worker', true, '{}'::jsonb)
-  `);
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  return employmentId;
-}
-
-/** Append one live status version with its evidence event (test canonical writer). */
-async function addLiveVersion(
-  orgId: string,
-  employmentId: string,
-  status: string,
-  from: string,
-): Promise<{ changeId: string; revision: number }> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`set constraints worker_employment_versions_change_tenant_fkey deferred`);
-    const now = (await tx.execute<{ now: Date }>(sql`select now() as now`)).rows[0]!.now;
-    const maxNo = (await tx.execute<{ n: number }>(sql`
-      select coalesce(max(version_no), 0)::int as n from worker_employment_versions
-       where org_id = ${orgId} and employment_id = ${employmentId}
-    `)).rows[0]!.n;
-    const prior = (await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
-      select id, version_no, to_jsonb(worker_employment_versions) as before
-        from worker_employment_versions
-       where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-    `)).rows;
-    const newRevision = (await tx.execute<{ revision: number }>(sql`
-      select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}
-    `)).rows[0]!.revision + 1;
-    const changeId = (await tx.execute<{ id: string }>(sql`
-      insert into employment_changes
-        (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
-         recorded_source, recorded_source_ref, closed_versions)
-      values (${orgId}, ${employmentId}, ${newRevision}, 'status_changed',
-              '{}'::jsonb, 'automation seed', 'system', 'hr16-seed',
-              ${JSON.stringify(prior.map((row) => ({
-                table: "worker_employment_versions",
-                identity: employmentId,
-                version_no: row.version_no,
-                row_id: row.id,
-                before: row.before,
-              })))}::jsonb)
-      returning id
-    `)).rows[0]!.id;
-    for (const row of prior) {
-      await tx.execute(sql`
-        update worker_employment_versions
-           set recorded_until = ${now}, superseded_by = ${maxNo + 1}, closed_by_change_id = ${changeId}
-         where id = ${row.id}
-      `);
-    }
-    await tx.execute(sql`
-      insert into worker_employment_versions
-        (org_id, employment_id, version_no, status, effective_from, recorded_at)
-      values (${orgId}, ${employmentId}, ${maxNo + 1}, ${status}, ${from}::date, ${now})
-    `);
-    await tx.execute(sql`
-      update worker_employments set revision = ${newRevision}, updated_at = now()
-       where org_id = ${orgId} and id = ${employmentId}
-    `);
-    return { changeId, revision: newRevision };
-  });
+async function setupAutomationsHarness(): Promise<Harness> {
+  return setupHarness(AUTOMATIONS_SPEC);
 }
 
 async function countRows(orgId: string): Promise<Record<string, number>> {
@@ -175,7 +87,7 @@ async function countRows(orgId: string): Promise<Record<string, number>> {
 }
 
 test("idempotency: the same trigger twice collapses onto one run row", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -213,11 +125,11 @@ test("idempotency: the same trigger twice collapses onto one run row", { skip: !
        where org_id = ${h.org.orgId} and kind = 'automation' and user_id = ${h.adminId}
     `)).rows[0]!.n;
     assert.equal(notes, 1, "the notification fired exactly once");
-  });
+  }, { bypass: true });
 });
 
 test("a failed step rolls the run's writes back and surfaces the error as a run row", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -255,12 +167,12 @@ test("a failed step rolls the run's writes back and surfaces the error as a run 
       select status from automations where id = ${recipe.id}
     `)).rows[0]!;
     assert.equal(recipeRow.status, "error", "the recipe surfaces its breakage until fixed");
-  });
+  }, { bypass: true });
 });
 
 test("simulate writes nothing: row counts identical before and after", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const employmentId = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+  await withHarness(setupAutomationsHarness, async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Automation Worker", withVersion: false });
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -288,11 +200,11 @@ test("simulate writes nothing: row counts identical before and after", { skip: !
     assert.ok(simulations[0]!.steps.every((s) => s.status === "simulated"));
     const after = await countRows(h.org.orgId);
     assert.deepEqual(after, before, "simulation performs zero writes");
-  });
+  }, { bypass: true });
 });
 
 test("webhook actions refuse at publish with the missing transport named", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     await assert.rejects(
       createAutomation({
         orgId: h.org.orgId,
@@ -312,11 +224,11 @@ test("webhook actions refuse at publish with the missing transport named", { ski
       select count(*)::int as n from automations where org_id = ${h.org.orgId} and name = 'webhook probe'
     `)).rows[0]!.n;
     assert.equal(rows, 0, "the refused publish stores nothing");
-  });
+  }, { bypass: true });
 });
 
 test("a legacy stored webhook action fails the run by name and sends nothing", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     // Rows predating the publish refusal bypass the service: insert
     // directly so execution of a legacy row is what is under test.
     const legacyId = (await db.execute<{ id: string }>(sql`
@@ -341,11 +253,11 @@ test("a legacy stored webhook action fails the run by name and sends nothing", {
        where org_id = ${h.org.orgId} and subject_id = ${result.runId}
     `)).rows[0]!.n;
     assert.equal(queued, 0, "a refused webhook enqueues no outbox job");
-  });
+  }, { bypass: true });
 });
 
 test("deferred actions refuse at publish; a legacy delay fails the run and runs nothing after it", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     const refused: { actions: unknown; pattern: RegExp }[] = [
       { actions: [{ kind: "delay", days: 2 }], pattern: /no resumable continuation/ },
       { actions: [{ kind: "approve_step" }], pattern: /cannot mint approval gates/ },
@@ -397,11 +309,11 @@ test("deferred actions refuse at publish; a legacy delay fails the run and runs 
     });
     assert.equal(simulations[0]!.steps[0]!.status, "failed");
     assert.match(simulations[0]!.steps[0]!.error ?? "", /no resumable continuation/);
-  });
+  }, { bypass: true });
 });
 
 test("send_email renders the registered template into the outbox payload", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -433,11 +345,11 @@ test("send_email renders the registered template into the outbox payload", { ski
     assert.match(payload.html, /Rendered mail probe/);
     assert.equal(payload.meta.category, "automation");
     assert.doesNotMatch(payload.text, /Template .* for automation run/);
-  });
+  }, { bypass: true });
 });
 
 test("send_email with an unknown template refuses at publish and in legacy runs", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     await assert.rejects(
       createAutomation({
         orgId: h.org.orgId,
@@ -470,11 +382,11 @@ test("send_email with an unknown template refuses at publish and in legacy runs"
     });
     assert.equal(result.status, "failed");
     assert.match(result.steps[result.steps.length - 1]!.error ?? "", /unknown email template 'nope'/);
-  });
+  }, { bypass: true });
 });
 
 test("feature-off: triggers must not fire", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -495,11 +407,11 @@ test("feature-off: triggers must not fire", { skip: !DB }, async () => {
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
     `)).rows[0]!.n;
     assert.equal(runs, 0, "no run row exists for a refused firing");
-  });
+  }, { bypass: true });
 });
 
 test("action reasons: required when on, ignored when off, comment enforced", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     await upsertActionReason({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -527,14 +439,14 @@ test("action reasons: required when on, ignored when off, comment enforced", { s
     await validateSubmitActionReason({ orgId: h.org.orgId, featureOn: true, action: "transfer", reasonCode: "VOL-DEPT", reason: "team move" });
     // Feature off: everything ignored, never a refusal.
     await validateSubmitActionReason({ orgId: h.org.orgId, featureOn: false });
-  });
+  }, { bypass: true });
 });
 
 test("rescind reverses versions exactly: as-of reads equal the pre-change state", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const employmentId = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, "active", "2026-01-01");
-    const target = await addLiveVersion(h.org.orgId, employmentId, "on_leave", "2026-02-01");
+  await withHarness(setupAutomationsHarness, async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Automation Worker", withVersion: false });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
+    const target = await addLiveVersion(h.org.orgId, employmentId, { status: "on_leave", from: "2026-02-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
     const asOfStatus = async () =>
       (
         await getEmploymentAsOf({
@@ -558,29 +470,29 @@ test("rescind reverses versions exactly: as-of reads equal the pre-change state"
     `)).rows[0]!;
     assert.equal(verb.verb, "rescind");
     assert.equal(verb.reverses, target.changeId);
-  });
+  }, { bypass: true });
 });
 
 test("rescind refuses when a later change depends on the target, naming it", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const employmentId = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, "active", "2026-01-01");
-    const target = await addLiveVersion(h.org.orgId, employmentId, "on_leave", "2026-02-01");
-    const later = await addLiveVersion(h.org.orgId, employmentId, "suspended", "2026-03-01");
+  await withHarness(setupAutomationsHarness, async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Automation Worker", withVersion: false });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
+    const target = await addLiveVersion(h.org.orgId, employmentId, { status: "on_leave", from: "2026-02-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
+    const later = await addLiveVersion(h.org.orgId, employmentId, { status: "suspended", from: "2026-03-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
     await assert.rejects(
       rescindEmploymentChange({ orgId: h.org.orgId, actorId: h.adminId, changeId: target.changeId, reason: "too late" }),
       (e: unknown) =>
         e instanceof EventVerbError &&
         new RegExp(`revision ${later.revision}`).test((e as Error).message),
     );
-  });
+  }, { bypass: true });
 });
 
 test("a rescind refuses instead of filing null evidence when the pre-rescind snapshot cannot be read", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const employmentId = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, "active", "2026-01-01");
-    const target = await addLiveVersion(h.org.orgId, employmentId, "on_leave", "2026-02-01");
+  await withHarness(setupAutomationsHarness, async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Automation Worker", withVersion: false });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
+    const target = await addLiveVersion(h.org.orgId, employmentId, { status: "on_leave", from: "2026-02-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
     // Revoking the actor's employment-read grant makes the pre-rescind
     // snapshot read throw inside the rescind (the approve grant and the
     // verb gate stay on, so the rescind proceeds to the read). The rescind
@@ -602,14 +514,14 @@ test("a rescind refuses instead of filing null evidence when the pre-rescind sna
        where org_id = ${h.org.orgId} and reverses_change_id = ${target.changeId}
     `)).rows[0]!.n;
     assert.equal(filed, 0, "a refused rescind files no event");
-  });
+  }, { bypass: true });
 });
 
 test("correct defaults to a pre-filled reapproval request; direct when allowed", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const employmentId = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
-    await addLiveVersion(h.org.orgId, employmentId, "active", "2026-01-01");
-    const target = await addLiveVersion(h.org.orgId, employmentId, "on_leave", "2026-02-01");
+  await withHarness(setupAutomationsHarness, async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Automation Worker", withVersion: false });
+    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
+    const target = await addLiveVersion(h.org.orgId, employmentId, { status: "on_leave", from: "2026-02-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
     // Default (correct_requires_reapproval true): opens a new request.
     const via = await correctEmploymentChange({
       orgId: h.org.orgId,
@@ -651,11 +563,11 @@ test("correct defaults to a pre-filled reapproval request; direct when allowed",
       }),
       /not visible/,
     );
-  });
+  }, { bypass: true });
 });
 
 test("exclude-initiator: a gate assigned to the initiator refuses instead of auto-deciding", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(setupAutomationsHarness, async (h) => {
     await seedApprovalFlow(h.org.orgId, {
       subjectKind: "vendor_bill",
       assignees: [{ type: "user", userId: h.adminId }],
@@ -690,11 +602,11 @@ test("exclude-initiator: a gate assigned to the initiator refuses instead of aut
       select status from flow_gates where id = ${gateId}
     `)).rows[0]!.status;
     assert.equal(status, "pending", "the refused gate stays pending for a human");
-  });
+  }, { bypass: true });
 });
 
 test("exception scoring refusal and naming live beside the pure matrix", { skip: !DB }, async () => {
-  await withHarness(async () => {
+  await withHarness(setupAutomationsHarness, async () => {
     // Unknown thresholds refuse instead of passing, over a real org row set.
     assert.throws(
       () =>
@@ -705,5 +617,5 @@ test("exception scoring refusal and naming live beside the pure matrix", { skip:
         ),
       /needs max_hours_per_day/,
     );
-  });
+  }, { bypass: true });
 });

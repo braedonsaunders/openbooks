@@ -3,54 +3,24 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { ensureCloseDefaults } from "./defaults.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { addCloseEvidence, updateCloseTask } from "./tasks.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import {
-  createScratchOrg,
   dropScratchOrg,
-  seedFlowActors,
 } from "../testing/fixtures.ts";
+import {
+  setupCloseAutomationHarness,
+  type CloseAutomationHarness,
+} from "../testing/hrm-harness.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-interface Harness {
-  orgId: string;
-  runId: string;
-  blueprintId: string;
-  reportingPackageId: string;
-  submitterId: string;
-  approver1Id: string;
-  adminId: string;
-}
+type Harness = CloseAutomationHarness;
 
-async function setupHarness(fingerprint: string | null = "fp-complete-task"): Promise<Harness> {
-  const fixture = await createScratchOrg();
-  const actors = await seedFlowActors(fixture.orgId);
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"advancedClose":true}'::jsonb, true)
-    where id = ${fixture.orgId}`);
-  const defaults = await ensureCloseDefaults(fixture.orgId, actors.adminId);
-  const runId = (await db.execute<{ id: string }>(sql`
-    insert into close_runs
-      (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
-       current_stage, target_close_date, scope, data_fingerprint, started_at, started_by, created_by, updated_by)
-    values (${fixture.orgId}, ${fixture.periodId}, ${fixture.bookId}, ${defaults.blueprintId},
-            ${defaults.reportingPackageId}, 'in_progress', 'execute', current_date + 30,
-            '{}'::jsonb, ${fingerprint}, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
-    returning id`)).rows[0]!.id;
-  return {
-    orgId: fixture.orgId,
-    runId,
-    blueprintId: defaults.blueprintId,
-    reportingPackageId: defaults.reportingPackageId,
-    submitterId: actors.submitterId,
-    approver1Id: actors.approver1Id,
-    adminId: actors.adminId,
-  };
+async function setupCompleteTaskHarness(fingerprint: string | null = "fp-complete-task"): Promise<Harness> {
+  // A null fingerprint stores NULL, leaving the run unvalidated for the refusal test.
+  return setupCloseAutomationHarness(fingerprint as string);
 }
 
 async function insertTask(
@@ -135,7 +105,7 @@ function fire(h: Harness, taskId: string, actorId: string | null) {
 }
 
 test("automation completes an authorized reviewerless manual task with task audit", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCompleteTaskHarness();
   try {
     const taskId = await insertTask(h, "plain");
     await stabilize(h);
@@ -160,7 +130,7 @@ test("automation completes an authorized reviewerless manual task with task audi
 });
 
 test("manual complete on a reviewer-gated task is refused; submit then approve reaches complete", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCompleteTaskHarness();
   try {
     const taskId = await insertTask(h, "gated", { reviewerId: h.approver1Id });
     // RED-adjacent: the canonical path must not complete past review.
@@ -199,7 +169,7 @@ test("manual complete on a reviewer-gated task is refused; submit then approve r
 });
 
 test("automation refuses a reviewer-gated task and never auto-approves", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCompleteTaskHarness();
   try {
     const taskId = await insertTask(h, "gated-auto", { reviewerId: h.approver1Id });
     await stabilize(h);
@@ -226,7 +196,7 @@ test("automation refuses a reviewer-gated task and never auto-approves", { skip:
 });
 
 test("automation refuses blocked, non-owned, evidence-gated, and computed tasks", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupCompleteTaskHarness();
   try {
     const ownedId = await insertTask(h, "owned");
     const evidenceId = await insertTask(h, "needs-evidence", { evidenceRequired: true });
@@ -268,7 +238,7 @@ test("automation refuses blocked, non-owned, evidence-gated, and computed tasks"
 });
 
 test("automation refuses to complete when the close run is not validated", { skip: !DB }, async () => {
-  const h = await setupHarness(null);
+  const h = await setupCompleteTaskHarness(null);
   try {
     const taskId = await insertTask(h, "unvalidated");
     await insertRule(h);

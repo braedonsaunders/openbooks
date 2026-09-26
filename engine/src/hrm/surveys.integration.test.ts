@@ -4,11 +4,14 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
-  createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { HrmSurveysError } from "./documents/errors.ts";
 import { closeSurvey, getSurvey, openSurvey, saveSurvey } from "./surveys/surveys.ts";
@@ -22,56 +25,29 @@ import { getSurveyResults, submitResponse } from "./surveys/responses.ts";
  * gate on results. Proofs are read back from storage.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const FEATURES = ["hrm", "hrmSurveys", "hrmPulseSurveys"];
+const SURVEYS_FEATURES = ["hrm", "hrmSurveys", "hrmPulseSurveys"] as const;
 
-async function enableFeatures(orgId: string): Promise<void> {
-  for (const feature of FEATURES) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
-    `);
-  }
-}
+const SURVEYS_SPEC = {
+  features: SURVEYS_FEATURES,
+  users: [
+    { key: "hrId", name: "HR Admin", handle: "hr_admin", permissions: ["hrm.surveys.manage"] },
+  ],
+} as const;
 
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-type Harness = { org: ScratchOrg; hrId: string; parties: string[] };
-
-async function setupHarness(partyCount: number): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableFeatures(org.orgId);
-  const hrId = await createScratchUser(org.orgId, "HR Admin", "hr_admin");
-  await grantPermissions(org.orgId, hrId, ["hrm.surveys.manage"]);
-  const parties: string[] = [];
-  for (let i = 0; i < partyCount; i++) {
-    const partyId = randomUUID();
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, email, is_active, custom)
-      values (${partyId}, ${org.orgId}, 'person', ${`Respondent ${i}`}, ${`resp${i}@scratch.test`}, true, '{}'::jsonb)
-    `);
-    parties.push(partyId);
-  }
-  return { org, hrId, parties };
-}
-
-async function withHarness(count: number, fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness(count);
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+async function setupSurveysHarness(respondents = 2) {
+  return setupHarness(SURVEYS_SPEC, async (base) => {
+    const parties: string[] = [];
+    for (let i = 0; i < respondents; i++) {
+      const partyId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, email, is_active, custom)
+        values (${partyId}, ${base.org.orgId}, 'person', ${`Respondent ${i}`}, ${`resp${i}@scratch.test`}, true, '{}'::jsonb)
+      `);
+      parties.push(partyId);
+    }
+    return { parties };
+  });
 }
 
 const QUESTIONS = [
@@ -80,10 +56,10 @@ const QUESTIONS = [
   { kind: "text", prompt: "Say more", options: [] },
 ];
 
-async function makeSurvey(h: Harness, anonymity: string, minGroupSize: number) {
+async function makeSurvey(org: ScratchOrg, hrId: string, anonymity: string, minGroupSize: number) {
   return saveSurvey({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
+    orgId: org.orgId,
+    actorId: hrId,
     name: `Engagement ${randomUUID().slice(0, 8)}`,
     kind: "engagement",
     anonymity,
@@ -93,8 +69,10 @@ async function makeSurvey(h: Harness, anonymity: string, minGroupSize: number) {
 }
 
 test("anonymous responses store no link and results aggregate", { skip: !DB }, async () => {
-  await withHarness(2, async (h: Harness) => {
-    const survey = await makeSurvey(h, "anonymous", 2);
+  await withHarness(
+    () => setupSurveysHarness(),
+    async (h) => {
+    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
     const opened = await openSurvey({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -153,8 +131,10 @@ test("anonymous responses store no link and results aggregate", { skip: !DB }, a
 });
 
 test("concurrent opens of one draft commit a single audience", { skip: !DB }, async () => {
-  await withHarness(2, async (h: Harness) => {
-    const survey = await makeSurvey(h, "anonymous", 2);
+  await withHarness(
+    () => setupSurveysHarness(),
+    async (h) => {
+    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
     const outcomes = await Promise.allSettled([
       openSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id, partyIds: [h.parties[0]!] }),
       openSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id, partyIds: [h.parties[1]!] }),
@@ -174,9 +154,11 @@ test("concurrent opens of one draft commit a single audience", { skip: !DB }, as
 });
 
 test("heatmap suppresses below min_group_size and comments hide", { skip: !DB }, async () => {
-  await withHarness(2, async (h: Harness) => {
+  await withHarness(
+    () => setupSurveysHarness(),
+    async (h) => {
     // min_group_size 3 with 2 respondents: min − 1 everywhere.
-    const survey = await makeSurvey(h, "anonymous", 3);
+    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 3);
     const opened = await openSurvey({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -207,8 +189,10 @@ test("heatmap suppresses below min_group_size and comments hide", { skip: !DB },
 });
 
 test("confidential links are sealed and named links are plain", { skip: !DB }, async () => {
-  await withHarness(1, async (h: Harness) => {
-    const confidential = await makeSurvey(h, "confidential", 2);
+  await withHarness(
+    () => setupSurveysHarness(1),
+    async (h) => {
+    const confidential = await makeSurvey(h.org, h.hrId, "confidential", 2);
     const opened = await openSurvey({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -228,7 +212,7 @@ test("confidential links are sealed and named links are plain", { skip: !DB }, a
     assert.ok(sealed);
     assert.ok(!Buffer.from(sealed).toString("utf8").includes(h.parties[0]!));
 
-    const named = await makeSurvey(h, "named", 2);
+    const named = await makeSurvey(h.org, h.hrId, "named", 2);
     const openedNamed = await openSurvey({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -250,8 +234,10 @@ test("confidential links are sealed and named links are plain", { skip: !DB }, a
 });
 
 test("survey lifecycle and answer refusals fire by name", { skip: !DB }, async () => {
-  await withHarness(2, async (h: Harness) => {
-    const survey = await makeSurvey(h, "anonymous", 2);
+  await withHarness(
+    () => setupSurveysHarness(),
+    async (h) => {
+    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
     // Editing the draft works; opening to a foreign party is refused.
     const edited = await saveSurvey({
       orgId: h.org.orgId,
@@ -359,8 +345,10 @@ test("survey lifecycle and answer refusals fire by name", { skip: !DB }, async (
 });
 
 test("a response waits for the close transition and refuses after it commits", { skip: !DB }, async () => {
-  await withHarness(1, async (h: Harness) => {
-    const survey = await makeSurvey(h, "anonymous", 2);
+  await withHarness(
+    () => setupSurveysHarness(1),
+    async (h) => {
+    const survey = await makeSurvey(h.org, h.hrId, "anonymous", 2);
     const opened = await openSurvey({
       orgId: h.org.orgId,
       actorId: h.hrId,

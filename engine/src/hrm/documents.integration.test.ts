@@ -4,11 +4,14 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  seedPerson,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HrmDocumentsError } from "./documents/errors.ts";
 import {
   acknowledgeDocument,
@@ -35,112 +38,22 @@ import { saveTemplate } from "./documents/templates.ts";
  * back from storage, never from service returns alone.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const FEATURES = ["hrm", "hrmDocuments", "hrmDocumentRetention", "hrmDataSubjectExport"];
+const DOCUMENTS_FEATURES = ["hrm", "hrmDocuments", "hrmDocumentRetention", "hrmDataSubjectExport"] as const;
 
-async function enableFeatures(orgId: string): Promise<void> {
-  for (const feature of FEATURES) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
-    `);
-  }
-}
+const DOCUMENTS_SPEC = {
+  features: DOCUMENTS_FEATURES,
+  users: [
+    { key: "hrId", name: "HR Admin", handle: "hr_admin", permissions: ["hrm.documents.read", "hrm.documents.manage"] },
+    { key: "employeeId", name: "Eddie Employee", handle: "employee_self", permissions: ["hrm.self.read"] },
+    { key: "managerId", name: "Mira Manager", handle: "manager_self", permissions: ["hrm.self.read"] },
+  ],
+} as const;
 
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-type Harness = {
-  org: ScratchOrg;
-  hrId: string;
-  hrPartyId: string;
-  employeeId: string;
-  employeePartyId: string;
-  employmentId: string;
-  managerId: string;
-  managerPartyId: string;
-  managerEmploymentId: string;
-};
-
-async function seedPerson(orgId: string, subsidiaryId: string, name: string): Promise<{ partyId: string; employmentId: string }> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, email, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${name}, ${`${name.replaceAll(" ", ".").toLowerCase()}@scratch.test`}, true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  return { partyId, employmentId };
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableFeatures(org.orgId);
-  const hr = await seedPerson(org.orgId, org.subsidiaryId, "HR Admin");
-  const hrId = await createScratchUser(org.orgId, "HR Admin", "hr_admin");
-  await db.execute(sql`update users set party_id = ${hr.partyId} where id = ${hrId} and org_id = ${org.orgId}`);
-  const employee = await seedPerson(org.orgId, org.subsidiaryId, "Eddie Employee");
-  const employeeId = await createScratchUser(org.orgId, "Eddie Employee", "employee_self");
-  await db.execute(sql`update users set party_id = ${employee.partyId} where id = ${employeeId} and org_id = ${org.orgId}`);
-  const manager = await seedPerson(org.orgId, org.subsidiaryId, "Mira Manager");
-  const managerId = await createScratchUser(org.orgId, "Mira Manager", "manager_self");
-  await db.execute(sql`update users set party_id = ${manager.partyId} where id = ${managerId} and org_id = ${org.orgId}`);
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from, recorded_at)
-    values (${org.orgId}, ${employee.employmentId}, ${manager.employmentId}, 'line',
-            ${randomUUID()}, 1, '2020-01-01'::date, now())
-  `);
-  await grantPermissions(org.orgId, hrId, ["hrm.documents.read", "hrm.documents.manage"]);
-  await grantPermissions(org.orgId, employeeId, ["hrm.self.read"]);
-  await grantPermissions(org.orgId, managerId, ["hrm.self.read"]);
-  // The declared category vocabulary templates must name.
-  for (const [key, label] of [["contract", "Contracts"], ["policy", "Policies"]] as const) {
-    await saveCategory({ orgId: org.orgId, actorId: hrId, key, label });
-  }
-  return {
-    org,
-    hrId,
-    hrPartyId: hr.partyId,
-    employeeId,
-    employeePartyId: employee.partyId,
-    employmentId: employee.employmentId,
-    managerId,
-    managerPartyId: manager.partyId,
-    managerEmploymentId: manager.employmentId,
-  };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function makeTemplate(h: Harness, signerRoles: string[]): Promise<string> {
+async function makeTemplate(org: ScratchOrg, hrId: string, signerRoles: string[]): Promise<string> {
   const tpl = await saveTemplate({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
+    orgId: org.orgId,
+    actorId: hrId,
     name: `Offer ${randomUUID().slice(0, 8)}`,
     categoryKey: "contract",
     bodyTemplate: "Dear {{employee_name}} of {{org_name}}, your start is {{employment_start}}.",
@@ -152,9 +65,37 @@ async function makeTemplate(h: Harness, signerRoles: string[]): Promise<string> 
   return tpl.id;
 }
 
+async function setupDocumentsHarness() {
+  return setupHarness(DOCUMENTS_SPEC, async (base) => {
+    const hr = await seedPerson(base.org.orgId, base.org.subsidiaryId, "HR Admin");
+    await db.execute(sql`update users set party_id = ${hr.partyId} where id = ${base.hrId} and org_id = ${base.org.orgId}`);
+    const employee = await seedPerson(base.org.orgId, base.org.subsidiaryId, "Eddie Employee");
+    await db.execute(sql`update users set party_id = ${employee.partyId} where id = ${base.employeeId} and org_id = ${base.org.orgId}`);
+    const manager = await seedPerson(base.org.orgId, base.org.subsidiaryId, "Mira Manager");
+    await db.execute(sql`update users set party_id = ${manager.partyId} where id = ${base.managerId} and org_id = ${base.org.orgId}`);
+    await db.execute(sql`
+      insert into reporting_relationships
+        (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from, recorded_at)
+      values (${base.org.orgId}, ${employee.employmentId}, ${manager.employmentId}, 'line',
+              ${randomUUID()}, 1, '2020-01-01'::date, now())
+    `);
+    // The declared category vocabulary templates must name.
+    for (const [key, label] of [["contract", "Contracts"], ["policy", "Policies"]] as const) {
+      await saveCategory({ orgId: base.org.orgId, actorId: base.hrId, key, label });
+    }
+    return {
+      hrPartyId: hr.partyId,
+      employeePartyId: employee.partyId,
+      employmentId: employee.employmentId,
+      managerPartyId: manager.partyId,
+      managerEmploymentId: manager.employmentId,
+    };
+  });
+}
+
 test("generate, send, ordered sign completes with evidence and a signed PDF version", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-  const templateId = await makeTemplate(h, ["employee", "manager", "hr"]);
+  await withHarness(() => setupDocumentsHarness(), async (h) => {
+  const templateId = await makeTemplate(h.org, h.hrId, ["employee", "manager", "hr"]);
   const { document, mergePreview } = await generateDocument({
     orgId: h.org.orgId,
     actorId: h.hrId,
@@ -238,8 +179,8 @@ test("generate, send, ordered sign completes with evidence and a signed PDF vers
 });
 
 test("a foreign actor cannot read another person's document", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-  const templateId = await makeTemplate(h, ["employee"]);
+  await withHarness(() => setupDocumentsHarness(), async (h) => {
+  const templateId = await makeTemplate(h.org, h.hrId, ["employee"]);
   const { document } = await generateDocument({
     orgId: h.org.orgId,
     actorId: h.hrId,
@@ -267,8 +208,8 @@ test("a foreign actor cannot read another person's document", { skip: !DB }, asy
 });
 
 test("decline, void, acknowledge, and legal hold follow their rules", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-  const templateId = await makeTemplate(h, ["employee"]);
+  await withHarness(() => setupDocumentsHarness(), async (h) => {
+  const templateId = await makeTemplate(h.org, h.hrId, ["employee"]);
   const { document } = await generateDocument({
     orgId: h.org.orgId,
     actorId: h.hrId,
@@ -339,7 +280,7 @@ test("decline, void, acknowledge, and legal hold follow their rules", { skip: !D
 });
 
 test("documents refuse while the hrmDocuments feature is off", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocumentsHarness(), async (h) => {
   await db.execute(sql`
     update orgs
        set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmDocuments}', 'false'::jsonb, true)

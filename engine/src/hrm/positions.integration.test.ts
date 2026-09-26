@@ -7,9 +7,18 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  gateOf,
+  grantPermissions,
+  mkDepartment,
+  nowIso,
+  seedEmployment,
+  seedFlow,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate } from "../flows/gates.ts";
 import {
@@ -45,98 +54,21 @@ installEngineSeams();
  * that must NOT exist.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type Harness = {
-  org: ScratchOrg;
-  managerId: string;
-  submitterId: string;
-  approverId: string;
-};
+const POSITIONS_SPEC = {
+  users: [
+    { key: "managerId", name: "HRM Position Manager", handle: "hrm_position_manager", permissions: ["hrm.position.read", "hrm.position.manage"] },
+    { key: "submitterId", name: "HRM Submitter", handle: "hrm_author", permissions: ["hrm.employment.read", "hrm.employment.manage"], link: true },
+    { key: "approverId", name: "HRM Approver", handle: "hrm_decider", permissions: ["hrm.employment.read", "hrm.employment.approve"], link: true },
+  ],
+} as const;
 
 function codeOf(error: unknown): string {
   assert.ok(error instanceof HrmPositionError);
   return error.code;
 }
 
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const managerId = await createScratchUser(org.orgId, "HRM Position Manager", "hrm_position_manager");
-  const submitterId = await createScratchUser(org.orgId, "HRM Submitter", "hrm_author");
-  const approverId = await createScratchUser(org.orgId, "HRM Approver", "hrm_decider");
-  await grantPermissions(org.orgId, managerId, ["hrm.position.read", "hrm.position.manage"]);
-  await grantPermissions(org.orgId, submitterId, ["hrm.employment.read", "hrm.employment.manage"]);
-  await grantPermissions(org.orgId, approverId, ["hrm.employment.read", "hrm.employment.approve"]);
-  await linkPerson(org.orgId, submitterId);
-  await linkPerson(org.orgId, approverId);
-  return { org, managerId, submitterId, approverId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function mkDepartment(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`)).rows[0]!.id;
-}
-
 /** A live employment with one live status version (test-only direct writer). */
-async function seedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  status = "active",
-): Promise<{ employmentId: string; workerPartyId: string }> {
-  const workerPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${workerPartyId}, ${orgId}, 'person', 'Position Holder', true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from)
-    values (${orgId}, ${employmentId}, 1, ${status}, '2026-07-01'::date)
-  `);
-  return { employmentId, workerPartyId };
-}
-
 /** A live assignment version on a slot (test-only direct writer). */
 async function seedAssignment(
   orgId: string,
@@ -171,25 +103,9 @@ async function positionChangeKinds(orgId: string, positionId: string): Promise<s
   return rows.map((row) => row.change_kind);
 }
 
-async function seedFlow(orgId: string, approverId: string): Promise<void> {
-  await seedApprovalFlow(orgId, {
-    subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
-    assignees: [{ type: "user", userId: approverId }],
-    mode: "any",
-  });
-}
-
-async function gateOf(requestId: string): Promise<{ id: string }> {
-  const rows = (await db.execute<{ id: string }>(sql`
-    select id from flow_gates where subject_id = ${requestId} order by created_at`)).rows;
-  assert.equal(rows.length, 1, "exactly one gate decides the request");
-  return { id: rows[0]!.id };
-}
-
-const KNOWN_AT = (): string => new Date().toISOString();
 
 test("positions happy path: create, revise, fund, and vacancy with storage proofs", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const deptId = await mkDepartment(orgId, "Engineering");
     const created = await createPosition({
@@ -249,7 +165,7 @@ test("positions happy path: create, revise, fund, and vacancy with storage proof
       orgId,
       actorId: h.managerId,
       effectiveDate: "2026-07-15",
-      knownAt: KNOWN_AT(),
+      knownAt: nowIso(),
     });
     assert.equal(vacancy.totals.positions, 1);
     assert.equal(vacancy.totals.plannedFte, "2.0000");
@@ -265,7 +181,7 @@ test("positions happy path: create, revise, fund, and vacancy with storage proof
 });
 
 test("duplicate position codes are refused with nothing written", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     await createPosition({
       orgId,
@@ -300,7 +216,7 @@ test("duplicate position codes are refused with nothing written", { skip: !DB },
 });
 
 test("revise refusals: no-op, direct close, and terminal closed", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const created = await createPosition({
       orgId,
@@ -390,7 +306,7 @@ test("revise refusals: no-op, direct close, and terminal closed", { skip: !DB },
 });
 
 test("close is refused while a live primary assignment names the position", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const position = await createPosition({
       orgId,
@@ -402,7 +318,7 @@ test("close is refused while a live primary assignment names the position", { sk
       effectiveFrom: "2026-07-01",
       reason: "open",
     });
-    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
     await seedAssignment(orgId, employmentId, "primary", {
       positionId: position.id,
       isPrimary: true,
@@ -442,7 +358,7 @@ test("close is refused while a live primary assignment names the position", { sk
       effectiveFrom: "2026-07-01",
       reason: "open",
     });
-    const { employmentId: second } = await seedEmployment(orgId, h.org.subsidiaryId);
+    const { employmentId: second } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
     await seedAssignment(orgId, second, "extra", { positionId: backfill.id, isPrimary: false });
     const closed = await closePosition({
       orgId,
@@ -456,7 +372,7 @@ test("close is refused while a live primary assignment names the position", { sk
 });
 
 test("funding preflights are reported, committed, and evidenced", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const position = await createPosition({
       orgId,
@@ -506,7 +422,7 @@ test("funding preflights are reported, committed, and evidenced", { skip: !DB },
 });
 
 test("funding refuses half-written cost plans and foreign periods", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const position = await createPosition({
       orgId,
@@ -555,7 +471,7 @@ test("funding refuses half-written cost plans and foreign periods", { skip: !DB 
 });
 
 test("concurrent revises leave no partial effects", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const position = await createPosition({
       orgId,
@@ -621,8 +537,8 @@ test("concurrent revises leave no partial effects", { skip: !DB }, async () => {
 });
 
 test("a second organization sees nothing of the first (RLS)", { skip: !DB }, async () => {
-  const first = await setupHarness();
-  const second = await setupHarness();
+  const first = await setupHarness(POSITIONS_SPEC);
+  const second = await setupHarness(POSITIONS_SPEC);
   try {
     const position = await createPosition({
       orgId: first.org.orgId,
@@ -637,7 +553,7 @@ test("a second organization sees nothing of the first (RLS)", { skip: !DB }, asy
       orgId: second.org.orgId,
       actorId: second.managerId,
       effectiveDate: "2026-07-15",
-      knownAt: KNOWN_AT(),
+      knownAt: nowIso(),
     });
     assert.equal(vacancy.totals.positions, 0);
     assert.equal(vacancy.positions.length, 0);
@@ -647,7 +563,7 @@ test("a second organization sees nothing of the first (RLS)", { skip: !DB }, asy
         actorId: second.managerId,
         positionId: position.id,
         effectiveDate: "2026-07-15",
-        knownAt: KNOWN_AT(),
+        knownAt: nowIso(),
       }),
       /not visible in this organization/,
     );
@@ -658,7 +574,7 @@ test("a second organization sees nothing of the first (RLS)", { skip: !DB }, asy
 });
 
 test("position as-of reads authorize the resolved version's employer scope", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const subsidiaryB = randomUUID();
     await db.execute(sql`
@@ -717,7 +633,7 @@ test("position as-of reads authorize the resolved version's employer scope", { s
 });
 
 test("position option pages scope before applying their limit", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const subsidiaryB = randomUUID();
     await db.execute(sql`
@@ -756,7 +672,7 @@ test("position option pages scope before applying their limit", { skip: !DB }, a
 });
 
 test("position_assignment rides the change-request path with warnings in both ledgers", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     await seedFlow(orgId, h.approverId);
     const deptId = await mkDepartment(orgId, "Engineering");
@@ -772,7 +688,7 @@ test("position_assignment rides the change-request path with warnings in both le
       effectiveFrom: "2026-07-01",
       reason: "open",
     });
-    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
     await seedAssignment(orgId, employmentId, "primary", {
       isPrimary: true,
       fte: "1.0000",
@@ -832,7 +748,7 @@ test("position_assignment rides the change-request path with warnings in both le
       actorId: h.managerId,
       positionId: position.id,
       effectiveDate: "2026-07-15",
-      knownAt: KNOWN_AT(),
+      knownAt: nowIso(),
     });
     assert.equal(detail.holders.length, 1);
     assert.equal(detail.holders[0]!.employmentId, employmentId);
@@ -844,7 +760,7 @@ test("position_assignment rides the change-request path with warnings in both le
 });
 
 test("unassignment clears the link and evidences both sides", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(POSITIONS_SPEC), async (h) => {
     const orgId = h.org.orgId;
     await seedFlow(orgId, h.approverId);
     const position = await createPosition({
@@ -856,7 +772,7 @@ test("unassignment clears the link and evidences both sides", { skip: !DB }, asy
       effectiveFrom: "2026-07-01",
       reason: "open",
     });
-    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId);
+    const { employmentId } = await seedEmployment(orgId, h.org.subsidiaryId, { from: "2026-07-01", displayName: "Position Holder" });
     await seedAssignment(orgId, employmentId, "primary", { positionId: position.id, isPrimary: true });
 
     const draft = await createChangeRequestDraft({

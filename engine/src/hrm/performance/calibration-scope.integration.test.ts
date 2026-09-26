@@ -9,6 +9,16 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  grant,
+  linkPerson,
+  mkEmployment,
+  mkReporting,
+  mkReviewTemplate,
+  perfError,
+  restrictRole,
+} from "../../testing/hrm-harness.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, openCycle } from "./review-cycles.ts";
 import { submitReview } from "./reviews.ts";
@@ -44,7 +54,7 @@ type Harness = {
 };
 
 test("calibration sessions require an open or calibrating cycle", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const h = await setupHarness();
+  const h = await setupCalibrationScopeHarness();
   try {
     const templateId = (await db.execute<{ template_id: string }>(sql`
       select template_id from hrm_review_cycles where org_id = ${h.org.orgId} and id = ${h.cycleId}
@@ -97,81 +107,9 @@ test("calibration sessions require an open or calibrating cycle", { skip: !proce
   }
 });
 
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function restrictRole(orgId: string, roleKey: string, restriction: Record<string, unknown>): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.performance.manage"]'::jsonb,
-           subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function enableCalibration(orgId: string): Promise<void> {
-  for (const key of ["hrm", "hrmPerformance", "hrmCalibration"] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  const employmentId = (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date)`);
-  return employmentId;
-}
-
-async function mkReporting(orgId: string, employmentId: string, managerEmploymentId: string): Promise<void> {
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from)
-    values (${orgId}, ${employmentId}, ${managerEmploymentId}, 'line', ${randomUUID()}, 1, '2020-01-01'::date)
-  `);
-}
-
-async function mkTemplate(orgId: string, actorId: string): Promise<string> {
-  const templateId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${orgId}, 'Annual', '{"min": 1, "max": 5, "labels": ["low", "high"]}'::jsonb, ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  const sectionId = (await db.execute<{ id: string }>(sql`
-    insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
-    values (${orgId}, ${templateId}, 0, 'Impact', 'competency', ${actorId}, ${actorId})
-    returning id`)).rows[0]!.id;
-  await db.execute(sql`
-    insert into hrm_review_template_questions
-      (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
-    values (${orgId}, ${sectionId}, 0, 'Customer impact', 'rating_and_text', true, ${actorId}, ${actorId})
-  `);
-  return templateId;
-}
-
-async function setupHarness(): Promise<Harness> {
+async function setupCalibrationScopeHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableCalibration(org.orgId);
+  await enableHrm(org.orgId, "hrmPerformance", "hrmCalibration");
   const hrAll = await createScratchUser(org.orgId, "Calibration HR All", "calibration_hr_all");
   await grant(org.orgId, hrAll, ["hrm.performance.manage"]);
   const subB = randomUUID();
@@ -181,23 +119,23 @@ async function setupHarness(): Promise<Harness> {
       from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
   const hrA = await createScratchUser(org.orgId, "Calibration HR A", "calibration_hr_a");
   await grant(org.orgId, hrA, ["hrm.performance.manage"]);
-  await restrictRole(org.orgId, "calibration_hr_a", { mode: "list", subsidiaryIds: [org.subsidiaryId] });
+  await restrictRole(org.orgId, "calibration_hr_a", { mode: "list", subsidiaryIds: [org.subsidiaryId] }, ["hrm.performance.manage"]);
   // Two managed workers, one per subsidiary, each with a line manager.
   const managerAUser = await createScratchUser(org.orgId, "Manager A", "calibration_manager_a");
   const managerAParty = await linkPerson(org.orgId, managerAUser);
-  const managerAEmployment = await mkEmployment(org.orgId, managerAParty, org.subsidiaryId);
+  const managerAEmployment = await mkEmployment(org.orgId, managerAParty, org.subsidiaryId, {});
   const workerAUser = await createScratchUser(org.orgId, "Worker A", "calibration_worker_a");
   const workerAParty = await linkPerson(org.orgId, workerAUser);
-  const workerAEmployment = await mkEmployment(org.orgId, workerAParty, org.subsidiaryId);
+  const workerAEmployment = await mkEmployment(org.orgId, workerAParty, org.subsidiaryId, {});
   await mkReporting(org.orgId, workerAEmployment, managerAEmployment);
   const managerBUser = await createScratchUser(org.orgId, "Manager B", "calibration_manager_b");
   const managerBParty = await linkPerson(org.orgId, managerBUser);
-  const managerBEmployment = await mkEmployment(org.orgId, managerBParty, subB);
+  const managerBEmployment = await mkEmployment(org.orgId, managerBParty, subB, {});
   const workerBUser = await createScratchUser(org.orgId, "Worker B", "calibration_worker_b");
   const workerBParty = await linkPerson(org.orgId, workerBUser);
-  const workerBEmployment = await mkEmployment(org.orgId, workerBParty, subB);
+  const workerBEmployment = await mkEmployment(org.orgId, workerBParty, subB, {});
   await mkReporting(org.orgId, workerBEmployment, managerBEmployment);
-  const templateId = await mkTemplate(org.orgId, hrAll);
+  const templateId = await mkReviewTemplate(org.orgId, hrAll);
   const cycle = await createCycle({
     orgId: org.orgId,
     actorId: hrAll,
@@ -236,13 +174,8 @@ async function submittedManagerReview(
   return reviewId;
 }
 
-function perfError(error: unknown): HrmPerformanceError {
-  assert.ok(error instanceof HrmPerformanceError, `expected HrmPerformanceError, got ${String(error)}`);
-  return error;
-}
-
 test("calibration sessions refuse a cycle scoped to another subsidiary", async () => {
-  const h = await setupHarness();
+  const h = await setupCalibrationScopeHarness();
   try {
     const templateId = (await db.execute<{ templateId: string }>(sql`
       select template_id as "templateId" from hrm_review_cycles
@@ -273,7 +206,7 @@ test("calibration sessions refuse a cycle scoped to another subsidiary", async (
 });
 
 test("opening a session enters only in-scope reviews and decides only in-scope entries", async () => {
-  const h = await setupHarness();
+  const h = await setupCalibrationScopeHarness();
   try {
     await submittedManagerReview(h, h.managerAUser, h.workerAEmployment);
     await submittedManagerReview(h, h.managerBUser, h.workerBEmployment);
@@ -322,7 +255,7 @@ test("opening a session enters only in-scope reviews and decides only in-scope e
 });
 
 test("deciding and closing across the fence is refused", async () => {
-  const h = await setupHarness();
+  const h = await setupCalibrationScopeHarness();
   try {
     await submittedManagerReview(h, h.managerAUser, h.workerAEmployment);
     await submittedManagerReview(h, h.managerBUser, h.workerBEmployment);
@@ -383,7 +316,7 @@ test("deciding and closing across the fence is refused", async () => {
 });
 
 test("rating changes and reversions wait for a closing calibration session", async () => {
-  const h = await setupHarness();
+  const h = await setupCalibrationScopeHarness();
   let releaseReviewLock!: () => void;
   let reviewLocked!: () => void;
   const release = new Promise<void>((resolve) => { releaseReviewLock = resolve; });

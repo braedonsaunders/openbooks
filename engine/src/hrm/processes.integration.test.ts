@@ -8,8 +8,17 @@ import {
   createScratchUser,
   dropScratchOrg,
   seedApprovalFlow,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  enableHrm,
+  grant,
+  mkEmployment,
+  mkParty,
+  mkVersion,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { decideGate } from "../flows/gates.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import {
@@ -46,54 +55,9 @@ installEngineSeams();
  * proves RLS invisibility on the read service.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
 
 // Same shape as the change-request suite: the approval release refuses an
 // approver with no linked person by design, so every decider gets one.
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkParty(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
-
-async function mkVersion(orgId: string, employmentId: string, from: string, status = "active"): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from)
-    values (${orgId}, ${employmentId}, 1, ${status}, ${from}::date) returning id`)).rows[0]!.id;
-}
-
 async function mkFolder(orgId: string, name: string, ownerId: string | null, isPrivate: boolean): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into folders (org_id, name, owner_id, is_private)
@@ -106,24 +70,11 @@ async function mkFile(orgId: string, folderId: string, name: string): Promise<st
     values (${orgId}, ${folderId}, ${name}, 'other', 'application/octet-stream', 10) returning id`)).rows[0]!.id;
 }
 
-type Harness = {
-  org: ScratchOrg;
-  managerId: string;
-  workerPartyId: string;
-  employmentId: string;
-};
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const managerId = await createScratchUser(org.orgId, "HRM Process Manager", "hrm_process_manager");
-  await grant(org.orgId, managerId, ["hrm.process.read", "hrm.process.manage", "hrm.employment.manage"]);
-  await linkPerson(org.orgId, managerId);
-  const workerPartyId = await mkParty(org.orgId, "Process Worker");
-  const employmentId = await mkEmployment(org.orgId, workerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, employmentId, "2020-01-01");
-  return { org, managerId, workerPartyId, employmentId };
-}
+const PROCESSES_SPEC = {
+  users: [
+    { key: "managerId", name: "HRM Process Manager", handle: "hrm_process_manager", permissions: ["hrm.process.read", "hrm.process.manage", "hrm.employment.manage"], link: true },
+  ],
+} as const;
 
 async function seedTemplate(
   orgId: string,
@@ -160,19 +111,19 @@ async function seedTemplate(
   return template.id;
 }
 
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
 async function stepRows(processId: string): Promise<Array<{ id: string; title: string; due_on: string; status: string }>> {
   return (await db.execute<{ id: string; title: string; due_on: string; status: string }>(sql`
     select id, title, due_on::text as due_on, status from hrm_process_steps
      where process_id = ${processId} order by position`)).rows;
+}
+
+async function setupProcessesHarness() {
+  return setupHarness(PROCESSES_SPEC, async (base) => {
+    const workerPartyId = await mkParty(base.org.orgId, "Process Worker");
+    const employmentId = await mkEmployment(base.org.orgId, workerPartyId, base.org.subsidiaryId);
+    await mkVersion(base.org.orgId, employmentId, { from: "2020-01-01" });
+    return { workerPartyId, employmentId };
+  });
 }
 
 test("0193 migration exposes four org-isolated tables with the open-process unique", { skip: !DB }, async () => {
@@ -208,7 +159,7 @@ test("0193 migration exposes four org-isolated tables with the open-process uniq
 });
 
 test("open snapshots the template and refuses duplicates and versionless employments", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding");
     const opened = await openProcess({
       orgId: h.org.orgId,
@@ -269,7 +220,7 @@ test("open snapshots the template and refuses duplicates and versionless employm
 });
 
 test("the template picker and explicit open both enforce the employment scope", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     const otherSubsidiaryId = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
@@ -309,7 +260,7 @@ test("the template picker and explicit open both enforce the employment scope", 
 });
 
 test("step evidence, required skips, and process completion refuse by name", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding", {
       steps: [
         { position: 0, title: "Upload contract", ownerKind: "hr", evidenceKind: "attachment" },
@@ -372,7 +323,7 @@ test("step evidence, required skips, and process completion refuse by name", { s
 });
 
 test("skipping a required step without employment.manage is refused", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding");
     const limited = await createScratchUser(h.org.orgId, "HRM Limited", "hrm_limited");
     await grant(h.org.orgId, limited, ["hrm.process.read", "hrm.process.manage"]);
@@ -400,7 +351,7 @@ test("skipping a required step without employment.manage is refused", { skip: !D
 });
 
 test("self-service completes only one's own steps and reads only the step", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding", {
       steps: [
         { position: 0, title: "Sign handbook", ownerKind: "employee", evidenceKind: "acknowledgement" },
@@ -447,7 +398,7 @@ test("self-service completes only one's own steps and reads only the step", { sk
 });
 
 test("reads segment overdue work and the overview under RLS with a second org", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding");
     const opened = await openProcess({
       orgId: h.org.orgId,
@@ -489,7 +440,7 @@ test("reads segment overdue work and the overview under RLS with a second org", 
 });
 
 test("approved hire auto-opens onboarding in the apply transaction", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     await seedApprovalFlow(h.org.orgId, {
       subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
       assignees: [{ type: "user", userId: h.managerId }],
@@ -534,7 +485,7 @@ test("approved hire auto-opens onboarding in the apply transaction", { skip: !DB
 });
 
 test("hire without a template applies the hire and opens no checklist; the explicit open still refuses", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     await seedApprovalFlow(h.org.orgId, {
       subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
       assignees: [{ type: "user", userId: h.managerId }],
@@ -606,7 +557,7 @@ test("hire without a template applies the hire and opens no checklist; the expli
 });
 
 test("deleting a template that opened processes is refused with the remedy", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupProcessesHarness(), async (h) => {
     const templateId = await seedTemplate(h.org.orgId, h.managerId, "onboarding");
     await openProcess({
       orgId: h.org.orgId,

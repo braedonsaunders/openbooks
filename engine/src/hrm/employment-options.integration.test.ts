@@ -15,6 +15,13 @@ import {
   createScratchUser,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  enableHrm,
+  grantRead,
+  mkEmployment,
+  mkParty,
+  restrictRole,
+} from "../testing/hrm-harness.ts";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 
@@ -23,38 +30,6 @@ const skip = !process.env.OPENBOOKS_DB_URL;
 // under the aggregate read authority, and the location options list active
 // native locations with subsidiary scope. Runs against the reviewer's own
 // database; never touches shared fixtures.
-
-async function enableHrm(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${orgId}`);
-}
-
-async function grantRead(orgId: string, roleKey: string): Promise<void> {
-  await db.execute(sql`
-    update app_roles set permissions = '["hrm.employment.read"]'::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function restrictRole(orgId: string, roleKey: string, subsidiaryIds: string[]): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
-async function mkParty(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name)
-    values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
 
 async function mkPrimaryAssignment(orgId: string, employmentId: string, jobTitle: string): Promise<void> {
   const slot = (await db.execute<{ id: string }>(sql`

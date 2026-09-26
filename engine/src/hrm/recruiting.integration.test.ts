@@ -10,12 +10,17 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  seedApprovalFlow,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
+import {
+  enableDepth,
+  grantPermissions,
+  linkPerson,
+  recruitingError,
+  seedFlow,
+  withHarness as runWithHarness,
+} from "../testing/hrm-harness.ts";
 import { createPosition, writePositionFunding } from "./positions.ts";
-import { RecruitingError } from "./recruiting/errors.ts";
 import {
   createPipelineTemplate,
   ensureDefaultPipelineTemplate,
@@ -89,27 +94,22 @@ type Harness = {
   interviewerPartyId: string;
 };
 
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
+/**
+ * Recruiting-depth feature keys. The parent goes first: enabling only the
+ * children leaves every gate refusing by name.
+ */
+const RECRUITING_DEPTH_KEYS = [
+  "hrm",
+  "hrmRecruiting",
+  "hrmStructuredInterviews",
+  "hrmInterviewScheduling",
+  "hrmOfferSigning",
+  "hrmJobBoards",
+  "hrmCandidateRetention",
+  "hrmTalentPool",
+];
 
-async function linkPerson(orgId: string, userId: string, name: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function setupHarness(): Promise<Harness> {
+async function setupRecruitingHarness(): Promise<Harness> {
   const org = await createScratchOrg();
   await enableRecruitingDepth(org.orgId);
   const recruiterId = await createScratchUser(org.orgId, "HRM Recruiter", "hrm_recruiter");
@@ -132,21 +132,8 @@ async function setupHarness(): Promise<Harness> {
   return { org, recruiterId, approverId, managerId, managerPartyId, interviewerId, interviewerPartyId };
 }
 
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function seedFlow(orgId: string, approverId: string): Promise<void> {
-  await seedApprovalFlow(orgId, {
-    subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
-    assignees: [{ type: "user", userId: approverId }],
-    mode: "any",
-  });
+function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
+  return runWithHarness(setupRecruitingHarness, fn);
 }
 
 /** A live employee holding a position slot (test-only direct writer). */
@@ -203,11 +190,6 @@ async function eventKinds(orgId: string, applicationId: string): Promise<string[
     select kind from hrm_application_events
      where org_id = ${orgId} and application_id = ${applicationId} order by recorded_at, id`)).rows;
   return rows.map((row) => row.kind);
-}
-
-function recruitingError(error: unknown): RecruitingError {
-  assert.ok(error instanceof RecruitingError, `expected RecruitingError, got ${String(error)}`);
-  return error;
 }
 
 /**
@@ -987,8 +969,8 @@ test("the interviewer sees the name and the interview, nothing else", { skip: !D
 });
 
 test("a second organization sees nothing of the first, at the policy itself", { skip: !DB }, async () => {
-  const first = await setupHarness();
-  const second = await setupHarness();
+  const first = await setupRecruitingHarness();
+  const second = await setupRecruitingHarness();
   try {
     const requisition = await createRequisition({
       orgId: first.org.orgId,
@@ -1071,21 +1053,7 @@ async function enableRecruitingDepth(orgId: string): Promise<void> {
   // The depth keys ride the registry's parent chain (hrmRecruiting requires
   // the hrm parent): enabling only the children leaves every gate refusing
   // by name, so the parent goes on first.
-  for (const key of [
-    "hrm",
-    "hrmRecruiting",
-    "hrmStructuredInterviews",
-    "hrmInterviewScheduling",
-    "hrmOfferSigning",
-    "hrmJobBoards",
-    "hrmCandidateRetention",
-    "hrmTalentPool",
-  ] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
+  await enableDepth(orgId, RECRUITING_DEPTH_KEYS);
 }
 
 /**

@@ -3,50 +3,23 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { ensureCloseDefaults } from "./defaults.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { assignCloseTaskTx } from "./tasks.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import {
-  createScratchOrg,
   dropScratchOrg,
-  seedFlowActors,
 } from "../testing/fixtures.ts";
+import {
+  setupCloseAutomationHarness,
+  type CloseAutomationHarness,
+} from "../testing/hrm-harness.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-interface Harness {
-  orgId: string;
-  runId: string;
-  submitterId: string;
-  approver1Id: string;
-  adminId: string;
-}
+type Harness = CloseAutomationHarness;
 
-async function setupHarness(): Promise<Harness> {
-  const fixture = await createScratchOrg();
-  const actors = await seedFlowActors(fixture.orgId);
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"advancedClose":true}'::jsonb, true)
-    where id = ${fixture.orgId}`);
-  const defaults = await ensureCloseDefaults(fixture.orgId, actors.adminId);
-  const runId = (await db.execute<{ id: string }>(sql`
-    insert into close_runs
-      (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
-       current_stage, target_close_date, scope, data_fingerprint, started_at, started_by, created_by, updated_by)
-    values (${fixture.orgId}, ${fixture.periodId}, ${fixture.bookId}, ${defaults.blueprintId},
-            ${defaults.reportingPackageId}, 'in_progress', 'execute', current_date + 30,
-            '{}'::jsonb, 'fp-assign-task', now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
-    returning id`)).rows[0]!.id;
-  return {
-    orgId: fixture.orgId,
-    runId,
-    submitterId: actors.submitterId,
-    approver1Id: actors.approver1Id,
-    adminId: actors.adminId,
-  };
+async function setupAssignHarness(): Promise<Harness> {
+  return setupCloseAutomationHarness("fp-assign-task");
 }
 
 async function insertTask(h: Harness, key: string): Promise<string> {
@@ -92,7 +65,7 @@ function fire(h: Harness, taskId: string) {
 }
 
 test("assignment automation sets the owner and writes a task audit event", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupAssignHarness();
   try {
     const taskId = await insertTask(h, "assignable");
     await stabilize(h, h.approver1Id);
@@ -109,7 +82,7 @@ test("assignment automation sets the owner and writes a task audit event", { ski
 });
 
 test("assignment against a vanished task is refused by name, never a zero-row success", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupAssignHarness();
   try {
     // The automation claim blind-inserts the trigger's task id, so a fully
     // deleted task fails before any branch runs; the race this guards is a

@@ -13,6 +13,10 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  scopeRole,
+} from "../../testing/hrm-harness.ts";
 import { encryptRespondentLink } from "../surveys/responses.ts";
 import { storeCabinetFile } from "./cabinet.ts";
 import { buildExport, downloadExport, listExports, requestExport } from "./dsar.ts";
@@ -37,15 +41,9 @@ type Harness = {
   otherPartyId: string;
 };
 
-async function setupHarness(): Promise<Harness> {
+async function setupDsarDomainsHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  for (const feature of ["hrm", "hrmDocuments", "hrmDataSubjectExport"]) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${org.orgId}
-    `);
-  }
+  await enableHrm(org.orgId, "hrmDocuments", "hrmDataSubjectExport");
   const partyId = randomUUID();
   await db.execute(sql`insert into parties (id, org_id, kind, display_name, email, is_active, custom) values (${partyId}, ${org.orgId}, 'person', 'Sam Subject', 'sam@scratch.test', true, '{}'::jsonb)`);
   const employmentId = randomUUID();
@@ -54,11 +52,7 @@ async function setupHarness(): Promise<Harness> {
   const otherPartyId = randomUUID();
   await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom) values (${otherPartyId}, ${org.orgId}, 'person', 'Ivy Interviewer', true, '{}'::jsonb)`);
   const adminId = await createScratchUser(org.orgId, "Ada Admin", "dsar_dom_admin");
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.documents.read", "hrm.documents.manage"]'::jsonb,
-           subsidiary_restriction = '{"mode": "all"}'::jsonb
-     where org_id = ${org.orgId} and key = 'dsar_dom_admin'`);
+  await scopeRole(org.orgId, "dsar_dom_admin", ["hrm.documents.read", "hrm.documents.manage"], "all");
   return { org, adminId, partyId, employmentId, otherPartyId };
 }
 
@@ -245,7 +239,7 @@ async function seedEmploymentExtras(h: Harness): Promise<void> {
 
 test("an export carries every new domain and the manifest names them all", { skip: !DB }, async () => {
   if (!DB) return;
-  const h = await setupHarness();
+  const h = await setupDsarDomainsHarness();
   try {
     await seedRecruiting(h);
     await seedQualifications(h);

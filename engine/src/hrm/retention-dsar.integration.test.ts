@@ -8,11 +8,15 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import {
-  createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  grantPermissions,
+  setupHarness,
+  withHarness,
+} from "../testing/hrm-harness.ts";
 import { HrmDocumentsError } from "./documents/errors.ts";
 import { saveCategory } from "./documents/categories.ts";
 import { generateDocument, sendDocument, signTokenDocument } from "./documents/documents.ts";
@@ -33,19 +37,16 @@ import { buildExport, claimQueuedExport, downloadExport, listExports, requestExp
  * read back from storage, never from service returns alone.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const FEATURES = ["hrm", "hrmDocuments", "hrmDocumentRetention", "hrmDataSubjectExport"];
+const RETENTION_FEATURES = ["hrm", "hrmDocuments", "hrmDocumentRetention", "hrmDataSubjectExport"] as const;
 
-async function enableFeatures(orgId: string): Promise<void> {
-  for (const feature of FEATURES) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
-    `);
-  }
-}
+const RETENTION_SPEC = {
+  features: RETENTION_FEATURES,
+  users: [
+    { key: "hrId", name: "HR Admin", handle: "hr_admin", permissions: ["hrm.documents.read", "hrm.documents.manage"] },
+    { key: "employeeId", name: "Rita Retention", handle: "employee_self", permissions: ["hrm.self.read"] },
+  ],
+} as const;
 
 async function setGraceDays(orgId: string, days: number): Promise<void> {
   await db.execute(sql`
@@ -70,62 +71,10 @@ async function waitForDocumentLockWaiters(expected: number): Promise<void> {
   assert.fail(`expected ${expected} document-lock waiter(s)`);
 }
 
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-type Harness = { org: ScratchOrg; hrId: string; employeeId: string; partyId: string; employmentId: string };
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableFeatures(org.orgId);
-  await setGraceDays(org.orgId, 0);
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, email, is_active, custom)
-    values (${partyId}, ${org.orgId}, 'person', 'Rita Retention', 'rita@scratch.test', true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  const hrId = await createScratchUser(org.orgId, "HR Admin", "hr_admin");
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${hrId} and org_id = ${org.orgId}`);
-  const employeeId = await createScratchUser(org.orgId, "Rita Retention", "employee_self");
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${employeeId} and org_id = ${org.orgId}`);
-  await grantPermissions(org.orgId, hrId, ["hrm.documents.read", "hrm.documents.manage"]);
-  await grantPermissions(org.orgId, employeeId, ["hrm.self.read"]);
-  // The declared category vocabulary templates and schedules must name.
-  for (const [key, label] of [["contract", "Contracts"], ["letter", "Letters"]] as const) {
-    await saveCategory({ orgId: org.orgId, actorId: hrId, key, label });
-  }
-  return { org, hrId, employeeId, partyId, employmentId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function makeTemplate(h: Harness, category: string): Promise<string> {
+async function makeTemplate(org: ScratchOrg, hrId: string, category: string): Promise<string> {
   const tpl = await saveTemplate({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
+    orgId: org.orgId,
+    actorId: hrId,
     name: `Template ${randomUUID().slice(0, 8)}`,
     categoryKey: category,
     bodyTemplate: "Hello {{employee_name}}.",
@@ -137,27 +86,54 @@ async function makeTemplate(h: Harness, category: string): Promise<string> {
   return tpl.id;
 }
 
-async function completeDocument(h: Harness, templateId: string, title: string): Promise<string> {
+async function completeDocument(org: ScratchOrg, hrId: string, employmentId: string, partyId: string, templateId: string, title: string): Promise<string> {
   const { document } = await generateDocument({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
+    orgId: org.orgId,
+    actorId: hrId,
     templateId,
-    employmentId: h.employmentId,
-    partyId: h.partyId,
+    employmentId,
+    partyId,
     title,
     today: "2026-09-21",
   });
-  const sent = await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
+  const sent = await sendDocument({ orgId: org.orgId, actorId: hrId, documentId: document.id });
   // The hr user and the subject share one party here, so the single
   // employee signature completes the document.
   await signTokenDocument({ token: sent.deliveries[0]!.token, name: "Rita Retention" });
   return document.id;
 }
 
+async function setupRetentionHarness() {
+  return setupHarness(RETENTION_SPEC, async (base) => {
+    await setGraceDays(base.org.orgId, 0);
+    const partyId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, email, is_active, custom)
+      values (${partyId}, ${base.org.orgId}, 'person', 'Rita Retention', 'rita@scratch.test', true, '{}'::jsonb)
+    `);
+    const employmentId = randomUUID();
+    await db.execute(sql`
+      insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+      values (${employmentId}, ${base.org.orgId}, ${partyId}, ${base.org.subsidiaryId}, 1)
+    `);
+    await db.execute(sql`
+      insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
+      values (${base.org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
+    `);
+    await db.execute(sql`update users set party_id = ${partyId} where id = ${base.hrId} and org_id = ${base.org.orgId}`);
+    await db.execute(sql`update users set party_id = ${partyId} where id = ${base.employeeId} and org_id = ${base.org.orgId}`);
+    // The declared category vocabulary templates and schedules must name.
+    for (const [key, label] of [["contract", "Contracts"], ["letter", "Letters"]] as const) {
+      await saveCategory({ orgId: base.org.orgId, actorId: base.hrId, key, label });
+    }
+    return { partyId, employmentId };
+  });
+}
+
 test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-    const contractTpl = await makeTemplate(h, "contract");
-    const letterTpl = await makeTemplate(h, "letter");
+  await withHarness(() => setupRetentionHarness(), async (h) => {
+    const contractTpl = await makeTemplate(h.org, h.hrId, "contract");
+    const letterTpl = await makeTemplate(h.org, h.hrId, "letter");
     await saveSchedule({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -189,8 +165,8 @@ test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !
       /already has a schedule/,
     );
 
-    const deleteId = await completeDocument(h, contractTpl, "Deletable contract");
-    const anonId = await completeDocument(h, letterTpl, "Anonymizable letter");
+    const deleteId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, contractTpl, "Deletable contract");
+    const anonId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, letterTpl, "Anonymizable letter");
     const heldDoc = await generateDocument({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -279,8 +255,8 @@ test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !
 });
 
 test("a missing termination anchor cannot execute retention or multiply blocked actions", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-    const templateId = await makeTemplate(h, "contract");
+  await withHarness(() => setupRetentionHarness(), async (h) => {
+    const templateId = await makeTemplate(h.org, h.hrId, "contract");
     await saveSchedule({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -289,7 +265,7 @@ test("a missing termination anchor cannot execute retention or multiply blocked 
       fromEvent: "termination",
       action: "delete",
     });
-    const documentId = await completeDocument(h, templateId, "Termination anchored record");
+    const documentId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, templateId, "Termination anchored record");
 
     for (let tick = 0; tick < 2; tick += 1) {
       const result = await runRetentionTick(h.org.orgId, "2026-09-24");
@@ -311,13 +287,13 @@ test("a missing termination anchor cannot execute retention or multiply blocked 
 });
 
 test("a legal hold that races retention wins before destructive execution", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-    const templateId = await makeTemplate(h, "contract");
+  await withHarness(() => setupRetentionHarness(), async (h) => {
+    const templateId = await makeTemplate(h.org, h.hrId, "contract");
     await saveSchedule({
       orgId: h.org.orgId, actorId: h.hrId, categoryKey: "contract",
       retainYears: 0, fromEvent: "completion", action: "delete",
     });
-    const documentId = await completeDocument(h, templateId, "Hold race document");
+    const documentId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, templateId, "Hold race document");
     const completed = (await db.execute<{ tick_day: string }>(sql`
       select retain_until::text as tick_day from hrm_documents
        where org_id = ${h.org.orgId} and id = ${documentId}
@@ -368,8 +344,8 @@ test("a legal hold that races retention wins before destructive execution", { sk
 });
 
 test("the tick expires stale sends", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-    const tpl = await makeTemplate(h, "contract");
+  await withHarness(() => setupRetentionHarness(), async (h) => {
+    const tpl = await makeTemplate(h.org, h.hrId, "contract");
     const { document } = await generateDocument({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -391,7 +367,7 @@ test("the tick expires stale sends", { skip: !DB }, async () => {
 });
 
 test("DSAR zip contents against a seeded person", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupRetentionHarness(), async (h) => {
     // Leave, time, a pay stub, and an HR document for the subject.
     const leaveType = randomUUID();
     await db.execute(sql`
@@ -425,8 +401,8 @@ test("DSAR zip contents against a seeded person", { skip: !DB }, async () => {
       insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
       values (${h.org.orgId}, ${runId}, ${h.partyId}, ${h.employmentId}, 'TX', 52, '2026-09-19'::date, 2026, 'USD', '900.0000', '700.0000')
     `);
-    const tpl = await makeTemplate(h, "contract");
-    await completeDocument(h, tpl, "My contract");
+    const tpl = await makeTemplate(h.org, h.hrId, "contract");
+    await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, tpl, "My contract");
 
     // The subject requests their own export with the self grant alone.
     const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
@@ -472,7 +448,7 @@ test("DSAR zip contents against a seeded person", { skip: !DB }, async () => {
 });
 
 test("DSAR exports paginate unbounded histories instead of truncating at 2000", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupRetentionHarness(), async (h) => {
     // 2500 time entries: three keyset pages where the old
     // ORDER BY worked_on LIMIT 2000 silently dropped 500 rows while the
     // export still reported ready.
@@ -543,7 +519,7 @@ test("DSAR exports paginate unbounded histories instead of truncating at 2000", 
 });
 
 test("DSAR claims are durable: one worker wins and the loser cannot fail the export", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupRetentionHarness(), async (h) => {
     const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
     // The first claim durably marks the row building with an owner + lease.
     const ownerA = randomUUID();
@@ -587,7 +563,7 @@ test("DSAR claims are durable: one worker wins and the loser cannot fail the exp
 });
 
 test("DSAR reclaims expired leases oldest-first", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupRetentionHarness(), async (h) => {
     const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
     // A worker claims then crashes: the row sits building with a dead lease.
     await claimQueuedExport(db, h.org.orgId, randomUUID());
@@ -611,9 +587,9 @@ test("DSAR reclaims expired leases oldest-first", { skip: !DB }, async () => {
 });
 
 test("DSAR export with missing file bytes is incomplete with omission evidence", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-    const tpl = await makeTemplate(h, "contract");
-    const docId = await completeDocument(h, tpl, "My contract");
+  await withHarness(() => setupRetentionHarness(), async (h) => {
+    const tpl = await makeTemplate(h.org, h.hrId, "contract");
+    const docId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, tpl, "My contract");
     // Lose the bytes the way retention delete does (file row survives, no
     // retrievable version remains) so the documents join finds nothing.
     const file = (await db.execute<{ file_id: string }>(sql`
@@ -655,8 +631,8 @@ test("DSAR export with missing file bytes is incomplete with omission evidence",
 });
 
 test("retention action is frozen at completion: schedule edits govern only future documents", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
-    const tpl = await makeTemplate(h, "contract");
+  await withHarness(() => setupRetentionHarness(), async (h) => {
+    const tpl = await makeTemplate(h.org, h.hrId, "contract");
     await saveSchedule({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -665,7 +641,7 @@ test("retention action is frozen at completion: schedule edits govern only futur
       fromEvent: "completion",
       action: "anonymize",
     });
-    const docId = await completeDocument(h, tpl, "Freezable contract");
+    const docId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, tpl, "Freezable contract");
     // The completion snapshot froze the governing action alongside the date.
     const snap = (await db.execute<{ retention_action: string | null }>(sql`
       select retention_action from hrm_documents where id = ${docId}

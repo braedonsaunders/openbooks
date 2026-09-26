@@ -7,8 +7,11 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  type ScratchOrg,
 } from "../testing/fixtures.ts";
+import {
+  DB,
+  setupHarness,
+} from "../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { HrmOrgChartError } from "./documents/errors.ts";
 import { loadDirectory, loadOrgChart } from "./org-chart.ts";
@@ -21,15 +24,41 @@ import { loadDirectory, loadOrgChart } from "./org-chart.ts";
  * the read gate. Proofs are read back from the service shape.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type Harness = {
-  org: ScratchOrg;
-  readerId: string;
-  ceoEmploymentId: string;
-  managerEmploymentId: string;
-  employeeEmploymentId: string;
-};
+const ORG_CHART_SPEC = {
+  features: ["hrm", "hrmOrgChart"],
+  users: [
+    { key: "readerId", name: "Reader", handle: "reader_self", permissions: ["hrm.employment.read"] },
+  ],
+} as const;
+
+async function setupOrgChartHarness() {
+  return setupHarness(ORG_CHART_SPEC, async (base) => {
+    const ceo = await seedEmployment(base.org.orgId, base.org.subsidiaryId, "Cora Ceo", "Chief Executive");
+    const manager = await seedEmployment(base.org.orgId, base.org.subsidiaryId, "Mira Manager", "Manager");
+    const employee = await seedEmployment(base.org.orgId, base.org.subsidiaryId, "Eddie Employee", "Associate");
+    await seedReport(base.org.orgId, manager.employmentId, ceo.employmentId, "2020-01-01");
+    // Future-dated manager change: Eddie reports to Mira until 2026-10-01,
+    // then to Cora. Adjacent windows — history stays queryable on both sides.
+    await seedReport(base.org.orgId, employee.employmentId, manager.employmentId, "2020-01-01", "2026-10-01");
+    await seedReport(base.org.orgId, employee.employmentId, ceo.employmentId, "2026-10-01");
+    // A funded-but-empty position: open, never assigned.
+    const positionId = randomUUID();
+    await db.execute(sql`
+      insert into positions (id, org_id, position_code) values (${positionId}, ${base.org.orgId}, 'ENG-2')
+    `);
+    await db.execute(sql`
+      insert into position_versions
+        (org_id, position_id, version_no, title, employer_subsidiary_id, planned_fte, status, effective_from, recorded_at)
+      values (${base.org.orgId}, ${positionId}, 1, 'Engineer', ${base.org.subsidiaryId}, 1.0000, 'open', '2020-01-01'::date, now())
+    `);
+    return {
+      ceoEmploymentId: ceo.employmentId,
+      managerEmploymentId: manager.employmentId,
+      employeeEmploymentId: employee.employmentId,
+    };
+  });
+}
 
 async function seedEmployment(
   orgId: string,
@@ -81,50 +110,8 @@ async function seedReport(
   `);
 }
 
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  for (const feature of ["hrm", "hrmOrgChart"]) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${org.orgId}
-    `);
-  }
-  const ceo = await seedEmployment(org.orgId, org.subsidiaryId, "Cora Ceo", "Chief Executive");
-  const manager = await seedEmployment(org.orgId, org.subsidiaryId, "Mira Manager", "Manager");
-  const employee = await seedEmployment(org.orgId, org.subsidiaryId, "Eddie Employee", "Associate");
-  await seedReport(org.orgId, manager.employmentId, ceo.employmentId, "2020-01-01");
-  // Future-dated manager change: Eddie reports to Mira until 2026-10-01,
-  // then to Cora. Adjacent windows — history stays queryable on both sides.
-  await seedReport(org.orgId, employee.employmentId, manager.employmentId, "2020-01-01", "2026-10-01");
-  await seedReport(org.orgId, employee.employmentId, ceo.employmentId, "2026-10-01");
-  // A funded-but-empty position: open, never assigned.
-  const positionId = randomUUID();
-  await db.execute(sql`
-    insert into positions (id, org_id, position_code) values (${positionId}, ${org.orgId}, 'ENG-2')
-  `);
-  await db.execute(sql`
-    insert into position_versions
-      (org_id, position_id, version_no, title, employer_subsidiary_id, planned_fte, status, effective_from, recorded_at)
-    values (${org.orgId}, ${positionId}, 1, 'Engineer', ${org.subsidiaryId}, 1.0000, 'open', '2020-01-01'::date, now())
-  `);
-  const readerId = await createScratchUser(org.orgId, "Reader", "reader_self");
-  await db.execute(sql`
-    insert into user_permission_overrides (org_id, user_id, permission, effect)
-    values (${org.orgId}, ${readerId}, 'hrm.employment.read', 'grant')
-    on conflict (user_id, permission) do update set effect = 'grant'
-  `);
-  return {
-    org,
-    readerId,
-    ceoEmploymentId: ceo.employmentId,
-    managerEmploymentId: manager.employmentId,
-    employeeEmploymentId: employee.employmentId,
-  };
-}
-
 test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOrgChartHarness();
   try {
     const before = await loadOrgChart({ orgId: h.org.orgId, actorId: h.readerId, asOf: "2026-09-21" });
     assert.equal(before.headcount, 3);
@@ -176,7 +163,7 @@ test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async 
 });
 
 test("directory pages continue past 200 rows and report the scoped total", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOrgChartHarness();
   try {
     await db.execute(sql`
       with new_parties as (

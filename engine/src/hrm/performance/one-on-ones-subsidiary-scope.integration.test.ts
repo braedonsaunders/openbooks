@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
@@ -8,6 +7,14 @@ import {
   createScratchUser,
   dropScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  enableHrm,
+  linkPerson,
+  mkEmployment,
+  mkHr,
+  mkReporting,
+  mkSecondSubsidiary,
+} from "../../testing/hrm-harness.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import {
   cancelOneOnOne,
@@ -31,54 +38,15 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableOneOnOnes(orgId: string): Promise<void> {
-  for (const feature of ["hrm", "hrmPerformance", "hrmOneOnOnes"]) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}, 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
+// Shared HRM seeding helpers (feature flags, person links, scoped HR users,
+// employments, reporting lines, second subsidiaries) live in
+// engine/src/testing/hrm-harness.ts; only the pair seeder below stays local.
 
-async function linkPerson(orgId: string, userId: string): Promise<string> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-  return partyId;
-}
-
-async function mkHr(
-  orgId: string,
-  name: string,
-  roleKey: string,
-  subsidiaryIds: string[] | null,
-): Promise<string> {
-  const userId = await createScratchUser(orgId, name, roleKey);
-  await linkPerson(orgId, userId);
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.performance.read", "hrm.performance.manage", "hrm.self.read"]'::jsonb,
-           subsidiary_restriction = ${subsidiaryIds === null ? JSON.stringify({ mode: "all" }) : JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-  return userId;
-}
-
-async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
-    insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
-}
-
-async function mkSecondSubsidiary(orgId: string, parentId: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${id}, ${orgId}, ${parentId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-  return id;
-}
+const ONE_ON_ONE_HR_PERMISSIONS = [
+  "hrm.performance.read",
+  "hrm.performance.manage",
+  "hrm.self.read",
+];
 
 type Pair = {
   managerUserId: string;
@@ -94,11 +62,7 @@ async function mkPair(orgId: string, label: string, subsidiaryId: string): Promi
   const reportUserId = await createScratchUser(orgId, `Report ${label}`, `one2one_report_${label}`);
   const reportPartyId = await linkPerson(orgId, reportUserId);
   const reportEmploymentId = await mkEmployment(orgId, reportPartyId, subsidiaryId);
-  await db.execute(sql`
-    insert into reporting_relationships
-      (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from)
-    values (${orgId}, ${reportEmploymentId}, ${managerEmploymentId}, 'line', ${randomUUID()}, 1, '2020-01-01'::date)
-  `);
+  await mkReporting(orgId, reportEmploymentId, managerEmploymentId);
   return { managerUserId, managerEmploymentId, reportUserId, reportEmploymentId };
 }
 
@@ -113,12 +77,12 @@ type Harness = {
   oneB: string;
 };
 
-async function setupHarness(): Promise<Harness> {
+async function setupOneOnOneHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableOneOnOnes(org.orgId);
+  await enableHrm(org.orgId, "hrmPerformance", "hrmOneOnOnes");
   const subB = await mkSecondSubsidiary(org.orgId, org.subsidiaryId);
-  const hrFull = await mkHr(org.orgId, "HR Full", "one2one_hr_full", null);
-  const hrA = await mkHr(org.orgId, "HR A", "one2one_hr_a", [org.subsidiaryId]);
+  const hrFull = await mkHr(org.orgId, "HR Full", "one2one_hr_full", null, ONE_ON_ONE_HR_PERMISSIONS);
+  const hrA = await mkHr(org.orgId, "HR A", "one2one_hr_a", [org.subsidiaryId], ONE_ON_ONE_HR_PERMISSIONS);
   const a = await mkPair(org.orgId, "a", org.subsidiaryId);
   const b = await mkPair(org.orgId, "b", subB);
   const oneA = (await scheduleOneOnOne({
@@ -135,7 +99,7 @@ async function setupHarness(): Promise<Harness> {
 }
 
 test("a restricted HR lists and reads only the pairs they cover", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOneOnOneHarness();
   try {
     // The privileged list returns every 1:1 in the org only for
     // unrestricted HR; HR-A sees exactly the A pair.
@@ -165,7 +129,7 @@ test("a restricted HR lists and reads only the pairs they cover", { skip: !DB },
 });
 
 test("a restricted HR writes only the pairs they cover", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOneOnOneHarness();
   try {
     // Scheduling for a B report is refused by name; for an A report it lands.
     await assert.rejects(
@@ -223,7 +187,7 @@ test("a restricted HR writes only the pairs they cover", { skip: !DB }, async ()
 });
 
 test("a 1:1 write waits for the report employment scope lock", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOneOnOneHarness();
   let releaseHolder!: () => void;
   let reportLocked!: () => void;
   const hold = new Promise<void>((resolve) => { releaseHolder = resolve; });
@@ -253,7 +217,7 @@ test("a 1:1 write waits for the report employment scope lock", { skip: !DB }, as
 });
 
 test("a restricted HR's schedule directory covers only their subsidiaries", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOneOnOneHarness();
   try {
     const directory = await listOneOnOneDirectory({ orgId: h.orgId, actorId: h.hrA });
     const ids = new Set(directory.employments.map((row) => row.id));
@@ -269,7 +233,7 @@ test("a restricted HR's schedule directory covers only their subsidiaries", { sk
 });
 
 test("the self-service report filter shows nothing for a foreign employment", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOneOnOneHarness();
   try {
     // The /me page forwards ?report= straight into listOneOnOnes as an
     // employment filter: a manager probing another manager's report, or
@@ -292,7 +256,7 @@ test("the self-service report filter shows nothing for a foreign employment", { 
 });
 
 test("a recurring 1:1 follows its weekday and local time across daylight saving", { skip: !DB }, async () => {
-  const h = await setupHarness();
+  const h = await setupOneOnOneHarness();
   try {
     await db.execute(sql`
       update orgs

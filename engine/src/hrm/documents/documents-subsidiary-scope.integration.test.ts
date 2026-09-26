@@ -4,11 +4,15 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  DB,
+  mkSecondSubsidiary,
+  scopeRole,
+  seedPerson,
+  setupHarness,
+  withHarness,
+} from "../../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { UnrestrictedScopeError } from "../../organization/subsidiary-scope.ts";
 import { HrmDocumentsError } from "./errors.ts";
@@ -36,183 +40,110 @@ import { listRetentionActions, saveSchedule } from "./retention.ts";
  * alone.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableFeatures(orgId: string): Promise<void> {
-  for (const feature of ["hrm", "hrmDocuments", "hrmDocumentRetention"]) {
+const DOC_SUBSIDIARY_FEATURES = ["hrm", "hrmDocuments", "hrmDocumentRetention"] as const;
+
+const DOC_SUBSIDIARY_SPEC = {
+  features: DOC_SUBSIDIARY_FEATURES,
+  users: [
+    { key: "adminId", name: "Ada Admin", handle: "doc_admin", permissions: ["hrm.documents.read", "hrm.documents.manage"] },
+    { key: "managerAId", name: "Mara Manager", handle: "doc_manager_a", permissions: ["hrm.documents.read", "hrm.documents.manage"] },
+  ],
+} as const;
+
+async function setupDocSubsidiaryHarness() {
+  return setupHarness(DOC_SUBSIDIARY_SPEC, async (base) => {
+    const subB = await mkSecondSubsidiary(base.org.orgId, base.org.subsidiaryId, { currency: "USD", country: "US" });
+    const empA = await seedPerson(base.org.orgId, base.org.subsidiaryId, "Amy Alpha");
+    const empB = await seedPerson(base.org.orgId, subB, "Ben Beta");
+    await scopeRole(base.org.orgId, "doc_admin", ["hrm.documents.read", "hrm.documents.manage"], "all");
+    await scopeRole(base.org.orgId, "doc_manager_a", ["hrm.documents.read", "hrm.documents.manage"], [base.org.subsidiaryId]);
+    await saveCategory({ orgId: base.org.orgId, actorId: base.adminId, key: "contract", label: "Contracts" });
+    const tpl = await saveTemplate({
+      orgId: base.org.orgId,
+      actorId: base.adminId,
+      name: `Offer ${randomUUID().slice(0, 8)}`,
+      categoryKey: "contract",
+      bodyTemplate: "Dear {{employee_name}} of {{org_name}}.",
+      mergeFields: ["employee_name", "org_name"],
+      requiresSignature: false,
+      signerRoles: [],
+      acknowledgmentOnly: true,
+    });
+    const docA = await generateDocument({
+      orgId: base.org.orgId,
+      actorId: base.adminId,
+      templateId: tpl.id,
+      employmentId: empA.employmentId,
+      partyId: empA.partyId,
+      title: "A offer",
+      today: "2026-09-21",
+    });
+    const docB = await generateDocument({
+      orgId: base.org.orgId,
+      actorId: base.adminId,
+      templateId: tpl.id,
+      employmentId: empB.employmentId,
+      partyId: empB.partyId,
+      title: "B offer",
+      today: "2026-09-21",
+    });
+    // One person employed by both entities: the B-employment slice must stay
+    // out of an A-only actor's reach even though the A employment admits them.
+    const dualPartyId = randomUUID();
     await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
+      insert into parties (id, org_id, kind, display_name, email, is_active, custom)
+      values (${dualPartyId}, ${base.org.orgId}, 'person', 'Dana Dual', 'dana.dual@scratch.test', true, '{}'::jsonb)
     `);
-  }
-}
-
-async function seedPerson(
-  orgId: string,
-  subsidiaryId: string,
-  name: string,
-): Promise<{ partyId: string; employmentId: string }> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, email, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${name}, ${`${name.replaceAll(" ", ".").toLowerCase()}@scratch.test`}, true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  return { partyId, employmentId };
-}
-
-async function mkSecondSubsidiary(orgId: string, parentId: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${id}, ${orgId}, ${parentId}, 'Second Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
-  return id;
-}
-
-type Harness = {
-  org: ScratchOrg;
-  subB: string;
-  adminId: string;
-  managerAId: string;
-  partyA: string;
-  employmentA: string;
-  partyB: string;
-  employmentB: string;
-  dualParty: string;
-  dualEmploymentA: string;
-  dualEmploymentB: string;
-  templateId: string;
-  docAId: string;
-  docBId: string;
-  docDualAId: string;
-  docDualBId: string;
-};
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableFeatures(org.orgId);
-  const subB = await mkSecondSubsidiary(org.orgId, org.subsidiaryId);
-  const empA = await seedPerson(org.orgId, org.subsidiaryId, "Amy Alpha");
-  const empB = await seedPerson(org.orgId, subB, "Ben Beta");
-  const adminId = await createScratchUser(org.orgId, "Ada Admin", "doc_admin");
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.documents.read", "hrm.documents.manage"]'::jsonb,
-           subsidiary_restriction = '{"mode": "all"}'::jsonb
-     where org_id = ${org.orgId} and key = 'doc_admin'`);
-  const managerAId = await createScratchUser(org.orgId, "Mara Manager", "doc_manager_a");
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.documents.read", "hrm.documents.manage"]'::jsonb,
-           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
-     where org_id = ${org.orgId} and key = 'doc_manager_a'`);
-  await saveCategory({ orgId: org.orgId, actorId: adminId, key: "contract", label: "Contracts" });
-  const tpl = await saveTemplate({
-    orgId: org.orgId,
-    actorId: adminId,
-    name: `Offer ${randomUUID().slice(0, 8)}`,
-    categoryKey: "contract",
-    bodyTemplate: "Dear {{employee_name}} of {{org_name}}.",
-    mergeFields: ["employee_name", "org_name"],
-    requiresSignature: false,
-    signerRoles: [],
-    acknowledgmentOnly: true,
+    const dualEmploymentA = randomUUID();
+    const dualEmploymentB = randomUUID();
+    for (const [employmentId, subsidiaryId] of [
+      [dualEmploymentA, base.org.subsidiaryId],
+      [dualEmploymentB, subB],
+    ] as const) {
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${employmentId}, ${base.org.orgId}, ${dualPartyId}, ${subsidiaryId}, 1)
+      `);
+      await db.execute(sql`
+        insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
+        values (${base.org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
+      `);
+    }
+    const docDualA = await generateDocument({
+      orgId: base.org.orgId,
+      actorId: base.adminId,
+      templateId: tpl.id,
+      employmentId: dualEmploymentA,
+      partyId: dualPartyId,
+      title: "Dual A offer",
+      today: "2026-09-21",
+    });
+    const docDualB = await generateDocument({
+      orgId: base.org.orgId,
+      actorId: base.adminId,
+      templateId: tpl.id,
+      employmentId: dualEmploymentB,
+      partyId: dualPartyId,
+      title: "Dual B offer",
+      today: "2026-09-21",
+    });
+    return {
+      subB,
+      partyA: empA.partyId,
+      employmentA: empA.employmentId,
+      partyB: empB.partyId,
+      employmentB: empB.employmentId,
+      dualParty: dualPartyId,
+      dualEmploymentA,
+      dualEmploymentB,
+      templateId: tpl.id,
+      docAId: docA.document.id,
+      docBId: docB.document.id,
+      docDualAId: docDualA.document.id,
+      docDualBId: docDualB.document.id,
+    };
   });
-  const docA = await generateDocument({
-    orgId: org.orgId,
-    actorId: adminId,
-    templateId: tpl.id,
-    employmentId: empA.employmentId,
-    partyId: empA.partyId,
-    title: "A offer",
-    today: "2026-09-21",
-  });
-  const docB = await generateDocument({
-    orgId: org.orgId,
-    actorId: adminId,
-    templateId: tpl.id,
-    employmentId: empB.employmentId,
-    partyId: empB.partyId,
-    title: "B offer",
-    today: "2026-09-21",
-  });
-  // One person employed by both entities: the B-employment slice must stay
-  // out of an A-only actor's reach even though the A employment admits them.
-  const dualPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, email, is_active, custom)
-    values (${dualPartyId}, ${org.orgId}, 'person', 'Dana Dual', 'dana.dual@scratch.test', true, '{}'::jsonb)
-  `);
-  const dualEmploymentA = randomUUID();
-  const dualEmploymentB = randomUUID();
-  for (const [employmentId, subsidiaryId] of [
-    [dualEmploymentA, org.subsidiaryId],
-    [dualEmploymentB, subB],
-  ] as const) {
-    await db.execute(sql`
-      insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-      values (${employmentId}, ${org.orgId}, ${dualPartyId}, ${subsidiaryId}, 1)
-    `);
-    await db.execute(sql`
-      insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-      values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-    `);
-  }
-  const docDualA = await generateDocument({
-    orgId: org.orgId,
-    actorId: adminId,
-    templateId: tpl.id,
-    employmentId: dualEmploymentA,
-    partyId: dualPartyId,
-    title: "Dual A offer",
-    today: "2026-09-21",
-  });
-  const docDualB = await generateDocument({
-    orgId: org.orgId,
-    actorId: adminId,
-    templateId: tpl.id,
-    employmentId: dualEmploymentB,
-    partyId: dualPartyId,
-    title: "Dual B offer",
-    today: "2026-09-21",
-  });
-  return {
-    org,
-    subB,
-    adminId,
-    managerAId,
-    partyA: empA.partyId,
-    employmentA: empA.employmentId,
-    partyB: empB.partyId,
-    employmentB: empB.employmentId,
-    dualParty: dualPartyId,
-    dualEmploymentA,
-    dualEmploymentB,
-    templateId: tpl.id,
-    docAId: docA.document.id,
-    docBId: docB.document.id,
-    docDualAId: docDualA.document.id,
-    docDualBId: docDualB.document.id,
-  };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
 }
 
 async function docStatus(orgId: string, docId: string): Promise<string> {
@@ -222,7 +153,7 @@ async function docStatus(orgId: string, docId: string): Promise<string> {
 }
 
 test("an A-restricted manager lists only in-scope subjects' documents", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const docs = await listDocuments({ orgId: h.org.orgId, actorId: h.managerAId });
     assert.deepEqual(new Set(docs.map((d) => d.id)), new Set([h.docAId, h.docDualAId]));
     const adminDocs = await listDocuments({ orgId: h.org.orgId, actorId: h.adminId });
@@ -235,7 +166,7 @@ test("an A-restricted manager lists only in-scope subjects' documents", { skip: 
 });
 
 test("a dual A+B employee's B-employment slice stays out of an A-only actor's reach", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const q = { orgId: h.org.orgId, actorId: h.managerAId };
     await assert.rejects(
       getDocumentDetail({ ...q, documentId: h.docDualBId }),
@@ -265,7 +196,7 @@ test("a dual A+B employee's B-employment slice stays out of an A-only actor's re
 });
 
 test("an A-restricted manager cannot read, download, send, hold or void B's document", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const q = { orgId: h.org.orgId, actorId: h.managerAId, documentId: h.docBId };
     await assert.rejects(getDocumentDetail(q), /not visible in this organization/);
     await assert.rejects(readDocumentFile(q), /not visible in this organization/);
@@ -292,7 +223,7 @@ test("an A-restricted manager cannot read, download, send, hold or void B's docu
 });
 
 test("retention action pending and history lists expose only visible document subjects", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const schedule = await saveSchedule({
       orgId: h.org.orgId, actorId: h.adminId, categoryKey: "contract",
       retainYears: 7, fromEvent: "completion", action: "anonymize",
@@ -317,7 +248,7 @@ test("retention action pending and history lists expose only visible document su
 });
 
 test("in-session acknowledgment refuses signature templates and terminal documents before recording an event", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     await db.execute(sql`
       update hrm_documents set status = 'signed'
        where org_id = ${h.org.orgId} and id = ${h.docAId}
@@ -352,7 +283,7 @@ test("in-session acknowledgment refuses signature templates and terminal documen
 });
 
 test("concurrent in-session acknowledgment records exactly one transition and event", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     await db.execute(sql`
       update hrm_documents set status = 'sent'
        where org_id = ${h.org.orgId} and id = ${h.docAId}
@@ -373,7 +304,7 @@ test("concurrent in-session acknowledgment records exactly one transition and ev
 });
 
 test("upload refuses an undeclared category and files a declared one", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const filed = {
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -397,7 +328,7 @@ test("upload refuses an undeclared category and files a declared one", { skip: !
 });
 
 test("generation and upload reject an employment that belongs to another party", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const before = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from hrm_documents where org_id = ${h.org.orgId}
     `)).rows[0]!.count;
@@ -424,7 +355,7 @@ test("generation and upload reject an employment that belongs to another party",
 });
 
 test("employment-linked templates refuse generation without an employment", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const template = await saveTemplate({
       orgId: h.org.orgId, actorId: h.adminId, name: "Employment details template",
       categoryKey: "contract", bodyTemplate: "{{department}} / {{position_title}} / {{employment_start}}",
@@ -449,7 +380,7 @@ test("employment-linked templates refuse generation without an employment", { sk
 });
 
 test("an A-restricted manager cannot generate for or template over an out-of-scope subject", { skip: !DB }, async () => {
-  await withHarness(async (h: Harness) => {
+  await withHarness(() => setupDocSubsidiaryHarness(), async (h) => {
     const before = (await db.execute<{ n: string }>(sql`
       select count(*) as n from hrm_documents where org_id = ${h.org.orgId} and party_id = ${h.partyB}
     `)).rows[0]!.n;

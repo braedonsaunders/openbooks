@@ -8,8 +8,16 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  DB,
+  enableFeatures,
+  grantPermissions,
+  seedNamedWorker,
+  seedProject,
+  setupHarness,
+  withHarness,
+} from "../../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { projectDerivedStatus } from "./shared.ts";
 import {
@@ -55,28 +63,17 @@ import { loadMaskingPolicies, seedDefaultMaskingPolicies } from "../../sandbox/m
  * Proofs are read back from storage, never from service returns alone.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const FEATURES = [
-  "hrm",
-  "projects",
-  "projectScheduling",
-  "equipment",
-  "hrmCertifications",
-  "hrmDispatchGating",
-  "hrmEquipmentQualifications",
-  "hrmCertificationAlerts",
-];
 
-async function enableFeatures(orgId: string): Promise<void> {
-  for (const feature of FEATURES) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-       where id = ${orgId}
-    `);
-  }
-}
+const QUALIFICATIONS_FEATURES = ["hrm", "projects", "projectScheduling", "equipment", "hrmCertifications", "hrmDispatchGating", "hrmEquipmentQualifications", "hrmCertificationAlerts"] as const;
+
+const QUALIFICATIONS_SPEC = {
+  features: QUALIFICATIONS_FEATURES,
+  users: [
+    { key: "adminId", name: "Qualification Admin", handle: "qual_admin", permissions: ["hrm.certifications.read", "hrm.certifications.manage"] },
+    { key: "outsiderId", name: "Qualification Outsider", handle: "qual_outsider" },
+  ],
+} as const;
 
 async function disableFeature(orgId: string, feature: string): Promise<void> {
   await db.execute(sql`
@@ -84,62 +81,6 @@ async function disableFeature(orgId: string, feature: string): Promise<void> {
        set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'false'::jsonb, true)
      where id = ${orgId}
   `);
-}
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-type Harness = { org: ScratchOrg; adminId: string; outsiderId: string };
-
-async function setupHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableFeatures(org.orgId);
-  const adminId = await createScratchUser(org.orgId, "Qualification Admin", "qual_admin");
-  const outsiderId = await createScratchUser(org.orgId, "Qualification Outsider", "qual_outsider");
-  await grantPermissions(org.orgId, adminId, ["hrm.certifications.read", "hrm.certifications.manage"]);
-  return { org, adminId, outsiderId };
-}
-
-async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const h = await setupHarness();
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
-async function seedWorker(orgId: string, subsidiaryId: string, name: string): Promise<{ employmentId: string; partyId: string }> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
-  return { employmentId, partyId };
-}
-
-async function seedProject(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into projects (id, org_id, name, status) values (${id}, ${orgId}, ${name}, 'active')
-  `);
-  return id;
 }
 
 async function seedResource(orgId: string, projectId: string, partyId: string | null, name: string): Promise<string> {
@@ -176,7 +117,7 @@ async function seedType(
 }
 
 test("migration 0225 bootstrap: six tables, forced RLS, events append-only", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
     const tables = (await db.execute<{ table: string; rls: boolean }>(sql`
       select tablename as table, rowsecurity as rls
         from pg_tables where schemaname = 'public'
@@ -206,7 +147,7 @@ test("migration 0225 bootstrap: six tables, forced RLS, events append-only", { s
     assert.equal(policies.length, 6);
     // Append-only events: an update is refused by storage, not by the service.
     // The driver wraps the Postgres refusal, so the proof reads the cause.
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Ledger Hand");
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Ledger Hand");
     const typeId = await seedType(h.org.orgId, h.adminId);
     const today = await businessToday(h.org.orgId);
     const q = await recordQualification(db, {
@@ -226,8 +167,8 @@ test("migration 0225 bootstrap: six tables, forced RLS, events append-only", { s
 });
 
 test("record refuses by name: window, undeclared type, missing evidence, retired type", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Refusal Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Refusal Hand");
     const typeId = await seedType(h.org.orgId, h.adminId);
     const today = await businessToday(h.org.orgId);
     // expires_on before issued_on.
@@ -270,8 +211,8 @@ test("record refuses by name: window, undeclared type, missing evidence, retired
 });
 
 test("verify, renew-as-new-row, revoke: hostile loops refused", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Lifecycle Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Lifecycle Hand");
     const typeId = await seedType(h.org.orgId, h.adminId);
     const today = await businessToday(h.org.orgId);
     const q = await recordQualification(db, {
@@ -319,8 +260,8 @@ test("verify, renew-as-new-row, revoke: hostile loops refused", { skip: !DB }, a
 });
 
 test("evidence: in-org file attaches, another org's file refused", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Evidence Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Evidence Hand");
     const typeId = await seedType(h.org.orgId, h.adminId, { requiresEvidence: false });
     const today = await businessToday(h.org.orgId);
     const q = await recordQualification(db, {
@@ -365,8 +306,8 @@ test("evidence: in-org file attaches, another org's file refused", { skip: !DB }
 });
 
 test("derived status projects at read: expiring, expired, pending, valid", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Projection Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Projection Hand");
     const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
     const today = await businessToday(h.org.orgId);
     // Expiring inside the lead window.
@@ -419,8 +360,8 @@ test("derived status projects at read: expiring, expired, pending, valid", { ski
 });
 
 test("future-issued credentials project not-yet-effective and the gate refuses by name", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Future Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Future Hand");
     const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
     const today = await businessToday(h.org.orgId);
     const issued = addDays(today, 1);
@@ -462,7 +403,7 @@ test("future-issued credentials project not-yet-effective and the gate refuses b
 });
 
 test("category vocabulary: undeclared refused, Setup declaration opens it", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
     await assert.rejects(
       createQualificationType(db, {
         orgId: h.org.orgId, actorId: h.adminId, code: "SitePass", name: "Site pass", category: "site-pass",
@@ -481,7 +422,7 @@ test("category vocabulary: undeclared refused, Setup declaration opens it", { sk
 });
 
 test("requirements: unreadable subject refused, zero-row delete fails", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
     const typeId = await seedType(h.org.orgId, h.adminId);
     const ghost = randomUUID();
     for (const kind of ["project", "equipment", "position", "classification"] as const) {
@@ -516,8 +457,8 @@ test("requirements: unreadable subject refused, zero-row delete fails", { skip: 
 });
 
 test("dispatch gate: block refuses by name, warn records a warned event", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Gated Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Gated Hand");
     const typeId = await seedType(h.org.orgId, h.adminId);
     const projectId = await seedProject(h.org.orgId, "North Tower");
     const resourceId = await seedResource(h.org.orgId, projectId, worker.partyId, "Gated Hand");
@@ -578,7 +519,7 @@ test("dispatch gate: block refuses by name, warn records a warned event", { skip
 });
 
 test("dispatch gate resolves the employment effective on the assignment date", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
     // One party, two sequential employments: A answers 2020–2023, B from 2023 on.
     const partyId = randomUUID();
     await db.execute(sql`
@@ -627,7 +568,7 @@ test("dispatch gate resolves the employment effective on the assignment date", {
 });
 
 test("dispatch gate refuses ambiguous employments and wrong-entity rows by name", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
     // One root subsidiary per org (subsidiaries_org_root): the extra
     // entities hang under it as children.
     const otherSubsidiary = randomUUID();
@@ -697,8 +638,8 @@ test("dispatch gate refuses ambiguous employments and wrong-entity rows by name"
 });
 
 test("dispatch gate answers for the task's project, even for shared-pool resources", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Pool Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Pool Hand");
     const typeId = await seedType(h.org.orgId, h.adminId);
     const today = await businessToday(h.org.orgId);
     const gatedProject = await seedProject(h.org.orgId, "Gated Tower");
@@ -761,8 +702,8 @@ test("dispatch gate answers for the task's project, even for shared-pool resourc
 });
 
 test("dispatch gate: feature-off never calls the gate, resourceless rows pass through", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Bypass Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Bypass Hand");
     const typeId = await seedType(h.org.orgId, h.adminId);
     const projectId = await seedProject(h.org.orgId, "South Pier");
     const resourceId = await seedResource(h.org.orgId, projectId, worker.partyId, "Bypass Hand");
@@ -783,7 +724,7 @@ test("dispatch gate: feature-off never calls the gate, resourceless rows pass th
     assert.equal(result.gated, false);
     assert.equal(result.verdict.ok, true);
     // Equipment-style rows with no party have no person to gate.
-    await enableFeatures(h.org.orgId);
+    await enableFeatures(h.org.orgId, QUALIFICATIONS_FEATURES);
     const machineId = await seedResource(h.org.orgId, projectId, null, "Crane 7");
     const machine = await gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId: machineId });
     assert.equal(machine.gated, false);
@@ -792,8 +733,8 @@ test("dispatch gate: feature-off never calls the gate, resourceless rows pass th
 });
 
 test("alerts: due rows written once, second run changes nothing", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Alert Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Alert Hand");
     // The holder needs a login for the notice; link the scratch admin to
     // the holder party so both holder and manager paths resolve.
     await db.execute(sql`update users set party_id = ${worker.partyId} where id = ${h.adminId}`);
@@ -839,7 +780,7 @@ test("alerts: due rows written once, second run changes nothing", { skip: !DB },
 });
 
 test("expiry alerts resolve managers from the exact holder employment", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
     const branchId = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -906,8 +847,8 @@ test("expiry alerts resolve managers from the exact holder employment", { skip: 
 });
 
 test("alert scan enumerates orgs past RLS: a constrained caller still scans", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "RLS Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "RLS Hand");
     const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
     const today = await businessToday(h.org.orgId);
     const q = await recordQualification(db, {
@@ -935,8 +876,8 @@ test("alert scan enumerates orgs past RLS: a constrained caller still scans", { 
 });
 
 test("alert scan catches up crossed thresholds instead of skipping them", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Catchup Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Catchup Hand");
     // The holder needs a login for the notice; link the scratch admin to
     // the holder party so exactly one holder user exists.
     await db.execute(sql`update users set party_id = ${worker.partyId} where id = ${h.adminId}`);
@@ -996,8 +937,8 @@ test("alert scan catches up crossed thresholds instead of skipping them", { skip
 });
 
 test("grants, self scope, masking seed and the second-org floor", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Scoped Hand");
+  await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
+    const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Scoped Hand");
     const typeId = await seedType(h.org.orgId, h.adminId);
     const today = await businessToday(h.org.orgId);
     // The outsider holds neither grant: reads and writes refuse by name.
@@ -1017,7 +958,7 @@ test("grants, self scope, masking seed and the second-org floor", { skip: !DB },
       listQualifications(db, { orgId: h.org.orgId, actorId: h.adminId }),
       /while the hrmCertifications feature is off/,
     );
-    await enableFeatures(h.org.orgId);
+    await enableFeatures(h.org.orgId, QUALIFICATIONS_FEATURES);
     // License numbers mask in sandbox clones like candidate PII.
     await seedDefaultMaskingPolicies(h.org.orgId);
     const policies = await loadMaskingPolicies(h.org.orgId);
@@ -1025,7 +966,7 @@ test("grants, self scope, masking seed and the second-org floor", { skip: !DB },
     // A second org's rows are invisible: zero matched rows, never a leak.
     const other = await createScratchOrg();
     try {
-      await enableFeatures(other.orgId);
+      await enableFeatures(other.orgId, QUALIFICATIONS_FEATURES);
       const otherAdmin = await createScratchUser(other.orgId, "Other Admin", "other_admin");
       await grantPermissions(other.orgId, otherAdmin, ["hrm.certifications.read", "hrm.certifications.manage"]);
       assert.equal((await listQualifications(db, { orgId: other.orgId, actorId: otherAdmin })).length, 0);

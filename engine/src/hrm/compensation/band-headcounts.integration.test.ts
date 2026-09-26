@@ -7,8 +7,15 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-  type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import {
+  DB,
+  grantPermissions,
+  restrictRole,
+  seedPositionedEmployment,
+  setupHarness,
+  withHarness,
+} from "../../testing/hrm-harness.ts";
 import {
   createJobFamily,
   createJobLevel,
@@ -33,161 +40,62 @@ import { countBandHolders } from "./band-headcounts.ts";
  * the legacy unfenced shape is replayed inline once to prove the red.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const AS_OF = "2026-06-01";
 
-type Harness = {
-  org: ScratchOrg;
-  subB: string;
-  hrId: string;
-  readerA: string;
-  readerB: string;
-  readerSub: string;
-  readerNone: string;
-  levelId: string;
-  otherLevelId: string;
-};
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function restrictRole(orgId: string, roleKey: string, restriction: Record<string, unknown>): Promise<void> {
-  await db.execute(sql`
-    update app_roles
-       set permissions = '["hrm.compensation.read"]'::jsonb,
-           subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb
-     where org_id = ${orgId} and key = ${roleKey}`);
-}
-
 /** Worker employment with one live version plus a primary positioned assignment. */
-async function seedPositionedEmployment(
-  orgId: string,
-  subsidiaryId: string,
-  opts: { status?: string; from?: string; levelId?: string | null },
-): Promise<string> {
-  const workerPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${workerPartyId}, ${orgId}, 'person', 'Band Worker', true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, ${opts.status ?? "active"}, ${opts.from ?? "2020-01-01"}::date, null, now())
-  `);
-  if (opts.levelId !== undefined && opts.levelId !== null) {
-    const positionId = randomUUID();
-    await db.execute(sql`
-      insert into positions (id, org_id, position_code, revision)
-      values (${positionId}, ${orgId}, ${`POS-${positionId.slice(0, 6)}`}, 1)
-    `);
-    await db.execute(sql`
-      insert into position_versions (org_id, position_id, version_no, title, department_id, location_id,
-        employer_subsidiary_id, planned_fte, status, effective_from, job_level_id)
-      values (${orgId}, ${positionId}, 1, 'Engineer', null, null,
-        ${subsidiaryId}, 1, 'filled', '2020-01-01', ${opts.levelId})
-    `);
-    const assignmentId = randomUUID();
-    await db.execute(sql`
-      insert into employment_assignments (id, org_id, employment_id, assignment_key)
-      values (${assignmentId}, ${orgId}, ${employmentId}, 'primary')
-    `);
-    await db.execute(sql`
-      insert into employment_assignment_versions (org_id, assignment_id, employment_id, version_no,
-        job_title, department_id, fte, is_primary, effective_from, position_id)
-      values (${orgId}, ${assignmentId}, ${employmentId}, 1,
-        'Engineer', null, 1, true, '2020-01-01', ${positionId})
-    `);
-  }
-  return employmentId;
-}
-
-async function setupHarness(rolePrefix: string): Promise<Harness> {
-  const org = await createScratchOrg();
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${org.orgId}`);
-  const hrId = await createScratchUser(org.orgId, "F16 HR", `${rolePrefix}_hr`);
-  await grantPermissions(org.orgId, hrId, ["hrm.compensation.read", "hrm.compensation.manage"]);
-  // A second legal entity under the same org.
-  const subB = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
-      from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-  // Readers holding the read grant under different subsidiary lenses.
-  const readerA = await createScratchUser(org.orgId, "F16 Reader A", `${rolePrefix}_reader_a`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_a`, { mode: "list", subsidiaryIds: [org.subsidiaryId] });
-  const readerB = await createScratchUser(org.orgId, "F16 Reader B", `${rolePrefix}_reader_b`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_b`, { mode: "list", subsidiaryIds: [subB] });
-  const readerSub = await createScratchUser(org.orgId, "F16 Reader Subtree", `${rolePrefix}_reader_sub`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_sub`, { mode: "subtree", subsidiaryId: org.subsidiaryId });
-  const readerNone = await createScratchUser(org.orgId, "F16 Reader None", `${rolePrefix}_reader_none`);
-  await restrictRole(org.orgId, `${rolePrefix}_reader_none`, { mode: "list", subsidiaryIds: [] });
-  // One level priced by a band plus a second level whose holders must
-  // never leak into this band's count.
-  const family = await createJobFamily({ orgId: org.orgId, actorId: hrId, code: "ENG", name: "Engineering" });
-  const criteria = [
-    { criterion: "skills", weight: "3" },
-    { criterion: "effort", weight: "2" },
-    { criterion: "responsibility", weight: "3" },
-    { criterion: "working_conditions", weight: "1" },
-  ];
-  const level = await createJobLevel({
-    orgId: org.orgId, actorId: hrId, familyId: family.id,
-    code: "IC3", name: "Engineer III", rank: 3, equalValueCriteria: criteria,
-  });
-  const otherLevel = await createJobLevel({
-    orgId: org.orgId, actorId: hrId, familyId: family.id,
-    code: "IC4", name: "Engineer IV", rank: 4, equalValueCriteria: criteria,
-  });
-  await createPayBand({
-    orgId: org.orgId, actorId: hrId,
-    scope: { familyId: family.id, levelId: level.id, employerSubsidiaryId: null, locationId: null },
-    currency: "CAD", basis: "annual",
-    min: "80000", target: "100000", max: "120000",
-    effectiveFrom: "2020-01-01", reason: "F16 band",
-  });
-  // Holders at the band's level: two active in A, one on_leave in A
-  // (still counted), one active in B.
-  await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-  await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
-  await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, status: "on_leave" });
-  await seedPositionedEmployment(org.orgId, subB, { levelId: level.id });
-  // Excluded rows: terminated at the level, a holder of the other
-  // level, and an active employment with no positioned assignment.
-  await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, status: "terminated" });
-  await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: otherLevel.id });
-  await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: null });
-  return {
-    org, subB, hrId, readerA, readerB, readerSub, readerNone,
-    levelId: level.id, otherLevelId: otherLevel.id,
-  };
-}
-
-async function withHarness(rolePrefix: string, fn: (h: Harness) => Promise<void>): Promise<void> {
-  if (!DB) return;
-  const h = await setupHarness(rolePrefix);
-  try {
-    await fn(h);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
-}
-
 /** The pre-F16 loader shape: org/level/date only, no subsidiary lens. */
+const bandHeadcountsSpecFor = (rolePrefix: string) => ({
+  users: [
+    { key: "hrId", name: "F16 HR", handle: `${rolePrefix}_hr`, permissions: ["hrm.compensation.read", "hrm.compensation.manage"] },
+    { key: "readerA", name: "F16 Reader A", handle: `${rolePrefix}_reader_a` },
+    { key: "readerB", name: "F16 Reader B", handle: `${rolePrefix}_reader_b` },
+    { key: "readerSub", name: "F16 Reader Subtree", handle: `${rolePrefix}_reader_sub` },
+    { key: "readerNone", name: "F16 Reader None", handle: `${rolePrefix}_reader_none` },
+  ],
+} as const);
+
+async function setupBandHeadcountsHarness(rolePrefix: string) {
+  return setupHarness(bandHeadcountsSpecFor(rolePrefix), async (base) => {
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${subB}, ${base.org.orgId}, ${base.org.subsidiaryId}, 'Second entity', base_currency, country
+        from subsidiaries where id = ${base.org.subsidiaryId} and org_id = ${base.org.orgId}`);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_a`, { mode: "list", subsidiaryIds: [base.org.subsidiaryId] }, ["hrm.compensation.read"]);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_b`, { mode: "list", subsidiaryIds: [subB] }, ["hrm.compensation.read"]);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_sub`, { mode: "subtree", subsidiaryId: base.org.subsidiaryId }, ["hrm.compensation.read"]);
+    await restrictRole(base.org.orgId, `${rolePrefix}_reader_none`, { mode: "list", subsidiaryIds: [] }, ["hrm.compensation.read"]);
+    const family = await createJobFamily({ orgId: base.org.orgId, actorId: base.hrId, code: "ENG", name: "Engineering" });
+    const criteria = [
+      { criterion: "skills", weight: "3" },
+      { criterion: "effort", weight: "2" },
+      { criterion: "responsibility", weight: "3" },
+      { criterion: "working_conditions", weight: "1" },
+    ];
+    const level = await createJobLevel({
+      orgId: base.org.orgId, actorId: base.hrId, familyId: family.id,
+      code: "IC3", name: "Engineer III", rank: 3, equalValueCriteria: criteria,
+    });
+    const otherLevel = await createJobLevel({
+      orgId: base.org.orgId, actorId: base.hrId, familyId: family.id,
+      code: "IC4", name: "Engineer IV", rank: 4, equalValueCriteria: criteria,
+    });
+    await seedPositionedEmployment(base.org.orgId, base.org.subsidiaryId, { levelId: level.id, displayName: "Band Worker" });
+    await seedPositionedEmployment(base.org.orgId, base.org.subsidiaryId, { levelId: level.id, displayName: "Band Worker" });
+    await seedPositionedEmployment(base.org.orgId, base.org.subsidiaryId, { levelId: level.id, status: "on_leave", displayName: "Band Worker" });
+    await seedPositionedEmployment(base.org.orgId, subB, { levelId: level.id, displayName: "Band Worker" });
+    // Excluded rows: terminated at the level, a holder of the other
+    // level, and an active employment with no positioned assignment.
+    await seedPositionedEmployment(base.org.orgId, base.org.subsidiaryId, { levelId: level.id, status: "terminated", displayName: "Band Worker" });
+    await seedPositionedEmployment(base.org.orgId, base.org.subsidiaryId, { levelId: otherLevel.id, displayName: "Band Worker" });
+    await seedPositionedEmployment(base.org.orgId, base.org.subsidiaryId, { levelId: null, displayName: "Band Worker" });
+    return {
+      subB,
+      levelId: level.id, otherLevelId: otherLevel.id,
+    };
+  });
+}
+
 async function legacyUnfencedCount(orgId: string, levelId: string, asOf: string): Promise<number> {
   const row = (await db.execute<{ n: string }>(sql`
     select count(distinct aav.employment_id)::text as n
@@ -209,7 +117,7 @@ async function legacyUnfencedCount(orgId: string, levelId: string, asOf: string)
 }
 
 test("F16: band holder counts match the caller lens, empty sees zero", { skip: !DB }, async () => {
-  await withHarness("f16_lens", async (h) => {
+  await withHarness(() => setupBandHeadcountsHarness("f16_lens"), async (h) => {
     const q = { orgId: h.org.orgId, levelId: h.levelId, asOf: AS_OF };
     // Red proof: the legacy shape exposes the whole-org total (4) to
     // anyone who can run it — the count no reader with an empty scope
@@ -244,7 +152,7 @@ test("F16: band holder counts match the caller lens, empty sees zero", { skip: !
 });
 
 test("F16: band holder counts respect dates and org isolation", { skip: !DB }, async () => {
-  await withHarness("f16_dates", async (h) => {
+  await withHarness(() => setupBandHeadcountsHarness("f16_dates"), async (h) => {
     const q = { orgId: h.org.orgId, levelId: h.levelId };
     // Before any employment starts, every lens — including
     // unrestricted — sees zero.
