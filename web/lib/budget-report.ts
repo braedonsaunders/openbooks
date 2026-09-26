@@ -251,8 +251,8 @@ export async function budgetVsActualView(
   }
 
   // Section total over the depth-0 rows only. The budget tree keeps the
-  // rolled presentation (parents carry their subtree, F-t08-001 deliberately
-  // leaves this reader alone), so summing every row would count nested
+  // rolled presentation (parents carry their subtree; this reader keeps
+  // rolled rows), so summing every row would count nested
   // accounts twice now that the shared sumSection assumes gross-presentation
   // rows. This preserves the budget's exact historical totals.
   const sumTopSection = (m: StatementMatrix, types: string[]): StatementValue[] => {

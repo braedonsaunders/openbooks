@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 /**
- * OM-05: opening New budgets nothing. The unsaved-create workspace must be
+ * Opening New budgets nothing. The unsaved-create workspace must be
  * the same worksheet slice the persisted drawer edits (same periods,
  * accounts, dimensions) bound to an in-memory scenario — and loading it
  * must not insert any budget_scenarios row. The drawer's explicit Save is

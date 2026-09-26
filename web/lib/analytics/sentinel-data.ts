@@ -787,7 +787,7 @@ export async function sentinelData(
   const dupAmount = Number(dupAgg.rows[0]?.amount ?? 0);
 
   // Compatibility projection for the assistant/MCP passthrough (owned by
-  // another fleet): every within-group ordered pair, so pair-shaped readers
+  // another team): every within-group ordered pair, so pair-shaped readers
   // keep working. Same-currency and same-reference by construction — the
   // cross-currency false positive cannot appear here either.
   const dayDiff = (a: string, b: string) =>
@@ -926,7 +926,7 @@ export async function sentinelData(
   }).sort((a, b) => b.riskScore - a.riskScore);
 
   // ---- Audit trail ---------------------------------------------------------------------------------
-  // F-t09-006: every row renders a one-line human summary (who did what to
+  // Every row renders a one-line human summary (who did what to
   // which record) instead of the raw changes envelope. The verb/actor/field
   // shaping is locale-free data; the sentence itself resolves through the
   // strings bundle in the request locale.

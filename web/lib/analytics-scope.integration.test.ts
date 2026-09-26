@@ -105,7 +105,7 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, expected);
             assert.equal(JSON.stringify(data).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');
             if (surface === 'spend') {
-              // Cliff totals are exact money strings since I5-platform-183.
+              // Cliff totals are exact money strings.
               assert.equal(data.commitmentCliff?.summary.totalPO, expectedRevenue.toFixed(4));
               assert.equal(data.commitmentCliff?.summary.totalSO, expectedRevenue.toFixed(4));
               const spenders = data.expenseAnalysis?.topSpenders;

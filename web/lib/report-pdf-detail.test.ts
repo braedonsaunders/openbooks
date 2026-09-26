@@ -45,7 +45,7 @@ test('project profitability export agrees with the table on decimalRatio margins
 })
 
 test('project profitability export labels the Unassigned tie-out bucket', () => {
-  // F-t07-004: the data row carries the English fallback; the export must
+  // The data row carries the English fallback; the export must
   // print the translated bucket label, not the raw fallback or noCustomer.
   const data = projectProfitabilityExportData({
     from: '2026-01-01',

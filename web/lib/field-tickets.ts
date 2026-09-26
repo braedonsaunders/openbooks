@@ -1053,7 +1053,7 @@ async function auditTicketLifecycle(
 }
 
 /**
- * Discard an untouched draft (F-t04-005). New ticket persists an empty
+ * Discard an untouched draft. New ticket persists an empty
  * server-side draft on click, so closing the drawer without entering
  * anything must not orphan a shell row: an empty draft deletes cleanly,
  * anything with content, signatures, links, or status refuses with the

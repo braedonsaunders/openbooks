@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 
 /**
- * The ONE membership read every banking surface agrees on (F-t06-001).
+ * The ONE membership read every banking surface agrees on.
  *
  * The overview roster, the Match account picker, and the per-account page
  * used to answer "which accounts are banks?" three different ways, so a
@@ -73,7 +73,7 @@ interface OpeningCarryRow extends Record<string, unknown> {
 }
 
 /**
- * The ONE opening-carry read every GL candidate list agrees on (F-t06-003).
+ * The ONE opening-carry read every GL candidate list agrees on.
  *
  * The engine persists the first reconciliation's proven statement opening in
  * that sign-off's audit record (see `firstReconciliationCarry` in

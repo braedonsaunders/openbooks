@@ -4,7 +4,7 @@ import test from 'node:test'
 import { missingPayrollControlAccounts } from './payroll-setup-checklist.ts'
 
 /**
- * Overview wiring for the setup checklist (F-t08-016): the payroll home
+ * Overview wiring for the setup checklist: the payroll home
  * derives its banner from the packSlotState walk — every statutory slot of
  * every installed pack — plus the two country-free accounts. Legacy CA
  * keys in the settings blob must never drive the banner on their own.
@@ -66,7 +66,7 @@ const checklistHooks = registerHooks({
 const { payrollHome } = await import('./module-home/payroll.ts')
 checklistHooks.deregister()
 
-// F-t08-016: the /payroll overview demanded hardcoded legacy CA control
+// The /payroll overview demanded hardcoded legacy CA control
 // accounts (CPP/EI payable) on a US-only tenant — accounts with no slot
 // anywhere in US-pack setup, unresolvable by definition. The checklist must
 // derive from the installed packs' declared liability slots (plus the two

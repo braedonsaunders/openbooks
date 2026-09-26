@@ -4,7 +4,7 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 // Worktree-relative imports: the @openbooks/* aliases resolve to the main
 // checkout through the symlinked node_modules, which does not yet carry the
-// allocation report entities this test executes (fleet A10 owns them).
+// allocation report entities this test executes.
 import { db, pool, withBypass, withOrgContext } from '../../engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '../../engine/src/testing/fixtures.ts'
 import { REPORT_ENTITY_MAP } from '../../packages/reports/src/entities.ts'

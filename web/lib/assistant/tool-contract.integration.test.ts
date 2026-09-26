@@ -37,7 +37,7 @@ const { ASSISTANT_TOOLS, executeAssistantTool } = await import("./registry");
 const { MAX_ROW_STRING } = await import("./tools-shared");
 
 /**
- * Tool contract harness (shard a06). Every READ/SEARCH assistant tool is
+ * Tool contract harness. Every READ/SEARCH assistant tool is
  * called with its minimal valid input through `executeAssistantTool` — the
  * same entry the chat loop and the MCP server share — against a scratch org,
  * and must honour the tool contract:
@@ -52,7 +52,7 @@ const { MAX_ROW_STRING } = await import("./tools-shared");
  *
  * Tools over budget get a lowered `limit` default or a compact projection —
  * fix them, do not raise the budget. Per-tool sizes are printed by the
- * `reports per-tool output sizes` case and recorded in the fleet ledger.
+ * `reports per-tool output sizes` case below.
  */
 
 const OUTPUT_BUDGET_BYTES = 24 * 1024;
@@ -483,7 +483,7 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         }
       });
 
-      await t.test("reports per-tool output sizes (recorded in the fleet ledger)", () => {
+      await t.test("reports per-tool output sizes", () => {
         const rows = [...sizes].sort((a, b) => b.bytes - a.bytes);
         for (const row of rows) {
           console.log(`[contract] ${row.tool}: ${row.bytes} bytes (${row.outcome})`);

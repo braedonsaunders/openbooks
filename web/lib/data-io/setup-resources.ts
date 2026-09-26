@@ -37,7 +37,7 @@ import {
 // array-valued setup fields as a single driver parameter for PostgreSQL.
 const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(value) : value
 /**
- * Pay-schedule calendar integrity on the import path (I5-platform-158). The
+ * Pay-schedule calendar integrity on the import path. The
  * interactive editor refuses a frequency/periods-per-year mismatch because
  * statutory annualization uses periods-per-year as factor P, but the import
  * writer applied only generic coercion — so a monthly schedule with 24
@@ -451,7 +451,7 @@ async function writeSetup(
           outcome.errors.push({ row: rowNo, message: updatePackProblem })
           continue
         }
-        // I5-platform-155: a class under a misspelled or inactive regime (or
+        // A class under a misspelled or inactive regime (or
         // an incomplete MACRS class) must fail import exactly as the
         // interactive writer refuses it — same merged-row validator.
         if (entity.key === 'tax-pool-classes') {
@@ -548,7 +548,7 @@ async function writeSetup(
           outcome.errors.push({ row: rowNo, message: insertPackProblem })
           continue
         }
-        // I5-platform-155: same merged-row validator as the update branch —
+        // Same merged-row validator as the update branch —
         // preview and commit share the refusal through the row path.
         if (entity.key === 'tax-pool-classes') {
           const classProblem = await validateEntityIntegrity(entity, src, ctx.orgId, undefined)

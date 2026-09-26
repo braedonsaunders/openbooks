@@ -3,7 +3,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// F-t11-010: the setup guide, the journal header, and the journal list each
+// The setup guide, the journal header, and the journal list each
 // counted "posted entries" with a different scope (guide: every posted or
 // reversed entry in the org; header: journalsOnly with no status filter;
 // list: the JOURNAL_ENTRY_TABLE union with no status filter), so one

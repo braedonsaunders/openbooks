@@ -7,7 +7,7 @@ import {
   packSystemGuidance,
 } from "./continuous-close-prompts.ts";
 
-test("wave-2 packs get their own guidance while existing packs stay untouched", () => {
+test("new packs get their own guidance while existing packs stay untouched", () => {
   assert.equal(packSystemGuidance("accounting"), "");
   assert.equal(packSystemGuidance("finance"), "");
   assert.equal(packSystemGuidance("forensics"), "", "future packs degrade to shared instructions");

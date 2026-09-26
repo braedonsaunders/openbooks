@@ -175,7 +175,7 @@ test(
   "a second approval names the prior approval instead of misreporting an unsubmitted week",
   { skip: !env.OPENBOOKS_DB_URL },
   () => {
-    // F-t08-009: re-approving an approved week failed with a causeless
+    // Re-approving an approved week failed with a causeless
     // conflict — nothing identified the prior approval (who/when) or named
     // the way back (reopen/amend). The refusal must carry both.
     runIntegrationSource(`

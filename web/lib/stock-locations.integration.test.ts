@@ -17,7 +17,7 @@ const { activeStockLocations, profiledItemIds, resolveLineStockLocation } = awai
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-// F-t07-003 pickers: one resolution rule for the order and document writers.
+// Pickers: one resolution rule for the order and document writers.
 // A scratch org ships two active warehouses (MAIN + STAGE) and profiled
 // moving-average/fifo items plus an unprofiled service item.
 test("explicit warehouses validate against the org's active locations", { skip: !DB }, async () => {

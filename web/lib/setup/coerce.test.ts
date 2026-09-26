@@ -132,7 +132,7 @@ test('setup date fields reject impossible calendar dates, not just malformed sha
   }
 })
 
-test('blank keepDefault fields fall through to database defaults instead of refusing (F-t06-022)', () => {
+test('blank keepDefault fields fall through to database defaults instead of refusing', () => {
   // keepDefault columns are NOT NULL WITH a database default: the drawer
   // sends explicit empty strings for untouched inputs, and the server must
   // omit them (buildRow drops null/undefined) rather than refuse with a
@@ -154,7 +154,7 @@ test('blank keepDefault fields fall through to database defaults instead of refu
   })
 })
 
-test('database errors never echo SQL text to the client (F-t06-022)', () => {
+test('database errors never echo SQL text to the client', () => {
   // Drizzle wraps driver failures with the full SQL + params in its own
   // message; only the driver's cause text (plain Postgres, e.g. a trigger's
   // user-language refusal) may surface.

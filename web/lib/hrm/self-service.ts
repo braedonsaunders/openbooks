@@ -33,8 +33,8 @@ import type { ExplainPayTrace } from '@openbooks/engine/src/hrm/ai/explain-pay.t
  * panels, never an empty workspace pretending the person has no record.
  *
  * EXTENSION POINT (HR-7 reviews, HR-8 benefits): SELF_SERVICE_EXTENSIONS
- * below is the rail the /me overview fills from. A shard that lands a new
- * person-scoped section appends one entry here (href, hrm-namespace label
+ * below is the rail the /me overview fills from. A new person-scoped
+ * section appends one entry here (href, hrm-namespace label
  * key, icon key) and the loader resolves it into a DirectoryItem — never a
  * placeholder panel promising a section that does not exist yet.
  */

@@ -7,7 +7,7 @@ import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 
 /**
- * Canonical operating-expense definition (F-t09-001).
+ * Canonical operating-expense definition.
  *
  * Spend Velocity and Financial Health used the identical label
  * "Operating expenses … of revenue" for two different numerators: the

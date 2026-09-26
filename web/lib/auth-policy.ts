@@ -103,7 +103,7 @@ export function networkAddressEvidenceHash(context: AuthRequestContext): string 
 /**
  * Reject browser cross-origin mutations while retaining non-browser API
  * clients. Loopback literals (`localhost` / `127.0.0.1` / `[::1]`) name one
- * machine: the fleet hits activation links and sessions across both spellings
+ * machine: activation links and browser sessions arrive across both spellings
  * on one port, so they compare equal here — scheme, port, and every real
  * host stay exact (see `isSameLoopbackOrigin`).
  */

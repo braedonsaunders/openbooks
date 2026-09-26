@@ -124,7 +124,7 @@ export async function apPosition(
   apSettings: ApSettings,
   asOfDate: string | undefined,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  /** BCP-47 locale for week labels (F-t04-010); defaults to en-US. */
+  /** BCP-47 locale for week labels; defaults to en-US. */
   locale = "en-US",
 ): Promise<ApPosition> {
   const subIds = allowedSubsidiaryIds === null ? undefined : [...allowedSubsidiaryIds];

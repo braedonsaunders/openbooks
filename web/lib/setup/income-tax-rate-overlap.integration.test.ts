@@ -7,7 +7,7 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { createSetupRecord } = await import('./write.ts')
 
-// F-t09-016: an overlapping income-tax-rate create 400s with the raw Postgres
+// An overlapping income-tax-rate create 400s with the raw Postgres
 // exclusion-constraint text echoed verbatim. It must 409 with a typed overlap
 // code the drawer can localize, and never surface pg text.
 test('overlapping income-tax-rate create conflicts typed instead of echoing Postgres', { skip: !env.OPENBOOKS_DB_URL }, async () => {

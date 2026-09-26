@@ -1,5 +1,5 @@
 /**
- * Customer-facing document numbers (F-t12-004).
+ * Customer-facing document numbers.
  *
  * Mirrored rows can carry the sync source handle (e.g.
  * 'salesInvoice:<uuid>') in document_number when the source never
@@ -21,7 +21,7 @@ export function displayDocumentNumber(documentNumber: unknown, referenceNumber: 
 }
 
 /**
- * Seeded built-in form name (F-t02-013).
+ * Seeded built-in form name.
  *
  * New orgs get one record form layout per record type named exactly this
  * (engine/src/provisioning/customization-defaults.ts DEFAULT_FORM_NAME). The name is

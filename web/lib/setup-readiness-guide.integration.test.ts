@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 /**
- * F-t01-017 — the readiness go-live guide rendered fully English in fr/es
+ * The readiness go-live guide rendered fully English in fr/es
  * because the loader hardcoded its whole body. The loader now resolves every
  * user-facing string through `admin.setup.guide`.
  *

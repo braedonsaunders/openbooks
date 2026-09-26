@@ -34,7 +34,7 @@ export async function inboxContext(authz: Authz): Promise<InboxListContext> {
 }
 
 /**
- * Wire view for degraded source legs (OM-10). Notices are sanitized where
+ * Wire view for degraded source legs. Notices are sanitized where
  * they are recorded (the engine names only designed refusals, everything
  * else carries a generic reason), so mapping them here keeps raw `.message`
  * text out of API route bodies entirely.

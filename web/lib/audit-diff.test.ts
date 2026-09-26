@@ -36,7 +36,7 @@ test('field-pair events produce before and after values', () => {
   ])
 })
 
-// F-t06-009: the API synthesizes Created events from record metadata with no
+// The API synthesizes Created events from record metadata with no
 // field data ({source, event} only). The trail must not promise "View
 // changes" for events with nothing inspectable.
 test('synthesized creation events with no field data are not inspectable', () => {

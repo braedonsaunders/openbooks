@@ -91,8 +91,8 @@ test('budget vs actual translates every functional to presentation', { skip: !en
 })
 
 /**
- * The budget tree keeps the rolled presentation (F-t08-001 leaves this reader
- * alone), so its section totals must sum depth-0 rows only: a nested expense
+ * The budget tree keeps the rolled presentation (this reader keeps rolled
+ * rows), so its section totals must sum depth-0 rows only: a nested expense
  * posted once through a child must total once, not twice (parent rolled +
  * child own). The shared sumSection assumes gross-presentation rows.
  */

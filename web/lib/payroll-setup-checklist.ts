@@ -1,5 +1,5 @@
 /**
- * Pack-driven payroll setup checklist (F-t08-016).
+ * Pack-driven payroll setup checklist.
  *
  * The /payroll overview used to demand hardcoded legacy control accounts
  * (CPP/EI payable) on every tenant, so a US-only org was told to configure

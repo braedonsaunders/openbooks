@@ -10,7 +10,7 @@ const state: { gate: Authz | null; reportResolutions: number } = { gate: null, r
 // tsx resolves only under the web tsconfig. Map it to the real module so the
 // route under test runs its production body parsing.
 const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
-// Fleet worktrees symlink node_modules (and web/node_modules) at the main
+// Worktrees symlink node_modules (and web/node_modules) at the main
 // checkout, so a bare `@openbooks/engine/...` import inside web code
 // resolves to the MAIN checkout's engine — the behaviour under test would
 // be main's, not this worktree's, and `instanceof` checks would span two

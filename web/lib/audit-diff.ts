@@ -64,7 +64,7 @@ function collectDiffs(before: unknown, after: unknown, path = ''): AuditDiffRow[
  * before/after snapshots (viewable in their own tabs even when equal).
  * Synthesized creation events ({source, event} metadata only — see
  * /api/audit/record) carry no field data, so the trail must not promise a
- * detail view for them (F-t06-009).
+ * detail view for them.
  */
 export function hasInspectableChanges(changesValue: unknown): boolean {
   const changes = isObject(changesValue) ? changesValue : {}

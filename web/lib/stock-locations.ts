@@ -6,7 +6,7 @@ import { isUuid } from './list-params'
 
 /**
  * Line-level warehouse resolution shared by the order draft writer and the
- * generic document edit writer (F-t07-003 pickers). One reader, two callers:
+ * generic document edit writer. One reader, two callers:
  * an explicit choice is validated the same way everywhere, and the silent
  * single-location default matches the posting reader's fallback
  * (loadDocumentInventoryLines resolves a blank line to the org's only

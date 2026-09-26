@@ -5,12 +5,10 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-// Consolidated shared behavior for every "exists but gated" refusal:
-// F-t13-002 (/admin/scripts 404), F-t13-003 (/api-docs 404),
-// F-t13-008 (/platform/* silent home bounce), F-t12-001 (forbidden admin
-// route silent home bounce), F-t03-012 (compliance setup-redirect vs 404).
-// A gated route names its feature or permission on a real explanation page;
-// only a genuinely nonexistent route 404s.
+// Consolidated shared behavior for every "exists but gated" refusal; each
+// case below pins its explanation page. A gated route names its feature or
+// permission on a real explanation page; only a genuinely nonexistent
+// route 404s.
 
 declare global {
   var __gateUser: {
@@ -162,7 +160,7 @@ test("access-denied href carries the refusal context", () => {
 
 // --- gate wiring (real gates, mocked identity/feature state) ----------------
 
-test("F-t12-001: denied permission explains instead of bouncing home", async () => {
+test("Denied permission explains instead of bouncing home", async () => {
   globalThis.__gateUser = fakeUser(false);
   const url = await redirectUrl(() => requirePermission("admin.users.manage"));
   assert.equal(url, "/access-denied?permission=admin.users.manage");
@@ -175,7 +173,7 @@ test("allowed permission still resolves (super admin holds every key)", async ()
   assert.equal(authz.user.id, fakeUser(true).id);
 });
 
-test("F-t13-008: platform gate names the operator scope", async () => {
+test("Platform gate names the operator scope", async () => {
   globalThis.__gateUser = fakeUser(false);
   const url = await redirectUrl(() => requireSuperAdmin());
   assert.equal(url, "/access-denied?scope=platform");
@@ -187,7 +185,7 @@ test("super admin still passes the platform gate", async () => {
   assert.equal(authz.user.isSuperAdmin, true);
 });
 
-test("F-t13-002/003: disabled feature explains instead of 404ing", async () => {
+test("Disabled feature explains instead of 404ing", async () => {
   globalThis.__gateFeatures = { scripts: false, apiAccess: false };
   assert.equal(
     await redirectUrl(() => requireFeatureEnabled("org", "scripts")),
@@ -204,7 +202,7 @@ test("enabled feature still resolves", async () => {
   assert.equal(await requireFeatureEnabled("org", "scripts"), undefined);
 });
 
-test("F-t03-012: compliance gates name the feature that is actually off", async () => {
+test("Compliance gates name the feature that is actually off", async () => {
   globalThis.__gateFeatures = { subcontractorCompliance: false, projects: true };
   assert.equal(
     await redirectUrl(() => requireComplianceFeature("org")),

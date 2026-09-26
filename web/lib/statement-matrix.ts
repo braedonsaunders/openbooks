@@ -632,7 +632,7 @@ async function comparePeriods(
   return [current, { key: 'prior', label: prior.aligned ? 'Prior period' : 'Prior period (equal length)', from: prior.from, to: prior.to }]
 }
 
-/** Gross presentation over the account tree (F-t08-001): every account line
+/** Gross presentation over the account tree: every account line
  * shows its OWN balance and contra accounts print as sibling lines, so the
  * displayed lines foot to the section total. Rolling child balances into
  * parents made cost lines read net while the contra printed again beside

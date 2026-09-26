@@ -5,7 +5,7 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 
 /**
- * F-t07-007: built-in "Open AR by customer" filtered on is_open_item, which
+ * Built-in "Open AR by customer" filtered on is_open_item, which
  * marks AR-tracked lines — not unpaid ones — so paid invoices and their
  * payment lines counted as open (28 vs the aging detail's 16) and the oldest
  * due date min()ed over stale rows. It must count only application-aware

@@ -207,7 +207,7 @@ export interface CompHomeData {
   architectureTitle: string
   canSetup: boolean
   /**
-   * OM-18/CK-09: the search params the rehomed job-architecture sections
+   * The search params the rehomed job-architecture sections
    * read (namespaced drawer keys open each section's New/edit drawer in
    * SetupEntitySection). The home page carries no other list state, so
    * this is the section's own list params verbatim.
@@ -520,7 +520,7 @@ export async function loadCompensationHome(
     equityLabel: t('compensation.equity'),
     architectureTitle: t('compensation.architectureTitle'),
     canSetup: can(authz, 'admin.setup.manage'),
-    // CK-09: the three job-architecture sections read their New/edit
+    // The three job-architecture sections read their New/edit
     // drawers from namespaced keys — one URL opens exactly one drawer.
     setupParams: setupSectionParams(sp, ['family', 'level', 'band']),
     refusal: gapRefusal,
@@ -1172,7 +1172,7 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
   await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
-  // OM-08: a linked person with no employment is a different state from no
+  // A linked person with no employment is a different state from no
   // linked person — and a missing user row is neither. The person read
   // throws when the identity is not established (never a refusal), an
   // unlinked login returns null (the notLinked refusal), and a linked

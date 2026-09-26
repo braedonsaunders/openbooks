@@ -72,7 +72,7 @@ export function complianceSubsidiaryFilter(
 /**
  * Page-boundary gate. Navigation hiding is presentation; this is the control.
  * A disabled feature explains itself on the feature-required page instead of
- * silently landing on the Features switchboard (F-t03-012).
+ * silently landing on the Features switchboard.
  */
 export async function requireComplianceFeature(orgId: string): Promise<void> {
   if (!(await isFeatureEnabled(orgId, 'subcontractorCompliance')))
@@ -126,7 +126,7 @@ export interface MatrixRow {
   findings: RequirementFinding[]
   /**
    * Posted, unpaid bill exposure for this vendor, base currency — grouped off
-   * the shared as-of open-items reader (F-t03-008), the same item set the /ap
+   * the shared as-of open-items reader, the same item set the /ap
    * dashboard, the aging and the control account read. A date-blind
    * document-cache aggregate disagreed in both directions at once (SIM
    * Meridian: future-dated payments zero the cache while the bill is still
@@ -146,7 +146,7 @@ export interface ComplianceMatrix {
 
 /**
  * One vendor's assigned compliance class for the party drawer's Compliance
- * tab (F-t04-003). Null covers both "no vendor_roles row" and "row without
+ * tab. Null covers both "no vendor_roles row" and "row without
  * a class" — either way the vendor is outside the matrix until a class is
  * assigned through PATCH /api/compliance/vendors/[partyId].
  */
@@ -187,7 +187,7 @@ export async function loadComplianceMatrix(args: {
   const asOf = args.asOf ?? (await businessToday(args.orgId))
   // Document legs fail closed on null subsidiaries, exactly like the reader's
   // own scope — so the matrix groups the same item set the dashboard does
-  // under the same gate (F-t03-008).
+  // under the same gate.
   const subIds = args.allowedSubsidiaryIds === null || args.allowedSubsidiaryIds === undefined
     ? undefined
     : [...args.allowedSubsidiaryIds]
@@ -248,7 +248,7 @@ export async function loadComplianceMatrix(args: {
     }
   ).rows
   // The "Open payable" column groups the shared as-of item set — the same
-  // numbers the /ap dashboard shows — not the documents cache (F-t03-008).
+  // numbers the /ap dashboard shows — not the documents cache.
   // Unapplied credits net against the vendor's bills, exactly like the aging.
   const openByParty = new Map<string, string>()
   for (const item of apOpen) {

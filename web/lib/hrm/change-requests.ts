@@ -377,7 +377,7 @@ export async function loadChangeRequestQueue(
     segmentsLabel: t('queue.segmentsLabel'),
     allLabel: t('queue.allLabel'),
     truncatedNote: t('queue.truncatedNote', { limit: QUEUE_LIMIT }),
-    // OM-18: the rehomed reason-code section reads its New/edit drawer
+    // The rehomed reason-code section reads its New/edit drawer
     // from sp.row (SetupEntitySection), so the queue's own segment params
     // ride beside the section's list params — dropping row renders a dead
     // New button at ?reasons=1&row=new. Dialog params (request/propose)

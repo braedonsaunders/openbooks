@@ -132,7 +132,7 @@ test('empty subsidiary scope returns no Accounting home metrics', async () => {
   assert.ok(state.calls.every((query) => query.includes('and false')))
 })
 
-test('draft journals count draft journal documents, not journal entries (F-t06-014)', async () => {
+test('draft journals count draft journal documents, not journal entries', async () => {
   // Manual-journal drafts are documents (not entries yet) — the /journal
   // list reads documents, so the hub tile must too. Counting
   // journal_entries with status draft always reads 0 for manual drafts.

@@ -3,7 +3,7 @@ import test from "node:test";
 import { concentrationBand, concentrationVerdict } from "./vendor-concentration.ts";
 
 /**
- * OM-04: the overview gauge and the HHI card must agree. At hhi ≈ 0.28 the
+ * The overview gauge and the HHI card must agree. At hhi ≈ 0.28 the
  * gauge said "Balanced" while the card said "highly concentrated" — opposite
  * verdicts about the same portfolio, produced by design from two independent
  * thresholds. Both words now derive from one shared banding.

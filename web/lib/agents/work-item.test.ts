@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// F-t11-012 follow-up: an OLD stored finding carries summary.href
+// An OLD stored finding carries summary.href
 // "/ar/cockpit" (and a citation with the same dead href). The read model
 // must resolve both through the registry — the drawer renders what it is
 // given, so the fix belongs here, shared by every consumer.

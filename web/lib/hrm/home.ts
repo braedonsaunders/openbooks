@@ -599,7 +599,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   }
 
   // Independent onboarding, leave, recruiting, and qualification reads were
-  // resolved in the concurrent cockpit wave above. Their null values still
+  // resolved in the concurrent cockpit reads above. Their null values still
   // mean the viewer lacks the corresponding grant or subordinate feature.
   const leavePending = leavePanel?.pendingCount ?? 0
   const overdueSteps = onboarding?.overdue.length ?? 0

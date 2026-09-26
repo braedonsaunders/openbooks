@@ -58,7 +58,7 @@ export const DOCUMENT_SORTS: Record<string, SQL> = {
 }
 
 /**
- * Human document number for display (F-t12-004). Mirrored rows can carry
+ * Human document number for display. Mirrored rows can carry
  * the sync source handle (e.g. 'salesInvoice:<uuid>') in document_number
  * when the source never supplied a number. A handle is never
  * customer-facing: fall back to the reference, and only then to the

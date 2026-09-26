@@ -710,7 +710,7 @@ export async function categoryWeekly(
   /**
    * Viewer BCP-47 locale for breakdown month names (F2-14b). UI readers pass
    * the request locale; the default serves the engine unit tests and the
-   * label-agnostic agent-tool callers, matching the F-t04-010 position
+   * label-agnostic agent-tool callers, matching the position
    * readers. See scripts/check-viewer-locale.allowlist.json.
    */
   locale = "en-US",

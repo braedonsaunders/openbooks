@@ -43,7 +43,7 @@ const NATIVE_ORIGINS = [
   'revenue_recognition',
   'fx_settlement',
   'translation',
-  // Migration true-ups (TRUEUP-*) are standalone engine journals (F-t12-014):
+  // Migration true-ups (TRUEUP-*) are standalone engine journals:
   // posted but invisible in /journal while Origin=All.
   'migration',
 ]

@@ -365,7 +365,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     }
     case 'aging': {
       // Bare export hits default to the screen's as-of (today) through the
-      // shared rule — never the fiscal year end (F-t07-011). The today
+      // shared rule — never the fiscal year end. The today
       // lookup runs only when neither as-of nor period was supplied.
       const asOfParam = p.get('asOf')
       const periodParam = p.get('period')

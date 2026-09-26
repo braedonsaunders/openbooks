@@ -12,7 +12,7 @@ const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src
 const { trialBalance } = await import('./reports/statements.ts')
 
 /**
- * F-t08-002: the trial balance is headed "accounts with activity" but dropped
+ * The trial balance is headed "accounts with activity" but dropped
  * zero-balance accounts with real postings (an investment account with
  * several fiscal-year legs that closed at zero), understating gross
  * debit/credit flows. Every account with postings must appear with its

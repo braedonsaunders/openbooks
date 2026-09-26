@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 /**
- * F-t06-025 follow-up: the rates-blocked banner (MissingRatesError →
+ * The rates-blocked banner (MissingRatesError →
  * RatesBlockedNotice, code rates-not-derived) shipped with en/es/fr copy
  * only; de/ja/pt-BR/zh fell back to English. Every locale needs its own
  * title + derive action.

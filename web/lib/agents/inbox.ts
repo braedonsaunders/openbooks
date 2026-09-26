@@ -78,8 +78,8 @@ export interface AgentInboxFacets {
   statuses: { key: InboxStatus; count: number }[];
   /**
    * Actionable (open + in review) count on the query-independent scope — the
-   * OPEN FINDINGS tile. The free-text query filters rows only, never tiles
-   * (F-t11-005), so this has its own count rather than summing the facet.
+   * OPEN FINDINGS tile. The free-text query filters rows only, never tiles,
+   * so this has its own count rather than summing the facet.
    */
   openActive: number;
   subsidiaries: { id: string; name: string; count: number }[];
@@ -191,9 +191,9 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
   const agentList = sql.join(agents.map((agent) => sql`${agent}`), sql`, `);
   const statusList = sql.join(statuses.map((status) => sql`${status}`), sql`, `);
   // Facet counts keep global scope: the free-text query filters rows only,
-  // never the KPI tiles or filter-chip counts (F-t11-005) — and the status
+  // never the KPI tiles or filter-chip counts — and the status
   // facet additionally ignores the status clause so every lifecycle state
-  // stays selectable with true counts (F-t11-006).
+  // stays selectable with true counts.
   // Findings sit behind a typed subject whose legal-entity lineage resolves
   // per kind (shared accounts visible, reconciliations through their
   // account, documents strictly scoped, budget scenarios line-gated); any

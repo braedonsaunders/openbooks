@@ -68,7 +68,7 @@ test('lot recall saved-view params resolve to the same filters while viewer/expo
   ])
 })
 
-test('profit-subtotal drills are profit-signed so the dialog net ties to the P&L cell (F-t07-001)', () => {
+test('profit-subtotal drills are profit-signed so the dialog net ties to the P&L cell', () => {
   // Net income mixes credit-normal revenue with debit-normal costs. A
   // reader-signed net sums them (Debits + Credits); the P&L cell is
   // Revenue − Costs, so the drill must carry profitSigned for its net to tie.

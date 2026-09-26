@@ -203,7 +203,7 @@ test("forged origins are rejected, including scheme, port, and suffix spoofs", a
 });
 
 test("loopback literals share one trusted origin", async () => {
-  // Same fleet reality as the route gate: localhost vs 127.0.0.1 on one
+  // Same loopback equivalence as the route gate: localhost vs 127.0.0.1 on one
   // machine and port is the same origin. Scheme, port, and real hosts stay
   // exact.
   const { hasTrustedOrigin } = await import("./csrf.ts");

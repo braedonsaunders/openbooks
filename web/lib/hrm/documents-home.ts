@@ -344,7 +344,7 @@ export async function loadDocumentsHome(
     tiles,
     segmentsLabel: t('documents.segmentsLabel'),
     allLabel: t('documents.statusAll'),
-    // I4-webui-160 suppresses org-wide counts for restricted readers;
+    // Suppresses org-wide counts for restricted readers;
     // the status chips follow it: an empty countBy would read 0 beside a
     // non-empty scoped register, so restricted chips carry no count at
     // all rather than a false zero.
@@ -353,7 +353,7 @@ export async function loadDocumentsHome(
       label: statusLabel(value),
       ...(unrestrictedStats ? { count: countBy.get(value) ?? 0 } : {}),
     })),
-    // OM-18/CK-09: the rehomed template/category/schedule sections read
+    // The rehomed template/category/schedule sections read
     // their New/edit drawers from namespaced keys (SetupEntitySection via
     // rowParam) — one URL opens exactly one drawer. The register's own
     // segment rides beside the section's list params.

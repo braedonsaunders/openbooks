@@ -71,7 +71,7 @@ for (const boundary of ["service", "page", "assistant", "drilldown"] as const) {
             if (mode === "all") {
               const output = JSON.stringify(await invoke(), (_key, value: unknown) => React.isValidElement(value) ? value.props : value);
               assert.ok(output.includes("HIDDEN-SPEND"));
-              // F-t09-006: the trail is a one-line summary (table + verb).
+              // The trail is a one-line summary (table + verb).
               // The raw routing secret no longer dumps into the page.
               assert.ok(output.includes("bank_accounts"));
               assert.ok(!output.includes("PRIVATE-ROUTING-EVIDENCE"));

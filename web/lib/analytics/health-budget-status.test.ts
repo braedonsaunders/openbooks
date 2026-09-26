@@ -15,7 +15,7 @@ const { budgetLineStatus, exactBudgetVariance } = await import('./health-data.ts
 hooks.deregister()
 
 /**
- * F-t09-004: budget variance flags kept the direction. A revenue shortfall
+ * Budget variance flags kept the direction. A revenue shortfall
  * is a miss, not overspend — it must read "under", never "over"/OVER
  * BUDGET — while a genuine cost overrun keeps "over".
  */

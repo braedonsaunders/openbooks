@@ -49,7 +49,7 @@ function messageAt(catalog: Record<string, unknown>, code: string): unknown {
 /**
  * The readiness screen is country-agnostic: the same run can pay Canadians
  * and Americans, and an org may only have one pack installed. A message that
- * names one country's programs (F-t08-004: a US-only org warned about
+ * names one country's programs (a US-only org warned about
  * Canadian CPP/EI ceilings) is wrong for everyone on the other side, so no
  * readiness message may name a country-specific program or agency. Wording
  * must stay neutral ("annual statutory ceilings") and leave the specifics
@@ -86,7 +86,7 @@ test('no readiness message names a country-specific payroll program', () => {
 
 /**
  * The readiness panel promises every item links to where it is fixed
- * (F-t08-005: the period blocker stranded the user with plain text), so the
+ * (the period blocker stranded the user with plain text), so the
  * period blockers must carry the periods setup href — and it must be the
  * live screen, not the dead /admin/close route period.closed once used.
  */

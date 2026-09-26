@@ -15,7 +15,7 @@ import {
   uuidInput,
   type RangeArgs,
 } from "./tools-shared";
-// NOTE (fleet worktree): @openbooks/* resolves to the MAIN checkout through
+// NOTE (worktree): @openbooks/* resolves to the MAIN checkout through
 // the shared node_modules symlink, so worktree engine code is imported via
 // relative paths (the route-test precedent). Identical after cherry-pick.
 import {

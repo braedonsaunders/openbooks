@@ -12,7 +12,7 @@ export interface PartylessControlLine {
 
 /**
  * Posted entry legs on an AR/AP control account that name no customer or
- * vendor (F-t08-007). The posting itself stays legitimate — a party-less
+ * vendor. The posting itself stays legitimate — a party-less
  * control leg is real GL activity — but it sits outside every subledger, so
  * the post response must carry the warning instead of accepting the journal
  * silently. One row per leg, in line order.

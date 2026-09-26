@@ -78,12 +78,12 @@ export function multirefField(entity: SetupEntity): SetupField | undefined {
  */
 export function coerceField(field: SetupField, raw: unknown, fieldVisible = true): Coerced | { error: string } {
   const present = raw !== undefined && raw !== null && raw !== ''
-  // keepDefault columns are NOT NULL WITH a database default (F-t06-022): a
+  // keepDefault columns are NOT NULL WITH a database default: a
   // blank is legal input that falls through to the default (each kind's
   // absent branch below resolves to null/undefined, which buildRow omits),
   // never a missing requirement. Without this the server refused the exact
   // blanks the drawer deliberately sends for untouched keepDefault inputs.
-  // A field hidden by showWhen is likewise not required (F-t03-007): the
+  // A field hidden by showWhen is likewise not required: the
   // drawer hides the default waiver form while enforcement is None and
   // clears it on save, so the server must accept the same blank — the
   // merged-row integrity rule still refuses a blank that is actually in
@@ -324,8 +324,8 @@ export function describeDbError(e: unknown): string {
   if (code === '23503') return 'in-use' // foreign_key_violation
   if (code === '23502') return 'missing-required' // not_null_violation
   // Drizzle wraps driver failures in DrizzleQueryError whose own message
-  // embeds the FULL SQL text plus bound params (F-t06-022 leaked a raw
-  // INSERT to the dialog this way) — never echo the wrapper. The driver's
+  // embeds the FULL SQL text plus bound params (a raw INSERT once reached
+  // the dialog this way) — never echo the wrapper. The driver's
   // message (cause) is plain Postgres text, e.g. a trigger's user-language
   // refusal; anything else degrades to a generic failure, never SQL.
   const driverMessage = (e as { cause?: { message?: unknown } })?.cause?.message

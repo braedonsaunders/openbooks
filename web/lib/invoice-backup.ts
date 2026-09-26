@@ -494,7 +494,7 @@ export async function assembleInvoiceBackup(
         where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${priorFileId}
       `)
       await tx.execute(sql`delete from files where id = ${priorFileId} and org_id = ${orgId}`)
-      // I5-platform-41: durable cleanup intents in the same transaction as
+      // Durable cleanup intents in the same transaction as
       // the row deletes; the worker duty drains them with retry.
       for (const versionId of priorS3VersionIds) {
         await enqueueStorageCleanup(tx, {

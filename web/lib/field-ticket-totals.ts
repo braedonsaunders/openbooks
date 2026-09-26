@@ -1,5 +1,5 @@
 /**
- * Field-ticket labor total helpers (F-t03-005).
+ * Field-ticket labor total helpers.
  *
  * Crew hours with no bill rate after the rate preview (no labor item, or no
  * rate-book match) price at $0. The $0 must read as *unpriced*, never as

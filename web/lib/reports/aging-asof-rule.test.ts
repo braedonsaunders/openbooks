@@ -10,7 +10,7 @@ registerHooks({
 })
 const { resolveAgingAsOf } = await import('./aging.ts')
 
-// F-t02-008 / F-t07-011: the aging CSV disagreed with its screen because
+// The aging CSV disagreed with its screen because
 // the export fell through to the fiscal year end while the screen ages as
 // of today. The as-of shift alone reproduces both totals and buckets.
 test('an explicit as-of always wins', () => {

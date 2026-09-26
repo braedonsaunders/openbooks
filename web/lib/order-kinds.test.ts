@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { CONVERSION_TARGETS } from './order-kinds.ts'
 
-// F-t07-002: an Approved sales order was a dead end — Convert to Invoice
+// An Approved sales order was a dead end — Convert to Invoice
 // 422'd "Fulfilled quantities do not cover any line yet" while no fulfil
 // control existed anywhere. A sales order must offer the shipment first,
 // mirroring the purchase-order goods-receipt target (same link, same
@@ -28,9 +28,8 @@ test('sales orders convert to a shipment before they bill', () => {
 
 // Every convert button renders through t(labelKey) in the
 // purchaseOrders.shared namespace — a missing key leaks a raw key into the
-// drawer (the F-t07-004 class of defect). All seven locales must label
-// every conversion target, including the purchase-receipt key only English
-// carried until F-t07-002.
+// drawer. All seven locales must label every conversion target, including
+// the purchase-receipt key that only English translated before.
 const MESSAGES = join(import.meta.dirname, '..', 'messages')
 const LOCALES = ['en', 'fr', 'de', 'es', 'pt-BR', 'ja', 'zh']
 const TARGETS = Object.values(CONVERSION_TARGETS).flat()

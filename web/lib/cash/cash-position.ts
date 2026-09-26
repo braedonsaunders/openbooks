@@ -58,7 +58,7 @@ export function buildTimeline(args: {
   apByWeek: Map<string, ForecastEntry[]>;
   categories: CategoryWeekly[];
   apSettings: ApSettings;
-  /** BCP-47 locale for week labels (F-t04-010); defaults to en-US. */
+  /** BCP-47 locale for week labels; defaults to en-US. */
   locale?: string;
 }): TimelineResult {
   const { weekStarts, startingCash, arByWeek, apByWeek, categories, apSettings, locale = "en-US" } = args;
@@ -222,7 +222,7 @@ export async function cashPosition(
   includeNullSubsidiary?: boolean,
   /**
    * Viewer BCP-47 locale for week labels (F2-14b); defaults to en-US like
-   * the F-t04-010 position readers. The banking cash loader passes the
+   * the position readers. The banking cash loader passes the
    * request locale — the default serves the API route (entries only),
    * vitals/metrics aggregates, engine tests, and agent callers.
    */

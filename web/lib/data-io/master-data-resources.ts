@@ -651,7 +651,7 @@ async function writeMaster(
                returning *`)) as { rows: Record<string, unknown>[] }
             const after = written.rows[0] ?? null
             if (!after) throw new Error('master-data mutation did not return a row')
-            // OM-16: a role-kind kind names its role row — keep the claim
+            // A role-kind kind names its role row — keep the claim
             // backed in the same row transaction (see ensurePartyRoleRow).
             // Effective values — the row's cells over the stored row — so a
             // partial update re-checks the kind as it will stand.
@@ -691,7 +691,7 @@ async function writeMaster(
             if (!after || typeof after.id !== 'string') {
               throw new Error('master-data mutation did not return a row')
             }
-            // OM-16: a role-kind kind names its role row — keep the claim
+            // A role-kind kind names its role row — keep the claim
             // backed in the same row transaction (see ensurePartyRoleRow).
             if (m.key === 'parties') {
               const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value

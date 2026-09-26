@@ -55,7 +55,7 @@ async function seedOrderWithoutLineAccount(
 }
 
 /**
- * F-t09-012: converted SO lines never inherited the item's income account,
+ * Converted SO lines never inherited the item's income account,
  * so SO-converted invoices were unpostable once Approved ("document line 1
  * has no resolvable account"). The convert must carry item income accounts
  * onto lines that have none, and the converted invoice must post end to end.

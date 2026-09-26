@@ -14,7 +14,7 @@ const { balanceSheet, trialBalance } = await import('./reports/statements.ts')
 const { decimalAdd } = await import('./statement-format.ts')
 
 /**
- * F-t08-001: fixed-asset cost lines printed NET of their contra while the
+ * Fixed-asset cost lines printed NET of their contra while the
  * contra printed again beside them — depreciation subtracted twice from
  * every visual sum (a cost account printed net of its contra while the
  * contra printed again, so displayed assets no longer footed to Total

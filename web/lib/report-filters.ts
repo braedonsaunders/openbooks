@@ -216,7 +216,7 @@ export type DrillColumn = {
 // equity subtotals that roll them up) mix credit-normal revenue with
 // debit-normal costs. Their drill dialog must net as Revenue − Costs — the
 // same sign convention the statement cell uses — so the dialog ties to the
-// cell. A reader-signed net would sum them into Debits + Credits (F-t07-001).
+// cell. A reader-signed net would sum them into Debits + Credits.
 // Single-section rows (revenue, COGS, expenses alone) and asset-inclusive
 // rows (whose residual cannot tie either way) keep the reader-signed net.
 // Kept as literal lists: this module ships to the client filter bar and must

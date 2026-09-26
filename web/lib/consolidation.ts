@@ -22,7 +22,7 @@ export class MissingRatesError extends Error {}
 
 /**
  * Typed surface contract for a statement blocked on underived consolidated
- * rates (F-t06-025). The description carries the kernel's user-language
+ * rates. The description carries the kernel's user-language
  * message verbatim (it names the pair and period); the code lets surfaces
  * render a localized banner with a derive link instead of throwing.
  */
@@ -83,7 +83,7 @@ export interface ResolvedSubsidiaryView {
 
 /**
  * Scope resolution that never refuses on underived consolidated rates
- * (F-t06-001): operational cockpits (banking overview) translate at dated
+ * Operational cockpits (banking overview) translate at dated
  * spot rates, not period consolidated rates, so they must keep reading
  * their scope — and keep offering the subsidiary picker as an escape to a
  * single-entity view — while a formal statement would refuse. The would-be
@@ -265,7 +265,7 @@ export async function resolveSubsidiaryScope(
       }),
     );
     // Never throw here: the refusal rides along for the caller to convert
-    // into a banner (F-t06-001) or throw (formal statements).
+    // into a banner or throw (formal statements).
     if (missing.length > 0) {
       ratesError = new MissingRatesError(
         `No consolidated exchange rates for ${missing.join(", ")} → ${node.baseCurrency} in the period ending ${periodTo}. Derive rates from period close first.`,
@@ -348,7 +348,7 @@ export async function reportSubsidiaryView(
 
 /**
  * Scope bundle that never refuses on underived consolidated rates
- * (F-t06-001): same visibility, context, and picker rows as
+ * Same visibility, context, and picker rows as
  * `reportSubsidiaryView`, with the would-be refusal as `ratesError`.
  * Operational cockpits read their scope and figures through this and pin
  * the banner beside live numbers; formal statements keep throwing via

@@ -132,7 +132,7 @@ async function parsedWorkbookRow(): Promise<Record<string, unknown>> {
     101,
     { formula: '101+101', result: 202 },
     7.5,
-    // I5-platform-187: currency arrives as exact decimal text, never a float.
+    // Currency arrives as exact decimal text, never a float.
     '42.25',
   ])
   const buffer = await workbook.xlsx.writeBuffer()

@@ -108,7 +108,7 @@ export async function arPosition(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   /**
    * Viewer BCP-47 locale for week labels (F2-14b); defaults to en-US like
-   * the F-t04-010 apPosition reader. UI readers pass the request locale —
+   * the apPosition reader. UI readers pass the request locale —
    * the default serves the engine tests and label-agnostic agent callers.
    */
   locale = "en-US",

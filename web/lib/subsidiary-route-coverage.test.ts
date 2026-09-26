@@ -255,7 +255,7 @@ test('every run-scoped verb inherits the source-bill scope gate', () => {
   ]) {
     const src = source(route)
     assert.ok(src.includes('guardPaymentRunPermission'), `${route} must authorize through the shared run gate`)
-    // Only the gate's own allowlist threaded into shared helpers (I1-refix-120); any other source is ad hoc.
+    // Only the gate's own allowlist threaded into shared helpers; any other source is ad hoc.
     assert.doesNotMatch(src.replace(/gate\.allowedSubsidiaryIds/g, '').replace(/allowedSubsidiaryIds:/g, ''), /allowedSubsidiaryIds/, `${route} must not re-implement scope ad hoc`)
   }
 })

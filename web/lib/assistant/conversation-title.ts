@@ -15,7 +15,7 @@ import { countConversationAssistantTurns, isMissingMetadataColumn } from "./conv
  * on older tenants exactly like conversation memory (no migration here).
  */
 
-/** A title is at most this many words (shard contract). */
+/** A title is at most this many words. */
 export const TITLE_MAX_WORDS = 6;
 /** Hard timeout for the title call — a title must never stall a completed turn. */
 export const TITLE_TIMEOUT_MS = 10_000;

@@ -505,9 +505,9 @@ export async function validateEntityIntegrity(
     const value = (camel: string, snake: string, fallback: unknown) =>
       body[camel] !== undefined ? body[camel] : current?.[snake] ?? fallback
     // A blank is not a choice: the drawer sends '' for untouched inputs and
-    // the coerce layer drops those blanks onto the default (F-t06-022), so
+    // the coerce layer drops those blanks onto the default, so
     // the integrity read must fall back the same way instead of refusing a
-    // raw blank (F-t10-001: '' reached toUnits as a refusal key).
+    // raw blank ('' reached toUnits as a refusal key).
     const present = (camel: string, snake: string, fallback: unknown) => {
       const submitted = body[camel]
       if (submitted === undefined || submitted === null || String(submitted).trim() === '') {
@@ -1001,7 +1001,7 @@ export async function validateEntityIntegrity(
       return 'Full consolidation below 100% requires both NCI equity and NCI profit-allocation accounts'
     }
     // The ownership_interest_guard trigger refuses full-method rows without
-    // these legs (F-t06-022): preflight it here so the refusal is a typed
+    // these legs: preflight it here so the refusal is a typed
     // user-language 400 naming the missing accounts, never the trigger's
     // raw SQL INSERT echoing through describeDbError.
     if (method === 'full' && (!value('goodwillAccountId', 'goodwill_account_id') || !value('fairValueAdjustmentAccountId', 'fair_value_adjustment_account_id'))) {
@@ -1140,10 +1140,10 @@ export async function validateEntityIntegrity(
       if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
     }
   }
-  // HRM benefit plans (0197): the coordinator-ruled component validation on
-  // plan save — a side with a cost and no component is refused by name,
-  // the employer component must be kind employer_contribution (so employer
-  // money can never reach net pay), the employee component kind deduction.
+  // HRM benefit-plan component validation on plan save: a side with a cost
+  // and no component is refused by name, the employer component must be
+  // kind employer_contribution (so employer money can never reach net
+  // pay), the employee component kind deduction.
   // prorationBasis carries no drawer default, so a missing rule is refused
   // here with its remedy, never stored as a guess.
   if (entity.key === 'benefit-plans') {
@@ -1660,7 +1660,7 @@ export async function preflightSetupWrite(
 }
 
 /**
- * Duplicate conflicts stay typed (F-t06-019): `code` drives the drawer's
+ * Duplicate conflicts stay typed: `code` drives the drawer's
  * localized copy while `error` reads as user language for every other
  * surface of this shared layer (assistant/MCP tools, API consumers) — never
  * a bare code string.
@@ -1673,7 +1673,7 @@ function duplicateConflict(entityKey: string): { status: 409; body: { error: str
 }
 
 /**
- * Overlap conflicts stay typed (F-t09-016): a GiST exclusion rejection
+ * Overlap conflicts stay typed: a GiST exclusion rejection
  * (SQLSTATE 23P01) must never echo Postgres constraint text to the drawer.
  * `code` drives the drawer's localized copy while `error` reads as user
  * language for every other surface of this shared layer.
@@ -1767,7 +1767,7 @@ export async function createSetupRecord(
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
   if (integrityError) {
     if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
-    // Typed user-correctable failure (F-t06-023): the code lets surfaces map
+    // Typed user-correctable failure: the code lets surfaces map
     // stably while the message reads as user language.
     return { status: 400, body: { error: integrityError, code: 'invalid' } }
   }
@@ -2047,7 +2047,7 @@ export async function createSetupRecord(
       return duplicateConflict(entity.key)
     }
     // Effective-range exclusion constraints (SQLSTATE 23P01) arbitrate overlap
-    // races the same way: typed 409, never raw Postgres text (F-t09-016).
+    // races the same way: typed 409, never raw Postgres text.
     if (pgErrorCode(e) === '23P01') {
       return overlapConflict(entity.key)
     }
@@ -2129,7 +2129,7 @@ export async function updateSetupRecord(
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   if (integrityError) {
     if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
-    // Typed user-correctable failure (F-t06-023): the code lets surfaces map
+    // Typed user-correctable failure: the code lets surfaces map
     // stably while the message reads as user language.
     return { status: 400, body: { error: integrityError, code: 'invalid' } }
   }
@@ -2604,7 +2604,7 @@ export async function updateSetupRecord(
     // Same storage-authority mapping as POST: an edit that moves a row onto an
     // occupied natural key (codes are editable on several entities) is a
     // duplicate conflict, not a generic save failure. Edits that newly
-    // overlap an effective range map the same way (F-t09-016).
+    // overlap an effective range map the same way.
     if (pgErrorCode(e) === '23505') {
       return duplicateConflict(entity.key)
     }
