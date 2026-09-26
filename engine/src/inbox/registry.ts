@@ -82,8 +82,10 @@ function adapterFor(kind: string): InboxAdapter | null {
 
 /**
  * One source that could not be read. The kind names the area so the surface
- * can say WHICH work is missing, and the message is the source's own
- * refusal or failure intact — never a generic placeholder, never silence.
+ * can say WHICH work is missing. The message is a designed refusal intact
+ * (an authorization gate or adapter refusal, whose remedy the operator can
+ * act on); an unexpected source failure carries a generic reason — driver
+ * text must never reach the rendered notice.
  */
 export interface InboxSourceNotice {
   readonly kind: InboxKind;
@@ -100,7 +102,12 @@ export interface InboxSourceNotice {
  * logs the way the house does.
  */
 function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSourceNotice[]): void {
-  const message = error instanceof Error ? error.message : "the inbox source could not be read";
+  // Designed refusals name their remedy and stay intact; anything else is an
+  // unexpected source failure whose detail lives in the server log only.
+  const message =
+    error instanceof HrmAuthorizationError || error instanceof InboxError
+      ? error.message
+      : "the inbox source could not be read";
   if (!(error instanceof HrmAuthorizationError)) {
     console.error(`[inbox] ${kind} list failed:`, error);
   }

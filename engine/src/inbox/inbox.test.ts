@@ -268,7 +268,7 @@ describe("adapter isolation (OM-10)", () => {
       );
       assert.equal(notices.length, 1);
       assert.equal(notices[0]!.kind, "notification");
-      assert.match(notices[0]!.message, /notification store unreachable/);
+      assert.equal(notices[0]!.message, "the inbox source could not be read");
       assert.equal(errors.length, 1, "an unexpected source failure is logged the way the house does");
       assert.match(String(errors[0]![0]), /\[inbox\] notification/);
     } finally {
@@ -470,7 +470,7 @@ describe("inbox count (B-INB-3)", () => {
       assert.equal(total, 2);
       assert.equal(notices.length, 1);
       assert.equal(notices[0]!.kind, "notification");
-      assert.match(notices[0]!.message, /notices backend unavailable/);
+      assert.equal(notices[0]!.message, "the inbox source could not be read");
     } finally {
       __testResetInboxAdapters([]);
     }
