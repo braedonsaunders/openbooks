@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
     return NextResponse.json(doc)
   } catch (error) {
     if (error instanceof DocumentDraftError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return apiErrorResponse(error)
     }
     throw error
   }

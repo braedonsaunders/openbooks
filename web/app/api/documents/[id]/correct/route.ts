@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -121,7 +122,7 @@ export async function POST(
     )
   } catch (error) {
     if (error instanceof DocumentEditError || error instanceof DocumentVoidError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return apiErrorResponse(error)
     }
     throw error
   }

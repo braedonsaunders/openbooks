@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -179,10 +180,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
     }
     if (e instanceof DocumentEditError) {
-      return NextResponse.json(
-        { error: e.message, ...(e.fieldErrors ? { fieldErrors: e.fieldErrors } : {}) },
-        { status: e.status },
-      )
+      return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined })
     }
     throw e
   }

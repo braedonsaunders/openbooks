@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { isDocumentRevisionToken } from "@/lib/api/registry-data";
 import { NextResponse } from 'next/server'
@@ -189,10 +190,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json(
-        { error: e.message, ...(e.fieldErrors ? { fieldErrors: e.fieldErrors } : {}) },
-        { status: e.status },
-      )
+      return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined })
     }
     throw e
   }
@@ -267,7 +265,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
+    if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e
   }
 }

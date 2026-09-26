@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -152,7 +153,7 @@ export async function POST(
     )
   } catch (error) {
     if (error instanceof DocumentVoidError) {
-      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+      return apiErrorResponse(error, { details: { code: error.code } })
     }
     throw error
   }
