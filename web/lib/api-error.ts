@@ -30,11 +30,23 @@ export async function readApiErrorMessage(res: Response, fallback: string): Prom
 
 function readNamedRefusal(body: unknown): string | null {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) return null
-  const record = body as { error?: unknown; message?: unknown; detail?: unknown; remedy?: unknown }
+  const record = body as {
+    error?: unknown
+    message?: unknown
+    detail?: unknown
+    errors?: unknown
+    remedy?: unknown
+  }
   const fields = [record.error, record.message, record.detail]
-  const refusal =
+  const single =
     fields.find((field): field is string => typeof field === 'string' && field.trim() !== '')?.trim() ??
     null
+  const listed = Array.isArray(record.errors)
+    ? record.errors
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+        .map((entry) => entry.trim())
+    : []
+  const refusal = single ?? (listed.length > 0 ? listed.join('; ') : null)
   if (!refusal) return null
   const remedy =
     typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
@@ -123,4 +135,24 @@ export function readApiBulkFailures(body: unknown, itemFallback = 'failed'): Api
 export async function throwApiErrorIfNotOk(res: Response, fallback: string): Promise<void> {
   if (res.ok) return
   throw new Error(await readApiErrorMessage(res, fallback))
+}
+
+/**
+ * The one JSON fetch helper for browser clients. It checks the status
+ * FIRST (an inline `if (!res.ok)` guard so the response-parse checker can
+ * see the ordering, then `readApiErrorMessage` so a proxy page or empty
+ * 502 toasts the fallback, never a SyntaxError), then parses the success
+ * body as `T`. A success body that is not JSON is a broken contract, so it
+ * throws the fallback with the status rather than returning `undefined`
+ * the caller would treat as an empty success.
+ */
+export async function apiJson<T>(url: string, init?: RequestInit, fallbackMessage = 'request failed'): Promise<T> {
+  const res = await fetch(url, init)
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallbackMessage))
+  try {
+    return (await res.json()) as T
+  } catch {
+    const safeFallback = fallbackMessage.trim() !== '' ? fallbackMessage : 'request failed'
+    throw new Error(`${safeFallback} (status ${res.status})`)
+  }
 }

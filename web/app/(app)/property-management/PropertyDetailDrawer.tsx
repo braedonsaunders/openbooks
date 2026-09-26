@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import { confirmDialog } from "@/lib/confirm";
 import {
   Drawer,
   Button,
@@ -602,13 +603,9 @@ export function PropertyDetailDrawer({
                     variant="ghost"
                     className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
                     disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          t("deleteConfirm", { name: property.name }),
-                        )
-                      )
-                        void onDelete();
+                    onClick={async () => {
+                      if (!(await confirmDialog(t("deleteConfirm", { name: property.name })))) return
+                      void onDelete();
                     }}
                   >
                     {t("deleteProperty")}

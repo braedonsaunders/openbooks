@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
 
 export interface BackupPolicyRow {
   enabled: boolean;
@@ -120,10 +121,10 @@ export function BackupManager({
     });
 
   const deleteRun = (run: BackupRunRow) => {
-    if (!window.confirm(t("deleteConfirm", { fileName: run.fileName ? ` “${run.fileName}”` : "" }))) {
-      return;
-    }
     start(async () => {
+      if (!(await confirmDialog(t("deleteConfirm", { fileName: run.fileName ? ` “${run.fileName}”` : "" })))) {
+        return;
+      }
       const res = await fetch(`/api/admin/backups/${run.id}`, { method: "DELETE" });
       if (!res.ok) {
         toast.error(t("errors.couldNotDelete"));

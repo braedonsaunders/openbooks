@@ -18,7 +18,7 @@ import type { FeaturesWorkspace } from './FeaturesWorkspace'
  * probes, then the whole surface renders inside ONE client island
  * (`FeaturesWorkspace`): the toggle switches own `useState` (switch state,
  * pending key), fire `fetch` PUT mutations against
- * `/api/admin/setup/features`, confirm via `window.confirm`, and toast +
+ * `/api/admin/setup/features`, confirm via `confirmDialog`, and toast +
  * `router.refresh()` on completion. Decomposing its grouped rows into a
  * spec repeat would render switches with no toggle flow and strand the
  * confirm/toast logic from what it acts on (the labor-costing /

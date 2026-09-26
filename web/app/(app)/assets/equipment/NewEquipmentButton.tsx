@@ -1,9 +1,6 @@
 'use client'
-import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Plus } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { mergeHref } from '../../../../lib/list-params'
+import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 
 /**
  * Unsaved create (exemplar: NewAccountButton): opening New allocates no
@@ -17,15 +14,13 @@ export function NewEquipmentButton({
   currentParams?: Record<string, string | string[] | undefined>
 }) {
   const t = useTranslations('assets.equipment')
-  const router = useRouter()
   return (
-    <Button
-      onClick={() => router.push(mergeHref('/assets/equipment', currentParams ?? {}, {
-        equipment: undefined,
-        equipmentNew: '1',
-      }) as never)}
-    >
-      <Plus size={15} />{t('new')}
-    </Button>
+    <UnsavedCreateButton
+      base="/assets/equipment"
+      param="equipmentNew"
+      clear={['equipment']}
+      label={t('new')}
+      currentParams={currentParams ?? {}}
+    />
   )
 }

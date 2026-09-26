@@ -10,6 +10,7 @@ import { useBusinessToday } from '../../../components/business-date-provider'
 import { useMoney } from '../../../components/money-provider'
 import { PagedTable } from '../../../components/paged-table'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
+import { confirmDialog } from '@/lib/confirm'
 
 interface RateRow {
   id: string
@@ -312,10 +313,9 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => {
-                        if (window.confirm(t('confirmEnd'))) {
-                          void mutate({ action: 'end-rate', id: row.id, effectiveTo: today }, t('ended'))
-                        }
+                      onClick={async () => {
+                        if (!(await confirmDialog(t('confirmEnd')))) return
+                        void mutate({ action: 'end-rate', id: row.id, effectiveTo: today }, t('ended'))
                       }}
                     >
                       {t('endToday')}
@@ -326,10 +326,9 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
                     variant="ghost"
                     disabled={busy}
                     aria-label={t('delete')}
-                    onClick={() => {
-                      if (window.confirm(t('confirmDelete'))) {
-                        void mutate({ action: 'delete-rate', id: row.id }, t('deleted'))
-                      }
+                    onClick={async () => {
+                      if (!(await confirmDialog(t('confirmDelete')))) return
+                      void mutate({ action: 'delete-rate', id: row.id }, t('deleted'))
                     }}
                   >
                     <Trash2 size={14} aria-hidden />

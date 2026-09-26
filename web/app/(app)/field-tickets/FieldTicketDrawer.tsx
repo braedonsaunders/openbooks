@@ -22,6 +22,7 @@ import {
 import { displayFormName } from '../../../lib/document-display'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
+import { confirmDialog } from '@/lib/confirm'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
@@ -709,8 +710,8 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     }
   }
 
-  function confirmDiscard() {
-    if (!window.confirm(t('editor.discardConfirm'))) return
+  async function confirmDiscard() {
+    if (!(await confirmDialog(t('editor.discardConfirm')))) return
     void discardDraft(true).then((ok) => {
       if (ok) router.push('/field-tickets')
     })

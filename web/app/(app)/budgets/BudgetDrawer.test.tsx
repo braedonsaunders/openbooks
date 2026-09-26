@@ -55,6 +55,12 @@ registerHooks({
         url: "data:text/javascript,export const toast={success(m){(globalThis.__budgetTestToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__budgetTestToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
       };
     }
+    if (specifier === "@/lib/confirm") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function confirmDialog(){return Promise.resolve(true)};export function ConfirmRoot(){return null}",
+      };
+    }
     return next(specifier, context);
   },
 });
@@ -105,7 +111,6 @@ function workspace() {
 async function mountDrawer(overrides?: { status?: string; canApprove?: boolean; budgetImport?: boolean }) {
   globalThis.__budgetTestRouter = { push() {}, refresh() {} };
   globalThis.__budgetTestToasts = [];
-  (window as unknown as Record<string, unknown>).confirm = () => true;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -264,7 +269,6 @@ async function mountCreateDrawer(options?: {
   router.push = (href: string) => {
     pushes.push(href);
   };
-  (window as unknown as Record<string, unknown>).confirm = () => true;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);

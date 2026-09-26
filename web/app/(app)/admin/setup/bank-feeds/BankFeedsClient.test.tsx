@@ -57,6 +57,12 @@ registerHooks({
         url: 'data:text/javascript,export function useRouter(){return globalThis.__feedTestRouter}',
       }
     }
+    if (specifier === '@/lib/confirm') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function confirmDialog(o){(globalThis.__feedConfirmCalls??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__feedConfirmAnswer??true)};export function ConfirmRoot(){return null}',
+      }
+    }
     return next(specifier, context)
   },
 })
@@ -98,10 +104,6 @@ async function mount() {
     }
     throw new Error(`unexpected fetch ${String(url)}`)
   }) as typeof fetch
-  ;(globalThis as Record<string, unknown>).confirm = (message: unknown) => {
-    ;(globalThis.__feedConfirmCalls ?? []).push(String(message))
-    return globalThis.__feedConfirmAnswer ?? true
-  }
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -418,10 +420,6 @@ async function mountSftpRemoves() {
     }
     throw new Error(`unexpected fetch ${String(url)}`)
   }) as typeof fetch
-  ;(globalThis as Record<string, unknown>).confirm = (message: unknown) => {
-    ;(globalThis.__feedConfirmCalls ?? []).push(String(message))
-    return globalThis.__feedConfirmAnswer ?? true
-  }
   return mountSftpSchedules([
     { id: 'sched-1', format: 'csv', expectedExternalAccountId: null },
   ])

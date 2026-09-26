@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { compareDecimal } from "../../../lib/exact-decimal";
+import { confirmDialog } from "@/lib/confirm";
 import { Empty, Small, Status } from "./workspace-ui";
 import type { CamPool, Money, PropertyAction, PropertyWorkspace } from "./types";
 
@@ -92,16 +93,17 @@ export function CamTable({
                       size="sm"
                       variant="outline"
                       disabled={busy}
-                      onClick={() => {
+                      onClick={async () => {
                         if (
-                          window.confirm(
+                          !(await confirmDialog(
                             `Cancel ${pool.name}? The pool will remain in CAM history.`,
-                          )
+                          ))
                         )
-                          void act(
-                            { action: "cancelCamPool", poolId: pool.id },
-                            "CAM pool cancelled",
-                          );
+                          return
+                        void act(
+                          { action: "cancelCamPool", poolId: pool.id },
+                          "CAM pool cancelled",
+                        );
                       }}
                     >
                       Cancel

@@ -19,6 +19,7 @@ import {
 } from "@openbooks/ui";
 import { Field } from "@/components/field";
 import { useDirtyClose } from "@/lib/use-dirty-close";
+import { confirmDialog } from "@/lib/confirm";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -508,10 +509,9 @@ function ScheduleSection({
                           size="sm"
                           variant="ghost"
                           disabled={busy}
-                          onClick={() => {
-                            if (window.confirm(t("deleteConfirm", { description: line.description }))) {
-                              void onChange({ action: "deleteSov", id: line.id });
-                            }
+                          onClick={async () => {
+                            if (!(await confirmDialog(t("deleteConfirm", { description: line.description })))) return
+                            void onChange({ action: "deleteSov", id: line.id });
                           }}
                         >
                           {t("delete")}
@@ -664,10 +664,9 @@ function ChangeOrdersSection({
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => {
-                        if (window.confirm(t("voidConfirm", { number: order.number }))) {
-                          void onChange({ action: "voidChangeOrder", id: order.id });
-                        }
+                      onClick={async () => {
+                        if (!(await confirmDialog(t("voidConfirm", { number: order.number })))) return
+                        void onChange({ action: "voidChangeOrder", id: order.id });
                       }}
                     >
                       {t("void")}
@@ -861,10 +860,9 @@ function PayApplicationsSection({
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => {
-                        if (window.confirm(t("voidConfirm", { number: app.applicationNumber }))) {
-                          void onChange({ action: "voidPayApp", payApplicationId: app.id });
-                        }
+                      onClick={async () => {
+                        if (!(await confirmDialog(t("voidConfirm", { number: app.applicationNumber })))) return
+                        void onChange({ action: "voidPayApp", payApplicationId: app.id });
                       }}
                     >
                       {t("void")}

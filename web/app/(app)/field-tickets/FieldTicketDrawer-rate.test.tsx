@@ -56,6 +56,12 @@ registerHooks({
         url: 'data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}',
       }
     }
+    if (specifier === '@/lib/confirm') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function confirmDialog(){return Promise.resolve(true)};export function ConfirmRoot(){return null}',
+      }
+    }
     return next(specifier, context)
   },
 })
@@ -223,11 +229,6 @@ test('a pristine draft closes by discarding its server shell', async (t) => {
 })
 
 test('explicit discard keeps a refused draft open with its reason pinned', async (t) => {
-  const priorConfirm = window.confirm
-  window.confirm = () => true
-  t.after(() => {
-    window.confirm = priorConfirm
-  })
   const { requests } = await mount(t, () => Response.json({}), () => Response.json({ error: 'Ticket contains billable time' }, { status: 409 }), 'view')
   const actions = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Actions')
   assert.ok(actions, 'the drawer actions menu renders')

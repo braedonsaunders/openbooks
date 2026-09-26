@@ -1,10 +1,7 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Plus } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { mergeHref } from '../../../lib/list-params'
+import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 
 /**
  * Unsaved-create: opens a URL-controlled unsaved drawer (`?projectNew=1`).
@@ -13,20 +10,12 @@ import { mergeHref } from '../../../lib/list-params'
  */
 export function NewProjectButton({ label }: { label?: string } = {}) {
   const t = useTranslations('projects')
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const current = Object.fromEntries(searchParams.entries())
-
-  function open() {
-    router.push(mergeHref('/projects', current, {
-      project: undefined,
-      projectNew: '1',
-    }) as never)
-  }
-
   return (
-    <Button onClick={open}>
-      <Plus size={15} /> {label ?? t('list.newButton')}
-    </Button>
+    <UnsavedCreateButton
+      base="/projects"
+      param="projectNew"
+      clear={['project']}
+      label={label ?? t('list.newButton')}
+    />
   )
 }

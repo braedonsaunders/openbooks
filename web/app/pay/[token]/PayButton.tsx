@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiJson } from "@/lib/api-error";
 
 export function PayButton({ token, provider }: { token: string; provider: string }) {
   const [busy, setBusy] = useState(false);
@@ -10,10 +11,9 @@ export function PayButton({ token, provider }: { token: string; provider: string
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/pay/${token}`, { method: "POST" });
-      const json = (await res.json()) as { redirectUrl?: string; error?: string };
-      if (!res.ok || !json.redirectUrl) {
-        setError(json.error ?? "checkout failed");
+      const json = await apiJson<{ redirectUrl?: string }>(`/api/pay/${token}`, { method: "POST" }, "checkout failed");
+      if (!json.redirectUrl) {
+        setError("checkout failed");
         setBusy(false);
         return;
       }

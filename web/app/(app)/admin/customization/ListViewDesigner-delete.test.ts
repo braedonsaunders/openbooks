@@ -53,6 +53,12 @@ registerHooks({
         url: 'data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}',
       }
     }
+    if (specifier === '@/lib/confirm') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function confirmDialog(o){(globalThis.__confirms??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__confirmAnswer??false)};export function ConfirmRoot(){return null}',
+      }
+    }
     return next(specifier, context)
   },
 })
@@ -71,13 +77,12 @@ const VIEW_ID = '019f68a5-6a24-78ec-bed6-cc04e06f2079'
 
 type FetchCall = { url: string; method: string }
 const calls: FetchCall[] = []
-const confirms: string[] = []
-let confirmAnswer = false
-window.confirm = ((message: string) => {
-  confirms.push(String(message))
-  return confirmAnswer
-}) as typeof window.confirm
-;(globals as Record<string, unknown>).confirm = window.confirm
+declare global {
+  var __confirms: string[] | undefined
+  var __confirmAnswer: boolean | undefined
+}
+globalThis.__confirms = []
+globalThis.__confirmAnswer = false
 globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
   calls.push({ url: String(url), method: init?.method ?? 'GET' })
   return new Response(JSON.stringify({}), { headers: { 'content-type': 'application/json' } })
@@ -86,8 +91,8 @@ globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
 test('deleting a saved view confirms before the DELETE goes out', async () => {
   document.body.innerHTML = ''
   calls.length = 0
-  confirms.length = 0
-  confirmAnswer = false
+  globalThis.__confirms = []
+  globalThis.__confirmAnswer = false
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -129,10 +134,10 @@ test('deleting a saved view confirms before the DELETE goes out', async () => {
       ;(remove as HTMLButtonElement).dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    assert.equal(confirms.length, 1, 'deleting the view must ask for confirmation')
+    assert.equal(globalThis.__confirms?.length, 1, 'deleting the view must ask for confirmation')
     assert.deepEqual(calls, [], 'no DELETE request before the operator confirms')
 
-    confirmAnswer = true
+    globalThis.__confirmAnswer = true
     await act(async () => {
       ;(remove as HTMLButtonElement).dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
       await new Promise((resolve) => setTimeout(resolve, 0))

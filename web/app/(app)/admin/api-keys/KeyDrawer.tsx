@@ -10,6 +10,7 @@ import { PERMISSION_GROUPS, type CataloguePermission } from '@/lib/permissions'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
+import { confirmDialog } from '@/lib/confirm'
 
 export type KeyRow = {
   id: string
@@ -139,7 +140,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
 
   async function revoke() {
     if (!keyRow) return
-    const ok = confirm(t('drawer.revokeConfirm'))
+    const ok = await confirmDialog(t('drawer.revokeConfirm'))
     if (!ok) return
     await execute(() => fetchAction('/api/admin/api-keys', {
       method: 'DELETE',

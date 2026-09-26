@@ -1,9 +1,6 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { mergeHref } from '../../../lib/list-params'
+import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 
 /**
  * Unsaved-create: opens a URL-controlled unsaved drawer (`?paymentNew=1`).
@@ -23,21 +20,13 @@ export function NewPaymentButton({
   basePath: string
   label: string
 }) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const current = Object.fromEntries(searchParams.entries())
-
-  function open() {
-    router.push(mergeHref(basePath, current, {
-      payment: undefined,
-      paymentNew: '1',
-      mode: 'edit',
-    }) as never)
-  }
-
   return (
-    <Button onClick={open}>
-      <Plus size={15} /> {label}
-    </Button>
+    <UnsavedCreateButton
+      base={basePath}
+      param="paymentNew"
+      clear={['payment']}
+      label={label}
+      extra={{ mode: 'edit' }}
+    />
   )
 }

@@ -17,6 +17,7 @@ import {
   type FeedProvider,
 } from "../../../../../lib/bank-directory";
 import { isUuid } from "../../../../../lib/list-params";
+import { confirmDialog } from "@/lib/confirm";
 
 interface Connection {
   id: string;
@@ -204,7 +205,7 @@ export function BankFeedsClient({
   };
 
   const removeFeed = async (connection: Connection) => {
-    if (!confirm(t("connection.removeConfirm"))) return;
+    if (!(await confirmDialog(t("connection.removeConfirm")))) return;
     const fallbackMessage = t("feedMessages.unknownError");
     setMsg(null);
     await execute(() => fetchAction(`/api/banking/bank-feeds/${connection.id}`, { method: "DELETE" }), {
@@ -388,8 +389,8 @@ function SftpConnectionCard({
     // that can never match.
     return raw && isUuid(raw) ? raw : null;
   });
-  const removeServer = () => {
-    if (!confirm(t("sftpCard.removeServerConfirm"))) return;
+  const removeServer = async () => {
+    if (!(await confirmDialog(t("sftpCard.removeServerConfirm")))) return;
     const fallbackMessage = t("feedMessages.unknownError");
     setRouteError(null);
     void execute(() => fetchAction(`/api/banking/sftp/${server.id}`, { method: "DELETE" }), {
@@ -398,8 +399,8 @@ function SftpConnectionCard({
       onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
     });
   };
-  const removeSchedule = (schedule: SftpSchedule) => {
-    if (!confirm(t("sftpCard.removeScheduleConfirm"))) return;
+  const removeSchedule = async (schedule: SftpSchedule) => {
+    if (!(await confirmDialog(t("sftpCard.removeScheduleConfirm")))) return;
     const fallbackMessage = t("feedMessages.unknownError");
     setRouteError(null);
     void execute(() => fetchAction(`/api/banking/sftp/schedules/${schedule.id}`, { method: "DELETE" }), {

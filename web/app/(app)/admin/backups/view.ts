@@ -17,7 +17,7 @@ import type { BackupManagerProps } from './BackupManager'
  * client component that owns the schedule form (local useState per field),
  * live progress polling (`setInterval` → `router.refresh()` while a run is
  * in flight), and fetch mutations (save policy, run now, delete with
- * `window.confirm`). Those are client state, effects and capabilities, none
+ * `confirmDialog`). Those are client state, effects and capabilities, none
  * of which a spec can name. What the spec CAN carry is everything around
  * it: the header and the server-resolved inputs become loader data.
  *

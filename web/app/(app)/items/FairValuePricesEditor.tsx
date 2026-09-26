@@ -6,6 +6,7 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Badge, Button, Card, CardContent, Input, Label } from '@openbooks/ui'
 import { useAppAction } from '../../../lib/use-app-action'
+import { confirmDialog } from '@/lib/confirm'
 
 interface Price {
   id: string
@@ -100,7 +101,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
   }
 
   async function remove(id: string) {
-    if (!confirm(t('confirmDelete'))) return
+    if (!(await confirmDialog(t('confirmDelete')))) return
     await action.execute(() => fetchAction(`/api/items/${itemId}/fair-values?id=${encodeURIComponent(id)}`, { method: 'DELETE' }), {
       fallbackMessage: common('feedback.saveFailed'),
       successMessage: common('feedback.deleted'),

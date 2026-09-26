@@ -1,9 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { Plus } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { mergeHref } from '../../../lib/list-params'
+import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 
 export function NewAccountButton({
   currentParams,
@@ -12,16 +9,13 @@ export function NewAccountButton({
   currentParams: Record<string, string | string[] | undefined>
   label: string
 }) {
-  const router = useRouter()
   return (
-    <Button
-      onClick={() => router.push(mergeHref('/accounts', currentParams, {
-        account: undefined,
-        accountNew: '1',
-      }) as never)}
-    >
-      <Plus size={16} />
-      {label}
-    </Button>
+    <UnsavedCreateButton
+      base="/accounts"
+      param="accountNew"
+      clear={['account']}
+      label={label}
+      currentParams={currentParams}
+    />
   )
 }

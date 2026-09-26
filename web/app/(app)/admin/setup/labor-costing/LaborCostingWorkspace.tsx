@@ -16,6 +16,8 @@ import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { LaborCostingWizard } from './LaborCostingWizard'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { apiJson } from '@/lib/api-error'
+import { confirmDialog } from '@/lib/confirm'
 
 export interface RateRow {
   id: string
@@ -228,18 +230,28 @@ export function LaborCostingWorkspace(props: {
   async function loadReconciliation() {
     setBusy(true)
     try {
-      const res = await fetch('/api/admin/setup/labor-costing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reconcile',
-          periodStart: recFrom,
-          periodEnd: recTo,
-          subsidiaryId: recSubsidiaryId,
-        }),
-      })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      const j = await apiJson<{
+        subsidiaryId: string
+        currency: string
+        standardPosted: string
+        payrollPosted: string
+        periodVariance: string
+        openBalance: string
+        perProject: { projectId: string; name: string; standard: string }[]
+      }>(
+        '/api/admin/setup/labor-costing',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'reconcile',
+            periodStart: recFrom,
+            periodEnd: recTo,
+            subsidiaryId: recSubsidiaryId,
+          }),
+        },
+        'failed',
+      )
       setRec(j)
     } catch (e) {
       toast.error((e as Error).message)
@@ -251,18 +263,20 @@ export function LaborCostingWorkspace(props: {
   async function postVariance() {
     setBusy(true)
     try {
-      const res = await fetch('/api/admin/setup/labor-costing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'post-variance',
-          periodStart: recFrom,
-          periodEnd: recTo,
-          subsidiaryId: recSubsidiaryId,
-        }),
-      })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      const j = await apiJson<{ variance: string | number }>(
+        '/api/admin/setup/labor-costing',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'post-variance',
+            periodStart: recFrom,
+            periodEnd: recTo,
+            subsidiaryId: recSubsidiaryId,
+          }),
+        },
+        'failed',
+      )
       toast.success(
         t('reconciliation.variancePosted', {
           amount: formatRate(String(j.variance), reconciliationCurrency, locale),
@@ -945,7 +959,7 @@ function RateDrawer({
   }
 
   async function remove() {
-    if (!row || !confirm(t('rates.confirmDelete'))) return
+    if (!row || !(await confirmDialog(t('rates.confirmDelete')))) return
     setBusy(true)
     try {
       await call({ action: 'delete-rate', id: row.id })

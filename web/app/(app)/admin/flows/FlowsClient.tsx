@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, SearchSelect, cn } from '@openbooks/ui'
+import { apiJson } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
 
 /**
@@ -46,19 +47,18 @@ export function NewFlowButton() {
   async function create() {
     setBusy(true)
     try {
-      const res = await fetch('/api/admin/flows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), subjectKind }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('new.failed'))
-        return
-      }
+      const data = await apiJson<{ id: string }>(
+        '/api/admin/flows',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), subjectKind }),
+        },
+        t('new.failed'),
+      )
       router.push(`/admin/flows/${data.id}`)
-    } catch {
-      toast.error(t('new.failed'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('new.failed'))
     } finally {
       setBusy(false)
     }
@@ -138,21 +138,20 @@ export function FlowRowActions({
     setBusy(true)
     const next = !isEnabled
     try {
-      const res = await fetch(`/api/admin/flows/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: next, expectedUpdatedAt: revision }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? data.errors?.join('; ') ?? t('actions.updateFailed'))
-        return
-      }
+      const data = await apiJson<{ updatedAt: string }>(
+        `/api/admin/flows/${id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: next, expectedUpdatedAt: revision }),
+        },
+        t('actions.updateFailed'),
+      )
       setIsEnabled(next)
       setRevision(data.updatedAt)
       router.refresh()
-    } catch {
-      toast.error(t('actions.updateFailed'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('actions.updateFailed'))
     } finally {
       saving.current = false
       setBusy(false)
@@ -171,20 +170,19 @@ export function FlowRowActions({
         tone: 'danger',
       })
       if (!ok) return
-      const res = await fetch(`/api/admin/flows/${id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expectedUpdatedAt: revision }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('actions.deleteFailed'))
-        return
-      }
+      await apiJson<unknown>(
+        `/api/admin/flows/${id}`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedUpdatedAt: revision }),
+        },
+        t('actions.deleteFailed'),
+      )
       toast.success(t('actions.deleted'))
       router.refresh()
-    } catch {
-      toast.error(t('actions.deleteFailed'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('actions.deleteFailed'))
     } finally {
       saving.current = false
       setBusy(false)

@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { ActionError, kindForStatus, transportError } from '@braedonsaunders/appkit-errors'
 import { Alert, Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { useAppAction } from '@/lib/use-app-action'
+import { confirmDialog } from '@/lib/confirm'
 
 interface RateBook { id: string; name: string; currency: string; is_default: boolean; latest_version_id: string | null }
 interface Assignment {
@@ -179,7 +180,7 @@ export function RateBookAssignmentSection({
   }
 
   async function remove(id: string) {
-    if (!confirm(t('confirmDelete'))) return
+    if (!(await confirmDialog(t('confirmDelete')))) return
     setFailure(null)
     const fallbackMessage = t('errors.save')
     await execute(() => assignmentAction(`/api/rate-book-assignments?id=${encodeURIComponent(id)}`, { method: 'DELETE' }), {
