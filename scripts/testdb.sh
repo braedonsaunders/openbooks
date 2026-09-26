@@ -16,7 +16,13 @@
 #
 # Usage:
 #   scripts/testdb.sh up                 start the container and build the template
-#   scripts/testdb.sh new [name]         create a fresh database, print its env exports
+#   scripts/testdb.sh new [--allow-stale] [name]
+#                                        create a fresh database, print its env
+#                                        exports; refuses when the template was
+#                                        built from a different schema than this
+#                                        checkout. --allow-stale (or
+#                                        OPENBOOKS_TESTDB_ALLOW_STALE=1) hands it
+#                                        out anyway, every line marked stale-template:
 #   scripts/testdb.sh drop [--dry-run] <name>
 #                                        drop one test database (name with or
 #                                        without the ob_ prefix; refuses anything
@@ -232,29 +238,40 @@ build_template() {
   release_lock
 }
 
-# Warn loudly when the template was built from a different schema than the
-# caller's checkout. Silence here is what let a worker copy a template missing
-# its own migration and conclude the migration did not work.
-check_template_freshness() {
-  local mine theirs mine_n theirs_n
-  mine=$(schema_fingerprint); theirs=$(template_meta fingerprint)
-  # Silence here is what let a half-built template pass as usable. Every
-  # template this script publishes carries a build record, so its absence means
-  # the database is not one — never that it is old and fine.
+# Whether the template was built from the schema of the caller's checkout.
+# Refuses outright when the template has no build record: every template this
+# script publishes carries one, so its absence means the database is not one —
+# never that it is old and fine.
+template_matches_checkout() {
+  local theirs
+  theirs=$(template_meta fingerprint)
   if [ -z "$theirs" ]; then
     echo "testdb: the template has no build record, so its schema is unknown." >&2
     echo "testdb: refusing to hand back a database copied from it. Run: scripts/testdb.sh reset" >&2
     exit 1
   fi
-  [ "$mine" = "$theirs" ] && return 0
+  [ "$(schema_fingerprint)" = "$theirs" ]
+}
+
+# A copy of a template built from another schema fails tests for reasons that
+# have nothing to do with the code under test (a template missing this
+# checkout's migration, or holding a newer one), and those reds read exactly
+# like product defects. So `new` refuses it; the remedies named here are the
+# ones this script implements.
+report_template_mismatch() {
+  local mine_n theirs_n
   mine_n=$(migration_count); theirs_n=$(template_meta migration_count)
-  echo "testdb: WARNING — the template was built from a different schema than this checkout" >&2
-  echo "testdb:   template: ${theirs_n} migrations   this checkout: ${mine_n} migrations" >&2
+  echo "testdb: the template was built from a different schema than this checkout" >&2
+  echo "testdb:   template ${TEMPLATE}: ${theirs_n} migrations   this checkout: ${mine_n} migrations" >&2
   if [ "${mine_n:-0}" -gt "${theirs_n:-0}" ]; then
     echo "testdb:   your migrations are NOT in the template. Run: scripts/testdb.sh reset" >&2
+  elif [ "${mine_n:-0}" -lt "${theirs_n:-0}" ]; then
+    echo "testdb:   this checkout is behind the template, and reset refuses to rebuild it backwards. Rebase this checkout." >&2
   else
-    echo "testdb:   your checkout is behind the template. Rebase before trusting a run." >&2
+    echo "testdb:   the same number of migrations with different contents. Run: scripts/testdb.sh reset" >&2
   fi
+  echo "testdb:   or build a template from this checkout alone, leaving the shared one untouched:" >&2
+  echo "testdb:     OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts/testdb.sh new [name]" >&2
 }
 
 print_env() {
@@ -338,19 +355,43 @@ case "$cmd" in
     ;;
 
   new)
+    shift
+    allow_stale=0; name=""
+    [ "${OPENBOOKS_TESTDB_ALLOW_STALE:-}" = 1 ] && allow_stale=1
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --allow-stale) allow_stale=1 ;;
+        -*) echo "testdb: new: unknown option '$1'" >&2; exit 1 ;;
+        *) [ -z "$name" ] || { echo "testdb: new takes one database name, got '$name' and '$1'" >&2; exit 1; }; name=$1 ;;
+      esac
+      shift
+    done
     require_docker
     start_container
     # Held across the readiness check AND the copy: otherwise a concurrent reset
     # can drop the template between deciding it is good and reading from it.
     acquire_lock
     template_ready || build_template
-    check_template_freshness
+    if ! template_matches_checkout; then
+      if [ "$allow_stale" != 1 ]; then
+        report_template_mismatch
+        echo "testdb: refusing to hand out a copy of it. A run against it is not evidence about this checkout." >&2
+        echo "testdb:   to take the copy anyway, pass --allow-stale (or OPENBOOKS_TESTDB_ALLOW_STALE=1)." >&2
+        exit 1
+      fi
+      # From here every diagnostic line, the database name included, carries the
+      # marker, so a run on this copy cannot be read without seeing it. The
+      # exports on stdout stay plain shell so `eval` still works.
+      exec 2> >(sed 's/^/stale-template: /' >&2)
+      report_template_mismatch
+      echo "testdb: --allow-stale: handing out a copy of the mismatched template" >&2
+    fi
     # Include the worktree identity: BB worktrees all use the basename
     # "openbooks", so basename plus commit alone collides across agents.
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)
     repo_name=$(basename "$repo_root")
     head=$(git rev-parse --short HEAD 2>/dev/null || echo local)
-    raw=${2:-${repo_name}_${head}_$(worktree_identity "$repo_root")}
+    raw=${name:-${repo_name}_${head}_$(worktree_identity "$repo_root")}
     # printf, not echo (inside test_db_name): `tr -c` would turn echo's trailing
     # newline into an underscore and silently create a database nobody asked for.
     db=$(test_db_name "$raw")
@@ -431,6 +472,7 @@ case "$cmd" in
     fi
     if template_ready; then
       echo "template:  $TEMPLATE ready ($(template_meta migration_count) migrations, fingerprint $(template_meta fingerprint | cut -c1-12))"
+      template_matches_checkout || echo "template:  built from a different schema than this checkout ($(migration_count) migrations here); 'new' refuses it"
     elif template_exists; then
       echo "template:  $TEMPLATE PRESENT BUT NOT READY — no build record; run 'scripts/testdb.sh reset'"
     else
