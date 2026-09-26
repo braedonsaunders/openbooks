@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -145,7 +146,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
@@ -415,10 +416,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json(
-        { error: e.message, ...(e.fieldErrors ? { fieldErrors: e.fieldErrors } : {}) },
-        { status: e.status },
-      )
+      return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined })
     }
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // Composite org-scoped storage keys make cross-tenant references
@@ -483,7 +481,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     expectedRevision = requireDocumentEditRevision((parsedBody.data as { expectedUpdatedAt?: unknown }).expectedUpdatedAt)
   } catch (e) {
-    if (e instanceof DocumentEditError) return NextResponse.json({ error: e.message }, { status: e.status })
+    if (e instanceof DocumentEditError) return apiErrorResponse(e)
     throw e
   }
   try {
@@ -494,7 +492,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
+    if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e
   }
 }
