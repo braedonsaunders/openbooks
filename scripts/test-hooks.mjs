@@ -1,6 +1,7 @@
 import { registerHooks } from 'node:module'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import pg from 'pg'
 
 const EMPTY_MODULE = 'openbooks:test-hooks:empty'
 // web/tsconfig.json maps the `@/*` house alias onto the web root. Mirror it
@@ -27,12 +28,46 @@ registerHooks({
   },
 })
 
-// A pg client that receives a second query while one is in flight only queues
-// it — the fan-out never parallelizes — and node-postgres warns today and
-// throws in pg 9. Fail the suite instead of letting the warning scroll past
-// in a log: every transaction client is one connection, so concurrent use is
-// always a defect at the call site.
+// A pg client that receives a query while another is running only queues it:
+// node-postgres warns today and refuses it from pg 9. Clients checked out
+// through engine/src/platform/db.ts queue such calls themselves, so a
+// Promise.all over a scoped transaction stays safe. Anything else that shares
+// one client (a raw pg.Client in a fixture or script) must not, and the suite
+// fails when it does rather than letting the warning scroll past in a log.
+//
+// pg's own warning names no caller, fires once per process, and only once a
+// query is already waiting in the queue, so whether a two-query fan-out trips
+// it depends on timing. The suite instead refuses what pg 9 refuses: a query
+// issued while another is still running on the same client. It checks every
+// call and prints each distinct call site. The warning listener stays as the
+// backstop for a pg copy this does not patch.
 const CONCURRENT_CLIENT_QUERY = 'already executing a query'
+const REPOSITORY_ROOT = resolvePath(dirname(fileURLToPath(import.meta.url)), '..')
+const reportedCallSites = new Set()
+function refuseConcurrentQuery(stack) {
+  process.exitCode = 1
+  const site = String(stack ?? '')
+    .split('\n')
+    .slice(1)
+    .filter((line) => line.includes(REPOSITORY_ROOT) && !line.includes('/node_modules/') && !line.includes('/scripts/test-hooks.mjs'))
+    .map((line) => line.trim().replace(`file://${REPOSITORY_ROOT}/`, '').replace(`${REPOSITORY_ROOT}/`, ''))
+    .slice(0, 8)
+    .join('\n    ')
+  if (reportedCallSites.has(site)) return
+  reportedCallSites.add(site)
+  console.error(`[test-hooks] refusing concurrent pg client use (a query issued while another runs on the same client) at:\n    ${site || '(no repository frame on the stack)'}`)
+}
+const clientQuery = pg.Client.prototype.query
+pg.Client.prototype.query = function query(...args) {
+  if (this._activeQuery || this._queryQueue?.length > 0) {
+    const limit = Error.stackTraceLimit
+    Error.stackTraceLimit = 60
+    const stack = new Error().stack
+    Error.stackTraceLimit = limit
+    refuseConcurrentQuery(stack)
+  }
+  return clientQuery.apply(this, args)
+}
 process.on('warning', (warning) => {
   if (
     warning?.name === 'DeprecationWarning' &&
