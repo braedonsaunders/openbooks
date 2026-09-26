@@ -51,7 +51,7 @@ test('accounting journal tiles read the primary book only', { skip: !env.OPENBOO
         insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
         values (${secondary}, ${scratch.orgId}, 'TAX', 'Tax', false, true, true)
       `)
-      // Manual drafts are documents (F-t06-014): seed two, one per book label —
+      // Manual drafts are documents: seed two, one per book label —
       // documents carry no book, so both count, exactly like the /journal
       // draft list.
       let n = 0

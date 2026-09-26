@@ -246,7 +246,7 @@ test("cashflow horizon control offers shared presets and preserves other query f
   }
 });
 
-test("week labels localize month names (F-t04-010)", () => {
+test("week labels localize month names", () => {
   // core.ts is server-only in production, so run the behavior check under
   // React's server condition (the same pattern used by other web tests).
   const source = `

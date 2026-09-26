@@ -5,7 +5,7 @@ import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCiv
 // Intl uses narrow/no-break spaces in some locales; compare on plain spaces.
 const nbsp = (s: string): string => s.replace(/[\u00a0\u202f]/g, " ");
 
-// Timestamps must render in the viewer's locale (F-t01-014): the Users
+// Timestamps must render in the viewer's locale: the Users
 // list passes its request locale through, so the formatter has to honor
 // the argument rather than always falling back to the default.
 

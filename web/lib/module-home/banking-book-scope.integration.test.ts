@@ -97,7 +97,7 @@ test('restricted transaction badge excludes subsidiary-less documents', { skip: 
         values (${branchId}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Txn branch', 'CAD', 'CA')
       `)
       for (const [subsidiary, number] of [[branchId, 'TXN-BRANCH'], [null, 'TXN-NOSUB']] as const) {
-        // The 7-day badge counts posted documents only (F-t05-009), so the
+        // The 7-day badge counts posted documents only, so the
         // scope fixture posts each document through a balanced entry.
         const docId = randomUUID()
         const entryId = randomUUID()

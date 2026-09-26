@@ -19,11 +19,11 @@ const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src
 const { bankingHome } = await import('./banking.ts')
 
 /**
- * F-t05-009: the banking work-queue badge reads "posted in the last 7 days"
+ * The banking work-queue badge reads "posted in the last 7 days"
  * but counted drafts. A scratch org with one draft + one posted deposit must
  * report txns7d = 1.
  */
-test('banking txns7d counts only posted documents (F-t05-009)', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('banking txns7d counts only posted documents', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     const today = await withBypass(() => businessToday(scratch.orgId))

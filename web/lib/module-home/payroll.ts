@@ -289,7 +289,7 @@ export async function payrollHome(
   const ytdMoney = payrollYtdMoneyAmounts(ytd as { gross?: string | null; net?: string | null; employer_cost?: string | null })
   const defaultSchedule = schedules.find((s) => s.isDefault) ?? schedules[0]
 
-  // Setup checklist (F-t08-016): the same packSlotState walk the run
+  // Setup checklist: the same packSlotState walk the run
   // pre-flight performs — every statutory slot of every installed pack must
   // resolve to a liability account — plus the two country-free accounts.
   // Legacy CA keys must never drive this banner: a US-only tenant has no

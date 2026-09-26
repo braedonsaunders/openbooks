@@ -108,7 +108,7 @@ test('customer pipeline sums large decimal strings without a floating-point roun
   })
 })
 
-// F-t02-008: dashboard $454,775.39 vs AR hub $293,651.99. The workspace read
+// Dashboard $454,775.39 vs AR hub $293,651.99. The workspace read
 // the live (unbounded) book — future-posted invoices counted, future
 // applications netted — while the hub reads the as-of book. One definition:
 // both CTEs bind the business day exactly like the cash engine's openItems.

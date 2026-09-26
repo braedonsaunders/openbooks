@@ -36,7 +36,7 @@ const { FEATURES } = await import("@openbooks/engine/src/organization/feature-re
 const { moduleOfTool } = await import("./tool-router");
 
 /**
- * Chat-payload budget (shard b01). A turn sends ~45k tokens of tool
+ * Chat-payload budget. A turn sends ~45k tokens of tool
  * definitions today; the two-stage catalog must hold a typical turn to
  * ≤ 12k (core ≤ 9k) with a ≤ 20k worst case. Token counts use the same
  * bytes/4 estimator as tmp/tool-budget.mts so the ledger numbers compare.

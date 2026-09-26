@@ -15,7 +15,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { createSetupRecord, updateSetupRecord } = await import('./write.ts')
 const { SETUP_ENTITY_BY_KEY } = await import('./registry.ts')
 
-// F-t03-007: creating a counterparty class with lien-waiver enforcement but
+// Creating a counterparty class with lien-waiver enforcement but
 // no default waiver form 400'd with raw Postgres constraint text
 // (`... violates check constraint "compliance_classes_waiver_type_required"`)
 // on a form field that is not marked required. The refusal is now a typed

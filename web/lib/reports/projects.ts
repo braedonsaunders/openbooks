@@ -14,7 +14,7 @@ import { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subs
 // ---------------------------------------------------------------------------
 
 /**
- * Sentinel project id for the Unassigned row (F-t07-004): P&L lines with no
+ * Sentinel project id for the Unassigned row: P&L lines with no
  * project assignment have no project to join to, so they aggregate under this
  * id. It is not a uuid and never matches a real project — callers must render
  * it as plain text (no P&L project link, no drill-through: neither surface
@@ -162,7 +162,7 @@ export async function projectProfitability(
          and worked_on >= ${from} and worked_on <= ${to}
        group by project_id
     ),
-    -- F-t07-004: P&L lines with no project assignment are invisible to the
+    -- P&L lines with no project assignment are invisible to the
     -- per-project aggregate above, so report totals silently under-read the
     -- P&L. Aggregate them under the Unassigned sentinel row instead. A
     -- project-dim filter empties this leg on its own (null never equals the

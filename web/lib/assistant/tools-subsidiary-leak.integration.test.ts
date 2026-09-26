@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../auth';
 
-// Regression coverage (wave 2): several assistant/MCP read tools ran raw SQL
+// Regression coverage: several assistant/MCP read tools ran raw SQL
 // without the caller's subsidiary allowlist, so a restricted caller saw
 // cross-subsidiary rows the UI surfaces hide. Fixture mirrors
 // open-items-scope.integration: a VISIBLE root subsidiary and a HIDDEN child,

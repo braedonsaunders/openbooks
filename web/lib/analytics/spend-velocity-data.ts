@@ -380,7 +380,7 @@ export async function spendVelocityData(
     `),
     // 5. P&L operating expenses + revenue for the OpEx ratio — the shared
     // operating-expenses reader, so this page reports the same "Operating
-    // expenses … of revenue" figure as Financial Health (F-t09-001). The
+    // expenses … of revenue" figure as Financial Health. The
     // spend-document universe above (COGS included, non-spend journals
     // missed) is not operating expenses and must not feed this ratio.
     periodOperatingExpenses(orgId, from, to, allowed),
@@ -843,7 +843,7 @@ export async function spendVelocityData(
   // ---- revenue normalisation ---------------------------------------------------------------------
   // The OpEx ratio reads the shared P&L operating-expenses reader (true OpEx
   // over true revenue), never the spend-document total above: that universe
-  // mixes a COGS account in and drops genuine expense (F-t09-001).
+  // mixes a COGS account in and drops genuine expense.
   const totalRevenue = plOpex.revenue;
   const revenue = {
     hasData: cmp(totalRevenue, "0") > 0,

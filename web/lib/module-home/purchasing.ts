@@ -13,7 +13,7 @@ import { isFeatureEnabled } from '../features'
  * roster: open POs → open bills per vendor), a 13-week spend trend, and the
  * live-directory badges. The open-payables vitals reuse the shared cash
  * engine (openItems as of today) so the pulse ties to /ap by construction —
- * a bespoke live aggregate drifted on both time boundaries (F-t04-012).
+ * a bespoke live aggregate drifted on both time boundaries.
  * The pay-run engine itself stays on the /ap cockpit tab.
  */
 
@@ -173,11 +173,11 @@ export async function purchasingHome(
         ? sql` and d.subsidiary_id = any(${subArr})`
         : sql``
 
-  // Open-payables vitals reuse the shared cash engine as of today (F-t04-012):
+  // Open-payables vitals reuse the shared cash engine as of today:
   // the bespoke live aggregate counted future-posted bills while netting
   // future-dated applications, so the pulse never tied to /ap. openItems
   // arrives in presentation currency, exactly like the cockpit's summary.
-  // The hero roster groups the SAME item set (F-t03-009): its own live
+  // The hero roster groups the SAME item set: its own live
   // aggregate additionally gated on the cached open_balance, so one page
   // showed two different Talent figures.
   // Without the AP grant every money query below is skipped outright: a
@@ -295,7 +295,7 @@ export async function purchasingHome(
   const po = ordersOn ? await openPoValueInOrgCurrency(orgId, orgCurrency, today, poRowsRes.rows) : { byParty: new Map(), total: '0' }
 
   // Hero roster — vendor commitments merged from the SAME as-of open items
-  // as the pulse (F-t03-009) with translated open POs, ranked by combined
+  // as the pulse with translated open POs, ranked by combined
   // exposure. Per-vendor billed legs net exactly like the /ap cockpit's
   // by-vendor grouping, so the roster ties to both the pulse and /ap by
   // construction. Items without a party cannot join a vendor row and stay

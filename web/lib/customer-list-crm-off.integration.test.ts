@@ -3,7 +3,7 @@ import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
-// F-t11-001: /entities/customers crashes for orgs with CRM off. The list's
+// /entities/customers crashes for orgs with CRM off. The list's
 // status-facet query groups by the status expression, which is the constant
 // 'customer' when CRM is off — `group by 'customer'` is a Postgres 42601, so
 // the whole page throws. CRM-on orgs group by a real column and never notice.

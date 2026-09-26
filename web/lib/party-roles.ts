@@ -24,7 +24,7 @@ export function partyRoleTable(kind: PartyRoleKind): 'customer_roles' | 'vendor_
 }
 
 /**
- * OM-16: keep a role-kind party backed by its canonical role row.
+ * Keep a role-kind party backed by its canonical role row.
  *
  * Writers that persist `parties.kind` without going through the parties
  * routes (master-data import, the generic v1/MCP entity writer) call this

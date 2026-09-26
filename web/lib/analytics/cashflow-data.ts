@@ -102,7 +102,7 @@ export async function cashflowData(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   /**
    * Viewer BCP-47 locale for week labels (F2-14b); defaults to en-US like
-   * the F-t04-010 position readers. The analytics loader passes the request
+   * the position readers. The analytics loader passes the request
    * locale — the default serves the label-agnostic agent caller.
    */
   locale = "en-US",

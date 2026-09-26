@@ -110,12 +110,12 @@ export function pickString(v: string | string[] | undefined): string | undefined
  * declared enum filters (`f_<key>`); every other key rides along through
  * mergeHref on the section's own links. A host loader that builds its own
  * narrowed params (a status segment, a tab) must spread these beside them —
- * otherwise the section renders with a dead New button (OM-18).
+ * otherwise the section renders with a dead New button.
  */
 export function setupSectionParams(
   searchParams: Search,
   /** Namespaced drawer keys for hosts mounting several setup sections
-   *  (CK-09): forwarded beside `row` so each section's sp carries the key
+   * Forwarded beside `row` so each section's sp carries the key
    *  its drawer reads. */
   rowParams: readonly string[] = [],
 ): Record<string, string> {

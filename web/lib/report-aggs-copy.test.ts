@@ -4,7 +4,7 @@ import test from 'node:test'
 import { REPORT_AGG_FNS } from '../../packages/reports/src/types.ts'
 
 /**
- * F-t07-005: the builder offered the `latest` aggregation but reports.aggs
+ * The builder offered the `latest` aggregation but reports.aggs
  * had no such key in any locale, so the dropdown rendered the raw
  * "reports.aggs.latest" key (plus MISSING_MESSAGE console errors). Every
  * engine aggregate needs a translated label in every locale.

@@ -193,7 +193,7 @@ export interface EntityListSource {
    * The list fetches the filtered id set through the source's own joins and
    * WHERE, resolves the sort values in ONE batched reader over that set,
    * and reads the page by id membership ordered by array position — never a
-   * correlated per-row sum (F-t03-013). Return null to fall back to SQL
+   * correlated per-row sum. Return null to fall back to SQL
    * ordering. Only consulted when defined.
    */
   orderedPageIds?: (ctx: {
@@ -426,7 +426,7 @@ const SOURCES: Record<string, EntityListSource> = {
           // Custom project types are tenant data: without them their keys
           // render underscore-spaced in cells and cannot be filtered at all.
           // Built-ins keep their static translated options — the list merges
-          // these in after, so they still win on any value collision (F-t11-003).
+          // these in after, so they still win on any value collision.
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select key as value, name as label from project_types
              where org_id = ${orgId} and is_active order by name`)
@@ -617,7 +617,7 @@ const SOURCES: Record<string, EntityListSource> = {
     // Only manual-journal documents open in the journal document drawer
     // (?entry=, kind journal only). A pay_run source opens its posted entry
     // (?txn=) instead — ?entry= with a pay_run document id resolves nothing
-    // and stranded the run's View-journal link (F-t08-014).
+    // and stranded the run's View-journal link.
     drawerTarget: (row) => {
       if (row.source_document_id && String(row.source_document_kind ?? '') === 'journal') {
         return { param: 'entry', id: String(row.source_document_id) }

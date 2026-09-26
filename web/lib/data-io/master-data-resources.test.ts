@@ -121,7 +121,7 @@ const mockSources = new Map<string, string>([
         if (insertedTable === 'accounts' || insertedTable === 'items' || insertedTable === 'parties') {
           return mutationFromInsert(text, pending)
         }
-        // OM-16: the resource backs an imported role kind with its canonical
+        // The resource backs an imported role kind with its canonical
         // role row. Record the ensure so the kind/role pairing stays honest.
         const ensuredRole = text.match(/insert\\s+into\\s+(customer_roles|vendor_roles|employee_roles)\\b/i)?.[1]?.toLowerCase()
         if (ensuredRole) {
@@ -459,7 +459,7 @@ test('master-data updates validate omitted required custom fields from the store
   assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
 })
 
-// F-t10-006: export emits the role-denormalized kinds the product stores
+// Export emits the role-denormalized kinds the product stores
 // (customer/vendor/employee) — import must accept them so the round trip
 // is lossless.
 test('parties import accepts the role kinds export emits', async () => {
@@ -474,7 +474,7 @@ test('parties import accepts the role kinds export emits', async () => {
   assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] })
 })
 
-// OM-16: an imported role kind names its role row — the write must back
+// An imported role kind names its role row — the write must back
 // the claim in the same row transaction instead of stranding a "Kind:
 // Vendor" no read can observe. company/person kinds back nothing.
 test('parties import backs an imported role kind with its role row', async () => {
@@ -502,7 +502,7 @@ test('parties import backs a role kind adopted on upsert', async () => {
   assert.deepEqual(importState.roleEnsures, ['vendor_roles'])
 })
 
-// F-t10-006: SIM/CRM parties carry no short_code and export emits them
+// SIM/CRM parties carry no short_code and export emits them
 // codeless — import must synthesize a stable code instead of refusing.
 test('parties import synthesizes a stable shortCode for codeless export rows', async () => {
   resetImportState(false)

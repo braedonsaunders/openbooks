@@ -78,7 +78,7 @@ export async function bankingHome(
   // binds as an empty uuid array so every `= any(...)` leg matches nothing.
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
-  // Roster membership is the ONE banking reader (F-t06-001): the same
+  // Roster membership is the ONE banking reader: the same
   // reconcilable/active/bank-type predicate the Match picker and the
   // account-page guard filter through, with this query's own subsidiary
   // scope appended after it. The badges below intentionally keep their own

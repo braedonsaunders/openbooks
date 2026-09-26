@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // A bare aging export URL (no as-of, no period) once fell through to the
-// fiscal year end, so every balance landed in 90+ (F-t07-011). The export
+// fiscal year end, so every balance landed in 90+. The export
 // must resolve bare hits through the shared aging as-of rule (screen
 // default: today), while explicit params keep their meaning.
 const TODAY = '2026-09-24'

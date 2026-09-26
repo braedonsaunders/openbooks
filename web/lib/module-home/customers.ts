@@ -67,13 +67,13 @@ export interface CustomersHome {
    */
   crmEnabled: boolean
   /**
-   * I4-webui-225b: false when the caller lacks ar.read. The AR families
+   * False when the caller lacks ar.read. The AR families
    * (balances, collections, DSO, roster) are then skipped, never
    * zero-shaped — the view hides their vitals.
    */
   arAllowed: boolean
   /**
-   * I4-webui-225b: false when the caller lacks parties.read. The directory
+   * False when the caller lacks parties.read. The directory
    * and customer count are then skipped — the view hides them.
    */
   partiesAllowed: boolean
@@ -135,7 +135,7 @@ async function pipelineInOrgCurrency(
 }
 
 /**
- * I4-webui-225b: per-section read grants for the customers home. Each
+ * Per-section read grants for the customers home. Each
  * payload family keeps the permission its native source page requires —
  * open receivables, collections, and quotes/sales orders read behind
  * `ar.read` (receivables cockpit, estimates, file-cabinet kind map); the
@@ -163,7 +163,7 @@ export async function customersHome(
   includeNullSubsidiary?: boolean,
   grants?: CustomersHomeGrants,
 ): Promise<CustomersHome> {
-  // I4-webui-225b: section grants default open so existing callers keep
+  // Section grants default open so existing callers keep
   // their payload; the /customers loader always passes explicit grants.
   const arGranted = grants?.ar ?? true
   const crmGranted = grants?.crm ?? true
@@ -190,11 +190,11 @@ export async function customersHome(
 
   const [arRes, dsoStats, topRes, trendRes, badgeRes, collectedRowsRes, forecast, orgRes] = (await Promise.all([
     // Open receivables aggregate — the cash engine's openItems population,
-    // aggregated (F-t02-008: one open-receivables definition — the as-of
+    // aggregated (one open-receivables definition — the as-of
     // book — across dashboard, workspace, hub and aging). Legs are stamped
     // in their line entity's functional: aggregate per functional and
     // translate to presentation below.
-    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    // Skipped without ar.read — never queried, never shaped.
     arGranted ? db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date, sub.base_currency as func,
@@ -227,11 +227,11 @@ export async function customersHome(
     // cashflow analytics, MCP cashflow tool, get_vitals, and customer
     // intelligence quote — never a second local grain. The rollup scan keeps
     // this landing cheap; subsidiary scoping rides the engine's own rules.
-    // I4-webui-225b: the AR settlement rollup is unreadable without ar.read.
+    // The AR settlement rollup is unreadable without ar.read.
     arGranted ? paymentStats("ar", today, subIds, orgId) : Promise.resolve({ map: new Map<string, { avg: number; sd: number; n: number }>(), globalAvg: 0 }),
     // Hero roster — top relationships by open balance, with open-opp counts.
     // Per (party, functional): the translated ranking happens in JS below.
-    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    // Skipped without ar.read — never queried, never shaped.
     arGranted ? db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date, sub.base_currency as func,
@@ -274,7 +274,7 @@ export async function customersHome(
     // receipt with its posting FX rate (first leg) before adding unlike
     // currencies; the second leg to presentation runs per (week, functional)
     // below.
-    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    // Skipped without ar.read — never queried, never shaped.
     arGranted ? db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
              sub.base_currency as func,
@@ -289,7 +289,7 @@ export async function customersHome(
     `) : Promise.resolve({ rows: [] }),
     // Directory badges — cheap counts for the workspace's other pages (the
     // collected-value scalar moved to the row query below for translation).
-    // I4-webui-225b: each badge keeps its source permission — opportunity
+    // Each badge keeps its source permission — opportunity
     // counts behind crm.opportunities.read, quotes/sales orders and
     // receipts behind ar.read, the customer count behind parties.read.
     db.execute(sql`
@@ -308,7 +308,7 @@ export async function customersHome(
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as customers
     `),
     // 7-day collection value per (date, functional) for presentation translation.
-    // I4-webui-225b: skipped without ar.read — never queried, never shaped.
+    // Skipped without ar.read — never queried, never shaped.
     arGranted ? db.execute(sql`
       select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
              coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
@@ -417,7 +417,7 @@ export async function customersHome(
       collected7d,
       customers: Number(badge.customers ?? 0),
     },
-    // I4-webui-225b: feature AND grant — an ungranted family hides its
+    // Feature AND grant — an ungranted family hides its
     // vitals in the view instead of rendering data-shaped zeros.
     ordersEnabled: ordersOn && arGranted,
     crmEnabled: crmOn && crmGranted,

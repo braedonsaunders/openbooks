@@ -1,5 +1,5 @@
 /**
- * Shared denial destinations (F-t13-002/003/007/008, F-t12-001, F-t03-012).
+ * Shared denial destinations.
  *
  * A route that exists but is gated off must explain itself: which feature or
  * permission is required and where it is turned on (or who can grant it) —

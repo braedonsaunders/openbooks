@@ -15,7 +15,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { createSetupRecord } = await import('./write.ts')
 const { SETUP_ENTITY_BY_KEY } = await import('./registry.ts')
 
-// OM-18: an empty org configures its reason codes through the rehomed
+// An empty org configures its reason codes through the rehomed
 // setup section on /hrm/change-requests (?reasons=1&row=new). The drawer
 // opens only if the generic setup writer accepts the entity — this pins
 // the entity descriptor the drawer renders and proves a created code

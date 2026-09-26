@@ -247,7 +247,7 @@ test("a malformed or hostile ownership account id is a contract 400 that writes 
   }
 });
 
-/** F-t06-022 (t12 follow-up): the tester's exact shape — 100% Full with no
+/** The tester's exact shape — 100% Full with no
  * goodwill/fair-value legs — must be refused with a typed user-language
  * message naming the missing accounts, never the raw SQL INSERT the
  * ownership_interest_guard raise used to echo through describeDbError. */
@@ -313,7 +313,7 @@ test("a full-method ownership with goodwill legs persists", async () => {
 });
 
 test("blank keepDefault ownership fields fall through to database defaults", async () => {
-  // F-t06-022: the drawer sends explicit empty strings for untouched
+  // The drawer sends explicit empty strings for untouched
   // keepDefault inputs. The registry documents those columns as NOT NULL
   // WITH a database default, so blanks are legal input — never a missing
   // requirement leaking a camelCase key.

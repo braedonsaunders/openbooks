@@ -36,7 +36,7 @@ export interface StatementRow {
  * The revenue account universe: the income-account postings the P&L reads.
  * Customer Intelligence headline revenue reads this same universe per customer
  * (see customer-data) — import this rather than re-listing the types, so the
- * two surfaces cannot drift into two definitions of revenue (fleet8 P3).
+ * two surfaces cannot drift into two definitions of revenue.
  */
 export const REVENUE_TYPES = ["income", "income_other"];
 export const CREDIT_NORMAL = new Set([
@@ -78,7 +78,7 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
 }
 
 /**
- * Gross presentation over the account tree (F-t08-001, mirroring
+ * Gross presentation over the account tree (mirroring
  * treeifyMatrix): every row shows its OWN balance and contra accounts print
  * as sibling lines, so displayed lines foot to the section total.
  */
@@ -282,7 +282,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
   if (glSummaryEligibleDims(dims)) {
     // Whole months from gl_month_activity, boundary sliver from lines.
     // The heading promises "accounts with activity": keep zero-balance
-    // accounts whose debit/credit legs are real (F-t08-002) instead of
+    // accounts whose debit/credit legs are real instead of
     // filtering on the net balance alone. P&L activity is FYTD so the
     // trial balance still foots after the prior-year RE placeholder.
     const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [], bookId });

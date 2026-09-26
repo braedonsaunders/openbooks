@@ -31,7 +31,7 @@ export async function loadAccounts(orgId: string): Promise<RefOption[]> {
  * active vendor role. A NULL subsidiary is org-wide (visible to every scoped
  * caller), matching the payroll settings picker and the accounts-tab vendor
  * query — a subsidiary-scoped operator must still see the org-wide
- * statutory remittance vendors (F-t08-015).
+ * statutory remittance vendors.
  */
 export async function loadVendors(
   orgId: string,
@@ -55,7 +55,7 @@ export async function loadEntityOptions(
   if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
   // `vendors` names the parties+vendor_roles picker, not a registry entity:
   // without this branch the generic lookup below finds no entry and every
-  // remittance-vendor listbox renders only None (F-t08-015).
+  // remittance-vendor listbox renders only None.
   if (source === 'vendors') return loadVendors(orgId, allowedSubsidiaryIds)
   if (source === 'accounting-periods') {
     const periods = (await db.execute(sql`

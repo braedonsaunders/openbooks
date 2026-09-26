@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import type { Authz } from "./authz";
 import type { SessionUser } from "./auth";
 
-// F-t11-011 residual: exact JE numbers for entries outside the journal-list
+// Exact JE numbers for entries outside the journal-list
 // scope (subledger postings like origin='document' linked to a payment, or
 // orphaned origin='payroll' with no document link) searched total zero even
 // though the dashboard shows them. An exact entry number must always

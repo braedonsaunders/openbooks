@@ -12,7 +12,7 @@ const catalog = (locale: string): Record<string, unknown> =>
   JSON.parse(readFileSync(join(messagesDir, locale, 'agents.json'), 'utf8'))
 
 // The finding drawer's Team select rendered DB-seeded English role names
-// ("Accountant … Viewer") under fr/es (F-t11-010). Unrenamed seed roles
+// ("Accountant … Viewer") under fr/es. Unrenamed seed roles
 // render via the catalog; a renamed (custom) role keeps its stored name.
 test('seeded role names resolve through the translator', () => {
   const t = (key: string) => `<${key}>`

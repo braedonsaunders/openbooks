@@ -5,7 +5,7 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 
 /**
- * F-t08-007: a manual journal that posts AR/AP-control legs with no party
+ * A manual journal that posts AR/AP-control legs with no party
  * (JE-00005: CA$100 to 1100 with the party left empty) must not go through
  * silently. The posting stays legitimate — party-less control legs are real
  * GL activity — but the post response must carry the warning so the drawer

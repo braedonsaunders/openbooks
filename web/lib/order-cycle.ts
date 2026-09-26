@@ -1290,7 +1290,7 @@ export async function convertOrder(
        for update of dl
     `))
     // A sales-side line with no account inherits the item's income account so
-    // the converted document stays postable (F-t09-012: converted SO lines
+    // the converted document stays postable (converted SO lines
     // carried null accounts and their invoices could never post). An explicit
     // line account always wins; the purchase side is untouched.
     const salesSide = doc.kind !== 'purchase_order'

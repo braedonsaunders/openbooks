@@ -5,7 +5,7 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 
 /**
- * WAVE 4 — budget vs actual resolved the WHOLE fiscal year with no period
+ * Budget vs actual resolved the WHOLE fiscal year with no period
  * bound, so a year-to-date view included future-dated actuals the P&L never
  * showed (cogs / expense residuals on the real tenant). The view now takes
  * the same caller-resolved window as every other statement, echoes it on the

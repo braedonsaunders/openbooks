@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 /**
- * F-t07-003: the drawer renders Submit / Approve / Reject buttons with
+ * The drawer renders Submit / Approve / Reject buttons with
  * confirm dialogs and feedback toasts through budgets.actions.*,
  * budgets.confirm.* and budgets.feedback.*. A missing key renders the raw
  * key path on the button, so every key the drawer uses must exist in every

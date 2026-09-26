@@ -3,7 +3,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 
-// F-t11-010: the setup guide, the journal header, and the journal list each
+// The setup guide, the journal header, and the journal list each
 // counted "posted entries" with a different SQL scope, so one tenant
 // read three different totals on three surfaces at once. All three now
 // read the JOURNAL_ENTRY_TABLE union through journalScopeWhere. This pins

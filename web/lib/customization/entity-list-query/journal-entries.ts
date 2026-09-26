@@ -55,7 +55,7 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "lease",
   "tax_provision",
   // Migration true-ups (TRUEUP-*) are standalone engine journals with no
-  // source document (F-t12-014): without this they post to the GL yet stay
+  // source document: without this they post to the GL yet stay
   // invisible in the list and its counts even with Origin=All.
   "migration",
 ];
@@ -68,11 +68,11 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
  * outer org_id predicate pushes down into each. UNION (not ALL) dedupes an
  * entry that qualifies both ways. Pay runs ride leg (b): a posted payroll JE
  * hits the GL like any other posting and the run links to it, so hiding it
- * here breaks the audit trail (F-t08-014). Other subledger postings (bills,
+ * here breaks the audit trail. Other subledger postings (bills,
  * invoices, payments, …) still live in their own modules and stay out. The
  * /journal header and the setup-guide "posted entries" tile count this same
  * relation through journalScopeWhere, so all three surfaces agree by
- * construction (F-t11-010).
+ * construction.
  */
 export const JOURNAL_ENTRY_TABLE = `(
   select je.* from journal_entries je
@@ -87,7 +87,7 @@ export const JOURNAL_ENTRY_TABLE = `(
  * — the per-entry line totals below would otherwise be computed for EVERY
  * entry in the tenant just to produce a count. */
 /**
- * The one journal scope every "posted entries" surface counts (F-t11-010):
+ * The one journal scope every "posted entries" surface counts:
  * the setup-guide tile, the /journal header, and the list total all read
  * the JOURNAL_ENTRY_TABLE union through this predicate — org-wide, both
  * statuses, subsidiary-fenced exactly like the list. Reversed entries stay
@@ -179,7 +179,7 @@ export function journalEntryWhere(
   // WHERE-level OR here defeated the ORDER BY/LIMIT index walk and the old
   // per-row source_doc lateral test ran for every entry in the tenant.
   // Org scope plus the subsidiary fence is the shared journalScopeWhere so
-  // the list total and the header/guide counts cannot drift apart (F-t11-010).
+  // the list total and the header/guide counts cannot drift apart.
   const parts: SQL[] = [journalScopeWhere(orgId, allowedSubsidiaryIds)]
   for (const filter of view.filters) {
     if (pushCustomFieldFilter(parts, filter, "source_doc")) continue

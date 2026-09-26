@@ -68,7 +68,7 @@ async function enableHrm(orgId: string): Promise<void> {
  */
 async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
   // DERIVED from the entities, not typed. A hand-written list goes stale
-  // the moment a shard lands an entity behind a new sub-switch, and the
+  // the moment a new entity lands behind a new sub-switch, and the
   // failure reads as "scope clamping hid a catalogue entry" rather than
   // "the helper is out of date" — which is exactly how HR-19's and
   // HR-21's switches went missing here.

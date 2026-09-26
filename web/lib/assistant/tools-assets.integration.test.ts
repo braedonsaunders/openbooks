@@ -57,7 +57,7 @@ test('asset reads: register totals, drawer detail, and subsidiary isolation', { 
       `);
       await db.execute(sql`
         insert into asset_categories(id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,default_method,tax_attributes)
-        values (${categoryId},${org.orgId},'Fleet machinery',${org.accounts.invAsset},${org.accounts.adjustment},${org.accounts.cogs},'straight_line','{}')
+        values (${categoryId},${org.orgId},'Press machinery',${org.accounts.invAsset},${org.accounts.adjustment},${org.accounts.cogs},'straight_line','{}')
       `);
       await db.execute(sql`
         insert into fixed_assets(id,org_id,category_id,asset_number,name,status,acquired_on,acquisition_cost,subsidiary_id)

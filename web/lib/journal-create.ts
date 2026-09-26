@@ -168,7 +168,7 @@ export async function createManualJournal(input: {
     if (owned.rows.length !== requestedSubsidiaries.length) fail("invalid subsidiary", "lines");
   }
   // Every submitted leg must name its account: the drawers send every
-  // contentful row (OM-09b), so an account-less row arrives here rather than
+  // contentful row, so an account-less row arrives here rather than
   // vanishing client-side — name its line instead of booking without it.
   // Malformed ids get the same line-numbered treatment the boundary's
   // anonymous uuid failure never gave them. This runs before the ownership

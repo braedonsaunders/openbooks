@@ -2,7 +2,7 @@
  * Structured load-models failures. The provider SDKs throw errors whose
  * messages embed the raw upstream body (`401 Unauthorized — {"type":"error",
  * …}`) — rendering that verbatim leaks JSON blobs into the settings UI
- * (F-t11-004). The route classifies with this helper and returns a code; the
+ * The route classifies with this helper and returns a code; the
  * form renders the localized message. Deliberately free of `server-only` so
  * the contract is unit-testable.
  */

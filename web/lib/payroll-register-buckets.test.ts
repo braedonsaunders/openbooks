@@ -4,7 +4,7 @@ import test from 'node:test'
 import { bucketAmounts, buildRegisterBuckets } from './payroll-register-buckets.ts'
 import { decimalSum } from './statement-format.ts'
 
-// F-t08-012: the payroll register and stub header summarized a US run into
+// The payroll register and stub header summarized a US run into
 // hardcoded Canadian buckets (PROVINCE/CPP/EI/TAX read off CA factor keys),
 // showing TAX $0.00 while $218.76 of withholding hid in the pay lines. The
 // columns must come from the installed pack's declared buckets — labels and

@@ -33,7 +33,7 @@ async function seedTwoCurrencySpend() {
   const org = await withBypass(() => createScratchOrg())
   const usSub = randomUUID()
   // A genuine COGS-typed account: the scratch fixture types every P&L
-  // account 'expense', which would hide a COGS-vs-OpEx mix-up. F-t09-001.
+  // account 'expense', which would hide a COGS-vs-OpEx mix-up.
   const cogsAccountId = randomUUID()
   await withBypass(async () => {
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -63,7 +63,7 @@ async function seedTwoCurrencySpend() {
       await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
     }
     // Genuine operating expense with NO spend document (e.g. depreciation):
-    // a manual GL journal the spend-document universe never sees. F-t09-001.
+    // a manual GL journal the spend-document universe never sees.
     const opexEntry = randomUUID()
     await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
       values (${opexEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEX-1', ${D}, ${org.periodId}, 'draft', 'manual')`)
@@ -104,11 +104,11 @@ test('spend velocity translates every spend functional to presentation', { skip:
       assert.equal(data.summary.billsTotal, 235)
       assert.equal(data.monthlyTrends.find((m) => m.month === '2026-07')?.totalAmount, 235)
       assert.equal(data.commitmentCliff.summary.totalPO, '235.0000')
-      // Revenue arrives as an exact decimal string since I5-platform-189.
+      // Revenue arrives as an exact decimal string.
       assert.equal(data.revenue.totalRevenue, '470.0000')
       // P&L operating expenses are the 100 CAD bill plus the 50 CAD manual
       // journal; the 135 CAD of COGS spend must not feed the "Operating
-      // expenses … of revenue" ratio (F-t09-001).
+      // expenses … of revenue" ratio.
       assert.equal(data.revenue.opexRatio, 32)
     })
   } finally {

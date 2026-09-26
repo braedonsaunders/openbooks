@@ -16,7 +16,7 @@ import { OPERATING_EXPENSE_TYPES, operatingExpenseRatio } from "./operating-expe
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 import { getMoneyFormatter } from '../money-server'
 
-/** The canonical operating-expense type list as a SQL `IN` fragment (F-t09-001: one definition). */
+/** The canonical operating-expense type list as a SQL `IN` fragment (one definition). */
 const OPEX_TYPES_SQL = sql.join(
   OPERATING_EXPENSE_TYPES.map((t) => sql`${t}`),
   sql`, `,
@@ -810,7 +810,7 @@ export async function healthData(
 }
 
 /**
- * Budget-line status rule (F-t09-004): on-track when favorable or within
+ * Budget-line status rule: on-track when favorable or within
  * 10%, watch to 25%, and beyond that the direction keeps its meaning —
  * overspent cost lines read "over", missed revenue lines read "under".
  * Flagging a revenue shortfall as over-budget spend inverts the story, so

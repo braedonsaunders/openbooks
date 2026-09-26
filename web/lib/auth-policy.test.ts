@@ -94,10 +94,9 @@ test("browser mutations reject a cross-origin Origin header", () => {
 });
 
 test("loopback literals share one origin for browser mutations", () => {
-  // Fleet reality behind the F-t01-013 activation block: the invite link
-  // names localhost while the browser session runs on 127.0.0.1 (same
-  // machine, same port). Loopback literals are equivalent; everything else
-  // stays exact.
+  // The invite link names localhost while the browser session runs on
+  // 127.0.0.1 (same machine, same port). Loopback literals are
+  // equivalent; everything else stays exact.
   const put = (url: string, origin: string) =>
     new Request(url, { method: "PUT", headers: { Origin: origin } });
   assert.equal(

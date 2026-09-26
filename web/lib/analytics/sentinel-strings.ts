@@ -55,7 +55,7 @@ export interface SentinelStrings {
     others: string;
   }): string;
   /**
-   * One-line audit-trail summary (F-t09-006): who did what to which record.
+   * One-line audit-trail summary: who did what to which record.
    * `verb` is a stable code the bundle maps to words; `action` is the raw
    * audit_log action, used verbatim only for `other`. `actor`, `table`,
    * `row` and `fields` are ledger data (short ids, field names) and travel
@@ -89,7 +89,7 @@ export interface AuditEventArgs {
 }
 
 /**
- * Assemble the locale-free arguments for an audit-trail summary (F-t09-006).
+ * Assemble the locale-free arguments for an audit-trail summary.
  * Pure data shaping, no display copy: the action maps to a stable verb
  * code, actor/row collapse to short ledger identifiers (a missing actor is
  * the system), and the changed-field list comes from the changes envelope

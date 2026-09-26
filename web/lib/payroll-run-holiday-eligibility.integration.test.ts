@@ -9,7 +9,7 @@ const state: { gate: Authz | null } = { gate: null };
 // resolves only under the web tsconfig. Map it to the real module so the
 // route under test runs its production body parsing.
 const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
-// Fleet worktrees carry a real (copied) root node_modules, so engine imports
+// Worktrees carry a real (copied) root node_modules, so engine imports
 // resolve inside this worktree already; only web-only shims need rewriting.
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };

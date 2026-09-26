@@ -19,7 +19,7 @@ const { openItems, summariseSide, buildWeekGrid } = await import('../cash/core.t
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
 
-// F-t04-012: the purchasing Payment pulse "open" did not tie to AP open
+// The purchasing Payment pulse "open" did not tie to AP open
 // payables ($229K vs $265K, drifting between sessions). The pulse aggregate
 // nets applications LIVE and has no posting-date cutoff, while the /ap house
 // engine nets applications AS OF the forecast date and only counts entries
@@ -146,7 +146,7 @@ test('payment pulse open ties to AP open payables across time boundaries', { ski
         )
         assert.equal(home.apOutstanding, 4000, 'open = overdue bill + future-paid bill; future-posted excluded')
         assert.equal(home.apOverdue, 1000, 'only the past-due bill is overdue')
-        // F-t03-009: the hero roster groups the SAME as-of item set as the
+        // The hero roster groups the SAME as-of item set as the
         // pulse — one page, one Talent figure. The old live aggregate gated
         // on the cached open_balance (which the seed never decrements), so
         // it showed the future-posted bill and dropped the future-paid one.

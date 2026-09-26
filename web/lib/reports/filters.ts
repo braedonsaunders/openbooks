@@ -48,7 +48,7 @@ export function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
 
 /**
  * Source-document twin of dimWhere's subsidiary limb: an out-of-scope
- * document's identity must never surface on a scoped read (I1-refix-77).
+ * document's identity must never surface on a scoped read.
  * The predicate matches the line predicate exactly — undefined dims read
  * unscoped like the lines, the includeNullSubsidiary null limb applies,
  * and a fail-closed empty list masks every document.

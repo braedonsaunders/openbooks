@@ -62,7 +62,7 @@ test('entities without rule slots pass through untouched', () => {
   assert.deepEqual(res.cols, cols)
 })
 
-// OM-17 follow-up: the review-template fold strips the scale slots before
+// The review-template fold strips the scale slots before
 // buildRow, so the writer refused every create with "ratingScaleMin is
 // required". A present fold covers its slots: buildRow skips them (required
 // check and column emission alike) and the integrity check proves the scale

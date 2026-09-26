@@ -63,7 +63,7 @@ test('documentation registry is complete and internally consistent', () => {
 })
 
 test('period-close docs scope the Publish stage to the advanced close flow', () => {
-  // F-t06-013: the article presented the Publish stage / Publish package
+  // The article presented the Publish stage / Publish package
   // button unconditionally, but simple-mode runs only Scope, Readiness,
   // Execute, Review, Lock — Publish is the sixth stage behind advanced close.
   const article = getArticle('period-close')

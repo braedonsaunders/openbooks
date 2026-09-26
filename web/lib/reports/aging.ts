@@ -22,7 +22,7 @@ export type AgingSide = "ar" | "ap";
 
 /**
  * The single as-of rule shared by the aging screen and its CSV export
- * (F-t02-008, F-t07-011): an explicit as-of always wins; otherwise an
+ * An explicit as-of always wins; otherwise an
  * explicit period preset resolves to its own end date; a bare call with
  * neither defaults to today — the screen's default — never to the fiscal
  * year end. The export once fell through to the fiscal year end, so every
@@ -73,7 +73,7 @@ export interface AgingResult {
  * Both bases rebuild as of the report date from stored dual-recorded amounts
  * (`jl.amount` / `jl.txn_amount`, `applications.amount` /
  * `source/target_transaction_amount`) — never by re-translating at document
- * FX, which drifts from the posted ledger by dust (F-t08-004).
+ * FX, which drifts from the posted ledger by dust.
  */
 export type AgingCurrencyBasis = "base" | "transaction";
 
@@ -133,13 +133,13 @@ export class AgingRatesUnavailableError extends Error {
  * txn × fx open drifts from the posted ledger whenever settlement and
  * document rates differ (or per-line posting rounding accumulates), so the
  * aging would disagree with its own control account by dust no reader can
- * explain (F-t08-004: AR aging CA$0.01 over GL 1030).
+ * explain (AR aging CA$0.01 over GL 1030).
  *
  * Documents are not the whole control account: unapplied receipts, direct
  * control journals, and legacy partyless opening balances post control lines
  * with no invoice/credit document behind them. Those balances are folded in
  * as an explicit per-party residual (the "(no party)" row when no party is
- * stamped), so the aging total always ties to the control (F-t08-006).
+ * stamped), so the aging total always ties to the control.
  */
 /**
  * One open document as rebuilt from stored dual-recorded amounts: the signed
@@ -393,7 +393,7 @@ export async function agingByParty(
 
 /**
  * Fold control-account balances that no invoice/credit document explains into
- * the aging rows, per party (F-t08-006). Unapplied receipts, direct control
+ * the aging rows, per party. Unapplied receipts, direct control
  * journals, and legacy partyless opening balances all post control lines
  * outside the document population above; without this the aging silently
  * understates the control (SIM AR CA$503,288 aged vs CA$687,038 on GL 1100).

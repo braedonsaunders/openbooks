@@ -223,8 +223,8 @@ test('deduction protection is offered only where it can legally apply', () => {
 })
 
 test('allocations is a feature-gated custom-page rail entry, never generic CRUD', () => {
-  // The Rules | Drivers | Runs workspace is a custom ModuleView page
-  // (allocation-kernel shard A7); the registry entry only puts the tab on the
+  // The Rules | Drivers | Runs workspace is a custom ModuleView page;
+  // the registry entry only puts the tab on the
   // setup rail under Accounting, gated by the `allocations` feature.
   const entry = SETUP_ENTITY_BY_KEY.get('allocations')
   assert.ok(entry, 'registry must declare the allocations entry')

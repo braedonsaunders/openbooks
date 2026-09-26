@@ -14,7 +14,7 @@ import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
  * cockpit Financials tab uses), and sort-by-actual is planned the same way
  * (`orderedPageIds` in the projects entity source). No join here may touch
  * journal lines per row: a correlated lateral over journal_lines times out
- * on large tenants (F-t03-013) — the aggregate runs once, batched over the
+ * on large tenants — the aggregate runs once, batched over the
  * filtered id set, before the page read (aggregate-before-join).
  */
 export const PROJECT_BASE_JOINS = sql`

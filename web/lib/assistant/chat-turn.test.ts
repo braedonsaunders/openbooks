@@ -34,7 +34,7 @@ const { FEATURES } = await import("@openbooks/engine/src/organization/feature-re
 const { activateTurnModules } = await import("./tool-router");
 
 /**
- * Chat-turn wiring (shard b01): the full gated catalog stays registered
+ * Chat-turn wiring: the full gated catalog stays registered
  * while each step only SENDS core ∪ pre-routed ∪ activated tools. No model
  * and no database: the apps feature stays off so the async registry never
  * leaves the pure path.

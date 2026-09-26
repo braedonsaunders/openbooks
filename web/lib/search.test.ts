@@ -743,7 +743,7 @@ test('repaired project and recall record links never regress to legacy destinati
   assert.doesNotMatch(recallEntry, /\/documents\//, 'no generic document links')
 })
 
-// F-t11-011: an exact document number must escape the recency-capped fuzzy
+// An exact document number must escape the recency-capped fuzzy
 // legs (the newest-200 cap excluded old exact rows and ranked unstably as
 // new documents arrived) and order first.
 test('exact document numbers bypass the candidate cap and order first', async () => {
@@ -761,7 +761,7 @@ test('exact document numbers bypass the candidate cap and order first', async ()
   assert.ok(query.values.includes('VENDOR_PAYMENT'), 'exact leg binds the raw query')
 })
 
-// F-t11-011: journal entries were unindexed — an exact JE number searched
+// Journal entries were unindexed — an exact JE number searched
 // total zero because only documents was queried. Entries surface inside the
 // transactions group through the entry compatibility redirect.
 test('journal entries are indexed and link through the entry redirect', async () => {

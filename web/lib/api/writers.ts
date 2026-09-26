@@ -874,7 +874,7 @@ async function createEntity(
       returning *`);
     const created = r.rows[0] as Record<string, unknown> | undefined;
     if (!created) return err(422, `could not create record: no row returned`);
-    // OM-16: a role-kind parties kind names its role row — the generic
+    // A role-kind parties kind names its role row — the generic
     // record writer has no role inputs, so it backs the claim with the
     // canonical row instead of stranding a Kind no read can observe.
     if (table === "parties") {
@@ -1021,7 +1021,7 @@ async function updateEntity(
       returning *`);
     const written = r.rows[0] as Record<string, unknown> | undefined;
     if (!written) return err(404, "not found");
-    // OM-16: adopting a role-kind kind on update backs the claim the same
+    // Adopting a role-kind kind on update backs the claim the same
     // way creation does (see above).
     if (table === "parties") {
       await ensurePartyRoleRow(db, {

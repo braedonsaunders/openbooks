@@ -3,7 +3,7 @@ import test from 'node:test'
 import { showsUnpricedHoursNotice, unpricedLaborHours } from './field-ticket-totals'
 
 /**
- * F-t03-005: crew hours with no bill rate price at $0 and must surface as
+ * Crew hours with no bill rate price at $0 and must surface as
  * unpriced next to the labor total — never read as free work. The finding's
  * shape is an approved ticket whose 188.5 crew-hours carry NULL bill rates
  * (no labor item / no rate-book match), so the footer names them.

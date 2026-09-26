@@ -1191,7 +1191,7 @@ export async function applyDocumentEdit(
   // owned by this org's reconcilable funding accounts of the kind's type,
   // the exact set the picker lists. An absent key leaves the stored bag
   // untouched; an explicit null/'' clears back to the org default.
-  // F-t05-020 extends the F-t04-013 bank carry to fundingSource='card':
+  // The bank carry extends to fundingSource='card':
   // with no card instruments on file the drawer offers reconcilable
   // card-liability accounts, saved as the controlAccountId override the
   // engine cardRule already reads first.
@@ -1302,7 +1302,7 @@ export async function applyDocumentEdit(
         seen.add(key)
       }
     }
-    // Silent single-warehouse default (F-t07-003 pickers): a stocked line
+    // Silent single-warehouse default: a stocked line
     // with no explicit warehouse takes the org's only active location, so
     // nobody answers a question with one possible answer. Several locations
     // (or a non-stocked item) leave the line blank for the picker, and the
@@ -1884,7 +1884,7 @@ export async function applyDocumentEdit(
 
       if (preparedLines) {
         // Billed-time/cost provenance the editor's column set cannot express
-        // (F-t04-003): a billing-generated invoice's lines are referenced by
+        // a billing-generated invoice's lines are referenced by
         // time_entries.invoiced_by_line_id and by source cost lines'
         // billed_by_line_id, so a blind delete dies on those FKs as a raw
         // 500 — and would strand the provenance even if it did not. Snapshot
@@ -1996,7 +1996,7 @@ export async function applyDocumentEdit(
             `)
           }
         }
-        // Re-home the billed references the snapshot carried (F-t04-003): the
+        // Re-home the billed references the snapshot carried: the
         // new rows replaced the old ids, so time entries and source cost
         // lines that pointed at the old rows must follow positionally.
         // References off lines the edit removed are released — the work
@@ -2399,7 +2399,7 @@ export type Opt = {
   network?: string | null
   liability_account_id?: string | null
   /** Settlement currency the account accepts (null = any). Drawers read it
-   * for form-level currency validation (F-t06-002). */
+   * for form-level currency validation. */
   currency_restriction?: string | null
   /** Party pickers carry the party's primary subsidiary (drafts default to it). */
   subsidiary_id?: string | null
@@ -2539,7 +2539,7 @@ export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
 
 /**
  * Reconcilable card-liability accounts (the card-charge fallback when no
- * card instruments exist — F-t05-020). Offered as the controlAccountId
+ * card instruments exist). Offered as the controlAccountId
  * override the engine cardRule reads first; fenced to this exact set by
  * the funding-override guard in applyDocumentEdit.
  */

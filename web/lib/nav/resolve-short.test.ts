@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// F-t12-018 residual: the es bottom-nav AR/AP tabs both truncated to
+// The es bottom-nav AR/AP tabs both truncated to
 // "Cuentas por…" — indistinguishable. Modules now carry a per-locale short
 // label (nav.modulesShort) that the mobile tab bar prefers; locales and
 // modules without one render exactly as before.
@@ -17,7 +17,7 @@ const { navPathname, resolveModuleShortLabel } = await import("./resolve.ts");
 const nav = (locale: string): { modules: Record<string, string>; modulesShort?: Record<string, string> } =>
   JSON.parse(readFileSync(new URL(`../../messages/${locale}/nav.json`, import.meta.url), "utf8"));
 
-test("F-t12-018: AR/AP shorts exist per locale and stay distinguishable", () => {
+test("AR/AP shorts exist per locale and stay distinguishable", () => {
   for (const locale of ["en", "es", "fr"]) {
     const { modules, modulesShort } = nav(locale);
     assert.ok(modulesShort?.ap && modulesShort?.ar, `${locale} ships AR/AP shorts`);
@@ -33,7 +33,7 @@ test("F-t12-018: AR/AP shorts exist per locale and stay distinguishable", () => 
   assert.ok(!es.ap!.startsWith("Cuentas por") && !es.ar!.startsWith("Cuentas por"), "es shorts drop the colliding prefix");
 });
 
-test("F-t12-018: short resolution falls back without changing existing labels", () => {
+test("Short resolution falls back without changing existing labels", () => {
   const t = (key: string): string => {
     const table: Record<string, string> = {
       "modulesShort.ap": "Por pagar",
@@ -55,7 +55,7 @@ test("F-t12-018: short resolution falls back without changing existing labels", 
   );
 });
 
-test("F-t12-018: missing shorts fall back even when the translator echoes keys", () => {
+test("Missing shorts fall back even when the translator echoes keys", () => {
   const full = "Accounts Receivable";
   // next-intl answers a missing key with the key path itself (truthy), which
   // a bare `||` fallback would print raw (observed: "nav.module…" tabs).

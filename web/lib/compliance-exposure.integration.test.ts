@@ -174,7 +174,7 @@ test(
   },
 )
 
-// F-t03-008: the matrix column is labelled "Open payable" — the same metric
+// The matrix column is labelled "Open payable" — the same metric
 // the /ap dashboard, the aging and the control account read off the shared
 // as-of open-items reader. SIM Meridian proved the matrix's own date-blind
 // document-cache aggregate disagrees in BOTH directions at once: Talent read

@@ -1,5 +1,5 @@
 /**
- * Client-safe segment naming helpers (F-t07-009).
+ * Client-safe segment naming helpers.
  *
  * The four reportable built-in segments ship with fixed seed names (migration
  * V0098) but the tenant may rename them. Translating a renamed segment's

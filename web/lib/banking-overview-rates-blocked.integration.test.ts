@@ -45,12 +45,12 @@ const { loadMatch } = await import(root + 'web/app/(app)/banking/match/view.ts')
 const { loadBankingAccount } = await import(root + 'web/app/(app)/banking/[accountId]/view.ts')
 
 /**
- * F-t06-001: a multi-subsidiary org whose consolidated rates were never
+ * A multi-subsidiary org whose consolidated rates were never
  * derived for the current period. The overview must still list the same
  * reconcilable accounts as the Match picker with the same cash total —
  * the missing derivation pins a banner, never an empty roster.
  */
-test('rates-blocked banking overview agrees with the match picker (F-t06-001)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('rates-blocked banking overview agrees with the match picker', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, 'Treasurer', 'admin'))

@@ -1,7 +1,7 @@
 import { decimalAdd, decimalIsZero } from './statement-format.ts'
 
 /**
- * Pack-declared payroll register buckets (F-t08-012).
+ * Pack-declared payroll register buckets.
  *
  * The run review grid and stub header used to summarize every run into
  * hardcoded Canadian buckets (PROVINCE/CPP/EI/TAX read off CA factor keys),

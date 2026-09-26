@@ -534,10 +534,10 @@ test(
 );
 
 test(
-  "generic record writes back a parties role kind with its role row (OM-16)",
+  "generic record writes back a parties role kind with its role row",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    // OM-16: the v1/MCP record writer persists parties.kind with no role
+    // The v1/MCP record writer persists parties.kind with no role
     // inputs, so a kind "vendor" stranded a "Kind: Vendor" no read could
     // back. The writer now ensures the canonical role row beside the party
     // row; company/person kinds back nothing, and an existing role row is

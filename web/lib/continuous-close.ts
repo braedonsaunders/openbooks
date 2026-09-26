@@ -43,8 +43,8 @@ export const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]
 export function canReadContinuousCloseAgent(authz: Authz, agentKey: string): boolean {
   if (!can(authz, "assistant.use")) return false;
   if (!(CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(agentKey)) return false;
-  // Fail closed at runtime: the linked engine may know packs this revision's
-  // table does not (fleet shards land packs concurrently) — deny, never crash.
+  // Fail closed at runtime: the linked engine can ship packs this revision's
+  // table does not know yet — deny, never crash.
   const perms: readonly string[] | undefined = AGENT_READ_PERMS[agentKey as ContinuousCloseAgentKey];
   if (!perms) return false;
   return perms.some((perm) => can(authz, perm));
@@ -67,7 +67,7 @@ export async function loadWorkItemAccess(orgId: string, itemId: string): Promise
 }
 
 /**
- * I1-refix-72: hold the work-item row and its writable subject lineage
+ * Hold the work-item row and its writable subject lineage
  * locked across a dependent write. A scope pre-check followed by a later
  * write lets a concurrent rehome move another entity's finding under the
  * write; resolving inside the same transaction (item row FOR UPDATE plus

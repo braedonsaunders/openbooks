@@ -15,7 +15,7 @@ const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src
 const { loadParty } = await import("../app/api/parties/_lib");
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
-// F-t02-005: document open balances are stored unsigned per document (the
+// Document open balances are stored unsigned per document (the
 // recompute sums abs() line amounts minus applications); the KIND carries the
 // sign. The party directory summary must net unapplied credits against the
 // customer's invoices instead of adding them with abs().

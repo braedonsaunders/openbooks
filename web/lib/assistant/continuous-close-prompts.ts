@@ -3,7 +3,7 @@ import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/conti
 /**
  * Per-pack enrichment prompts for the continuous-close background agents.
  * Pure strings: no server imports, so unit tests can pin the copy every pack
- * (and the coordinator's future packs) send to the enrichment model.
+ * (and future packs) send to the enrichment model.
  *
  * Packs without an entry run on the shared finance/accounting instructions
  * unchanged; a future pack degrades to the generic brief until it registers

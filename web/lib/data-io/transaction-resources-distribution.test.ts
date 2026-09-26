@@ -3,10 +3,10 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { DOC_KINDS } from '../document-kinds.ts'
 
-// distributionKey on transaction import/export rows (shard A9). A line may
+// distributionKey on transaction import/export rows. A line may
 // stage one entry-rule key: the adapter resolves it against entry-mode rules
 // in effect on the document date and stores the rule reference on the line.
-// Explosion itself stays in A4's save path (gated there); the adapter never
+// Explosion itself stays in the save path (gated there); the adapter never
 // explodes. Unknown / wrong-mode / inactive keys fail the row closed, and the
 // key round-trips through the line export.
 

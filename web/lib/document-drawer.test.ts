@@ -320,7 +320,7 @@ test('the field-ticket drawer sends expectedRevision on header and grid saves an
   assert.equal(requests[1]!.body.expectedRevision, SAVED_REVISION, 'grid save chains the refreshed token')
 })
 
-test('a refused send-for-signature hands the server reason back instead of a fallback (F-t04-001)', async () => {
+test('a refused send-for-signature hands the server reason back instead of a fallback', async () => {
   // SIM Northstar has no email transport: the route 422s with the typed
   // FieldTicketError reason. The mutation must carry that reason to the
   // caller (toast + pinned dialog alert), never the generic fallback.

@@ -17,7 +17,7 @@ const { openItems } = await import('./open-items.ts')
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
 
-// F-t03-010: a vendor bill listed TWICE in the payment-history dialog under
+// A vendor bill listed TWICE in the payment-history dialog under
 // the same record id with different dates, inflating the dialog total past
 // the dashboard. The data is a textbook append-only correction —
 // original entry reversed, reversal entry, correction re-post — and the

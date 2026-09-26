@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F-t10-001: a blank Recoverable % on a new tax code was refused with the
+// A blank Recoverable % on a new tax code was refused with the
 // raw key `invalid-recoverable-percent`. Blank keepDefault inputs must fall
-// through to the default (F-t06-022) the same way the coerce layer treats
+// through to the default the same way the coerce layer treats
 // them — the integrity check read the raw body instead. The validator takes
 // an executor; the create-blank path must never touch storage, so the stub
 // throws on any query. Only server-only is stubbed.

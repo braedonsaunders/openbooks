@@ -19,7 +19,7 @@ import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 /**
  * Customer Intelligence — the data behind /analytics/customer-intelligence.
  * Every subsystem and its exact parameters:
- *  - Money (TWO measures, one definition each — fleet8 P3):
+ *  - Money (TWO measures, one definition each):
  *     * revenue = RECOGNIZED (ASC 606): net income-account postings per
  *       customer — the same universe the P&L reads (REVENUE_TYPES, statement
  *       book, posted/reversed entries), net of credit memos, voids netting to

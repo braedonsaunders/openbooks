@@ -9,7 +9,7 @@ import {
   sentinelStrings,
 } from './sentinel-strings.ts'
 
-test('audit summaries assemble from action, actor, resource and changed fields (F-t09-006)', () => {
+test('audit summaries assemble from action, actor, resource and changed fields', () => {
   assert.deepEqual(
     auditEventArgs('update', 'a1b2c3d4-ffff', 'parties', '9f8e7d6c-ffff', '{"email":"a@b.c","phone":"1"}'),
     { verb: 'updated', action: 'update', actor: 'a1b2c3d4', table: 'parties', row: '9f8e7d6c', fields: 'email, phone' },

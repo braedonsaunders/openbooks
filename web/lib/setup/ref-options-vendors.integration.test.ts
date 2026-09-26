@@ -9,7 +9,7 @@ const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src
 const { SETUP_ENTITY_BY_KEY } = await import('./registry.ts')
 const { loadRefOptions } = await import('./ref-options.ts')
 
-// F-t08-015: the FIT Remittance vendor listbox on the payroll setup
+// The FIT Remittance vendor listbox on the payroll setup
 // components tab rendered only None. Its loader — loadRefOptions for the
 // pay-components entity — had no `vendors` branch (the generic registry
 // lookup finds no `vendors` entity and returns []), and carried no

@@ -5,7 +5,7 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 
 /**
- * F-t08-004 / F-t08-006: the aging must tie its control account to the cent.
+ * The aging must tie its control account to the cent.
  * Documents are not the whole control: unapplied receipts, direct control
  * journals, and legacy partyless opening balances post control lines with no
  * invoice/credit document behind them, and settlement dust (a payment line
@@ -67,7 +67,7 @@ async function controlBalance(org: ScratchOrg, type: 'asset_receivable' | 'liabi
   return r.rows[0]!.bal
 }
 
-test('partyless control balances surface as an explicit row and tie the control (F-t08-006)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('partyless control balances surface as an explicit row and tie the control', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await withBypassContext(async () => {
@@ -97,7 +97,7 @@ test('partyless control balances surface as an explicit row and tie the control 
   }
 })
 
-test('settlement dust lands on the right party and the total still ties (F-t08-004)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('settlement dust lands on the right party and the total still ties', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await withBypassContext(async () => {
@@ -125,7 +125,7 @@ test('settlement dust lands on the right party and the total still ties (F-t08-0
   }
 })
 
-test('a clean subledger reads exactly as before: no residual rows (F-t08-004/006)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a clean subledger reads exactly as before: no residual rows', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await withBypassContext(async () => {
@@ -145,7 +145,7 @@ test('a clean subledger reads exactly as before: no residual rows (F-t08-004/006
   }
 })
 
-test('AP residual presents credit-normal control positive and names the vendor (F-t08-006)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('AP residual presents credit-normal control positive and names the vendor', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await withBypassContext(async () => {

@@ -5,7 +5,7 @@ import { PERIOD_PRESETS, PERIOD_PRESET_GROUP_LABELS } from '@openbooks/reports'
 import { DEFAULT_SEGMENT_ALL_KEY, isDefaultSegmentName } from './segment-labels.ts'
 
 /**
- * F-t07-009: the filter bar rendered period presets, preset group headings,
+ * The filter bar rendered period presets, preset group headings,
  * breakout nouns and "All X" dimension options in English (or mixed) on
  * fr/es/de/ja/pt-BR/zh. Preset/group labels now come from
  * reports.filterBar.periodPresets.* / periodPresetGroups.*, and default

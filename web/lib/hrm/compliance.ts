@@ -167,7 +167,7 @@ export async function loadCompliancePage(
   const canManage = can(authz, 'hrm.construction.manage')
   const section = SECTIONS.includes(sp.section as ComplianceSection) ? (sp.section as ComplianceSection) : 'findings'
   const kindFilter = typeof sp.kind === 'string' && sp.kind.length > 0 ? sp.kind : null
-  // OM-18/CK-09: the rehomed construction sections read their New/edit
+  // The rehomed construction sections read their New/edit
   // drawers from namespaced keys — one URL opens exactly one drawer.
   // The workspace's own params ride beside the section's list params,
   // never instead of them.
@@ -287,8 +287,8 @@ export async function loadCompliancePage(
     )
     const visible = kindFilter ? findings.filter((finding) => finding.kind === kindFilter) : findings
     // No silent prefix cap: the tables render the complete visible
-    // populations so tables and stats agree (I4-webui-148). The truncation
-    // note below renders only when a cap reappears (AC-webui-051).
+    // populations so tables and stats agree. The truncation
+    // note below renders only when a cap reappears.
     const truncatedNote = (shown: number, total: number): string | null =>
       total > shown ? t('compliance.truncatedNote', { limit: shown, total }) : null
     const findingsTruncatedNote = truncatedNote(200, visible.length)

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-// F-t11-003: the projects list rendered a custom type's key ("t11 tm
+// The projects list rendered a custom type's key ("t11 tm
 // verify") instead of its name ("T11 T&M Verify") because the billing
 // filter only knew the three static built-ins. The filter now loads tenant
 // types (key as value, name as label) so cells and the dropdown resolve

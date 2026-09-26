@@ -276,7 +276,7 @@ export async function partyRegister(
   // parallel book's mirror entries fuse into the register while the sibling
   // statement readers stay primary-only.
   const bookFilter = sql` and e.book_id = ${statementBookExpr(resolvedOrgId, opts.bookId)}`
-  // Source documents mask exactly where the lines do (I1-refix-77).
+  // Source documents mask exactly where the lines do.
   const sourceDocumentScope = documentSubsidiaryScope(opts.dims)
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${opts.to} and a.type = ${acctType} and ${dimWhere(opts.dims)} ${partyFilter} ${bookFilter}`)
   // Party attribution with the confidentiality remap folded in: restricted
@@ -346,7 +346,7 @@ export async function partyRegister(
   // never from the capped detail rows alone: the line cap is
   // presentation-only, so a party whose lines are capped out (or who has no
   // window lines at all) still gets its section with the exact closing
-  // (F-t08-005 — capped-out vendors lost their sections and the closings
+  // (capped-out vendors lost their sections and the closings
   // summed CA$293,617.43 short of the AP control).
   const lineGroups = new Map<string | null, typeof rows>()
   for (const x of rows) {

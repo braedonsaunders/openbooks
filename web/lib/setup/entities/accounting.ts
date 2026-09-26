@@ -36,7 +36,7 @@ export const ACCOUNTING_ENTITIES: SetupEntity[] = [
     // rule version carries nested applicability/basis/target definitions the
     // generic drawer cannot express. This entry only puts the tab on the
     // setup rail under Accounting, gated by the `allocations` feature (the
-    // platform shard registers the key; until then the key string resolves
+    // platform registers the key; until then the key string resolves
     // closed). The static custom page takes precedence over the [entity]
     // dynamic route; readOnly with no create/delete refuses every generic
     // CRUD write so versioned rule config only changes through the

@@ -14,7 +14,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@o
 const { DOCUMENT_BUILT_IN_EXPR, PAYMENT_BUILT_IN_EXPR } = await import("./list-query.ts");
 
 /**
- * F-t12-004: mirrored rows show raw "salesInvoice:<uuid>" in the INVOICE
+ * Mirrored rows show raw "salesInvoice:<uuid>" in the INVOICE
  * column and "salesInvoicePayment:<uuid>" in the receipts PAYMENT column,
  * while the Reference column holds the human number (PS-INV103296 /
  * PAY-PS-INV). The list number expressions must fall back to the
