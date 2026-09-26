@@ -540,15 +540,33 @@ export async function runScenario(
     detail: `project-tagged overhead totals ${taggedTotal.toFixed(2)} (want >= 0 — burden must DEBIT jobs, not credit them)`,
   });
 
-  // -- Labor clearing balance (informational): standards in, payroll out — the
-  // residual is in-flight work + unposted variance, so it is reported, not gated.
-  const clr = await one<{ b: string | null }>(sql`
-    select (select coalesce(sum(l.amount), 0) from journal_lines l
-             join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
-            where l.org_id = ${orgId}
-              and l.account_id = (select (settings->'controlAccounts'->>'laborClearing')::uuid from orgs where id = ${orgId})) b
-     where exists (select 1 from orgs where id = ${orgId} and settings->'controlAccounts'->>'laborClearing' is not null)`);
-  checks.push({ name: "labor-clearing", ok: true, detail: clr?.b != null ? `clearing balance = ${clr.b} (standards − payroll − variance; informational)` : "labor clearing not configured (inert)" });
+  // -- Labor clearing nets to zero per settled month: standards credit the
+  // clearing account at approval, payroll debits it when actuals land, and the
+  // variance entry clears the residue — so as of the cutoff every settled
+  // month must net to zero. The live month's in-flight work is excluded by the
+  // cutoff, never by tolerance. Inert until the clearing account is mapped.
+  const clrAcct = await one<{ id: string | null }>(sql`
+    select (settings->'controlAccounts'->>'laborClearing')::uuid as id from orgs where id = ${orgId}`);
+  if (clrAcct.id == null) {
+    checks.push({ name: "labor-clearing", ok: true, detail: "labor clearing not configured (inert)" });
+  } else {
+    const clrBad = await all<{ period: string; bal: string }>(sql`
+      select date_trunc('month', e.posting_date)::date::text as period, sum(l.amount)::text as bal
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id
+       where l.org_id = ${orgId} and e.status in ('posted','reversed')
+         and e.posting_date <= ${cutoff}
+         and l.account_id = ${clrAcct.id}::uuid
+       group by 1 having abs(sum(l.amount)) >= 0.005 order by abs(sum(l.amount)) desc`);
+    const worst = clrBad[0];
+    checks.push({
+      name: "labor-clearing",
+      ok: clrBad.length === 0,
+      detail: clrBad.length === 0
+        ? `0 settled months with clearing residue (want 0 — standards − payroll − variance nets to zero per month as of ${cutoff})`
+        : `${clrBad.length} settled month(s) with clearing residue (want 0) — worst: ${worst!.period} = ${worst!.bal} (post the payroll variance for the period: Admin → Setup → Labor costing, post-variance)`,
+    });
+  }
 
   // -- Subledger ↔ GL tie-out for AR/AP control accounts, POINT-IN-TIME as-of
   // the cutoff. GL balance and open-item remaining are BOTH reconstructed to the
