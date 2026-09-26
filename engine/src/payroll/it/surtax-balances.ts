@@ -5,7 +5,7 @@ import type { PushStatutoryFn } from "../statutory-context.ts";
 import { ItPayrollRefusal } from "./refusal.ts";
 
 /**
- * The addizionali assessed-saldo channel (I6-payroll-50 remainder).
+ * The addizionali assessed-saldo channel.
  *
  * THE LAW. The regional addizionale is settled at the conguaglio and
  * withheld in up to 11 installments afterwards (D.Lgs. 15 dicembre 1997,

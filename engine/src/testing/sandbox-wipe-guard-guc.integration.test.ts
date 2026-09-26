@@ -160,7 +160,7 @@ test("a raw wipe GUC cannot rewrite posted ledger state, while an authorized san
       (error: unknown) => pgMessage(error).includes("posted and immutable"),
     );
 
-    // ARCH-APPEND-ONLY (0380): the amend escape is gone — even the
+    // The amend escape is gone (migration 0380) — even the
     // wipe+amend combination cannot move a posted entry's date. Corrections
     // reverse and repost; history is never edited in place.
     await assert.rejects(

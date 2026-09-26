@@ -19,7 +19,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * Fraud probe (wave 2, B8): a subcontractor compliance policy with
+ * Fraud probe: a subcontractor compliance policy with
  * `block_payment` enforcement must stop payment on EVERY payment path — the
  * release evaluator's own docstring says "every payment path routes through:
  * pay-run creation, run readiness, and posting". Pay-run creation, readiness,

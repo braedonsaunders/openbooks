@@ -165,7 +165,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
          where id = ${subjectId} and org_id = ${ctx.orgId}
       `)).rows[0];
       if (!link) throw new Error(`bank account ${subjectId} not found`);
-      // Locked subsidiary recheck (I1-refix-108): the route's precheck can
+      // Locked subsidiary recheck: the route's precheck can
       // pass while a concurrent party rehome lands before this write
       // commits. Under the party lock the verdict sees the latest
       // subsidiary — never the precheck's stale one — and the rehome

@@ -1,4 +1,4 @@
-/** Source-evidenced reconciliation. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Source-evidenced reconciliation. Split from banking.ts (pure moves only). */
 import { BankingError, type BankingContext } from "./banking-core"
 import { loadReconcilableAccount, lockReconciliationAccount } from "./reconcilable-account"
 import { reconciliationBookId } from "./reconciliation"
@@ -283,7 +283,7 @@ export async function signOffFromSourceEvidence(
     const statementBalance = fromUnits(toUnits(coverage.balance));
     // Raw SQL, not the drizzle model: the new evidence columns travel with
     // the 0158 migration in this same change, and the shared schema package
-    // resolves from main until the coordinator picks it up.
+    // resolves from main until this change is merged.
     const recon = (await tx.execute<{ id: string }>(sql`
       insert into reconciliations
         (org_id, account_id, through_date, currency, statement_balance,

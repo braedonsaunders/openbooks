@@ -68,7 +68,7 @@ export interface GbPriorPeriod {
  * `usEmployeeYtd` does: calculated runs are drafts and may be abandoned, so
  * counting them would let unpaid figures consume allowance room in a later
  * run. Opening balances contribute nothing — GB has no opening-YTD columns
- * (no migration this shard), so the completeness gate below refuses the
+ * (no migration carries one), so the completeness gate below refuses the
  * gapped cases by name instead of pricing them from zero.
  */
 export async function gbEmployeePriorPeriod(ctx: Pick<

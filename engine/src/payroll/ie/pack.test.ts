@@ -1,5 +1,5 @@
 /**
- * ie-payroll-live shard: the Ireland pack transcribes 2026 (PAYE credits and
+ * The Ireland pack transcribes 2026 (PAYE credits and
  * bands, Class A PRSI, standard USC), computes through compute.ts, and keeps
  * its named refusals for everything outside the transcribed scope.
  */

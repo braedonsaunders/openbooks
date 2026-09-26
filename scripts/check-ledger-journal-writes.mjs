@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // check-ledger-journal-writes.mjs — every journal write routes through the
 // journal kernel (engine/src/journal/post-entry.ts postEntry /
-// markEntryReversed, extracted from ledger in ARCH-MODULE-CYCLE C02; the
+// markEntryReversed, extracted from ledger; the
 // document-posting sibling writer posting-commit.ts stays in ledger).
 // Owner approved this widening under "everything lands in alpha24".
 // Fails if any other engine module issues INSERT / UPDATE / DELETE on

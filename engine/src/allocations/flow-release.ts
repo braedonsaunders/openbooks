@@ -1,5 +1,5 @@
 /**
- * Engine-owned allocation-run approval release (ARCH-MODULE-CYCLE C13).
+ * Engine-owned allocation-run approval release.
  * Moved verbatim from flows/allocation-runs-adapter.ts releaseApproval;
  * the adapter now delegates through the registered releaseFlowApproval
  * seam. Runs inside decideGate's serialized org transaction (inDbTransaction

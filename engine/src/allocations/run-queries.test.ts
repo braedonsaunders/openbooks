@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runSubsidiaryVisible, validateLineageAnchor } from "./run-queries.ts";
 
-// Pure read guards for the Runs tab + lineage drill (A8). SQL round trips
+// Pure read guards for the Runs tab + lineage drill. SQL round trips
 // are pinned by run-queries.integration.test.ts.
 
 test("lineage needs exactly one anchor", () => {

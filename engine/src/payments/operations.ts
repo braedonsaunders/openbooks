@@ -914,7 +914,7 @@ async function findLiveRunArtifact(
 }
 
 /**
- * NACHA File ID Modifier allocation for one AP run (I2-money-06).
+ * NACHA File ID Modifier allocation for one AP run.
  *
  * The bank keys same-day duplicate-file detection on (origin, creation
  * date, modifier): every NACHA file a bank profile generates on one civil

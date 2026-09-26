@@ -1,4 +1,4 @@
-/** Pack tax-year resolution. Split from packs.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Pack tax-year resolution. Split from packs.ts (pure moves only). */
 import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
 import { payrollDraftTaxYears, payrollSupportedTaxYears } from "./tax-years.ts"
 import { taxYearFor } from "./tax-year-math.ts"

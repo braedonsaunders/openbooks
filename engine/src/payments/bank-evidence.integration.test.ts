@@ -125,7 +125,7 @@ async function seedRailRun(
             ${method}, 'approved', ${org.date}, 'CAD', ${profileId}, ${org.subsidiaryId},
             ${actorId}, ${actorId})`);
   // Unsent instructions are `pending` (the status run creation writes):
-  // I1-refix-146 refuses to generate a file over any instruction that
+  // Generation refuses a file over any instruction that
   // already left pending, so seeding `approved` here fails generation.
   await db.execute(sql`
     insert into payment_instructions

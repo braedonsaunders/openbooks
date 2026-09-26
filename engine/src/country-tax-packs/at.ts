@@ -59,7 +59,7 @@ const AT_U30_2026: TaxReturnPack = {
  * KZ 037 claim still rests on the BMF's own U30 form via the statutory
  * chamber's mirror (wko.at): the formularservice does not host that
  * vintage and the U30a instructions do not document KZ 037 — a named
- * mirror exception in the wave4 proof, re-verify if BMF publishes it.
+ * mirror exception accepted at review, re-verify if BMF publishes it.
  */
 export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
   code: "AT_INDIRECT_TAX",

@@ -1,4 +1,4 @@
-/** Reconciliation lifecycle. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Reconciliation lifecycle. Split from banking.ts (pure moves only). */
 import { BankingError, type BankingContext, subsidiaryScopeSql } from "./banking-core"
 import { loadReconcilableAccount, requireSessionRowInScope, validateReconciliationDate, lockReconciliationAccount, requireCutoffAfterSignedHistory, type BankingSqlExecutor } from "./reconcilable-account"
 import { normalizeAmount } from "./statement-parsers/shared"

@@ -127,7 +127,7 @@ export function parseLohnsteuerbescheinigungRowId(rowId: string): PayrollFilingR
 }
 
 /**
- * The Bescheinigungszeitraum from the employment relationship (I6-payroll-268):
+ * The Bescheinigungszeitraum from the employment relationship:
  * the duration of the Dienstverhältnis during the certificate year (EStG
  * §41b Abs. 1; BMF Anhang 23 I Nr. 1), clipped to the year — never inferred
  * from first/last pay dates. Refuses when the relationship dates are
@@ -409,7 +409,7 @@ export async function lohnsteuerbescheinigungSlips(
     account.country === "DE" && account.programType === "de_finanzamt" && account.isActive,
   );
   const soleFinanzamtId = soleFinanzamt.length === 1 ? soleFinanzamt[0]!.id : null;
-  // Employment relationships for the Bescheinigungszeitraum (I6-payroll-268):
+  // Employment relationships for the Bescheinigungszeitraum:
   // hired_on/terminated_on per party; earliest start and latest end win
   // across spells, and a missing start refuses per slip below.
   const roles = (await db.execute<{ employee_party_id: string; hired_on: string | null; terminated_on: string | null }>(sql`

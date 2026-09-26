@@ -6,7 +6,7 @@ import { OdooSource, odooReconcilableAccountType } from "./odoo-source.ts";
 import type { OdooClient } from "../connectors/odoo.ts";
 
 /**
- * Settlement-link currency fixtures (wave 3): Odoo `account.partial.reconcile`
+ * Settlement-link currency fixtures: Odoo `account.partial.reconcile`
  * `amount` is company currency (Odoo multi-currency docs: reconciliation
  * matches "the invoice price in the invoice currency and the ... amount in
  * your company currency"; the foreign legs ride `debit/credit_amount_currency`

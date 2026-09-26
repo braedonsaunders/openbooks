@@ -298,7 +298,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         (doc.status === "posted" || doc.status === "approved")
       ) {
         // Void completion lives behind the installed document-effects port
-        // (C14): the adapter never imports ledger. Runs inline in this call
+        // The adapter never imports ledger. Runs inline in this call
         // chain, so the ambient pinned org transaction is unchanged.
         const effects = flowDocumentEffects();
         if (outcome === "approved") {

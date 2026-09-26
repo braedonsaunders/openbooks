@@ -179,7 +179,7 @@ export async function verifyCloneRls(args: {
    * only). The proof then certifies the template/sample pair's isolation
    * instead of a production/sandbox pair; the source side asserts the
    * promoted-template registration flag rather than the production kind.
-   * Defaults to the production-only proof (I5-platform-66).
+   * Defaults to the production-only proof.
    */
   allowTemplateSource?: boolean;
 }): Promise<CloneRlsProof> {

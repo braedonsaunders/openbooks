@@ -87,7 +87,7 @@ export async function applyAuEmployerLevies(
   ctx: PayrollEmployerLevyContext,
 ): Promise<PayrollEmployerLevyFactors> {
   const { orgId, taxYear, region, lines, pushStatutory } = ctx;
-  // State payroll tax (I6-payroll-221): the pack transcribes no state payroll
+  // State payroll tax: the pack transcribes no state payroll
   // tax computation, so a run with covered wages and no established employer
   // position would silently omit a possibly-owed levy. Fail closed on the
   // legal employer's declared position before pricing anything.

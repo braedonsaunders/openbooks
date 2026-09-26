@@ -982,7 +982,7 @@ test("drivers: statistical_journal respects the subsidiary scope", async () => {
 });
 
 test("drivers: preview resolves an admin-created gl driver end to end", async () => {
-  // Registry writes belong to driver-admin.ts (A8); evaluation reads the
+  // Registry writes belong to driver-admin.ts; evaluation reads the
   // stored canonical config back through the resolvers.
   const org = await createScratchOrg();
   try {

@@ -378,7 +378,7 @@ export const flowScheduledOccurrences = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass to
+FOREIGN KEYS (added by the generated migration to
 schema/migrations/referential-integrity.sql):
   flow_scheduled_occurrences.org_id → orgs.id (on delete cascade)
   flow_scheduled_occurrences.flow_id → flows.id

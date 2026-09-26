@@ -24,10 +24,10 @@ import type {
 } from "./types.ts";
 
 /**
- * Allocation driver evaluation (fleet shard A2) — one resolver per
+ * Allocation driver evaluation — one resolver per
  * `source_kind` plus `previewDriverVector` for the Drivers tab.
  *
- * Registry WRITES live in `driver-admin.ts` (A8): this module builds on its
+ * Registry WRITES live in `driver-admin.ts`: this module builds on its
  * validators (`parseAllocationDimension`, `validateDriverConfig`) and its
  * reads (`getDriver`, `listDriverValues`), and owns evaluation only.
  * Design: docs/design/allocation-kernel.md §2 (`allocation_drivers`,
@@ -35,8 +35,8 @@ import type {
  * posted ledger reality only (`posted` + `reversed` entries mirror each
  * other, so a reversal nets out instead of double-counting).
  *
- * Cross-shard surface: A3 (period-run) injects `DriverResolver`
- * (`createDriverResolver()`); A8's routes call `previewDriverVector` and
+ * Shared surface: the period-run module injects `DriverResolver`
+ * (`createDriverResolver()`); the admin routes call `previewDriverVector` and
  * wire the real `ReportDriverRunner` for `report_definition` drivers
  * (engine never imports the web report path, so the runner is injected).
  */

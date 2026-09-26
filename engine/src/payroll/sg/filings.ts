@@ -91,7 +91,7 @@ export interface Ir8aSlip {
   employmentIncome: string;
   /**
    * Taxable earnings PAID in the following tax year through committed
-   * payroll (I6-payroll-292): the candidate pool for bonuses the employee
+   * payroll: the candidate pool for bonuses the employee
    * became entitled to in this year but received next year (§9b). Never
    * added to employmentIncome — the employer moves qualifying amounts into
    * this year's items before submitting.
@@ -143,7 +143,7 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
       + "so a year with nothing committed has no slip to issue",
     );
   }
-  // Entitlement-year source (I6-payroll-292): contractual bonuses earned in
+  // Entitlement-year source: contractual bonuses earned in
   // this year but paid next year sit in next year's stubs, so the slip would
   // silently omit them. The subledger carries no bonus classification or
   // entitlement date, so this is the candidate pool — next-year earnings the
@@ -291,7 +291,7 @@ async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<
       + "withholding box exists on this slip. (Explanatory Notes §5; IRAS, Reporting Employee Earnings)",
     ],
   };
-  // Entitlement-year review pointer (I6-payroll-292): bonuses earned this
+  // Entitlement-year review pointer: bonuses earned this
   // year but paid next year are assessed this year (§9b) yet sit in next
   // year's stubs. Name the candidate pool so it cannot be silently omitted.
   if (slip.nextYearPaid !== "0" && slip.nextYearPaid !== "0.00") {

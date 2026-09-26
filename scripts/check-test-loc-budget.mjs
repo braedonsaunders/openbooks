@@ -13,7 +13,7 @@
  *   node scripts/check-test-loc-budget.mjs           check
  *   node scripts/check-test-loc-budget.mjs --lower[=N]  lower the ceiling to
  *     the current total plus N lines of headroom (default 0), never raising
- *     it. The integrator lowers it with a small headroom after each pruning
+ *     it. Maintainers lower it with a small headroom after each pruning
  *     batch, so a fix's regression check fits without the corpus regrowing.
  */
 import { execFileSync } from 'node:child_process'

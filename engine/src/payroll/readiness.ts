@@ -1291,8 +1291,8 @@ export async function payRunStaleness(
            -- Holiday assertions are the same kind of fact: per-run inputs
            -- filed after Calculate that the next pass reads fresh. Reported
            -- under "adjustments" deliberately — a dedicated reason string
-           -- would touch all seven locales owned by the live hsf-translations
-           -- shard, and the banner's remedy is identical (recalculate).
+           -- would touch all seven locales with live hsf translations,
+           -- and the banner's remedy is identical (recalculate).
            exists (
              select 1 from pay_run_holiday_assertions ha
               where ha.org_id = r.org_id and ha.pay_run_document_id = r.document_id

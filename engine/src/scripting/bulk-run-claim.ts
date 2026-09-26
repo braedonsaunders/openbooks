@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 
 /**
- * Durable exactly-once boundary for interactive bulk "Run now" executions
- * (E02). The scripts queue is attempts=1 and bulk runs are not idempotent
+ * Durable exactly-once boundary for interactive bulk "Run now" executions.
+ * The scripts queue is attempts=1 and bulk runs are not idempotent
  * by contract, so a double-click without this claim runs the script twice
  * and double-posts. The claim lives in the shared application_idempotency_keys
  * table (no new migration): the route inserts it, the worker completes it.
@@ -131,7 +131,7 @@ export async function claimBulkRunKey(args: {
 /**
  * Stable journal idempotency scope for one bulk-run intent. A stall
  * redelivery of the same claim reuses this scope, so its journal writes
- * replay the first execution's documents instead of double-posting (E02).
+ * replay the first execution's documents instead of double-posting.
  * Distinct keys stay distinct; unkeyed launches never reach here.
  */
 export function bulkRunIdempotencyScope(key: string): string {
@@ -154,7 +154,7 @@ export type BulkRunExecution =
   | { status: "mismatched" };
 
 /**
- * Atomically elect one executor for a claimed bulk run (E02). The winner
+ * Atomically elect one executor for a claimed bulk run. The winner
  * stamps a start marker and runs; a rival delivery that finds a fresh marker
  * — a BullMQ stall redelivery racing the live first execution — must NOT
  * re-execute, it refuses loudly instead. A stale marker is a crashed owner:

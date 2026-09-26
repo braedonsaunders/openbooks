@@ -1,4 +1,4 @@
-/** Bootstrap path and hash helpers (the repoRoot trap: this file stays in scripts/). Split from scripts/bootstrap.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Bootstrap path and hash helpers (the repoRoot trap: this file stays in scripts/). Split from scripts/bootstrap.ts (pure moves only). */
 import { createHash } from "node:crypto"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"

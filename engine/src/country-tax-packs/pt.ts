@@ -65,7 +65,7 @@ const PT_IVA_DP_2026: TaxReturnPack = {
  * recapitulativa developments are out of scope.
  *
  * SOURCING: three citations are professional-body mirrors of DSIVA material,
- * kept as named id-specific exceptions (wave5 proof): `at_dp_modelo_instrucoes`
+ * kept as named id-specific exceptions accepted at review: `at_dp_modelo_instrucoes`
  * (the Declaração Periódica form and filling instructions via aproces.org),
  * `dsiva_oc30118_2010_aplicabilidade` (DSIVA Ofício 30118/2010 via the OCC
  * accountants' Order mirror) and `dsiva_oc30121_2010_taxa_normal` (DSIVA Ofício

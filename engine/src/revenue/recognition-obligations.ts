@@ -1,4 +1,4 @@
-/** Invoice-to-obligation creation. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Invoice-to-obligation creation. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { cmp, sum } from "../money/money.ts";

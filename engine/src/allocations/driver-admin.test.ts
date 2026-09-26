@@ -12,7 +12,7 @@ import {
   vectorShares,
 } from "./driver-admin.ts";
 
-// Pure input validation for the driver registry (A8). Service SQL is covered
+// Pure input validation for the driver registry. Service SQL is covered
 // by driver-admin.integration.test.ts; these pin the exact rejection rules.
 
 test("driver key must be a slug", () => {

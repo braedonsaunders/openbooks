@@ -11,9 +11,9 @@ import { requireExplicitOrgId } from "./org-selection.ts";
  * used to seed whatever org happened to sort first, stamping placeholder
  * bank settings into an arbitrary tenant. It now refuses and lists the orgs.
  *
- * Every value below is a placeholder the integrator MUST replace with the
- * numbers assigned by the org's financial institution before generating a
- * real file — loadEftSettings() treats FILL-ME values as unconfigured, so
+ * Every value below is a placeholder — replace it with the numbers assigned
+ * by the org's financial institution before generating a real file.
+ * loadEftSettings() treats FILL-ME values as unconfigured, so
  * the run page keeps showing its configuration-needed state until then.
  * Existing settings.eft keys are preserved (jsonb merge, placeholder wins
  * only for missing keys — it never overwrites a configured value).

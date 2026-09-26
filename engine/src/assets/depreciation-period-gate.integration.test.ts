@@ -17,7 +17,7 @@ import {
 } from "../testing/fixtures.ts";
 
 /**
- * One period gate for depreciation (fleet 8, P7): recordDepreciationInput and
+ * One period gate for depreciation: recordDepreciationInput and
  * the runDepreciation claim route through assertPeriodModulesOpen /
  * arePeriodModulesOpen instead of raw period_module_is_closed SQL. Policy is
  * preserved — recording and posting depreciation is new local activity, not

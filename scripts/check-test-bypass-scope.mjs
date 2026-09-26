@@ -579,7 +579,7 @@ const inRegions = (regions, index) => regions.some(([start, end]) => index >= st
 // to eagerly load web/lib/request-org.ts at import time (resolver-slot probe:
 // the module-body registration observably replaces the preloaded test
 // bypass), with unscoped fixture writes that die file-alone with 42501 or
-// silently match zero rows. The fleet is working through this queue with the
+// silently match zero rows. This queue is worked through with the
 // withBypassContext (seeds) / withOrgContext (reads and product calls) split.
 // Rules: a file NOT on this list must have zero findings (a new exposure
 // fails the build); a file fixed must leave this list in the same commit

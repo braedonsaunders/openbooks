@@ -92,7 +92,7 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   NY_WITHHOLDING,
   PA_WITHHOLDING,
   IL_WITHHOLDING,
-  // Second wave: New Jersey first because it closes Pennsylvania's reciprocal
+  // Second group: New Jersey first because it closes Pennsylvania's reciprocal
   // pair, then the two states that levy below themselves, then three that do
   // not.
   NJ_WITHHOLDING,
@@ -101,7 +101,7 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   MA_WITHHOLDING,
   GA_WITHHOLDING,
   NC_WITHHOLDING,
-  // Third wave: Arizona's percentage-of-wages election, then the Midwest /
+  // Third group: Arizona's percentage-of-wages election, then the Midwest /
   // Appalachian reciprocity cluster (IN, KY, VA, WV, IA, MN, WI) and Utah.
   AZ_WITHHOLDING,
   IN_WITHHOLDING,
@@ -162,7 +162,7 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  * in this table, and the meta-test in index.test.ts fails on it — which is how
  * the list stays honest as states are added.
  *
- * Empty today: the fleet is complete — every wage-tax jurisdiction in
+ * Empty today: coverage is complete — every wage-tax jurisdiction in
  * US_STATES has an engine, and the nine others levy no wage income tax.
  * The map stays, because the next untranscribed levy re-adds its entry here.
  */

@@ -284,7 +284,7 @@ export async function authenticateWebConnector(connectionId: string, username: s
     // row and re-read status and credentials under it, then insert in the
     // same transaction — either this commits before the pause (whose
     // termination then closes this ticket) or it observes the pause and
-    // issues nothing (I5-platform-219). Lock order stays connection row
+    // issues nothing. Lock order stays connection row
     // first, matching the pause path, so the two cannot deadlock.
     const issue = await db.transaction(async (tx) => {
       const fresh = (await tx.execute<PublicConnection>(sql`

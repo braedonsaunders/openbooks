@@ -1,5 +1,5 @@
 /**
- * Engine-owned HRM approval releases (ARCH-MODULE-CYCLE C13).
+ * Engine-owned HRM approval releases.
  * Moved verbatim from the flows adapters' releaseApproval bodies
  * (comp-cycles, hrm-change-requests, leave-requests); the adapters now
  * delegate through the registered releaseFlowApproval seam. Each release

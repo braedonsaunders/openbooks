@@ -8,7 +8,7 @@ import {
 } from "@openbooks/jobs";
 
 /**
- * Dispatch-recovery scan for AP capture (I5-platform-35).
+ * Dispatch-recovery scan for AP capture.
  *
  * Upload and reprocess commit `status = 'queued'` in a database transaction
  * and enqueue the BullMQ job afterwards. A process crash (or lost

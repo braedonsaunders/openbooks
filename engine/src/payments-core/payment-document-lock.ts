@@ -1,8 +1,8 @@
 /**
  * Payment-document edit lock: lock in run -> instruction -> payment document
  * order before any flow or service writer mutates a payment document, plus
- * the PaymentKind guard. Moved verbatim from payments/payment-documents.ts
- * (ARCH-MODULE-CYCLE C06 E4); depends only on db, payment-errors and the
+ * the PaymentKind guard. Moved verbatim from payments/payment-documents.ts;
+ * depends only on db, payment-errors and the
  * organization subsidiary-scope row lock, so flows and the posting
  * orchestrator can use it without importing the payments orchestrator.
  */

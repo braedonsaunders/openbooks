@@ -63,7 +63,7 @@ export const savedViews = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass to
+FOREIGN KEYS (added by the generated migration to
 schema/migrations/referential-integrity.sql):
   saved_views.org_id     → orgs.id
   saved_views.owner_id   → users.id

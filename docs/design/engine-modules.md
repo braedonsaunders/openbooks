@@ -17,8 +17,8 @@ which runs ahead of every test partition and every release verification.
    `@/…` (see `engine/tsconfig.json`).
 4. **Every declared edge is used.** A declaration nothing relies on is stale or
    a permission granted in advance; both are refused.
-5. **The module graph is acyclic.** ARCH-MODULE-CYCLE C15 broke the last
-   cycle and retired the `cycles` pin: the check refuses any cycle, and it
+5. **The module graph is acyclic.** The last cycle was broken and the
+   `cycles` pin retired: the check refuses any cycle, and it
    refuses a non-empty pin, so the pin stays empty.
 
 Tests, and everything under `engine/src/testing/`, are composition and may

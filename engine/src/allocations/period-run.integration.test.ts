@@ -865,7 +865,7 @@ test(
 );
 
 test(
-  "driver basis resolves through A2's dispatcher with no injected double",
+  "driver basis resolves through the driver dispatcher with no injected double",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -887,7 +887,7 @@ test(
         targetKind: "dynamic",
         dynamicTarget: { dimension: "department", minWeight: "0" },
       });
-      // No injected resolver: the engine falls back to A2's dispatcher.
+      // No injected resolver: the engine falls back to the driver dispatcher.
       const preview = await previewAllocationRun({
         orgId: org.orgId,
         ruleId,

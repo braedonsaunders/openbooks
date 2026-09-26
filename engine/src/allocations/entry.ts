@@ -16,17 +16,17 @@ import type {
 } from "./types.ts";
 
 /**
- * Allocation kernel, entry mode (shard A4).
+ * Allocation kernel, entry mode.
  *
  * `explodeDocumentLine` turns one entered line into child drafts; pure and
- * exact (A1's bigint apportionment, never floats). `planEntryDistributions`
+ * exact (bigint apportionment, never floats). `planEntryDistributions`
  * decides, per submitted line, whether to explode (explicit key or automatic
  * match), regenerate an edited group, keep a locked/unchanged group, or
  * collapse an un-split request. Both are pure: the web save path (and the
  * import writer) does the rule loading and lineage persistence around them.
  *
  * Quantity apportionment keeps a small local exact helper: quantities are
- * commercial decimals (8dp), not ledger money, so A1's money apportionment
+ * commercial decimals (8dp), not ledger money, so the money apportionment
  * does not cover them. Kernel errors surface as EntryAllocationError so the
  * planner's automatic path keeps its fail-open contract.
  */

@@ -18,7 +18,7 @@ import {
 } from "../testing/fixtures.ts";
 
 /**
- * One period gate for revenue recognition (fleet 8, P7): the recognition
+ * One period gate for revenue recognition: the recognition
  * runner and the invoice-cancellation reversal route through
  * arePeriodModulesOpen / assertPeriodModulesOpen instead of raw
  * period_module_is_closed SQL. Policy is preserved — recognizing and

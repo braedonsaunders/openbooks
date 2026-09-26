@@ -679,7 +679,7 @@ function payrollFilenameLabelFor(format: PayRunBankFileFormat): string {
 }
 
 /**
- * NACHA File ID Modifier allocation for one payroll bank file (I2-money-06).
+ * NACHA File ID Modifier allocation for one payroll bank file.
  * Lowest free letter for the bank profile's creation day (the civil day of
  * `now` in the org's zone — the same instant the artifact's generated_at
  * stamps, so the counted day is the filed day). Call inside the generation

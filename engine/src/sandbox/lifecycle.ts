@@ -172,8 +172,8 @@ export interface CreateSandboxInput {
   lifecycleAuthority?: SandboxLifecycleAuthority;
   /**
    * Sanctioned template consumer (sample-company provisioning only).
-   * createSandbox otherwise accepts production sources exclusively
-   * (I5-platform-66); flipping this asserts the source carries the promoted
+   * createSandbox otherwise accepts production sources exclusively;
+   * flipping this asserts the source carries the promoted
    * sample-template registration flag instead — ordinary sandbox and
    * production orgs still refuse.
    */
@@ -744,7 +744,7 @@ export async function refreshSandbox(
       });
       const currentS3VersionIds = new Set(await listSandboxS3VersionIds(s.org_id));
       const staleIds = staleS3VersionIds.filter((id) => !currentS3VersionIds.has(id));
-      // I5-platform-41: durable intents so the worker retries what the
+      // Durable intents so the worker retries what the
       // inline delete below cannot confirm; the inline attempt stays.
       for (const versionId of staleIds) {
         await enqueueStorageCleanupStandalone({
@@ -760,7 +760,8 @@ export async function refreshSandbox(
       // Sample shells re-verify through the sanctioned template branch:
       // their source is the promoted template org, never production, so a
       // production-only proof would refuse the pair the same way
-      // provisioning did before CI3-sample-source. Detect the registration
+      // provisioning did before the sample-source template branch existed.
+      // Detect the registration
       // flag with the same predicate the assertion uses; ordinary pairs
       // keep the production-only default.
       const sourceSettings = (await db.execute<{ settings: Record<string, unknown> | null }>(sql`
@@ -931,7 +932,7 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
       await recordSandboxS3Cleanup(productionOrgId, sandboxId, manifest, "manifest");
     }
     await wipeSandbox(orgId, new Set(tenantTables.map((t) => t.name)));
-    // I5-platform-41: the rows are gone, so record durable intents after the
+    // The rows are gone, so record durable intents after the
     // wipe (never before — the worker must not delete objects whose rows may
     // still exist if the wipe fails). The inline delete below stays.
     for (const versionId of manifest.versionIds) {

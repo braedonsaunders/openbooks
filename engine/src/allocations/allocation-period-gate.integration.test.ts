@@ -18,7 +18,7 @@ import {
 import { enableAllocations, negate, seedDepartment } from "./integration-seeds.ts";
 
 /**
- * One period gate for allocations (fleet 8, P7): the period-run posting
+ * One period gate for allocations: the period-run posting
  * check routes through assertPeriodModulesOpen instead of raw
  * period_module_is_closed SQL. Policy is preserved — an allocation posting
  * is new local activity, not historical replay, so a source-owned imported

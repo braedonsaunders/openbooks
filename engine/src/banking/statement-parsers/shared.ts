@@ -1,4 +1,4 @@
-/** Helpers shared by two or more statement parsers. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Helpers shared by two or more statement parsers. Split from banking.ts (pure moves only). */
 import { BankingError } from "../banking-core"
 import { assertLedgerRange } from "./bai2"
 import { utcDateFromParts } from "../../platform/business-date.ts"

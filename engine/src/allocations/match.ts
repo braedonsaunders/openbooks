@@ -13,12 +13,12 @@ import type {
 } from "./types.ts";
 
 /**
- * Allocation kernel, entry/post matcher (shard A4).
+ * Allocation kernel, entry/post matcher.
  *
  * Pure `matchLine` / `selectRule` decide which rule fires for one line;
- * `listEntryRulesInEffect` narrows A1's canonical window-based listing to the
- * heads' current versions for an as-of date. Post mode (A5) reuses the pure
- * matcher; entry mode (A4) wires it into the document save path.
+ * `listEntryRulesInEffect` narrows the canonical window-based listing to
+ * the heads' current versions for an as-of date. Post mode reuses the pure
+ * matcher; entry mode wires it into the document save path.
  */
 
 export type AccountGroupResolver = (dimension: string, groupKey: string) => Set<string>;
@@ -203,7 +203,7 @@ export interface RulesInEffectRequest {
 }
 
 /**
- * Entry-oriented rule candidates: A1's canonical window-based listing
+ * Entry-oriented rule candidates: the canonical window-based listing
  * (rules.ts listRulesInEffect) narrowed to the head's current published
  * version, with an optional apply-policy filter. Entry (and post) consumers
  * match against these; the canonical cross-mode listing stays in rules.ts.

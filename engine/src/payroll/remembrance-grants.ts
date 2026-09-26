@@ -1,5 +1,5 @@
 /**
- * Work-triggered alternate-day-off grants (I6-payroll-262).
+ * Work-triggered alternate-day-off grants.
  *
  * Nova Scotia's Remembrance Day Act earns an employee who works November 11
  * another day off WITH PAY instead of immediate cash. The grant is an

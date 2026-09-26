@@ -1,4 +1,4 @@
-/** Payroll pack declarations: slots, components, identifiers, holidays, jurisdictions, remittance schedules. Split from packs.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Payroll pack declarations: slots, components, identifiers, holidays, jurisdictions, remittance schedules. Split from packs.ts (pure moves only). */
 import type { PAYROLL_COUNTRY_PACKS } from "./pack-registry"
 import { type ControlAccountRole } from "../records/control-accounts.ts"
 import { db } from "../platform/db.ts"
@@ -109,7 +109,7 @@ export type PayrollTaxBases = Record<PayrollCoreTaxBaseKey, string>
  * layer subtracts tagged lines from the income leg in full; an engine that
  * taxes bonuses jointly adds the raw `nonPeriodic` leg back (the IE
  * pattern: taxable pay is gross less pension, priced as reduced income plus
- * untouched non-periodic pay). No treatment in the fleet reduces
+ * untouched non-periodic pay). No treatment in the set reduces
  * `pensionable` or `insurable` — a treatment that did would move a social
  * insurance base, which is exactly the wrong-money case this vocabulary
  * exists to prevent by declaration.
@@ -1518,7 +1518,7 @@ export interface PayrollHolidayPayEdition {
  * A general-holiday rule pays cash on the holiday's own run; this one pays
  * nothing then and grants an employee-specific hours-bank entitlement to be
  * taken later. Declaring it as a holiday-pay rule would price the benefit on
- * November 11 itself — the exact defect I6-payroll-262 removes.
+ * November 11 itself — the exact defect this shape removes.
  */
 export interface PayrollRemembranceAlternateDayRule {
   /** Ledger source key stamped on the granted movement (e.g. remembrance_day). */

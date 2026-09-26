@@ -1,4 +1,4 @@
-/** CAM pools, finalization, reconciliation billing. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** CAM pools, finalization, reconciliation billing. Split from property/management.ts (pure moves only). */
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";

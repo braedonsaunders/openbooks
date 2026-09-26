@@ -14,7 +14,7 @@
  *   Form NJ-165, Employee's Certificate of Nonresidence in New Jersey.
  *
  * ---------------------------------------------------------------------------
- * Why New Jersey is first in this wave
+ * Why New Jersey is first in this group
  * ---------------------------------------------------------------------------
  * It closes the pair Pennsylvania left half-built. PA/NJ is the one genuine
  * mutual reciprocal agreement in the north-east, and until New Jersey existed

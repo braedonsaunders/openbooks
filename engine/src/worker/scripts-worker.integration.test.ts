@@ -187,7 +187,7 @@ test("scheduledScopeFromJob prefers the payload key and adopts scheduler-minted 
   );
 });
 
-test("a bulk claim key derives one stable journal scope (E02)", () => {
+test("a bulk claim key derives one stable journal scope", () => {
   assert.equal(bulkRunIdempotencyScope("run-key-1"), bulkRunIdempotencyScope("run-key-1"));
   assert.notEqual(bulkRunIdempotencyScope("run-key-1"), bulkRunIdempotencyScope("run-key-2"));
 });

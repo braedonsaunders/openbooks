@@ -1,4 +1,4 @@
-/** Managed-property and unit CRUD. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Managed-property and unit CRUD. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, normalizeMoney } from "../money/money.ts";

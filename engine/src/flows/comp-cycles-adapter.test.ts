@@ -7,7 +7,7 @@ import {
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
-// C13: releaseApproval delegates through the registered engine handler, so
+// releaseApproval delegates through the registered engine handler, so
 // the seam must be installed before the release tests below run.
 installEngineSeams();
 

@@ -235,7 +235,7 @@ export async function rescindEmploymentChange(input: {
         `only an applied change can be rescinded — this event is '${target.verb}'; correct or rescind the underlying apply instead`,
       );
     }
-    // I3-people-21: rescind carries the approval permission, so it takes the
+    // Rescind carries the approval permission, so it takes the
     // scoped approval gate — same employer-subject check as direct correction.
     await requireHrmEmploymentApprove(db, input.orgId, input.actorId, target.employmentId);
     if (!Array.isArray(target.closedVersions) || target.closedVersions.length === 0) {
@@ -550,7 +550,7 @@ export async function correctEmploymentChange(input: {
       throw new EventVerbError("direct correction needs correctedFields — name the fields and their corrected values");
     }
     return withOrgTransaction(input.orgId, async () => {
-      // I3-people-21: the direct branch must resolve the target employment
+      // The direct branch must resolve the target employment
       // and enforce its employer scope on the write runner — the bare
       // permission check above cannot see cross-subsidiary corrections.
       await requireHrmEmploymentManage(db, input.orgId, input.actorId, target.employmentId);

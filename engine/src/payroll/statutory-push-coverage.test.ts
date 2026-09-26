@@ -14,7 +14,7 @@
  * call SITE is enumerated here whatever the inputs. Non-literal keys fail
  * the scan loudly so a future dynamic push cannot pass silently — the
  * sanctioned shapes are a `"literal"` key with a `"literal"` kind, and the
- * levy dispatch (I6-payroll-207), which checks the fallback arms plus every
+ * levy dispatch, which checks the fallback arms plus every
  * routed `statutoryComponent`. A match never spans calls.
  *
  * Run with `node --import tsx` on this file. Run from the repo root: like

@@ -7,8 +7,8 @@
  * measuring a target it should measure (zero-mutant or missing entries, or
  * a red baseline), or when config/report/floor drift apart. Raise floors by
  * re-running `npm run test:mutation -- --write-checked-in`, verifying the
- * new report, and committing the updated report + floor together — the
- * coordinator decides when a higher floor is ratified.
+ * new report, and committing the updated report + floor together —
+ * ratifying a higher floor is an explicit reviewed decision.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

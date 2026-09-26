@@ -1,4 +1,4 @@
-/** Migration filename transitions and the digest-transition ledger. Split from scripts/bootstrap.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Migration filename transitions and the digest-transition ledger. Split from scripts/bootstrap.ts (pure moves only). */
 import { migrationsDir, sha256 } from "../bootstrap-paths"
 import { type MigrationLedgerClient } from "./governed-views"
 import { readFileSync, readdirSync } from "node:fs"
@@ -963,7 +963,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     to: "863fb22fc97911ed8ef81a8a0808277a8069c4039b96838de94a7c8001639944",
     strategy: "reapply",
     reason:
-      "corrective revision 97609eae (tax-nexus shard) appends the documents ship-to "
+      "corrective revision 97609eae appends the documents ship-to "
       + "snapshot to the filings-only 0265: ship_to_country / ship_to_region DDL (both "
       + "IF NOT EXISTS) plus an evidence-only backfill from first-line provider-quote "
       + "destinations, limited to untouched rows so a kernel stamp is never overwritten. "
@@ -993,7 +993,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     to: "126d6d8962862048241522d9862a7a9a72e3cf552f50aac3c5acbb00ba608bb7",
     strategy: "reapply",
     reason:
-      "corrective revisions U1+U2+U4+PR6b+U5 (payroll-remittance shard) supersede "
+      "corrective revisions U1+U2+U4+PR6b+U5 supersede "
       + "every earlier 0296: U1 refuses first over unparseable legacy markers, naming "
       + "each bill and field. U2 replaces the grand-total backfill with an exact "
       + "reconciliation repair (recorded party equals the marker party, lines per "
@@ -1043,7 +1043,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     to: "126d6d8962862048241522d9862a7a9a72e3cf552f50aac3c5acbb00ba608bb7",
     strategy: "reapply",
     reason:
-      "U5 hot-table conversion (payroll-remittance shard): the file declares "
+      "U5 hot-table conversion: the file declares "
       + "no-transaction and the runner applies it statement by statement, the "
       + "snapshot index builds CONCURRENTLY behind an INVALID-drop guard, and "
       + "the snapshot FK arrives NOT VALID with a separate VALIDATE step. "
@@ -1178,7 +1178,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     reason:
       "same revision as the two entries above, for databases that applied the "
       + "interim PRC15d body (b70ecb04, briefly on local main between the PRC15d "
-      + "and residual commits and applied by the coordinator's and shards' test "
+      + "and residual commits and applied by automated test databases): the "
       + "databases): the residual replaced that body without a transition from it, "
       + "so those databases could not reach the current digest. The delta is the "
       + "keep-and-stamp revocation (revoked_at/revoked_by) and activation instants; "
@@ -1243,7 +1243,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
     strategy: "reapply",
     reason:
-      "unshipped wave-G migration grows by section: the G4-only body gains "
+      "unshipped 0338 migration grows by section: the G4-only body gains "
       + "the wipe-fix (no raw sandbox_wipe GUC read), the G5 amend-delete "
       + "fence, the G6 book-rehome aggregate trigger, the G8 "
       + "open-balance INSERT trigger plus NULL-cache backfill, the G9 "
@@ -1333,7 +1333,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     to: "89cd4e08d445e962a52ac9cb2d4dbf284c67c97c9ccd16c624994b9875e485c1",
     strategy: "reapply",
     reason:
-      "the published I3-people-61 revision (ec1e01df0) reconstructed "
+      "the published revision (ec1e01df0) reconstructed "
       + "employment_id from existing HR history and left unresolvable legacy "
       + "nulls to the preflight refusal. The current revision retains that "
       + "reconstruction and first backfills one open employment per (worker, "

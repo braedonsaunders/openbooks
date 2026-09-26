@@ -336,7 +336,7 @@ export function registerWorkerDuties(): void {
       await runReminderDuty();
     },
   });
-  // I5-platform-35: re-drive capture rows committed as queued whose dispatch
+  // Re-drive capture rows committed as queued whose dispatch
   // never reached BullMQ (commit-then-crash). Deterministic job ids make the
   // scan idempotent; rows with a live or retained job are left alone.
   console.log("[worker] duty registered: ap-capture-dispatch");

@@ -249,7 +249,7 @@ function marginalTax(
 }
 
 /**
- * Progressive addizionale from deliberated scaglioni (I6-payroll-18): the
+ * Progressive addizionale from deliberated scaglioni: the
  * same marginal walk, but bracket rates are percent numbers like the scalar
  * slot ("1.23" for 1,23%), not fractions.
  */
@@ -273,7 +273,7 @@ export interface It2025SurtaxInput {
 }
 
 /**
- * One deliberated surtax bracket (I6-payroll-18): `{ upTo, rate }`, where —
+ * One deliberated surtax bracket: `{ upTo, rate }`, where —
  * unlike the IRPEF bands — `rate` is a percent number like the scalar slot
  * ("1.23" for 1,23%). A null `upTo` is the open top bracket.
  */
@@ -313,7 +313,7 @@ export interface It2025Input {
   /** Declared regionale rate; null refuses (never guessed). */
   regionalRate: string | null;
   /**
-   * Deliberated regionale scaglioni (I6-payroll-18): for domiciles whose
+   * Deliberated regionale scaglioni: for domiciles whose
    * region publishes a progressive schedule (e.g. Lombardia), the scalar
    * slot cannot represent it and the engine refuses without these. Supplying
    * both a scalar and brackets refuses as ambiguous.
@@ -322,21 +322,21 @@ export interface It2025Input {
   /** Declared comunale rate/exemption; null refuses (never guessed). */
   municipalSurtax: It2025SurtaxInput | null;
   /**
-   * Deliberated comunale scaglioni (I6-payroll-18): same progressive
+   * Deliberated comunale scaglioni: same progressive
    * treatment for comuni that deliberate by bracket; the soglia exemption
    * still zeroes at-or-below-threshold imponibili first.
    */
   municipalBrackets?: readonly ItSurtaxBracket[] | null;
   /**
-   * Days of employment in the tax year (I6-payroll-19): the art. 13
+   * Days of employment in the tax year: the art. 13
    * detrazione lavoro and the c. 6 ulteriore detrazione are rapportate al
    * periodo di lavoro (730 istruzioni, Table 6). Null/undefined keeps the
    * documented full-year assumption; partial-year payrolls must carry this.
    */
   taxYearWorkDays?: number | null;
   /**
-   * Annual eligible fringe benefits within the art. 51 exclusion
-   * (I6-payroll-227): excluded up to EUR 1,000, or EUR 2,000 with a
+   * Annual eligible fringe benefits excludable under art. 51, up to
+   * EUR 1,000, or EUR 2,000 with a
    * dependent child (L. 207/2024 art. 1 c. 390, tax years 2025–2027).
    * Above the cap the whole amount is taxable, so nothing is excluded.
    * Null/undefined prices the whole gross as taxable.
@@ -345,7 +345,7 @@ export interface It2025Input {
   /** Dependent child for the EUR 2,000 fringe cap (art. 51 only, not art. 12). */
   fringeDependentChild?: boolean;
   /**
-   * 2026 CCNL contractual-renewal increases in pay (I6-payroll-51): L.
+   * 2026 CCNL contractual-renewal increases in pay: L.
    * 199/2025 art. 1 c. 7 prices them under a 5% imposta sostitutiva, which
    * the engine does not compute — any positive amount refuses by name.
    */
@@ -487,13 +487,13 @@ function refuse(message: string): never {
   throw new ItPayrollRefusal(message);
 }
 
-/** Days in the tax year for the rapportatura divisor (I6-payroll-19). */
+/** Days in the tax year for the rapportatura divisor. */
 function daysInTaxYear(year: number): number {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
 }
 
 /**
- * Give IT_REFUSED_2026 arms (I6-payroll-51): the 2026-only substitute regimes
+ * Give IT_REFUSED_2026 arms: the 2026-only substitute regimes
  * are declared in the refusal list, and any pay carrying the facts refuses
  * here before ordinary IRPEF prices it at the wrong rate. The c. 18–21
  * tourism speciale is not an arm: it prices in calculateItWithTables
@@ -671,7 +671,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
     );
   }
   if (year === 2026) enforceIt2026SubstituteRegimes(input);
-  // Art. 51 fringe exclusion (I6-payroll-227): eligible benefits within the
+  // Art. 51 fringe exclusion: eligible benefits within the
   // 1.000 / 2.000 cap never enter employment taxable income; above the cap
   // the whole amount is taxable (L. 207/2024 art. 1 c. 390).
   const fringeRaw = input.excludedFringeAnnual == null || input.excludedFringeAnnual === "" ? ZERO : needNonNegative(input.excludedFringeAnnual, "excludedFringeAnnual", year);
@@ -819,7 +819,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   }
   ulteriore = r2(ulteriore);
 
-  // Rapportatura al periodo di lavoro (I6-payroll-19): the art. 13
+  // Rapportatura al periodo di lavoro: the art. 13
   // detrazione lavoro and the c. 6 ulteriore detrazione scale with days of
   // employment in the tax year (730 istruzioni, Table 6). Absent work-days
   // keep the documented full-year assumption.
@@ -901,7 +901,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + `${input.regionCode}) in ${year} — the domicile comune's deliberated rate must be entered`,
     );
   }
-  // Bracketed deliberations (I6-payroll-18): a domicile whose region or
+  // Bracketed deliberations: a domicile whose region or
   // comune deliberates scaglioni cannot be priced from the scalar slot.
   // Lombardia (03) publishes a progressive regionale schedule (1.23% /
   // 1.58% / 1.72% by bracket:
@@ -911,8 +911,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   // Trento and Bolzano deliberate separately, and Bolzano's 2026 EUR 430.50
   // credit through EUR 90,000 (https://finanze.provincia.bz.it/it/addizionale-regionale-irpef-imposta-sul-reddito-delle-persone-fisiche)
   // is transcribed (IT_2026_BOLZANO_DETRAZIONE) and prices only on an
-  // explicit Bolzano domicile attribution — so unattributed 04 refuses
-  // (I6-payroll-56).
+  // explicit Bolzano domicile attribution — so unattributed 04 refuses.
   if (input.regionalRate != null && input.regionalRate !== "" && hasRegionalBrackets) {
     refuse(
       `IT ${year} regionale computation is ambiguous for regione ${input.regionCode}: both a scalar rate `

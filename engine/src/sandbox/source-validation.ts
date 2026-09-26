@@ -24,7 +24,7 @@ export function isSampleTemplateSource(settings: Record<string, unknown> | null 
 /**
  * Refuse a missing or non-template source before a sample-company shell is
  * born or refreshed. Sample provisioning/refresh is the one sanctioned
- * consumer of template sources: the production-only default (I5-platform-66)
+ * consumer of template sources: the production-only default
  * stands for every other caller. A random sandbox or production org lacks
  * the flag and still refuses, which keeps the confused-deputy protection:
  * the ID passed must actually be a promoted template, never just any org.

@@ -150,7 +150,7 @@ test("RL-1 carry-in leaves box E alone: no opening source exists", () => {
   assert.equal(carried.qcIncomeTax, "6100.0000");
 });
 
-test("RL-1 carry-in folds pre-adoption union dues into box F (I6-payroll-250)", () => {
+test("RL-1 carry-in folds pre-adoption union dues into box F", () => {
   // Eligible dues withheld before adoption arrive in union_dues_ytd and add
   // to the stubs; with none carried, the stubs pass through add() to 4dp.
   const untouched = openingYtdIntoRl1Aggregates(aggregates(), opening({}));

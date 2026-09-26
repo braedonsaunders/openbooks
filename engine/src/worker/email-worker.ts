@@ -130,7 +130,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
       // fail delivery bookkeeping, and a crash-orphaned blob is never
       // re-read because only live job payloads reference storage ids.
       const dropStagedAttachments = async (): Promise<void> => {
-        // I5-platform-57: durable cleanup intents first so the worker duty
+        // Durable cleanup intents first so the worker duty
         // retries what the inline delete below cannot confirm; the inline
         // best-effort attempt stays (a failed delete must never fail
         // delivery bookkeeping).

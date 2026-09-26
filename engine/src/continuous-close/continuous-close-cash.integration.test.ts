@@ -263,8 +263,8 @@ test(
         1,
         "the fixture fires uncapped",
       );
-      // jsonb_set creates no missing intermediate object on this fleet's
-      // Postgres, so a one-shot '{analytics,cashflow}' set on a fresh org
+      // jsonb_set creates no missing intermediate object, so a one-shot
+      // '{analytics,cashflow}' set on a fresh org
       // matches one row and changes nothing. Build the levels that exist.
       await withBypassContext(async () => {
         await db.execute(sql`

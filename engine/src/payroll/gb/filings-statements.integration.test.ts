@@ -388,7 +388,7 @@ test(
     try {
       await assert.rejects(gbP60Slips(org.orgId, YEAR), /no committed GB pay runs for 2026\/27/);
       await assert.rejects(gbP45Leavers(org.orgId, YEAR), /no committed GB pay runs for 2026\/27/);
-      // 2025 is TRANSCRIBED now -- the GB prior-year shard landed 2024/25 and
+      // 2025 is TRANSCRIBED now -- the GB prior-year transcription landed 2024/25 and
       // 2025/26 tables, so that year no longer refuses for a missing edition
       // and falls through to the committed-runs refusal instead. Use a year
       // the pack genuinely does not cover.

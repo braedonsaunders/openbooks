@@ -79,7 +79,7 @@ test("declared treatments only reduce the bases their pack names", () => {
     for (const treatment of pack.deductionTreatments) {
       assert.ok(
         !treatment.reduces.includes("pensionable") && !treatment.reduces.includes("insurable"),
-        `${country}.${treatment.key}: no treatment in the fleet moves a social-insurance base`,
+        `${country}.${treatment.key}: no treatment in the set moves a social-insurance base`,
       );
     }
   }

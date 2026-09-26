@@ -22,8 +22,8 @@ import { declaredPayrollTaxYears } from "./packs.ts";
  * is no closer to existing.
  *
  * The cost is paid by whoever is told the skeleton will be written for them. It
- * was paid twice in one afternoon: two shards were briefed that the generator
- * would scaffold their pack, and Italy's shard ran it, watched it aim at
+ * was paid twice in one afternoon: two pack teams were briefed that the
+ * generator would scaffold their pack, and Italy's team ran it, watched it aim at
  * `engine/src/payroll/it/editions/{year}.ts` — a directory no pack in this
  * repository has — and correctly wrote its edition by hand instead.
  *

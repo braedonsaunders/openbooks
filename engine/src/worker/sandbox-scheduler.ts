@@ -28,7 +28,7 @@ export function startSandboxScheduler(): void {
 }
 
 /**
- * Age-based reaper for tick claims whose job was lost (E08). The tick flips
+ * Age-based reaper for tick claims whose job was lost. The tick flips
  * ready→refreshing BEFORE the Redis enqueue; when the enqueue throws, the
  * catch above releases the claim — but an accepted-then-lost job (Redis
  * failover between accept and delivery) strands the sandbox in 'refreshing'

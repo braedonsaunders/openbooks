@@ -19,7 +19,7 @@ import {
 } from "../testing/fixtures.ts";
 
 /**
- * One period gate for property management (fleet 8, P7): rent levelling,
+ * One period gate for property management: rent levelling,
  * security-deposit recording/reversal, and CAM finalization route through
  * assertPeriodModulesOpen / arePeriodModulesOpen instead of raw
  * period_module_is_closed SQL. Policy is preserved — every one of these

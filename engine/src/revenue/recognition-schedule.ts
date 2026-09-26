@@ -1,4 +1,4 @@
-/** Pure recognition-schedule computation. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Pure recognition-schedule computation. Split from revenue/recognition.ts (pure moves only). */
 import { cmp, fromUnits, mulPercent, toUnits } from "../money/money.ts";
 import { MAX_RECOGNITION_INITIAL_PERCENT, MAX_RECOGNITION_TERM_MONTHS, MIN_RECOGNITION_INITIAL_PERCENT } from "./recognition-limits.ts";
 import { addDays, addMonths, daysInMonth, epochDay, eventMonth, inclusiveDays, monthEnd, monthStart, recognitionDate, recognitionInteger } from "./recognition-dates.ts";

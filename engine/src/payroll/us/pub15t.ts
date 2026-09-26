@@ -16,7 +16,7 @@
  * the current or preceding year, the flat rate is unavailable and method 1b
  * applies (or the run refuses until the 1b basis exists).
  *
- * Out of scope in this wave (documented, not forgotten): state income tax
+ * Out of scope in v1 (documented, not forgotten): state income tax
  * withholding (v1 covers the nine no-withholding states), nonresident-alien
  * additional amounts, and Form W-4P pension withholding.
  */

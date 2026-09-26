@@ -137,7 +137,7 @@ export const userPermissionOverrides = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Foreign keys (SQL, for the integrator's generated migration):
+// Foreign keys (SQL, for the generated migration):
 //
 // Role and assignment constraints are installed by forward migration 0097.
 // -- ALTER TABLE user_permission_overrides ADD FOREIGN KEY (org_id)  REFERENCES orgs(id)      ON DELETE CASCADE;

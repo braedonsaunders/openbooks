@@ -1,4 +1,4 @@
-/** Recognition event recording. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Recognition event recording. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { eventMonth, recognitionEventDecimal } from "./recognition-dates.ts";

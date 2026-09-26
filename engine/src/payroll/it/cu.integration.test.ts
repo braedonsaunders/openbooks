@@ -320,7 +320,7 @@ test(
     assert.equal(boxesA.get("INPS-6"), String(byId.get(empA)!.inpsWorker));
     const slipB = await filing.slip.build(orgId, TAX_YEAR, empB);
     const boxesB = new Map(slipB.boxes.map((box) => [box.code, box.value]));
-    // B is indeterminato since I6-payroll-297 (fixed-term box selection
+    // B is indeterminato (fixed-term box selection
     // stays covered by the pure cuSlipBoxes test): punto 1, never punto 2.
     assert.equal(boxesB.get("1"), String(byId.get(empB)!.redditi));
     assert.ok(!boxesB.has("2"));

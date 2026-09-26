@@ -221,7 +221,7 @@ const CORPORATE_REPORTABLE_BOXES: ReadonlySet<string> = new Set(["misc6", "misc8
  * All-zero weights put everything on the first bucket rather than losing it —
  * cash that left the bank has to land somewhere.
  *
- * Decision (ARCH-MONEY-BRAND): this stays its own splitter rather than a
+ * Decision: this stays its own splitter rather than a
  * thin caller of the kernel's allocateLargestRemainder or payroll's
  * allocateProportionally. It splits at unit (1e-4) precision while payroll
  * splits at cents with a throw-on-dust rule; it absorbs negative weights

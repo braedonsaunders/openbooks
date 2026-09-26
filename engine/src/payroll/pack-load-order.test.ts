@@ -65,8 +65,8 @@ test("no pack file imports a runtime binding out of packs.ts", () => {
   //
   // It kept coming back because PayrollPackError lived in packs.ts for the whole
   // life of the project and payroll-error.ts is new — so every new pack file
-  // reached for the old home. Round 1 found it in 2 packs; the parent checked and
-  // found 5; the registration shard found a 6th in au/tax-year-2027.ts; and three
+  // reached for the old home. An early scan found it in 2 packs; a follow-up
+  // check found 5; the registration scan found a 6th in au/tax-year-2027.ts; and three
   // more arrived with the DE and FR engines (de/pap.ts, fr/tables-2026.ts,
   // fr/compute-statutory.ts). A runtime probe only catches the pack the current
   // order happens to hit first, so this scan is the thing that actually holds.

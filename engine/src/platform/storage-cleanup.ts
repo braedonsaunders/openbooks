@@ -10,7 +10,7 @@ import {
 } from "./file-storage.ts";
 
 /**
- * Durable S3 cleanup outbox (migration 0386, I5-platform-41/-57).
+ * Durable S3 cleanup outbox (migration 0386).
  *
  * Object storage has no transactions: a blob written before its DB commit
  * (or deleted beside a row delete) can strand bytes no row references when

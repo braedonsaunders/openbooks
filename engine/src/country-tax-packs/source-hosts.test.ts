@@ -3,9 +3,9 @@ import test from "node:test";
 import { COUNTRY_TAX_PACKS } from "./index.ts";
 
 /**
- * Fleet-wide source-host guard (tax-vendor-sweep). The per-wave proofs each
- * allowlist only their own wave's countries, so a pack resting on a vendor
- * or junk host outside its wave went unnoticed three times (a Sovos page
+ * Repository-wide source-host guard. The per-group proofs each allowlist
+ * only their own group's countries, so a pack resting on a vendor or junk
+ * host outside its group went unnoticed three times (a Sovos page
  * behind RO, a Jimdo CDN and a private mirror behind MX, a private PDF
  * behind HU). This test scans EVERY registered pack as a set: each source
  * URL must sit on an authority host or a NAMED per-source-id exception.

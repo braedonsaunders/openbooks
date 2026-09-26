@@ -39,8 +39,8 @@ const TR_KDV1_2026: TaxReturnPack = {
  * 30.12.2007 sayı 26742, decided 24/12/2007 under KDV Kanunu md. 28 ve 36,
  * read at the gazette's own URL
  * https://www.resmigazete.gov.tr/eskiler/2007/12/20071230-4.htm by a host
- * whose network reaches resmigazete.gov.tr (this sandbox's TLS cannot; a
- * sandbox limitation, recorded per the pack-fleet fetch rules). Operative
+ * whose network reaches resmigazete.gov.tr (this sandbox's TLS cannot —
+ * a sandbox fetch limitation). Operative
  * Madde 1 — the legacy page encoding strips Turkish diacritics, the
  * figures are unambiguous:
  *

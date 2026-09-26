@@ -167,7 +167,7 @@ test("drafting writes nowhere except ai_decisions", async () => {
           compensationMin: "90000", compensationMax: "110000",
           compensationCurrency: "CAD", compensationBasis: "annual",
           description: "Own the queue", positionId: null,
-          // The subject gate (I3-people-60) reads the requisition's owning
+          // The subject gate reads the requisition's owning
           // subsidiary: the stubbed subject lives in the actor's scope.
           employerSubsidiaryId: "sub-1",
         }] };

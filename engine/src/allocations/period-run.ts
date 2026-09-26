@@ -53,14 +53,14 @@ function driverAsOf(raw: string): AllocationDriverAsOf {
 }
 
 /**
- * Period-mode allocation runs (shard A3).
+ * Period-mode allocation runs.
  *
  * preview → post → reverse / rerun over one allocation rule, one accounting
  * period, one book. The full explain payload (sources, driver vector,
  * per-target weight/share/amount/residual, journal lines) is stored on the
  * run; post and reverse never recompute, they mirror what preview stored.
  *
- * Apportionment is A1's canonical `./apportion.ts` (`apportion` plus
+ * Apportionment is the canonical `./apportion.ts` (`apportion` plus
  * `fixedPercentWeights`): exact bigint money, floors plus a single residual
  * absorber, Σ(amounts) === total always. Likewise the driver vector resolves
  * through A2's `./drivers.ts` dispatcher by default (test doubles still plug
@@ -152,7 +152,7 @@ export interface RerunAllocationRunResult {
 
 
 // ---------------------------------------------------------------------------
-// Apportionment is A1's canonical engine (`./apportion.ts`): exact bigint
+// Apportionment is the canonical engine (`./apportion.ts`): exact bigint
 // money, floors plus a single residual absorber, Σ(amounts) === total always.
 // ---------------------------------------------------------------------------
 
@@ -719,7 +719,7 @@ async function resolveDriverVectorForRun(
     throw new AllocationRunError("NOT_FOUND", `allocation driver ${opts.version.driver_id} does not belong to this organization`);
   }
   if (!driver.is_active) throw new AllocationRunError("INVALID", `allocation driver ${driver.key} is not active`);
-  // A2's dispatcher covers every source_kind; report_definition needs the
+  // The driver dispatcher covers every source_kind; report_definition needs the
   // production runner, which the single service factory provides by default.
   // Callers may still inject a test double through deps.
   const resolver = deps.driverResolver ?? allocationServiceDeps().driverResolver;
@@ -1071,7 +1071,7 @@ async function buildComputation(
     throw new AllocationRunError("INVALID", "allocation produced no positive target weight");
   }
 
-  // A1's absorber precedence: an explicit residual key wins, else a sole
+  // Absorber precedence: an explicit residual key wins, else a sole
   // remainder target absorbs, else the residual policy decides.
   const residualKey = opts.version.residual_policy === "explicit_target"
     ? (opts.version.residual_target_id ?? undefined)

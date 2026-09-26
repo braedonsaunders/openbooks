@@ -289,7 +289,7 @@ export async function executeFlowPlan(
       }
 
       case "post_document": {
-        // Posting lives behind the installed document-effects port (C14):
+        // Posting lives behind the installed document-effects port:
         // the executor never imports ledger/payments. The port runs inline
         // in this call chain, so the ambient pinned org transaction is
         // unchanged; a missing port throws instead of reporting posted.

@@ -14,9 +14,9 @@
  *     lease claims, and idempotency keys; the tick claim is only the coarse
  *     fan-out gate per topology.
  *
- * The primitive itself lives here (moved from the report scheduler in
- * ARCH-MODULE-CYCLE C07 so the scheduling module no longer depends on the
- * worker); the report scheduler borrows it like every other topology. Like
+ * The primitive itself lives here (moved from the report scheduler so the
+ * scheduling module no longer depends on the worker); the report scheduler
+ * borrows it like every other topology. Like
  * every session lock it dies with its connection: released in a finally block
  * on success and error paths, with a broken connection discarded rather than
  * returned to the pool so a stale claim can never leak back into circulation.

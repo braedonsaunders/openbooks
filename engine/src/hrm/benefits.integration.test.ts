@@ -49,12 +49,12 @@ import {
 import { installEngineSeams } from "../composition/install.ts";
 
 // Gate releases and post_document run through the installed engine
-// seams (C13/C14); without this the gates strand on a not-registered
+// seams; without this the gates strand on a not-registered
 // refusal instead of releasing.
 installEngineSeams();
 
 /**
- * HR-8 DB coverage (integration partition — run by the integrator at gate;
+ * HR-8 DB coverage (integration partition — run at the integration gate;
  * skips without OPENBOOKS_DB_URL): migration 0197 bootstraps plus RLS,
  * every named refusal through the real code path, the termination hook
  * through the real change-request apply path (and its rollback),

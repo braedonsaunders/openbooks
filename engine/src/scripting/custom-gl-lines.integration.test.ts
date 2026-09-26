@@ -1,6 +1,6 @@
 // Run with:  env $OB_TEST_ENV node --no-concurrent-sparkplug --no-concurrent-recompilation --import tsx --import ./engine/src/testing/database-bypass.ts --test --test-force-exit --test-reporter=tap engine/src/scripting/custom-gl-lines.integration.test.ts   (from repo root)
 //
-// custom_gl_lines trigger (allocation kernel, shard A6): tenant-authored extra
+// custom_gl_lines trigger (allocation kernel): tenant-authored extra
 // GL lines contributed to a document's own journal entry at posting. Scripts
 // see the kernel lines read-only and return { lines: [...] }; the host
 // validates (max 200 lines, account resolution, org ownership, per-subsidiary

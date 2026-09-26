@@ -398,7 +398,7 @@ export async function resolveFeedOrg(feedToken: string): Promise<string> {
     return found ?? null;
   });
   if (!row) throw new RecruitingError("NOT_FOUND", "this feed's organization no longer exists");
-  // I3-people-102: the feed is the generic job board — serving it while
+  // The feed is the generic job board — serving it while
   // hrmJobBoards (or its hrmRecruiting parent) is off bypasses the switch.
   await withOrgTransaction(row.orgId, () => requireDepthFeature(db, row.orgId, "hrmJobBoards"));
   return row.orgId;
@@ -413,7 +413,7 @@ export async function listFeedPostings(orgId: string): Promise<
   // boundary the listing silently returns zero postings. The token resolved
   // the org above; the read runs inside it.
   return withOrgTransaction(orgId, async () => {
-    // I3-people-102: same gate for direct service callers bypassing the token.
+    // Same gate for direct service callers bypassing the token.
     await requireDepthFeature(db, orgId, "hrmJobBoards");
     const rows = (await db.execute<{
       postingId: string;

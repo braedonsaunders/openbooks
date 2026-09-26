@@ -396,7 +396,7 @@ export async function processCloseDeliveryJobData(
         // Manual "Send now": the intent key comes from the request, never
         // from the worker — a double-click or retried send reuses the
         // client's key and collapses onto one delivery instead of minting a
-        // fresh random key per invocation and sending both mails (E04).
+        // fresh random key per invocation and sending both mails.
         emailIntentKey = closeDeliveryManualEmailIntentKey({
           orgId,
           packageId: data.packageId,

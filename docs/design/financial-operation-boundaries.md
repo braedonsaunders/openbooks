@@ -104,4 +104,4 @@ nonce-marked database, the database-bypass preload, and scratch-owned TypeScript
 resolution. Both database and template were dropped afterwards. CI-form
 workspace typechecks passed on the measured source; targeted mutation harness
 and evidence checks passed 36/36 with zero skips after publication. Combined
-unit and full integration gates remain the integrator's landing obligation.
+unit and full integration gates must both pass before merge.

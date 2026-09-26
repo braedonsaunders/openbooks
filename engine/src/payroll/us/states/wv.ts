@@ -442,7 +442,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     : "two_earner";
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
   const grossWages = U(input.wages) + U(input.supplemental ?? "0");
-  // Nonresidents withhold on verified West Virginia-source wages (I6-payroll-131);
+  // Nonresidents withhold on verified West Virginia-source wages;
   // the mobile exclusion below prices off the same allocation when it applies.
   let wages = input.basis === "nonresident"
     ? U(requireUsSourceWages(input.wageAllocations, "WV", null))
@@ -490,9 +490,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // every West Virginia day that year withholds — the prior exempt wages
   // are caught up through the same percentage method. Without the filed
   // eligibility attestation the exclusion does not apply (fail closed).
-  // (The general nonresident source-wage base is the separately delivered
-  // I6-payroll-131 change; this path prices the mobile exclusion on the
-  // verified allocation it requires.)
+  // (The general nonresident source-wage base was delivered separately;
+  // this path prices the mobile exclusion on the verified allocation it
+  // requires.)
   let catchUpSourceWages = "0.0000";
   let catchUpPeriods = 0;
   const mobileFactors: Record<string, string> = {};

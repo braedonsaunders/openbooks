@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 /**
- * One period gate (fleet 8, P7): app-layer code must never call the raw
+ * One period gate: app-layer code must never call the raw
  * `period_module_is_closed()` SQL function directly. That function knows
  * nothing about the allowImportedLocks exemption — it refuses
  * source-owned imported locks exactly like user locks — while the shared

@@ -62,8 +62,9 @@ executed) / error (does not parse — excluded from the score, never killed).
 per target. `mutation-floor.test.ts` (runs in the unit suite) fails when a
 measured score drops below its floor, when a target goes unmeasured, when a
 baseline is red, or when config/report/floor drift apart. Floors move only by
-explicit commit of report + floor together; the coordinator decides when to
-raise. Sampling is seeded and deterministic, so the same code + config +
+explicit commit of report + floor together; ratifying a higher floor is an
+explicit reviewed decision. Sampling is seeded and deterministic, so the
+same code + config +
 sample always yields the same mutant set — a floor failure means the code or
 its coverage changed, never dice.
 

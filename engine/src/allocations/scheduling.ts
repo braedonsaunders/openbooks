@@ -9,7 +9,7 @@ import {
 } from "./period-run.ts";
 
 /**
- * Allocation scheduling (fleet A10): the scheduler-outbox kind
+ * Allocation scheduling: the scheduler-outbox kind
  * `allocation_run` and the close-automation `run_allocation` action.
  *
  * Both paths call the real period-run engine directly: preview the

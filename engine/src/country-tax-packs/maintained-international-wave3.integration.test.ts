@@ -9,7 +9,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const selections = ["IN_GSTR3B", "ZA_VAT201", "AE_VAT201", "JP_CONSUMPTION"] as const;
 
 test(
-  "third-wave maintained packs install atomically, preserve evidence, and rerun idempotently",
+  "maintained packs in this group install atomically, preserve evidence, and rerun idempotently",
   { skip: !DB },
   async () => {
     const target = await withBypass(() => createScratchOrg());

@@ -1,4 +1,4 @@
-/** Statement byte/text decoding. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Statement byte/text decoding. Split from banking.ts (pure moves only). */
 import { BankingError, type StatementSourceContent, type StatementTextSource } from "./banking-core"
 
 const STATEMENT_ENCODING_ALIASES: Readonly<Record<string, string>> = {

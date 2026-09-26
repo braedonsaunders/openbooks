@@ -1,4 +1,4 @@
-/** The run resolved jurisdiction context. Split from packs.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** The run resolved jurisdiction context. Split from packs.ts (pure moves only). */
 import { type PayrollAssessedOn, type PayrollCountry, type PayrollCountryPack } from "./pack-types"
 import { PAYROLL_COUNTRY_PACKS, packStatutoryComponents, payrollPack, payrollCountry } from "./pack-registry"
 import { payrollTaxYear, assertPayrollRegionSupported } from "./pack-tax-years"

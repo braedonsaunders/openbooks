@@ -1,4 +1,4 @@
-/** Security-deposit subledger. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Security-deposit subledger. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";

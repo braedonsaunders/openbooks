@@ -848,7 +848,7 @@ export async function requireOrgChartRead(
 }
 // HR-19 end
 
-// H-lens begin: party-subject subsidiary lens shared across hrm/ (H wave).
+// H-lens begin: party-subject subsidiary lens shared across hrm/.
 // Every decision below delegates to the canonical subsidiary-scope module
 // (engine/src/organization/subsidiary-scope.ts) — the HRM layer only loads
 // person/employment subjects and keeps the HRM refusal shapes. Do not add a

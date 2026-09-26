@@ -254,7 +254,7 @@ export const reportDeliveryOutbox = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass to
+FOREIGN KEYS (added by the generated migration to
 schema/migrations/referential-integrity.sql):
   report_definitions.org_id             → orgs.id
   report_definitions.created_by         → users.id

@@ -81,7 +81,7 @@ export const US_NEXUS_OVERRIDES: Record<string, Omit<StateNexusThreshold, 'state
   IA: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
   ND: { salesUsd: '100000', txnCount: null, measure: 'sales_only' },
   NJ: { salesUsd: '100000', txnCount: 200, measure: 'sales_or_txn' },
-  // Remote-seller $250k sales-only thresholds (I3-people-03): Alabama DOR
+  // Remote-seller $250k sales-only thresholds: Alabama DOR
   // and Mississippi DOR apply $250,000 in retail sales with no transaction
   // trigger, so the generic $100k OR 200-transaction default over-applies.
   // Statutory measurement windows are separate per-state rules.

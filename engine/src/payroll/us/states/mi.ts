@@ -15,7 +15,7 @@
  *     cities that may levy, and the 2:1 resident/nonresident rate structure.
  *
  * ---------------------------------------------------------------------------
- * Why Michigan is in this wave
+ * Why Michigan is in this group
  * ---------------------------------------------------------------------------
  * It stresses the sub-region layer from the opposite direction to Ohio. Ohio's
  * problem is COUNT — several hundred municipalities nobody can enumerate.

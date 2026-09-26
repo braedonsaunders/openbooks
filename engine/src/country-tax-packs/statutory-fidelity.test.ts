@@ -4,11 +4,11 @@ import { COUNTRY_TAX_PACKS, packReturnCodesWithTaxCodes, packTaxCodesForReturn }
 import type { CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
 
 /**
- * Statutory fidelity of rate bands vs return boxes (AUDIT-C 81–86): every
- * rate a pack can price must have a declared destination on its return —
- * a real box/casilla/line — and every band's window must open at a sourced
- * effective date, never at the fetch date. Either half fails fleet-wide, so
- * a new pack (or a new band on an old pack) cannot reintroduce the shape.
+ * Statutory fidelity of rate bands vs return boxes: every rate a pack
+ * can price must have a declared destination on its return — a real
+ * box/casilla/line — and every band's window must open at a sourced
+ * effective date, never at the fetch date. Either half fails for every
+ * pack, so no new pack or band can reintroduce the shape.
  */
 
 function governmentBoxes(pack: CountryTaxPackDefinition, returnPackCode: string): TaxReturnPackBox[] {

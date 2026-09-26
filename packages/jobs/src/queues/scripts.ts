@@ -16,7 +16,7 @@ export type ScriptJobData = {
   /** Who pressed Run now (absent for cron ticks). */
   actorId?: string
   /**
-   * The caller's run key for interactive bulk runs (E02). The worker
+   * The caller's run key for interactive bulk runs. The worker
    * re-checks the durable claim under this key because BullMQ dedupe only
    * covers live jobs: a redelivered duplicate reconciles onto the recorded
    * outcome instead of executing the script twice. Absent on scheduled runs

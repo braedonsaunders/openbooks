@@ -23,14 +23,14 @@ import {
 } from "../hrm/flow-releases.ts";
 
 /**
- * Composition root (ARCH-MODULE-CYCLE C12): the one place that wires engine
+ * Composition root: the one place that wires engine
  * modules across layering seams.
  *
  * scripting sits below the ledger orchestrator, so it cannot import
  * createScriptJournal; instead the process installs the ledger's writer
  * here and the __journal_create host call invokes it inline, in the same
  * ambient transaction. The engine-owned approval-release handlers register
- * on this same root (C13), as does the document-effects port (C14).
+ * on this same root, as does the document-effects port.
  *
  * Idempotent: re-registering the same writer is a no-op. Call it from every
  * process that can post, run scripts or run flows — web/instrumentation,
@@ -41,14 +41,14 @@ import {
  */
 export function installEngineSeams(): void {
   registerScriptJournalWriter(createScriptJournal);
-  // Engine-owned approval releases (C13): the adapters delegate through
+  // Engine-owned approval releases: the adapters delegate through
   // releaseFlowApproval; the handlers run inside decideGate's transaction.
   registerFlowApprovalReleaseHandler(ALLOCATION_RUN_SUBJECT_KIND, releaseAllocationRunApproval);
   registerFlowApprovalReleaseHandler(CLOSE_RUN_SUBJECT_KIND, releaseCloseRunApproval);
   registerFlowApprovalReleaseHandler(HRM_COMP_CYCLE_SUBJECT_KIND, releaseCompCycleApproval);
   registerFlowApprovalReleaseHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, releaseHrmChangeRequestApproval);
   registerFlowApprovalReleaseHandler(HRM_LEAVE_REQUEST_SUBJECT_KIND, releaseLeaveRequestApproval);
-  // Document effects (C14): post_document and before_void completion,
+  // Document effects: post_document and before_void completion,
   // verbatim from flows/execute.ts and flows/documents-adapter.ts. Runs
   // inline in the caller's chain, so the ambient pinned org transaction
   // that `db` routes to does not change.

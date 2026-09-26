@@ -379,8 +379,8 @@ test("succession plans and candidates stay inside the fence", async () => {
       select count(*)::text as n from hrm_succession_candidates
        where org_id = ${h.org.orgId} and plan_id = ${planA.id}`)).rows[0]!.n;
     // Two API-added candidates plus the out-of-scope row planted raw above
-    // (I3-people-55 changed that plant from a refused duplicate rank to a
-    // succeeding fence probe without rebasing these counts).
+    // (the out-of-scope row planted raw above probes the succeeding fence,
+    // not the duplicate-rank refusal, without rebasing these counts).
     assert.equal(remainingBeforeDraft, "3");
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrAll, id: planA.id, status: "draft" });
     await removeSuccessionCandidate({ orgId: h.org.orgId, actorId: h.hrAll, planId: planA.id, candidateId: candidate.id });

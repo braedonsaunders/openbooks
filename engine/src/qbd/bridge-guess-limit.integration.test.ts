@@ -8,7 +8,7 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(env.OPENBOOKS_DB_URL && env.OPENBOOKS_DATA_KEY);
 
-// WAVE 9 (inbound authenticity): the Web Connector password is user-chosen
+// Inbound authenticity: the Web Connector password is user-chosen
 // (min 16 chars, typed into the desktop client), so authenticate must bound
 // online guessing per connection — unlimited wrong passwords must not leave
 // the correct password working, and one connection's flood must not lock out

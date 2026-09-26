@@ -81,7 +81,7 @@ export async function storeEmailAttachments(
     // The caller never receives partial refs, so a mid-loop failure must
     // delete every key this call already wrote before rethrowing —
     // otherwise the orphaned blobs sit in object storage unreferenced
-    // forever (no TTL covers them). I5-platform-57: the inline delete stays,
+    // forever (no TTL covers them). The inline delete stays,
     // and when the caller names its org a durable cleanup intent is recorded
     // first so the worker retries what inline cannot confirm.
     if (opts?.orgId) {

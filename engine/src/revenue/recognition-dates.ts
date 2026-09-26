@@ -1,4 +1,4 @@
-/** Date/decimal input helpers for recognition math. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Date/decimal input helpers for recognition math. Split from revenue/recognition.ts (pure moves only). */
 import { MAX_RECOGNITION_DAY_OFFSET, MIN_RECOGNITION_DAY_OFFSET } from "./recognition-limits.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { RevenueRecognitionError } from "./recognition-transaction-price.ts";

@@ -2,8 +2,8 @@
  * The contract a US state withholding engine satisfies.
  *
  * There is deliberately NO single "state tax table" shape here, and that is the
- * central design decision of this directory. The four states delivered in this
- * wave compute withholding four genuinely different ways:
+ * central design decision of this directory. The four states delivered here
+ * compute withholding four genuinely different ways:
  *
  *   Pennsylvania  a flat rate on compensation, no allowances, no deduction,
  *                 no brackets, no filing status. Three lines of arithmetic.

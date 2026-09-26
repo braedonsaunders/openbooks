@@ -1297,7 +1297,7 @@ export async function runBulkScript(
   };
   // Retry identity: a claimed run-key intent reuses its stable scope, so a
   // stall redelivery replays the first execution's documents instead of
-  // double-posting (E02). Unkeyed launches are distinct runs (a fresh
+  // double-posting. Unkeyed launches are distinct runs (a fresh
   // operator press with no key): a per-run namespace, so two launches never
   // share keys. Timeout retries rely on deadline fencing (a fenced write
   // commits nothing).
@@ -1578,7 +1578,7 @@ export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
   }
 }
 
-// --- custom_gl_lines: allocation-kernel GL plug-in (A6) ----------------------
+// --- custom_gl_lines: allocation-kernel GL plug-in --------------------------
 // Tenant-authored extra GL lines on a document's own journal entry. The
 // posting seam (prepareDocumentPosting, after rule contributions) calls
 // runCustomGlLineScripts with the kernel lines; each active script's main(ctx)
@@ -1639,7 +1639,7 @@ export async function customGlLinesEnabled(orgId: string): Promise<boolean> {
 /**
  * Run every active custom_gl_lines script for the document kind, in
  * sort_order, and collect their validated contributions. Rule contributions
- * (A5) run first at the seam; scripts observe them through kernelLines. The
+ * run first at the seam; scripts observe them through kernelLines. The
  * first error — a failed run or a refused line set — throws and halts
  * posting; script_runs evidence for every script that ran is already recorded
  * in the posting transaction, and the in-memory twin rides on the thrown
@@ -1956,7 +1956,7 @@ export async function resolveCustomGlLines(
     }
   }
 
-  // Secondary-book targets arrive with allocation rule support (A5); a script
+  // Secondary-book targets arrive with allocation rule support; a script
   // line pinned to a non-primary book is refused rather than silently posted
   // to the primary book.
   const bookCodes = [...new Set(parsed.map((l) => l.bookCode).filter((x): x is string => typeof x === "string"))];

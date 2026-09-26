@@ -124,7 +124,7 @@ export const apiKeyEvents = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass — referential-integrity.sql):
+FOREIGN KEYS (added by the generated migration — referential-integrity.sql):
   api_keys.org_id             → orgs.id ON DELETE CASCADE
   api_keys.user_id            → users.id ON DELETE CASCADE
   api_keys.created_by         → users.id

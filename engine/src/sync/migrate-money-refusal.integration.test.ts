@@ -69,7 +69,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      // Valid wave first: every resource lands, proving the refusal wave
+      // Valid batch first: every resource lands, proving the refusal batch
       // below fails on the money and not on some missing fixture.
       const valid = await withOrg(org.orgId, () =>
         loadEntities(stubSource(), org.orgId, null, undefined, undefined, [
@@ -81,7 +81,7 @@ test(
         ]),
       );
       for (const resource of ["time_types", "tax_codes", "payment_terms", "items", "projects"]) {
-        assert.equal(valid[resource]?.failed ?? -1, 0, `${resource} valid wave lands`);
+        assert.equal(valid[resource]?.failed ?? -1, 0, `${resource} valid batch lands`);
       }
       const landed = await counts(org.orgId);
 

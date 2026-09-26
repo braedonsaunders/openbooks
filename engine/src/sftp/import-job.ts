@@ -452,7 +452,7 @@ async function runClaimedSchedule(
          where sv.id = ${s.sftp_server_id} and sv.org_id = ${s.org_id}
          for share of sv, o, a
       `)).rows[0];
-      // Each ineligibility names its own remedy (I1-refix-159): a single
+      // Each ineligibility names its own remedy: a single
       // "no longer active" message sends the operator to reactivate a
       // schedule that is already active when the server or switch is the
       // actual cause.

@@ -1,6 +1,6 @@
 /**
  * Script-journal contract: the governed sandbox -> ledger write shapes.
- * Moved verbatim from ledger/journal-writes.ts (ARCH-MODULE-CYCLE C12) so
+ * Moved verbatim from ledger/journal-writes.ts so
  * scripting can type the installed journal writer without importing the
  * ledger orchestrator. Pure types: no runtime imports, no module edges.
  */

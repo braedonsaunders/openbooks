@@ -239,7 +239,7 @@ export async function resolveOrgEmailTransport(orgId: string): Promise<EmailTran
 }
 
 /**
- * Resolve an org's transport naming why it cannot send (E05). `unusable`
+ * Resolve an org's transport naming why it cannot send. `unusable`
  * (rotated session secret, corrupt credential) must fail and retry — never
  * ack as "not configured", which would drop every mail forever.
  */

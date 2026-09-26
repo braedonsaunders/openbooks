@@ -21,7 +21,7 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fix
  * first published.
  *
  * The stubbed jobs module keeps the test hermetic (delivery is best-effort
- * after commit; the wave-1 test proves deliverability itself).
+ * after commit; a separate delivery test proves deliverability itself).
  */
 (globalThis as Record<string, unknown>).__p06closeVersionDelivery = async () => {};
 const hooks = registerHooks({

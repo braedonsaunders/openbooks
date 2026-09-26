@@ -1,4 +1,4 @@
-/** Property management. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Property management. Split from property/management.ts (pure moves only). */
 export { billCamReconciliation, cancelCamPool, createCamPool, finalizeCamPool, reopenFinalizedCamPool, updateCamPool } from "./cam.ts";
 export { recordSecurityDeposit, reverseSecurityDepositTransaction } from "./deposits.ts";
 export { MAX_LEASE_SCHEDULE_HORIZON_MONTHS, activatePropertyLease, addLeaseEscalation, applyLeaseEscalation, scheduleLeaseCharges, terminatePropertyLease } from "./lease-schedules.ts";

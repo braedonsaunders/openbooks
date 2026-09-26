@@ -150,7 +150,7 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // No `emp` facts: the engine reads TFN declarations off the certificate
   // answers, never off bare profile keys.
   employeeFacts: [],
-  // State payroll tax position (I6-payroll-221): required, so a run with
+  // State payroll tax position: required, so a run with
   // covered wages and no established position refuses instead of silently
   // omitting a possibly-owed levy.
   employerFacts: AU_EMPLOYER_FACTS,

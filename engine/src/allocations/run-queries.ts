@@ -4,13 +4,14 @@ import { allocationScopeVisible } from "../organization/allocation-scope.ts";
 import type { AllocationRunStatus, AllocationRunTrigger, RunComputation } from "./types.ts";
 
 /**
- * Run + lineage READS for the Runs tab and the lineage drill (A8).
+ * Run + lineage READS for the Runs tab and the lineage drill.
  *
- * A3 (`period-run.ts`) owns the run lifecycle (preview/post/reverse/rerun,
- * `listRuns`); until it lands, the Runs tab reads through this module, which
- * queries only the frozen 0160 schema. When A3 lands, routes rewire to its
- * `listRuns` and this module keeps the lineage-drill read plus the
- * subsidiary-visibility predicate (or is deleted — see the ledger).
+ * The period-run module (`period-run.ts`) owns the run lifecycle
+ * (preview/post/reverse/rerun, `listRuns`); until it exists, the Runs tab
+ * reads through this module, which queries only the frozen 0160 schema.
+ * When it exists, routes rewire to its `listRuns` and this module keeps
+ * the lineage-drill read plus the subsidiary-visibility predicate (or is
+ * deleted — see the ledger).
  */
 
 export type RunQueryCode = "validation" | "not_found";

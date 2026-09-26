@@ -14,7 +14,7 @@ import type {
 } from "./types.ts";
 
 /**
- * Driver registry administration (A8).
+ * Driver registry administration.
  *
  * A2 (`drivers.ts`) owns driver evaluation (`resolveDriverVector`) and the
  * manual values read path; this module owns the registry WRITES the Drivers
