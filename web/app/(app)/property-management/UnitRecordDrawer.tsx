@@ -6,6 +6,7 @@ import { Button, Card, CardContent, Drawer, Input, Popover, Table, TableBody, Ta
 import { Empty, Field, Read, RecordTabs, Status } from "./workspace-ui";
 import type { LeaseRow, PropertyRow, SaveAction, UnitRow } from "./types";
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { confirmDialog } from '@/lib/confirm'
 
 export function UnitRecordDrawer({
   unit,
@@ -141,8 +142,9 @@ export function UnitRecordDrawer({
                 variant="ghost"
                 className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
                 disabled={busy}
-                onClick={() => {
-                  if (window.confirm(`Delete unit ${unit.code}? Only units without lease history can be deleted.`)) void onDelete();
+                onClick={async () => {
+                  if (!(await confirmDialog(`Delete unit ${unit.code}? Only units without lease history can be deleted.`))) return
+                  void onDelete();
                 }}
               >
                 Delete unit

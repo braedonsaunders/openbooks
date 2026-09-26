@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { confirmDialog } from '@/lib/confirm'
 import { supportedFormActionsFor } from '../../../../lib/customization/form-actions'
 import {
   customFieldDefKey,
@@ -416,7 +417,7 @@ export function FormDesigner({
     if (!def?.id) return
     // Deleting the org default silently drops the record type back to the
     // standard layout for every user — confirm first, naming the fallback.
-    if (def?.isDefault && !window.confirm(t('designer.forms.deleteDefaultConfirm', { name: def.name ?? '' }))) return
+    if (def?.isDefault && !(await confirmDialog(t('designer.forms.deleteDefaultConfirm', { name: def.name ?? '' })))) return
     setBusy(true)
     try {
       const res = await fetch(`/api/customization/form-layouts/${def.id}`, { method: 'DELETE' })

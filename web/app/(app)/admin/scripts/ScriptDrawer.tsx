@@ -8,6 +8,8 @@ import { toast } from 'sonner'
 import { CodeEditor } from '@/components/code-editor'
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { dateTime } from '../../../../lib/format'
+import { apiJson } from '@/lib/api-error'
+import { confirmDialog } from '@/lib/confirm'
 import { BUILT_IN_SCRIPT_KINDS, customRecordKind } from '../../../../lib/script-kinds'
 import type { ScriptDetailRow, ScriptRunRow } from './view'
 
@@ -192,47 +194,49 @@ export function ScriptDrawer({
 
   async function save() {
     setBusy(true)
-    const res = await fetch('/api/admin/scripts', {
-      method: creating ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: script?.id,
-        name,
-        triggerPoint,
-        documentKind: hasDocKind ? (documentKind || null) : null,
-        endpointSlug: isEndpoint ? endpointSlug.trim() : null,
-        source,
-        cron: isScheduled ? cron : null,
-        timeoutMs: timeoutMs.trim() === '' ? 2000 : Number(timeoutMs),
-        sortOrder: sortOrder.trim() === '' ? 100 : Number(sortOrder),
-        isActive,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('drawer.saveFailed'))
+    try {
+      await apiJson<unknown>(
+        '/api/admin/scripts',
+        {
+          method: creating ? 'POST' : 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: script?.id,
+            name,
+            triggerPoint,
+            documentKind: hasDocKind ? (documentKind || null) : null,
+            endpointSlug: isEndpoint ? endpointSlug.trim() : null,
+            source,
+            cron: isScheduled ? cron : null,
+            timeoutMs: timeoutMs.trim() === '' ? 2000 : Number(timeoutMs),
+            sortOrder: sortOrder.trim() === '' ? 100 : Number(sortOrder),
+            isActive,
+          }),
+        },
+        t('drawer.saveFailed'),
+      )
+      toast.success(creating ? t('drawer.created') : t('drawer.saved'))
+      router.push('/admin/scripts')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('drawer.saveFailed'))
       setBusy(false)
-      return
     }
-    toast.success(creating ? t('drawer.created') : t('drawer.saved'))
-    router.push('/admin/scripts')
-    router.refresh()
   }
 
   async function deleteScript() {
     if (!script?.id) return
-    if (!confirm(t('drawer.deleteConfirm'))) return
+    if (!(await confirmDialog(t('drawer.deleteConfirm')))) return
     setBusy(true)
-    const res = await fetch(`/api/admin/scripts/${script.id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const data = await res.json().catch(() => null)
-      toast.error(data?.error ?? t('drawer.deleteFailed'))
+    try {
+      await apiJson<unknown>(`/api/admin/scripts/${script.id}`, { method: 'DELETE' }, t('drawer.deleteFailed'))
+      toast.success(t('drawer.deleted'))
+      router.push('/admin/scripts')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('drawer.deleteFailed'))
       setBusy(false)
-      return
     }
-    toast.success(t('drawer.deleted'))
-    router.push('/admin/scripts')
-    router.refresh()
   }
 
   // One run key per drawer instance, rotated once the server answers with
@@ -244,19 +248,20 @@ export function ScriptDrawer({
     if (!script?.id) return
     setRunning(true)
     try {
-      const res = await fetch(`/api/admin/scripts/${script.id}/run`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ idempotencyKey: runKey }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('drawer.runFailed'))
-      } else if (data.queued) {
+      const data = await apiJson<{ queued?: boolean; status?: string; durationMs?: number; abortReason?: string }>(
+        `/api/admin/scripts/${script.id}/run`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ idempotencyKey: runKey }),
+        },
+        t('drawer.runFailed'),
+      )
+      if (data.queued) {
         toast.success(t('drawer.runOk', { ms: 0 }))
         setRunKey(crypto.randomUUID())
       } else if (data.status === 'ok') {
-        toast.success(t('drawer.runOk', { ms: data.durationMs }))
+        toast.success(t('drawer.runOk', { ms: data.durationMs ?? 0 }))
         setRunKey(crypto.randomUUID())
       } else {
         toast.error(t('drawer.runFailed') + (data.abortReason ? `: ${data.abortReason}` : ''))
@@ -265,8 +270,8 @@ export function ScriptDrawer({
       setTab('log')
       setSelectedRun(0)
       router.refresh()
-    } catch {
-      toast.error(t('drawer.runFailed'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('drawer.runFailed'))
     } finally {
       setRunning(false)
     }

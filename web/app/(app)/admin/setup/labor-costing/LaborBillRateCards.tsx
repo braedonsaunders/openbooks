@@ -176,12 +176,19 @@ export function LaborBillRateCards(props: {
           ...(props.multiCurrency ? { currency: props.currencies[0] ?? "CAD" } : {}),
         }),
       });
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => null)) as {
+          errorCode?: unknown;
+        } | null;
+        const code = typeof failure?.errorCode === "string" ? failure.errorCode : "save";
+        toast.error(t(`errors.${code}`));
+        return;
+      }
       const result = (await response.json()) as {
         id?: string;
-        errorCode?: string;
       };
-      if (!response.ok || !result.id) {
-        toast.error(t(`errors.${result.errorCode ?? "save"}`));
+      if (!result.id) {
+        toast.error(t("errors.save"));
         return;
       }
       router.push(
@@ -386,9 +393,12 @@ function RateCardDrawer(
           ...(props.multiCurrency ? { currency } : {}),
         }),
       });
-      const result = (await response.json()) as { errorCode?: string };
       if (!response.ok) {
-        toast.error(t(`errors.${result.errorCode ?? "save"}`));
+        const failure = (await response.json().catch(() => null)) as {
+          errorCode?: unknown;
+        } | null;
+        const code = typeof failure?.errorCode === "string" ? failure.errorCode : "save";
+        toast.error(t(`errors.${code}`));
         return;
       }
       toast.success(t("saved"));

@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Ban, Bolt, Eye, Plus, Trash2, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { confirmDialog } from '@/lib/confirm'
 import { useDirtyClose } from '@/lib/use-dirty-close'
 import { Button, Drawer, Input, Label, Select, SearchSelect, UrlDrawer, cn } from '@openbooks/ui'
 import { ConditionBuilder } from '../../../../components/conditions/ConditionBuilder'
@@ -287,7 +288,7 @@ export function RuleDrawer({
 
   async function remove() {
     if (!rule?.id) return
-    if (!confirm(t('deleteConfirm'))) return
+    if (!(await confirmDialog(t('deleteConfirm')))) return
     setBusy(true)
     try {
       const res = await fetch(`/api/banking/rules/${rule.id}`, { method: 'DELETE' })

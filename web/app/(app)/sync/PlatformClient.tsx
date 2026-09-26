@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { readApiErrorMessage } from "../../../lib/api-error";
+import { confirmDialog } from "@/lib/confirm";
 import { PagedTable, type PagedColumn } from "../../../components/paged-table";
 import {
   Badge,
@@ -655,7 +656,7 @@ export function PlatformClient() {
       action === "void"
         ? t("confirmVoidSourceDeletion", { ref: sourceRef })
         : t("confirmRetainSourceDeletion", { ref: sourceRef });
-    if (!confirm(prompt)) return;
+    if (!(await confirmDialog(prompt))) return;
     setBusy(`${conn.id}:deletion:${sourceRef}`);
     try {
       const res = await fetch(
@@ -682,7 +683,7 @@ export function PlatformClient() {
   }
 
   async function remove(conn: Connection) {
-    if (!confirm(t("confirmDelete", { name: conn.displayName }))) return;
+    if (!(await confirmDialog(t("confirmDelete", { name: conn.displayName })))) return;
     setBusy(`${conn.id}:del`);
     try {
       const res = await fetch(`/api/platform/connections/${conn.id}`, {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  apiJson,
   chunkArray,
   readApiBulkFailures,
   readApiErrorMessage,
@@ -75,6 +76,48 @@ test('a detail-only ping refusal surfaces the provider reason', async () => {
     headers: { 'content-type': 'application/json' },
   })
   assert.equal(await readApiErrorMessage(res, 'failed'), 'connection timed out after 10s')
+})
+
+test('an errors array surfaces the joined validation reasons', async () => {
+  const res = new Response(JSON.stringify({ errors: ['name required (max 200 chars)', 'graph: bad edge'] }), {
+    status: 400,
+    headers: { 'content-type': 'application/json' },
+  })
+  assert.equal(
+    await readApiErrorMessage(res, 'failed'),
+    'name required (max 200 chars); graph: bad edge',
+  )
+})
+
+test('apiJson returns the parsed success body without the caller touching res.json', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () =>
+    Response.json({ id: 'flow-1' })) as typeof fetch
+  try {
+    assert.deepEqual(
+      await apiJson<{ id: string }>('/api/admin/flows', { method: 'POST' }, 'failed'),
+      { id: 'flow-1' },
+    )
+  } finally {
+    globalThis.fetch = prior
+  }
+})
+
+test('apiJson throws the named server refusal on error, never a SyntaxError', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () =>
+    new Response('<html>Bad Gateway</html>', {
+      status: 502,
+      headers: { 'content-type': 'text/html' },
+    })) as typeof fetch
+  try {
+    await assert.rejects(
+      apiJson<unknown>('/api/admin/flows', { method: 'POST' }, 'failed to save'),
+      /failed to save \(status 502\)/,
+    )
+  } finally {
+    globalThis.fetch = prior
+  }
 })
 
 test('a blank fallback can never produce an empty message', async () => {

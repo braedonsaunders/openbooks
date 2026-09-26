@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import { confirmDialog } from "@/lib/confirm";
 import {
   Alert,
   Badge,
@@ -1100,7 +1101,10 @@ function LockStage(
           {props.run.status === "approved" ? (
             <Button
               disabled={props.busy || !props.canApprove}
-              onClick={() => window.confirm(t("lock.confirmLock")) && props.onAction("close")}
+              onClick={async () => {
+                if (!(await confirmDialog(t("lock.confirmLock")))) return
+                props.onAction("close")
+              }}
             >
               <LockKeyhole size={15} />
               {t("actions.lockPeriod")}
@@ -1207,10 +1211,10 @@ export function PublishStage(
             ) : null}
             <Button
               disabled={props.busy || !props.canRun || props.run.status !== "closed" || !noteReady}
-              onClick={() =>
-                window.confirm(t("publish.confirm")) &&
+              onClick={async () => {
+                if (!(await confirmDialog(t("publish.confirm")))) return
                 props.onAction("publish", note.trim() || undefined)
-              }
+              }}
             >
               <Send size={15} />
               {t("actions.publish")}

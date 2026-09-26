@@ -10,6 +10,7 @@ import { CUSTOM_FIELD_TARGETS as TARGETS, CUSTOM_FIELD_REFERENCE_TABLES } from '
 import { CustomFieldInput } from '@/components/custom-field-input'
 import type { CustomFieldDefClient } from '@/components/custom-field-inputs'
 import { customFieldEditorConfig } from '@/lib/custom-field-editor-config'
+import { apiJson } from '@/lib/api-error'
 
 const DISPLAY_MODES = [
   { value: 'always', labelKey: 'drawer.displayNormal' },
@@ -133,21 +134,20 @@ export function FieldDrawer({
       const body = creating
         ? { targetTable, targetKind: targetKind || null, key: key || slug(label), label, fieldType, config: buildConfig(), isRequired }
         : { id: def!.id, expectedUpdatedAt, label, fieldType, config: buildConfig(), isRequired, isActive }
-      const res = await fetch('/api/admin/custom-fields', {
-        method: creating ? 'POST' : 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('drawer.saveFailed'))
-        return
-      }
+      await apiJson<unknown>(
+        '/api/admin/custom-fields',
+        {
+          method: creating ? 'POST' : 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        t('drawer.saveFailed'),
+      )
       toast.success(creating ? t('drawer.created') : t('drawer.updated'))
       router.push('/admin/custom-fields')
       router.refresh()
-    } catch {
-      toast.error(t('drawer.saveFailed'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('drawer.saveFailed'))
     } finally {
       saving.current = false
       setBusy(false)

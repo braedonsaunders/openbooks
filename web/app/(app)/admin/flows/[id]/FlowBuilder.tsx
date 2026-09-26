@@ -202,12 +202,20 @@ export default function FlowBuilder({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expectedUpdatedAt: revision, name: name.trim() || flow.name, graph: fromFlow(nodes, edges) }),
       })
-      const data = await res.json()
       if (!res.ok) {
-        setSaveErrors(Array.isArray(data.errors) ? data.errors : [String(data.error ?? res.status)])
+        const failure = (await res.json().catch(() => null)) as {
+          error?: unknown
+          errors?: unknown
+        } | null
+        setSaveErrors(
+          Array.isArray(failure?.errors)
+            ? (failure.errors as unknown[]).map(String)
+            : [String((failure as { error?: unknown } | null)?.error ?? res.status)],
+        )
         toast.error(t('builder.saveFailed'))
         return
       }
+      const data = (await res.json()) as { updatedAt: string }
       setSaveErrors([])
       setRevision(data.updatedAt)
       if (editVersion.current === submittedVersion) setDirty(false)

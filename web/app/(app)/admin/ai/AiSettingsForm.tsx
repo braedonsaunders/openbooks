@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl'
 import { Bot, CheckCircle2, FileScan, Loader2, RefreshCw, XCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, cn, type SelectOption } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 // Serializable slice of a provider spec (no SDK code reaches the client bundle).
 export type ProviderSpecLite = {
@@ -187,14 +188,15 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
             documentCapture: { ...documentCapture, apiKey: documentCaptureKey || undefined },
           }),
         })
-        const body = (await res.json()) as AiFormInitial & { error?: string }
         if (!res.ok) {
           // This endpoint answers 409 only for the Continuous Close
           // pack-enable refusal: show the translated remedy instead of the
           // raw server string. Every other failure keeps the server message.
-          toast.error(res.status === 409 ? t('featureDisabled') : (body.error ?? t('saveFailed')))
+          if (res.status === 409) toast.error(t('featureDisabled'))
+          else toast.error(await readApiErrorMessage(res, t('saveFailed')))
           return
         }
+        const body = (await res.json()) as AiFormInitial
         setHasKey(body.hasKey)
         setSavedProvider({
           provider: body.provider,

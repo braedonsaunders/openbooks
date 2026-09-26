@@ -16,6 +16,7 @@ import {
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
 import { useDirtyClose } from '../../../../../lib/use-dirty-close'
+import { apiJson } from '@/lib/api-error'
 
 /**
  * Work schedules — the hours and days an employee is normally scheduled to
@@ -135,18 +136,27 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
   // with the triggers (the mount initializer above, and the mutation reloads)
   // instead of a mount effect.
   const load = useCallback(() => {
-    return fetch('/api/work-schedules')
-      .then((res) => res.json().then((json) => {
-        if (!res.ok) throw new Error(json.error ?? 'failed')
+    return (async () => {
+      try {
+        const json = await apiJson<{
+          schedules?: Schedule[]
+          options?: {
+            employees: { id: string; name: string }[]
+            trades: { id: string; name: string }[]
+            departments: { id: string; name: string }[]
+            subsidiaries: { id: string; name: string }[]
+          }
+        }>('/api/work-schedules', undefined, 'failed')
         setSchedules(json.schedules ?? [])
-        setOptions(json.options ?? { employees: [], trades: [], departments: [], subsidiaries: [] })
-      }))
-      .catch((error: unknown) => {
+        setOptions(
+          json.options ?? { employees: [], trades: [], departments: [], subsidiaries: [] },
+        )
+      } catch (error: unknown) {
         toast.error((error as Error).message)
-      })
-      .finally(() => {
+      } finally {
         setLoading(false)
-      })
+      }
+    })()
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -222,13 +232,15 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
     if (!draft) return
     setBusy(true)
     try {
-      const res = await fetch('/api/work-schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', ...draft, id: draft.id || undefined }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'failed')
+      await apiJson<unknown>(
+        '/api/work-schedules',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save', ...draft, id: draft.id || undefined }),
+        },
+        'failed',
+      )
       toast.success(tc('feedback.saved'))
       discardDraft()
       setLoading(true)
@@ -243,13 +255,15 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
   async function remove(id: string) {
     setBusy(true)
     try {
-      const res = await fetch('/api/work-schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', id }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'failed')
+      await apiJson<unknown>(
+        '/api/work-schedules',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete', id }),
+        },
+        'failed',
+      )
       discardDraft()
       setLoading(true)
       await load()

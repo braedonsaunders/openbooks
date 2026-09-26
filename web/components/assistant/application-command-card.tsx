@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useTranslations } from 'next-intl'
 import { AlertTriangle, Check, FileWarning, ShieldCheck } from 'lucide-react'
 import { Button } from '@openbooks/ui'
+import { apiJson } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 
 export interface ProposedApplicationCommand {
@@ -49,21 +50,19 @@ export function ApplicationCommandCard({ proposal }: { proposal: ProposedApplica
       }
       setError(null)
       try {
-        const response = await fetch('/api/assistant/application-command', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(proposal),
-        })
-        const body = (await response.json()) as Record<string, unknown>
-        if (!response.ok) {
-          setError(typeof body.message === 'string' ? body.message : String(body.error ?? t('commandFailed')))
-          setState('error')
-          return
-        }
+        const body = await apiJson<Record<string, unknown>>(
+          '/api/assistant/application-command',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(proposal),
+          },
+          t('commandFailed'),
+        )
         setResult(body)
         setState('applied')
-      } catch {
-        setError(t('failed'))
+      } catch (error) {
+        setError(error instanceof Error ? error.message : t('failed'))
         setState('error')
       }
     })

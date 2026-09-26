@@ -253,7 +253,7 @@ export function SetupDrawer({
 
   async function remove() {
     if (!row) return
-    if (!confirm(t('confirmDelete'))) return
+    if (!(await confirmDialog(t('confirmDelete')))) return
     setBusy(true)
     try {
       const res = await fetch(`/api/admin/setup/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {

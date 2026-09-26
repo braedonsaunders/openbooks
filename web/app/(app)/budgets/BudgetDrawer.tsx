@@ -15,6 +15,7 @@ import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
 import { mergeHref } from '../../../lib/list-params'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { confirmDialog } from '@/lib/confirm'
 import { budgetFromUnits, budgetToUnits, spreadBudgetTotal, upliftBudgetAmount } from '../../../lib/budget-math'
 import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../lib/budgets'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -114,14 +115,18 @@ export function BudgetDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, expectedRevision: revisionRef.current }),
       })
-      const data = await response.json()
       if (!response.ok) {
-        if (response.status === 409 && data.error === 'revision_conflict') toast.error(t('feedback.revisionConflict'))
-        throw new Error(data.error ?? 'request_failed')
+        const message = await readApiErrorMessage(response, 'request_failed')
+        if (response.status === 409 && message.includes('revision_conflict')) {
+          toast.error(t('feedback.revisionConflict'))
+        }
+        throw new Error(message)
       }
+      const data = (await response.json()) as T & { revision?: number }
       if (typeof data.revision === 'number') {
-        revisionRef.current = data.revision
-        setScenario((current) => ({ ...current, revision: data.revision }))
+        const revision = data.revision
+        revisionRef.current = revision
+        setScenario((current) => ({ ...current, revision }))
       }
       setSaveState('saved')
       return data as T
@@ -330,9 +335,9 @@ export function BudgetDrawer({
     })
   }
 
-  function clearRow(accountId: string) {
+  async function clearRow(accountId: string) {
     if (!editable) return
-    if (!window.confirm(t('confirm.clearYear'))) return
+    if (!(await confirmDialog(t('confirm.clearYear')))) return
     initial.periods.forEach((period) => queueCell({ accountId, periodId: period.id, amount: '0.0000' }))
   }
 
@@ -355,7 +360,7 @@ export function BudgetDrawer({
       { key: 'month-separator', separator: true as const },
     ] : []),
     { key: 'split', label: t('workspace.splitAnnualEvenly'), icon: Rows3, onSelect: () => spreadRow(menuTarget.accountId, budgetFromUnits(rowTotal(menuTarget.accountId))) },
-    { key: 'clear', label: t('workspace.clearYear'), icon: Eraser, danger: true, onSelect: () => clearRow(menuTarget.accountId) },
+    { key: 'clear', label: t('workspace.clearYear'), icon: Eraser, danger: true, onSelect: () => { void clearRow(menuTarget.accountId) } },
   ] : []
 
   function upliftPage() {
@@ -370,8 +375,8 @@ export function BudgetDrawer({
     }
   }
 
-  function clearPage() {
-    if (!window.confirm(t('confirm.clearPage'))) return
+  async function clearPage() {
+    if (!(await confirmDialog(t('confirm.clearPage')))) return
     initial.accounts.forEach((account) => initial.periods.forEach((period) => queueCell({ accountId: account.id, periodId: period.id, amount: '0.0000' })))
   }
 
@@ -410,12 +415,12 @@ export function BudgetDrawer({
   }
   async function action(actionName: string, extra: Record<string, unknown> = {}) {
     if (unsaved) return
-    if (actionName === 'archive' && !window.confirm(t('confirm.archive'))) return
-    if (actionName === 'copy_prior_actuals' && !window.confirm(t('confirm.copyPriorActuals'))) return
-    if (actionName === 'apply_source' && !window.confirm(t('confirm.applySource'))) return
-    if (actionName === 'submit' && !window.confirm(t('confirm.submit'))) return
-    if (actionName === 'approve' && !window.confirm(t('confirm.approve'))) return
-    if (actionName === 'reject' && !window.confirm(t('confirm.reject'))) return
+    if (actionName === 'archive' && !(await confirmDialog(t('confirm.archive')))) return
+    if (actionName === 'copy_prior_actuals' && !(await confirmDialog(t('confirm.copyPriorActuals')))) return
+    if (actionName === 'apply_source' && !(await confirmDialog(t('confirm.applySource')))) return
+    if (actionName === 'submit' && !(await confirmDialog(t('confirm.submit')))) return
+    if (actionName === 'approve' && !(await confirmDialog(t('confirm.approve')))) return
+    if (actionName === 'reject' && !(await confirmDialog(t('confirm.reject')))) return
     setMenuTarget(null)
     cellMenu.close()
     setBusy(true)
@@ -459,7 +464,7 @@ export function BudgetDrawer({
 
   async function deleteDraft() {
     if (unsaved) return
-    if (!window.confirm(t('confirm.delete'))) return
+    if (!(await confirmDialog(t('confirm.delete')))) return
     setMenuTarget(null)
     cellMenu.close()
     setBusy(true)
@@ -652,7 +657,7 @@ export function BudgetDrawer({
             {editable ? <div className="flex flex-wrap items-center gap-2">
               <Input className="h-8 w-28" inputMode="decimal" value={uplift} onChange={(event) => setUplift(event.target.value)} placeholder={t('workspace.uplift')} aria-label={t('workspace.uplift')} />
               <Button variant="outline" size="sm" disabled={!uplift} onClick={upliftPage}>{t('workspace.applyUplift')}</Button>
-              <Button variant="outline" size="sm" onClick={clearPage}>{t('workspace.clearPage')}</Button>
+              <Button variant="outline" size="sm" onClick={() => { void clearPage() }}>{t('workspace.clearPage')}</Button>
               {unsaved ? null : <Button variant="outline" size="sm" onClick={() => void action('copy_prior_actuals')}>{t('actions.copyPriorActuals')}</Button>}
             </div> : null}
           </div>

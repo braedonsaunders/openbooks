@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
-import { mergeHref } from '../../../lib/list-params'
+import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 
 /**
  * Order creation entry point, two modes:
@@ -47,13 +47,6 @@ export function NewOrderButton({
   const tCommon = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  // URL-only create: no fetch, so no busy state and no failure message.
-  function openUnsaved() {
-    const current = Object.fromEntries(searchParams.entries())
-    router.push(mergeHref(base, current, { [param]: undefined, [createParam!]: '1' }) as never)
-  }
 
   // DEPRECATED (see header): the last fetch in this file. The Field Tickets
   // slice deletes this branch with the `apiPath` prop when it migrates.
@@ -79,11 +72,7 @@ export function NewOrderButton({
   }
 
   if (createParam) {
-    return (
-      <Button onClick={openUnsaved}>
-        <Plus size={15} /> {label}
-      </Button>
-    )
+    return <UnsavedCreateButton base={base} param={createParam} clear={[param]} label={label} />
   }
 
   return (

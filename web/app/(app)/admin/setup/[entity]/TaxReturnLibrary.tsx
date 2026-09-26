@@ -19,6 +19,7 @@ import {
   UrlDrawer,
 } from '@openbooks/ui'
 import { countryOptions } from '../../../../../lib/countries'
+import { confirmDialog } from '@/lib/confirm'
 
 const PACKS_PER_PAGE = 5
 
@@ -122,7 +123,7 @@ export function TaxReturnLibrary({
   }
 
   async function reset(pack: TaxPackOption) {
-    if (!confirm(t('confirmReset', { name: pack.name }))) return
+    if (!(await confirmDialog(t('confirmReset', { name: pack.name })))) return
     setBusy(pack.code)
     try {
       const response = await fetch('/api/tax/returns', {

@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Check, ExternalLink, FileWarning, Sparkles } from 'lucide-react'
 import { Button } from '@openbooks/ui'
+import { apiJson } from '@/lib/api-error'
 import { decimalCmp, decimalNeg } from '@/lib/statement-format'
 type ProposalData = {
   kind: string
@@ -55,26 +56,28 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
     setError(null)
     start(async () => {
       try {
-        const res = await fetch('/api/assistant/commit', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(proposal),
-        })
-        const body = (await res.json()) as {
+        const body = await apiJson<{
           ok?: boolean
           documentNumber?: string
           href?: string
-          error?: string
-        }
-        if (res.ok && body.ok && body.href) {
+        }>(
+          '/api/assistant/commit',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(proposal),
+          },
+          t('proposal.failed'),
+        )
+        if (body.ok && body.href) {
           setResult({ documentNumber: body.documentNumber ?? '', href: body.href })
           setState('done')
         } else {
-          setError(body.error ?? t('proposal.failed'))
+          setError(t('proposal.failed'))
           setState('error')
         }
-      } catch {
-        setError(t('proposal.failed'))
+      } catch (error) {
+        setError(error instanceof Error ? error.message : t('proposal.failed'))
         setState('error')
       }
     })

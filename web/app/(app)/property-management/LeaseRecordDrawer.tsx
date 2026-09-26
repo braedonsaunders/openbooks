@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button, Card, CardContent, Drawer, Input, Popover, cn } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { confirmDialog } from "@/lib/confirm";
 import { Field, RecordTabs, Status } from "./workspace-ui";
 import { LeaseDetail } from "./LeaseDetail";
 import type { LeaseForm, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyWorkspace, SaveAction, WorkspaceOptions } from "./types";
@@ -145,11 +146,10 @@ export function LeaseRecordDrawer({
                     variant="ghost"
                     className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
                     disabled={busy}
-                    onClick={() => {
-                      if (window.confirm(`Cancel lease ${lease.leaseNumber}? The record will remain in history.`)) {
-                        void act({ action: "cancelLease", leaseId: lease.id }, "Lease cancelled");
-                        setActionsOpen(false);
-                      }
+                    onClick={async () => {
+                      if (!(await confirmDialog(`Cancel lease ${lease.leaseNumber}? The record will remain in history.`))) return
+                      void act({ action: "cancelLease", leaseId: lease.id }, "Lease cancelled");
+                      setActionsOpen(false);
                     }}
                   >
                     Cancel lease
