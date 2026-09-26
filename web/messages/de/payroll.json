@@ -989,6 +989,7 @@
       "normalDay": "der Lohn eines normalen Arbeitstages, aus dem erfassten Arbeitszeitplan des Mitarbeiters",
       "normalDayStandardHours": "für Mitarbeiter mit mindestens den Standardstunden der Jurisdiktion, ",
       "normalDayOtherwise": "Andernfalls",
+      "normalDayNoFallback": "Das Gesetz nennt keine Formel für Beschäftigte ohne regelmäßigen Arbeitstag; ihr Feiertagsentgelt wird daher namentlich abgelehnt statt berechnet.",
       "beforeTheDay": "vor dem Feiertag",
       "beforeTheWeek": "vor der Woche des Feiertags",
       "daysWorked": "darin gearbeitete Tage",

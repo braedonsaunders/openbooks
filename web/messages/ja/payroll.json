@@ -989,6 +989,7 @@
       "normalDay": "記録された勤務スケジュールによる通常勤務1日分の賃金",
       "normalDayStandardHours": "管轄の標準時間を満たす従業員については、",
       "normalDayOtherwise": "それ以外の場合",
+      "normalDayNoFallback": "通常の労働日がない従業員について法律は計算式を定めていないため、その祝日手当は計算されず、理由を示して拒否されます。",
       "beforeTheDay": "休日の前",
       "beforeTheWeek": "休日週の前",
       "daysWorked": "その期間の勤務日数",

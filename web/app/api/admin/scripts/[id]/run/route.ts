@@ -23,7 +23,7 @@ import { isUuid } from '../../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
-function invalidCronResponse(error: InvalidScheduledScriptCronError): NextResponse {
+function invalidCronResponse(error: InvalidScheduledScriptCronError): Promise<NextResponse> {
   return apiErrorResponse(error, {
     safeStatus: 422,
     details: { code: INVALID_SCHEDULED_SCRIPT_CRON_CODE, field: 'cron' },

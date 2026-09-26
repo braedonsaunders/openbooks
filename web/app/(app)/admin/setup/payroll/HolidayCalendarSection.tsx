@@ -199,8 +199,15 @@ function describeBasis(
       ? label('holidayCalendar.normalDayStandardHours', 'for employees working at least '
         + `${rule.basis.minWeeklyHours} hours a week, `)
       : ''
-    return `${standard}${label('holidayCalendar.normalDay', 'the wages of one normal working '
+    const normalDay = `${standard}${label('holidayCalendar.normalDay', 'the wages of one normal working '
       + 'day, from the employee\u2019s recorded work schedule')}. `
+    // An Act that writes no varying-hours formula (it leaves the rate to an
+    // inspector) has no fallback arm; the engine refuses those employees by name.
+    if (rule.basis.whenIrregular === undefined) {
+      return normalDay + label('holidayCalendar.normalDayNoFallback', 'The Act states no formula for '
+        + 'employees without a normal working day, so their holiday pay is refused by name rather than priced.')
+    }
+    return normalDay
       + `${label('holidayCalendar.normalDayOtherwise', 'Otherwise')}: `
       + describeBasis({ ...rule, basis: rule.basis.whenIrregular }, label)
   }
