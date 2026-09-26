@@ -5,49 +5,38 @@ declare global {
   var __typeBuilderRouter: { refresh(): void }
 }
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', {
-  url: 'http://localhost:4800/records/types?type=type-1',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {}
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/records/types?type=type-1', matchMediaMatches: false })
 
 const { registerHooks } = await import('node:module')
 const { join } = await import('node:path')
 const { pathToFileURL } = await import('node:url')
 const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
+// The @openbooks/ui redirect is a worktree pin, not a stub shape: it stays
+// in a local hook while the remaining stubs move to the shared helper.
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '@openbooks/ui') return { shortCircuit: true, url: worktreeUi }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return globalThis.__typeBuilderRouter}export function usePathname(){return '/records/types'}export function useSearchParams(){return new URLSearchParams()}",
-      }
-    }
-    if (specifier === 'next/link') {
-      return { shortCircuit: true, url: "data:text/javascript,export default function Link(p){return globalThis.React.createElement('a',p,p.children)}" }
-    }
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast={success(){},error(){},warning(){}}' }
-    }
-    if (specifier === '@/lib/confirm' || specifier === '@/lib/prompt') {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function confirmDialog(){return true}export async function promptDialog(){return null}' }
-    }
     return next(specifier, context)
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__typeBuilderRouter}export function usePathname(){return '/records/types'}export function useSearchParams(){return new URLSearchParams()}",
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link':
+      "export default function Link(p){return globalThis.React.createElement('a',p,p.children)}",
+    sonner: 'export const toast={success(){},error(){},warning(){}}',
+    '@/lib/confirm': 'export async function confirmDialog(){return true}',
+    '@/lib/prompt': 'export async function promptDialog(){return null}',
+  },
+})
+
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

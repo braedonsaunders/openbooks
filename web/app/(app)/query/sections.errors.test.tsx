@@ -1,36 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/query",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof dom.window.requestAnimationFrame !== "function") {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  dom.window.cancelAnimationFrame = ((id: number) =>
-    clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame;
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame;
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/query", matchMediaMatches: false });
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -39,28 +11,29 @@ const { pathToFileURL } = await import("node:url");
 const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
+// The @openbooks/ui redirect is a worktree pin, not a stub shape: it stays
+// in a local hook while sonner and next/link move to the shared helper.
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
       return { shortCircuit: true, url: worktreeUi };
     }
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
-      };
-    }
-    if (specifier === "next/link") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return p.children}",
-      };
-    }
     return next(specifier, context);
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner: "export const toast={success(){},error(){}};export function Toaster(){return null}",
+    "next/link": "export default function Link(p){return p.children}",
+  },
+});
+
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

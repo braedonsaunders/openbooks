@@ -38,20 +38,14 @@ const RUN = {
   createdAt: '2026-01-15T00:00:00.000Z',
 }
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:authz',
-    `
+const authzMock = `
       export async function requirePermission() {
         const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.restricted ? ['sub-1'] : null, permissions: ['reports.read', 'reports.create'] }
       }
       export function can() { return globalThis[Symbol.for('openbooks.tax-provisions-labels-test')].canCompute }
-    `,
-  ],
-  [
-    'mock:intl',
     `
+const intlMock = `
       const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]
       export async function getTranslations(namespace) {
         return (key, params) => {
@@ -62,12 +56,10 @@ const mockSources = new Map<string, string>([
           return out
         }
       }
-    `,
-  ],
-  [
-    'mock:money',
-    `export async function getMoneyFormatter() { return { money: (value) => String(value) } }`,
-  ],
+    `
+const moneyMock = `export async function getMoneyFormatter() { return { money: (value) => String(value) } }`
+
+const mockSources = new Map<string, string>([
   ['mock:data', `export async function orgInfo() { return { base_currency: 'USD' } }`],
   [
     'mock:provision',
@@ -86,13 +78,21 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['../../../../lib/authz', 'mock:authz'],
-  ['next-intl/server', 'mock:intl'],
-  ['@/lib/money-server', 'mock:money'],
   ['../../../../lib/data', 'mock:data'],
   ['@openbooks/engine/src/tax-returns/income-tax-provision.ts', 'mock:provision'],
   ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
 ])
+
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({
+  navigation: false,
+  intl: intlMock,
+  authz: authzMock,
+  features: false,
+  extra: {
+    '@/lib/money-server': moneyMock,
+  },
+})
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

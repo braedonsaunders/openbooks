@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
@@ -23,39 +22,19 @@ const mockMoney = `
   export async function getMoneyFormatter() { return { money: String, moneyCompact: String } }
 `
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/records/')) {
-      return { url: 'mock:custom-record-view-scope-authz', shortCircuit: true }
-    }
-    if (specifier === 'next-intl/server') {
-      return { url: 'mock:custom-record-view-scope-intl', shortCircuit: true }
-    }
-    if (specifier === '../../../../lib/money-server' && context.parentURL?.includes('/records/')) {
-      return { url: 'mock:custom-record-view-scope-money', shortCircuit: true }
-    }
-    if (context.parentURL?.startsWith('mock:')) {
-      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
-    }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    if (url === 'mock:custom-record-view-scope-authz') {
-      return { format: 'module', source: mockAuthz, shortCircuit: true }
-    }
-    if (url === 'mock:custom-record-view-scope-intl') {
-      return { format: 'module', source: mockIntl, shortCircuit: true }
-    }
-    if (url === 'mock:custom-record-view-scope-money') {
-      return { format: 'module', source: mockMoney, shortCircuit: true }
-    }
-    return nextLoad(url, context)
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({
+  navigation: false,
+  intl: mockIntl,
+  authz: mockAuthz,
+  features: false,
+  extra: {
+    '../../../../lib/money-server': mockMoney,
   },
 })
 
 const viewUrl = './view.ts?custom-record-view-scope-test'
 const { loadRecordModule } = (await import(viewUrl)) as typeof import('./view.ts')
-hooks.deregister()
 
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

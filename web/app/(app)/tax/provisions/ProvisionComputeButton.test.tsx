@@ -14,38 +14,18 @@ declare global {
 // pristine trailing row must still save.
 
 // jsdom first: the dialog reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/tax/provisions",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/tax/provisions", matchMediaMatches: false });
 
-const { registerHooks } = await import("node:module");
-const hooks = registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return {push(u){globalThis.__provisionPushed.push(u)},refresh(){}}}",
-      };
-    }
-    return next(specifier, context);
-  },
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    "export function useRouter(){return {push(u){globalThis.__provisionPushed.push(u)},refresh(){}}}",
+  intl: false,
+  authz: false,
+  features: false,
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");
@@ -53,7 +33,6 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/en")).default;
 const { ProvisionComputeButton } = await import("./ProvisionComputeButton");
-hooks.deregister();
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 

@@ -33,13 +33,19 @@ const mockIntl = `
   export async function getTranslations() { return (key) => key }
 `
 
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation: false,
+  intl: mockIntl,
+  authz: false,
+  features: false,
+})
+// The catalog authz double imports the real permission set, so it cannot
+// live in a data: URL: it stays in a local hook with its module rebase.
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '../../../lib/authz' && context.parentURL?.includes('/reports/view.ts')) {
       return { url: 'mock:hub-catalog-authz', shortCircuit: true }
-    }
-    if (specifier === 'next-intl/server') {
-      return { url: 'mock:hub-catalog-intl', shortCircuit: true }
     }
     if (context.parentURL?.startsWith('mock:')) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url })

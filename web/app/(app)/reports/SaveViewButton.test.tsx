@@ -4,23 +4,8 @@ import test from 'node:test'
 // F1T-4 (save used the native prompt and toasted the generic saveFailed,
 // dropping the server's named refusal): the house prompt dialog collects the
 // name and the refusal surfaces through the shared helper.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/reports/pnl?period=2026-01',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/reports/pnl?period=2026-01' })
 
 declare global {
   var __saveViewToasts: { kind: string; message: string }[] | undefined
@@ -33,32 +18,21 @@ Object.assign(globalThis, {
   __saveViewName: 'My view',
   __saveViewPromptTitles: [] as string[],
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}export function usePathname(){return "/reports/pnl"}export function useSearchParams(){return new URLSearchParams("period=2026-01")}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__saveViewToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__saveViewToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
-      }
-    }
-    if (specifier.endsWith('/lib/prompt')) {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function promptDialog(o){(globalThis.__saveViewPromptTitles??=[]).push(o?.title ?? "");return globalThis.__saveViewName ?? null}',
-      }
-    }
-    return next(specifier, context)
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation:
+    'export function useRouter(){return {refresh(){}}}export function usePathname(){return "/reports/pnl"}export function useSearchParams(){return new URLSearchParams("period=2026-01")}',
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner:
+      "export const toast={success(m){(globalThis.__saveViewToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__saveViewToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
+    '../../../lib/prompt':
+      'export async function promptDialog(o){(globalThis.__saveViewPromptTitles??=[]).push(o?.title ?? "");return globalThis.__saveViewName ?? null}',
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

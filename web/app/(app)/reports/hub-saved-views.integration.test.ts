@@ -9,16 +9,18 @@ const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
 const state: { user: import('../../../lib/auth').SessionUser | null } = { user: null }
 Object.assign(globalThis, { __hubSavedViewsState: state, React })
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation: false,
+  intl: 'export async function getTranslations(){const t=(k,p)=>p===undefined?k:`${k} ${JSON.stringify(p)}`;t.has=()=>false;t.rich=(k)=>k;return t;};export async function getLocale(){return "en"}',
+  authz: false,
+  features: false,
+})
+// The session shim and the bundler-style module rules are per-test needs,
+// not stub shapes: auth stays real behind the currentUser shim while the
+// shared helper covers translations.
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(
-          'export async function getTranslations(){const t=(k,p)=>p===undefined?k:`${k} ${JSON.stringify(p)}`;t.has=()=>false;t.rich=(k)=>k;return t;};export async function getLocale(){return "en"}',
-        ),
-      }
-    }
     if ((s === './auth' || s.endsWith('/lib/auth')) && c.parentURL?.includes('/web/') && !c.parentURL.includes('/web/lib/auth.ts')) {
       return {
         shortCircuit: true,

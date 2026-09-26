@@ -1,17 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return{replace(){}}} export function usePathname(){return"/reports/trial-balance"} export function useSearchParams(){return new URLSearchParams("period=this_fiscal_year")}',
-      }
-    }
-    return next(specifier, context)
-  },
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation:
+    'export function useRouter(){return{replace(){}}} export function usePathname(){return"/reports/trial-balance"} export function useSearchParams(){return new URLSearchParams("period=this_fiscal_year")}',
+  intl: false,
+  authz: false,
+  features: false,
 })
 
 const React = await import('react')

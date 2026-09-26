@@ -45,10 +45,7 @@ const FILING_ROW = {
   created_at: '2026-04-01T00:00:00Z',
 }
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:authz',
-    `
+const authzMock = `
       const state = globalThis[Symbol.for('openbooks.tax-view-grants-test')]
       export async function requirePermission(permission) {
         if (!state.grants.has(permission)) throw new Error('forbidden: ' + permission)
@@ -62,17 +59,12 @@ const mockSources = new Map<string, string>([
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: state.grants }
       }
       export function guardSubsidiaryScope() { return null }
-    `,
-  ],
-  [
-    'mock:intl',
-    `export async function getTranslations() { return (key) => key }`,
-  ],
-  [
-    'mock:navigation',
-    `export function notFound() { throw new Error('notFound') }
-     export function redirect(url) { throw new Error('redirect:' + url) }`,
-  ],
+    `
+const intlMock = `export async function getTranslations() { return (key) => key }`
+const navigationMock = `export function notFound() { throw new Error('notFound') }
+     export function redirect(url) { throw new Error('redirect:' + url) }`
+
+const mockSources = new Map<string, string>([
   [
     'mock:viewspec',
     `
@@ -116,10 +108,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['../../../lib/authz', 'mock:authz'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['next-intl/server', 'mock:intl'],
-  ['next/navigation', 'mock:navigation'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/tax-returns/return.ts', 'mock:tax-return'],
   ['@openbooks/engine/src/tax-returns/filing.ts', 'mock:tax-filing'],
@@ -127,6 +115,14 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
   ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
 ])
+
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation: navigationMock,
+  intl: intlMock,
+  authz: authzMock,
+  features: false,
+})
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

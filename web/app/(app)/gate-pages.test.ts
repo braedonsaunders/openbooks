@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -67,28 +66,16 @@ const FEATURES_MOCK = `
   export async function isFeatureEnabled(_orgId, key) { return globalThis.__pageFeatures[key] === true }
 `;
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "next/navigation") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(NAV_MOCK) };
-    }
-    if (specifier === "next/link") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(LINK_MOCK) };
-    }
-    if (specifier === "next-intl/server") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(INTL_MOCK) };
-    }
-    if (specifier.endsWith("lib/authz")) {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(AUTHZ_MOCK) };
-    }
-    if (specifier.endsWith("lib/features")) {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(FEATURES_MOCK) };
-    }
-    return nextResolve(specifier, context);
+const { stubModules } = await import("../../testing/stub-modules");
+stubModules({
+  navigation: NAV_MOCK,
+  intl: INTL_MOCK,
+  authz: AUTHZ_MOCK,
+  features: FEATURES_MOCK,
+  extra: {
+    "next/link": LINK_MOCK,
   },
 });
-
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 // Real registry (pure data): the page's known-feature check runs against the
 // same keys the gates enforce.
 (globalThis as Record<string, unknown>).__featureByKey = (
@@ -105,7 +92,6 @@ const FeatureRequiredPage = (await import("./feature-required/page.tsx")).defaul
 const AccessDeniedPage = (await import("./access-denied/page.tsx")).default as (
   props: unknown,
 ) => Promise<React.ReactElement>;
-hooks.deregister();
 
 function authz(): NonNullable<typeof globalThis.__pageAuthz> {
   return { user: { orgId: "org" }, permissions: [] };

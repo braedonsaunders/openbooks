@@ -5,55 +5,24 @@ import test from 'node:test'
 // null and the drawer stuck on Loading forever): the refusal lands in a
 // named error state with a retry, and a retry that succeeds renders the
 // editor.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/reports/pnl',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/reports/pnl' })
 
 Object.assign(globalThis, {
   __scheduleFetchImpl: null as null | (() => Promise<Response>),
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/link') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
-    }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}export function usePathname(){return "/"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    return next(specifier, context)
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation:
+    'export function useRouter(){return {refresh(){}}}export function usePathname(){return "/"}export function useSearchParams(){return new URLSearchParams()}',
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

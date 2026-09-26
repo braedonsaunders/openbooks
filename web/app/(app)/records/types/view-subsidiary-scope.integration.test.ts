@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
@@ -19,33 +18,16 @@ const mockIntl = `
   export async function getTranslations() { return (key) => key }
 `
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/records/types/')) {
-      return { url: 'mock:record-type-view-scope-authz', shortCircuit: true }
-    }
-    if (specifier === 'next-intl/server') {
-      return { url: 'mock:record-type-view-scope-intl', shortCircuit: true }
-    }
-    if (context.parentURL?.startsWith('mock:')) {
-      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
-    }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    if (url === 'mock:record-type-view-scope-authz') {
-      return { format: 'module', source: mockAuthz, shortCircuit: true }
-    }
-    if (url === 'mock:record-type-view-scope-intl') {
-      return { format: 'module', source: mockIntl, shortCircuit: true }
-    }
-    return nextLoad(url, context)
-  },
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({
+  navigation: false,
+  intl: mockIntl,
+  authz: mockAuthz,
+  features: false,
 })
 
 const viewUrl = './view.ts?record-type-view-scope-test'
 const { loadRecordTypes } = (await import(viewUrl)) as typeof import('./view.ts')
-hooks.deregister()
 
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

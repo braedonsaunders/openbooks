@@ -18,59 +18,25 @@ declare global {
 // work.
 
 // jsdom first: the drawer reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/records/project",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/records/project", matchMediaMatches: false });
 
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return globalThis.__recordRouter}export function usePathname(){return '/records/project'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__recordToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__recordToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__recordToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
-      };
-    }
-    if (specifier === "@/lib/confirm" || specifier.endsWith("/lib/confirm")) {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function confirmDialog(){return globalThis.__recordConfirm ?? true}",
-      };
-    }
-    if (specifier === "@/lib/client-scripts" || specifier.endsWith("/lib/client-scripts")) {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function runClientScripts(){const g=globalThis.__recordGate;return g!==undefined?{ok:g.ok,reason:g.reason,warnings:g.warnings??[]}:{ok:true,warnings:[]}}",
-      };
-    }
-    return next(specifier, context);
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__recordRouter}export function usePathname(){return '/records/project'}export function useSearchParams(){return new URLSearchParams()}",
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner:
+      "export const toast={success(m){(globalThis.__recordToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__recordToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__recordToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
+    "@/lib/confirm": "export async function confirmDialog(){return globalThis.__recordConfirm ?? true}",
+    "@/lib/client-scripts":
+      "export async function runClientScripts(){const g=globalThis.__recordGate;return g!==undefined?{ok:g.ok,reason:g.reason,warnings:g.warnings??[]}:{ok:true,warnings:[]}}",
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

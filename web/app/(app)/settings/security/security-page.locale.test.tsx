@@ -3,17 +3,12 @@ import test from 'node:test'
 
 const React = await import('react')
 Object.assign(globalThis, { React })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {push(){}}}',
-      }
-    }
-    return next(specifier, context)
-  },
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({
+  navigation: 'export function useRouter(){return {push(){}}}',
+  intl: false,
+  authz: false,
+  features: false,
 })
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
