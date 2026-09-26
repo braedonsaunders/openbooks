@@ -37,6 +37,27 @@ export async function lockPropertyInScope(
   return String(row.subsidiary_id);
 }
 /**
+ * Global property lock order: whenever one transaction holds two property
+ * rows at once (a lease moving between properties locks its current and its
+ * target), they are taken in ascending id order. Two concurrent moves in
+ * opposite directions otherwise take the same pair in opposite orders and
+ * Postgres aborts one with a deadlock. A single id locks once; every id is
+ * scope-checked while its lock is held, exactly as lockPropertyInScope does.
+ */
+export async function lockPropertiesInScope(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  propertyIds: readonly string[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<string[]> {
+  const ordered = [...new Set(propertyIds)].sort();
+  const subsidiaries: string[] = [];
+  for (const propertyId of ordered) {
+    subsidiaries.push(await lockPropertyInScope(tx, orgId, propertyId, allowedSubsidiaryIds));
+  }
+  return subsidiaries;
+}
+/**
  * Lease-anchored variant: locks the lease AND its property (lease first,
  * matching the termination/lease-edit lock order) and asserts the caller
  * may touch the property's freshly-read subsidiary.

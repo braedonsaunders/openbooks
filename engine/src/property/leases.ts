@@ -2,7 +2,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, normalizeMoney } from "../money/money.ts";
-import { assertEnabled, audit, exactMoney, lockLeasePropertyInScope, lockPropertyInScope, PropertyManagementError, UUID_RE, validDate } from "./management-foundation.ts";
+import { assertEnabled, audit, exactMoney, lockLeasePropertyInScope, lockPropertiesInScope, lockPropertyInScope, PropertyManagementError, UUID_RE, validDate } from "./management-foundation.ts";
 
 export async function createPropertyLease(input: {
   orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
@@ -119,9 +119,10 @@ export async function updatePropertyLease(input: {
     if (!current || !["draft", "active", "notice"].includes(current.status)) throw new PropertyManagementError("Editable lease not found");
     // Both the lease's current property and the move target are locked and
     // rechecked: a draft lease may move properties, and the target check in
-    // the route runs outside this transaction.
-    await lockPropertyInScope(tx, input.orgId, String(current.propertyId), input.allowedSubsidiaryIds);
-    await lockPropertyInScope(tx, input.orgId, input.propertyId, input.allowedSubsidiaryIds);
+    // the route runs outside this transaction. The pair locks in ascending
+    // id order (see lockPropertiesInScope) so opposite concurrent moves
+    // cannot take the same two rows in opposite orders.
+    await lockPropertiesInScope(tx, input.orgId, [String(current.propertyId), input.propertyId], input.allowedSubsidiaryIds);
     const duplicateNumber = (await tx.execute(sql`select 1 from property_leases
       where org_id=${input.orgId} and lease_number=${leaseNumber} and id<>${input.leaseId} limit 1`));
     if (duplicateNumber.rows.length) throw new PropertyManagementError("Lease number already exists");
