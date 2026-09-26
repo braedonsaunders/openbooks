@@ -109,6 +109,15 @@ export interface PostEntryResult {
 
 const AMOUNT_RE = /^-?\d+(\.\d{1,4})?$/;
 
+/**
+ * How long a keyed replay waits for the winning posting's lines to become
+ * visible before refusing by name, and how often it re-reads while waiting.
+ * The window is normally milliseconds (the winner's next statement); the
+ * bound only bites when the winner never finishes.
+ */
+const KEYED_REPLAY_WAIT_MS = 5000;
+const KEYED_REPLAY_POLL_MS = 50;
+
 function fail(message: string): never {
   throw new LedgerPostError(message);
 }
@@ -176,20 +185,42 @@ export async function postEntry(
   // and every other guard here reads shared state — so unrelated posts stay
   // parallel instead of serializing onto one row (which deadlocked
   // concurrent multi-post flows with 40P01).
-  const entryLines = async (entryId: string): Promise<PostEntryResult["lines"]> => {
-    const rows = (await executor.execute<{ id: string; line_number: number }>(sql`
-      select id, line_number from journal_lines
-       where org_id = ${orgId} and entry_id = ${entryId}
-       order by line_number`)).rows;
-    return rows.map((row) => ({ id: row.id, lineNumber: row.line_number }));
+  // A keyed replay must return the winner's full posted entry — header AND
+  // lines — in the one shape below, whichever path finds it. The winner's
+  // lines commit in a later statement than its header (pool executors commit
+  // each statement separately), so a replay landing between the two sees a
+  // header with no lines yet: one statement reads both, and the read waits
+  // out that window. A header that stays lineless is a defect, never a
+  // success — it is refused by name instead of returned with zero lines.
+  const readKeyedEntry = async (idempotencyKey: string): Promise<PostEntryResult | null> => {
+    const deadline = Date.now() + KEYED_REPLAY_WAIT_MS;
+    for (;;) {
+      const rows = (await executor.execute<{ entry_id: string; id: string | null; line_number: number | null }>(sql`
+        select je.id as entry_id, jl.id as id, jl.line_number as line_number
+          from journal_entries je
+          left join journal_lines jl
+            on jl.org_id = je.org_id and jl.entry_id = je.id
+         where je.org_id = ${orgId} and je.custom->>'idempotencyKey' = ${idempotencyKey}
+         order by jl.line_number`)).rows;
+      if (rows.length === 0) return null;
+      const entryId = rows[0]!.entry_id;
+      const replayed = rows.flatMap((row) =>
+        row.id === null ? [] : [{ id: row.id, lineNumber: row.line_number! }],
+      );
+      if (replayed.length > 0) return { entryId, lines: replayed };
+      if (Date.now() >= deadline)
+        fail(
+          `journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} already posted entry ${entryId} with no lines — the winning posting did not finish; retry the posting`,
+        );
+      await new Promise<void>((resolve) => {
+        setTimeout(() => resolve(), KEYED_REPLAY_POLL_MS);
+      });
+    }
   };
   if (input.idempotencyKey) {
-    const prior = (await executor.execute<{ id: string }>(sql`
-      select id from journal_entries
-       where org_id = ${orgId} and custom->>'idempotencyKey' = ${input.idempotencyKey}
-       limit 1`)).rows[0];
+    const prior = await readKeyedEntry(input.idempotencyKey);
     if (prior) {
-      return { entryId: prior.id, lines: await entryLines(prior.id) };
+      return prior;
     }
   }
 
@@ -343,16 +374,15 @@ export async function postEntry(
   if (!inserted && !input.idempotencyKey)
     fail(`journal entry ${input.entryNumber} was not created`);
   if (!inserted) {
-    // A concurrent identical key won the race: return its entry rather
-    // than a second posting. The conflict above is the proof the entry
-    // exists — a zero-row read here is a failure, not a success.
-    const raced = (await executor.execute<{ id: string }>(sql`
-      select id from journal_entries
-       where org_id = ${orgId} and custom->>'idempotencyKey' = ${input.idempotencyKey}
-       limit 1`)).rows[0];
+    // A concurrent identical key won the race: return its full entry rather
+    // than a second posting, through the same keyed read as the friendly
+    // path above — one shape for every replay. The conflict above is the
+    // proof the entry exists — a zero-row read here is a failure, not a
+    // success.
+    const raced = await readKeyedEntry(input.idempotencyKey!);
     if (!raced)
       fail(`journal entry ${input.entryNumber} collided on its idempotency key but the winning entry is not visible — retry the posting`);
-    return { entryId: raced.id, lines: await entryLines(raced.id) };
+    return raced;
   }
   const entryId = inserted.id;
 
