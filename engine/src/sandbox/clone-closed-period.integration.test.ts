@@ -331,6 +331,7 @@ test("a sample company cuts from a closed-period template and numbering continue
   // sample invoices sit in a closed GL period promotes, clones via
   // createSampleCompany, and the first live invoice continues past the
   // highest sample number instead of restarting at INV-00001.
+  const baselineOrgIds = new Set((await db.execute<{ id: string }>(sql`select id from orgs`)).rows.map((row) => row.id)); // recycled pool slots predate this test; their rows persist by design
   const source = await createScratchOrg();
   const memberOrg = await createScratchOrg();
   let previewOrgId: string | null = null;
@@ -408,11 +409,10 @@ test("a sample company cuts from a closed-period template and numbering continue
       () => dropScratchOrg(source.orgId),
     );
   }
-  // The teardown above must leave nothing behind: neither the scratch orgs
-  // nor any org cloned from them (sample company, promoted template), nor
-  // their sandbox rows.
+  // The teardown above must leave nothing behind: neither the scratch orgs nor
+  // any org cloned from them (sample company, promoted template), nor their sandbox rows.
   const ownedOrgIds = [source.orgId, memberOrg.orgId, templateOrgId, previewOrgId]
-    .filter((id): id is string => id !== null);
+    .filter((id): id is string => id !== null && !baselineOrgIds.has(id));
   const leakedOrgs = (await db.execute<{ id: string; name: string }>(sql`
     select id, name from orgs
      where id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])
