@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
@@ -31,7 +32,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const result = await postProvisionRun(gate.user.orgId, id, gate.user.id);
     return NextResponse.json(result);
   } catch (e) {
-    const status = e instanceof IncomeTaxProvisionError ? 422 : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    return apiErrorResponse(e, e instanceof IncomeTaxProvisionError ? { safeStatus: 422 } : {})
   }
 }

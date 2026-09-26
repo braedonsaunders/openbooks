@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-returns/filing.ts'
@@ -41,7 +42,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       // Stale or ungoverned: the state conflicts with what would be certified.
       if (error.code === 'stale' || error.code === 'period-not-closed') {
-        return NextResponse.json({ code: error.code, error: error.message }, { status: 409 })
+        return apiErrorResponse(error, { safeStatus: 409, details: { code: error.code } })
       }
     }
     return NextResponse.json({ error: 'could not update filing' }, { status: 422 })
