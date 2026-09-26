@@ -573,7 +573,7 @@ test(
         rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } }],
       });
       const warned = bankItem(await payRunReadiness(fx.orgId, documentId));
-      assert.equal(warned.length, 3, `one per plan, got ${warned.map((w) => w.detail).join(", ")}`);
+      assert.equal(warned.length, 4, `one per plan, got ${warned.map((w) => w.detail).join(", ")}`);
       for (const item of warned) {
         assert.equal(item.severity, "warning", "never a blocker — zero can be correct");
         assert.deepEqual(item.employees.map((e) => e.name), [fx.employeeName]);
@@ -581,7 +581,7 @@ test(
       }
       assert.deepEqual(
         warned.map((w) => w.detail).sort(),
-        ["Banked overtime", "Benefit recoup", "Vacation"],
+        ["Banked overtime", "Benefit recoup", "Statutory alternate day", "Vacation"],
       );
 
       // Loading the carry-in settles that plan, and only that plan.
@@ -591,7 +591,7 @@ test(
       });
       assert.deepEqual(
         bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => w.detail).sort(),
-        ["Banked overtime", "Benefit recoup"],
+        ["Banked overtime", "Benefit recoup", "Statutory alternate day"],
       );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -624,7 +624,7 @@ test(
 
       assert.deepEqual(
         bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => w.detail).sort(),
-        ["Banked overtime", "Benefit recoup"],
+        ["Banked overtime", "Benefit recoup", "Statutory alternate day"],
         "only the plan a committed run has moved goes quiet",
       );
     } finally {
