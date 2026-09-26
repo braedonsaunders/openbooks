@@ -11,6 +11,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { seedUsSuiAccount } from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -141,12 +142,16 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, subsidiaryId);
+  // Every hire works under the work state's contributory SUI account —
+  // reusing the test's own account where it created one, so box 15 keeps
+  // its exact asserted number. A run with no recorded method refuses.
+  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state);
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, pay_basis, filing_status,
-                                           is_active, created_by, updated_by)
+                                           filing_account_id, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'US', ${opts.state},
-            'salary', 'single', true, ${fx.actorId}, ${fx.actorId})`);
+            'salary', 'single', ${suiAccountId}, true, ${fx.actorId}, ${fx.actorId})`);
   for (const certificate of opts.certificates ?? []) {
     await db.execute(sql`
       insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,

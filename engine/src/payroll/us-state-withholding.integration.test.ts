@@ -17,6 +17,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedWorkAllocation } from "../testing/fixtures.ts";
+import { seedUsSuiAccount } from "./filing-test-fixtures.ts";
 
 /**
  * The US state withholding engine, ON A REAL PAY RUN.
@@ -219,12 +220,18 @@ async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Pro
       opts.locality.region, opts.locality.subregion, opts.locality.workShare,
     );
   }
+  // Every hire works under a contributory SUI account for their work state:
+  // a run with no recorded financing method refuses by design, and these
+  // tests assert withholding, never the method refusal.
+  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state);
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, residence_region, pay_basis,
-                                           filing_status, is_active, created_by, updated_by)
+                                           filing_status, filing_account_id, is_active,
+                                           created_by, updated_by)
     values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'US', ${opts.state},
-            ${opts.residence ?? null}, 'salary', 'single', true, ${fx.actorId}, ${fx.actorId})`);
+            ${opts.residence ?? null}, 'salary', 'single', ${suiAccountId}, true,
+            ${fx.actorId}, ${fx.actorId})`);
   for (const certificate of opts.certificates ?? []) {
     await db.execute(sql`
       insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,

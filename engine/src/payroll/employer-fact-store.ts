@@ -44,8 +44,14 @@ export async function listPayrollEmployerFacts(
   return rows.rows;
 }
 
-/** Resolve one fact only for its declared owner and effective date. */
-export async function resolveStoredEmployerFact(input: {
+/**
+ * The stored raw value for one fact's declared owner and effective date, or
+ * null when nothing is recorded — WITHOUT the declaration's refusal. Callers
+ * that must fail closed pass the result through `resolveEmployerFact`; the
+ * run's rate gate instead treats "nothing recorded" as "no waiver", so an
+ * employee not assigned to the fact's account keeps today's gate exactly.
+ */
+export async function findStoredEmployerFactValue(input: {
   tx: Pick<typeof db, "execute">;
   orgId: string;
   subsidiaryId?: string | null;
@@ -72,7 +78,25 @@ export async function resolveStoredEmployerFact(input: {
      order by effective_from desc, superseded_on asc nulls last
      limit 1
   `)).rows[0];
-  return resolveEmployerFact(input.country, input.factKey, row?.fact_value);
+  return row?.fact_value ?? null;
+}
+
+/** Resolve one fact only for its declared owner and effective date. */
+export async function resolveStoredEmployerFact(input: {
+  tx: Pick<typeof db, "execute">;
+  orgId: string;
+  subsidiaryId?: string | null;
+  filingAccountId?: string | null;
+
+  country: string;
+  factKey: string;
+  asOf: string;
+}): Promise<string | null> {
+  return resolveEmployerFact(
+    input.country,
+    input.factKey,
+    await findStoredEmployerFactValue(input),
+  );
 }
 
 /** Supersede the same effective point and append a fully audited successor. */

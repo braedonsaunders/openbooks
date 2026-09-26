@@ -133,6 +133,10 @@ async function usEmployee(fx: Fixture, name: string): Promise<string> {
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
+  // No SUI account: this fixture prices presence-only SUI from the legacy
+  // rates, which needs no financing method (there is no account to record
+  // one on) — the run refuses a missing method only for an assigned SUI
+  // account.
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, residence_region, pay_basis,

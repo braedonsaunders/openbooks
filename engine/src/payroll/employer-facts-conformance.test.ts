@@ -21,6 +21,7 @@ test("every country pack publishes exactly its declared employer-fact vocabulary
   }
 });
 
-test("US SUI financing method routes a missing fact to the required-fact refusal", () => {
+test("US SUI financing method refuses a missing fact and resolves reimbursable", () => {
   assert.throws(() => resolveUsSuiFinancingMethod(null, "CA"), /Payroll Setup → Employer facts/);
+  assert.equal(resolveUsSuiFinancingMethod("reimbursable", "CA"), "reimbursable");
 });
