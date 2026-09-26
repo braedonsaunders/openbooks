@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
@@ -35,11 +36,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof PostingError) return NextResponse.json({ error: e.message }, { status: 422 })
-    if (e instanceof JournalPostingDeniedError) return NextResponse.json({ error: e.message }, { status: 403 })
+    if (e instanceof PostingError) return apiErrorResponse(e, { safeStatus: 422 })
+    if (e instanceof JournalPostingDeniedError) return apiErrorResponse(e)
     // Unconfigured org control accounts refuse the match before any GL write.
     if (e instanceof ControlAccountsIncompleteError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
     return bankingErrorResponse(e)
   }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
@@ -12,6 +13,19 @@ import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { auditSetupChange } from '../../../../lib/setup/audit'
 
 export const runtime = 'nodejs'
+
+/**
+ * SFTP setup validation travels as plain Errors from the engine validators,
+ * so the sanitizer cannot type-refuse them: carry the operator-actionable
+ * message (bad key lines, out-of-namespace prefix) in a named 400 refusal.
+ */
+class SftpSetupRefusal extends Error {
+  readonly status = 400
+  constructor(message: string) {
+    super(message)
+    this.name = 'SftpSetupRefusal'
+  }
+}
 
 /** List the org's SFTP servers (never returns secrets). */
 export async function GET() {
@@ -72,7 +86,13 @@ export async function POST(req: Request) {
     backend = appStorageKind()
     bucket = backend === 's3' ? appBucket() : null
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 503 })
+    // Storage misconfiguration refuses by name at 503 with a static remedy:
+    // the thrown detail (which env names are missing) stays server-side.
+    console.error('[banking/sftp] storage selection failed', e)
+    return NextResponse.json(
+      { error: 'SFTP storage is not configured: set all four S3 variables, or unset them all and set an absolute shared OPENBOOKS_DATA_DIR for local storage' },
+      { status: 503 },
+    )
   }
   const requestedPrefix = body.rootPrefix?.trim() || ''
   if (requestedPrefix) {
@@ -84,7 +104,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `sftp root prefix must name a folder under sftp/${user.orgId}/` }, { status: 400 })
       }
     } catch (e) {
-      return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+      return apiErrorResponse(new SftpSetupRefusal(e instanceof Error ? e.message : String(e)))
     }
   }
   // Key material is validated BEFORE any insert: every non-comment line must
@@ -97,7 +117,7 @@ export async function POST(req: Request) {
     try {
       lines = validateAuthorizedKeys(String(body.authorizedKeys))
     } catch (e) {
-      return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+      return apiErrorResponse(new SftpSetupRefusal(e instanceof Error ? e.message : String(e)))
     }
     if (lines.length === 0) {
       return NextResponse.json(
