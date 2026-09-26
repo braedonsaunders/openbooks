@@ -124,37 +124,6 @@ jobs:
             exit 1
           fi
           echo "Merge gate is green and EXHAUSTIVE for ${SOURCE_COMMIT} (run ${verified})."
-      - name: Require a passing upgrade rehearsal for this exact commit
-        # Every install upgrades in place: bootstrap applies the pending
-        # migrations over whatever data that install holds. upgrade-rehearsal.yml
-        # (release-only, never per-commit) upgrades each supported source
-        # release, seeded with every required dataset class, to this commit. It
-        # proves ledger parity, harness tie-outs, idempotence, and that the
-        # upgraded catalog matches a fresh install's. Its `upgrade-verification`
-        # job passes only when every cell passed. No such job on this SHA means
-        # no release.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          runs=$(gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SOURCE_COMMIT}&status=success" \
-            --jq '[.workflow_runs[] | select(.name == "upgrade-rehearsal") | .id] | join(" ")')
-          rehearsed=
-          for run in $runs; do
-            if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs" --paginate \
-                 --jq '.jobs[] | select(.name == "upgrade-verification") | .conclusion' \
-               | grep -qw success; then
-              rehearsed=$run
-              break
-            fi
-          done
-          if [ -z "$rehearsed" ]; then
-            echo "No passing 'upgrade-rehearsal' run for ${SOURCE_COMMIT}." >&2
-            echo "Start one with: git push origin \"${SOURCE_COMMIT}:refs/heads/upgrade-rehearsal/<name>\", then retry." >&2
-            exit 1
-          fi
-          echo "Upgrade rehearsal passed for ${SOURCE_COMMIT} (run ${rehearsed})."
       - name: Refuse to release a commit that is not on main
         # Checking out an explicit ref leaves HEAD detached, so the local `main`
         # branch does not exist even with full history. Materialize it, then
@@ -169,6 +138,55 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Require a passing upgrade rehearsal for this commit
+        # Every install upgrades in place: bootstrap applies the pending
+        # migrations over whatever data that install holds. upgrade-rehearsal.yml
+        # (release-only, never per-commit) upgrades each supported source
+        # release, seeded with every required dataset class, to this commit. It
+        # proves ledger parity, harness tie-outs, idempotence, and that the
+        # upgraded catalog matches a fresh install's. Its `upgrade-verification`
+        # job passes only when every cell passed.
+        #
+        # A rehearsal of an earlier commit on this line still covers this one
+        # when nothing between them changes what the rehearsal runs, as decided
+        # by scripts/upgrade-rehearsal/reuse.mjs from the rehearsal's own import
+        # graph. Only the newest passing rehearsal of an ancestor is considered.
+        # Anything else needs a rehearsal of this exact commit, and no covering
+        # rehearsal means no release. Runs after `npm ci`: reuse.mjs needs esbuild.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          passed() {
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/$1/jobs" --paginate \
+              --jq '.jobs[] | select(.name == "upgrade-verification") | .conclusion' \
+              | grep -qw success
+          }
+          runs=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SOURCE_COMMIT}&status=success" \
+            --jq '[.workflow_runs[] | select(.name == "upgrade-rehearsal") | .id] | join(" ")')
+          for run in $runs; do
+            if passed "$run"; then
+              echo "Upgrade rehearsal passed for ${SOURCE_COMMIT} (run ${run})."
+              exit 0
+            fi
+          done
+          earlier=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/upgrade-rehearsal.yml/runs?status=success&per_page=50" \
+            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')
+          while read -r run sha; do
+            [ -n "$run" ] || continue
+            git merge-base --is-ancestor "$sha" "$SOURCE_COMMIT" || continue
+            passed "$run" || continue
+            if node scripts/upgrade-rehearsal/reuse.mjs "$sha" "$SOURCE_COMMIT"; then
+              echo "Upgrade rehearsal run ${run} of ${sha} covers ${SOURCE_COMMIT}."
+              exit 0
+            fi
+            break
+          done <<< "$earlier"
+          echo "No passing 'upgrade-rehearsal' run covers ${SOURCE_COMMIT}." >&2
+          echo "Start one with: git push origin \"${SOURCE_COMMIT}:refs/heads/upgrade-rehearsal/<name>\", then retry." >&2
+          exit 1
       - name: Verify deployment workflow contracts
         run: node --test scripts/deploy-edge-workflow.test.mjs scripts/deploy-production-workflow.test.mjs
       - name: Bootstrap a clean release database

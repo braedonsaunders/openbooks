@@ -301,7 +301,7 @@ test("the summary lists unexpected preflight notices by code", () => {
 });
 
 test("publish refuses a release whose exact commit has no passing upgrade-verification job", () => {
-  const verify = PUBLISH.slice(PUBLISH.indexOf("Require a passing upgrade rehearsal"), PUBLISH.indexOf("Refuse to release a commit that is not on main"));
+  const verify = PUBLISH.slice(PUBLISH.indexOf("Require a passing upgrade rehearsal"), PUBLISH.indexOf("Verify deployment workflow contracts"));
   assert.match(verify, /head_sha=\$\{SOURCE_COMMIT\}&status=success/);
   assert.match(verify, /select\(\.name == "upgrade-rehearsal"\)/);
   assert.match(verify, /select\(\.name == "upgrade-verification"\)/);
