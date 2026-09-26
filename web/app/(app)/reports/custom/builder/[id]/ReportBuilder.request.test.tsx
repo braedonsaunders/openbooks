@@ -1,49 +1,31 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/reports/custom/builder/report-1' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
+const { bootJsdomEnvironment } = await import('../../../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/reports/custom/builder/report-1', matchMediaMatches: false })
 if (!window.HTMLElement.prototype.getBoundingClientRect) {
   window.HTMLElement.prototype.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON() {} })
-}
-if (typeof globals.ResizeObserver !== 'function') {
-  globals.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
-}
-if (typeof window.requestAnimationFrame !== 'function') {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 0)) as typeof window.requestAnimationFrame
-  window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as typeof window.cancelAnimationFrame
 }
 
 const state = { errors: [] as string[], confirm: true }
 Object.assign(globalThis, { __reportBuilderRequestTest: state })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: "data:text/javascript,export function useRouter(){return {push(){},replace(){},refresh(){}}}export function usePathname(){return '/reports/custom/builder/report-1'}export function useSearchParams(){return new URLSearchParams()}" }
-    }
-    if (specifier === 'next/link') {
-      return { shortCircuit: true, url: 'data:text/javascript,export default function Link(p){const{children,...rest}=p;return globalThis.React.createElement("a",rest,children)}' }
-    }
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: "data:text/javascript,export const toast={success(){},error(m){globalThis.__reportBuilderRequestTest.errors.push(String(m))}}" }
-    }
-    if (specifier.endsWith('/lib/confirm')) {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function confirmDialog(){return globalThis.__reportBuilderRequestTest.confirm}' }
-    }
-    return next(specifier, context)
+const { stubModules } = await import('../../../../../../testing/stub-modules')
+stubModules({
+  navigation:
+    "export function useRouter(){return {push(){},replace(){},refresh(){}}}export function usePathname(){return '/reports/custom/builder/report-1'}export function useSearchParams(){return new URLSearchParams()}",
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link':
+      'export default function Link(p){const{children,...rest}=p;return globalThis.React.createElement("a",rest,children)}',
+    sonner:
+      "export const toast={success(){},error(m){globalThis.__reportBuilderRequestTest.errors.push(String(m))}}",
+    '../../../../../../lib/confirm':
+      'export async function confirmDialog(){return globalThis.__reportBuilderRequestTest.confirm}',
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

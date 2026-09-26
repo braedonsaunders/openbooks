@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
@@ -17,29 +16,19 @@ const mockIntl = `export async function getTranslations() { return key => key }`
 const mockFeature = `export async function isFeatureEnabled(_orgId, feature) { return feature === 'multiCurrency' }`
 const mockGate = `export async function requireSubcontractsFeature() {}`
 
-const hooks = registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === '../../../lib/authz' && context.parentURL?.includes('/subcontracts/view.ts')) return { shortCircuit: true, url: 'mock:subcontracts-scope-authz' }
-    if (specifier === '../../../lib/features' && context.parentURL?.includes('/subcontracts/view.ts')) return { shortCircuit: true, url: 'mock:subcontracts-scope-features' }
-    if (specifier === '../../../lib/subcontracts-gate' && context.parentURL?.includes('/subcontracts/view.ts')) return { shortCircuit: true, url: 'mock:subcontracts-scope-gate' }
-    if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:subcontracts-scope-intl' }
-    if (context.parentURL?.startsWith('mock:')) return next(specifier, { ...context, parentURL: import.meta.url })
-    return next(specifier, context)
-  },
-  load(url, context, next) {
-    const sources: Record<string, string> = {
-      'mock:subcontracts-scope-authz': mockAuthz,
-      'mock:subcontracts-scope-features': mockFeature,
-      'mock:subcontracts-scope-gate': mockGate,
-      'mock:subcontracts-scope-intl': mockIntl,
-    }
-    if (sources[url]) return { format: 'module', source: sources[url], shortCircuit: true }
-    return next(url, context)
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation: false,
+  intl: mockIntl,
+  authz: mockAuthz,
+  features: false,
+  extra: {
+    '../../../lib/features': mockFeature,
+    '../../../lib/subcontracts-gate': mockGate,
   },
 })
 
 const { loadSubcontracts } = await import('./view.ts') as typeof import('./view.ts')
-hooks.deregister()
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 

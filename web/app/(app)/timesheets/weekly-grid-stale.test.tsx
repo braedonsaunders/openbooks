@@ -7,30 +7,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // jsdom first: the grid reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({
   url: "http://localhost:4800/timesheets?timesheet=emp-1:2026-07-12",
+  matchMediaMatches: false,
 });
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof window.requestAnimationFrame !== "function") {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  window.cancelAnimationFrame = ((_id: number) => setTimeout(() => {}, 0)) as unknown as typeof window.cancelAnimationFrame;
-}
 
 const script = { refreshed: 0, putBodies: [] as Record<string, unknown>[], confirms: 0, confirmNext: false };
 Object.assign(globalThis, {
@@ -42,44 +23,23 @@ Object.assign(globalThis, {
   },
 });
 
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return globalThis.__gridStaleRouter}export function usePathname(){return '/timesheets'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
-    if (specifier === "next/link") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return p.children}",
-      };
-    }
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(){},error(){},warning(){},info(){}};export function Toaster(){return null}",
-      };
-    }
-    if (specifier.endsWith("/lib/confirm")) {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function confirmDialog(){const s=globalThis.__gridStale;s.confirms++;return s.confirmNext}",
-      };
-    }
-    if (specifier.endsWith("/lib/prompt")) {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function promptDialog(){return null}",
-      };
-    }
-    return next(specifier, context);
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__gridStaleRouter}export function usePathname(){return '/timesheets'}export function useSearchParams(){return new URLSearchParams()}",
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "next/link": "export default function Link(p){return p.children}",
+    sonner:
+      "export const toast={success(){},error(){},warning(){},info(){}};export function Toaster(){return null}",
+    "../../../lib/confirm":
+      "export async function confirmDialog(){const s=globalThis.__gridStale;s.confirms++;return s.confirmNext}",
+    "../../../lib/prompt": "export async function promptDialog(){return null}",
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

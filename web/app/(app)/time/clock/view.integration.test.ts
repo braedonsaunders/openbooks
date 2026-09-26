@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // Page loaders import the server-only marker (stubbed by the shared test
@@ -8,24 +7,13 @@ import test from 'node:test'
 // loader loads under plain node (the journal drawer and ref-options vendors
 // tests stub them the same way). Only the refusal path runs here — no
 // translations, no session — so the stubs never fire.
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export function notFound() { throw new Error("notFound") } export function redirect() { throw new Error("redirect") }',
-      }
-    }
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export async function getTranslations() { return (key) => key }',
-      }
-    }
-    return next(specifier, context)
-  },
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({
+  navigation:
+    'export function notFound() { throw new Error("notFound") } export function redirect() { throw new Error("redirect") }',
+  intl: 'export async function getTranslations() { return (key) => key }',
+  authz: false,
+  features: false,
 })
 
 const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')

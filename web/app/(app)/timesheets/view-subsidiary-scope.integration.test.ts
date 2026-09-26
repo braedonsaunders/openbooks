@@ -22,29 +22,30 @@ const mockCustomFields = `export async function loadFieldDefs() { return [] }`
 const mockTimePolicy = `export async function loadTimePolicy() { return { requireApproval: true } }`
 const mockHrmRails = `export async function loadOpenFlagsForWeek() { return [] } export async function approvalFlags() { return [] }`
 
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation: false,
+  intl: mockIntl,
+  authz: false,
+  features: false,
+  extra: {
+    '../../../lib/features': mockFeatures,
+    '../../../lib/feature-gates': mockFeatureGate,
+    '../../../lib/custom-fields': mockCustomFields,
+    '../../../lib/time-policy': mockTimePolicy,
+    '../../../lib/hrm/ai-rails': mockHrmRails,
+  },
+})
+// The scope authz double imports the real subsidiary-scope helper, so it
+// cannot live in a data: URL: it stays in a local hook with its rebase.
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:timesheets-scope-intl' }
     if (specifier === '../../../lib/authz') return { shortCircuit: true, url: 'mock:timesheets-scope-authz' }
-    if (specifier === '../../../lib/features') return { shortCircuit: true, url: 'mock:timesheets-scope-features' }
-    if (specifier === '../../../lib/feature-gates') return { shortCircuit: true, url: 'mock:timesheets-scope-feature-gate' }
-    if (specifier === '../../../lib/custom-fields') return { shortCircuit: true, url: 'mock:timesheets-scope-custom-fields' }
-    if (specifier === '../../../lib/time-policy') return { shortCircuit: true, url: 'mock:timesheets-scope-time-policy' }
-    if (specifier === '../../../lib/hrm/ai-rails') return { shortCircuit: true, url: 'mock:timesheets-scope-hrm-rails' }
     if (context.parentURL?.startsWith('mock:')) return next(specifier, { ...context, parentURL: import.meta.url })
     return next(specifier, context)
   },
   load(url, context, next) {
-    const sources: Record<string, string> = {
-      'mock:timesheets-scope-authz': mockAuthz,
-      'mock:timesheets-scope-intl': mockIntl,
-      'mock:timesheets-scope-features': mockFeatures,
-      'mock:timesheets-scope-feature-gate': mockFeatureGate,
-      'mock:timesheets-scope-custom-fields': mockCustomFields,
-      'mock:timesheets-scope-time-policy': mockTimePolicy,
-      'mock:timesheets-scope-hrm-rails': mockHrmRails,
-    }
-    if (sources[url]) return { format: 'module', source: sources[url], shortCircuit: true }
+    if (url === 'mock:timesheets-scope-authz') return { format: 'module', source: mockAuthz, shortCircuit: true }
     return next(url, context)
   },
 })

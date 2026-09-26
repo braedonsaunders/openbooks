@@ -20,14 +20,18 @@ import type { SessionUser } from '../../../../lib/auth'
 
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __crewCreate: session })
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({
+  navigation:
+    "export function redirect(url){throw new Error('REDIRECT:'+url)};export function notFound(){throw new Error('NOT_FOUND')}",
+  intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en'}",
+  authz: false,
+  features: false,
+})
+// The session shim is per-test state, not a stub shape: authz itself stays
+// real so the loader performs real authorization against this user.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
-      return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en'}" }
-    }
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: "data:text/javascript,export function redirect(url){throw new Error('REDIRECT:'+url)};export function notFound(){throw new Error('NOT_FOUND')}" }
-    }
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__crewCreate.user}' }
     }

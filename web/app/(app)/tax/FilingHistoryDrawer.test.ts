@@ -2,32 +2,21 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ComponentProps, ComponentType, ReactNode } from 'react'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/tax' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-globals.Event = domWindow.Event
-globals.IS_REACT_ACT_ENVIRONMENT = true
+const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/tax' })
+// The drawer's event interop needs the jsdom Event constructor identity, not
+// Node's native global: keep the unconditional pin the inline block had.
+;(globalThis as Record<string, unknown>).Event = window.Event
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__filingHistoryRouter}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(m){(globalThis.__filingHistoryToasts??=[]).push(String(m))},error(m){(globalThis.__filingHistoryToasts??=[]).push(String(m))}}',
-      }
-    }
-    return next(specifier, context)
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({
+  navigation: 'export function useRouter(){return globalThis.__filingHistoryRouter}',
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner:
+      'export const toast={success(m){(globalThis.__filingHistoryToasts??=[]).push(String(m))},error(m){(globalThis.__filingHistoryToasts??=[]).push(String(m))}}',
   },
 })
 
@@ -82,7 +71,7 @@ test('a typed filing refusal stays visible beside the action and the saved amoun
     await act(async () => root.unmount())
     host.remove()
     globalThis.fetch = priorFetch
-    dom.window.close()
+    window.close()
   })
 
   const markFiled = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === messages.tax.history.markFiled)

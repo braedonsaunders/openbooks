@@ -5,31 +5,8 @@ import test from 'node:test'
 // data.error ?? runFailed, and left the button stuck on Running when fetch
 // itself rejected): the status is checked first through the shared helper,
 // the server's named refusal wins, and busy always releases.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/reports/custom/run/def-1/delivery',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+const { bootJsdomEnvironment } = await import('../../../../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/reports/custom/run/def-1/delivery' })
 
 declare global {
   var __deliveryToasts: { kind: string; message: string }[] | undefined
@@ -49,26 +26,19 @@ Object.assign(globalThis, {
     prefetch() {},
   },
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__deliveryTestRouter}export function usePathname(){return "/"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__deliveryToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__deliveryToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
-      }
-    }
-    return next(specifier, context)
+const { stubModules } = await import('../../../../../../../testing/stub-modules')
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__deliveryTestRouter}export function usePathname(){return "/"}export function useSearchParams(){return new URLSearchParams()}',
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner:
+      "export const toast={success(m){(globalThis.__deliveryToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__deliveryToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

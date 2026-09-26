@@ -3,17 +3,13 @@ import test from 'node:test'
 import { createTranslator } from 'next-intl'
 import { LOCALE_CODES as LOCALES } from "../../../../../i18n/config"
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: `data:text/javascript,export function usePathname(){return '/reports/statements/p1'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
-      }
-    }
-    return next(specifier, context)
-  },
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({
+  navigation:
+    `export function usePathname(){return '/reports/statements/p1'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
+  intl: false,
+  authz: false,
+  features: false,
 })
 
 const React = await import('react')
