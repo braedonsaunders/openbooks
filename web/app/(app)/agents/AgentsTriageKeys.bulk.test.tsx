@@ -190,7 +190,7 @@ test("a refused middle row does not stop the bulk and stays accounted", async (t
   assert.match(errors[0]?.message ?? "", /Applied 2/, "the toast must name the applied count");
   assert.match(errors[0]?.message ?? "", /1 refused/, "the toast must name the refused count");
 
-  const alert = document.querySelector('[role="alert"]');
+  const alert = [...document.querySelectorAll('[role="alert"]')].at(-1); // the unread-count read fails against this mock, so its amber alert renders first
   assert.ok(alert, "the refused row must pin as an alert with its reason");
   assert.match(
     alert.textContent ?? "",
