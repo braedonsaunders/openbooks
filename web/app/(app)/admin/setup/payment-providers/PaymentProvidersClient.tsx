@@ -93,7 +93,7 @@ export function PaymentProvidersClient() {
     setError(null);
     setNotice(null);
     let saved = false;
-    const fallbackMessage = tc("somethingWentWrong");
+    const fallbackMessage = tc("feedback.somethingWentWrong");
     await execute(() => fetchAction("/api/admin/setup/payment-providers", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -109,7 +109,7 @@ export function PaymentProvidersClient() {
 
   if (!data) return loading
     ? <p className="text-sm text-slate-500">…</p>
-    : <div className="space-y-2" role="alert"><p className="text-sm text-red-600">{error ?? tc("somethingWentWrong")}</p><Button variant="outline" onClick={() => { setLoading(true); void load(); }}>{tc("actions.retry")}</Button></div>;
+    : <div className="space-y-2" role="alert"><p className="text-sm text-red-600">{error ?? tc("feedback.somethingWentWrong")}</p><Button variant="outline" onClick={() => { setLoading(true); void load(); }}>{tc("actions.retry")}</Button></div>;
 
   return (
     <div className="space-y-6">
@@ -178,7 +178,7 @@ function ProviderCard({
 
   async function test() {
     setTestResult(null);
-    const fallbackMessage = tc("somethingWentWrong");
+    const fallbackMessage = tc("feedback.somethingWentWrong");
     await execute(() => fetchAction<{ ok: boolean; detail: string }>("/api/admin/setup/payment-providers", {
       method: "POST",
       headers: { "content-type": "application/json" },
