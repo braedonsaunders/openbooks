@@ -1,5 +1,5 @@
 import "server-only";
-import type { InboxKind, InboxListContext } from "@openbooks/engine/src/inbox/index.ts";
+import type { InboxKind, InboxListContext, InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";
@@ -31,6 +31,16 @@ export async function inboxContext(authz: Authz): Promise<InboxListContext> {
       payDirections,
     },
   };
+}
+
+/**
+ * Wire view for degraded source legs (OM-10). Notices are sanitized where
+ * they are recorded (the engine names only designed refusals, everything
+ * else carries a generic reason), so mapping them here keeps raw `.message`
+ * text out of API route bodies entirely.
+ */
+export function toInboxNoticeViews(notices: InboxSourceNotice[]): { source: InboxKind; reason: string }[] {
+  return notices.map((notice) => ({ source: notice.kind, reason: notice.message }));
 }
 
 /** The doorway to decision rows: callers who cannot approve see no union. */

@@ -1,8 +1,9 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { countInbox, listInbox, type InboxKind, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
 import { approvalWorklistPageForAuthz } from "../../../lib/application/approvals";
 import { getAuthz } from "../../../lib/authz";
-import { inboxContext, INBOX_FILTER_KINDS, maySeeUnion } from "../../../lib/inbox-context";
+import { inboxContext, INBOX_FILTER_KINDS, maySeeUnion, toInboxNoticeViews } from "../../../lib/inbox-context";
 import { pickString } from "../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -51,7 +52,7 @@ export async function GET(req: Request) {
         return NextResponse.json({
           count: union + unread,
           partial: true,
-          notices: notices.map((notice) => ({ source: notice.kind, reason: notice.message })),
+          notices: toInboxNoticeViews(notices),
         });
       }
       return NextResponse.json({ count: union + unread });
@@ -64,11 +65,10 @@ export async function GET(req: Request) {
     const items = await listInbox(ctx, { ...(kinds ? { kinds } : {}), ...(page ? { page } : {}), notices });
     return NextResponse.json({
       items: filter === "overdue" ? items.filter((i) => i.priority === "overdue") : items,
-      notices: notices.map((notice) => ({ source: notice.kind, reason: notice.message })),
+      notices: toInboxNoticeViews(notices),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "the inbox could not be read";
-    return NextResponse.json({ error: message }, { status: 422 });
+    return apiErrorResponse(error);
   }
 }
 

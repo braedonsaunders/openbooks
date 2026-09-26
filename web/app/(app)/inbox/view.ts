@@ -590,9 +590,11 @@ export async function loadApprovals(
     taskItemsFor(filter),
   ])
   // Named per-source notices for the legs that refused or failed, in stable
-  // kind order. The frame is translated; the reason stays the source's own
-  // message intact. (tasksNotices above is the notices-filter ITEMS — this
-  // is the failure copy, deliberately named apart.)
+  // kind order. The frame is translated; the reason is the designed refusal
+  // intact, or a generic reason for an unexpected source failure (driver
+  // text never reaches the notice). (tasksNotices above is the
+  // notices-filter ITEMS — this is the failure copy, deliberately named
+  // apart.)
   const failedSourceNotices = [...taskNoticeByKind.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([kind, reason]) => ti('sourceUnavailable', { source: ti(`kinds.${kind}`), reason }))
