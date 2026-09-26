@@ -10,11 +10,15 @@ import { registerHooks } from "node:module";
  * per-file `registerHooks` call; the shapes drifted apart while the behavior
  * under test stayed the same.
  *
- * `stubModules` registers one resolve hook covering the four shapes. Each
- * option defaults to the most common stub used across the suite; a test that
- * needs a different behavior passes it in rather than writing a new hook.
- * Anything the four shapes do not cover (a capturing database stand-in, a
- * per-test router script) stays in the test through `extra` or its own hook.
+ * `stubModules` registers one resolve hook covering the four shapes. An
+ * option left out (or passed `false`) stubs nothing: the call only covers
+ * what the test names, so it never shadows the test's own hook or replaces
+ * a module the test expects to be real. Pass `true` for the most common
+ * stub used across the suite, or a stricter shape (a source string, or the
+ * pathname/permissions/enabled knobs) when the test needs different
+ * behavior. Anything the four shapes do not cover (a capturing database
+ * stand-in, a per-test router script) stays in the test through `extra` or
+ * its own hook.
  *
  * Call this before importing the module under test: module resolution hooks
  * only affect imports that happen after they are registered.
@@ -49,10 +53,10 @@ export interface FeaturesStubOptions {
 }
 
 export interface StubModulesOptions {
-  navigation?: false | string | NavigationStubOptions;
-  intl?: false | string;
-  authz?: false | string | AuthzStubOptions;
-  features?: false | string | FeaturesStubOptions;
+  navigation?: boolean | string | NavigationStubOptions;
+  intl?: boolean | string;
+  authz?: boolean | string | AuthzStubOptions;
+  features?: boolean | string | FeaturesStubOptions;
   /** Additional exact-specifier to module-source stubs, same hook. */
   extra?: Record<string, string>;
 }
@@ -139,42 +143,46 @@ function isFeaturesSpecifier(specifier: string): boolean {
 }
 
 function resolveOptionSource(
-  option: false | string | { source?: string } | undefined,
+  option: boolean | string | { source?: string } | undefined,
   fallback: () => string,
 ): string | null {
-  if (option === false) return null;
+  if (option === undefined || option === false) return null;
+  if (option === true) return fallback();
   if (typeof option === "string") return option;
-  if (option && typeof option.source === "string") return option.source;
-  if (option === undefined) return fallback();
+  if (typeof option.source === "string") return option.source;
   return fallback();
 }
 
 export function stubModules(options: StubModulesOptions = {}): void {
   let navigation: string | null = null;
-  if (options.navigation !== false) {
-    if (typeof options.navigation === "string") {
+  if (options.navigation !== undefined && options.navigation !== false) {
+    if (options.navigation === true) {
+      navigation = navigationSource(NAVIGATION_DEFAULT_PATH);
+    } else if (typeof options.navigation === "string") {
       navigation = options.navigation;
-    } else if (options.navigation?.source !== undefined) {
+    } else if (options.navigation.source !== undefined) {
       navigation = options.navigation.source;
     } else {
       navigation = navigationSource(
-        options.navigation?.pathname ?? NAVIGATION_DEFAULT_PATH,
+        options.navigation.pathname ?? NAVIGATION_DEFAULT_PATH,
       );
     }
   }
   const intl = resolveOptionSource(options.intl, () => INTL_SERVER_DEFAULT);
   let authz: string | null = null;
-  if (options.authz !== false) {
-    if (typeof options.authz === "string") authz = options.authz;
-    else if (options.authz?.source !== undefined) authz = options.authz.source;
-    else authz = authzSource(options?.authz?.permissions ?? null);
+  if (options.authz !== undefined && options.authz !== false) {
+    if (options.authz === true) authz = authzSource(null);
+    else if (typeof options.authz === "string") authz = options.authz;
+    else if (options.authz.source !== undefined) authz = options.authz.source;
+    else authz = authzSource(options.authz.permissions ?? null);
   }
   let features: string | null = null;
-  if (options.features !== false) {
-    if (typeof options.features === "string") features = options.features;
-    else if (options.features?.source !== undefined) {
+  if (options.features !== undefined && options.features !== false) {
+    if (options.features === true) features = featuresSource(null);
+    else if (typeof options.features === "string") features = options.features;
+    else if (options.features.source !== undefined) {
       features = options.features.source;
-    } else features = featuresSource(options?.features?.enabled ?? null);
+    } else features = featuresSource(options.features.enabled ?? null);
   }
   const extra = options.extra ?? {};
 
