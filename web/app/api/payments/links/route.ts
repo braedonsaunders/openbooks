@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -102,7 +103,7 @@ export async function POST(req: Request) {
     return NextResponse.json(link, { status: 201 });
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
-    const status = e instanceof PaymentAcceptanceError ? 422 : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 });
+    return apiErrorResponse(e);
   }
 }

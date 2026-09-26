@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -133,7 +134,7 @@ export async function POST(req: Request) {
     // A reused key that cannot replay is a conflict with a named remedy, not
     // a validation failure: the operator must reload and review what settled.
     if (e instanceof CreditApplicationConflictError) {
-      return NextResponse.json({ error: e.message }, { status: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 })
     }
     return paymentErrorResponse(e)
   }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -125,7 +126,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
@@ -166,7 +167,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (e) {
     // The engine fence fired under the row lock: someone saved first.
     if (e instanceof PaymentRevisionConflictError) {
-      return NextResponse.json({ error: e.message }, { status: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 })
     }
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
     return paymentErrorResponse(e)
@@ -185,7 +186,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
-    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e
   }
 }

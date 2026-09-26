@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
     expectedRevision = requireDocumentEditRevision(parsed.data.expectedUpdatedAt)
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
@@ -168,12 +169,12 @@ export async function POST(req: Request) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
     // The engine fence fired under the row lock: someone saved first.
     if (e instanceof PaymentRevisionConflictError) {
-      return NextResponse.json({ error: e.message }, { status: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 })
     }
     // A refused approval routing already rolled back; its message names the
     // failed flow, so it keeps it with the same 422.
     if (e instanceof ApprovalRoutingError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
     return paymentErrorResponse(e)
   }
