@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -67,7 +68,7 @@ export async function PATCH(req: Request, { params }: Params) {
     header = headerHtml ? sanitizeTokenizedFragment(headerHtml) : "";
     footer = footerHtml ? sanitizeTokenizedFragment(footerHtml) : "";
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    return apiErrorResponse(e, { safeStatus: 400 });
   }
   // Store the source human-readable (whitespace-only change; render-neutral).
   const prettySource = await prettifyTemplateHtml(compiled.sanitizedSource);
@@ -78,10 +79,10 @@ export async function PATCH(req: Request, { params }: Params) {
   try {
     assertPrintablePage(paperSizeInput, marginMmInput);
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    return apiErrorResponse(e, { safeStatus: 400 });
   }
   if (!Number.isInteger(marginMmInput)) {
-    return NextResponse.json({ error: `Margin must be a whole number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${String(marginMmInput)}.` }, { status: 400 });
+    return NextResponse.json({ error: `Margin must be a whole number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${marginMmInput}.` }, { status: 400 });
   }
   // assertPrintablePage narrows paperSizeInput to the supported set.
   const paperSize = paperSizeInput;
