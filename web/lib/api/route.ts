@@ -27,7 +27,7 @@ import { notFound } from "./responses";
  */
 export const runtime = "nodejs";
 
-export type RouteScope = "subsidiary" | "unrestricted" | "root";
+export type RouteScope = "unrestricted" | "root";
 export type FeatureGate = string | { none: string };
 
 interface CommonOptions<
@@ -161,10 +161,13 @@ export function defineRoute(options: LooseOptions) {
       } else if (authz && scope === "root") {
         const denied = await authzModule.guardRootSubsidiaryScope(authz);
         if (denied) return denied;
+      } else if (scope !== undefined) {
+        // The type admits only "unrestricted" and "root". Record-level
+        // subsidiary enforcement lives in the handler, which alone knows
+        // which field carries the subsidiary — so a plain-JS caller passing
+        // anything else fails closed instead of running unscoped.
+        throw new Error(`defineRoute: unknown scope "${String(scope)}"`);
       }
-      // scope "subsidiary" performs no automatic gate: list filtering and
-      // record-level checks live in the handler, which sees the caller's
-      // scope through authz. Declaring it records the contract.
 
       let params: unknown;
       if (context?.params !== undefined) {

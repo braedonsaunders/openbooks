@@ -83,7 +83,6 @@ function hoursOrNull(v: unknown): string | null | 'invalid' {
 export const GET = defineRoute({
   permission: 'time.read',
   feature: 'timeTracking',
-  scope: 'subsidiary',
   handler: async ({ request, authz }) => {
     const orgId = authz.user.orgId
 
