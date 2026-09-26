@@ -17,7 +17,7 @@ import { submitForApproval } from "@openbooks/engine/src/flows/submit.ts";
 
 
 /**
- * Wave-3 privilege boundary battery (least-privileged insider vs mutating
+ * Privilege boundary battery (least-privileged insider vs mutating
  * routes). ONE stub only: the session identity (currentUser). Everything
  * else — role assignments, permission resolution, route guards, engine
  * writes — runs for real against a scratch tenant. Every cell asserts the

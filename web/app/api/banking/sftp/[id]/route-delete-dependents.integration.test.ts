@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 /**
- * Wave-7 delete-contract regression for SFTP servers: a server that still
+ * Delete contract for SFTP servers: a server that still
  * feeds live dependents must refuse deletion with a typed 409 naming them —
  * never a raw FK 500, and never a 200 that silently orphans rows.
  *
