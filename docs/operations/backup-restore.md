@@ -28,8 +28,14 @@ npx tsx src/backup/local-cli.ts \
   --out=/secure/openbooks/acme-backup.json.gz
 ```
 
-The command writes the gzip archive and an adjacent
+The command writes the encrypted archive and an adjacent
 `.manifest.json`, both mode `0600`. It refuses to overwrite either file. The
+archive file is one plaintext JSON envelope line, then AES-256-GCM ciphertext
+of the gzip stream under a random per-backup content key wrapped by
+`OPENBOOKS_DATA_KEY`, then the 16-byte authentication tag as the trailer — so
+the bytes are opaque without the source data key and are not readable by
+`zcat` or `gunzip`. The command refuses before writing anything when
+`OPENBOOKS_DATA_KEY` is unset or still the `.env.example` placeholder. The
 manifest records the SHA-256, organization, table count, and row count. Keep the
 archive and manifest together, but copy them to a failure domain separate from
 the OpenBooks host. The adjacent manifest detects corruption only if its hash is
@@ -71,9 +77,22 @@ security ledger.
 
 ### What format v3 proves
 
+New backups are encrypted: one JSON envelope line (format version 3, key id
+`v1`, nonce, content key wrapped by `OPENBOOKS_DATA_KEY`), AES-256-GCM
+ciphertext of the gzip stream, and the authentication tag as the trailer.
+Operator action: none for new backups — old unencrypted backups remain
+readable as described below. Guard the source `OPENBOOKS_DATA_KEY` with the
+same care as the archive: without it the ciphertext cannot be restored.
+
+Follow-up, not done here: stored backups share the application's S3 bucket
+with the file cabinet; moving them to a separate bucket is tracked work.
+
 Before any restore write, OpenBooks:
 
-- hashes the compressed bytes and compares the result with the manifest;
+- hashes the file bytes and compares the result with the manifest;
+- unwraps the per-backup content key and authenticates every ciphertext byte
+  before parsing any row, so a single modified byte refuses by name instead
+  of surfacing as a decompression error;
 - decrypts a format-level AEAD canary before database access, proving the
   configured `OPENBOOKS_DATA_KEY` is the source key even when the tenant has no
   MFA factors or other encrypted rows;
@@ -92,6 +111,10 @@ They are also refused by default. The exceptional
 `--allow-legacy-v2-without-key-check` override is only for an operator who has
 independently proven that `OPENBOOKS_DATA_KEY` is the source key; an archive
 with no decryptable ciphertext cannot prove that fact itself.
+
+Any archive without an encryption envelope — v1, v2, or a v3 written before
+encryption — makes the restore CLI print a `backup-legacy-unencrypted` notice
+naming the file, because its bytes are readable without a key.
 
 ### Restore into an isolated empty target
 

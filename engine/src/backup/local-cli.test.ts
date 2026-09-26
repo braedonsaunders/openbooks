@@ -7,6 +7,11 @@ import { test } from "node:test";
 import type { Writable } from "node:stream";
 import { runLocalBackup } from "./local-cli.ts";
 
+// Local backups wrap a content key under OPENBOOKS_DATA_KEY; the shared
+// suites provide one, the single-file loop may not.
+process.env.OPENBOOKS_DATA_KEY ??=
+  "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
 const ORG_ID = "11111111-1111-4111-8111-111111111111";
 
 test("removes every artifact after a manifest failure so the backup can be retried", async () => {

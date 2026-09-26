@@ -40,6 +40,67 @@ export const BACKUP_FORMAT = "openbooks-backup" as const;
 export const BACKUP_FORMAT_VERSION = 3 as const;
 export const BACKUP_DATA_KEY_CHECK_PLAINTEXT = "openbooks-backup-data-key-check:v1" as const;
 
+/**
+ * Encrypted backups wrap the gzip NDJSON stream in AES-256-GCM under a
+ * random per-backup content key, itself sealed by OPENBOOKS_DATA_KEY. The
+ * file is one plaintext JSON envelope line, the ciphertext, then the 16-byte
+ * GCM tag as the trailer. The manifest/ledger SHA-256 continues to cover the
+ * whole file. The key id is hard-coded until the key-rotation work adopts
+ * real key ids.
+ */
+export const BACKUP_ENCRYPTION = "aes-256-gcm" as const;
+export const BACKUP_KEY_ID = "v1" as const;
+/** GCM authentication tag length in bytes. */
+export const BACKUP_TAG_BYTES = 16 as const;
+
+export interface BackupEnvelope {
+  format: typeof BACKUP_FORMAT;
+  version: typeof BACKUP_FORMAT_VERSION;
+  encryption: typeof BACKUP_ENCRYPTION;
+  keyId: string;
+  /** Base64 12-byte GCM nonce for the per-backup content key. */
+  nonce: string;
+  /** The content key sealed by OPENBOOKS_DATA_KEY (`enc:v1:` wire format). */
+  wrappedKey: string;
+}
+
+export function encodeBackupEnvelope(envelope: BackupEnvelope): string {
+  return `${JSON.stringify(envelope)}\n`;
+}
+
+/**
+ * Parse the first line of a backup file. Returns null for legacy plaintext
+ * gzip archives (binary magic, never JSON). Throws a named refusal for a
+ * line that claims to be an envelope but is malformed.
+ */
+export function decodeBackupEnvelopeLine(line: string): BackupEnvelope | null {
+  let candidate: unknown;
+  try {
+    candidate = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const record = candidate as Record<string, unknown>;
+  if (record.format !== BACKUP_FORMAT) return null;
+  if (record.encryption === undefined) return null;
+  if (
+    record.version !== BACKUP_FORMAT_VERSION ||
+    record.encryption !== BACKUP_ENCRYPTION ||
+    typeof record.keyId !== "string" ||
+    record.keyId.length === 0 ||
+    typeof record.nonce !== "string" ||
+    record.nonce.length === 0 ||
+    typeof record.wrappedKey !== "string" ||
+    !record.wrappedKey.startsWith("enc:v1:")
+  ) {
+    throw new Error(
+      "backup encryption envelope is malformed; the archive is neither a supported encrypted backup nor a legacy plaintext backup",
+    );
+  }
+  return candidate as BackupEnvelope;
+}
+
 export interface BackupHeaderV2 {
   format: typeof BACKUP_FORMAT;
   version: 2;
