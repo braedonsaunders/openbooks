@@ -163,6 +163,18 @@ async function seedQualifications(h: Harness): Promise<void> {
   await db.execute(sql`insert into hrm_qualification_events (org_id, qualification_id, kind) values (${h.org.orgId}, ${qualificationId}, 'recorded')`);
 }
 
+async function seedReviewsExtras(h: Harness): Promise<void> {
+  const managerEmploymentId = randomUUID();
+  await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${managerEmploymentId}, ${h.org.orgId}, ${h.otherPartyId}, ${h.org.subsidiaryId}, 1)`);
+  await db.execute(sql`insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body) values (${h.org.orgId}, ${h.employmentId}, ${h.otherPartyId}, 'feedback', 'manager_and_subject', 'Keep shipping')`);
+  await db.execute(sql`insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body) values (${h.org.orgId}, ${managerEmploymentId}, ${h.partyId}, 'praise', 'public', 'Great work')`);
+  await db.execute(sql`insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, requested_from_party_id, body) values (${h.org.orgId}, ${managerEmploymentId}, ${h.otherPartyId}, 'request', 'manager_and_subject', ${h.partyId}, 'Please share feedback')`);
+  const oneOnOneId = randomUUID();
+  await db.execute(sql`insert into hrm_one_on_ones (id, org_id, manager_employment_id, report_employment_id, scheduled_at) values (${oneOnOneId}, ${h.org.orgId}, ${managerEmploymentId}, ${h.employmentId}, now())`);
+  await db.execute(sql`insert into hrm_one_on_one_items (org_id, one_on_one_id, kind, author_party_id, body) values (${h.org.orgId}, ${oneOnOneId}, 'talking_point', ${h.partyId}, 'Career growth')`);
+  await db.execute(sql`insert into hrm_succession_plans (org_id, position_id, incumbent_employment_id, status) values (${h.org.orgId}, ${randomUUID()}, ${h.employmentId}, 'active')`);
+}
+
 async function seedPartyExtras(h: Harness): Promise<void> {
   await db.execute(sql`insert into addresses (org_id, party_id, label, line1, city, country) values (${h.org.orgId}, ${h.partyId}, 'home', '1 Main St', 'Toronto', 'CA')`);
   await db.execute(sql`insert into contacts (org_id, party_id, name, email) values (${h.org.orgId}, ${h.partyId}, 'Sam Subject', 'sam@scratch.test')`);
@@ -261,6 +273,7 @@ test("an export carries every new domain and the manifest names them all", { ski
     await seedClock(h);
     await seedPartyExtras(h);
     await seedEmploymentExtras(h);
+    await seedReviewsExtras(h);
     await seedPayrollIdentity(h);
     await seedPerformance(h);
     const prior = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
@@ -274,57 +287,29 @@ test("an export carries every new domain and the manifest names them all", { ski
     const path = join(dir, "export.zip");
     writeFileSync(path, bytes);
     const manifest = JSON.parse(execFileSync("unzip", ["-p", path, "export.json"], { encoding: "utf8" })) as {
-      candidates: unknown[];
-      applications: unknown[];
-      interviews: unknown[];
-      scorecards: unknown[];
-      scorecardRatings: unknown[];
-      offers: unknown[];
-      qualifications: unknown[];
-      compStatements: unknown[];
-      surveyInvitations: unknown[];
-      surveyResponses: unknown[];
-      clockEvents: unknown[];
-      addresses: unknown[];
-      contacts: unknown[];
-      processSteps: unknown[];
-      employeeRoles: unknown[];
-      reportingRelationships: unknown[];
       taxCertificates: { certificate_key: string }[];
       payrollProfiles: Record<string, unknown>[];
       workLocationAllocations: Record<string, unknown>[];
       roeSeparationEvents: Record<string, unknown>[];
       roeSeparationPayments: Record<string, unknown>[];
       itAddizionaliOpeningBalances: Record<string, unknown>[];
-      goals: unknown[];
-      reviews: unknown[];
-      reviewAnswers: unknown[];
       priorExports: { id: string }[];
       manifest: { gathered: { module: string; status: string }[]; excluded: { table: string; reason: string }[] };
     };
+    // One generic loop over every seeded payload key: each newly gathered
+    // table asserts through this table, never a per-table test. Keys read
+    // through a Record cast because export.json is dynamic — a typo still
+    // fails loudly (undefined has no length).
     for (const [key, want] of [
-      ["candidates", 1],
-      ["applications", 1],
-      ["interviews", 1],
-      ["scorecards", 1],
-      ["scorecardRatings", 1],
-      ["offers", 1],
-      ["qualifications", 1],
-      ["compStatements", 1],
-      ["surveyInvitations", 1],
-      ["surveyResponses", 1],
-      ["clockEvents", 1],
-      ["addresses", 1],
-      ["contacts", 1],
-      ["processSteps", 1],
-      ["employeeRoles", 1],
-      ["reportingRelationships", 1],
-      ["goals", 1],
-      ["reviews", 1],
-      ["reviewAnswers", 1],
+      ["candidates", 1], ["applications", 1], ["interviews", 1], ["scorecards", 1],
+      ["scorecardRatings", 1], ["offers", 1], ["qualifications", 1], ["compStatements", 1],
+      ["surveyInvitations", 1], ["surveyResponses", 1], ["clockEvents", 1], ["addresses", 1],
+      ["contacts", 1], ["processSteps", 1], ["employeeRoles", 1], ["reportingRelationships", 1],
+      ["feedback", 3], ["oneOnOnes", 1], ["oneOnOneItems", 1], ["successionPlans", 1],
+      ["goals", 1], ["reviews", 1], ["reviewAnswers", 1],
     ] as const) {
       assert.equal(
-        (manifest[key] as unknown[]).length,
+        (manifest as unknown as Record<string, unknown[]>)[key]?.length,
         want,
         `${key} must carry the seeded row`,
       );

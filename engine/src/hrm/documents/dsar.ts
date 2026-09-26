@@ -546,6 +546,43 @@ const REPORTING_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
+// Reviews-domain subject records. Feedback follows all three person links
+// (subject employment, author, requested party — mirroring the scorecard
+// subject-or-author rule); 1:1s gather as report or manager; items follow
+// transitively under the gathered 1:1s; succession plans gather where the
+// subject is the incumbent. Candidates under those plans stay out — they
+// name other employees, not the subject. Feedback has no updated_by
+// column, so (like the field-ticket lines below) its deny set omits it —
+// the projector fails closed on a stale deny entry, so this must match
+// the live schema exactly.
+const FEEDBACK_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "subject_employment_id",
+  "created_by",
+]);
+
+const ONE_ON_ONES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "manager_employment_id",
+  "report_employment_id",
+  "created_by",
+  "updated_by",
+]);
+
+const ONE_ON_ONE_ITEMS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "one_on_one_id",
+  "created_by",
+  "updated_by",
+]);
+
+const SUCCESSION_PLANS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "incumbent_employment_id",
+  "created_by",
+  "updated_by",
+]);
+
 export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
   const claimed = await withOrgTransaction(orgId, () =>
@@ -839,6 +876,38 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by reviewed_at nulls last
+      `)).rows;
+      // Continuous-performance records: feedback by any of its three
+      // person links, 1:1s as report or manager with their items, and
+      // succession plans where the subject is the incumbent.
+      const subjectReviewsEmployments = sql`select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}`;
+      const subjectOneOnOnes = sql`select id from hrm_one_on_ones where org_id = ${orgId} and (report_employment_id in (${subjectReviewsEmployments}) or manager_employment_id in (${subjectReviewsEmployments}))`;
+      payload.feedback = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("hrm_feedback", FEEDBACK_DENIED_COLUMNS)}
+          from hrm_feedback
+         where org_id = ${orgId}
+           and (subject_employment_id in (${subjectReviewsEmployments})
+                or author_party_id = ${partyId}
+                or requested_from_party_id = ${partyId})
+         order by recorded_at
+      `)).rows;
+      payload.oneOnOnes = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("hrm_one_on_ones", ONE_ON_ONES_DENIED_COLUMNS)}
+          from hrm_one_on_ones
+         where org_id = ${orgId} and id in (${subjectOneOnOnes})
+         order by scheduled_at
+      `)).rows;
+      payload.oneOnOneItems = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("hrm_one_on_one_items", ONE_ON_ONE_ITEMS_DENIED_COLUMNS)}
+          from hrm_one_on_one_items
+         where org_id = ${orgId} and one_on_one_id in (${subjectOneOnOnes})
+         order by created_at
+      `)).rows;
+      payload.successionPlans = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("hrm_succession_plans", SUCCESSION_PLANS_DENIED_COLUMNS)}
+          from hrm_succession_plans
+         where org_id = ${orgId} and incumbent_employment_id in (${subjectReviewsEmployments})
+         order by created_at
       `)).rows;
     });
 
