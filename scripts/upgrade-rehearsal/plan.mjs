@@ -42,7 +42,7 @@ const SHA = /^[0-9a-f]{40}$/;
  * wrote. Refused here, at plan time, not mid-cell.
  */
 export const ORACLE_OVERLAY_ALLOWLIST = Object.freeze([
-  "engine/src/harness/",
+  "engine/src/golden/scenario.ts",
   "engine/src/platform/uuid.ts",
 ]);
 
