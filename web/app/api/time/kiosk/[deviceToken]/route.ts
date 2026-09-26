@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -23,7 +24,7 @@ async function kiosk(deviceToken: string) {
   try {
     return await resolveKioskByToken(deviceToken)
   } catch (error) {
-    if (error instanceof FieldTimeError) return bad(error.message, 404)
+    if (error instanceof FieldTimeError) return apiErrorResponse(error, { safeStatus: 404 })
     throw error
   }
 }
@@ -113,7 +114,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ deviceToken: st
     })
     return NextResponse.json({ fileId: meta.id }, { status: 201 })
   } catch (error) {
-    if (error instanceof FieldTimeError) return bad(error.message)
+    if (error instanceof FieldTimeError) return apiErrorResponse(error, { safeStatus: 422 })
     throw error
   }
 }
@@ -162,8 +163,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ deviceToken: s
     }
   } catch (error) {
     if (error instanceof FieldTimeError) {
-      if (error.code === 'client_event_conflict') return NextResponse.json({ error: error.message }, { status: 409 })
-      return bad(error.message)
+      if (error.code === 'client_event_conflict') return apiErrorResponse(error, { safeStatus: 409 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }

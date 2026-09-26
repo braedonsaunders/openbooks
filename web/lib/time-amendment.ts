@@ -8,6 +8,19 @@ import { checkProjectsWriteEnabled } from './features'
 import { lockReasonsFor } from './time-lifecycle'
 
 /**
+ * Amendment refusals are user-actionable (the message names the remedy)
+ * and answer 422. A named class keeps them intact through the API error
+ * sanitizer; unexpected failures stay anonymous 500s.
+ */
+export class TimeAmendmentRefusal extends Error {
+  readonly status = 422
+  constructor(message: string) {
+    super(message)
+    this.name = 'TimeAmendmentRefusal'
+  }
+}
+
+/**
  * Create an offsetting draft time entry that amends a consumed original.
  *
  * Once hours are invoiced, paid, costed or ticketed they are evidence for a
@@ -36,7 +49,7 @@ export async function amendTimeEntry(
     const identity = (await db.execute<{ employee_party_id: string; worked_on: string }>(sql`
       select employee_party_id, worked_on::text from time_entries where id = ${entryId} and org_id = ${orgId}
     `)).rows[0]
-    if (!identity) throw new Error('time entry not found')
+    if (!identity) throw new TimeAmendmentRefusal('time entry not found')
     await lockScopeRow(db, orgId, 'party', identity.employee_party_id, allowedSubsidiaryIds, 'share')
     const entryWeek = weekStart(identity.worked_on)
     await lockTimesheetWeek(orgId, identity.employee_party_id, entryWeek)
@@ -47,25 +60,25 @@ export async function amendTimeEntry(
        for update
     `))
     const row = src.rows[0]
-    if (!row) throw new Error('time entry not found')
+    if (!row) throw new TimeAmendmentRefusal('time entry not found')
     if (row.employee_party_id !== identity.employee_party_id) throw new ScopeNotFoundError()
-    if (weekStart(row.worked_on) !== entryWeek) throw new Error('time entry week changed; retry the amendment')
-    if (row.amends_entry_id) throw new Error('an amendment cannot itself be amended — amend the original')
+    if (weekStart(row.worked_on) !== entryWeek) throw new TimeAmendmentRefusal('time entry week changed; retry the amendment')
+    if (row.amends_entry_id) throw new TimeAmendmentRefusal('an amendment cannot itself be amended — amend the original')
     // Only approved history is amended. An entry that is still draft,
     // submitted, or rejected remains editable, so a contra against it would
     // point at a row the weekly save can delete or replace — orphaning the
     // offset into phantom negative hours. Correct editable entries by saving,
     // and consumed ones here.
-    if (row.status !== 'approved') throw new Error('only an approved entry can be amended — edit or submit it first')
+    if (row.status !== 'approved') throw new TimeAmendmentRefusal('only an approved entry can be amended — edit or submit it first')
     const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id, allowedSubsidiaryIds)
-    if (!ownedEmployee) throw new Error('employee not found')
+    if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
     row.employee_party_id = ownedEmployee
     const already = (await db.execute(sql`
       select 1 from time_entries
        where org_id = ${orgId} and amends_entry_id = ${entryId}
        limit 1
     `))
-    if (already.rows.length) throw new Error('this entry already has an amendment')
+    if (already.rows.length) throw new TimeAmendmentRefusal('this entry already has an amendment')
 
     const inserted = await insertAmendment(orgId, actorId, row)
     // The week header stays "approved" until we clear it — otherwise the
@@ -135,10 +148,10 @@ async function lockTimesheetWeek(orgId: string, employeeId: string, week: string
      where org_id = ${orgId} and employee_party_id = ${employeeId} and week_start = ${week}::date
      for update
   `)).rows[0]
-  if (!header) throw new Error('timesheet week not found')
+  if (!header) throw new TimeAmendmentRefusal('timesheet week not found')
   // Reading status under the lock deliberately rechecks any approval or
   // submission that completed while this amendment waited for the header.
-  if (header.status === 'empty') throw new Error('no locked entries to amend')
+  if (header.status === 'empty') throw new TimeAmendmentRefusal('no locked entries to amend')
 }
 
 async function insertAmendment(
@@ -147,13 +160,13 @@ async function insertAmendment(
   row: AmendableRow,
 ): Promise<string> {
   const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id)
-  if (!ownedEmployee) throw new Error('employee not found')
+  if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
   // The contra inherits the original's project as a draft entry — a new
   // Projects disable-blocker — so a disable racing this insert must refuse
   // one side or the other. Both amendment entry points ride this insert.
   // The default runner is the caller's pinned transaction.
   if (row.project_id != null && !(await checkProjectsWriteEnabled(orgId))) {
-    throw new Error('Projects feature is disabled')
+    throw new TimeAmendmentRefusal('Projects feature is disabled')
   }
   const ownedRefs = await pinTimesheetLineRefs(orgId, {
     projectId: row.project_id,
@@ -161,7 +174,7 @@ async function insertAmendment(
     timeTypeId: row.time_type_id,
     departmentId: row.department_id,
   })
-  if (!ownedRefs) throw new Error('amendment line references are not in this organization')
+  if (!ownedRefs) throw new TimeAmendmentRefusal('amendment line references are not in this organization')
   // The original's labour cost is exactly hours × cost_rate, and an approved
   // original with no snapshot cost nothing. The contra must cost the exact
   // negative of that — so a missing snapshot is carried as ZERO, never left
@@ -223,7 +236,7 @@ export async function amendLockedWeek(
   return withOrgTransaction(orgId, async () => {
     await lockScopeRow(db, orgId, 'party', employeeId, allowedSubsidiaryIds, 'share')
     const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId, allowedSubsidiaryIds)
-    if (!ownedEmployee) throw new Error('employee not found')
+    if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
     const week = weekStart(sundayIso)
     await lockTimesheetWeek(orgId, ownedEmployee, week)
     const days = weekWindow(week)
@@ -239,9 +252,9 @@ export async function amendLockedWeek(
          and week_start = ${week}::date
        for update
     `)).rows[0])
-    if (!header) throw new Error('timesheet week not found')
+    if (!header) throw new TimeAmendmentRefusal('timesheet week not found')
     if (header.status !== 'approved') {
-      throw new Error('only an approved week can be amended')
+      throw new TimeAmendmentRefusal('only an approved week can be amended')
     }
 
     const src = (await db.execute<AmendableRow>(sql`
@@ -275,7 +288,7 @@ export async function amendLockedWeek(
       await insertAmendment(orgId, actorId, row)
       amended += 1
     }
-    if (amended === 0) throw new Error('no locked entries to amend')
+    if (amended === 0) throw new TimeAmendmentRefusal('no locked entries to amend')
     await setTimesheetWeekStatus(orgId, ownedEmployee, week, 'draft', actorId, null)
     return { amended }
   })

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -66,6 +67,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ...payload, ...result }, { status: 201 })
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'could not amend' }, { status: 422 })
+    return apiErrorResponse(e)
   }
 }
