@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
 import { generalLedgerExportData, isExactDecimalText, pdfMoney } from './report-pdf-detail.ts'
@@ -7,15 +6,6 @@ import { generalLedgerExportData, isExactDecimalText, pdfMoney } from './report-
 // `report-pdf` is server-only in production. This suite runs it directly so
 // the shared CSV/XLSX boundary is covered without weakening that production
 // guard.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { url: 'data:text/javascript,export {}', shortCircuit: true }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData, journalExportData, registerExportData, partnerStatementExportData } = await import('./report-pdf.ts')
 const { decimalRatio } = await import('./reports/decimals.ts')
 

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { ApiField, ResolvedApiType } from "./registry-data.ts";
@@ -9,15 +8,6 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // typed field error — never a generic constraint blow-up, and never a silent
 // NULL when the column happens to be nullable. Mirrors the repo's writer
 // integration-test conventions (hand-built resolved type + fields).
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { updateRecord } = await import("./writers.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

@@ -1,15 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/')) {
-      return nextResolve(new URL(`../${specifier.slice(2)}`, import.meta.url).href, context)
-    }
-    return nextResolve(specifier, context)
-  },
-})
 
 // tsx compiles neighboring legacy JSX modules with the classic runtime when
 // this test starts from the repository root; provide that runtime explicitly.

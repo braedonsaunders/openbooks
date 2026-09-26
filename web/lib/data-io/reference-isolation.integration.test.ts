@@ -1,24 +1,10 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
 // Data-io resources are server-only. Shim that marker so this focused
 // PostgreSQL boundary test can import them under node's test runner.
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export {}',
-      }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { RefResolver } = (await import('./resource-core.ts')) as typeof import('./resource-core.ts')
 const { recordResource, recordSections } = (await import('./record-resources.ts')) as typeof import(
   './record-resources.ts'
@@ -32,7 +18,6 @@ const { propertyDataResource } = (await import('./property-resources.ts')) as ty
 const { recordSecurityDeposit } = (await import('@openbooks/engine/src/property/management.ts')) as typeof import(
   '@openbooks/engine/src/property/management.ts'
 )
-hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')

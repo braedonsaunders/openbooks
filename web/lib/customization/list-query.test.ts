@@ -1,18 +1,8 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // SQL builders only. The server-only seam is stubbed the same way as
 // list-where-fail-closed.integration.test.ts — no database.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { documentWhere } = await import("./list-query.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

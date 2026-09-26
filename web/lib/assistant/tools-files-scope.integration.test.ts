@@ -10,14 +10,8 @@ const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __fileScope: state })
 registerHooks({ resolve(specifier, context, nextResolve) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__fileScope.user}' }
-  if (specifier.startsWith('@/')) {
-    const path = root + 'web/' + specifier.slice(2)
-    for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return nextResolve(path + suffix, context)
-    return nextResolve(path, context)
-  }
   return nextResolve(specifier, context)
 } })
 

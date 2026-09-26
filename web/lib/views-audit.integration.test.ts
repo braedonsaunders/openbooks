@@ -16,7 +16,6 @@ Object.assign(globalThis, { __viewsAuditState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__viewsAuditState;
@@ -27,7 +26,6 @@ registerHooks({
       export async function canRunReportEntity() { return true }
       export async function guardReportEntity() { return null }
     `)
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

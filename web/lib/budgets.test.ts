@@ -1,15 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/')) {
-      return nextResolve(new URL(`../${specifier.slice(2)}`, import.meta.url).href, context)
-    }
-    return nextResolve(specifier, context)
-  },
-})
 
 const React = await import('react')
 ;(globalThis as typeof globalThis & { React: typeof React }).React = React

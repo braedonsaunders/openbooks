@@ -13,9 +13,6 @@ import test from 'node:test'
  */
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { url: 'data:text/javascript,export {}', format: 'module', shortCircuit: true }
-    }
     const mockUrl = new Map([
       ['../../../../lib/authz', 'mock:parse-route-authz'],
       ['../../../../lib/data-io/resources', 'mock:parse-route-resources'],

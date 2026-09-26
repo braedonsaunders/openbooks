@@ -1,19 +1,9 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import { test } from 'node:test'
 import { DOC_ARTICLES } from '../docs'
 
 // `server-only` throws outside a React Server Component; the module under
 // test is server-only for the bundler's benefit, and its search is pure.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { createFeedbackKnowledge, searchDocArticles } = await import('./knowledge')
 
 /**

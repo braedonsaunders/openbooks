@@ -14,9 +14,6 @@ import test from "node:test";
 const root = pathToFileURL(process.cwd() + '/').href;
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next-intl/server") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key}export async function getLocale(){return 'en'}" };
     }
@@ -26,7 +23,6 @@ registerHooks({
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function useRouter(){return {push(){},replace(){},refresh(){}}}export function usePathname(){return '/projects'}export function useSearchParams(){return new URLSearchParams()}" };
     }
-    if (specifier.startsWith('@/')) return nextResolve(root + 'web/' + specifier.slice(2) + '.ts', context);
     return nextResolve(specifier, context);
   },
 });

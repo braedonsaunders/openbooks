@@ -8,9 +8,6 @@ import test from 'node:test'
 // stubbed map would make every assertion below hollow.
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { url: 'mock:flow-subject-authz-server-only', shortCircuit: true }
-    }
     if (
       specifier === './authz' &&
       context.parentURL?.endsWith('/web/lib/flow-subject-authz.ts')

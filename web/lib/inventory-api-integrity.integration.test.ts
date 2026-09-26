@@ -15,13 +15,11 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryApiAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:null}}",
       ) };
     }
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

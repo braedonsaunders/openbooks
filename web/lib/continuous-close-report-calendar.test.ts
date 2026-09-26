@@ -8,7 +8,6 @@ const state: { generatedAt?: Date; filename?: string } = {}
 
 const stamp = '2026-03-15'
 const mockSources = new Map<string, string>([
-  ['mock:server-only', 'export {}'],
   ['mock:intl', `export async function getTranslations() { return (key) => key }; export async function getLocale() { return 'en-US' }`],
   ['mock:business-date', `export async function businessToday(orgId) { if (orgId !== 'org-1') throw new Error('wrong organization'); return '${stamp}' }`],
   ['mock:db', `export const db = { async execute() { return { rows: [{ agent_key: 'accounting', finished_at: new Date('2026-03-14T23:59:00Z'), narrative: { title: 'Close review', periodLabel: 'March close', executiveSummary: 'Two risks need review.' } }] } } }`],
@@ -22,7 +21,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['server-only', 'mock:server-only'],
   ['next-intl/server', 'mock:intl'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],

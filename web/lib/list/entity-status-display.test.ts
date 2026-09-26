@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // The opportunity LIST cell (and the status
@@ -11,11 +10,6 @@ import test from "node:test";
 // unrenamed seeds render through crm.opportunities.statuses, tenant
 // renames keep their stored names, and locales without the subtree keep
 // the stored name instead of a raw message key.
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-  return next(specifier, context);
-} });
-
 const { entityListSource } = await import("./entity-sources.ts");
 
 const catalog = (locale: string): Record<string, string> => {

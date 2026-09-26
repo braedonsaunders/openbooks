@@ -82,7 +82,6 @@ const transitionRouteMockUrls = new Map<string, string>([
 const transitionRouteHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // The real '@/lib/api/json' imports 'server-only', which is inert here.
-    if (specifier === "server-only") return { url: "data:text/javascript,export {}", shortCircuit: true };
     const mocked = transitionRouteMockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);

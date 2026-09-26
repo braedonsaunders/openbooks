@@ -1,21 +1,12 @@
 import assert from 'node:assert/strict'
 import { sql } from 'drizzle-orm'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { registerHooks } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '../../engine/src/organization/subsidiary-scope.ts'
 
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
-    return next(specifier, context)
-  },
-})
 const { guardSubsidiaryScope, subsidiariesInScope } = await import('./authz.ts')
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')

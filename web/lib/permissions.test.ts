@@ -133,9 +133,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { url: 'data:text/javascript,export {}', shortCircuit: true }
-    }
     if (
       context.parentURL?.includes('?email-permission-test-helper') &&
       !specifier.startsWith('node:')
@@ -342,9 +339,6 @@ const provisionPostSources = new Map<string, string>([
 
 const provisionPostHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next/navigation') {
       return {
         shortCircuit: true,

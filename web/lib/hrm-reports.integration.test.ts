@@ -1,19 +1,12 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { ScratchOrg } from '../../engine/src/testing/fixtures.ts'
 import type { Authz } from './authz.ts'
 
-// Static imports hoist past the shim below, so every module that (even
-// transitively) imports the RSC `server-only` marker loads dynamically after
-// it — the same seam as web/lib/custom-reports-open-ar.integration.test.ts.
-registerHooks({
-  resolve(s, c, next) {
-    if (s === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    return next(s, c)
-  },
-})
+// The shared test preset stubs the RSC `server-only` marker, so every
+// module that (even transitively) imports it loads dynamically below —
+// the same seam as web/lib/custom-reports-open-ar.integration.test.ts.
 const { db, pool, withBypass, withOrgContext } = await import('../../engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow } = await import(
   '../../engine/src/testing/fixtures.ts'

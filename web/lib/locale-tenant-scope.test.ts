@@ -14,7 +14,6 @@ const mocks = new Map([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === 'next/headers') return { shortCircuit: true, url: 'mock:headers' }
     if (specifier === './auth' && context.parentURL?.includes('/web/lib/locale.ts')) return { shortCircuit: true, url: 'mock:auth' }
     if (specifier === '@openbooks/engine/src/platform/db.ts' && context.parentURL?.includes('/web/lib/locale.ts')) return { shortCircuit: true, url: 'mock:db' }

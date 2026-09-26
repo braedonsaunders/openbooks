@@ -1,16 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
 import type { ApplicationContext } from './context'
 import { ApplicationError } from './errors'
-registerHooks({resolve(specifier,context,next){
-  if(specifier === 'server-only')return {shortCircuit:true,url:'data:text/javascript,export {}'}
-  return next(specifier,context)
-}})
 const { listApplicationAuditEvents, listApplicationUsers } = await import('./admin-read')
 
 function context(orgId: string, permission: string, allowedSubsidiaryIds: Set<string> | null): ApplicationContext {

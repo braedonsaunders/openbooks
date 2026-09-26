@@ -8,19 +8,6 @@ import { env } from "@openbooks/engine/src/platform/db.ts";
 // createContext). The production modules still import server-only as a
 // marker; replace that marker only inside this trusted integration process.
 const serverOnlyLoader = `data:text/javascript,${encodeURIComponent(`
-  import { registerHooks } from "node:module";
-  registerHooks({
-    resolve(specifier, context, nextResolve) {
-      if (specifier === "server-only") {
-        return {
-          url: "data:text/javascript,export {}",
-          format: "module",
-          shortCircuit: true,
-        };
-      }
-      return nextResolve(specifier, context);
-    },
-  });
 `)}`;
 
 function runIntegrationSource(source: string): void {

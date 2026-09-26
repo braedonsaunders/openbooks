@@ -130,7 +130,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === './features') return { url: 'mock:features', shortCircuit: true }
@@ -139,7 +138,6 @@ const hooks = registerHooks({
     return nextResolve(specifier, _context)
   },
   load(url, _context, nextLoad) {
-    if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
     if (url === 'mock:features') return { format: 'module', source: 'export async function isFeatureEnabled() { return true }; export async function acquireFeatureGateLock() {}', shortCircuit: true }
     if (url === 'mock:org-feature-lock') return { format: 'module', source: 'export async function lockAndCheckOrgFeature() { return true }', shortCircuit: true }
     const source = mockSources.get(url)

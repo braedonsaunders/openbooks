@@ -5,7 +5,6 @@ import test from "node:test";
 const cookieValues = new Map<string, string>();
 Object.assign(globalThis, { __orgAccessCookies: cookieValues });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "next/headers") return { shortCircuit: true, url: "data:text/javascript,export async function cookies(){return {get(name){const value=globalThis.__orgAccessCookies.get(name);return value ? {value} : undefined}}}" };
   if (specifier === "./request-org" && context.parentURL?.endsWith('/auth.ts')) return { shortCircuit: true, url: "data:text/javascript,export function setRequestOrg(){}" };
   return next(specifier, context);

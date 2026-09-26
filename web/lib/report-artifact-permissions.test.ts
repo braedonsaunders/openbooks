@@ -1,20 +1,10 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { Authz } from './authz'
 
 // `report-execution-context` is a server module; the suite loads the REAL gate
 // after stubbing the marker, so the payroll refusal below exercises the
 // production check rather than a copy of it.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { canAccessReportArtifact, reportArtifactAccessDetail, snapshotReportAuthorization } = await import(
   './report-execution-context.ts'
 )

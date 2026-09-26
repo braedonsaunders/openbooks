@@ -1,19 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
 
 const { MAX_UPLOAD_BYTES, isUploadContentType, listApplicationFiles, validateCabinetUpload } = await import("./files.ts");
 const { ApplicationError } = await import("./errors.ts");

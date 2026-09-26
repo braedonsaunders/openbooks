@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
@@ -17,18 +16,6 @@ import type { Authz } from "../authz";
 import type { SessionUser } from "../auth";
 
 const root = pathToFileURL(process.cwd() + "/").href;
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(root + "web/" + specifier.slice(2) + ".ts", context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { applicationContextFromSession } = await import("./context.ts");
 const { getSetupRecord, listSetupRecords } = await import("./setup-read.ts");
 const { ApplicationError } = await import("./errors.ts");

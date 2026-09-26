@@ -13,7 +13,6 @@ const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.fx-feature-race")] = state;
 // Substitute identity only; the feature gate, parser, service and writes remain native.
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "./authz" && (context.parentURL ?? "").endsWith("/lib/feature-gates.ts")) {
     return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
       `export async function guardPermission(){return globalThis[Symbol.for('openbooks.fx-feature-race')].gate}`) };

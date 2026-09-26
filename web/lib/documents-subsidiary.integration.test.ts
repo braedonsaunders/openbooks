@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // A document's subsidiary is structural: posting falls back to the root
@@ -9,18 +8,6 @@ import test from "node:test";
 // entries remain. The drawer sends `subsidiaryId: null` when its entity
 // picker is empty, and the service boundary must refuse that shape the same
 // way it refuses clearing a required party.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");

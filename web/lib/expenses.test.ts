@@ -1,18 +1,8 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // expenses.ts is a server-only module. The marker only gates RSC bundling,
 // so replace it with an empty module for this pure eligibility test.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { canRecallExpenseReport } = await import('./expenses.ts')
 
 const viewer = (id: string, roles: { key: string }[] = [{ key: 'accountant' }]) => ({ id, roles })

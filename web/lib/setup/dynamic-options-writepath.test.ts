@@ -6,17 +6,7 @@
  * prove the German filing account a persona could not create now saves.
  */
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true as const, url: 'data:text/javascript,export {}' }
-    }
-    return next(specifier, context)
-  },
-})
 
 const { SETUP_ENTITY_BY_KEY } = (await import('./registry')) as {
   SETUP_ENTITY_BY_KEY: Map<string, unknown>

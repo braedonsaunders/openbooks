@@ -1,17 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // The es bottom-nav AR/AP tabs both truncated to
 // "Cuentas por…" — indistinguishable. Modules now carry a per-locale short
 // label (nav.modulesShort) that the mobile tab bar prefers; locales and
 // modules without one render exactly as before.
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-  return next(specifier, context);
-} });
-
 const { navPathname, resolveModuleShortLabel } = await import("./resolve.ts");
 
 const nav = (locale: string): { modules: Record<string, string>; modulesShort?: Record<string, string> } =>

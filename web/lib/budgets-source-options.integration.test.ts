@@ -4,7 +4,6 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 registerHooks({ resolve(specifier, _context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
   return next(specifier)
 } })
 

@@ -1,28 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { ResolvedApiType } from "./registry-data.ts";
 
 // The writer imports server-only services. Shim the marker package so this
 // focused integration suite can load the production module under node:test.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { deleteRecord, updateRecord } = await import("./writers.ts");
 const { createAppPlatformAdapter } = await import("../apps/platform.ts");
 const { loadApiSchema, resolveApiType } = await import("./schema-registry.ts");

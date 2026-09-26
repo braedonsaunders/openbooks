@@ -7,7 +7,6 @@ const root=pathToFileURL(process.cwd()+'/').href;
 const capture={html:''};
 Object.assign(globalThis,{__backupPrecisionCapture:capture});
 registerHooks({resolve(specifier,context,next){
-  if(specifier==='server-only') return {shortCircuit:true,url:'data:text/javascript,export {}'};
   if(context.parentURL?.endsWith('/web/lib/invoice-backup.ts')) {
     // Thin re-export-plus-override of the real @openbooks/pdf surface, so the
     // next export added to the package cannot break this double's link again.
@@ -17,7 +16,6 @@ registerHooks({resolve(specifier,context,next){
     if(specifier==='./pdf-templates/store') return {shortCircuit:true,url:'data:text/javascript,export async function resolvePdfTemplate(){return null}'};
     if(specifier==='./money-server') return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent(`import {createMoneyFormatter} from '${root}web/lib/money-format.ts';export async function getMoneyFormatter(_org,currency){return createMoneyFormatter('en-CA',currency)}`)};
   }
-  if(specifier.startsWith('@/')) return next(root+'web/'+specifier.slice(2)+'.ts',context);
   return next(specifier,context);
 }});
 const {sql}=await import('drizzle-orm');

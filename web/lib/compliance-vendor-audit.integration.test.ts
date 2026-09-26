@@ -43,9 +43,6 @@ const mockCompliance = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/authz") return { url: "mock:compliance-authz", shortCircuit: true };
     if (specifier === "@/lib/compliance") return { url: "mock:compliance-gate", shortCircuit: true };
     // Resolve this worktree's engine directly.  This keeps the route and the
@@ -56,15 +53,6 @@ const hooks = registerHooks({
         url: new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href,
         shortCircuit: true,
       };
-    }
-    if (specifier.startsWith("@/") && context.parentURL) {
-      const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
-      const webRoot = parentDir.lastIndexOf("/web/");
-      if (webRoot === -1) return nextResolve(specifier, context);
-      return nextResolve(
-        new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + ".ts").href,
-        context,
-      );
     }
     return nextResolve(specifier, context);
   },

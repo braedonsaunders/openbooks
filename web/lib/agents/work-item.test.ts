@@ -32,9 +32,6 @@ const OLD_FINDING = {
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { url: "data:text/javascript,export {}", format: "module", shortCircuit: true };
-    }
     if (specifier === "drizzle-orm") {
       return { url: "mock:work-item-drizzle", shortCircuit: true };
     }

@@ -23,7 +23,6 @@ const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __taxPageScope: state, React })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === 'next-intl/server') {
       return {
         shortCircuit: true,

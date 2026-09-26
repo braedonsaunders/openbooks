@@ -13,13 +13,7 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmRouteScope: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__pmRouteScope.user}' };
-  if (specifier.startsWith('@/')) {
-    const path = root + 'web/' + specifier.slice(2);
-    for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');

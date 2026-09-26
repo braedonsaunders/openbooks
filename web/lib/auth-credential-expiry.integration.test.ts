@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
-
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-  return next(specifier, context);
-} });
 
 for (const method of ["reset", "begin MFA", "confirm MFA"] as const) {
   for (const expires of [true, false]) {

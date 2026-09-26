@@ -1,20 +1,10 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // The sidebar resolver is a server module (server-only marker); shim the
 // marker so it loads under the plain runner, then import the unit under test.
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
 const { resolveNav } = await import("./resolve.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(

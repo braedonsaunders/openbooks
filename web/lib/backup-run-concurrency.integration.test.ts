@@ -10,9 +10,6 @@ import { sql } from "drizzle-orm";
 // the database are real.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.endsWith("/lib/authz")) {
       return { shortCircuit: true, url: "mock:backup-run-gate" };
     }

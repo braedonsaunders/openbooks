@@ -1,20 +1,9 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { url: "data:text/javascript,export {}", format: "module", shortCircuit: true };
-    }
-    return nextResolve(specifier, context);
-  },
-});
 
 const { getSpendVelocityComparisonWindows, velocityAndAcceleration } = await import(
   "./spend-velocity-data.ts"
 );
-hooks.deregister();
 
 test("comparison windows preserve inclusive current-period length", () => {
   assert.deepEqual(

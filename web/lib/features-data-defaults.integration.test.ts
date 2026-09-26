@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
@@ -13,15 +12,6 @@ import { sql } from "drizzle-orm";
 // presented as multi-currency. All three resolve through the single engine
 // helper (engine/src/organization/feature-defaults.ts); an explicit stored boolean always
 // wins in both directions.
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' };
-    }
-    return next(specifier, context);
-  },
-});
-
 const { db, withBypassContext, withOrgTransaction } = await import(
   "@openbooks/engine/src/platform/db.ts"
 );

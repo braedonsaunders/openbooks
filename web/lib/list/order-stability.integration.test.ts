@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
@@ -8,15 +7,6 @@ import { sql } from "drizzle-orm";
 // clauses: five bills sharing one date/status/total must page out exactly
 // once each, in a repeatable order, and four vendors sharing one name must
 // do the same. Only the session seam is stubbed; SQL and storage are real.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { listOrderClause } = await import("./sources.ts");

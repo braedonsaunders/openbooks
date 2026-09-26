@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
-registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context) } })
 const { CONTINUOUS_CLOSE_DISABLED_REMEDY } = await import('./ai-config.ts')
 
 /**

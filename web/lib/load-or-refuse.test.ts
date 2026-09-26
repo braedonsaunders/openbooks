@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
-// server-only guards page loaders against client bundling; stub it so the
-// pure helper loads under plain node (the ref-options vendors test stubs
-// it the same way).
-registerHooks({
-  resolve(specifier, context, next) {
-    return specifier === "server-only"
-      ? { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" }
-      : next(specifier, context);
-  },
-});
+// server-only guards page loaders against client bundling; the shared test
+// preset stubs it so the pure helper loads under plain node.
 
 const { FieldTimeError } = await import("@openbooks/engine/src/hrm/field-time/errors.ts");
 const { SelfServiceError } = await import("@openbooks/engine/src/hrm/self-service/actor.ts");

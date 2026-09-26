@@ -8,7 +8,6 @@ const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-payment-route-scope")] = state;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../../lib/feature-gates" &&
         decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/runs/[id]/route.ts")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(

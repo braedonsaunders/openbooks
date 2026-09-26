@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    return nextResolve(specifier, context);
-  },
-});
 
 for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] as const) {
   test(`${method} observes MFA enabled while its user lock is pending`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

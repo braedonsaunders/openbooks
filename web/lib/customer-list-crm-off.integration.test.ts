@@ -10,9 +10,7 @@ import { pathToFileURL } from 'node:url'
 const root = pathToFileURL(process.cwd() + '/').href
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key)=>key}export async function getLocale(){return 'en'}" }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

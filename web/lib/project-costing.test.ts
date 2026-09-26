@@ -104,7 +104,6 @@ function costAmounts(cost: CostFixture, convert: boolean): { revenue: string; co
 }
 
 const mockSources = new Map<string, string>([
-  ['mock:server-only', 'export {}'],
   [
     'mock:db',
     `
@@ -175,7 +174,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === './subcontract-commitments') {
       return { url: 'mock:subcontract-commitments', shortCircuit: true }

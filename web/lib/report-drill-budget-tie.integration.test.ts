@@ -11,7 +11,6 @@ import test from 'node:test';
 // currency. On a year-to-date, multi-currency book the drill's supporting
 // totals agreed with nothing.
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') {
     return { shortCircuit: true, url: `data:text/javascript,export async function getTranslations() { return (key) => key }` };
   }

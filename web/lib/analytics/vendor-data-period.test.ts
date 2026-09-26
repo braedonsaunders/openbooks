@@ -97,9 +97,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { url: "data:text/javascript,export {}", format: "module", shortCircuit: true };
-    }
     // The business-date double re-exports the real module, so its own star
     // import must resolve past this hook to the real file instead of looping
     // back into the mock. Re-based to this file so the workspace alias

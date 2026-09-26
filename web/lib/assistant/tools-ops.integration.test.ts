@@ -9,13 +9,7 @@ import type { SessionUser } from '../auth'
 
 const root = pathToFileURL(process.cwd() + '/').href
 registerHooks({ resolve(specifier, context, nextResolve) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
-  if (specifier.startsWith('@/')) {
-    const path = root + 'web/' + specifier.slice(2)
-    for (const suffix of ['.ts', '.tsx', '/index.ts', '/index.tsx']) if (existsSync(new URL(path + suffix))) return nextResolve(path + suffix, context)
-    return nextResolve(path, context)
-  }
   return nextResolve(specifier, context)
 } })
 

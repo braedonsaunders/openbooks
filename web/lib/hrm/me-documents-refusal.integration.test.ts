@@ -8,9 +8,6 @@ import test from 'node:test'
 // refusal path maps no rows, so no catalog copy is needed.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next/navigation') {
       return {
         shortCircuit: true,

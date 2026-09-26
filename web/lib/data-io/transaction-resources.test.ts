@@ -226,9 +226,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { url: 'data:text/javascript,export {}', format: 'module', shortCircuit: true }
-    }
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/src/platform/db.ts', 'mock:db'],

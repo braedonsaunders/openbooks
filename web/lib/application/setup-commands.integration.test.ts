@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
@@ -20,17 +19,6 @@ import type { SessionUser } from '../auth'
 // RSC `server-only` marker and forward Next's `@/*` alias to `web/*` from
 // the repo root (this file runs from the root, one file per process).
 const root = pathToFileURL(process.cwd() + '/').href
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    if (specifier.startsWith('@/')) {
-      return nextResolve(root + 'web/' + specifier.slice(2) + '.ts', context)
-    }
-    return nextResolve(specifier, context)
-  },
-})
 const { applicationTool, executeApplicationTool } = await import('./tool-catalog.ts')
 const { applicationContextFromSession } = await import('./context.ts')
 

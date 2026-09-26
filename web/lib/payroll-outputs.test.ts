@@ -93,7 +93,6 @@ const harness = {
 const pdfIndexUrl = pathToFileURL(`${process.cwd()}/packages/pdf/src/index.ts`).href
 
 const mockSources = new Map<string, string>([
-  ['mock:server-only', 'export {}'],
   [
     'mock:drizzle-orm',
     `
@@ -238,7 +237,6 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
-      'server-only': 'mock:server-only',
       'drizzle-orm': 'mock:drizzle-orm',
       '@openbooks/pdf': 'mock:openbooks-pdf',
       '@openbooks/engine/src/platform/db.ts': 'mock:db',

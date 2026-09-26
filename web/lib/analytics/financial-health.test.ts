@@ -32,7 +32,6 @@ const state: HealthTestState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
-  ["mock:server-only", "export {}"],
   [
     "mock:money-server",
     `
@@ -125,8 +124,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only")
-      return { url: "mock:server-only", shortCircuit: true };
     const mockUrl = new Map([
       ["../money-server", "mock:money-server"],
       ["drizzle-orm", "mock:drizzle"],

@@ -72,10 +72,7 @@ function probe(candidate: string): string | null {
 
 /** Resolve an import specifier to a graph file, or null for externals. */
 function resolveSpecifier(importer: string, spec: string): string | null {
-  if (spec === 'server-only' || spec.startsWith('node:') || spec.startsWith('data:')) return null
-  if (spec.startsWith('@/')) {
-    return probe(join(webRoot, `${spec.slice(2)}.ts`)) ?? probe(join(webRoot, spec.slice(2), 'index.ts'))
-  }
+  if (spec.startsWith('node:') || spec.startsWith('data:')) return null
   if (spec.startsWith('.')) {
     const base = resolve(dirname(importer), spec)
     return probe(base) ?? probe(`${base}.ts`) ?? probe(join(base, 'index.ts'))

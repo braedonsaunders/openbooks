@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 /**
@@ -9,15 +8,6 @@ import test from "node:test";
  * kind vocabulary. An unknown kind or a parent funnel outside the org is
  * refused by field name before the write — never a half-row.
  */
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
 
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/src/platform/db.ts");

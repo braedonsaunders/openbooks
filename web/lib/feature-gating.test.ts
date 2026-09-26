@@ -10,9 +10,6 @@ import pg from 'pg'
 // PostgreSQL — exactly as production runs them.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { url: 'data:text/javascript,export {}', format: 'module', shortCircuit: true }
-    }
     if (specifier === 'next/navigation') {
       return {
         url: 'data:text/javascript,export function redirect(){throw new Error("redirect")}',
@@ -21,19 +18,6 @@ registerHooks({
       }
     }
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', format: 'module', shortCircuit: true }
-    if (specifier.startsWith('@/')) {
-      // Next's webpack alias (`@/*` → `web/*`, see web/tsconfig.json) restated
-      // for this node process.
-      const webRoot = new URL('../', import.meta.url)
-      const rel = specifier.slice(2)
-      for (const candidate of [`${rel}.ts`, `${rel}.tsx`, `${rel}/index.ts`]) {
-        try {
-          return nextResolve(new URL(candidate, webRoot).href, context)
-        } catch {
-          // try the next extension candidate
-        }
-      }
-    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

@@ -26,11 +26,9 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null };
 Object.assign(globalThis, { __assetEditControls: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier.endsWith('/lib/feature-gates') && context.parentURL?.includes('/api/assets/')) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetEditControls.gate}' };
   }
-  if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context);
   return next(specifier, context);
 } });
 const { PATCH, GET } = await import('../app/api/assets/[id]/route');

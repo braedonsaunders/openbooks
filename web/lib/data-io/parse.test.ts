@@ -1,21 +1,10 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
 import { CELL_PROVENANCE_KEY } from './types.ts'
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { url: 'data:text/javascript,export {}', format: 'module', shortCircuit: true }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const parseUrl = './parse.ts?xlsx-cell-provenance-test'
 const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
-hooks.deregister()
 
 async function provenanceWorkbook(): Promise<string> {
   const workbook = new ExcelJS.Workbook()

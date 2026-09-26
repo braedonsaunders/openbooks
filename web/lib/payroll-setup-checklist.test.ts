@@ -21,9 +21,6 @@ const checklistState: {
 
 const checklistHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
       return { shortCircuit: true, url: 'data:text/javascript,export async function businessToday() { return "2026-09-24" }' }
     }

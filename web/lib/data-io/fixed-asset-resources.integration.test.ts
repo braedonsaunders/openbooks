@@ -1,22 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
 
 const { fixedAssetsResource, FIXED_ASSETS_DESCRIPTOR } = (await import(
   './fixed-asset-resources.ts'
 )) as typeof import('./fixed-asset-resources.ts')
-hooks.deregister()
 
 const { db, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
 const { runDepreciation } = await import('@openbooks/engine/src/assets/depreciation.ts')

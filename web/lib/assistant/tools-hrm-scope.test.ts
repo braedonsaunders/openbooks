@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -9,26 +8,6 @@ import { pathToFileURL } from "node:url";
 // resolve through tsx with TSX_TSCONFIG_PATH=web/tsconfig.json (as the
 // suite runner sets it).
 const root = pathToFileURL(process.cwd() + "/").href;
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
-    if (specifier.startsWith("@/")) {
-      const path = root + "web/" + specifier.slice(2);
-      for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
-        if (existsSync(new URL(path + suffix))) return nextResolve(path + suffix, context);
-      }
-      return nextResolve(path, context);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { HRM_TOOLS, hrmRefusal } = await import("./tools-hrm.ts");
 const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employment-read.ts");
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
 import test from 'node:test';
 
 // DSO has ONE definition: the settlement-weighted trailing mean from
@@ -10,10 +9,6 @@ import test from 'node:test';
 // fully-paid-invoice averages — so on a skewed book (one slow whale, many
 // fast small payers) the two surfaces quoted different DSOs for the same org
 // on the same day. The header now reads the single engine definition.
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
-  return next(specifier, context);
-} });
 const { sql } = await import('drizzle-orm');
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');

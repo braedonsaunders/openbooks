@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
@@ -10,15 +9,6 @@ import { sql } from 'drizzle-orm'
 // PostgreSQL array literals, and a malformed binding only fails against live
 // Postgres once the bound collection holds more than one element — so every
 // restricted collection exercised here is deliberately multi-element.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { listRecordTypes, listRecords, getRecord, createApplicationRecord, updateApplicationRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
 const { resolveEntityLabels: resolveEntityLabelsFromModule } = await import('../records.ts')
 const { ApplicationError } = await import('./errors.ts')

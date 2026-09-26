@@ -1,24 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-// Dynamic, after the hooks: a static import would resolve 'server-only'
-// before the hooks run and throw. Same pattern as the data-io
+// The resource imports the `server-only` marker, which the shared test
+// preset stubs. Same dynamic-import pattern as the data-io
 // payroll-opening-balances suite.
 const { payrollEmployerLevyOpeningsResource } = (await import(
   "./payroll-employer-levy-openings-resource.ts"
 )) as typeof import("./payroll-employer-levy-openings-resource.ts");
-hooks.deregister();
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");

@@ -7,19 +7,6 @@ import { env } from "@openbooks/engine/src/platform/db.ts";
 // web/lib modules import `server-only`, so the amendment service runs in a
 // child with that marker stubbed (trusted integration process only).
 const serverOnlyLoader = `data:text/javascript,${encodeURIComponent(`
-  import { registerHooks } from "node:module";
-  registerHooks({
-    resolve(specifier, context, nextResolve) {
-      if (specifier === "server-only") {
-        return {
-          url: "data:text/javascript,export {}",
-          format: "module",
-          shortCircuit: true,
-        };
-      }
-      return nextResolve(specifier, context);
-    },
-  });
 `)}`;
 
 function runIntegrationSource(source: string): void {

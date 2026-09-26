@@ -9,8 +9,6 @@ const routeState: { gate: Authz | null } = { gate: null };
 ] = routeState;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only")
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       specifier === "../../../../lib/feature-gates" &&
       context.parentURL?.endsWith("/api/payroll/remittances/route.ts")

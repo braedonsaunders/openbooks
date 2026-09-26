@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 // Worktree-relative imports: the @openbooks/* aliases resolve to the main
@@ -13,11 +12,6 @@ import { BUILT_IN_REPORT_DEFINITION_MAP } from '../../packages/reports/src/built
 
 // Same seam as web/lib/custom-report-books.test.ts: shim the RSC
 // `server-only` marker (this file runs from the root, one file per process).
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-  return next(specifier, context)
-} })
-
 /**
  * The allocation report entities execute against the real 0160 tables: a
  * posted run with one lineage row reads back through the entity FROM clauses

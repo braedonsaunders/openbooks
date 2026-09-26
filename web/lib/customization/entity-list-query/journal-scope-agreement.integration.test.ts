@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
@@ -14,15 +13,6 @@ import { sql } from "drizzle-orm";
 // entry (the 42-class a posted-only unification would drop), and a pure
 // subledger posting (bills live in their module, never in the journal).
 // SQL builders and storage are real; only server-only is stubbed.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { JOURNAL_ENTRY_TABLE, journalEntryWhere, journalScopeWhere } = await import("./journal-entries.ts");

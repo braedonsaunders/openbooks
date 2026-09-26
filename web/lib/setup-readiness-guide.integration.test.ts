@@ -18,7 +18,6 @@ const root = pathToFileURL(repo + '/').href
 const state: { user: import('./auth').SessionUser | null } = { user: null }
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (s === 'next-intl/server') {
       return {
         shortCircuit: true,

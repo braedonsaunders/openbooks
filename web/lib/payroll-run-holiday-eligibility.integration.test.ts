@@ -12,7 +12,6 @@ const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
 // Worktrees carry a real (copied) root node_modules, so engine imports
 // resolve inside this worktree already; only web-only shims need rewriting.
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
   const parent = decodeURIComponent(context.parentURL ?? "");
   if ((specifier === "../../../../../lib/feature-gates" && parent.endsWith("/api/payroll/runs/[id]/route.ts"))

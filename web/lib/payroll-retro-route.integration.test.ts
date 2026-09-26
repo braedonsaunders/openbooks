@@ -10,7 +10,6 @@ const state: { gate: Authz | null } = { gate: null };
 // route under test runs its production body parsing.
 const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
   if (specifier === "../../../../lib/feature-gates" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/retro/route.ts")) {
     return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(

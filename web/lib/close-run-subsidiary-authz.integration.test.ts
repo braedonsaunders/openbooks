@@ -29,20 +29,8 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../lib/feature-gates" && context.parentURL?.includes("/api/close/runs/route")) {
       return { url: "mock:close-run-feature-gates", shortCircuit: true };
-    }
-    if (specifier.startsWith("@/") && context.parentURL) {
-      const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
-      const webRoot = parentDir.lastIndexOf("/web/");
-      if (webRoot === -1) return nextResolve(specifier, context);
-      return nextResolve(
-        new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + ".ts").href,
-        context,
-      );
     }
     if (specifier.startsWith("@openbooks/engine/") && context.parentURL?.includes("/api/close/runs/route")) {
       const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);

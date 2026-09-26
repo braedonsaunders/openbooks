@@ -77,9 +77,6 @@ const routeUrls = new Map<string, string>([
 
 const routeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next-intl/server') {
       return {
         shortCircuit: true,
@@ -175,9 +172,6 @@ if (typeof (dom.window as unknown as { matchMedia?: unknown }).matchMedia !== 'f
 
 const sectionHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next-intl') {
       return {
         shortCircuit: true,

@@ -102,7 +102,6 @@ const harness = {
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('openbooks.pdf-send-attribution-test')] = harness
 
 const mockSources = new Map<string, string>([
-  ['mock:server-only', 'export {}'],
   [
     'mock:drizzle-orm',
     `
@@ -249,7 +248,6 @@ registerHooks({  resolve(specifier, context, nextResolve) {
       return { url: emailConfigUrl, shortCircuit: true }
     }
     const mocks: Record<string, string> = {
-      'server-only': 'mock:server-only',
       'drizzle-orm': 'mock:drizzle-orm',
       '@openbooks/engine/src/platform/db.ts': 'mock:db',
       '@openbooks/emails': 'mock:emails',

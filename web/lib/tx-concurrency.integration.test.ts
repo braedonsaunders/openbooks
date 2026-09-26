@@ -1,16 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerHooks } from "node:module";
 import pg from "pg";
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
-    return next(specifier, context);
-  },
-});
 
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");

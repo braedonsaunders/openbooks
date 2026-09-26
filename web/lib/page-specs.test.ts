@@ -71,9 +71,6 @@ const MOCK_DB_SOURCE = `
 
 const precedenceHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '@openbooks/engine/src/platform/db.ts') {
       return { shortCircuit: true, format: 'module', url: 'mock:page-specs-precedence-db' }
     }

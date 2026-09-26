@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
@@ -9,15 +8,6 @@ import test from "node:test";
 // anything unresolvable must fail closed to null.
 process.env.SESSION_SECRET ??= "b06-proposal-test-secret-must-be-32+chars!!";
 const root = pathToFileURL(process.cwd() + "/").href;
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
-  if (specifier.startsWith("@/")) {
-    const path = root + "web/" + specifier.slice(2);
-    for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) if (existsSync(new URL(path + suffix))) return next(path + suffix, context);
-    return next(path, context);
-  }
-  return next(specifier, context);
-} });
 const { carriedProposal, findingProposalCommand } = await import("./proposals");
 const { verifyApplicationCommand } = await import("../assistant/application-proposals");
 const { applicationTool } = await import("../application/tool-catalog");
