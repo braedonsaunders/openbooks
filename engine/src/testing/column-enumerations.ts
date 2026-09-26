@@ -80,6 +80,12 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
+    file: "engine/src/hrm/documents/dsar.ts",
+    sites: [
+      { stance: "descriptive", note: "subject-access export projection shown to the data subject; generated columns are readable computed values legitimately part of the export" },
+    ],
+  },
+  {
     file: "engine/src/platform/sqlapi.ts",
     sites: [
       { stance: "key-members", note: "unique-index membership behind the schema listing's is_key flag; the flag is displayed, never written through" },
