@@ -92,6 +92,7 @@ export const TENANT_TABLE_POLICIES = {
   "compliance_requirements": "clone:catalog-uuid-rebase",
   "compliance_waivers": "clone:catalog-uuid-rebase",
   "connections": "clone:catalog-uuid-rebase",
+  "connector_replay_authorizations": "skip:no-copy",
   "consolidated_fx_rates": "clone:catalog-uuid-rebase",
   "consolidation_control_losses": "clone:catalog-uuid-rebase",
   "contacts": "clone:catalog-uuid-rebase",

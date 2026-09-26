@@ -91,6 +91,9 @@ export const EXCLUDE = new Set([
   // goes with them.
   "scheduler_outbox",
   "scheduler_outbox_terminal_audit",
+  // Time-bound controller replay grants are evidence of the source org, not
+  // configuration: a sandbox must never inherit a live closed-period window.
+  "connector_replay_authorizations",
   // The storage cleanup outbox holds object deletes queued against the
   // source org's files; a sandbox that replayed them would delete them.
   "storage_cleanup_outbox",

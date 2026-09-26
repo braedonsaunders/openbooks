@@ -7,6 +7,7 @@ import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { authorizeConnectorReplay } from "../journal/replay-authorization.ts";
 import { transferCorrectionApplications } from "./posting-replay-applications.ts";
 import { type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
@@ -26,7 +27,9 @@ export interface SourceCorrectionAuthorization {
    * correction inside a period OpenBooks has since closed.  This mode is not a
    * caller-trusted close override: the database validates requestId + actorId
    * against the active sync run and the connection's controller-authorized
-   * append-only policy before any closed-period ledger write can occur.
+   * append-only policy, and the governed path records a bounded
+   * connector_replay_authorizations grant the journal kernel requires before
+   * any closed-period ledger write can occur.
    */
   replayMode?: "authenticated_connector_historical_replay";
 }
@@ -377,6 +380,29 @@ export async function regenerateGlImpactTx(
         "closed-period connector replay is not authorized by the active sync run and connection policy",
       );
     }
+    // The governed path converts the ephemeral flag into a durable grant:
+    // postEntry admits a closed-period replay only against this row, bounded
+    // to the replaying connector, the two touched periods, and a short
+    // window, under the correction's attributable reason.
+    const replayRun = (await tx.execute<{ connection_id: string }>(sql`
+      select connection_id
+        from sync_runs
+       where id::text = ${correction.requestId} and org_id = ${doc.orgId}
+       limit 1`)).rows[0];
+    if (!replayRun)
+      throw new PostingError(
+        "closed-period connector replay is not authorized by the active sync run and connection policy",
+      );
+    await authorizeConnectorReplay(tx, {
+      orgId: doc.orgId,
+      connectionId: replayRun.connection_id,
+      authorizedBy: correction.actorId,
+      periodFromId: entry.periodId,
+      periodToId: period.id,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      reason,
+      actorId: correction.actorId,
+    });
     authenticatedHistoricalReplay = true;
   }
 

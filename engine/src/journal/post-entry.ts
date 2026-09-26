@@ -4,6 +4,7 @@ import { sumMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
+import { findLiveReplayAuthorization } from "./replay-authorization.ts";
 
 /**
  * The ONE journal-write API for direct (non-document) postings. Every
@@ -306,16 +307,22 @@ export async function postEntry(
   // Authenticated connector historical replay carries a transaction-local
   // token the DATABASE validates (connector_historical_replay_authorized:
   // active sync run, owning connection, attributable automatic policy). The
-  // trigger guards honor that token through period_module_blocks_write, so
-  // this application-level companion must honor it too — otherwise it
-  // refuses a write the kernel allows, and authorized upstream history can
-  // never be mirrored into a preserved closed period. The token is
-  // re-validated here by calling the same function (never trusted from the
-  // caller), and the triggers re-validate it again at write time.
+  // trigger guards honor that token through period_module_blocks_write. This
+  // application-level companion honors it only with durable evidence: the
+  // token names the replaying sync run (re-validated here by calling the
+  // same function, never trusted from the caller), and a
+  // controller-recorded connector_replay_authorizations row for that run's
+  // connector must cover the posting period before a closed period opens.
+  // The triggers re-validate the token again at write time.
   const replayAuthorized = (
     await executor.execute<{ allowed: boolean }>(sql`
       select connector_historical_replay_authorized(${orgId}) as allowed`)
   ).rows[0]?.allowed === true;
+  // Evidence for an admitted closed-period replay, cited in the posting
+  // audit below. The flag alone never opens a closed period: it only names
+  // the replaying sync run, and a controller-recorded authorization row for
+  // that run's connector must cover the posting period.
+  let replayEvidence: { authorizationId: string; connectionId: string } | null = null;
   if (!replayAuthorized) {
     try {
       await assertPeriodModulesOpen(executor, {
@@ -330,6 +337,39 @@ export async function postEntry(
       if (error instanceof CloseError)
         throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`);
       throw error;
+    }
+  } else {
+    let closedForReplay = false;
+    try {
+      await assertPeriodModulesOpen(executor, {
+        orgId,
+        periodId: input.periodId,
+        bookId: input.bookId,
+        subsidiaryIds,
+        modules: input.closeModules ?? [],
+        allowImportedLocks: input.allowImportedLocks,
+      });
+    } catch (error) {
+      if (!(error instanceof CloseError)) throw error;
+      closedForReplay = true;
+    }
+    if (closedForReplay) {
+      const authorization = await findLiveReplayAuthorization(executor, {
+        orgId,
+        periodId: input.periodId,
+      });
+      if (!authorization)
+        fail(
+          `journal entry ${input.entryNumber}: closed-period connector replay is not covered by a replay authorization for this connector and period — have a controller record a connector replay authorization (connector, covered period range, expiry, reason) and retry`,
+        );
+      if (authorization!.expiresAt <= new Date())
+        fail(
+          `journal entry ${input.entryNumber}: connector replay authorization ${authorization!.id} expired at ${authorization!.expiresAt.toISOString()} — have a controller record a fresh authorization and retry`,
+        );
+      replayEvidence = {
+        authorizationId: authorization!.id,
+        connectionId: authorization!.connectionId,
+      };
     }
   }
 
@@ -434,6 +474,16 @@ export async function postEntry(
               periodId: input.periodId,
               lineCount: lines.length,
               ...(input.auditChanges ?? {}),
+              ...(replayEvidence
+                ? {
+                    historicalReplay: {
+                      mode: "authenticated_connector_historical_replay",
+                      authorizationId: replayEvidence.authorizationId,
+                      connectionId: replayEvidence.connectionId,
+                      periodLocksPreserved: true,
+                    },
+                  }
+                : {}),
             })}::jsonb, ${input.actorId ?? null}, ${input.requestId ?? null})`);
 
   return { entryId, lines: orderedLines };
