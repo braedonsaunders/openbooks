@@ -41,6 +41,8 @@ export interface DsarGatheredTable {
 
 export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "parties", domain: "party", linkage: "direct" },
+  { table: "addresses", domain: "party", linkage: "direct" },
+  { table: "contacts", domain: "party", linkage: "direct" },
   { table: "worker_employments", domain: "employments", linkage: "direct" },
   { table: "worker_employment_versions", domain: "employments", linkage: "transitive" },
   { table: "employment_assignments", domain: "employments", linkage: "transitive" },
@@ -252,18 +254,6 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason:
       "SUBJECT DATA — gatherer pending: the manager chain " +
       "(employment_id/manager_employment_id). Needs an employments-domain gatherer.",
-  },
-  {
-    table: "addresses",
-    reason:
-      "SUBJECT DATA — gatherer pending: the subject's addresses (party_id). " +
-      "Needs a party-domain gatherer.",
-  },
-  {
-    table: "contacts",
-    reason:
-      "SUBJECT DATA — gatherer pending: the subject's contact records " +
-      "(party_id). Needs a party-domain gatherer.",
   },
   {
     table: "crew_time_batch_lines",

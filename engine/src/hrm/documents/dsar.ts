@@ -498,6 +498,24 @@ const ROE_PAYMENTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
+// Party-domain subject records: the subject's own address book and contact
+// rows, by direct party link. Only tenancy, the subject link and audit
+// actors are withheld — everything else held about the subject exports by
+// catalog default.
+const ADDRESSES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const CONTACTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "party_id",
+  "created_by",
+  "updated_by",
+]);
+
 export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
   const claimed = await withOrgTransaction(orgId, () =>
@@ -561,6 +579,21 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       `)).rows[0];
       if (!party) throw new Error("subject party is gone");
       payload.party = party;
+      // The subject's own address book and contact rows, by direct party
+      // link — part of the party file, like any other HR record about the
+      // subject's account.
+      payload.addresses = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("addresses", ADDRESSES_DENIED_COLUMNS)}
+          from addresses
+         where org_id = ${orgId} and party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.contacts = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("contacts", CONTACTS_DENIED_COLUMNS)}
+          from contacts
+         where org_id = ${orgId} and party_id = ${partyId}
+         order by created_at
+      `)).rows;
     });
 
     await gather("employments", async () => {
