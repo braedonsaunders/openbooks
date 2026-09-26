@@ -100,8 +100,20 @@ export async function calculateStub(
     if (!(error instanceof PayrollPackError)) throw error;
   }
   if (packRefuses) {
+    const resolution = await ctx.statutoryRatesFor(country, taxYear);
+    // A pack-recorded waiver stands its slots down from the requirement (US
+    // SUI for a recorded non-contributory account, which prices no SUI).
+    // Nothing recorded waives nothing, so every other scope point keeps
+    // today's gate byte-for-byte.
+    const waived = pack.waivedRateSlots
+      ? await pack.waivedRateSlots(tx, {
+        orgId, region: province, filingAccountId: jurisdiction.filingAccountId, payDate: run.pay_date!,
+      })
+      : [];
     assertConfiguredStatutoryRates(
-      await ctx.statutoryRatesFor(country, taxYear),
+      waived.length === 0
+        ? resolution
+        : { ...resolution, slots: resolution.slots.filter((slot) => !waived.includes(slot.key)) },
       { region: province, filingAccountId: jurisdiction.filingAccountId },
       emp.display_name ?? employeePartyId,
     );

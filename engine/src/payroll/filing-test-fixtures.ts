@@ -52,6 +52,37 @@ export async function seedRoeIssuanceFixture(orgId: string, employeeId: string):
     select ${orgId}, id, '2020-01-01', 'none', 'ROE fixture' from pay_components where org_id = ${orgId}`);
 }
 
+/**
+ * Contributory SUI setup for US pay-run fixtures: the active state
+ * unemployment account for one state — reused when the harness already
+ * created it (box-15 tests assert its exact number), created otherwise —
+ * with its financing method recorded through the product API. A run with no
+ * recorded method refuses by design, so a contributory fixture that
+ * configures a rate without its method tests nothing a real employer can
+ * do. Pass a non-default method only for the account the test prices under.
+ */
+export async function seedUsSuiAccount(
+  orgId: string, actorId: string, state: string, method = "contributory",
+): Promise<string> {
+  const existing = (await db.execute<{ id: string }>(sql`
+    select id from payroll_filing_accounts
+     where org_id = ${orgId} and country = 'US' and program_type = 'us_state_sui'
+       and state_code = ${state} and is_active
+     limit 1`)).rows[0];
+  const filingAccountId = existing?.id ?? randomUUID();
+  if (!existing) {
+    await db.execute(sql`
+      insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
+                                           state_code, is_active, created_by, updated_by)
+      values (${filingAccountId}, ${orgId}, 'US', 'us_state_sui', ${`${state}-TEST`}, ${`${state} SUI`},
+              ${state}, true, ${actorId}, ${actorId})`);
+  }
+  await upsertPayrollEmployerFact({ orgId, actorId, filingAccountId, country: "US",
+    factKey: "sui_financing_method", effectiveFrom: "2026-01-01", value: method,
+    changeReason: "state account determination" });
+  return filingAccountId;
+}
+
 /** Standalone GB legal employer holding the whole £15,000 Apprenticeship Levy allowance. */
 export async function seedGbLevyAllowanceFixture(
   orgId: string, actorId: string, subsidiaryId: string,

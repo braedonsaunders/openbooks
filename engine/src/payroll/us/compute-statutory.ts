@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
+import type { db } from "../../platform/db.ts";
 import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { U } from "../canada/decimal.ts";
 import { add, sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 import { resolveEmployerFact } from "../employer-facts.ts";
-import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
+import { findStoredEmployerFactValue, resolveStoredEmployerFact } from "../employer-fact-store.ts";
 
 // Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
@@ -69,8 +70,17 @@ export type UsYtdRow = {
  * as a `"null"` method with the non-contributory remedy. An unknown value
  * refuses by name against the declared choices. Only a recorded declared
  * value returns, so the caller below decides solely on recorded values.
+ *
+ * The return type names every declared arm, and the pricing switch below
+ * names them again with a `never` default: extending this union without
+ * extending that switch fails at typecheck time instead of falling through
+ * silently (the "declared with no arm" class). A pack declaration that
+ * gains a fourth method first meets the resolver's own default, which
+ * refuses by name rather than returning it.
  */
-export function resolveUsSuiFinancingMethod(method: string | null, region: string): string {
+export type UsSuiFinancingMethod = "contributory" | "reimbursable" | "school_employees_fund";
+
+export function resolveUsSuiFinancingMethod(method: string | null, region: string): UsSuiFinancingMethod {
   const canonical = resolveEmployerFact("US", "sui_financing_method", method);
   switch (canonical) {
     case "contributory":
@@ -84,6 +94,32 @@ export function resolveUsSuiFinancingMethod(method: string | null, region: strin
         + "in Payroll Setup → Employer facts.",
       );
   }
+}
+
+/**
+ * Rate slots the run must not require for one SUI account: a RECORDED
+ * non-contributory financing method prices no SUI, so the rate gate that
+ * would otherwise refuse the missing rate notice stands down for it.
+ *
+ * Nothing recorded waives nothing: an employee not assigned to a state SUI
+ * account, or an account whose method was never recorded, keeps today's
+ * gate exactly — and the compute pass still refuses the missing method by
+ * name. So the gate and the compute pass cannot disagree about what is
+ * missing.
+ */
+export async function usWaivedSuiRateSlots(
+  tx: Pick<typeof db, "execute">,
+  input: { orgId: string; filingAccountId: string | null; region: string | null; payDate: string },
+): Promise<readonly string[]> {
+  const { orgId, filingAccountId, region, payDate } = input;
+  if (!filingAccountId) return [];
+  const recorded = await findStoredEmployerFactValue({
+    tx, orgId, filingAccountId,
+    country: "US", factKey: "sui_financing_method", asOf: payDate,
+  });
+  if (recorded == null) return [];
+  const method = resolveUsSuiFinancingMethod(recorded, region ?? "state");
+  return method === "contributory" ? [] : ["us_sui"];
 }
 
 /** Resolve the SUI wage-base year-to-date for one region.
@@ -392,21 +428,56 @@ export async function computeUsStatutory(
   const fitWages = reducedBases.income;
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region, filingAccountId);
-  const sui = config.sui(region, ytd.suiAccountId);
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
-  const suiFinancingMethod = suiExempt ? null : resolveUsSuiFinancingMethod(
-    await resolveStoredEmployerFact({
-      tx, orgId, filingAccountId,
+  // The method is read raw and resolved through the declaration: a missing
+  // fact refuses here (Payroll Setup → Employer facts), an unknown value
+  // refuses by name, and only a recorded declared value prices below. The
+  // requirement is per SUI account: an employee not assigned to an active
+  // state SUI account prices presence-only SUI (legacy or region rates)
+  // with no method to record — exactly as before this rule — while every
+  // assigned SUI account must declare its method.
+  const suiAccountId = filingAccountId && !suiExempt
+    ? (await tx.execute<{ id: string }>(sql`
+        select id from payroll_filing_accounts
+         where org_id = ${orgId} and id = ${filingAccountId} and country = 'US'
+           and program_type = 'us_state_sui' and is_active`)).rows[0]?.id ?? null
+    : null;
+  const suiFinancingMethod = suiAccountId ? resolveUsSuiFinancingMethod(
+    await findStoredEmployerFactValue({
+      tx, orgId, filingAccountId: suiAccountId,
       country: "US", factKey: "sui_financing_method", asOf: run.pay_date!,
     }),
     region,
-  );
-  if (suiFinancingMethod !== null && suiFinancingMethod !== "contributory") {
-    throw new PayrollPackError(
-      `US SUI cannot be calculated for the ${region} employer account using the "${suiFinancingMethod}" financing method. `
-      + "This payroll engine does not yet record the account's benefit-charge liability; "
-      + "do not configure a fictitious contributory rate. Use the external state benefit-charge process until this financing method is supported.",
-    );
+  ) : null;
+  // A reimbursable account — nonprofits and government employers electing
+  // reimbursement under FUTA §3309 — and a California School Employees Fund
+  // account pay no per-wage SUI contribution: no SUI is priced on the stub,
+  // while the wages still accrue to the stub's insurable earnings and so to
+  // the quarterly wage reporting. The state's benefit-charge or fund bill is
+  // an AP/journal event, not a payroll-run withholding, which is why these
+  // accounts also require no rate notice (see usWaivedSuiRateSlots).
+  let sui: { rate: string; wageBase: string } | undefined;
+  switch (suiFinancingMethod) {
+    case null:
+    case "contributory":
+      sui = config.sui(region, ytd.suiAccountId);
+      break;
+    case "reimbursable":
+    case "school_employees_fund":
+      sui = undefined;
+      break;
+    default: {
+      // Unreachable while the resolver returns only declared arms. The
+      // `never` assignment is the tripwire: extending
+      // UsSuiFinancingMethod without extending this switch fails at
+      // typecheck time instead of silently pricing the new method.
+      const unhandled: never = suiFinancingMethod;
+      throw new PayrollPackError(
+        `US SUI cannot be calculated for the ${region} employer account using the "${unhandled}" financing method. `
+        + "Record one of the declared financing methods for this state unemployment account "
+        + "in Payroll Setup → Employer facts.",
+      );
+    }
   }
   const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, taxYear, ytd, suiExempt) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";

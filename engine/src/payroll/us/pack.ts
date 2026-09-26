@@ -4,7 +4,7 @@ import type {
   PayrollJurisdiction,
   PayrollRegionCoverage,
 } from "../pack-types.ts";
-import { computeUsStatutory, US_COMPUTE_FACTOR_LABELS } from "./compute-statutory.ts";
+import { computeUsStatutory, US_COMPUTE_FACTOR_LABELS, usWaivedSuiRateSlots } from "./compute-statutory.ts";
 import { usPackFilings } from "./filings.ts";
 import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./jurisdictions.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
@@ -541,6 +541,9 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     },
   ],
   computeStatutory: computeUsStatutory,
+  // A recorded non-contributory SUI account prices no SUI, so the run must
+  // not demand its rate notice. Nothing recorded waives nothing.
+  waivedRateSlots: (tx, input) => usWaivedSuiRateSlots(tx, input),
   statutoryEngineLabel: "Pub 15-T",
   // Pack-declared trace labels, aggregated from the modules that trace
   // them: Pub 15-T, one map per state engine, the local-rate dispatch, and

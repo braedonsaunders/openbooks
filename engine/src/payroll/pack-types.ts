@@ -922,6 +922,27 @@ export interface PayrollCountryPack {
     },
   ) => Promise<PayrollWorkAllocation[]>;
   /**
+   * Rate slots the run must not REQUIRE at one scope point, decided by the
+   * pack from recorded account facts. OPTIONAL: absent when every declared
+   * `refuse` slot always applies, in which case the generic layer requires
+   * them all, exactly as today.
+   *
+   * A waiver is never silence: it answers only on a RECORDED fact (US SUI
+   * waives `us_sui` for a recorded reimbursable or School Employees Fund
+   * account, whose liability the run does not price), and nothing recorded
+   * waives nothing — so the gate and the compute pass cannot disagree about
+   * what is missing.
+   */
+  waivedRateSlots?: (
+    tx: Pick<typeof db, "execute">,
+    input: {
+      orgId: string;
+      region: string | null;
+      filingAccountId: string | null;
+      payDate: string;
+    },
+  ) => Promise<readonly string[]>;
+  /**
    * The pack's annual settlement for one tax year: the year-end
    * recomputation and its settlement in the final pay
    * (engine/src/payroll/annual-settlement.ts). OPTIONAL: absent when the

@@ -11,7 +11,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import { seedOntarioEhtFixture, seedUsSuiAccount } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -234,6 +234,7 @@ test(
     const h = await seedTexasHarness();
     try {
       await suiRow(h.orgId, h.actorId, "TX", h.txSuiAccountId, "0.027", "9000");
+      await seedUsSuiAccount(h.orgId, h.actorId, "TX");
       await db.execute(sql`
         update employee_payroll_profiles set filing_account_id = ${h.txSuiAccountId}
          where org_id = ${h.orgId} and employee_party_id = ${h.employeeId}`);
@@ -274,6 +275,47 @@ test(
       const sutaLeg = glLines.rows.find((row) => row.account_id === h.sutaPayable);
       assert.ok(sutaLeg, "SUI liability posts to its slot account");
       assert.equal(sutaLeg!.amount, neg("194.4000"));
+    } finally {
+      await dropScratchOrgReporting(h.orgId);
+    }
+  },
+);
+
+test(
+  "TX reimbursable SUI account prices no SUI and still reports wages",
+  { skip: !DB },
+  async () => {
+    const h = await seedTexasHarness();
+    try {
+      // A reimbursable account holds no rate notice: the recorded method
+      // alone must let the run calculate, pricing zero SUI.
+      await seedUsSuiAccount(h.orgId, h.actorId, "TX", "reimbursable");
+      await db.execute(sql`
+        update employee_payroll_profiles set filing_account_id = ${h.txSuiAccountId}
+         where org_id = ${h.orgId} and employee_party_id = ${h.employeeId}`);
+      const run = await createPayRun({
+        orgId: h.orgId, actorId: h.actorId, payScheduleId: h.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
+      assert.deepEqual(result.errors, []);
+      assert.equal(result.employees, 1);
+      const stubs = (await db.execute<{ factors: Record<string, string>; insurable_earnings: string }>(sql`
+        select factors, insurable_earnings from pay_stubs
+         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`));
+      assert.equal(stubs.rows.length, 1);
+      // No SUI priced on the stub …
+      assert.equal(stubs.rows[0]!.factors.SUTA, "0.0000");
+      // … but the wages still accrue to the quarterly wage reporting.
+      assert.equal(stubs.rows[0]!.insurable_earnings, "7200.0000");
+      // And no SUI line lands anywhere on the stub.
+      const sutaLines = (await db.execute(sql`
+        select 1 from pay_stub_lines l
+          join pay_components c on c.id = l.component_id
+          join pay_stubs s on s.id = l.stub_id
+         where l.org_id = ${h.orgId} and s.pay_run_document_id = ${run.documentId}
+           and c.system_key = 'suta'`));
+      assert.equal(sutaLines.rows.length, 0);
     } finally {
       await dropScratchOrgReporting(h.orgId);
     }
