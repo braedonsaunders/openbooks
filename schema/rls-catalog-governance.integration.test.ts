@@ -86,6 +86,10 @@ const GLOBAL_ALLOWLIST: Record<string, string> = {
     "pre-authentication session state keyed by user_id, reached before app.current_org is set so no org policy could match",
   currencies:
     "shared ISO reference data identical for every org; no tenant rows",
+  openbooks_document_close_modules:
+    "schema registry mapping each document kind to its period-close module; written only by migrations, identical for every org, no tenant data",
+  openbooks_query_catalog_relations:
+    "schema registry of the relations the governed query console may expose; written only by migrations, identical for every org, no tenant data",
   openbooks_testdb_meta:
     "local test-database stamp written by scripts/testdb.sh (schema fingerprint, copy time); present only in developer test databases, never in an installation",
   orgs: "the root tenant table itself; isolated by org_root_isolation matching id/sandbox_of to the session org",
