@@ -47,7 +47,7 @@
  * the single statement in its own savepoint and asserts the genuine guard
  * message — never the 25P02 echo of an earlier abort.
  *
- * FIXTURES (final 0184 shape, coordinator thr_jhgkkrcm8j): worker_employments
+ * FIXTURES (final 0184 shape): worker_employments
  * inserts (id, org_id, worker_party_id, employer_subsidiary_id, revision)
  * — every other column is nullable or defaulted, and UNIQUE(org_id, id)
  * backs the composite FK. employment_changes inserts (id, org_id,

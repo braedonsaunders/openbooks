@@ -7,7 +7,7 @@ import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
  * Presentation-currency translation for consolidated operational reads
  * (cockpits, tiles, analytics loaders, cash primitives).
  *
- * Doctrine (fleet-3 wave 2): the presentation currency of a consolidated view
+ * Doctrine: the presentation currency of a consolidated view
  * is the reporting subsidiary's functional currency — the org base for root
  * views. Journal legs are already stamped in their line entity's functional
  * currency (`jl.amount`; `jl.currency` describes `txn_amount`), and documents

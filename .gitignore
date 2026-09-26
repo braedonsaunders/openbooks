@@ -67,3 +67,16 @@ docs/operations/production-audit.md
 sim-runs/
 ob-retainage-gaps.probe.test.ts
 engine/src/zz-retainage-gaps.probe.test.ts
+
+# Internal release-process records (defect trackers, audit/verification reports,
+# triage and fleet notes) are never part of the repository. They live outside it.
+/docs/verification/
+/docs/internal/
+/audit/
+/findings/
+/fleet/
+*.internal.md
+*-findings.md
+*-triage.md
+*-tracker.md
+*.tracker.tsv

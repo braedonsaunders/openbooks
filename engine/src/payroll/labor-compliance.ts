@@ -2,7 +2,7 @@ import type { PayrollFilingFile } from "./filing-registry.ts";
 
 /**
  * Labor-compliance files and construction carve-outs — pack declarations
- * consumed generically (HR-13, payroll-lane conditions thr_umg5eqccin).
+ * consumed generically.
  *
  * Doctrine: packs DECLARE, the generic layer branches on NOTHING. These
  * are statutory FILES, sibling to filings downloads and bank files — not
