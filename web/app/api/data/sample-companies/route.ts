@@ -1,9 +1,11 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   SampleCompanyError,
   SampleCompanyProvisioningError,
   createSampleCompany,
+  sampleCompanyProvisioningBody,
   sampleCompanyStatuses,
 } from '@openbooks/engine/src/sample-companies/service.ts'
 import { getAuthz, can } from '../../../../lib/authz'
@@ -78,17 +80,12 @@ export async function POST(req: Request) {
     // 500 with no internal detail in the body.
     if (error instanceof SampleCompanyProvisioningError) {
       console.error(`[sample-company] provisioning failed at stage ${error.stage}`, error.cause ?? error)
-      return NextResponse.json(
-        { error: error.code, stage: error.stage, message: error.message },
-        { status: 500 },
-      )
+      return NextResponse.json(sampleCompanyProvisioningBody(error), { status: 500 })
+    }
+    if (error instanceof SampleCompanyError) {
+      return apiErrorResponse(error, { safeStatus: 409 })
     }
     console.error('[sample-company] provisioning failed', error)
-    return NextResponse.json(
-      {
-        error: error instanceof SampleCompanyError ? error.message : 'sample-company-provisioning-failed',
-      },
-      { status: error instanceof SampleCompanyError ? 409 : 500 },
-    )
+    return apiErrorResponse(error)
   }
 }

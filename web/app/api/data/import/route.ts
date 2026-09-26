@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -114,10 +115,10 @@ export async function POST(req: Request) {
       // caller error, not a server failure — report it instead of a 500. A
       // banking-domain refusal keeps its own API status.
       if (error instanceof ImportParseError) {
-        return NextResponse.json({ error: error.message }, { status: 400 })
+        return apiErrorResponse(error, { safeStatus: 400 })
       }
       if (error instanceof BankingError) {
-        return NextResponse.json({ error: error.message }, { status: error.status })
+        return apiErrorResponse(error)
       }
       throw error
     }
@@ -244,7 +245,7 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     if (error instanceof ApplicationError) {
-      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+      return apiErrorResponse(error, { details: { code: error.code } })
     }
     throw error
   }
