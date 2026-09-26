@@ -172,7 +172,7 @@ test("ES certificates keep Modelo 145 distinct from payer-held facts", () => {
   // and its situación familiar is distinct from SITUPER.
   assert.deepEqual(
     ES_CERTIFICATES.certificates.map((entry) => [entry.key, entry.storage]),
-    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"], ["es_contrato", "certificate_rows"], ["es_residencia_fiscal", "certificate_rows"]],
+    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"], ["es_contrato", "certificate_rows"], ["es_residencia_fiscal", "certificate_rows"], ["es_domicilio", "certificate_rows"]],
   );
   const certificate = ES_CERTIFICATES.certificates[0]!;
   assert.equal(certificate.form, "145");
@@ -238,7 +238,7 @@ test("ES filings declare the TGSS account plus the 190/111 (IRPF) and 296/216 (I
   );
   assert.deepEqual(
     filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["190", "annual"], ["111", "quarterly"], ["216", "quarterly"], ["296", "annual"]],
+    [["190", "annual"], ["111", "quarterly"], ["111-mensual", "monthly"], ["216", "quarterly"], ["296", "annual"]],
   );
   assert.deepEqual(ES_PAYROLL_PACK.filings(), filings);
 });
