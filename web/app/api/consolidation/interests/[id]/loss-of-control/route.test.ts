@@ -42,7 +42,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export class LossOfControlProposalError extends Error{constructor(status,message){super(message);this.status=status}}export async function loadLossOfControlProposalData(...args){const s=globalThis[Symbol.for('control-loss-route')];s.calls.push(args);if(s.refusal)throw new LossOfControlProposalError(404,s.refusal);return {proposal:true}}export async function proposeLossOfControl(...args){const s=globalThis[Symbol.for('control-loss-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return 'change'}`,
+        source: `export class LossOfControlProposalError extends Error{constructor(status,message){super(message);this.status=status}}export async function loadLossOfControlProposalData(...args){const s=globalThis[Symbol.for('control-loss-route')];s.calls.push(args);if(s.refusal)throw new LossOfControlProposalError(404,s.refusal);return {proposal:true}}export async function proposeLossOfControl(...args){const s=globalThis[Symbol.for('control-loss-route')];s.calls.push(args);if(s.refusal)throw new LossOfControlProposalError(422,s.refusal);return 'change'}`,
       };
     return next(url, context);
   },

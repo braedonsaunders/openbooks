@@ -46,7 +46,8 @@ const hooks = registerHooks({
         format: "module",
         source: `
       const state=globalThis[Symbol.for('openbooks.lease-lifecycle-routes')];
-      async function execute(...args){state.calls.push(args);if(state.refusal)throw new Error(state.refusal);return {leaseId:'lease',changeId:'change'}}
+      export class LeaseError extends Error {}
+      async function execute(...args){state.calls.push(args);if(state.refusal)throw new LeaseError(state.refusal);return {leaseId:'lease',changeId:'change'}}
       export const createLeaseAgreement=execute,commenceLease=execute,postDueLeaseSchedules=execute,proposeLeaseChange=execute;
     `,
       };

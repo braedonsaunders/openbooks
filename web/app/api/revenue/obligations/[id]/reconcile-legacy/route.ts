@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -61,9 +62,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     if (e instanceof RevenueRecognitionError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error('[revenue/reconcile-legacy] reconciliation failed', e)
+    return NextResponse.json({ error: 'reconciliation failed' }, { status: 500 })
   }
 }

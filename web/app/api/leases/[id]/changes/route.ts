@@ -1,3 +1,5 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { LeaseError } from "@openbooks/engine/src/revenue/leases.ts";
 import { parseJsonBody } from "@/lib/api/json";
 import { leaseChangeSchema } from "../../_schema";
 import { NextResponse } from "next/server";
@@ -21,9 +23,9 @@ export async function POST(
       await proposeLeaseChange(gate.user.orgId, id, gate.user.id, body.data),
     );
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "lease action failed" },
-      { status: 422 },
-    );
+    if (e instanceof LeaseError) {
+      return apiErrorResponse(e, { safeStatus: 422 })
+    }
+    return apiErrorResponse(e);
   }
 }
