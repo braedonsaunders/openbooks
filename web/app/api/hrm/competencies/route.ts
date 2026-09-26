@@ -3,7 +3,9 @@ import {
   addCompetencyLevel,
   createCompetency,
 } from "@openbooks/engine/src/hrm/performance/competencies.ts";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { parseJsonBody } from "../../../../lib/api/json";
+import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
 import { getAuthz } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "../review-cycles/_lib";
@@ -41,7 +43,12 @@ export async function POST(req: Request) {
   if (raw !== null && typeof raw === "object" && "competencyId" in raw) {
     const parsedLevel = addCompetencyLevelBody.safeParse(raw);
     if (!parsedLevel.success) {
-      return NextResponse.json({ error: parsedLevel.error.issues[0]?.message ?? "invalid body" }, { status: 400 });
+      // The issue text is our own schema message (safe to echo); it rides
+      // in the governed refusal so the sanitizer carries it at 400.
+      return apiErrorResponse(
+        new HrmPerformanceError("INVALID_INPUT", parsedLevel.error.issues[0]?.message ?? "invalid body"),
+        { safeStatus: 400 },
+      );
     }
     try {
       const level = await addCompetencyLevel({
@@ -59,7 +66,10 @@ export async function POST(req: Request) {
   }
   const parsedBody = createCompetencyBody.safeParse(raw);
   if (!parsedBody.success) {
-    return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? "invalid body" }, { status: 400 });
+    return apiErrorResponse(
+      new HrmPerformanceError("INVALID_INPUT", parsedBody.error.issues[0]?.message ?? "invalid body"),
+      { safeStatus: 400 },
+    );
   }
   const body = parsedBody.data;
   try {

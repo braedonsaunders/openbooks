@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import {
   EmploymentReadError,
@@ -135,7 +136,7 @@ export async function GET(req: Request) {
       return hrmAuthorizationResponse(e);
     }
     if (e instanceof EmploymentReadError || e instanceof HrmPositionError) {
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 });
+      return apiErrorResponse(e, { safeStatus: 422 });
     }
     throw e;
   }

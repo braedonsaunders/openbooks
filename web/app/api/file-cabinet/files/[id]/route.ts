@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -72,7 +73,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (error) {
     if (error instanceof FilePatchAbort) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return apiErrorResponse(error)
     }
     throw error
   }

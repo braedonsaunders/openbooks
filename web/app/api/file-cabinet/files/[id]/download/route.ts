@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -54,7 +55,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     blob = await getFileBlob(gate.user.orgId, id, viewer, versionId)
   } catch (err) {
     if (isMaskedFileContentError(err)) {
-      return NextResponse.json({ error: (err as Error).message }, { status: 403 })
+      return apiErrorResponse(err, { safeStatus: 403 })
     }
     throw err
   }

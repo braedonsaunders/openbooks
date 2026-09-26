@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
@@ -22,17 +23,17 @@ export const runtime = 'nodejs'
  *   DELETE ?id=     same as PATCH revoke
  */
 
-function delegationErrorResponse(e: unknown): NextResponse {
+function delegationErrorResponse(e: unknown): Promise<NextResponse> {
   if (e instanceof DelegationError) {
     const status = /not found/.test(e.message)
       ? 404
       : /already revoked|expired/.test(e.message)
         ? 409
         : 422
-    return NextResponse.json({ error: e.message }, { status })
+    return apiErrorResponse(e, { safeStatus: status })
   }
   console.error('[flows] delegations endpoint failed:', e)
-  return NextResponse.json({ error: 'internal error' }, { status: 500 })
+  return Promise.resolve(NextResponse.json({ error: 'internal error' }, { status: 500 }))
 }
 
 export async function GET() {
