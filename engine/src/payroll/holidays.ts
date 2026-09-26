@@ -1937,8 +1937,9 @@ export async function loadHolidayDayEvidence(
     return { workedOn, paidPeriodsWithoutHours: [], paidHolidays: [] };
   }
 
-  const [earned, owed] = await Promise.all([
-    tx.execute<{ earned_on: string | Date }>(sql`
+  // Sequential reads: the run calculation passes its transaction client,
+  // which is one pg connection — fanning out queues concurrent queries on it.
+  const earned = await tx.execute<{ earned_on: string | Date }>(sql`
       select l.earned_from as earned_on
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -1947,8 +1948,8 @@ export async function loadHolidayDayEvidence(
          and r.run_status = 'committed' and s.pay_run_document_id <> ${input.excludeDocumentId}
          and l.kind = 'earning' and l.earned_from = l.earned_to
          and l.earned_from between ${window.from} and ${window.to}
-       group by l.earned_from having sum(l.amount) > 0`),
-    tx.execute<{ on_date: string | Date }>(sql`
+       group by l.earned_from having sum(l.amount) > 0`);
+  const owed = await tx.execute<{ on_date: string | Date }>(sql`
       select distinct a.on_date
         from hrm_absences a
         join worker_employments e on e.id = a.employment_id and e.org_id = a.org_id
@@ -1959,8 +1960,7 @@ export async function loadHolidayDayEvidence(
          and r.status = 'approved' and t.paid and a.hours > 0
          and a.reversal_of is null
          and not exists (select 1 from hrm_absences reversal
-                          where reversal.org_id = a.org_id and reversal.reversal_of = a.id)`),
-  ]);
+                          where reversal.org_id = a.org_id and reversal.reversal_of = a.id)`);
 
   // One row per committed stub overlapping the window, with the hours and the
   // earnings on it. The classification is done here rather than in SQL so the

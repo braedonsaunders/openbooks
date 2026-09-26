@@ -396,8 +396,9 @@ export async function listScheduleLines(
         `Rate schedule ${scheduleId} does not exist in this organization — use one of its schedules.`,
       );
     }
-    const [lines, classifications] = await Promise.all([
-      exec.execute<{
+    // Sequential reads: a transaction exec is one pg client, so reading
+    // lines and classifications at once queues concurrent queries on it.
+    const lines = await exec.execute<{
         id: string;
         classificationId: string;
         classificationCode: string;
@@ -421,14 +422,13 @@ export async function listScheduleLines(
           on classification.org_id = line.org_id and classification.id = line.classification_id
        where line.org_id = ${input.orgId}::uuid and line.schedule_id = ${scheduleId}::uuid
        order by line.effective_from desc, classification.code
-      `),
-      exec.execute<{ id: string; code: string; name: string }>(sql`
+      `);
+    const classifications = await exec.execute<{ id: string; code: string; name: string }>(sql`
       select id::text as id, code, name
         from hrm_work_classifications
        where org_id = ${input.orgId}::uuid and is_active
        order by code, name
-      `),
-    ]);
+      `);
     return { lines: lines.rows, classifications: classifications.rows };
   });
 }

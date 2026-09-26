@@ -134,8 +134,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       throw error
     }
 
-    const [stubs, lines] = (await Promise.all([
-      tx.execute<Record<string, unknown>>(sql`
+    // Sequential reads: this transaction holds one pg client, so reading
+    // both result sets at once queues concurrent queries on it.
+    const stubs = await tx.execute<Record<string, unknown>>(sql`
         select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
                st.gross, st.pensionable_earnings, st.insurable_earnings, st.net_pay,
                st.employer_cost, st.vacation_accrued, st.federal_claim, st.provincial_claim,
@@ -143,8 +144,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           from pay_stubs st
           join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
          where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by p.display_name`),
-      tx.execute<Record<string, unknown>>(sql`
+         order by p.display_name`)
+    const lines = await tx.execute<Record<string, unknown>>(sql`
         select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
                c.code as component_code, pr.name as project_name, dep.name as department_name
           from pay_stub_lines l
@@ -153,8 +154,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
           left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
          where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by l.stub_id, l.sequence`),
-    ]))
+         order by l.stub_id, l.sequence`)
 
     const linesByStub = new Map<string, Record<string, unknown>[]>()
     for (const line of lines.rows) {
@@ -163,21 +163,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       if (list) list.push(line)
       else linesByStub.set(stubId, [line])
     }
-    const [adjustments, adjustableComponents] = (await Promise.all([
-      tx.execute<Record<string, unknown>>(sql`
+    const adjustments = await tx.execute<Record<string, unknown>>(sql`
         select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
                a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
           from pay_run_adjustments a
           join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
           left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
          where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
-         order by p.display_name, a.created_at`),
-      tx.execute<Record<string, unknown>>(sql`
+         order by p.display_name, a.created_at`)
+    const adjustableComponents = await tx.execute<Record<string, unknown>>(sql`
         select id, code, name, kind from pay_components
          where org_id = ${orgId} and is_active
            and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
-         order by sequence, code`),
-    ]))
+         order by sequence, code`)
 
     return NextResponse.json({
       run,

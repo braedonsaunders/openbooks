@@ -103,16 +103,18 @@ export async function measureCreditExposure(
     throw new Error(
       "the approved deferred-credit allocation evidence is missing",
     );
-  const net = sum(
-    await Promise.all(
-      group.previous.map(async (p) =>
-        add(
-          await measureCreditExposure(tx, orgId, bookId, p.exposure),
-          fromUnits(-toUnits(p.baseline)),
-        ),
+  // Sequential recursion: the posting transaction holds one pg client, so
+  // measuring every predecessor at once queues concurrent queries on it.
+  const parts: string[] = [];
+  for (const p of group.previous) {
+    parts.push(
+      add(
+        await measureCreditExposure(tx, orgId, bookId, p.exposure),
+        fromUnits(-toUnits(p.baseline)),
       ),
-    ),
-  );
+    );
+  }
+  const net = sum(parts);
   if (group.weights.every((w) => toUnits(w) === 0n)) return "0.0000";
   return fromUnits(
     apportion(toUnits(net), group.weights.map(toUnits))[exposure.promiseIndex]!,

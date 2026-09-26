@@ -66,27 +66,28 @@ export async function loadStoredHolidayFacts(
   const assertions = new Map<string, Map<string, boolean>>();
   const entitledDays = new Map<string, Map<string, number>>();
   if (employeePartyIds.length === 0) return { commissions, assertions, entitledDays };
-  const [profileRows, assertionRows, entitlementRows] = await Promise.all([
-    tx.execute<{ employee_party_id: string; paid_on_commission: boolean }>(sql`
+  // Sequential reads: callers pass a transaction client for the run's
+  // snapshot, which is one pg connection — fanning out queues concurrent
+  // queries on it instead of running them together.
+  const profileRows = await tx.execute<{ employee_party_id: string; paid_on_commission: boolean }>(sql`
       select employee_party_id, paid_on_commission
         from employee_payroll_profiles
        where org_id = ${orgId}
          and employee_party_id in (${sql.join(employeePartyIds.map((id) => sql`${id}::uuid`), sql`, `)})
-         and paid_on_commission is not null`),
-    tx.execute<{
+         and paid_on_commission is not null`);
+  const assertionRows = await tx.execute<{
       employee_party_id: string; holiday_key: string; holiday_date: string | Date;
       absent_without_consent: boolean;
     }>(sql`
       select employee_party_id, holiday_key, holiday_date::text as holiday_date, absent_without_consent
         from pay_run_holiday_assertions
-       where org_id = ${orgId} and pay_run_document_id = ${documentId}`),
-    tx.execute<{ changes: Record<string, unknown>; actor_id: string | null }>(sql`
+       where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  const entitlementRows = await tx.execute<{ changes: Record<string, unknown>; actor_id: string | null }>(sql`
       select changes, actor_id from audit_log
        where org_id = ${orgId} and table_name = 'pay_run_holiday_assertions'
          and row_id = ${documentId} and action = 'insert'
          and changes->>'event' = 'entitled_pay_days_complete'
-       order by at, id`),
-  ]);
+       order by at, id`);
   for (const row of profileRows.rows) {
     commissions.set(row.employee_party_id, assertStoredBoolean(row.paid_on_commission));
   }

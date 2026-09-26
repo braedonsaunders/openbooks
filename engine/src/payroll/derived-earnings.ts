@@ -1143,13 +1143,13 @@ export async function resolveDerivedEarnings(
   // none of this.
   const chargeWindow = derivedChargeWindow(applicable, periodStart, periodEnd);
 
-  const [components, rateOverrides, charges] = await Promise.all([
-    loadComponents(tx, orgId, [...new Set(applicable.map((rule) => rule.componentId))]),
-    loadRateOverrides(tx, orgId, employeePartyId, periodEnd),
-    chargeWindow
-      ? loadEquipmentCharges(tx, orgId, chargeWindow.start, chargeWindow.end)
-      : Promise.resolve([] as DerivedEquipmentCharge[]),
-  ]);
+  // Sequential loads: the stub calculation runs on its transaction client,
+  // which is one pg connection — fanning out queues concurrent queries on it.
+  const components = await loadComponents(tx, orgId, [...new Set(applicable.map((rule) => rule.componentId))]);
+  const rateOverrides = await loadRateOverrides(tx, orgId, employeePartyId, periodEnd);
+  const charges: DerivedEquipmentCharge[] = chargeWindow
+    ? await loadEquipmentCharges(tx, orgId, chargeWindow.start, chargeWindow.end)
+    : [];
 
   return computeDerivedEarnings({
     rules: applicable,

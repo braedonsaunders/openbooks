@@ -123,19 +123,19 @@ export async function saveBudgetCells(input: {
 
     const accountIds = normalized.map((cell) => cell.accountId)
     const periodIds = normalized.map((cell) => cell.periodId)
-    const [accounts, periods] = (await Promise.all([
-      tx.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
+    // Sequential reads: the save runs on one transaction client, so
+    // validating accounts and periods at once queues concurrent queries on it.
+    const accounts = await tx.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
         select id, number, name, type from accounts
          where org_id = ${input.orgId} and id = any(${uuidArray(accountIds)}::uuid[])
            and is_active and not is_summary
-      `),
-      tx.execute<{ id: string }>(sql`
+      `)
+    const periods = await tx.execute<{ id: string }>(sql`
         select p.id from accounting_periods p
           join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
          where p.org_id = ${input.orgId} and p.id = any(${uuidArray(periodIds)}::uuid[])
            and p.fiscal_year = ${scenario.fiscal_year} and not p.is_adjustment and fc.is_default
-      `),
-    ]))
+      `)
     if (new Set(accounts.rows.map((row) => row.id)).size !== new Set(accountIds).size) {
       throw new BudgetMutationError('invalid_account')
     }
@@ -166,21 +166,22 @@ export async function saveBudgetCells(input: {
       locationId: [...new Set(normalized.map((cell) => cell.locationId).filter((id): id is string => !!id))],
       classId: [...new Set(normalized.map((cell) => cell.classId).filter((id): id is string => !!id))],
     }
-    const dimensionQueries = [
+    // Sequential reads on the same single-client transaction: starting every
+    // query up front would run them all before the first await.
+    const dimensionResults: { rows: { id: string }[] }[] = [
       dimensionIds.departmentId.length
-        ? tx.execute<{ id: string }>(sql`select id from departments where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.departmentId)}::uuid[])`)
-        : Promise.resolve({ rows: [] as { id: string }[] }),
+        ? await tx.execute<{ id: string }>(sql`select id from departments where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.departmentId)}::uuid[])`)
+        : { rows: [] },
       dimensionIds.projectId.length
-        ? tx.execute<{ id: string }>(sql`select id from projects where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.projectId)}::uuid[])`)
-        : Promise.resolve({ rows: [] as { id: string }[] }),
+        ? await tx.execute<{ id: string }>(sql`select id from projects where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.projectId)}::uuid[])`)
+        : { rows: [] },
       dimensionIds.locationId.length
-        ? tx.execute<{ id: string }>(sql`select id from locations where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.locationId)}::uuid[])`)
-        : Promise.resolve({ rows: [] as { id: string }[] }),
+        ? await tx.execute<{ id: string }>(sql`select id from locations where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.locationId)}::uuid[])`)
+        : { rows: [] },
       dimensionIds.classId.length
-        ? tx.execute<{ id: string }>(sql`select id from classes where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.classId)}::uuid[])`)
-        : Promise.resolve({ rows: [] as { id: string }[] }),
+        ? await tx.execute<{ id: string }>(sql`select id from classes where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.classId)}::uuid[])`)
+        : { rows: [] },
     ]
-    const dimensionResults = await Promise.all(dimensionQueries)
     const dimensionExpected = [dimensionIds.departmentId, dimensionIds.projectId, dimensionIds.locationId, dimensionIds.classId]
     dimensionResults.forEach((result, index) => {
       if (result.rows.length !== dimensionExpected[index]!.length) throw new BudgetMutationError('invalid_dimension')

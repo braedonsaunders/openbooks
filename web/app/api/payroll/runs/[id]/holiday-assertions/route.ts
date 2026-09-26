@@ -118,18 +118,26 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           employeeName: employee.name,
           periodStart: run.periodStart, periodEnd: run.periodEnd,
         })
-        demanding.set(employee.employeePartyId, await Promise.all(holidays.map(async (holiday) => ({
-          ...holiday,
-          evidencedDayCount: holiday.needsEntitlementDayAssessment
-            ? await evidencedEntitledPayDays(tx, {
-                orgId: gate.user.orgId, employeePartyId: employee.employeePartyId,
-                employeeName: employee.name, excludeDocumentId: id,
-                jurisdiction: holiday.jurisdiction, holidayDate: holiday.date,
-              })
-            : undefined,
-          attestedDayCount: stored.entitledDays.get(employee.employeePartyId)
-            ?.get(`${holiday.key}|${holiday.date}`),
-        }))))
+        // Sequential assessments: this transaction holds one pg client, so
+        // evidencing every holiday at once queues concurrent queries on it.
+        const assessed: (DemandingHoliday & {
+          evidencedDayCount?: number; attestedDayCount?: number;
+        })[] = []
+        for (const holiday of holidays) {
+          assessed.push({
+            ...holiday,
+            evidencedDayCount: holiday.needsEntitlementDayAssessment
+              ? await evidencedEntitledPayDays(tx, {
+                  orgId: gate.user.orgId, employeePartyId: employee.employeePartyId,
+                  employeeName: employee.name, excludeDocumentId: id,
+                  jurisdiction: holiday.jurisdiction, holidayDate: holiday.date,
+                })
+              : undefined,
+            attestedDayCount: stored.entitledDays.get(employee.employeePartyId)
+              ?.get(`${holiday.key}|${holiday.date}`),
+          })
+        }
+        demanding.set(employee.employeePartyId, assessed)
       }
       const suggested = mergeHolidayEligibility(undefined, stored, demanding)
       // The day counts are server-owned audit facts. The client may answer only
