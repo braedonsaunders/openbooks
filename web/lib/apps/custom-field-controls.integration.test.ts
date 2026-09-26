@@ -82,15 +82,15 @@ test('app field upgrades preserve target identity', {skip:!process.env.OPENBOOKS
 
 test('app field installation rechecks a feature after a competing disable commits', {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
  const org=await withBypassContext(() => createScratchOrg());const {default:pg}=await import('pg');const {featureGateLockKey}=await import('../features');
- const holder=new pg.Client({connectionString:process.env.OPENBOOKS_DB_URL});let pending:Promise<unknown>|undefined;
+ const holder=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL});let pending:Promise<unknown>|undefined;
  await holder.connect();
  try{
   const actor=(await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   await holder.query('begin');
-  await holder.query("select set_config('app.bypass_rls','on',true)");
+  await holder.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
   const pid=(await holder.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
   await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
-  await withBypassContext(() => (holder.query(`update orgs set settings=jsonb_set(settings,'{features}','{"projects":false}'::jsonb) where id=$1`,[org.orgId])));
+  assert.equal((await holder.query(`update orgs set settings=jsonb_set(settings,'{features}','{"projects":false}'::jsonb) where id=$1`,[org.orgId])).rowCount,1,'holder must stage the competing disable');
   pending=withOrgContext(org.orgId,()=>installApp(org.orgId,actor,bundle({targetTable:'projects'})));pending.catch(()=>{});
   let waiting=false;
   for(let attempt=0;attempt<100;attempt++){

@@ -94,7 +94,7 @@ for (const operation of ['dispose', 'remeasure'] as const) {
 for (const operation of ['dispose', 'remeasure'] as const) {
   test(`asset posting rechecks subsidiary scope after waiting: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg();
-    const writer = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
     let connected = false;
     let pending: Promise<Response> | undefined;
     try {
@@ -104,8 +104,8 @@ for (const operation of ['dispose', 'remeasure'] as const) {
       state.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
       await writer.connect(); connected = true;
       await writer.query('begin');
-      await writer.query("select set_config('app.bypass_rls','on',true)");
-      await writer.query('update fixed_assets set subsidiary_id=$1 where id=$2', [outsideId,assetId]);
+      await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
+      assert.equal((await writer.query('update fixed_assets set subsidiary_id=$1 where id=$2', [outsideId,assetId])).rowCount,1,'concurrent writer must hold the asset row');
       pending = (operation === 'dispose' ? dispose : remeasure)(new Request(`http://audit.local/api/assets/${assetId}/${operation}`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({date:'2026-07-31',writeOff:true,newCarryingValue:'800'}),

@@ -30,7 +30,7 @@ for (const scenario of scenarios) {
     const org = await createScratchOrg();
     const foreignOrg = scenario === 'foreign definition' ? await createScratchOrg() : null;
     const foreignId = randomUUID();
-    const writer = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
     let connected = false;
     let pending: Promise<Response> | undefined;
     let cleanup: (() => Promise<void>) | undefined;
@@ -101,8 +101,8 @@ for (const scenario of scenarios) {
       }
       if (scenario === 'waiting writer') {
         await writer.connect(); connected = true;
-        await writer.query('begin'); await writer.query("select set_config('app.bypass_rls','on',true)");
-        await writer.query("update custom_field_defs set label='Committed while editor waited',updated_at=updated_at+interval '1 microsecond' where id=$1", [id]);
+        await writer.query('begin'); await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
+        assert.equal((await writer.query("update custom_field_defs set label='Committed while editor waited',updated_at=updated_at+interval '1 microsecond' where id=$1", [id])).rowCount,1,'concurrent writer must hold the definition row');
         pending = patch({ label: 'Stale waiting editor' }); void pending.catch(() => {});
         await waitForLockWaiter(writer, { label: 'the waiting editor' }); await writer.query('commit'); assert.equal((await pending).status, 409);
         assert.equal((await row()).label, 'Committed while editor waited');

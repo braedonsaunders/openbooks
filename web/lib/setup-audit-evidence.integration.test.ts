@@ -142,7 +142,7 @@ test('a referenced tax group refuses deletion and restores all removed members',
 });
 
 test('setup evidence reads the committed before-image after waiting for another writer', {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
- const org=await createScratchOrg();const writer=new pg.Client({connectionString:env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
+ const org=await createScratchOrg();const writer=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
  try{
   await authenticate(org);const body={code:'CONCURRENT',name:'Original department',isActive:true};
   const created=await send('POST','departments',body);assert.equal(created.status,200);const {id}=await created.json();
@@ -151,7 +151,7 @@ test('setup evidence reads the committed before-image after waiting for another 
   // the update matches zero rows under enforcement, takes no lock, and the
   // PATCH below never blocks. Scope the writer and assert its footprint so
   // a blind writer fails fast instead of after the 10s poll.
-  await writer.query("select set_config('app.bypass_rls','on',true)");
+  await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
   const committed = await writer.query('update departments set name=$1 where id=$2',['Concurrent committed name',id]);
   assert.equal(committed.rowCount, 1, 'concurrent writer must hold the department row');
   pending=send('PATCH','departments',{...body,id,name:'Final reviewed name'});void pending.catch(()=>{});

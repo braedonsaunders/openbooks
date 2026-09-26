@@ -78,11 +78,11 @@ test('two stale editors cannot silently overwrite each other',{skip:!process.env
  }finally{state.gate=null;await dropScratchOrg(org.orgId)}
 });
 test('asset revision rechecks the writer that committed while PATCH waited',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
- const org=await createScratchOrg();const writer=new pg.Client({connectionString:env.OPENBOOKS_DB_URL});let connected=false;let pending:Promise<Response>|undefined;
+ const org=await createScratchOrg();const writer=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL});let connected=false;let pending:Promise<Response>|undefined;
  try{
   const {actorId,assetId}=await seedAsset(org);state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};const revision=await token(assetId);
-  await writer.connect();connected=true;await writer.query('begin');await writer.query("select set_config('app.bypass_rls','on',true)");
-  await writer.query("update fixed_assets set name='Concurrent committed editor',updated_at=updated_at+interval '1 microsecond' where id=$1",[assetId]);
+  await writer.connect();connected=true;await writer.query('begin');await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
+  assert.equal((await writer.query("update fixed_assets set name='Concurrent committed editor',updated_at=updated_at+interval '1 microsecond' where id=$1",[assetId])).rowCount,1,'concurrent writer must hold the asset row');
   pending=patch(assetId,{expectedUpdatedAt:revision,name:'Stale waiting editor'});void pending.catch(()=>{});
   await waitForLockWaiter(writer,{label:'the stale waiting editor'});await writer.query('commit');assert.equal((await pending).status,409);
   assert.equal((await db.execute(sql`select name from fixed_assets where id=${assetId}`)).rows[0]!.name,'Concurrent committed editor');

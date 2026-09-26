@@ -62,15 +62,15 @@ for(const change of ['name','asset account','accumulated account','expense accou
 }
 for(const edit of ['metadata','custom','tax'] as const){
  test(`asset editor preserves concurrent provenance during ${edit} save`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  const org=await createScratchOrg();const writer=new pg.Client({connectionString:env.OPENBOOKS_DB_URL});let connected=false;let pending:Promise<Response>|undefined;
+  const org=await createScratchOrg();const writer=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL});let connected=false;let pending:Promise<Response>|undefined;
   try{
    const {actorId,assetId}=await seedAsset(org);
    state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};
    await db.execute(sql`update fixed_assets set custom='{"provenance":{"version":1},"taxDepreciation":{"ca_cca":{"businessUsePercent":"100"}}}'::jsonb where id=${assetId}`);
    await db.execute(sql`insert into custom_field_defs(org_id,target_table,key,label,field_type) values (${org.orgId},'fixed_assets','inspection_note','Inspection','text')`);
    const latest={provenance:{version:2},inspection_note:'Latest inspection',taxDepreciation:{ca_cca:{businessUsePercent:'90'}}};
-   await writer.connect();connected=true;await writer.query('begin');await writer.query("select set_config('app.bypass_rls','on',true)");
-   await writer.query('update fixed_assets set custom=$1::jsonb where id=$2',[JSON.stringify(latest),assetId]);
+   await writer.connect();connected=true;await writer.query('begin');await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
+   assert.equal((await writer.query('update fixed_assets set custom=$1::jsonb where id=$2',[JSON.stringify(latest),assetId])).rowCount,1,'concurrent writer must hold the asset row');
    const body:Record<string,unknown>={name:'Concurrent save'};
    if(edit==='custom')body.custom={inspection_note:'Replaced inspection'};
    if(edit==='tax')body.taxDepreciation={};

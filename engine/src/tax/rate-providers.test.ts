@@ -1160,11 +1160,11 @@ test(
       // A second session holds the config row's lock while the product save is
       // already in flight — exactly the interleaving that used to lose one
       // side's credential: the save must merge on the lock, not on a stale read.
-      editor = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+      editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL });
       await editor.connect();
       await editor.query("begin");
-      await editor.query("select set_config('app.bypass_rls', 'on', true)");
-      await editor.query("select id from tax_rate_provider_configs where org_id = $1 for update", [orgId]);
+      await editor.query("select set_config('app.bypass_rls', 'on', true)"); // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
+      assert.equal((await editor.query("select id from tax_rate_provider_configs where org_id = $1 for update", [orgId])).rows.length, 1, "concurrent editor must hold the provider config row");
 
       const admin2 = randomUUID();
       const racingSave = saveTaxRateProviderConfig(
