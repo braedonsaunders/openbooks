@@ -246,7 +246,7 @@ get the same ordering from the bootstrap one-shot.
 
 ## [0.1.0-alpha.15] - 2026-09-17
 
-Fleet-7 defect wave on top of alpha.14. No new migration.
+Defect fixes on top of alpha.14. No new migration.
 
 ### Payroll, parties, and close
 
@@ -363,7 +363,7 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
 
 ## [0.1.0-alpha.14] - 2026-09-17
 
-Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.
+Defect fixes on top of alpha.13. Requires migration 0170.
 
 ### Locale remediation
 
@@ -390,7 +390,7 @@ Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.
 
 ## [0.1.0-alpha.13] - 2026-09-17
 
-Fleet-6 closeout on top of alpha.12. No new migration.
+Defect fixes on top of alpha.12. No new migration.
 
 ### i18n, shell, and allocations
 
@@ -407,7 +407,7 @@ Fleet-6 closeout on top of alpha.12. No new migration.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–44: setup, banking, assistant, payroll, CRM, reports,
+Fixes across setup, banking, assistant, payroll, CRM, reports,
 dashboard, documents, allocations, construction/AR, rates, assets,
 payroll, i18n, drawers/search/mobile, expenses, compliance, invites,
 agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
@@ -513,7 +513,7 @@ agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
 ### Invites, i18n, and cockpit (batches 40–41)
 
 - CSRF treats localhost / 127.0.0.1 / [::1] as one origin so invite
-  activation works across the fleet's loopback pair.
+  activation works across loopback addresses.
 - Feature-toggle 409s map to localized copy; recent-entry status and
   line counts translate; opportunity status cells and filters use the
   drawer catalog; mobile tabs prefer short AR/AP labels.
@@ -701,7 +701,7 @@ line, rule version, and driver value.
 
 Assistant and agents release. A live benchmark of the in-app assistant on a
 real ledger (three models, graded against tool output) showed nearly every
-lost point was a tool-surface gap; two agent fleets closed those gaps, made
+lost point was a tool-surface gap; this release closed those gaps, made
 the model's context proportional to the question, generalised the
 background-agent runtime, and gave agent work a home in the product.
 Everything the assistant and MCP clients can do reuses the same services,
@@ -782,7 +782,7 @@ permission gates, subsidiary scoping, and feature switches as the screens.
 
 ## [0.1.0-alpha.6] - 2026-09-15
 
-Defect-remediation release: ~300 atomic fixes from a third audit fleet
+Defect-remediation release: ~300 atomic fixes from a third audit
 (persona attacks, real-data replay, mutation survivors, standards
 conformance, boundary sweeps), each with a red-then-green regression test
 and an independent review. Highlights below; every commit carries its own

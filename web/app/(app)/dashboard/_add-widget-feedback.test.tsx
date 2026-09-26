@@ -27,7 +27,7 @@ const messages = { dashboard: dashboardEn, apps: appsEn, common: commonEn };
 // Palette adds once appended the widget at the bottom with no feedback —
 // off-screen on a tall dashboard the click read as "nothing happened" — and
 // a rapid double-click appended the widget twice, because the duplicate check
-// ran on stale render state outside the state update. (Fleet-8 dx context.)
+// ran on stale render state outside the state update.
 
 const LAYOUT: DashboardLayoutData = {
   widgets: [{ id: 'kpi-cash-balance', x: 0, y: 0, w: 3, h: 2 }],

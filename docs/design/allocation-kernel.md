@@ -1,8 +1,7 @@
 # Allocation Kernel — design and build plan
 
-Status: SHIPPED on main 2026-09-16 (fleet coordinator thread `thr_t8dcvesuvd`; 14 shards, migrations
-0160–0164). Section 6 is the historical build plan; the code under `engine/src/allocations/` and
-`web/app/(app)/admin/setup/allocations/` is the source of truth where they differ.
+Status: SHIPPED 2026-09-16 (migrations 0160–0164). The code under `engine/src/allocations/` and
+`web/app/(app)/admin/setup/allocations/` is the source of truth where it differs from this document.
 Schema contract: `schema/src/allocations.ts` + migration `0160_allocation_kernel.sql`.
 Type contract: `engine/src/allocations/types.ts`.
 
@@ -176,22 +175,22 @@ holds rows; none does anywhere).
 ## 3. Engine (`engine/src/allocations/`)
 
 - `types.ts` — the shared contract (rule/version/target/driver shapes, `Coordinate`,
-  `DriverVector`, `ApportionResult`, `ContributedLine`, `MatchResult`). Frozen by the
-  coordinator; extend only additively.
-- `apportion.ts` (A1) — pure: `apportion(total, weights, residualPolicy)` exact bigint
+  `DriverVector`, `ApportionResult`, `ContributedLine`, `MatchResult`). Extend it only
+  additively.
+- `apportion.ts` — pure: `apportion(total, weights, residualPolicy)` exact bigint
   money via `money.ts`; `fixedPercentWeights(targets)`, `steppedWeights`. Never a float.
-- `validate.ts` (A1) — `validateRuleVersion(version, targets)` (percents, remainder, driver
+- `validate.ts` — `validateRuleVersion(version, targets)` (percents, remainder, driver
   presence, overlap of effective windows, dynamic target sanity, impact/offset coherence,
   mode-specific requirements) and `definitionHash(version, targets)`.
 - `match.ts` (A4, committed FIRST) — pure `matchLine(rule, line: LineCoordinate) → boolean`
   and `selectRule(candidates, line) → RuleVersionRef | null` (most specific wins: count of
-  matched predicates, then `sort_order`, then key). `post` (A5) and `entry` (A4) use it.
-- `drivers.ts` (A2) — `resolveDriverVector({ orgId, driver, asOf: { periodId } |
+  matched predicates, then `sort_order`, then key). `post` and `entry` use it.
+- `drivers.ts` — `resolveDriverVector({ orgId, driver, asOf: { periodId } |
   { date }, dimension, filter, actor }) → DriverVector` (Map<dimensionValueId, numeric
   string>) with one resolver per `source_kind`. Report-backed drivers call the report
   engine. Native measures reuse the True Cost data helpers where they are db-free, else
   re-query.
-- `period-run.ts` (A3) — `previewAllocationRun`, `postAllocationRun`,
+- `period-run.ts` — `previewAllocationRun`, `postAllocationRun`,
   `reverseAllocationRun`, `rerunAllocationRun`, `listRuns`. Source read uses the GL
   summary helpers (`web/lib/gl-summary.ts` patterns are web-side; engine reads
   `journal_lines` directly, excluding this rule's own lineage). Journal written through
@@ -199,7 +198,7 @@ holds rows; none does anywhere).
   classId, subsidiaryId, extraDims, contributorKind, contributorRef — additive). Origin
   `allocation`. Period/book/closed-module checks exactly as depreciation does. Reversal
   mirrors stored lines (never recomputes). Runs and lineage in ONE transaction.
-- `entry.ts` (A4) — `explodeDocumentLine(line, ruleVersion, driverVector) →
+- `entry.ts` — `explodeDocumentLine(line, ruleVersion, driverVector) →
   childLines[]` and `planEntryDistributions(doc, lines, rulesInEffect, drivers)`; wired into
   `web/lib/documents.ts applyDocumentEdit` (before totals + tax) and the generic writers.
   Children are REAL lines: the entered line is replaced by N children sharing
@@ -209,7 +208,7 @@ holds rows; none does anywhere).
   `distribution_locked=false`, children are regenerated from the group's total and the
   first child's inherited fields. "Un-split" collapses the group into one line at the
   first child's coordinates.
-- `post.ts` (A5) — `contributePostingAllocations(db, doc, kernelLines, deps) →
+- `post.ts` — `contributePostingAllocations(db, doc, kernelLines, deps) →
   ContributedLine[]` called in `engine/src/ledger/posting.ts` right after kernel lines are built
   and BEFORE `applySubsidiaries`. Rules in effect on the posting date, `post` mode,
   book_scope covering the primary book, matched per kernel line via `match.ts`. Each
@@ -220,7 +219,7 @@ holds rows; none does anywhere).
   `journal_entries` row in that book, `origin='allocation'`, `source_document_id=doc.id`,
   in the same transaction. Void/reversal mirrors contributed lines through the existing
   reversal cloning (`reversal-journal-lines.ts`) — verify with a test.
-- `scripting.ts` (A6) — new trigger `custom_gl_lines`: `main(ctx)` receives
+- `scripting.ts` — new trigger `custom_gl_lines`: `main(ctx)` receives
   `{ trigger, document, lines, kernelLines (frozen), org, user }` and returns
   `{ lines: [{ accountId|accountCode, amount, departmentId?, projectId?, locationId?,
   classId?, subsidiaryId?, memo?, bookCode? }] }`. The host validates (max 200 lines, must
@@ -228,7 +227,7 @@ holds rows; none does anywhere).
   `allocationsAtPosting` + `scripts`), stamps `contributor_kind='script'`,
   `contributor_ref=script.id`. Runs after rule contributions, inside the posting
   transaction, deterministic (no clock, no random: the sandbox already has none).
-- `scheduling.ts` (A10) — scheduler outbox kind `allocation_run`: at period end +
+- `scheduling.ts` — scheduler outbox kind `allocation_run`: at period end +
   `run_offset_days`, for each active period-mode published version with
   `run_policy != 'manual'`, enqueue `(rule, period, book)`; `auto_preview` computes a run in
   `previewed`; `auto_post` posts (or opens the approval flow). Idempotent per occurrence
@@ -240,41 +239,41 @@ holds rows; none does anywhere).
 - **Setup workspace** `/admin/setup/allocations` (ModuleView spec, exemplar
   `web/app/(app)/admin/setup/overhead/`): tabs **Rules**, **Drivers**, **Runs**. Registered
   in `web/lib/setup/registry.ts` (`groupKey: 'accounting'`, custom page, gated by
-  `allocations`). Rule drawer (A7): mode, applicability (account scope: accounts or account
+  `allocations`). Rule drawer: mode, applicability (account scope: accounts or account
   group; dimension filters incl. "untagged"), basis, targets (reuse
   `web/components/allocations/SplitLinesEditor.tsx`, extended with `weight` and the
   target-account-optional case), impact, residual, books, schedule, versions timeline with
   Publish/Retire, Preview (period mode) and Test-against-a-line (entry/post mode). Drivers
-  tab (A8): driver list + drawer per source_kind + manual values grid (effective-dated).
-  Runs tab (A8): list (RecordListView/PagedTable), preview table (source rows, driver vector,
+  tab: driver list + drawer per source_kind + manual values grid (effective-dated).
+  Runs tab: list (RecordListView/PagedTable), preview table (source rows, driver vector,
   targets with weight/share/amount/residual), Post / Reverse / Re-run actions with reason
   prompts (`promptDialog`), lineage drill.
-- **Line grid** (A9): a distribution affordance on every account/expense line in
+- **Line grid**: a distribution affordance on every account/expense line in
   `web/components/line-grid.tsx` / `document-drawer.tsx`: chip showing the applied rule,
   "Split…" action opening a dialog (SplitLinesEditor) that creates/edits the group, group
   rendering (children indented under a synthetic group header showing the total), "Un-split",
   `suggest` chips. Rule defaults resolve server-side (`GET
   /api/allocations/entry-candidates?documentKind&accountId&dims…`). Import/API: a line may
   carry `distributionKey` (rule key) in `web/lib/api/writers.ts` and data-io adapters.
-- **GL impact drawer** (A5): `web/components/journal-entry-link.tsx` groups lines by
+- **GL impact drawer**: `web/components/journal-entry-link.tsx` groups lines by
   contributor (Standard / Rule: name / Script: name), standard lines rendered locked.
 - **API** (`web/app/api/allocations/…`): rules CRUD + versions (publish/retire) + targets,
   drivers CRUD + values, runs (preview/post/reverse/rerun/list), entry-candidates,
   explain (`GET /api/allocations/lineage?journalEntryId|documentId|runId`). Every route
   gated by feature + permission; subsidiary scope respected; revision tokens on updates.
-- **Reports** (A10): report entities `allocation_runs`, `allocation_lineage` in
+- **Reports**: report entities `allocation_runs`, `allocation_lineage` in
   `packages/reports/src/entities.ts`; built-in "Allocation summary" and "Allocation
   lineage" reports; Runs tab links to them (no bespoke analytics screens).
-- **Features** (A10): `allocations` (accounting, default OFF, navModules none; setup rail
+- **Features**: `allocations` (accounting, default OFF, navModules none; setup rail
   entry gated), `allocationsAtEntry` and `allocationsAtPosting` with `parentKey:
   'allocations'`; turn-off impact counts (open previewed runs, active rules); never blocked.
-- **Permissions** (A10): `allocations.read`, `allocations.manage`, `allocations.run`,
+- **Permissions**: `allocations.read`, `allocations.manage`, `allocations.run`,
   `allocations.approve` in `engine/src/organization/permissions.ts` + built-in roles + `seed-roles.ts`
   rerun note. Posting a run additionally requires `gl.post`.
 - **i18n**: `web/messages/en/allocations.json` (+ fallbacks file per the i18n gotchas
   memory); labels via keys, never literals.
-- **Docs** (A12): `web/lib/docs/articles/allocations.ts` registered in `web/lib/docs/index.ts`.
-- **Trust corpus** (A12): conformance cases `alloc-no-lost-cent`, `alloc-reversal-restores`,
+- **Docs**: `web/lib/docs/articles/allocations.ts` registered in `web/lib/docs/index.ts`.
+- **Trust corpus**: conformance cases `alloc-no-lost-cent`, `alloc-reversal-restores`,
   `alloc-rerun-idempotent`, `alloc-contributor-balance`, `alloc-entry-group-sum`.
 
 ## 5. Invariants (tests must pin each)
@@ -297,24 +296,3 @@ holds rows; none does anywhere).
 8. Period/book/closed-module checks are the same as depreciation; a closed period refuses
    post and reverse.
 9. Cross-org references in any allocation table are refused (composite FKs + service check).
-
-## 6. Fleet shards
-
-| shard | owner area | key files | depends on |
-| ----- | ---------- | --------- | ---------- |
-| A1 engine-core | apportion, validate, definitionHash, rule/version service (CRUD, publish, retire, overlap guard) | `engine/src/allocations/{apportion,validate,rules}.ts` | schema (landed) |
-| A2 drivers | driver registry resolvers + manual values service | `engine/src/allocations/drivers.ts` | schema |
-| A3 period-run | preview/post/reverse/rerun + lineage + GlLine extension | `engine/src/allocations/period-run.ts`, `engine/src/projects/recognition.ts` (additive) | A1 apportion, A2 (inject a `DriverResolver`; start with fixed_percent) |
-| A4 entry-mode | `match.ts` (first commit), `entry.ts`, `applyDocumentEdit` wiring, generic writers `distributionKey` | `engine/src/allocations/{match,entry}.ts`, `web/lib/documents.ts`, `web/lib/api/writers.ts` | A1 apportion |
-| A5 post-mode | posting seam, contributor stamping, secondary-book entries, void mirroring, GL impact drawer grouping | `engine/src/allocations/post.ts`, `engine/src/ledger/posting.ts`, `web/components/journal-entry-link.tsx` | A4 match |
-| A6 script-trigger | `custom_gl_lines` trigger in the QuickJS runtime, ScriptDrawer template, scripting docs | `engine/src/scripting/scripting.ts`, `web/app/(app)/admin/scripts/*`, `web/lib/docs/articles/scripting.ts` | A5 seam (stub until landed) |
-| A7 setup-ui-rules | Rules tab + Rule drawer + versions + rules/targets API routes + setup registry entry | `web/app/(app)/admin/setup/allocations/*`, `web/app/api/allocations/rules/*`, `web/lib/setup/registry.ts` (one small commit) | A1 service |
-| A8 setup-ui-drivers-runs | Drivers tab + drawer + values grid, Runs tab + preview/post/reverse UI + lineage drill + API routes | `web/app/(app)/admin/setup/allocations/{drivers,runs}*`, `web/app/api/allocations/{drivers,runs,lineage}/*` | A2, A3 |
-| A9 line-grid | entry-mode UI in line grid/document drawer, split dialog, group rendering, suggest chips, entry-candidates API, data-io | `web/components/line-grid.tsx`, `web/components/document-drawer.tsx`, `web/app/api/allocations/entry-candidates/route.ts`, `web/lib/data-io/*` | A4 |
-| A10 platform | Features + permissions + roles, report entities + built-ins, scheduler outbox kind + runner, close automation action, governed catalog migration 0161 | `engine/src/organization/feature-registry.ts`, `web/lib/features.ts`, `engine/src/organization/permissions.ts`, `packages/reports/src/*`, `engine/src/scheduling/outbox.ts`, `engine/src/close*.ts`, `schema/migrations/generated/0161_*.sql` | schema |
-| A11 overhead-fold (wave 2) | overhead net-zero pair → system-owned post rule, backfill parity test | `engine/src/projects/overhead-apply.ts` | A5 |
-| A12 docs-trust (wave 2) | in-app docs article, trust corpus cases, i18n fallbacks for other locales | `web/lib/docs/*`, `corpus/*` | A3, A4, A5 |
-| A13 assistant (wave 2, after the assistant fleet releases its files) | `preview_allocation`, `explain_allocation`, `list_allocation_rules` tools + MCP | `web/lib/assistant/*`, `web/lib/mcp/*` | A3, A8 |
-
-Ordinals: 0160 kernel (coordinator), 0161 governed catalog + views (A10), 0162–0169 reserved
-for the fleet (request from the coordinator).
