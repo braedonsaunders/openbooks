@@ -79,7 +79,9 @@ jobs:
             echo "full=$full"; echo "code=$code"; echo "browser=$browser"
           } >> "$GITHUB_OUTPUT"
           echo "full=$full code=$code browser=$browser"
-          echo "$changed" | head -40
+          # A here-string, not a pipe: under pipefail, `echo | head` fails the
+          # step with SIGPIPE whenever the list outgrows the pipe buffer.
+          head -n 40 <<< "$changed"
 
   typecheck:
     needs: scope
