@@ -1,33 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 // jsdom first: the workbench reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/assistant",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-
 declare global {
   var __newChatPushes: string[] | undefined;
 }
 
 const { registerHooks } = await import("node:module");
+await bootJsdomEnvironment({ url: "http://localhost:4800/assistant" });
+
+stubModules({ navigation: { source: 'export function useRouter(){return{push(u){globalThis.__newChatPushes.push(u)},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return \'/assistant\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(u){globalThis.__newChatPushes.push(u)},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/assistant'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
     if (specifier === "next/link") {
       // Render a real anchor (href/target/rel preserved) so link-behavior
       // tests can pin same-tab navigation; children-only mocks hide it.
@@ -54,7 +41,6 @@ globalThis.fetch = (async () =>
     headers: { "content-type": "application/json" },
   })) as typeof fetch;
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 // P7: the /time/setup rules form must carry every visible choice into the
 // PUT /api/time/settings payload — a control whose selection never reaches
@@ -9,28 +10,13 @@ import test from "node:test";
 // asserts the captured request body carries every rule.
 
 // jsdom first: the ui Select/SearchSelect read browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/time/setup",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of [
-  "window",
-  "document",
-  "navigator",
-  "Node",
-  "Element",
-  "HTMLElement",
-  "Event",
-  "self",
-]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/time/setup", matchMediaMatches: false });
+
 // Node 24+ ships native Event constructors that jsdom nodes will not
 // propagate (a component-dispatched `new Event('change')` never reaches a
 // container listener), so a Select pick would read as unwired here while it
 // works in every browser. Pin the test realm's constructors for fidelity.
+const domWindow = window as unknown as Record<string, unknown>;
 for (const key of ["Event", "CustomEvent", "InputEvent", "MouseEvent", "KeyboardEvent"]) {
   Object.defineProperty(globalThis, key, {
     value: domWindow[key],
@@ -38,28 +24,7 @@ for (const key of ["Event", "CustomEvent", "InputEvent", "MouseEvent", "Keyboard
     writable: true,
   });
 }
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof (globalThis as Record<string, unknown>).ResizeObserver !== "function") {
-  const stub = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
-  (globalThis as Record<string, unknown>).ResizeObserver = stub;
-  (window as unknown as Record<string, unknown>).ResizeObserver = stub;
-}
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

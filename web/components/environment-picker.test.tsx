@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // F5-5: EnvironmentPicker hardcoded its English labels (Workspace,
 // Production/Sample company, Manage environments) while the hosting
@@ -8,25 +9,9 @@ import test from "node:test";
 // Only routing and the workspace-switch action are doubled. React, next-intl
 // and the REAL German catalog run, so hardcoded English fails every
 // assertion below.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/dashboard",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-
 const { registerHooks } = await import("node:module");
+await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard", matchMediaMatches: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
@@ -45,7 +30,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

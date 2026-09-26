@@ -1,20 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 // jsdom first: the workbench reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/assistant",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
@@ -22,16 +11,14 @@ const { pathToFileURL } = await import("node:url");
 const worktreeRoot = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
+await bootJsdomEnvironment({ url: "http://localhost:4800/assistant" });
+
+stubModules({ navigation: { source: 'export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return \'/assistant\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
       return { shortCircuit: true, url: worktreeRoot };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/assistant'}export function useSearchParams(){return new URLSearchParams()}",
-      };
     }
     if (specifier === "@/lib/confirm" || specifier.endsWith("/lib/confirm")) {
       return {
@@ -43,7 +30,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
+import { stubModules } from '../testing/stub-modules.ts'
 
 // The budget drill-down must tie to the budget vs actual report it supports:
 // the same window and the same currency translation. It did neither — it
@@ -10,10 +11,9 @@ import test from 'node:test';
 // across currencies while the report translates every leg to the presentation
 // currency. On a year-to-date, multi-currency book the drill's supporting
 // totals agreed with nothing.
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next-intl/server') {
-    return { shortCircuit: true, url: `data:text/javascript,export async function getTranslations() { return (key) => key }` };
-  }
   if (specifier === './money-server' || specifier.endsWith('/money-server')) {
     return { shortCircuit: true, url: `data:text/javascript,export async function getMoneyFormatter() { return { money: (value) => String(value) } }` };
   }

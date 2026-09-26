@@ -1,19 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
+import { stubModules } from '../testing/stub-modules.ts'
 
 // /entities/customers crashes for orgs with CRM off. The list's
 // status-facet query groups by the status expression, which is the constant
 // 'customer' when CRM is off — `group by 'customer'` is a Postgres 42601, so
 // the whole page throws. CRM-on orgs group by a real column and never notice.
 const root = pathToFileURL(process.cwd() + '/').href
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key)=>key}export async function getLocale(){return 'en'}" }
-    return next(specifier, context)
-  },
-})
+stubModules({ navigation: false, authz: false, features: false });
+
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')

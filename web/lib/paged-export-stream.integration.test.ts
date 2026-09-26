@@ -5,20 +5,15 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import ExcelJS from "exceljs";
 import { resolveAppModule } from "./test-module-hooks";
+import { stubModules } from '../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + "/").href;
 const state: { user: import("./auth").SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pagedExportStreamState: state });
+stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t;};export async function getLocale(){return "en"}', authz: false, features: false });
+
 registerHooks({
   resolve(s, c, next) {
-    if (s === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(
-          'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t;};export async function getLocale(){return "en"}',
-        ),
-      };
-    }
     if ((s === "./auth" || s.endsWith("/lib/auth")) && c.parentURL?.includes("/web/") && !c.parentURL.includes("/web/lib/auth.ts")) {
       return {
         shortCircuit: true,

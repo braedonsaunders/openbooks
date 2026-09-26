@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import { renderToStaticMarkup } from "react-dom/server";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { stubModules } from '../../testing/stub-modules.ts'
 
 // The projects list rendered a custom type's key ("t11 tm
 // verify") instead of its name ("T11 T&M Verify") because the billing
@@ -12,20 +12,9 @@ import test from "node:test";
 // them; built-ins keep their static translated options. Needs a fixture
 // database.
 const root = pathToFileURL(process.cwd() + '/').href;
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key}export async function getLocale(){return 'en'}" };
-    }
-    if (specifier === "next-intl") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export function useTranslations(){const t=(key)=>key;t.rich=(key)=>key;return t}export function useLocale(){return 'en'}export function useTimeZone(){return 'UTC'}" };
-    }
-    if (specifier === "next/navigation") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export function useRouter(){return {push(){},replace(){},refresh(){}}}export function usePathname(){return '/projects'}export function useSearchParams(){return new URLSearchParams()}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
+stubModules({ navigation: { pathname: '/projects' }, authz: false, features: false, extra: {
+    'next-intl': 'export function useTranslations(){const t=(key)=>key;t.rich=(key)=>key;return t}export function useLocale(){return \'en\'}export function useTimeZone(){return \'UTC\'}',
+  } });
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { stubModules } from '../testing/stub-modules.ts'
 
 /**
  * Live-PostgreSQL regression for fnd_mtcbbunr_7k3wlv.  The vendor compliance
@@ -22,28 +23,16 @@ interface RouteState {
 const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.compliance-vendor-audit-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-  export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
-    const allowed = authz.allowedSubsidiaryIds
-    if (allowed === null) return null
-    if ((subsidiaryId === null || subsidiaryId === undefined) && opts.orgWideNull === true) return null
-    if (typeof subsidiaryId === 'string' && allowed.has(subsidiaryId)) return null
-    return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
-  }
-`;
-
 const mockCompliance = `
   export async function guardComplianceFeature(_orgId) { return null }
 `;
 
+stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
+    '@/lib/authz': '\n  const state = globalThis[Symbol.for(\'openbooks.compliance-vendor-audit-test\')]\n  export async function guardPermission(_permission) {\n    if (!state.authz) return new Response(null, { status: 403 })\n    return state.authz\n  }\n  export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {\n    const allowed = authz.allowedSubsidiaryIds\n    if (allowed === null) return null\n    if ((subsidiaryId === null || subsidiaryId === undefined) && opts.orgWideNull === true) return null\n    if (typeof subsidiaryId === \'string\' && allowed.has(subsidiaryId)) return null\n    return new Response(JSON.stringify({ error: \'not found\' }), { status: 404 })\n  }\n',
+  } });
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/authz") return { url: "mock:compliance-authz", shortCircuit: true };
     if (specifier === "@/lib/compliance") return { url: "mock:compliance-gate", shortCircuit: true };
     // Resolve this worktree's engine directly.  This keeps the route and the
     // fixture helpers on one db module even when node_modules is shared.
@@ -57,9 +46,6 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:compliance-authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
     if (url === "mock:compliance-gate") {
       return { format: "module", source: mockCompliance, shortCircuit: true };
     }

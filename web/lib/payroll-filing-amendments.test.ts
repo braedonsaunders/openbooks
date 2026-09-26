@@ -3,6 +3,8 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
 import type { FilingLifecycle, FilingRowReview } from '../app/(app)/payroll/_ui/filing-amendments.tsx'
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 /**
  * Filing-cancellation evidence: cancelling an issued slip is an affirmative
@@ -75,14 +77,14 @@ const routeUrls = new Map<string, string>([
   ['@openbooks/engine/src/payroll/yearend-amendments.ts', mockUrl('yearend-amendments')],
 ])
 
+await bootJsdomEnvironment({ url: "http://localhost:4800/", matchMediaMatches: false });
+
+stubModules({ navigation: false, authz: false, features: false, extra: {
+    'next-intl': 'export function useTranslations() { const t = (key) => key; t.has = () => false; return t }export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}',
+  } });
+
 const routeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function getTranslations() { return (key) => key }',
-      }
-    }
     // The yearend population script is the route's boundary, but the real
   // subsidiary-scope guard imports roeSourceScope from the same module.
   // Only the route under test sees the script; every other importer (the
@@ -130,27 +132,8 @@ const CANCEL = {
 
 // --- FilingCorrectionSection (jsdom + the real section component) ---
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost:4800/' })
-const sectionGlobals = globalThis as Record<string, unknown>
-const sectionWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (sectionGlobals[key] === undefined) sectionGlobals[key] = sectionWindow[key]
-}
-if (typeof (dom.window as unknown as { matchMedia?: unknown }).matchMedia !== 'function') {
-  ;(dom.window as unknown as Record<string, unknown>).matchMedia = () => ({
-    matches: false,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {
-      return false
-    },
-  })
-}
 {
-  sectionGlobals.fetch = (async (url: string, init?: RequestInit) => {
+  ;(globalThis as Record<string, unknown>).fetch = (async (url: string, init?: RequestInit) => {
     const href = String(url)
     if (href.includes('/amendments/slip?')) {
       return {
@@ -172,12 +155,6 @@ if (typeof (dom.window as unknown as { matchMedia?: unknown }).matchMedia !== 'f
 
 const sectionHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next-intl') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useTranslations() { const t = (key) => key; t.has = () => false; return t }export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}',
-      }
-    }
     if (specifier === '../../../../components/money-provider') {
       return {
         shortCircuit: true,
@@ -194,7 +171,6 @@ const sectionHooks = registerHooks({
   },
 })
 
-;(sectionGlobals as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
@@ -340,7 +316,7 @@ function buttonByText(host: HTMLElement, text: string): HTMLButtonElement | null
 }
 
 async function click(el: Element) {
-  const MouseEventCtor = (dom.window as unknown as { MouseEvent: typeof MouseEvent }).MouseEvent
+  const MouseEventCtor = (window as unknown as { MouseEvent: typeof MouseEvent }).MouseEvent
   await act(async () => {
     el.dispatchEvent(new MouseEventCtor('click', { bubbles: true }))
     await tick()
@@ -354,7 +330,7 @@ async function typeReason(host: HTMLElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
   await act(async () => {
     setter.call(area, value)
-    area.dispatchEvent(new (dom.window as unknown as { Event: typeof Event }).Event('input', { bubbles: true }))
+    area.dispatchEvent(new (window as unknown as { Event: typeof Event }).Event('input', { bubbles: true }))
     await tick()
   })
   await tick()

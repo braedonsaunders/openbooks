@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // LAYOUT2 sweep: the saved-view default picker fires one PUT per pick. A
 // refused save must surface the named failure (never an unhandled rejection
@@ -10,27 +12,6 @@ declare global {
   var __viewToasts: { kind: string; message: string }[] | undefined;
 }
 
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/customers",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
@@ -38,16 +19,14 @@ const { pathToFileURL } = await import("node:url");
 const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
+await bootJsdomEnvironment({ url: "http://localhost:4800/customers", matchMediaMatches: false });
+
+stubModules({ navigation: { pathname: '/customers' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
       return { shortCircuit: true, url: worktreeUi };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){}}}export function usePathname(){return '/customers'}export function useSearchParams(){return new URLSearchParams()}",
-      };
     }
     if (specifier === "next/link") {
       return {
@@ -65,7 +44,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
+import { stubModules } from '../testing/stub-modules.ts'
 
 // The budget drill-down must scope budget lines by the line's own legal
 // entity — the rule every sibling reader applies (budget vs actual report,
@@ -11,10 +12,9 @@ import test from 'node:test';
 // subsidiary-restricted caller: another entity's line wearing one of your
 // dimensions leaked in, while your own undimensioned lines were denied —
 // even though the report and the list right beside the drill showed them.
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next-intl/server') {
-    return { shortCircuit: true, url: `data:text/javascript,export async function getTranslations() { return (key) => key }` };
-  }
   if (specifier === './money-server' || specifier.endsWith('/money-server')) {
     return { shortCircuit: true, url: `data:text/javascript,export async function getMoneyFormatter() { return { money: (value) => String(value) } }` };
   }

@@ -5,6 +5,7 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypass, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { stubModules } from '../testing/stub-modules.ts'
 
 // Database partition: order drill scopes route through live SQL predicates
 // (open/backlog, converted/linked, voided) that only PostgreSQL can answer.
@@ -13,20 +14,10 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/
 // orders. next-intl has no request scope in plain node, so translations
 // resolve to the key (labels are never asserted).
 
+stubModules({ navigation: {}, authz: false, features: false });
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function getTranslations() { return (key) => key }',
-      }
-    }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function redirect() { throw new Error("redirect") }; export function notFound() { throw new Error("not-found") }',
-      }
-    }
     return nextResolve(specifier, context)
   },
 })

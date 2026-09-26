@@ -2,45 +2,19 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { stubModules } from '../../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 const navigation = { replacements: [] as string[] };
 (globalThis as Record<string, unknown>).__cashHorizonNavigation = navigation;
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "next/navigation") {
-      const code = `
-        export const useRouter = () => ({ replace: (url) => globalThis.__cashHorizonNavigation.replacements.push(url) });
-        export const usePathname = () => "/analytics/cashflow";
-        export const useSearchParams = () => new URLSearchParams("sub=sub-1");
-      `;
-      return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(code)}` };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
+stubModules({ navigation: { source: 'export const useRouter = () => ({ replace: (url) => globalThis.__cashHorizonNavigation.replacements.push(url) }); export const usePathname = () => "/analytics/cashflow"; export const useSearchParams = () => new URLSearchParams("sub=sub-1");' }, intl: false, authz: false, features: false });
 // House render guard: classic JSX transforms and shared tsx caches need React
 // on globalThis before the client control module is evaluated.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost:4800/analytics/cashflow" });
-const browser = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "HTMLSelectElement", "Event", "self"]) {
-  if ((globalThis as Record<string, unknown>)[key] === undefined) {
-    (globalThis as Record<string, unknown>)[key] = browser[key];
-  }
-}
-;(globalThis as Record<string, unknown>).Event = browser.Event
-if (!(dom.window as unknown as { matchMedia?: unknown }).matchMedia) {
-  (dom.window as unknown as { matchMedia: (query: string) => MediaQueryList }).matchMedia = (query) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() { return true; },
-  } as unknown as MediaQueryList);
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+await bootJsdomEnvironment({ html: '<!doctype html><html><body></body></html>', url: 'http://localhost:4800/analytics/cashflow', matchMediaMatches: false });
+// The horizon dropdown dispatches jsdom-realm events: keep jsdom's Event
+// (Node 24 also ships a native global Event that this document will not
+// dispatch as its own) until the shared preset offers an Event option.
+globalThis.Event = window.Event;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");
@@ -242,7 +216,7 @@ test("cashflow horizon control offers shared presets and preserves other query f
   } finally {
     await act(async () => root.unmount());
     host.remove();
-    dom.window.close();
+    window.close();
   }
 });
 

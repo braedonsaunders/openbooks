@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import React from 'react'
 import type { SessionUser } from './auth'
+import { stubModules } from '../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + '/').href
 const state: {
@@ -16,6 +17,8 @@ const moduleSource = (source: string) => ({
   shortCircuit: true as const,
   url: 'data:text/javascript,' + encodeURIComponent(source),
 })
+stubModules({ navigation: false, intl: 'export async function getTranslations(){ const t=(key)=>key; t.rich=(key)=>key; return t }; export async function getLocale(){ return "en" }', authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (
@@ -34,10 +37,6 @@ registerHooks({
         return snapshot;
       }
     `)
-    if (specifier === 'next-intl/server')
-      return moduleSource(
-        'export async function getTranslations(){ const t=(key)=>key; t.rich=(key)=>key; return t }; export async function getLocale(){ return "en" }',
-      )
     if (
       (specifier === './auth' || specifier.endsWith('/lib/auth')) &&
       context.parentURL?.includes('/web/')

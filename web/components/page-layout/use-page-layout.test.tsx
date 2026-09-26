@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 // LAYOUT1: two tabs race whole-layout saves with inverted commit order — the
 // tab whose request commits second must 409, merge to the union, and retry,
@@ -8,17 +9,8 @@ import test from "node:test";
 // change pending (no silent rollback), and a retry saves it.
 
 // jsdom first: the hook test renders through react-dom.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/banking",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/banking" });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

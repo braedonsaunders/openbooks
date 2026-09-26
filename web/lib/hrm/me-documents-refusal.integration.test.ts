@@ -1,30 +1,12 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../testing/stub-modules.ts'
 
 // The /me loaders import server-only, Next navigation, and next-intl at
 // module scope; stub those boundaries so the loader loads under plain
 // node. Translations resolve to the identity with .has() false — the
 // refusal path maps no rows, so no catalog copy is needed.
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export function notFound() { throw new Error("notFound") } export function redirect() { throw new Error("redirect") }',
-      }
-    }
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export async function getTranslations() { const f = (key) => key; f.has = () => false; return f }',
-      }
-    }
-    return next(specifier, context)
-  },
-})
+stubModules({ navigation: {}, intl: 'export async function getTranslations() { const f = (key) => key; f.has = () => false; return f }', authz: false, features: false });
 
 const { env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')

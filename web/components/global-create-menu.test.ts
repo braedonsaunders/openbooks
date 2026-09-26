@@ -1,32 +1,13 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test, { type TestContext } from 'node:test'
 import type { ComponentType, ReactNode } from 'react'
-
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'MouseEvent', 'self']) {
-  if ((globalThis as Record<string, unknown>)[key] === undefined) {
-    ;(globalThis as Record<string, unknown>)[key] = domWindow[key]
-  }
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((callback: FrameRequestCallback) => setTimeout(() => callback(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 const virtual = (source: string) => ({ shortCircuit: true as const, url: `data:text/javascript,${encodeURIComponent(source)}` })
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function useRouter(){return globalThis.__createMenuRouter}')
-    return next(specifier, context)
-  },
-})
+await bootJsdomEnvironment({ html: "<!doctype html><html><body></body></html>", url: "http://localhost/", matchMediaMatches: false });
+
+stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__createMenuRouter}' }, intl: false, authz: false, features: false });
 
 const React = await import('react')
 Object.assign(globalThis, { React, __createMenuRouter: { pushes: [] as string[], push(url: string) { this.pushes.push(url) }, refresh() {} } })

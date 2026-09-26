@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { Authz } from '../authz'
 import type { SessionUser } from '../auth'
+import { stubModules } from '../../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + '/').href
-registerHooks({ resolve(specifier, context, nextResolve) {
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
-  return nextResolve(specifier, context)
-} })
+stubModules({ navigation: false, authz: false, features: false });
 
 const { sql } = await import('drizzle-orm')
 const { withBypassContext, db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')

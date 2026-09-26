@@ -1,22 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // F5-9: NavCountBadge hardcoded its English aria-label ("N items waiting"),
 // so a non-en screen-reader user heard English on shared shell chrome that
 // renders on every page. The label must pluralize through the catalog.
 // Only the count route is doubled. React, next-intl and the REAL French
 // catalog run, so the hardcoded template fails every assertion below.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/dashboard",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard" });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

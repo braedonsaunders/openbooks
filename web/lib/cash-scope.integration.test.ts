@@ -6,11 +6,13 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import * as React from 'react';
 import type { SessionUser } from './auth';
+import { stubModules } from '../testing/stub-modules.ts'
 const root = pathToFileURL(process.cwd()+'/').href;
 const state: { user: SessionUser | null; subIds: string[] } = { user: null, subIds: [] };
 Object.assign(globalThis, { __cashScope: state, React });
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__cashScope.user}' };
   // A page is its `page.tsx` AND its `view.ts`. These stubs are scoped to the
   // page's own modules so they cannot leak into the service-boundary cases

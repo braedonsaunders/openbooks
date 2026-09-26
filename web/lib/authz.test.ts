@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { NextResponse } from "next/server";
 import { resolveEffectivePermissions } from "./permissions";
+import { stubModules } from '../testing/stub-modules.ts'
 
 const apiRoot = fileURLToPath(new URL("../app/api/", import.meta.url));
 
@@ -43,24 +44,6 @@ const routeState: RouteState = { gate: allowedGate, gateCalls: [], dbCalls: 0 };
 
 const mockSources = new Map<string, string>([
   [
-    "mock:authz",
-    `
-      const state = globalThis[Symbol.for("openbooks.authz-route-contract-test")];
-      export async function guardPermission(permission) {
-        state.gateCalls.push(permission);
-        return state.gate;
-      }
-      // Faithful to web/lib/authz.ts: only an unrestricted caller passes.
-      export function guardUnrestrictedScope(authz) {
-        if (authz?.allowedSubsidiaryIds == null) return null;
-        return new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), {
-          status: 403,
-          headers: { "content-type": "application/json" },
-        });
-      }
-    `,
-  ],
-  [
     "mock:db",
     `
       const state = globalThis[Symbol.for("openbooks.authz-route-contract-test")];
@@ -89,13 +72,14 @@ const mockSources = new Map<string, string>([
 ]);
 
 const webRoot = new URL("../", import.meta.url);
+stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
+    '../../../lib/authz': '\n      const state = globalThis[Symbol.for("openbooks.authz-route-contract-test")];\n      export async function guardPermission(permission) {\n        state.gateCalls.push(permission);\n        return state.gate;\n      }\n      // Faithful to web/lib/authz.ts: only an unrestricted caller passes.\n      export function guardUnrestrictedScope(authz) {\n        if (authz?.allowedSubsidiaryIds == null) return null;\n        return new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), {\n          status: 403,\n          headers: { "content-type": "application/json" },\n        });\n      }\n    ',
+  } });
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { shortCircuit: true, url: "mock:db" };
-    }
-    if (specifier === "../../../lib/authz") {
-      return { shortCircuit: true, url: "mock:authz" };
     }
     return nextResolve(specifier, context);
   },

@@ -1,17 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // House render guard: classic JSX transforms and shared tsx caches need React
 // on globalThis before the dialog's component module is evaluated.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/confirm' })
-const browser = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'HTMLButtonElement', 'KeyboardEvent', 'Event', 'self']) {
-  if ((globalThis as Record<string, unknown>)[key] === undefined) {
-    (globalThis as Record<string, unknown>)[key] = browser[key]
-  }
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+await bootJsdomEnvironment({ html: "<!doctype html><html><body></body></html>", url: "http://localhost:4800/confirm" });
 
 const React = await import('react')
 Object.assign(globalThis, { React })
@@ -68,6 +61,6 @@ test('Enter on Cancel leaves the confirmation pending for its explicit cancel ch
   } finally {
     await act(async () => root.unmount())
     host.remove()
-    dom.window.close()
+    window.close()
   }
 })

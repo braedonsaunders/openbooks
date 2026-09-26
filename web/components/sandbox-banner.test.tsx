@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // F5-4: SandboxBanner hardcoded every word of its safety-critical chrome —
 // the banner a sandbox session cannot avoid. A non-en user must read the
@@ -8,29 +10,17 @@ import test from "node:test";
 // stub that reads the REAL catalog: the mock translator substitutes the
 // locale file's own values, and hardcoded English fails every assertion.
 // The sandbox-session server action is stubbed to keep the graph light.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/dashboard",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-
 declare global {
   var __sbMessages: Record<string, Record<string, string>> | undefined;
 }
 
 const { registerHooks } = await import("node:module");
+await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard" });
+
+stubModules({ navigation: false, intl: 'export async function getTranslations(namespace){const tree=(globalThis.__sbMessages??{})[namespace]??{};return (key,params)=>{let out=String(tree?.[key]??key);for(const [n,v] of Object.entries(params??{}))out=out.replaceAll(\'{\'+n+\'}\',String(v));return out}}', authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function getTranslations(namespace){const tree=(globalThis.__sbMessages??{})[namespace]??{};return (key,params)=>{let out=String(tree?.[key]??key);for(const [n,v] of Object.entries(params??{}))out=out.replaceAll('{'+n+'}',String(v));return out}}",
-      };
-    }
     if (specifier.endsWith("/sandbox-session")) {
       return {
         shortCircuit: true,
@@ -41,7 +31,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

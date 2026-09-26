@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registerHooks } from "node:module";
 import { NextRequest } from "next/server";
+import { stubModules } from '../testing/stub-modules.ts'
 
 // House render guard: layout JSX may compile to the classic
 // React.createElement transform (shared tsx cache hazard), which needs a
@@ -16,6 +17,8 @@ Object.assign(globalThis, { React });
 const proxyKey = Symbol.for("openbooks.security-headers-proxy-test");
 const proxyState: { nextCalls: Array<{ request?: { headers: Headers } }> } = { nextCalls: [] };
 (globalThis as Record<symbol, unknown>)[proxyKey] = proxyState;
+
+stubModules({ navigation: false, authz: false, features: false });
 
 const proxyHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -103,14 +106,6 @@ const layoutMocks = new Map<string, string>([
     `,
   ],
   [
-    "mock:next-intl-server",
-    `
-      export async function getLocale() { return "en"; }
-      export async function getMessages() { return {}; }
-      export async function getTranslations() { return (key) => key; }
-    `,
-  ],
-  [
     "mock:sonner",
     `
       export function Toaster() { return null; }
@@ -138,7 +133,6 @@ const layoutHooks = registerHooks({
     if (specifier === "next/script") return { shortCircuit: true, url: layoutMockUrl("mock:next-script") };
     if (specifier === "next/headers") return { shortCircuit: true, url: layoutMockUrl("mock:next-headers") };
     if (specifier === "next-intl") return { shortCircuit: true, url: layoutMockUrl("mock:next-intl") };
-    if (specifier === "next-intl/server") return { shortCircuit: true, url: layoutMockUrl("mock:next-intl-server") };
     if (specifier === "sonner") return { shortCircuit: true, url: layoutMockUrl("mock:sonner") };
     if (
       specifier === "../components/app-link-provider" ||

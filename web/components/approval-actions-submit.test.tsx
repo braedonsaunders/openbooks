@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // residual (bank accounts stranded with NO flow run at all): the
 // row claims "Pending approval" while the engine never saw the record, so
@@ -7,24 +9,6 @@ import test from 'node:test'
 // reports neverSubmitted for that case; the row renders a Submit button
 // only when the surface passes an explicit submit href (parties bank panel),
 // and the submit POSTs it, toasts, and refreshes the approval state.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/entities/vendors',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   submitPosts: [] as string[],
@@ -41,14 +25,12 @@ Object.assign(globalThis, {
   },
 })
 const { registerHooks } = await import('node:module')
+await bootJsdomEnvironment({ url: "http://localhost:4800/entities/vendors" });
+
+stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__approvalSubmitRouter}' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__approvalSubmitRouter}',
-      }
-    }
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,
@@ -59,7 +41,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

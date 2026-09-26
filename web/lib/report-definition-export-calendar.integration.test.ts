@@ -2,19 +2,16 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import ExcelJS from "exceljs";
+import { stubModules } from '../testing/stub-modules.ts'
 
 const root = new URL("./", import.meta.url);
 const authState: { user: import("./auth").SessionUser | null } = { user: null };
 Object.assign(globalThis, { __definitionExportCalendarState: authState });
 
+stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t} export async function getLocale(){return "en"}', authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        url: `data:text/javascript,${encodeURIComponent('export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t} export async function getLocale(){return "en"}')}`,
-      };
-    }
     if (
       (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
       context.parentURL?.includes("/web/") &&

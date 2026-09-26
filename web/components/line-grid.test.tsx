@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../testing/stub-modules.ts'
 
 // LineGrid reorder/delete must never land one line's uncommitted edit on
 // another line: DecimalCell/TaxCell keep a focus draft and commit on blur,
@@ -37,14 +38,10 @@ if (typeof globalThis.requestAnimationFrame !== "function") {
 }
 
 const { registerHooks } = await import("node:module");
+stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
