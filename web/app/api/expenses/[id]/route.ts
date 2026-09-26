@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -79,7 +80,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
@@ -100,10 +101,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json(
-        { error: e.message, ...(e.fieldErrors ? { fieldErrors: e.fieldErrors } : {}) },
-        { status: e.status },
-      )
+      return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : {} })
     }
     throw e
   }
@@ -178,10 +176,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json(
-        { error: e.message, ...(e.fieldErrors ? { fieldErrors: e.fieldErrors } : {}) },
-        { status: e.status },
-      )
+      return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : {} })
     }
     throw e
   }
@@ -217,7 +212,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
   } catch (e) {
     if (e instanceof DocumentEditError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return apiErrorResponse(e)
     }
     throw e
   }
@@ -231,7 +226,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // The engine fence carries its own 409; every other refusal stays 422.
-    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
+    if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e
   }
 }

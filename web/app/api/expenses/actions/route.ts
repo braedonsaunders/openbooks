@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -257,7 +258,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ ok: true, ...outcome })
         } catch (e) {
           if (e instanceof DocumentEditError) {
-            return NextResponse.json({ error: e.message }, { status: e.status })
+            return apiErrorResponse(e)
           }
           throw e
         }
@@ -269,17 +270,14 @@ export async function POST(req: Request) {
     // Posting refusals (kernel rules or unconfigured org control accounts)
     // and submission lifecycle refusals (a double-clicked or replayed submit
     // on a report that already left draft) are request-state failures, not
-    // server defects. Revision-fence refusals carry their own status.
-    const status =
+    // server defects. Revision-fence refusals carry their own status; the
+    // status-less named refusals below travel with safeStatus 422.
+    const unprocessable =
       e instanceof PostingError ||
       e instanceof ControlAccountsIncompleteError ||
       e instanceof SubmitError ||
       e instanceof ExpenseValidationError ||
       e instanceof ApprovalRoutingError
-        ? 422
-        : e instanceof DocumentEditError
-          ? e.status
-          : 500
-    return NextResponse.json({ error: (e as Error).message }, { status })
+    return apiErrorResponse(e, unprocessable ? { safeStatus: 422 } : {})
   }
 }
