@@ -249,11 +249,11 @@ export async function createFile(input: {
   const fileType = deriveFileType(input.contentType)
   const contentHash = createHash('sha256').update(input.bytes).digest('hex')
   const kind = activeStorageKind()
-  // I5-platform-41: the S3 put below cannot roll back with the row
-  // transaction. Track the staged version so a later failure (or a commit
-  // failure) records a durable cleanup intent instead of stranding the
-  // object. Nested callers (executor passed) compensate at their outer
-  // boundary, where the final commit verdict is known.
+  // The S3 put below cannot roll back with the row transaction. Track the
+  // staged version so a later failure (or a commit failure) records a
+  // durable cleanup intent instead of stranding the object. Nested callers
+  // (executor passed) compensate at their outer boundary, where the final
+  // commit verdict is known.
   let staged: { versionId: string; fileId: string } | null = null
   return runMutation(input.audit?.executor, async (tx) => {
     if (!(await viewerFolderGate(tx, input.orgId, input.audit, input.folderId, 'editor'))) {
@@ -351,10 +351,10 @@ export async function replaceFile(input: {
   updatedBy: string
   audit?: FileMutationAudit
 }): Promise<boolean> {
-  // I5-platform-41: the S3 put below cannot roll back with the row
-  // transaction. Track the staged version so the catch below records a
-  // durable cleanup intent instead of stranding the object. Nested callers
-  // (executor passed) compensate at their outer boundary.
+  // The S3 put below cannot roll back with the row transaction. Track the
+  // staged version so the catch below records a durable cleanup intent
+  // instead of stranding the object. Nested callers (executor passed)
+  // compensate at their outer boundary.
   let staged: { versionId: string; fileId: string } | null = null
   return runMutation(input.audit?.executor, async (tx) => {
     const contentHash = createHash('sha256').update(input.bytes).digest('hex')
