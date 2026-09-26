@@ -22,12 +22,11 @@ const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __documentCreateViewUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ intl: true, extra: { 'server-only': 'export {}' } })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
-    if (specifier === 'next-intl/server') {
-      return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
-    }
+
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__documentCreateViewUser.user}')
     }

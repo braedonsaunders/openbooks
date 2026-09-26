@@ -5,9 +5,10 @@ import test from 'node:test'
 const denied = { kind: 'notFound' }
 Object.assign(globalThis, { __derivedPreviewDbCalls: 0, __derivedPreviewDenied: denied })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: `data:text/javascript,${encodeURIComponent(source)}` })
+const { stubModules } = await import('../../../../../testing/stub-modules')
+stubModules({ navigation: 'export function notFound(){ throw globalThis.__derivedPreviewDenied }', intl: true })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next/navigation') return virtual('export function notFound(){ throw globalThis.__derivedPreviewDenied }')
-  if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}')
+
   if (specifier.endsWith('/platform/db.ts')) return virtual('export const db={execute(){globalThis.__derivedPreviewDbCalls++;return {rows:[]}}}')
   if (specifier.endsWith('/platform/business-date.ts')) return virtual('export async function businessToday(){return "2026-01-01"}')
   if (specifier.endsWith('/payroll/derived-earnings.ts')) return virtual('export async function previewDerivedRule(){throw Error("must not run")}')

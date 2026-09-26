@@ -2,16 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/hrm/processes' })
-Object.assign(globalThis, {
-  window: dom.window,
-  document: dom.window.document,
-  self: dom.window,
-  React,
-  IS_REACT_ACT_ENVIRONMENT: true,
-})
-Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true })
+const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost/hrm/processes', scrollIntoView: false, resizeObserver: false })
+
+Object.assign(globalThis, { React })
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../testing/stub-modules')
 stubModules({ navigation: 'export const useRouter=()=>({refresh(){}})', extra: { 'next-intl': 'export const useTranslations=()=>key=>key' } })

@@ -4,9 +4,10 @@ import test from "node:test";
 
 // A denied widget must be absent and unqueried; readers run only for visible
 // widgets. Spying readers prove the denied query leaves no timing or log trace.
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
 
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a

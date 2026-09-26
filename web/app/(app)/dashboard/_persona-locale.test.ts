@@ -2,13 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ authz: 'export const can = () => true', features: 'export const isFeatureEnabled = async () => false', extra: { 'server-only': 'export {}' } })
 registerHooks({
   resolve(specifier, _context, next) {
     const virtual = (source: string) => ({
       shortCircuit: true,
       url: `data:text/javascript,${encodeURIComponent(source)}`,
     })
-    if (specifier === 'server-only') return virtual('export {}')
+
     if (specifier === 'drizzle-orm') return virtual('export const sql = () => ({})')
     if (specifier === 'next-intl/server') {
       return virtual(`
@@ -35,8 +37,7 @@ registerHooks({
     if (specifier === '@openbooks/engine/src/hrm/leave-read.ts') return virtual('export const listLeaveTypes = async () => []; export const timeBalanceAsOf = async () => null')
     if (specifier === '@/lib/setup/home-announcements') return virtual('export const liveHomeAnnouncements = async () => []')
     if (specifier === '@/lib/inbox-context') return virtual('export const inboxContext = async () => ({})')
-    if (specifier === '@/lib/authz') return virtual('export const can = () => true')
-    if (specifier === '@/lib/features') return virtual('export const isFeatureEnabled = async () => false')
+
     if (specifier === './_widget-access') return virtual('export const hasAdminPersona = () => true')
     if (specifier === '@/lib/permissions') return virtual('export const permissionSetCovers = () => false')
     return next(specifier)

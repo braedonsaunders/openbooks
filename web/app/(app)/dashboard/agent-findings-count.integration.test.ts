@@ -1,19 +1,14 @@
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
+
 import test from "node:test";
 
 // The Agent findings tile links to /agents, so it uses inbox scope: open and
 // in-review findings over readable packs, open carriers with proposals, and
 // latest detection as "last run". assistant.use and per-pack grants determine
 // visibility; no grants means zero findings, not org-wide counts.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
-
-    return nextResolve(specifier, context);
-  },
-});
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");

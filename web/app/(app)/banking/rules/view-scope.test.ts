@@ -9,11 +9,11 @@ const virtual = (source: string) => ({
   format: "module" as const,
   url: `data:text/javascript,${encodeURIComponent(source)}`,
 });
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export function forbidden() { throw Object.assign(new Error(\"forbidden\"), { status: 403 }); }", intl: "export async function getTranslations() { return (key) => key; }", extra: { "server-only": "export {}" } });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {};");
-    if (specifier === "next/navigation") return virtual(`export function forbidden() { throw Object.assign(new Error("forbidden"), { status: 403 }); }`);
-    if (specifier === "next-intl/server") return virtual(`export async function getTranslations() { return (key) => key; }`);
+
     if (specifier === "@braedonsaunders/appkit-viewspec") return virtual(`
       export const page = () => ({}); export const pageHeader = () => ({});
       export const ref = () => ({}); export const widget = () => ({}); export const widgetBlock = () => ({});

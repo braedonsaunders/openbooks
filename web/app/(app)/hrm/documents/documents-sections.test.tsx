@@ -4,28 +4,13 @@ import test from "node:test";
 
 // three setup sections share one page URL (?row=new opened all three
 // drawers at once). Each section now reads its own drawer key.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/hrm/documents",
-});
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/documents", scrollIntoView: false, resizeObserver: false });
 const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
 
 const React = await import("react");
 // The shared @openbooks/ui controls compile against a global React.
 Object.assign(globalThis, { React });
-(globals as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
 // The seams below stub I/O only (the database transport, feature switches,
 // ref options, navigation, the server-only marker); translations ride the

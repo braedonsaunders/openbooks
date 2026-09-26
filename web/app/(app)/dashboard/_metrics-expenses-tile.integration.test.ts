@@ -7,9 +7,10 @@ import test from "node:test";
 // same reader as the /expenses cockpit — and counts pending_approval only.
 // Totals are deliberately untouched (the reader sums raw multi-currency
 // totals org-wide; a tile must never present those as a fact).
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
 
     if (specifier.startsWith("@openbooks/engine/")) {
       return nextResolve(

@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/analytics' })
-const target = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if ((globalThis as Record<string, unknown>)[key] === undefined) (globalThis as Record<string, unknown>)[key] = target[key]
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost:4800/analytics', scrollIntoView: false, resizeObserver: false })
 
 const { stubModules } = await import('../../../../testing/stub-modules')
 stubModules({ navigation: { pathname: '/analytics' } })
@@ -46,6 +41,6 @@ test('cash entity drawer presents a named API refusal', async () => {
     await act(async () => root.unmount())
     host.remove()
     globalThis.fetch = priorFetch
-    dom.window.close()
+    window.close()
   }
 })

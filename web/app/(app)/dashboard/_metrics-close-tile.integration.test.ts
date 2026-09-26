@@ -4,9 +4,10 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 
 // The close widget uses listCloseRuns, matching /close and orgVitals.
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
 
     if (specifier.startsWith("@openbooks/engine/")) {
       return nextResolve(
