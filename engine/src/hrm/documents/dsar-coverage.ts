@@ -16,12 +16,12 @@ import type { DsarModule } from "./dsar.ts";
  * fails when one has neither, so a new personal-data table cannot land
  * without a coverage decision.
  *
- * Exclusions come in two honest kinds: remit exclusions (another module
- * owns the data — finance, CRM, vendor, ops, compliance, legal, platform —
- * or the link is actor-side / counterparty / credential material), and
- * gather-pending notes for subject data with no gatherer yet. A pending
- * note names the link and the required gatherer; it is a tracked gap,
- * not a silent omission.
+ * Exclusions are remit exclusions only (another module owns the data —
+ * finance, CRM, vendor, ops, compliance, legal, platform — or the link is
+ * actor-side / counterparty / credential material). Subject data always
+ * ships with a gatherer in dsar.ts: the coverage test refuses any
+ * gather-pending note, so the gap cannot reopen — a new personal-data
+ * table lands gathered, or excluded with a reviewed remit reason.
  *
  * Linkage kinds:
  * - direct: the table carries its own subject/employment link and the
@@ -61,6 +61,9 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "entitlement_ledger", domain: "leave", linkage: "direct" },
   { table: "entitlement_plan_limits", domain: "leave", linkage: "direct" },
   { table: "time_entries", domain: "time", linkage: "direct" },
+  { table: "crew_time_batch_lines", domain: "time", linkage: "direct" },
+  { table: "timesheet_weeks", domain: "time", linkage: "direct" },
+  { table: "field_ticket_labor_lines", domain: "time", linkage: "direct" },
   { table: "hrm_reviews", domain: "reviews", linkage: "direct" },
   { table: "hrm_review_answers", domain: "reviews", linkage: "transitive" },
   { table: "hrm_goals", domain: "reviews", linkage: "direct" },
@@ -88,6 +91,18 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "payroll_roe_separation_events", domain: "payroll", linkage: "direct" },
   { table: "payroll_roe_separation_payments", domain: "payroll", linkage: "transitive" },
   { table: "it_addizionali_opening_balances", domain: "payroll", linkage: "direct" },
+  { table: "employee_pay_components", domain: "payroll", linkage: "direct" },
+  { table: "payroll_opening_balances", domain: "payroll", linkage: "direct" },
+  { table: "payroll_opening_program_bases", domain: "payroll", linkage: "direct" },
+  { table: "payroll_opening_account_bases", domain: "payroll", linkage: "direct" },
+  { table: "payroll_prior_stubs", domain: "payroll", linkage: "direct" },
+  { table: "payroll_retro_settlements", domain: "payroll", linkage: "direct" },
+  { table: "payroll_parallel_findings", domain: "payroll", linkage: "direct" },
+  { table: "payroll_anomaly_flags", domain: "payroll", linkage: "direct" },
+  { table: "pay_run_adjustments", domain: "payroll", linkage: "direct" },
+  { table: "pay_run_holiday_assertions", domain: "payroll", linkage: "direct" },
+  { table: "labor_cost_rates", domain: "payroll", linkage: "direct" },
+  { table: "work_schedules", domain: "payroll", linkage: "direct" },
   { table: "hrm_candidates", domain: "recruiting", linkage: "direct" },
   { table: "hrm_candidate_consents", domain: "recruiting", linkage: "transitive" },
   { table: "hrm_applications", domain: "recruiting", linkage: "transitive" },
@@ -122,102 +137,6 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "salted one-way PIN credential hashes: authentication material, unusable " +
       "without the preimage, and exporting them would leak credential material " +
       "rather than personal data.",
-  },
-  // SUBJECT DATA — gatherer pending. Each note names the subject link and
-  // the required gatherer; these are tracked gaps, not silent omissions.
-  {
-    table: "employee_pay_components",
-    reason:
-      "SUBJECT DATA — gatherer pending: the subject's pay component values " +
-      "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "payroll_opening_balances",
-    reason:
-      "SUBJECT DATA — gatherer pending: YTD carry-ins " +
-      "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "payroll_prior_stubs",
-    reason:
-      "SUBJECT DATA — gatherer pending: pre-migration stub register " +
-      "(employee_party_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "payroll_retro_settlements",
-    reason:
-      "SUBJECT DATA — gatherer pending: recomputation settlements " +
-      "(employee_party_id/employment_id); quantified_source_snapshot needs " +
-      "a secrecy review before inclusion. Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "payroll_parallel_findings",
-    reason:
-      "SUBJECT DATA — gatherer pending: parallel-run comparisons including " +
-      "employee_name (employee_party_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "payroll_anomaly_flags",
-    reason:
-      "SUBJECT DATA — gatherer pending: run anomaly flags about the " +
-      "subject's pay (employment_id, unconstrained). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "payroll_opening_program_bases",
-    reason:
-      "SUBJECT DATA — gatherer pending: program opening bases " +
-      "(employee_party_id, unconstrained). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "payroll_opening_account_bases",
-    reason:
-      "SUBJECT DATA — gatherer pending: filing-account-scoped YTD bases " +
-      "(employee_party_id, unconstrained). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "pay_run_adjustments",
-    reason:
-      "SUBJECT DATA — gatherer pending: per-employee run adjustments " +
-      "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "pay_run_holiday_assertions",
-    reason:
-      "SUBJECT DATA — gatherer pending: holiday assertions including " +
-      "absent_without_consent (same links). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "labor_cost_rates",
-    reason:
-      "SUBJECT DATA — gatherer pending: the subject's costing rate " +
-      "(employee_party_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "work_schedules",
-    reason:
-      "SUBJECT DATA — gatherer pending: the subject's schedule pattern " +
-      "(employee_party_id). Needs a payroll/time-domain gatherer.",
-  },
-  {
-    table: "crew_time_batch_lines",
-    reason:
-      "SUBJECT DATA — gatherer pending: crew time records " +
-      "(employee_party_id). Needs a time-domain gatherer; envelopes stay " +
-      "foreman-side (see crew_time_batches).",
-  },
-  {
-    table: "field_ticket_labor_lines",
-    reason:
-      "SUBJECT DATA — gatherer pending behind a field-ticket remit " +
-      "decision: lines name the employee, but the parent ticket is a " +
-      "customer billing document outside the HR remit.",
-  },
-  {
-    table: "timesheet_weeks",
-    reason:
-      "SUBJECT DATA — gatherer pending: approval envelopes " +
-      "(employee_party_id, unconstrained) over gathered time_entries. " +
-      "Needs a time-domain gatherer.",
   },
   // Remit exclusions: another module owns the data, the link is
   // actor-side or counterparty, or the payload is credential material.

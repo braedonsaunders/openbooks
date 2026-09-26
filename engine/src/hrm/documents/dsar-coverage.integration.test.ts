@@ -66,6 +66,11 @@ test("every person-linked remit table has a gatherer or a reviewed exclusion", a
   );
 });
 
+test("no gather-pending entries remain: subject data ships with its gatherer", async () => {
+  const pending = DSAR_EXCLUDED_TABLES.filter((e) => e.reason.includes("gatherer pending")).map((e) => e.table);
+  assert.deepEqual(pending, [], `subject-data tables with no DSAR gatherer: ${pending.join(", ")}`);
+});
+
 test("the registry names real tables only", async () => {
   const catalog = await catalogTables();
   const stale = [...DSAR_GATHERED_TABLES.map((entry) => entry.table), ...DSAR_EXCLUDED_TABLES.map((entry) => entry.table)].filter(

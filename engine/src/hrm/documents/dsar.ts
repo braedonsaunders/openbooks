@@ -613,6 +613,126 @@ const ENTITLEMENT_LIMITS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
+// Time-capture subject records: the subject's crew lines (envelopes stay
+// foreman-side, mirroring the crew_time_batches remit exclusion), the
+// approval envelopes over gathered time entries, and field-ticket labor
+// lines naming the employee — the parent ticket stays an ops billing
+// document, but the lines are the subject's own work records, gathered
+// here exactly like the crew lines. Field-ticket lines have no updated_by
+// column, so their deny set omits it.
+const CREW_LINES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const TIMESHEET_WEEKS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const FIELD_TICKET_LINES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+]);
+
+// Payroll carry-ins, recomputations and adjustments about the subject, by
+// direct party link (or the subject's employments for run-scoped anomaly
+// flags). Component, register, comparison, run and ticket references stay
+// — they say what the amount is for — only tenancy, the subject link and
+// audit actors are withheld. The retro quantification snapshot exports too:
+// reviewed, it carries only the subject's own calculation inputs (their
+// time entries, rates, claim ids), priced for their own settlement.
+// Config-shaped rows that name nobody (trade/department-scoped rates,
+// schedules, plan limits) never match the subject link and stay out.
+const EMPLOYEE_PAY_COMPONENTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_OPENING_BALANCES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_PRIOR_STUBS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_RETRO_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_PARALLEL_FINDINGS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_ANOMALY_FLAGS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employment_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_PROGRAM_BASES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAYROLL_ACCOUNT_BASES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAY_RUN_ADJUSTMENTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const PAY_RUN_HOLIDAY_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const LABOR_COST_RATES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const WORK_SCHEDULES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
 export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
   const claimed = await withOrgTransaction(orgId, () =>
@@ -854,6 +974,26 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
         lastId = page[page.length - 1]!.id;
       }
       payload.timeEntries = timeEntries;
+      // The subject's own crew lines, timesheet-week envelopes and
+      // field-ticket labor lines — work records naming the employee.
+      payload.crewTimeBatchLines = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("crew_time_batch_lines", CREW_LINES_DENIED_COLUMNS)}
+          from crew_time_batch_lines
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.timesheetWeeks = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("timesheet_weeks", TIMESHEET_WEEKS_DENIED_COLUMNS)}
+          from timesheet_weeks
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by week_start
+      `)).rows;
+      payload.fieldTicketLaborLines = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("field_ticket_labor_lines", FIELD_TICKET_LINES_DENIED_COLUMNS)}
+          from field_ticket_labor_lines
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by created_at
+      `)).rows;
     });
 
     await gather("reviews", async () => {
@@ -1214,6 +1354,85 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
              select id from payroll_roe_separation_events where org_id = ${orgId} and employee_party_id = ${partyId}
            )
          order by expected_payment_on
+      `)).rows;
+      // Carry-ins, recomputations and adjustments about the subject: pay
+      // component values, YTD opening balances with their program and
+      // filing-account bases, the pre-migration stub register, retro
+      // settlements with their reviewed quantification snapshot,
+      // parallel-run findings, run anomaly flags on the subject's
+      // employments, per-employee run adjustments, holiday assertions, and
+      // the subject-scoped costing rate and schedule pattern.
+      payload.employeePayComponents = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("employee_pay_components", EMPLOYEE_PAY_COMPONENTS_DENIED_COLUMNS)}
+          from employee_pay_components
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by effective_from
+      `)).rows;
+      payload.openingBalances = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_opening_balances", PAYROLL_OPENING_BALANCES_DENIED_COLUMNS)}
+          from payroll_opening_balances
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by tax_year
+      `)).rows;
+      payload.openingProgramBases = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_opening_program_bases", PAYROLL_PROGRAM_BASES_DENIED_COLUMNS)}
+          from payroll_opening_program_bases
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by tax_year, program_key
+      `)).rows;
+      payload.openingAccountBases = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_opening_account_bases", PAYROLL_ACCOUNT_BASES_DENIED_COLUMNS)}
+          from payroll_opening_account_bases
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by tax_year, program_key
+      `)).rows;
+      payload.priorStubs = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_prior_stubs", PAYROLL_PRIOR_STUBS_DENIED_COLUMNS)}
+          from payroll_prior_stubs
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.retroSettlements = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_retro_settlements", PAYROLL_RETRO_DENIED_COLUMNS)}
+          from payroll_retro_settlements
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.parallelFindings = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_parallel_findings", PAYROLL_PARALLEL_FINDINGS_DENIED_COLUMNS)}
+          from payroll_parallel_findings
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.anomalyFlags = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("payroll_anomaly_flags", PAYROLL_ANOMALY_FLAGS_DENIED_COLUMNS)}
+          from payroll_anomaly_flags
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by created_at
+      `)).rows;
+      payload.runAdjustments = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("pay_run_adjustments", PAY_RUN_ADJUSTMENTS_DENIED_COLUMNS)}
+          from pay_run_adjustments
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.holidayAssertions = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("pay_run_holiday_assertions", PAY_RUN_HOLIDAY_DENIED_COLUMNS)}
+          from pay_run_holiday_assertions
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by holiday_date
+      `)).rows;
+      payload.laborCostRates = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("labor_cost_rates", LABOR_COST_RATES_DENIED_COLUMNS)}
+          from labor_cost_rates
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by effective_from
+      `)).rows;
+      payload.workSchedules = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("work_schedules", WORK_SCHEDULES_DENIED_COLUMNS)}
+          from work_schedules
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by effective_from
       `)).rows;
     });
 
