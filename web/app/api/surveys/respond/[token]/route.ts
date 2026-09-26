@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { submitResponse } from "@openbooks/engine/src/hrm/surveys/responses.ts";
@@ -17,6 +18,17 @@ import { withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
  * feature-gate here: a link HR sent must explain itself even after the
  * switch flips.
  */
+/**
+ * Anonymous survey links must explain themselves with a 403, never a 500:
+ * the sanitizer only carries messages on named refusals.
+ */
+class SurveyLinkRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SurveyLinkRefusal";
+  }
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await ctx.params;
@@ -39,7 +51,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
          where i.token_hash = ${hashHrmToken(token)}
       `)).rows[0];
       if (!row) {
-        throw Object.assign(new Error("this survey link is no longer available — ask HR for a fresh invitation"), { status: 403 });
+        throw new SurveyLinkRefusal("this survey link is no longer available — ask HR for a fresh invitation");
       }
       const questions = (await db.execute<{ id: string; kind: string; prompt: string; options: unknown }>(sql`
         select id, kind, prompt, options from hrm_survey_questions
@@ -51,7 +63,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ survey });
   } catch (e) {
     if (e instanceof Error && (e as { status?: number }).status === 403) {
-      return NextResponse.json({ error: e.message }, { status: 403 });
+      return apiErrorResponse(e, { safeStatus: 403 });
     }
     return hrmDocumentsErrorResponse(e);
   }
