@@ -33,7 +33,7 @@ export class PasswordExpressionError extends Error {}
  * mix letters with digits, both when the rule is saved and when a password
  * is derived from a real record.
  */
-export const MIN_DERIVED_PASSWORD_LENGTH = 8;
+const MIN_DERIVED_PASSWORD_LENGTH = 8;
 
 export type PasswordTokenKind = "text" | "date";
 

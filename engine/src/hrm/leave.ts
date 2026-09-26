@@ -232,63 +232,6 @@ export async function createLeaveType(query: CreateLeaveTypeQuery): Promise<Leav
   });
 }
 
-export interface UpdateLeaveTypeQuery {
-  readonly orgId: string;
-  readonly actorId: string;
-  readonly leaveTypeId: string;
-  readonly name?: unknown;
-  readonly paid?: unknown;
-  readonly valueCrossing?: unknown;
-  readonly requiresAttachment?: unknown;
-  readonly isActive?: unknown;
-}
-
-/**
- * Edit a leave type. Code never changes (it is identity — deactivate and
- * create a new code instead). Changing value_crossing while live payroll
- * inputs reference the type is refused: the queue already promised the old
- * crossing to the run.
- */
-export async function updateLeaveType(query: UpdateLeaveTypeQuery): Promise<LeaveTypeDTO> {
-  const orgId = requireOrgId(query.orgId);
-  const actorId = requireActorId(query.actorId);
-  const leaveTypeId = requireId(query.leaveTypeId, "leaveTypeId");
-  return withOrgTransaction(orgId, async () => {
-    await requireHrmLeaveManage(db, orgId, actorId);
-    await assertHrmEnabled(db, orgId);
-    const current = await loadLeaveType(db, orgId, leaveTypeId);
-    if (query.valueCrossing !== undefined && query.valueCrossing !== current.value_crossing) {
-      if (query.valueCrossing !== "none" && query.valueCrossing !== "payout" && query.valueCrossing !== "bank_in") {
-        throw new LeaveError("INVALID_INPUT", "value_crossing is one of none, payout, bank_in — there is no taken movement kind");
-      }
-      const live = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from hrm_payroll_inputs i
-          join hrm_leave_requests r on r.id = i.source_leave_request_id and r.org_id = i.org_id
-         where i.org_id = ${orgId} and r.leave_type_id = ${leaveTypeId} and i.status <> 'voided'
-      `)).rows[0]?.n ?? 0;
-      if (live > 0) {
-        throw new LeaveError(
-          "REFUSED",
-          `leave type ${current.code} still feeds ${live} live pay-run input rows — void or consume them before changing what the type raises, or deactivate this type and create a new code instead`,
-        );
-      }
-    }
-    const updated = (await db.execute<LeaveTypeRow>(sql`
-      update hrm_leave_types
-         set name = ${typeof query.name === "string" && query.name.trim().length > 0 ? query.name.trim() : current.name},
-             paid = ${query.paid ?? current.paid},
-             value_crossing = ${query.valueCrossing ?? current.value_crossing},
-             requires_attachment = ${query.requiresAttachment ?? current.requires_attachment},
-             is_active = ${query.isActive ?? current.is_active},
-             updated_by = ${actorId}, updated_at = now()
-       where org_id = ${orgId} and id = ${leaveTypeId}
-      returning id, code, name, paid, value_crossing, requires_attachment, is_active
-    `)).rows[0];
-    if (!updated) throw new LeaveError("REFUSED", "the leave type was not stored — no row was written; retry the request");
-    return toTypeDTO(updated);
-  });
-}
-
 function validateAccrualRule(rule: unknown): AccrualRule {
   if (typeof rule !== "object" || rule === null) throw new LeaveError("INVALID_INPUT", "accrual_rule declares kind none, per_period, per_year, or unlimited — record the rule");
   const record = rule as Record<string, unknown>;
@@ -950,7 +893,7 @@ export type CommittedRunCover = {
  * the party through its stubs. HR never computes period boundaries; it asks
  * the run rows. A voided document's run is history undone, never cover.
  */
-export async function committedRunCoveringDay(
+async function committedRunCoveringDay(
   exec: SqlExecutor,
   orgId: string,
   employeePartyId: string,

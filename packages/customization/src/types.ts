@@ -124,7 +124,7 @@ export interface FormTabPlacement {
 }
 
 /** Prefix that marks an author-created tab. */
-export const CUSTOM_TAB_PREFIX = 'tab_'
+const CUSTOM_TAB_PREFIX = 'tab_'
 
 export function isCustomTabKey(key: string) {
   return key.startsWith(CUSTOM_TAB_PREFIX)

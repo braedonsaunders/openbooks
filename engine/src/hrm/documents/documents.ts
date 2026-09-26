@@ -1113,7 +1113,7 @@ export async function signOwnDocument(input: {
 }
 
 /** Append a signature certificate page to the rendered PDF (pdf-lib). */
-export async function appendSignaturePage(
+async function appendSignaturePage(
   pdf: Buffer,
   input: {
     title: string;

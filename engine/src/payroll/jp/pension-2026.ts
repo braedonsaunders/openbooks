@@ -92,5 +92,3 @@ export const JP_PENSION_GRADES_2026: readonly JpPensionGrade[] = [
 ];
 
 /** The 2026 pension rate both shares price off: 18.300% total, 9.15% each. */
-export const JP_PENSION_RATE_2026 = "0.183";
-export const JP_PENSION_HALF_RATE_2026 = "0.0915";

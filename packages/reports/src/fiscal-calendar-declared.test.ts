@@ -7,7 +7,6 @@ import {
   declaredPeriodsCover,
   declaredQuarterColumns,
   declaredQuarterContaining,
-  declaredFiscalYearRange,
   type FiscalPeriod,
 } from './fiscal-calendar'
 
@@ -100,15 +99,5 @@ describe('declared lookups', () => {
       label: 'Q1 FY 2026',
     })
     assert.equal(declaredQuarterContaining(P445, '2025-01-01'), null)
-  })
-
-  it('resolves the whole declared fiscal year holding a date', () => {
-    assert.deepEqual(declaredFiscalYearRange(P445, '2026-04-15'), {
-      from: '2026-02-02',
-      to: '2026-08-02',
-      label: 'FY 2026',
-      fiscalYear: 2026,
-    })
-    assert.equal(declaredFiscalYearRange(P445, '2025-01-01'), null)
   })
 })

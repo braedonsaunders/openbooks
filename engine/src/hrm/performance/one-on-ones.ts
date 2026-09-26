@@ -86,7 +86,7 @@ async function assertContinuousFeature(db: SqlExecutor, orgId: string): Promise<
   }
 }
 
-export async function assertOneOnOnesFeature(db: SqlExecutor, orgId: string): Promise<void> {
+async function assertOneOnOnesFeature(db: SqlExecutor, orgId: string): Promise<void> {
   await assertContinuousFeature(db, orgId);
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_ONE_ON_ONES_KEY))) {
     throw new HrmPerformanceError(
@@ -886,59 +886,3 @@ export async function listOneOnOnes(args: {
   });
 }
 
-/**
- * Held-1:1 shared-item evidence for review drafting: shared items from
- * held 1:1s touching the subject employment, newest first. Private notes
- * never appear here — evidence is shared content only.
- */
-export async function listHeldSharedItemsForEmployment(args: {
-  orgId: string;
-  actorId: string;
-  employmentId: string;
-}): Promise<readonly { oneOnOneId: string; heldAt: string; kind: OneOnOneItemKind; body: string }[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const employmentId = requireId("employmentId", args.employmentId);
-  return withOrgTransaction(orgId, async () => {
-    await assertContinuousFeature(db, orgId);
-    try {
-      await lockEmploymentsForScope(db, [employmentId], { orgId, actorId });
-    } catch (error) {
-      if (error instanceof HrmAuthorizationError) throw reportNotVisible();
-      throw error;
-    }
-    // Evidence serves the manager review: HR reads only evidence for
-    // employments inside their allowed subsidiaries, otherwise the
-    // reader must manage the employment structurally.
-    const readScope = await performanceReadScope(db, orgId, actorId);
-    if (readScope === undefined) {
-      const today = await businessToday(orgId);
-      const own = await loadOwnEmploymentIds(db, orgId, actorId);
-      const team = await loadManagedEmploymentIds(db, orgId, actorId, today);
-      if (!team.includes(employmentId) && !own.includes(employmentId)) {
-        throw new HrmPerformanceError(
-          "FORBIDDEN",
-          "1:1 evidence serves the manager review — only the report's line manager or HR may read it",
-        );
-      }
-    } else if (readScope !== null) {
-      const employer = await reportEmployer(db, orgId, employmentId);
-      if (employer === null || !readScope.has(employer)) {
-        throw new HrmPerformanceError(
-          "FORBIDDEN",
-          "1:1 evidence serves the manager review — only the report's line manager or the HR covering them may read it",
-        );
-      }
-    }
-    const rows = (await db.execute<{ oneOnOneId: string; heldAt: string; kind: OneOnOneItemKind; body: string }>(sql`
-      select i.one_on_one_id as "oneOnOneId", o.held_at::text as "heldAt", i.kind, i.body
-        from hrm_one_on_one_items i
-        join hrm_one_on_ones o on o.org_id = i.org_id and o.id = i.one_on_one_id
-       where i.org_id = ${orgId} and o.status = 'held'
-         and (o.manager_employment_id = ${employmentId} or o.report_employment_id = ${employmentId})
-         and i.visibility = 'shared' and i.status <> 'carried'
-       order by o.held_at desc
-    `)).rows;
-    return rows;
-  });
-}

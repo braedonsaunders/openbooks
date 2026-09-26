@@ -1,5 +1,4 @@
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { businessToday } from "../../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { loadOwnEmploymentIds, requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
 import {
@@ -8,7 +7,7 @@ import {
   type ChangeRequestDTO,
 } from "../change-requests.ts";
 import { actorPartyOf, SelfServiceError } from "./actor.ts";
-import { loadMyAddress, loadMyParty } from "./self-read.ts";
+
 import {
   profileChangePayloadSchema,
   type ProfileAddress,
@@ -181,27 +180,8 @@ export interface ProfileApplication {
 }
 
 /** The current profile state an application diffs against. */
-export async function loadProfileBefore(
-  exec: SqlExecutor,
-  orgId: string,
-  partyId: string,
-): Promise<{ phone: string | null; email: string | null; emergencyContact: unknown; address: unknown }> {
-  // loadMyParty fails closed on a missing party row (NOT_FOUND names the
-  // remedy); the address pick is the same row the profile reads.
-  const party = await loadMyParty(exec, orgId, partyId);
-  const address = await loadMyAddress(exec, orgId, partyId);
-  return {
-    phone: party.phone,
-    email: party.email,
-    emergencyContact: party.emergency_contact,
-    address,
-  };
-}
 
 /** Today's civil date for the team/self as-of reads that share it. */
-export async function selfServiceToday(orgId: string): Promise<string> {
-  return businessToday(orgId);
-}
 
 /** The self.read gate for route-level composition. */
 export async function requireSelfRead(

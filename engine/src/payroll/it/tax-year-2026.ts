@@ -72,13 +72,6 @@
 
 import type { ItMarginalBand } from "./tax-year-2025.ts";
 
-export const IT_2026_SOURCE_URLS = {
-  adeRatesEn:
-    "https://www.agenziaentrate.gov.it/portale/web/english/personal-income-tax-rates-and-calculation",
-  inpsCirc6_2026:
-    "https://www.inps.it/it/it/inps-comunica/atti/circolari-messaggi-e-normativa/dettaglio.circolari-e-messaggi.2026.01.circolare-numero-6-del-30-01-2026_15151.html",
-} as const;
-
 /**
  * IRPEF scaglioni 2026 — L. 199/2025 art. 1 c. 3 (GU n. 301 del 30/12/2025,
  * S.O.), via the MEF portal:
@@ -138,11 +131,6 @@ export const IT_2026_IRPEF_CUMULATIVE = {
  * above-200k payrolls would block legitimate pay; inventing an oneri input
  * would price a detrazione nobody declared.
  */
-export const IT_2026_STERILIZZAZIONE_200K = {
-  thresholdExclusive: "200000",
-  reduction: "440",
-  engineEffect: "none — no oneri inputs in the engine",
-} as const;
 
 /**
  * Detrazione per redditi di lavoro dipendente 2026 — art. 13 c. 1 TUIR as
@@ -373,8 +361,6 @@ export const IT_2026_BOLZANO_DETRAZIONE = {
   incomeCap: "90000",
 } as const;
 
-export const IT_2026_ROUNDING = "half-up-to-cent" as const;
-
 /**
  * Addizionali regionale e comunale 2026 — tenant-entered rates, same model
  * as 2025 (standing law: D.Lgs. 15 dicembre 1997, n. 446; D.Lgs. 28
@@ -385,7 +371,6 @@ export const IT_2026_ROUNDING = "half-up-to-cent" as const;
  * the 2026 deliberations are entered by the employer exactly as a SUI
  * experience rate is.
  */
-export const IT_2026_SURTAX_MODEL = "tenant-declared-rate" as const;
 
 /**
  * Named refusals: everything the 2026 engine does not compute, with the

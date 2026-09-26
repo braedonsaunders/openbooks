@@ -20,11 +20,6 @@ import type { AgentFinding } from "./types.ts";
  * collections and payables packs — the finding is the review card. Never
  * writes.
  */
-export const PROJECTS_DETECTOR_KEYS = [
-  "project_negative_margin",
-  "project_budget_overrun",
-  "project_stale_unbilled",
-] as const;
 
 const PROJECTS_HREF = "/projects";
 

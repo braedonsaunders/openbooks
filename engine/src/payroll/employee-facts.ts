@@ -385,15 +385,5 @@ export function isPayrollPackPayable(pack: PayrollCountryPack): boolean {
 }
 
 /** Payable packs as country codes, in registry order. */
-export function payablePayrollCountries(packs: readonly PayrollCountryPack[]): string[] {
-  return packs.filter(isPayrollPackPayable).map((pack) => String(pack.country));
-}
 
 /** Payable packs as (country, name) pairs, for surfaces that list packs. */
-export function payablePayrollPacks(
-  packs: readonly PayrollCountryPack[],
-): { country: string; name: string }[] {
-  return packs
-    .filter(isPayrollPackPayable)
-    .map((pack) => ({ country: String(pack.country), name: pack.name }));
-}

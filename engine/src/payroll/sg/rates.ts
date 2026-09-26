@@ -134,7 +134,6 @@ export const SG_OW_CEILING_MONTHLY_2026 = "8000.00";
  * more than $50 per month" (Who should receive CPF contributions); Table 1
  * row "$50 or less: Nil / Nil".
  */
-export const SG_CPF_FLOOR_2026 = "50.00";
 
 /**
  * Table 1, 55 & below, "> $750" row: "[37% (OW)]* + 37% (AW)" total,

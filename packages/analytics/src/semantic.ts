@@ -108,7 +108,7 @@ function defaultRole(t: SemanticType): FieldRole {
   return t === 'number' || t === 'currency' ? 'both' : 'dimension'
 }
 
-export function decorateField(f: CatalogField): AnalyticsField {
+function decorateField(f: CatalogField): AnalyticsField {
   const role = f.role ?? defaultRole(f.semanticType)
   return {
     ...f,
@@ -129,9 +129,6 @@ export function sourceField(source: AnalyticsSource, key: string): AnalyticsFiel
 
 /** The full SQL reference for a whitelisted field key — the single place every
  *  consumer builds a field reference. Returns null for unknown keys. */
-export function fieldRef(source: AnalyticsSource, key: string): string | null {
-  return sourceField(source, key)?.expr ?? null
-}
 
 // --- aggregations ------------------------------------------------------------
 
@@ -156,7 +153,7 @@ export type OperatorMeta = {
   types?: SemanticType[]
 }
 
-export const FILTER_OPERATORS: OperatorMeta[] = [
+const FILTER_OPERATORS: OperatorMeta[] = [
   { key: 'eq', label: 'equals', needsValue: 'one' },
   { key: 'neq', label: 'not equals', needsValue: 'one' },
   { key: 'in', label: 'is any of', needsValue: 'list' },
@@ -183,6 +180,3 @@ export const FILTER_OPERATOR_MAP: Record<FilterOp, OperatorMeta> = Object.fromEn
   FILTER_OPERATORS.map((o) => [o.key, o]),
 ) as Record<FilterOp, OperatorMeta>
 
-export function aggLabel(agg: AggFn): string {
-  return AGG_FUNCTIONS.find((a) => a.key === agg)?.label ?? agg
-}

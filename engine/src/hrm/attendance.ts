@@ -130,55 +130,6 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
   });
 }
 
-/**
- * Calendar read per employment for a date range: net hours per day with the
- * type and source. Reversals net out; a fully reversed day reads zero, never
- * vanishes (the evidence stays).
- */
-export async function absenceCalendarForEmployment(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-  from: string,
-  to: string,
-): Promise<AbsenceDay[]> {
-  await requireHrmLeaveRead(exec, orgId, actorId, employmentId);
-  if (to < from) throw new LeaveError("INVALID_INPUT", `calendar end ${to} must not precede start ${from}`);
-  const rows = (await exec.execute<{
-    id: string; employment_id: string; on_date: string; hours: string;
-    code: string; source: "request" | "recorded";
-  }>(sql`
-    select a.id, a.employment_id, a.on_date::text as on_date, a.hours::text as hours,
-           t.code, a.source
-      from hrm_absences a join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
-     where a.org_id = ${orgId} and a.employment_id = ${employmentId}
-       and a.on_date >= ${from} and a.on_date <= ${to}
-     order by a.on_date
-  `)).rows;
-  interface NettedDay { id: string; hours: string; code: string; source: "request" | "recorded" }
-  const byDay = new Map<string, NettedDay>();
-  for (const row of rows) {
-    const day = String(row.on_date).slice(0, 10);
-    const current = byDay.get(day);
-    byDay.set(day, {
-      id: row.id,
-      hours: current ? addHours(current.hours, String(row.hours)) : String(row.hours),
-      // The latest row names the day; the hours net across all rows.
-      code: row.code,
-      source: row.source,
-    });
-  }
-  return [...byDay.entries()].map(([onDate, entry]) => ({
-    id: entry.id,
-    employmentId,
-    onDate,
-    hours: entry.hours,
-    leaveTypeCode: entry.code,
-    source: entry.source,
-  }));
-}
-
 export interface DepartmentAbsenceDay extends AbsenceDay {
   readonly workerName: string;
 }

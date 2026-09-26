@@ -135,7 +135,7 @@ export function periodStartFor(cadence: "monthly" | "quarterly", today: string):
  * approximate period honestly rather than blocking the refusal. Pure and
  * sim-clock aware, like businessToday.
  */
-export function utcPeriodFallback(cadence: "monthly" | "quarterly"): string {
+function utcPeriodFallback(cadence: "monthly" | "quarterly"): string {
   return periodStartFor(cadence, formatInZone(now(), "UTC"));
 }
 
@@ -144,13 +144,6 @@ export function startOverheadScheduler(): void {
   timer = setInterval(() => void tick(), TICK_INTERVAL_MS);
   timer.unref?.();
   void tick();
-}
-
-export function stopOverheadScheduler(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
 }
 
 export async function tick(): Promise<void> {

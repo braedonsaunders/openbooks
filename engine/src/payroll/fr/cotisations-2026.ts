@@ -315,10 +315,6 @@ export const FR_CRDS_SAL_2026 = {
  * applied: it needs a workplace-department channel no pack carries.
  * Refused by name.
  */
-export const FR_MALADIE_SAL_ALSACE_MOSELLE_2026: FrCotisationRate = {
-  rate: "0.013",
-  quote: "Cotisation salariale maladie supplémentaire pour les départements du Haut-Rhin, Bas-Rhin et de la Moselle  1,30 %",
-};
 
 // ---------------------------------------------------------------------------
 // Tenant-declared by design (posture quotes, no rates transcribable)
@@ -332,11 +328,6 @@ export const FR_MALADIE_SAL_ALSACE_MOSELLE_2026: FrCotisationRate = {
  * mobilité refused in FR_REFUSED_2026): the tenant declares the rate,
  * the pack never invents one.
  */
-export const FR_TENANT_DECLARED_QUOTES_2026 = {
-  atmp: "Accident du travail Taux notifié par la Carsat",
-  versementMobilite:
-    "Versement mobilité (effectif de 11 salariés et plus) Outil de recherche versement mobilité",
-} as const;
 
 /**
  * Named refusals for the 2026 cotisation pass: everything this file

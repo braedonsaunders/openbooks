@@ -27,16 +27,16 @@ import type { ReportEntity } from './entities'
 // bound server-side to the org business day exactly like the entitlement
 // limit resolution; it is never CURRENT_DATE.
 
-export const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
-export const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
-export const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
-export const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
-export const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
-export const HRM_PERFORMANCE_READ_PERMISSION = 'hrm.performance.read'
-export const HRM_RETENTION_READ_PERMISSION = 'hrm.retention.read'
-export const HRM_BENEFITS_READ_PERMISSION = 'hrm.benefits.read'
-export const HRM_COMPENSATION_READ_PERMISSION = 'hrm.compensation.read'
-export const HRM_COMPENSATION_FEATURE_KEY = 'hrmCompensation'
+const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
+const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
+const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
+const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
+const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
+const HRM_PERFORMANCE_READ_PERMISSION = 'hrm.performance.read'
+const HRM_RETENTION_READ_PERMISSION = 'hrm.retention.read'
+const HRM_BENEFITS_READ_PERMISSION = 'hrm.benefits.read'
+const HRM_COMPENSATION_READ_PERMISSION = 'hrm.compensation.read'
+const HRM_COMPENSATION_FEATURE_KEY = 'hrmCompensation'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -70,9 +70,9 @@ const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
 const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
 
 // HR-16 begin: automation + reason-code report entities (0226/0227).
-export const AUTOMATIONS_READ_PERMISSION = 'automations.read'
-export const AUTOMATIONS_FEATURE_KEY = 'automations'
-export const HRM_ACTION_REASONS_FEATURE_KEY = 'hrmActionReasons'
+const AUTOMATIONS_READ_PERMISSION = 'automations.read'
+const AUTOMATIONS_FEATURE_KEY = 'automations'
+const HRM_ACTION_REASONS_FEATURE_KEY = 'hrmActionReasons'
 
 const AUTOMATION_STATUSES = ['draft', 'enabled', 'disabled', 'error'] as const
 const AUTOMATION_TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
@@ -88,21 +88,21 @@ const HRM_PLAN_LINE_KINDS = ['create', 'backfill', 'change', 'terminate'] as con
 const HRM_PLAN_LINE_STATUSES = ['proposed', 'approved', 'rejected', 'opened', 'filled', 'cancelled'] as const
 // HR-12 end
 // HR-14 begin: certification register and alert queue report entities (0225).
-export const HRM_CERTIFICATIONS_READ_PERMISSION = 'hrm.certifications.read'
-export const HRM_CERTIFICATIONS_FEATURE_KEY = 'hrmCertifications'
-export const HRM_CERTIFICATION_ALERTS_FEATURE_KEY = 'hrmCertificationAlerts'
+const HRM_CERTIFICATIONS_READ_PERMISSION = 'hrm.certifications.read'
+const HRM_CERTIFICATIONS_FEATURE_KEY = 'hrmCertifications'
+const HRM_CERTIFICATION_ALERTS_FEATURE_KEY = 'hrmCertificationAlerts'
 
 const HRM_QUALIFICATION_STATUSES = ['valid', 'revoked', 'pending_verification'] as const
 const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
 // HR-14 end
 // HR-19 begin: documents, signers, retention actions, survey results, org
 // chart report entities (0230).
-export const HRM_DOCUMENTS_READ_PERMISSION = 'hrm.documents.read'
+const HRM_DOCUMENTS_READ_PERMISSION = 'hrm.documents.read'
 export const HRM_DOCUMENTS_FEATURE_KEY = 'hrmDocuments'
-export const HRM_DOCUMENT_RETENTION_FEATURE_KEY = 'hrmDocumentRetention'
-export const HRM_SURVEYS_MANAGE_PERMISSION = 'hrm.surveys.manage'
+const HRM_DOCUMENT_RETENTION_FEATURE_KEY = 'hrmDocumentRetention'
+const HRM_SURVEYS_MANAGE_PERMISSION = 'hrm.surveys.manage'
 export const HRM_SURVEYS_FEATURE_KEY = 'hrmSurveys'
-export const HRM_ORG_CHART_FEATURE_KEY = 'hrmOrgChart'
+const HRM_ORG_CHART_FEATURE_KEY = 'hrmOrgChart'
 
 const HRM_DOCUMENT_STATUSES = [
   'draft', 'sent', 'viewed', 'partially_signed', 'signed', 'acknowledged', 'declined', 'voided', 'expired',

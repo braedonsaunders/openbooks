@@ -19,13 +19,6 @@ import type { PayrollDeductionTreatment, PayrollTaxBaseKey, PayrollTaxBases } fr
  * across packs. `"none"` (after-tax) reduces nothing by construction.
  */
 
-export const TAX_BASE_KEYS: readonly PayrollTaxBaseKey[] = [
-  "income",
-  "nonPeriodic",
-  "pensionable",
-  "insurable",
-];
-
 /** The stub-line shape this computation reads. Structural, so callers pass lines directly. */
 export interface TreatmentLine {
   kind: string;

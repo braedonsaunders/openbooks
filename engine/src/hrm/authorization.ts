@@ -779,20 +779,6 @@ export async function requireAggregateDocumentsRead(
 }
 
 /**
- * Aggregate half of document authority for creates (which name no stored
- * row yet): the manage grant, then the employer-subsidiary scope the
- * caller validates the declared subject against.
- */
-export async function requireAggregateDocumentsManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<Set<string> | null> {
-  await requireHrmDocumentsManage(exec, orgId, actorId);
-  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
-}
-
-/**
  * Author surveys and read aggregate results (never respondent links): the
  * hrm.surveys.manage grant plus the employer-subsidiary scope for the
  * caller to fence invitees and respondents by (null = unrestricted),
@@ -1067,7 +1053,7 @@ export async function requireHrmLeaveRead(
 }
 
 /** File a leave request against an employment. */
-export async function requireHrmLeaveRequest(
+async function requireHrmLeaveRequest(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -1462,7 +1448,6 @@ export async function requireHrmRecruitingReadOrg(
     );
   }
 }
-
 
 /** Performance and retention duties (HR-7, 0196). Confidential like employment. */
 export const HRM_PERFORMANCE_PERMISSIONS = [
@@ -1957,7 +1942,7 @@ export async function requireConstructionScope(
 }
 
 /** Author construction-compliance configuration, entries, runs and findings transitions. */
-export async function requireHrmConstructionManage(
+async function requireHrmConstructionManage(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,

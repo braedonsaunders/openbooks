@@ -20,12 +20,6 @@ import type { AgentFinding } from "./types.ts";
  * nothing executable yet (no pack proposal flow exists in the control plane);
  * never writes.
  */
-export const TAX_DETECTOR_KEYS = [
-  "tax_missing_codes",
-  "tax_missing_registration",
-  "tax_return_blocked",
-  "tax_unlocked_period",
-] as const;
 
 export async function taxFindings(
   orgId: string,

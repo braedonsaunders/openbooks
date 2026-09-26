@@ -1743,7 +1743,6 @@ const LABOR_RATE_CARD: RecordTypeMeta = {
   listFilters: [],
 };
 
-
 /**
  * Field ticket — the signed crew timesheet (feature-gated). Header rides the
  * standard configurable form (project drives customer/PO derivation); the crew
@@ -1990,10 +1989,6 @@ export function isBuiltInFilter(recordType: string, key: string): boolean {
   const meta = RECORD_TYPE_BY_KEY[recordType];
   if (!meta) return false;
   return meta.listFilters.some((f) => f.key === key);
-}
-
-export function headerFieldMeta(recordType: string, key: string) {
-  return RECORD_TYPE_BY_KEY[recordType]?.headerFields.find((f) => f.key === key);
 }
 
 export function lineFieldMeta(recordType: string, key: string) {

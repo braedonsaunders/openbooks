@@ -173,7 +173,7 @@ async function resolvePurchaseOrder(
  * on a two-way match (ordered quantity + price). Every other kind — including
  * an unknown or missing kind — requires the receipt leg of the match.
  */
-export const RECEIPT_EXEMPT_ITEM_KINDS: ReadonlySet<string> = new Set([
+const RECEIPT_EXEMPT_ITEM_KINDS: ReadonlySet<string> = new Set([
   "service",
   "non_inventory",
   "other_charge",
@@ -193,13 +193,13 @@ export function lineRequiresReceipt(itemKind: string | null | undefined): boolea
 }
 
 /** Line-level unit-price tolerance against the ordered price, as a percent. */
-export const PRICE_TOLERANCE_PERCENT = "2";
+const PRICE_TOLERANCE_PERCENT = "2";
 
 /**
  * Exact numeric(19,4) comparison — no floating point and no rounding drift:
  * |invoiced − ordered| · 100 ≤ |ordered| · tolerance.
  */
-export function priceWithinTolerance(
+function priceWithinTolerance(
   poUnitPrice: string,
   invoiceUnitPrice: string,
   tolerancePercent: string = PRICE_TOLERANCE_PERCENT,

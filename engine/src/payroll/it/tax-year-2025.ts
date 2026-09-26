@@ -39,21 +39,6 @@
  * half-up to the cent per the CU 2026 istruzioni (quoted below).
  */
 
-export const IT_2025_SOURCE_URLS = {
-  adeRatesEn:
-    "https://www.agenziaentrate.gov.it/portale/web/english/personal-income-tax-rates-and-calculation",
-  guL207:
-    "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.versione=1&art.idGruppo=1&art.flagTipoArticolo=0&art.codiceRedazionale=24G00229&art.idArticolo=1&art.idSottoArticolo=1&art.idSottoArticolo1=10&art.dataPubblicazioneGazzetta=2024-12-31&art.progressivo=1",
-  guDLgs216:
-    "https://www.gazzettaufficiale.it/atto/serie_generale/caricaArticolo?art.versione=1&art.idGruppo=0&art.flagTipoArticolo=0&art.codiceRedazionale=23G00228&art.idArticolo=1&art.idSottoArticolo=1&art.idSottoArticolo1=10&art.dataPubblicazioneGazzetta=2023-12-30&art.progressivo=0",
-  ade730_2026:
-    "https://www.agenziaentrate.gov.it/portale/730-2026/modello-e-istruzioni",
-  adeCirc4E:
-    "https://www.agenziaentrate.gov.it/portale/documents/20143/8410823/Circolare+lavoro+dipendente+LB2025+DD+IRPEF+n.+4+del+16+maggio+2025.pdf/36979eaa-9fc5-a4ec-a7aa-136497c53f91",
-  adeCU2026:
-    "https://www.agenziaentrate.gov.it/portale/certificazione-unica-2026/modello-e-istruzioni",
-} as const;
-
 /**
  * IRPEF scaglioni 2025 — L. 207/2024 art. 1 c. 2, lett. a), GU 24G00229:
  *
@@ -315,7 +300,6 @@ export const IT_2025_MINIMALE = {
  * uguale o superiore a cinquanta centesimi" — governs the RETURN, not the
  * withholding computation.)
  */
-export const IT_2025_ROUNDING = "half-up-to-cent" as const;
 
 /**
  * Addizionali regionale e comunale 2025 — tenant-entered rates.
@@ -336,7 +320,6 @@ export const IT_2025_ROUNDING = "half-up-to-cent" as const;
  * Domicile selects: CU carries the domicilio fiscale at 1 January and
  * 31 December for exactly this computation.
  */
-export const IT_2025_SURTAX_MODEL = "tenant-declared-rate" as const;
 
 /**
  * Named refusals: everything the 2025 engine does not compute, with the

@@ -397,10 +397,3 @@ export async function getGoal(args: {
 
 /** Progress evidence for one goal, newest last: the subject, their
  * manager as of today, or HR reads — the same scope as the goal list. */
-export async function listGoalUpdates(args: {
-  orgId: string;
-  actorId: string;
-  goalId: string;
-}): Promise<{ progressPercent: number; note: string | null; recordedAt: string }[]> {
-  return (await getGoal(args)).updates;
-}

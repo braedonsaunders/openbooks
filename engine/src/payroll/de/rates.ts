@@ -24,24 +24,6 @@ import type { PayrollEditionScaffold, PayrollTaxYearSupport } from "../tax-years
  * transcribed here — that is the engine step (pap.ts), not this file.
  */
 
-export const DE_2026_SOURCE_URLS = {
-  estg32a: "https://www.gesetze-im-internet.de/estg/__32a.html",
-  solzg3: "https://www.gesetze-im-internet.de/solzg_1995/__3.html",
-  solzg4: "https://www.gesetze-im-internet.de/solzg_1995/__4.html",
-  sgb5_223: "https://www.gesetze-im-internet.de/sgb_5/__223.html",
-  sgb5_241: "https://www.gesetze-im-internet.de/sgb_5/__241.html",
-  sgb5_249: "https://www.gesetze-im-internet.de/sgb_5/__249.html",
-  sgb6_168: "https://www.gesetze-im-internet.de/sgb_6/__168.html",
-  sgb3_341: "https://www.gesetze-im-internet.de/sgb_3/__341.html",
-  sgb3_346: "https://www.gesetze-im-internet.de/sgb_3/__346.html",
-  sgb11_55: "https://www.gesetze-im-internet.de/sgb_11/__55.html",
-  sgb11_58: "https://www.gesetze-im-internet.de/sgb_11/__58.html",
-  pbav2025: "http://www.gesetze-im-internet.de/pbav_2025/PBAV_2025.pdf",
-  rvBek2026: "https://www.gesetze-im-internet.de/rvbeitrsbek_2026/BJNR1230A0025.html",
-  svrv2026: "https://www.bmas.de/SharedDocs/Downloads/DE/Gesetze/Verordnungsabschluesse/sozialversicherungs-rechengroessenverordnung-2026.pdf?__blob=publicationFile",
-  svrvBegruendung: "https://www.bundesrat.de/SharedDocs/drucksachen/2025/0501-0600/567-25.pdf?__blob=publicationFile&v=1",
-} as const;
-
 /**
  * §32a EStG income-tax tariff, Veranlagungszeitraum 2026.
  *
@@ -61,13 +43,6 @@ export const DE_2026_SOURCE_URLS = {
  * die Hälfte ihres gemeinsam zu versteuernden Einkommens nach Absatz 1
  * ergibt (Splitting-Verfahren)."
  */
-export const DE_2026_TARIFF = {
-  grundfreibetrag: 12348,
-  zone2: { from: 12349, to: 17799, a: 914.51, b: 1400 },
-  zone3: { from: 17800, to: 69878, a: 173.1, b: 2397, c: 1034.87 },
-  zone4: { from: 69879, to: 277825, rate: 0.42, subtrahend: 11135.63 },
-  zone5: { from: 277826, rate: 0.45, subtrahend: 19470.38 },
-} as const;
 
 /**
  * Solidaritätszuschlag 2026.
@@ -85,12 +60,6 @@ export const DE_2026_TARIFF = {
  * 1/360. No rounding of cents fractions: "Bruchteile eines Cents bleiben
  * außer Ansatz" (§4 Satz 3).
  */
-export const DE_2026_SOLI = {
-  rate: 5.5,
-  milderungRate: 11.9,
-  freigrenzeSplitting: 40700,
-  freigrenzeOther: 20350,
-} as const;
 
 /**
  * 2026 Sozialversicherung assessment ceilings — all "bundeseinheitlich":
@@ -198,7 +167,7 @@ export const DE_2026_RATES = {
   pvSachsenDifferential: 0.5,
 } as const;
 
-export const DE_EDITION_SCAFFOLD: PayrollEditionScaffold = {
+const DE_EDITION_SCAFFOLD: PayrollEditionScaffold = {
   files: [],
   barrels: [],
   steps: [

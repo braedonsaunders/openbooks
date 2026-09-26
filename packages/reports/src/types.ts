@@ -136,7 +136,7 @@ export type ReportCustomQuery = {
 // --- Layout (page setup for a printed/exported document) ---------------------
 
 /** Paper sizes a report document can print on. */
-export const REPORT_PAPER_SIZES = ['letter', 'a4', 'legal'] as const
+const REPORT_PAPER_SIZES = ['letter', 'a4', 'legal'] as const
 export type ReportPaperSize = (typeof REPORT_PAPER_SIZES)[number]
 
 /** Document densities: compact shrinks type and cell padding so more rows fit
@@ -158,7 +158,7 @@ export type ReportLayoutConfig = {
   density?: ReportDensity
 }
 
-export const DEFAULT_REPORT_LAYOUT: ReportLayoutConfig = {
+const DEFAULT_REPORT_LAYOUT: ReportLayoutConfig = {
   paperSize: 'letter',
   orientation: 'landscape',
   marginMm: 15,

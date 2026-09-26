@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   requireHrmCompensationManage,
   requireHrmCompensationRead,
@@ -57,14 +56,6 @@ export interface CompensationSettings {
   /** Declared burden rate (decimal fraction, e.g. "0.18"). Null = resolve from labor-costing percent_of_wage/worker_comp components. */
   readonly burdenRate: string | null;
 }
-
-export const DEFAULT_COMPENSATION_SETTINGS: CompensationSettings = {
-  comparisonAttributeKey: null,
-  gapThresholdPct: "5",
-  responseDays: null,
-  fteRounding: "up_to_whole",
-  burdenRate: null,
-};
 
 /** The org's compensation settings document (orgs.settings->'compensation'), with declared defaults. */
 export async function compensationSettings(orgId: string): Promise<CompensationSettings> {
@@ -393,6 +384,3 @@ export async function listJobLevels(query: {
 }
 
 /** True when the actor holds the org-wide compensation read (for aggregate surfaces). */
-export async function actorCanReadCompensation(exec: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
-  return actorHasPermission(exec, orgId, actorId, "hrm.compensation.read");
-}

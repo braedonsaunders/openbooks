@@ -109,7 +109,7 @@ const XLSX_MONEY_NUMBER_FORMAT = '#,##0.00;(#,##0.00)'
  * column keeps Excel's General format so counts stay counts (3, never 3.00)
  * and quantities keep their natural precision.
  */
-export function xlsxMoneyNumberFormat(money: boolean | undefined): string | undefined {
+function xlsxMoneyNumberFormat(money: boolean | undefined): string | undefined {
   return money === true ? XLSX_MONEY_NUMBER_FORMAT : undefined
 }
 

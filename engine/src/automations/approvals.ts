@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { listUserDelegations } from "../flows/delegations.ts";
 import { decideGateAsSystem } from "../flows/gates.ts";
 import { loadSubjectSnapshot } from "./registry.ts";
 import type { SubjectSnapshot } from "./evaluate.ts";
@@ -238,19 +237,3 @@ export async function applyExceptionOnly(input: {
   });
 }
 
-/**
- * delegate_after_days: seats the existing delegations service. Returns the
- * delegates currently covering the assignee (empty = no coverage, the gate
- * stays put — delegation never invents authority).
- */
-export async function delegationCoverFor(
-  orgId: string,
-  assigneeUserId: string,
-): Promise<{ delegateUserId: string }[]> {
-  return withOrg(orgId, async () => {
-    const delegations = await listUserDelegations(orgId, assigneeUserId);
-    return delegations
-      .filter((d) => d.direction === "given" && d.phase === "active")
-      .map((d) => ({ delegateUserId: d.toUserId }));
-  });
-}

@@ -277,18 +277,6 @@ export function declaredPeriodsCover(periods: FiscalPeriod[], from: string, to: 
   return false
 }
 
-/** Whole declared fiscal year holding `date`: P1's start through the year's
- *  last declared period's end. Null when the year has no declared periods. */
-export function declaredFiscalYearRange(periods: FiscalPeriod[], date: string): (DateRange & { fiscalYear: number }) | null {
-  const holding = declaredPeriodContaining(periods, date)
-  if (!holding) return null
-  const year = periods.filter((p) => p.fiscalYear === holding.fiscalYear)
-  if (!year.length) return null
-  const from = year.reduce((a, b) => (a < b.from ? a : b.from), year[0]!.from)
-  const to = year.reduce((a, b) => (a > b.to ? a : b.to), year[0]!.to)
-  return { from, to, label: `FY ${holding.fiscalYear}`, fiscalYear: holding.fiscalYear }
-}
-
 /** Declared quarter holding `date` (same grouping as `declaredQuarterColumns`). */
 export function declaredQuarterContaining(periods: FiscalPeriod[], date: string): DateRange | null {
   const holding = declaredPeriodContaining(periods, date)

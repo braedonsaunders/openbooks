@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { requireHrmRecruitingManageOrg } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
-import { requireActorId, requireId, requireOrgId } from "./input.ts";
+import { requireActorId, requireOrgId } from "./input.ts";
 
 /**
  * Canonical recruiting pipeline service (HR-6, 0195): the org's own funnel.
@@ -74,7 +74,7 @@ function toStageDTO(row: {
   };
 }
 
-export async function loadTemplateStages(
+async function loadTemplateStages(
   exec: SqlExecutor,
   orgId: string,
   templateId: string,
@@ -116,7 +116,7 @@ export async function loadPipelineTemplate(
   return { ...row, stages: await loadTemplateStages(exec, orgId, templateId) };
 }
 
-export async function loadDefaultPipelineTemplate(
+async function loadDefaultPipelineTemplate(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<PipelineTemplateDTO | null> {
@@ -296,23 +296,4 @@ export async function createPipelineTemplate(query: CreatePipelineTemplateQuery)
   });
 }
 
-export interface GetPipelineTemplateQuery {
-  readonly orgId: string;
-  readonly actorId: string;
-  readonly templateId: string;
-}
-
 /** Read one funnel (any recruiting reader; the Setup drawer resolves through here). */
-export async function getPipelineTemplate(query: GetPipelineTemplateQuery): Promise<PipelineTemplateDTO> {
-  const orgId = requireOrgId(query.orgId);
-  const actorId = requireActorId(query.actorId);
-  const templateId = requireId(query.templateId, "templateId");
-  // Config visibility rides the manage grant (the Setup registry fences the
-  // same writes behind admin.setup.manage); reads stay inside the module.
-  await requireHrmRecruitingManageOrg(db, orgId, actorId);
-  const template = await loadPipelineTemplate(db, orgId, templateId);
-  if (!template) {
-    throw new RecruitingError("NOT_FOUND", "pipeline template is not visible in this organization");
-  }
-  return template;
-}

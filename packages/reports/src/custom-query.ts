@@ -27,7 +27,7 @@ import {
   type ReportRuleGroup,
 } from './types'
 
-export const DEFAULT_REPORT_LIMIT = 1000
+const DEFAULT_REPORT_LIMIT = 1000
 /** Compatibility value for callers that need an explicit "full run" clamp.
  * It is the numeric/SQL safety boundary, not a product row ceiling. */
 export const MAX_REPORT_ROWS = Number.MAX_SAFE_INTEGER
@@ -806,7 +806,7 @@ export function measureLabel(entity: ReportEntity, m: ReportMeasure): string {
   return `${AGG_FN_LABEL[m.fn]} of ${labelFor(entity, m.column ?? '')}`
 }
 
-export function resolveLimit(requested: number | null | undefined, maxRows?: number): number {
+function resolveLimit(requested: number | null | undefined, maxRows?: number): number {
   let limit = normalizeReportLimit(requested)
   if (Number.isFinite(maxRows) && Number(maxRows) > 0) {
     limit = Math.min(limit, normalizeReportLimit(maxRows))
@@ -835,7 +835,7 @@ export function normalizeReportLimit(
 }
 
 /** Normalize untrusted page numbers against the entity-authored policy. */
-export function resolveReportPage(
+function resolveReportPage(
   entity: ReportEntity,
   requested: ReportPageRequest,
   maxRows?: number,

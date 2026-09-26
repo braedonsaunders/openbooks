@@ -17,11 +17,6 @@ export const FIELD_TIME_MULTI_STAGE_APPROVAL_FEATURE = "fieldTimeMultiStageAppro
 export { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 
 /** Permissions: self clock, foreman entry, kiosk devices. */
-export const FIELD_TIME_PERMISSIONS = [
-  "time.clock",
-  "time.crew.enter",
-  "time.kiosk.manage",
-] as const;
 
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";

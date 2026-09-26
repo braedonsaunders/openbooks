@@ -21,7 +21,7 @@ export type ReportJobData = {
 
 let reportsQueue: Queue<ReportJobData> | undefined
 
-export function getReportsQueue(): Queue<ReportJobData> {
+function getReportsQueue(): Queue<ReportJobData> {
   reportsQueue ??= new Queue<ReportJobData>(REPORTS_QUEUE, {
     connection: getConnection(),
     defaultJobOptions: {

@@ -175,7 +175,7 @@ import { PayrollError } from "../error.ts";
 import type { PayrollTaxYearSupport } from "../tax-years.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 
-export const ES_RATES_MODULE = "engine/src/payroll/es/rates.ts";
+const ES_RATES_MODULE = "engine/src/payroll/es/rates.ts";
 
 /** Situación familiar (Modelo 145 datum, RIRPF art. 81-83). */
 export type EsSituacionFamiliar = "1" | "2" | "3";
@@ -300,10 +300,6 @@ export const ES_CEUMELI_FACTOR = "0.40";
  * permanente"). No personal or family minimums apply under the IRNR —
  * the rate hits the full Spanish-source gross.
  */
-export const ES_IRNR_TIPOS_2026 = {
-  unionEuropea: "19",
-  resto: "24",
-} as const;
 
 /** Monthly/daily base regime for a grupo de cotización. */
 export type EsGrupoRegimen = "mensual" | "diaria";
@@ -353,7 +349,6 @@ export const ES_BASE_MINIMA_HORA_2026: readonly { grupo: number; minimaHora: str
 /** Tope máximo mensual Régimen General (art. 2.1). */
 export const ES_TOPE_MAXIMO_2026 = "5101.20";
 /** Floor for the AT/EP minimum and daily-regime coherence (art. 2.2). */
-export const ES_TOPE_MINIMO_AT_2026 = "1424.40";
 
 /** Split rate: [total, empresa, trabajador] as decimal fraction strings. */
 export interface EsTipoSplit {

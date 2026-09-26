@@ -3,7 +3,6 @@ import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import {
   entitlementBalances,
-  planBalanceExcludingRun,
 } from "../payroll/entitlements-db.ts";
 import {
   HrmAuthorizationError,
@@ -61,7 +60,7 @@ export type PolicyRow = {
 };
 
 /** Accrual-year start for a date: the calendar year. */
-export function accrualYearOf(date: string): string {
+function accrualYearOf(date: string): string {
   return `${date.slice(0, 4)}-01-01`;
 }
 
@@ -117,7 +116,7 @@ export function policyToCandidate(row: PolicyRow): PolicyCandidate {
 }
 
 /** The policy row behind a resolved candidate, for carryover-rule reads. */
-export function policyById(rows: readonly PolicyRow[], id: string | null | undefined): PolicyRow | null {
+function policyById(rows: readonly PolicyRow[], id: string | null | undefined): PolicyRow | null {
   if (!id) return null;
   return rows.find((row) => row.id === id) ?? null;
 }
@@ -316,30 +315,6 @@ export async function payrollBankBalances(
   }));
 }
 
-/**
- * VALUE balance for one plan net of an open run's own movements — the read
- * the request drawer uses where a bank exists. Owned by payroll's
- * planBalanceExcludingRun; labelled value here.
- */
-export async function payrollBankBalanceForPlan(
-  orgId: string,
-  planId: string,
-  employeePartyId: string,
-  onDate: string,
-  excludeRunDocumentId: string | null,
-  executor?: SqlExecutor,
-): Promise<{ kind: "value"; planId: string; balance: string }> {
-  const balance = await planBalanceExcludingRun(
-    executor ?? db,
-    orgId,
-    planId,
-    employeePartyId,
-    onDate,
-    excludeRunDocumentId,
-  );
-  return { kind: "value", planId, balance };
-}
-
 /** Today's business date for an org — the as-of the balances display. */
 export async function leaveToday(orgId: string): Promise<string> {
   return businessToday(orgId);
@@ -401,7 +376,7 @@ export interface LeaveFilingEmploymentOption {
  * the drawer submits the employment id, never a name. An empty page is
  * truthful (the actor manages leave for nobody in scope), never a refusal.
  */
-export async function loadLeaveFilingEmploymentOptions(
+async function loadLeaveFilingEmploymentOptions(
   exec: SqlExecutor,
   query: LeaveFilingEmploymentOptionsQuery,
 ): Promise<readonly LeaveFilingEmploymentOption[]> {

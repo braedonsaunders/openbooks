@@ -42,6 +42,7 @@ import type {
   PayrollCountryPack,
   PayrollStatutorySlot,
 } from "../pack-types.ts";
+import { GB_PACK_RATES, GB_TAX_YEARS } from "./rates.ts";
 import { computeGbStatutory, GB_FACTOR_LABELS } from "./compute-statutory.ts";
 import { GB_EMPLOYER_FACTS } from "./employer-facts.ts";
 import { gbEmployerAggregateLevies } from "./employer-levies.ts";
@@ -52,13 +53,11 @@ import {
   GB_REGIONS,
   GB_WITHHOLDING,
 } from "./jurisdictions.ts";
-import { GB_NATIONS, GB_PACK_RATES, GB_TAX_YEARS } from "./rates.ts";
 
 /** The GB pack's registry key, once `PayrollCountry` opens to it. */
-export const GB_COUNTRY_CODE = "GB" as const;
+const GB_COUNTRY_CODE = "GB" as const;
 
 /** The nations the GB pack knows, re-exported for the wiring diff. */
-export const GB_KNOWN_NATIONS: readonly string[] = [...GB_NATIONS];
 
 /**
  * The GB pack's statutory slots: every levy the jurisdiction withholds or
@@ -77,7 +76,7 @@ export const GB_KNOWN_NATIONS: readonly string[] = [...GB_NATIONS];
  * destination is configured — the same treatment as the US pack's EFTPS
  * deposits. Student and postgraduate loan deductions remit through the same HMRC payroll account.
  */
-export const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
+const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
   {
     key: "paye",
     // Withheld PAYE sits in the chart's payroll-deductions account: the pack

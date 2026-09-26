@@ -84,7 +84,7 @@ export const INSIGHT_SOURCES: AnalyticsSource[] = REPORT_ENTITIES.map((entity) =
   buildSource(sourceFromEntity(entity)),
 )
 
-export const INSIGHT_SOURCE_MAP: Record<string, AnalyticsSource> = Object.fromEntries(
+const INSIGHT_SOURCE_MAP: Record<string, AnalyticsSource> = Object.fromEntries(
   INSIGHT_SOURCES.map((s) => [s.key, s]),
 )
 

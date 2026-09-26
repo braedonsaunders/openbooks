@@ -186,10 +186,6 @@ export const FR_PASS_2026 = {
  * contract (fr_pas_option short_contract) without a transmitted DGFiP rate
  * refuses by name (FR_REFUSED_2026) instead of guessing.
  */
-export const FR_CONTRATS_COURTS_ABATTEMENT_2026 = {
-  from2026_01_01: "748",
-  from2026_06_01: "766",
-} as const;
 
 /**
  * Named refusals: everything this file does not transcribe, with the

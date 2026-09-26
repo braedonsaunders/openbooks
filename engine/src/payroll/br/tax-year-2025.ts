@@ -40,7 +40,6 @@
  */
 
 /** Calendar 2025: two IRRF editions (Jan–Apr vs May–Dec), one INSS table. */
-export const BR_TRANSCRIBED_YEAR_2025 = 2025;
 
 /**
  * INSS 2025 — Anexo II of Portaria Interministerial MPS/MF nº 6/2025.
@@ -58,7 +57,6 @@ export const BR_2025_INSS_BRACKETS = [
 export const BR_2025_INSS_TETO = "8157.41";
 
 /** Salário mínimo from 1 January 2025 (Decreto nº 12.342/2024, art. 1º). */
-export const BR_2025_SALARIO_MINIMO = "1518.00";
 
 /**
  * IRRF January–April 2025 — Tabela Progressiva Mensal (Lei 14.848/2024

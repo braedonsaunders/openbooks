@@ -715,29 +715,3 @@ export async function competencyProfileForEmployment(args: {
   });
 }
 
-/**
- * Level expectations for a review template section: what the review
- * drafting renders inline beside the section's questions.
- */
-export async function levelExpectationsForSection(args: {
-  orgId: string;
-  actorId: string;
-  sectionId: string;
-}): Promise<readonly CompetencyLevelDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const sectionId = requireId("sectionId", args.sectionId);
-  return withOrgTransaction(orgId, async () => {
-    await assertCompetenciesFeature(db, orgId);
-    await requireCompetenciesRead(db, orgId, actorId);
-    const section = (await db.execute<{ competency_id: string | null }>(sql`
-      select competency_id::text as competency_id from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}
-    `)).rows[0];
-    if (!section?.competency_id) return [];
-    const levels = (await db.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
-      select id, level_rank, label, expectation from hrm_competency_levels
-       where org_id = ${orgId} and competency_id = ${section.competency_id} order by level_rank
-    `)).rows;
-    return levels.map((level) => ({ id: level.id, levelRank: level.level_rank, label: level.label, expectation: level.expectation }));
-  });
-}

@@ -319,7 +319,7 @@ export async function withdrawConsent(query: {
 export type RetentionFileRemover = (exec: SqlExecutor, orgId: string, fileId: string) => Promise<void>;
 
 /** Default resume removal: delete the File Cabinet blob + file rows (the file is candidate PII). */
-export async function deleteCabinetFile(exec: SqlExecutor, orgId: string, fileId: string): Promise<void> {
+async function deleteCabinetFile(exec: SqlExecutor, orgId: string, fileId: string): Promise<void> {
   await exec.execute(sql`delete from file_blobs where org_id = ${orgId} and file_id = ${fileId}`);
   const deleted = (await exec.execute<{ id: string }>(sql`
     delete from files where org_id = ${orgId} and id = ${fileId} returning id
@@ -595,7 +595,7 @@ export async function evaluateRetentionRule(
  * through the 0229 SET NULL FK); the orphaned count is returned for the
  * run detail. Events are the ONLY survivors.
  */
-export async function deleteCandidateCascade(
+async function deleteCandidateCascade(
   exec: SqlExecutor,
   orgId: string,
   candidateId: string,

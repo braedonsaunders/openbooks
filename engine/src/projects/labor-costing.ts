@@ -32,7 +32,7 @@ export class LaborCostingFeatureDisabledError extends Error {
 
 /** A stored or supplied labor-costing input mispriced silently until now:
  * thrown (never skipped) naming the component and its source. */
-export class LaborCostingSettingsError extends Error {
+class LaborCostingSettingsError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "LaborCostingSettingsError";
@@ -41,7 +41,7 @@ export class LaborCostingSettingsError extends Error {
 
 /** Maximum burden components per org — shared by the write API and the
  * read path so the two can never disagree about the bound. */
-export const MAX_LABOR_COST_COMPONENTS = 20;
+const MAX_LABOR_COST_COMPONENTS = 20;
 
 const LABOR_COST_COMPONENT_KINDS = new Set(["percent_of_wage", "per_hour", "per_day", "worker_comp"]);
 
@@ -146,14 +146,6 @@ export interface LaborCostingSettings {
    *  uncovered time refuses at approval so hours never price silently at $0. */
   allowUnratedTime: boolean;
 }
-
-export const DEFAULT_LABOR_COSTING: LaborCostingSettings = {
-  mode: "off",
-  hoursPerDay: 8,
-  annualHours: 2080,
-  components: [],
-  allowUnratedTime: false,
-};
 
 export async function laborCostingSettings(
   orgId: string,

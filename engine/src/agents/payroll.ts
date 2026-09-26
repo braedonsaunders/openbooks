@@ -31,12 +31,6 @@ import type { AgentFinding } from "./types.ts";
  * condition the unknown-accounts detector reports, never a second finding.
  * Proposes nothing executable yet; never writes.
  */
-export const PAYROLL_DETECTOR_KEYS = [
-  "payroll_remittance_due",
-  "payroll_unknown_accounts",
-  "payroll_missing_elections",
-  "payroll_yearend_gaps",
-] as const;
 
 const REMITTANCE_HREF = "/payroll/remittances";
 const EMPLOYEES_HREF = "/entities/employees";

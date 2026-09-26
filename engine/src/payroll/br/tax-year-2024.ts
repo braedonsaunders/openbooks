@@ -40,7 +40,6 @@
  */
 
 /** Calendar 2024: two IRRF editions (January vs February–December), one INSS table. */
-export const BR_TRANSCRIBED_YEAR_2024 = 2024;
 
 /**
  * INSS 2024 — Anexo II of Portaria Interministerial MPS/MF nº 2/2024.
@@ -58,7 +57,6 @@ export const BR_2024_INSS_BRACKETS = [
 export const BR_2024_INSS_TETO = "7786.02";
 
 /** Salário mínimo from 1 January 2024 (Decreto nº 11.864/2023, art. 1º). */
-export const BR_2024_SALARIO_MINIMO = "1412.00";
 
 /**
  * IRRF January 2024 — Tabela Progressiva Mensal (Lei 14.663/2023 art. 5º,

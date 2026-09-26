@@ -36,7 +36,6 @@
  */
 
 /** Calendar 2026, the only transcribed year. */
-export const BR_TRANSCRIBED_YEAR = 2026;
 
 /**
  * INSS 2026 — Anexo I of Portaria Interministerial MPS/MF nº 13/2026.
@@ -54,7 +53,6 @@ export const BR_2026_INSS_BRACKETS = [
 export const BR_2026_INSS_TETO = "8475.55";
 
 /** Salário mínimo from 1 January 2026 (Decreto nº 12.797/2025). */
-export const BR_2026_SALARIO_MINIMO = "1621.00";
 
 /**
  * IRRF 2026 — Tabela Progressiva Mensal (Lei 11.482/2007 art. 1º XII, MP

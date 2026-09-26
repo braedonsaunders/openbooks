@@ -181,22 +181,6 @@ export async function listTemplates(query: {
   return rows.map(toDTO);
 }
 
-export async function getTemplate(query: {
-  orgId: string;
-  actorId: string;
-  templateId: string;
-}): Promise<DocumentTemplateDTO> {
-  await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  const row = (await db.execute<TemplateRow>(sql`
-    ${SELECT_COLS}
-     where org_id = ${query.orgId} and id = ${query.templateId}
-  `)).rows[0];
-  if (!row) {
-    throw new HrmDocumentsError("NOT_FOUND", "template is not visible in this organization");
-  }
-  return toDTO(row);
-}
-
 export async function saveTemplate(input: {
   orgId: string;
   actorId: string;

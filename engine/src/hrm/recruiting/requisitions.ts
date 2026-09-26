@@ -3,8 +3,6 @@ import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import {
   requireHrmPositionRead,
   requireHrmRecruitingManage,
-  requireHrmRecruitingRead,
-  requireOwnRequisitionForHiringManager,
   requireRecruitingManageForEmployer,
 } from "../authorization.ts";
 import { loadVacancyAsOf } from "../positions-read.ts";
@@ -130,7 +128,7 @@ function toDTO(row: RequisitionRow): RequisitionDTO {
  * number, so exactly one org-wide row hands them out (never per-subsidiary
  * rows, which would each hand out the same number).
  */
-export async function allocateRequisitionNumber(exec: SqlExecutor, orgId: string): Promise<string> {
+async function allocateRequisitionNumber(exec: SqlExecutor, orgId: string): Promise<string> {
   const seq = (await exec.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, 'hrm_requisition', null, 'REQ-')
@@ -537,30 +535,4 @@ export async function bumpFillForHire(
   return toDTO(updated);
 }
 
-export interface GetRequisitionQuery {
-  readonly orgId: string;
-  readonly actorId: string;
-  readonly requisitionId: string;
-}
-
 /** Read one requisition row (the composed drawer resolves through recruiting-read). */
-export async function getRequisition(query: GetRequisitionQuery): Promise<RequisitionDTO> {
-  const orgId = requireOrgId(query.orgId);
-  const actorId = requireActorId(query.actorId);
-  const requisitionId = requireId(query.requisitionId, "requisitionId");
-  // Org-wide read first; the hiring manager reaches their own openings
-  // without the grant. Either refusal names the same remedy.
-  try {
-    await requireHrmRecruitingRead(db, orgId, actorId, requisitionId);
-  } catch {
-    await requireOwnRequisitionForHiringManager(db, orgId, actorId, requisitionId);
-  }
-  const row = (await db.execute<RequisitionRow>(sql`
-    select ${REQUISITION_COLUMNS} from hrm_requisitions
-     where org_id = ${orgId} and id = ${requisitionId}
-  `)).rows[0];
-  if (!row) {
-    throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
-  }
-  return toDTO(row);
-}

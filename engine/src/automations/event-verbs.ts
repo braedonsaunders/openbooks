@@ -10,7 +10,6 @@ import { parseCivilDate } from "../hrm/temporal.ts";
 import { getEmploymentAsOf } from "../hrm/employment-read.ts";
 import {
   createChangeRequestDraft,
-  withdrawChangeRequest,
 } from "../hrm/change-requests.ts";
 import { hrmFeatureOn } from "./services.ts";
 
@@ -89,21 +88,6 @@ async function requirePermission(orgId: string, actorId: string, permission: str
 }
 
 /** Cancel an in-flight change request → withdrawn with reason. Reuses withdraw. */
-export async function cancelChangeRequest(input: {
-  orgId: string;
-  actorId: string;
-  requestId: string;
-  reason: string;
-}): Promise<{ status: string }> {
-  requireReason(input.reason, "cancel");
-  const request = await withdrawChangeRequest({
-    orgId: input.orgId,
-    actorId: input.actorId,
-    requestId: input.requestId,
-    reason: input.reason.trim(),
-  });
-  return { status: request.status };
-}
 
 async function refuseWhenDependent(exec: SqlExecutor, orgId: string, target: ChangeEventRow): Promise<void> {
   const later = await exec.execute<{ id: string; revision: number; changeKind: string; verb: string }>(sql`
@@ -489,7 +473,7 @@ async function rescindReportingLine(exec: SqlExecutor, ctx: RescindCtx): Promise
 }
 
 /** Read the org's correct_requires_reapproval setting (default TRUE). */
-export async function correctRequiresReapproval(orgId: string): Promise<boolean> {
+async function correctRequiresReapproval(orgId: string): Promise<boolean> {
   const rows = await db.execute<{ settings: { hrmCorrectRequiresReapproval?: boolean } | null }>(sql`
     select settings from orgs where id = ${orgId} limit 1
   `);

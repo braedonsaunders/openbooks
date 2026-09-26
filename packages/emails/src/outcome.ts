@@ -14,7 +14,7 @@ export const EMAIL_DELIVERY_ID_HEADER = "X-Openbooks-Delivery-Id";
 
 const DELIVERY_KEY_PREFIX = "obem_";
 const DELIVERY_KEY_INPUT = "openbooks.email-delivery.v1";
-export const EMAIL_DELIVERY_KEY_PATTERN = /^obem_[0-9a-f]{40}$/;
+const EMAIL_DELIVERY_KEY_PATTERN = /^obem_[0-9a-f]{40}$/;
 
 /**
  * The result of one send attempt through any transport. Definite failures are
