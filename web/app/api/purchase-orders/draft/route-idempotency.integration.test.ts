@@ -19,7 +19,6 @@ registerHooks({
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual(`export async function currentUser(){return globalThis.__poDraftIdempotencySession.user}`)
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

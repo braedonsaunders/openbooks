@@ -31,10 +31,6 @@ const hooks = registerHooks({
     ) {
       return { url: 'mock:record-type-audit-authz', shortCircuit: true }
     }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 5)
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context)
-    }
     if (context.parentURL?.startsWith('mock:') && (specifier.startsWith('@openbooks/') || specifier === 'next/server')) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url })
     }

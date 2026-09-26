@@ -10,7 +10,6 @@ import test from 'node:test'
 const root = pathToFileURL(process.cwd() + '/').href
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

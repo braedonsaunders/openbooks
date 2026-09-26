@@ -119,9 +119,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/lib/') && context.parentURL) {
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
-    }
     // Engine modules import the pool through relative paths (`./db.ts` inside
     // platform/, `../platform/db.ts` elsewhere), not the workspace
     // specifier: normalize every load of the platform pool to the double, or

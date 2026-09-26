@@ -29,12 +29,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      if (specifier === "@/lib/authz" && context.parentURL.includes("/api/items/price")) {
-        return { url: "mock:items-price-basis-authz", shortCircuit: true };
-      }
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

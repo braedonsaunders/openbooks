@@ -34,9 +34,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("customization/form-layouts/route")) {
       return { url: "mock:authz", shortCircuit: true };
     }

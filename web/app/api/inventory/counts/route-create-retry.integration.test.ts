@@ -20,7 +20,6 @@ registerHooks({
         "export async function guardPermission(){return {user:globalThis.__stockCountRetryAudit.user,allowedSubsidiaryIds:globalThis.__stockCountRetryAudit.allowedSubsidiaryIds}}",
       ) };
     }
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

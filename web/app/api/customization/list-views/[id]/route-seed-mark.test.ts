@@ -55,12 +55,6 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     // No root tsconfig maps `@/` (only web/tsconfig does), so resolve the
     // app's alias the way PartyDrawer.test.tsx does: `@/lib/...` → web/lib.
-    if (specifier.startsWith('@/')) {
-      return nextResolve(
-        new URL(`../../../../../../web/${specifier.slice(2)}.ts`, import.meta.url).href,
-        context,
-      )
-    }
     const parent = context.parentURL ?? ''
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
       // Late delegation: the route binds `db` at import time, before the

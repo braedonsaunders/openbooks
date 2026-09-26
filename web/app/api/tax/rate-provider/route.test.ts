@@ -30,9 +30,6 @@ const hooks = registerHooks({
     if (specifier === "@openbooks/engine/src/tax/rate-providers.ts") {
       return { shortCircuit: true, url: "mock:rate-providers" };
     }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(new URL(`web/${specifier.slice(2)}.ts`, root).href, context);
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

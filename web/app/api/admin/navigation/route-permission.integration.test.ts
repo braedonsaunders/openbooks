@@ -38,11 +38,6 @@ const hooks = registerHooks({
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("admin/navigation")) {
       return { url: "mock:nav-permission-authz", shortCircuit: true };
     }
-    if (specifier.startsWith("@/") && context.parentURL) {
-      const testUrl = import.meta.url;
-      const webRoot = testUrl.slice(0, testUrl.indexOf("/web/") + 5);
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context);
-    }
     if (context.parentURL?.startsWith("mock:") && (specifier.startsWith("@openbooks/") || specifier === "next/server")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }

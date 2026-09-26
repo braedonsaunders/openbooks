@@ -24,13 +24,6 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
     return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__subcontractRehomeRace.user}" };
   }
-  if (specifier.startsWith("@/")) {
-    const path = root + "web/" + specifier.slice(2);
-    for (const suffix of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
-      if (existsSync(new URL(path + suffix))) return nextResolve(path + suffix, context);
-    }
-    return nextResolve(path, context);
-  }
   return nextResolve(specifier, context);
 }, load(url, context, nextLoad) {
   if (url === "mock:subcontract-rehome-authz") return { format: "module", shortCircuit: true, source: `

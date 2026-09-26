@@ -30,7 +30,6 @@ registerHooks({
     // the order handlers '../../../lib/authz'. web/lib holds no other
     // authz module, so both spellings name the same gate.
     if (specifier === './authz' || specifier === '../../../lib/authz') return authzStub
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

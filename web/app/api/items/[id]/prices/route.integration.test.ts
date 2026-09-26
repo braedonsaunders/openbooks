@@ -11,9 +11,6 @@ const routeState: { authz: { user: { orgId: string; id: string }; allowedSubsidi
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/authz') return { shortCircuit: true, url: 'mock:item-price-authz' }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
-    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

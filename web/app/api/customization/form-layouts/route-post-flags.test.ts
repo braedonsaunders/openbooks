@@ -34,9 +34,6 @@ const mockCustomization = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     const parent = context.parentURL ?? "";
     if (specifier === "@openbooks/engine/src/platform/db.ts" && parent.includes("customization/form-layouts/route")) {
       return {

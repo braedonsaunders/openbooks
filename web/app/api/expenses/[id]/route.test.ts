@@ -106,7 +106,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:server-only', `export {}`],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -114,16 +113,12 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/records/transaction-audit.ts', 'mock:transaction-audit'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/expenses', 'mock:expenses-loader'],
-  ['server-only', 'mock:server-only'],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as documents.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
-    if (specifier.startsWith('@/lib/') && context.parentURL) {
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
-    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

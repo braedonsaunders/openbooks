@@ -25,7 +25,6 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId, roles: s.roles, isSuperAdmin: false }, permissions: new Set(s.permissions), allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     // Pin the engine to THIS checkout: the environment shares node_modules
     // with the main checkout, so an unmapped @openbooks/engine import would
     // silently exercise main's engine instead of the branch under test.

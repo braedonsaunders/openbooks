@@ -104,9 +104,6 @@ const hooks = registerHooks({
       dbRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:setup-wizard-db', shortCircuit: true }
     }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
-    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

@@ -24,7 +24,6 @@ const hooks = registerHooks({
           ),
       };
     }
-    if (specifier.startsWith("@/")) return next(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     return next(specifier, context);
   },
 });

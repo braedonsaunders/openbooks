@@ -36,7 +36,6 @@ registerHooks({
           return ids.every((id) => id !== null && id !== undefined && id !== '' && scope.has(id))
         }
       `);
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

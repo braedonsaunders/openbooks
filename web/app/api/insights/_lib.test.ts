@@ -20,9 +20,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/authz') return { url: 'mock:insights-test-authz', shortCircuit: true }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      return nextResolve(new URL(root + 'web/' + specifier.slice(2) + '.ts').href, context)
-    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

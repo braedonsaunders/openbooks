@@ -35,9 +35,6 @@ const hooks = registerHooks({
     // Forward Next.js-style aliases to the real modules they point at. The
     // route lives one level deeper than the labor-rate-cards exemplar, so
     // the alias climbs five directories to the web root.
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     if (
       specifier === "../../../../../lib/feature-gates" &&
       context.parentURL?.includes("/api/items/")

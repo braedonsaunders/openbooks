@@ -23,7 +23,6 @@ registerHooks({
         "export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:globalThis.__inventoryApiAudit.allowedSubsidiaryIds}}",
       ) };
     }
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

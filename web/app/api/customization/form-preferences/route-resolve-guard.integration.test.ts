@@ -37,7 +37,6 @@ const hooks = registerHooks({
     if (specifier === "../../../../lib/customization/gates") {
       return virtual(`export async function refuseDisabledRecordType() { return null }`);
     }
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

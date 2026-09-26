@@ -33,12 +33,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      // The collection and member routes sit at different depths; resolve
-      // against the web root rather than a fixed number of ../ segments.
-      const webRoot = context.parentURL.slice(0, context.parentURL.indexOf("/web/") + 5);
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context);
-    }
     if (specifier.endsWith("lib/authz") && context.parentURL?.includes("customization/form-layouts")) {
       return { url: "mock:form-layout-audit-authz", shortCircuit: true };
     }

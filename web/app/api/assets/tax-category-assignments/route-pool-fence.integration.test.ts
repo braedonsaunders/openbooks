@@ -18,7 +18,6 @@ registerHooks({
       }
     `);
     if (specifier.endsWith("/lib/authz")) return virtual("export function guardUnrestrictedScope() { return null }");
-    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
   },
 });

@@ -208,13 +208,6 @@ const hooks = registerHooks({
     if (mocked) return { url: mocked, shortCircuit: true }
     // The web tsconfig maps '@/…' to the web root; the plain runner needs the
     // mapping spelled out.
-    if (specifier.startsWith('@/')) {
-      return {
-        url: new URL(`${specifier.slice(2)}.ts`, new URL('../../../../', import.meta.url)).href,
-        shortCircuit: true,
-        format: 'module',
-      }
-    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

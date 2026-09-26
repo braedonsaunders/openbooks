@@ -18,7 +18,6 @@ registerHooks({
               'export async function getLocale(){return "en";}',
           ),
       }
-    if (s.startsWith('@/')) return next(root + 'web/' + s.slice(2) + '.ts', c)
     return next(s, c)
   },
 })

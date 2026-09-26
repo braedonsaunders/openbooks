@@ -15,9 +15,6 @@ const routeGate = { authz: null as null | { user: { id: string; orgId: string };
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     if (specifier === "../../../lib/feature-gates" && context.parentURL?.includes("/api/_order/handlers")) {
       return { url: "mock:order-line-warehouse-feature-gates", shortCircuit: true };
     }

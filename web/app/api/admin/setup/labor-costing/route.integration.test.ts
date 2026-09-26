@@ -117,9 +117,6 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as platform.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/labor-costing")) {
       authzRealUrl = nextResolve(specifier, context).url;
       return { url: "mock:authz", shortCircuit: true };

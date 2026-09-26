@@ -36,13 +36,6 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // tsx does not apply web/tsconfig.json paths when run from the repo
     // root; map @/ to web/ explicitly (extension probing included).
-    if (specifier.startsWith("@/")) {
-      const base = join(process.cwd(), "web", specifier.slice(2));
-      const hit = [".ts", ".tsx", "/index.ts"]
-        .map((suffix) => base + suffix)
-        .find((candidate) => existsSync(candidate));
-      if (hit) return { shortCircuit: true, url: pathToFileURL(hit).href };
-    }
     if (specifier === "../../../lib/authz" && context.parentURL?.includes("pdf-templates")) {
       return { url: "mock:authz-post-duplicate", shortCircuit: true };
     }

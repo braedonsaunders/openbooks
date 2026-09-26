@@ -30,9 +30,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     const entityRoute = context.parentURL?.includes("%5Bentity%5D")
       ?? context.parentURL?.includes("[entity]");
     if (specifier === "../../../../../lib/authz" && entityRoute) {

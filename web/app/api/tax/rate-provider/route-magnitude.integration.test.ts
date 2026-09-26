@@ -31,7 +31,6 @@ registerHooks({
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 });
       }
     `)
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

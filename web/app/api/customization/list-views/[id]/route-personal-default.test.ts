@@ -49,12 +49,6 @@ const mockCustomization = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@/')) {
-      return nextResolve(
-        new URL(`../../../../../../web/${specifier.slice(2)}.ts`, import.meta.url).href,
-        context,
-      )
-    }
     const parent = context.parentURL ?? ''
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export const db = { execute: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-patch-test")].db.execute(...a), transaction: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-patch-test")].db.transaction(...a) }' }

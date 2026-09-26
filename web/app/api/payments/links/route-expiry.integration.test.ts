@@ -32,9 +32,6 @@ const hooks = registerHooks({
     if (specifier.startsWith("@openbooks/engine/")) {
       return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
     }
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("payments/links")) {
       return { url: "mock:payment-links-expiry-authz", shortCircuit: true };
     }
