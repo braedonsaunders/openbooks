@@ -51,7 +51,7 @@ function assertPackRegistersEnabledDetectors(agentKey: (typeof CONTINUOUS_CLOSE_
   );
 }
 
-test("the four wave-2 packs register their detectors and default on", () => {
+test("the four detector packs register their detectors and default on", () => {
   for (const agentKey of ["collections", "payables", "reconciliation", "hygiene"] as const) {
     assertPackRegistersEnabledDetectors(agentKey);
   }
@@ -110,7 +110,7 @@ test("new-pack detector tuning validates like the original packs", () => {
   );
 });
 
-test("wave-2 packs stay quiet without touching the DB when nothing is enabled", async () => {
+test("detector packs stay quiet without touching the DB when nothing is enabled", async () => {
   // Every pack short-circuits before its loaders when none of its detectors
   // is enabled, so a fully-disabled agent costs no queries.
   for (const agentKey of ["collections", "payables", "reconciliation", "hygiene"] as const) {

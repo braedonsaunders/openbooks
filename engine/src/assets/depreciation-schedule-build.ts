@@ -1,4 +1,4 @@
-/** Schedule persistence: plan loading, carrying value, build paths. Split from assets/depreciation.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Schedule persistence: plan loading, carrying value, build paths. Split from assets/depreciation.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";

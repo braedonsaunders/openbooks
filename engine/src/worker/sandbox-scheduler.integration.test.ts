@@ -85,7 +85,7 @@ test("a stale unproven refreshing claim returns to ready for re-queue", { skip: 
       status: "ready",
       last_error: "refresh worker never started: stale scheduler claim released for re-queue",
     });
-    // I5-platform-65: a proof token without a live worker is an expired
+    // A proof token without a live worker is an expired
     // lease, not live work — the reaper fails it by name instead of leaving
     // it refreshing forever. Only the fresh claim is preserved.
     assert.deepEqual(await sandboxState(proven.sandboxId), {

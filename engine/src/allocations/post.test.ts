@@ -140,7 +140,7 @@ function weights(keys: string[], values: string[]): WeightedTarget[] {
   return keys.map((key, i) => ({ key, weight: values[i]! }));
 }
 
-// Exactness and percent validation belong to A1's apportion.ts (tested
+// Exactness and percent validation belong to apportion.ts (tested
 // there); post-mode pins impacts, balance, books, and wiring.
 // ---------------------------------------------------------------------------
 // assertContributorBalance

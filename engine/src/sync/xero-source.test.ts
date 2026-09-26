@@ -7,12 +7,12 @@ import type { XeroClient } from "../connectors/xero.ts";
 const ctx = { baseCurrency: "NZD" } as NativeContext;
 
 /**
- * Settlement-link currency fixtures (wave 3): Xero payment and allocation
+ * Settlement-link currency fixtures: Xero payment and allocation
  * amounts are denominated in the INVOICE's currency (they must not exceed
  * the invoice outstanding), so every link states the invoice's CurrencyCode
  * with the producer's own rate — never a home-converted guess.
  *
- * Settlement-link sign rule (fleet 4, from the vendor's published Accounting
+ * Settlement-link sign rule (from the vendor's published Accounting
  * API contract, XeroAPI/xero-openapi `xero_accounting.yaml`): the shared
  * `components/schemas/Allocation` (`Amount`: "the amount being applied to the
  * invoice") serves CreditNote, Prepayment AND Overpayment allocations, and

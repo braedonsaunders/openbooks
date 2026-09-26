@@ -44,8 +44,8 @@ import {
 import { loadMaskingPolicies, seedDefaultMaskingPolicies } from "../../sandbox/masking.ts";
 
 /**
- * HR-14 DB coverage (integration partition — run by the integrator at
- * gate; skips without OPENBOOKS_DB_URL): migration 0225 bootstrap plus
+ * HR-14 DB coverage (integration partition — run at the integration gate;
+ * skips without OPENBOOKS_DB_URL): migration 0225 bootstrap plus
  * RLS, the ledger (record/verify/renew-as-new-row/revoke with every
  * refusal red-proofed through the real code path), derived-status
  * projection at read, append-only events, block-vs-warn dispatch gating

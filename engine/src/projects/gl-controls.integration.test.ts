@@ -281,7 +281,7 @@ test(
 );
 
 /**
- * One period gate for project GL (fleet 8, P7): postProjectGlEntry and its
+ * One period gate for project GL: postProjectGlEntry and its
  * reversal route through assertPeriodModulesOpen instead of raw
  * period_module_is_closed SQL. Policy is preserved — project journals and
  * their reversals are new local activity, not historical replay, so a

@@ -1,4 +1,4 @@
-/** Foundation: error, scope locks, money/date helpers, shared row shapes, guards. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Foundation: error, scope locks, money/date helpers, shared row shapes, guards. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { type db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";

@@ -1,5 +1,5 @@
 /**
- * NetSuite foreign-currency regression coverage (fleet r02).
+ * NetSuite foreign-currency regression coverage.
  *
  * The NetSuite adapter used to drop the transaction currency/rate, so a
  * foreign-currency source document posted at face value as base currency and

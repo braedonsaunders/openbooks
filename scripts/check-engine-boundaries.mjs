@@ -15,8 +15,8 @@
  *      tolerated (see engine/tsconfig.json).
  *   4. Every declared edge is used. A declaration nothing relies on is either
  *      stale or a permission granted in advance; both are removed.
- *   5. The module graph is acyclic. ARCH-MODULE-CYCLE C15 broke the last
- *      pinned cycle and retired the `cycles` pin: any cycle is refused, and
+ *   5. The module graph is acyclic. The last pinned cycle was broken and
+ *      the `cycles` pin retired: any cycle is refused, and
  *      a non-empty pin is refused. Breaking a would-be cycle is refactoring
  *      work, not manifest work.
  *

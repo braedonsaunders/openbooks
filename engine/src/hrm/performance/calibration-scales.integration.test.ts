@@ -262,7 +262,7 @@ test("a template with no scale labels offers no potential options", async () => 
       periodStartOn: "2026-01-01",
       periodEndOn: "2026-12-31",
     });
-    // I3-people-114 requires a live cycle for calibration sessions: the
+    // Calibration sessions require a live cycle: the
     // label-less probe runs on an opened cycle, as the editor would.
     await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const session = await createCalibrationSession({

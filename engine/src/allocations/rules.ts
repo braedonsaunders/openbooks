@@ -35,7 +35,7 @@ import {
 } from "../organization/allocation-scope.ts";
 
 /**
- * Rule/version service (shard A1): versioned, effective-dated allocation
+ * Rule/version service: versioned, effective-dated allocation
  * rules. Drafts are freely editable; publish validates, hashes and freezes;
  * retire ends a version. Every mutation runs in withOrgTransaction (RLS) and
  * writes audit_log evidence with before/after and a reason.

@@ -204,7 +204,7 @@ export interface ItConguaglioInput {
   /** Domicile regione (ISTAT code): domicile selects, never the workplace. */
   regionCode: string;
   /**
-   * Days of employment in the tax year (I6-payroll-19): carried into the
+   * Days of employment in the tax year: carried into the
    * annual recomputation so detrazioni rapportano al periodo di lavoro.
    * Absent keeps the full-year assumption the v1 priors always carried.
    */

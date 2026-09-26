@@ -1,4 +1,4 @@
-/** Banking core: errors, statement types, context, scope SQL, actor helpers, and the two types shared parsers and import both point at. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Banking core: errors, statement types, context, scope SQL, actor helpers, and the two types shared parsers and import both point at. Split from banking.ts (pure moves only). */
 import { sql } from "drizzle-orm"
 
 // ---------------------------------------------------------------------------

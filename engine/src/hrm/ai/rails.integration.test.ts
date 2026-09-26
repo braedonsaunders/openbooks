@@ -484,7 +484,7 @@ test("flag reads and transitions see only the flag employment's employer", { ski
         returning id::text as id`)).rows;
       return rows[0]!.id;
     };
-    // I3-people-63 splits flag visibility by family and capability: the
+    // Flag visibility splits by family and capability: the
     // scoped time/HR readers below hold time authority only, so the
     // in-scope probe flag must be a time-family kind (retro_spike is
     // payroll-family and correctly invisible to them now).

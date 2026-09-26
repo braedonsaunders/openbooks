@@ -1260,7 +1260,7 @@ export const payrollEmployerLevyOpening = pgTable(
 );
 
 /**
- * IT addizionali assessed-saldo carry-in (0393, I6-payroll-50): the prior-year
+ * IT addizionali assessed-saldo carry-in (0393): the prior-year
  * regional/municipal assessment per (org, employee, tax year) that the year's
  * saldo installments withhold. Row presence IS the declaration — an explicit
  * zero records a worker with no prior-year Italian employment — so this lives

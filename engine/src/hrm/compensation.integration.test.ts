@@ -52,13 +52,13 @@ import {
 import { installEngineSeams } from "../composition/install.ts";
 
 // Gate releases and post_document run through the installed engine
-// seams (C13/C14); without this the gates strand on a not-registered
+// seams; without this the gates strand on a not-registered
 // refusal instead of releasing.
 installEngineSeams();
 
 /**
- * HR-12 DB coverage (integration partition — run by the integrator at
- * gate; skips without OPENBOOKS_DB_URL): migrations 0221/0222 tables
+ * HR-12 DB coverage (integration partition — run at the integration gate;
+ * skips without OPENBOOKS_DB_URL): migrations 0221/0222 tables
  * plus RLS, architecture and bands, the cycle open → propose → approve
  * (Flows) → push (one wage row, idempotent) → statement path, headcount
  * plan approve → requisition → hire-fill hook, gap snapshots with a

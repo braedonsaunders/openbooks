@@ -32,7 +32,7 @@ function assertContiguous(rates: readonly EffectiveTaxRate[], code: string): voi
   }
 }
 
-test("fifth-wave maintained country packs are directly provisionable", () => {
+test("maintained country packs in this group are directly provisionable", () => {
   const countries = new Map(supportedTaxCountries().map((entry) => [entry.country, entry]));
   for (const country of maintainedCountries) {
     const definition = pack(country);
@@ -47,7 +47,7 @@ test("fifth-wave maintained country packs are directly provisionable", () => {
   }
 });
 
-test("fifth-wave code sets declare exactly the parent return with contiguous, sourced schedules", () => {
+test("code sets in this group declare exactly the parent return with contiguous, sourced schedules", () => {
   for (const country of maintainedCountries) {
     const definition = pack(country);
     const parent = parentReturn(country);
@@ -65,7 +65,7 @@ test("fifth-wave code sets declare exactly the parent return with contiguous, so
   }
 });
 
-test("fifth-wave code-set sizes match territorial reality, including the PT and DK exceptions", () => {
+test("code-set sizes in this group match territorial reality, including the PT and DK exceptions", () => {
   // Portugal files one national return for three rate territories: the
   // Declaracao Periodica fixes the sede territory in Quadro 03 and
   // consolidates other-territory operations via ANEXO R, so the nine codes
@@ -84,7 +84,7 @@ test("fifth-wave code-set sizes match territorial reality, including the PT and 
   assert.equal(packTaxCodesForReturn(dk, parentReturn("DK")).length, 1, "DK: a single standard code is the whole set");
 });
 
-test("fifth-wave primary code is a standard band, never a reduced one", () => {
+test("primary code in this group is a standard band, never a reduced one", () => {
   for (const country of maintainedCountries) {
     const definition = pack(country);
     const parent = parentReturn(country);
@@ -105,7 +105,7 @@ test("fifth-wave primary code is a standard band, never a reduced one", () => {
   assert.equal(primaryPackTaxCode(pack("PT"), parentReturn("PT"))?.code, "PT-VAT-STD", "PT: Continente 23 is the headline standard");
 });
 
-test("fifth-wave evidence is https with an asOf on every source", () => {
+test("evidence in this group is https with an asOf on every source", () => {
   for (const country of maintainedCountries) {
     const definition = pack(country);
     const sourceIds = new Set(definition.sources.map((source) => source.id));
@@ -117,7 +117,7 @@ test("fifth-wave evidence is https with an asOf on every source", () => {
   }
 });
 
-test("fifth-wave evidence remains restricted to official government and tax-authority hosts", () => {
+test("evidence in this group remains restricted to official government and tax-authority hosts", () => {
   const officialHosts = new Set([
     "www.portaldasfinancas.gov.pt",
     "info.portaldasfinancas.gov.pt",

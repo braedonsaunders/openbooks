@@ -7,7 +7,7 @@ import { runRevaluation } from "./fx-revaluation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
- * One period gate for FX revaluation (fleet 8, P7): the adjustment-leg and
+ * One period gate for FX revaluation: the adjustment-leg and
  * reversal-leg checks route through assertPeriodModulesOpen instead of raw
  * period_module_is_closed SQL. Policy is preserved — revaluation mints new
  * local journals, not historical replay, so a source-owned imported lock

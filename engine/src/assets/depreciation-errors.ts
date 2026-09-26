@@ -1,4 +1,4 @@
-/** Depreciation refusal error and postable-status gate. Split from assets/depreciation.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Depreciation refusal error and postable-status gate. Split from assets/depreciation.ts (pure moves only). */
 
 /**
  * An operator-facing depreciation refusal: a missing or invalid asset/book/

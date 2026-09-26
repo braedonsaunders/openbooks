@@ -1,4 +1,4 @@
-/** Read models, public row types, management workspace. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Read models, public row types, management workspace. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";

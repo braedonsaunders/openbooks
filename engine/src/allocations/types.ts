@@ -1,8 +1,8 @@
 /**
  * Allocation kernel — shared type contract.
  *
- * FROZEN by the coordinator for the build fleet: extend only additively
- * (new optional fields, new exported types). Every module under
+ * Frozen shared contract: extend only additively (new optional fields,
+ * new exported types). Every module under
  * engine/src/allocations/ and every web surface codes against these shapes.
  * Design: docs/design/allocation-kernel.md. Schema: schema/src/allocations.ts.
  *

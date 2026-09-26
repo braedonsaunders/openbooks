@@ -1,4 +1,4 @@
-/** Organization, currency, subsidiary, role, and admin seeding. Split from scripts/bootstrap.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Organization, currency, subsidiary, role, and admin seeding. Split from scripts/bootstrap.ts (pure moves only). */
 import { randomBytes, scryptSync } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db, env } from "../../engine/src/platform/db.ts"

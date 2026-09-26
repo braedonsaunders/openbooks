@@ -345,7 +345,7 @@ export async function calculateStub(
   const payVacationInCash = emp.vacation_method === "pay_each_period" || terminationRun;
   await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines });
 
-  // Work-triggered alternate-day grants (I6-payroll-262): a statutory day off
+  // Work-triggered alternate-day grants: a statutory day off
   // banked as hours, never cash on this stub. Under the same gate as the
   // holiday-pay phase, and persisted with every other movement below (which
   // skips simulation), so a simulated run grants nothing. Plan caps do not

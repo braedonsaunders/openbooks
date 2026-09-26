@@ -1,4 +1,4 @@
-/** CSV statement parsing. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** CSV statement parsing. Split from banking.ts (pure moves only). */
 import { BankingError, type ParsedStatementLine, type StatementSourceContent, type CsvMapping, type SkippedStatementRow } from "../banking-core"
 import { decodeStatementSourceText } from "../statement-encoding"
 import { assertRealDate, normalizeAmount } from "./shared"

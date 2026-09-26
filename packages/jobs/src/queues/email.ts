@@ -119,7 +119,7 @@ export async function enqueueEmail(data: EnqueueEmailData, options: EnqueueEmail
 /**
  * The delivery identity the worker claims its email_log row through. Every
  * job carries it in `data.deliveryKey`, derived at enqueue from the caller's
- * durable idempotency key — never from any queue-assigned id (E11).
+ * durable idempotency key — never from any queue-assigned id.
  *
  * There is no legacy fallback: deriving from the scope queueJobId realigns
  * new mail with old sent-log rows after a Redis reset (BullMQ

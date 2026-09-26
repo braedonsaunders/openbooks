@@ -1,4 +1,4 @@
-/** Database roles, RLS, and test ownership. Split from scripts/bootstrap.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Database roles, RLS, and test ownership. Split from scripts/bootstrap.ts (pure moves only). */
 import { migrationsDir, quoted, sha256 } from "../bootstrap-paths"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"

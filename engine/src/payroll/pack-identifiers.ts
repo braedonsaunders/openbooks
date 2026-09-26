@@ -1,4 +1,4 @@
-/** Pack employee-identifier validation. Split from packs.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Pack employee-identifier validation. Split from packs.ts (pure moves only). */
 import { type EmployeeIdentifierVerdict } from "./pack-types"
 import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
 

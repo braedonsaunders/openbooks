@@ -3,7 +3,7 @@
  * recognition journals (mirrors depreciation). Book resolution, subsidiary
  * default, the period gate, dimension row locks and per-subsidiary balance,
  * then postEntry — plus the row-locked reversal primitive. Moved verbatim
- * from projects/recognition.ts (ARCH-MODULE-CYCLE C05); the project labor
+ * from projects/recognition.ts; the project labor
  * posting that calls it stays in projects.
  */
 import { and, eq, sql } from "drizzle-orm";

@@ -5,7 +5,7 @@ import { bcFxRateFor, dividePositiveDecimals, DynamicsSource } from "./dynamics-
 import type { DynamicsClient } from "../connectors/dynamics.ts";
 
 /**
- * Settlement-link currency fixtures (fleet 4, from the vendor's published
+ * Settlement-link currency fixtures (from the vendor's published
  * Business Central v2.0 API reference on Microsoft Learn):
  * - `salesInvoice`, §Properties: `remainingAmount` "The amount including VAT"
  *   sits among the document totals, with `currencyCode` "The default currency

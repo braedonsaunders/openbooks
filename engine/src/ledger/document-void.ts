@@ -619,7 +619,7 @@ async function assertRetainageDrawVoidable(
 }
 
 /**
- * A released payroll bank file locks its pay run against voiding (I6-payroll-299).
+ * A released payroll bank file locks its pay run against voiding.
  * Runs in the REQUEST path before the reservation, so the operator sees the
  * file number and its remedy instead of the generic draft/status refusal the
  * zero-row reservation falls back to — and again at COMPLETION, which stays

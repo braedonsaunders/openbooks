@@ -1,4 +1,4 @@
-/** Standalone-selling-price apportionment and fair-value flags. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Standalone-selling-price apportionment and fair-value flags. Split from revenue/recognition.ts (pure moves only). */
 import { fromUnits, toUnits } from "../money/money.ts";
 import { canonicalDecimal, fixedDecimal } from "../money/exact-decimal.ts";
 import { RevenueRecognitionError } from "./recognition-transaction-price.ts";

@@ -5,7 +5,7 @@ import { ErpNextSource, erpNextReconcilableAccountType } from "./erpnext-source.
 import type { ErpNextClient } from "../connectors/erpnext.ts";
 
 /**
- * Settlement-link currency fixtures (fleet 4, from the vendor's published
+ * Settlement-link currency fixtures (from the vendor's published
  * contract): Payment Entry `references[].allocated_amount` is denominated in
  * the invoice's account currency (ERPNext docs: "Allocate the invoice in its
  * account currency"), so every invoice-backed link states that currency. The

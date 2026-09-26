@@ -58,7 +58,7 @@ export async function processScriptJobData(
 }
 
 /**
- * Bulk runs execute under the caller's run-key claim (E02). A redelivered
+ * Bulk runs execute under the caller's run-key claim. A redelivered
  * duplicate whose claim already completed reconciles onto the recorded
  * outcome without executing the script again; the election lets exactly one
  * live delivery own the execution, and that execution reuses the claim's

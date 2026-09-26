@@ -230,8 +230,8 @@ test("reversed entry accepts no further transition", { skip: !DB }, async () =>
 /**
  * Source-contract pin: every je_guard() branch is marked by name so no
  * future rewrite can silently drop one. The draft-post block interior
- * belongs to f2/0168 (source-module recheck) and is pinned only by its
- * marker and its period fence, not by contents this shard does not own.
+ * belongs to the source-module recheck and is pinned only by its marker
+ * and its period fence, not by contents owned elsewhere.
  *
  * Append-only (0380) deliberately removed the same-status-amend branch, so
  * it is pinned by ABSENCE below rather than by name: a reintroduced amend

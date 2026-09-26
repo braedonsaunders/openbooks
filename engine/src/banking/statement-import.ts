@@ -1,4 +1,4 @@
-/** Statement import with dedupe. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Statement import with dedupe. Split from banking.ts (pure moves only). */
 import { BankingError, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow } from "./banking-core"
 import { canonicalCsvMapping } from "./statement-parsers/csv"
 import { loadReconcilableAccount, lockReconciliationAccount } from "./reconcilable-account"

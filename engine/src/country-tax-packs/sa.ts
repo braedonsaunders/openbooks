@@ -49,8 +49,8 @@ const SA_VAT_RETURN: TaxReturnPack = {
  * contemporaneous announcement URL 404s and gazt.gov.sa (the authority's
  * former name) is dead. The date is from the Ministry of Finance decision and
  * is not in dispute, but it is NOT attested by the source id on that rate row.
- * Re-source it if a ZATCA or Umm al-Qura page surfaces. The wave5 re-source
- * hunt (2026-09-18) checked the ZATCA VAT-law page (notes the Shawwal-1441
+ * Re-source it if a ZATCA or Umm al-Qura page surfaces. A re-source hunt
+ * (2026-09-18) checked the ZATCA VAT-law page (notes the Shawwal-1441
  * amendment, no date), the Implementing-Regulation amendments PDF in English
  * and the VAT law in Arabic (15% applicability, no changeover sentence), the
  * guidelines index, and filename guesses for the GAZT transitional guide —

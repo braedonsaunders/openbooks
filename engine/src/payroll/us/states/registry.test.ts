@@ -71,7 +71,7 @@ test("supported states are the implemented ones PLUS the genuinely no-tax ones",
 /* Refusals                                                               */
 /* --------------------------------------------------------------------- */
 
-test("the fleet is complete: no wage-tax jurisdiction lacks an engine", () => {
+test("coverage is complete: no wage-tax jurisdiction lacks an engine", () => {
   // The District of Columbia was the last one: it levies a wage income tax
   // and had no engine, so it carried the refusal below. Now it computes
   // (see conformance-dc.test.ts), and every other wage-tax jurisdiction in

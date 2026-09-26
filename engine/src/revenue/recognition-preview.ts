@@ -1,4 +1,4 @@
-/** Read-only recognition preview with confirm fingerprint. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Read-only recognition preview with confirm fingerprint. Split from revenue/recognition.ts (pure moves only). */
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { sql } from "drizzle-orm";

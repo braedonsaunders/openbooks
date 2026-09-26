@@ -138,8 +138,7 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
-    // ARCH-FILE-SPLIT: was scripts/bootstrap.ts; the five sites moved with
-    // the code that owns them.
+    // Was scripts/bootstrap.ts; the five sites moved with the code that owns them.
     file: "scripts/bootstrap/governed-views.ts",
     sites: [
       { stance: "descriptive", note: "column comments for the schema documentation check" },

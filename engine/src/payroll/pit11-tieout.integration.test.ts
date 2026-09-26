@@ -306,7 +306,7 @@ test(
         () => pit11Population(org.orgId, 2026),
         /no committed PL pay stubs for tax year 2026/,
       );
-      // 2024 and 2025 are TRANSCRIBED now -- the PL prior-year shard landed
+      // 2024 and 2025 are TRANSCRIBED now -- the PL prior-year transcription landed
       // both -- so they no longer refuse for a missing edition. Use years the
       // pack genuinely does not cover.
       await assert.rejects(

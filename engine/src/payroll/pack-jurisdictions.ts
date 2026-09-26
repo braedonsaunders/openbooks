@@ -1,4 +1,4 @@
-/** Declared employment jurisdictions. Split from packs.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Declared employment jurisdictions. Split from packs.ts (pure moves only). */
 import { type PayrollJurisdiction } from "./pack-types"
 import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
 import { PayrollPackError } from "./payroll-error.ts"

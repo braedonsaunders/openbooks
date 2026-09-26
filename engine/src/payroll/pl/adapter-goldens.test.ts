@@ -148,7 +148,7 @@ test("adapter refuses a December bonus instead of annualising it into YTD", asyn
   } as unknown as PayrollStatutoryComputeContext;
   // Prior months are priced as (month − 1) × this month — a bonus implies
   // every prior month paid it too, collapsing the ZUS room and pushing PIT
-  // to 32 % on fabricated YTD (I6-payroll-25).
+  // to 32 % on fabricated YTD.
   await assert.rejects(
     () => computePlStatutory(withBonus),
     /PL refuses a bonus\/uneven versement.*no pack channel carries YTD/,

@@ -45,8 +45,8 @@ import {
 } from "./construction/index.ts";
 
 /**
- * HR-13 DB coverage (integration partition — run by the integrator at
- * gate; skips without OPENBOOKS_DB_URL): migrations 0223/0224 bootstrap
+ * HR-13 DB coverage (integration partition — run at the integration gate;
+ * skips without OPENBOOKS_DB_URL): migrations 0223/0224 bootstrap
  * plus RLS, the resolver (scope precedence, reciprocity, as-of,
  * missing → refusal + finding), per-diem brackets and the weekly rule,
  * ratio-breach journey pricing, the certified payload against a

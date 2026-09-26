@@ -1,4 +1,4 @@
-/** Rent billing, straight-line levelling, late fees, scheduler run. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Rent billing, straight-line levelling, late fees, scheduler run. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";

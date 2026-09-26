@@ -245,7 +245,7 @@ test("eligible French payroll refuses missing contractual hours by name", async 
 });
 
 test("an eligible filing account prices the reduced 3.45% family rate through the adapter", async () => {
-  // I6-payroll-44 addendum: the adapter never passed the resolved fr_allocfam
+  // The adapter never passed the resolved fr_allocfam
   // eligibility, so an eligible employer over-accrued at 5.25%. 2 000 € × 3.45% = 69.00.
   let query = 0;
   const ctx = {
@@ -264,7 +264,7 @@ test("an eligible filing account prices the reduced 3.45% family rate through th
 });
 
 test("a declared short contract without a transmitted rate refuses by name", async () => {
-  // I6-payroll-14: the €748/€766 contrats-courts abatement is transcribed but
+  // The €748/€766 contrats-courts abatement is transcribed but
   // never applied, so the default grid would over-withhold. A minimal context
   // reaches the short-contract branch with only the pay date and answers.
   const ctx = {

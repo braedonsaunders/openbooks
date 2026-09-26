@@ -1,4 +1,4 @@
-/** Read-only depreciation preview. Split from assets/depreciation.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Read-only depreciation preview. Split from assets/depreciation.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";

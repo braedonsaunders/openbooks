@@ -37,7 +37,7 @@ test("row grammar refuses everything that is not one of its rows", () => {
   assert.equal(parseLohnsteuerbescheinigungRowId(` ${EMPLOYEE}`), null);
 });
 
-test("Bescheinigungszeitraum comes from the relationship, never pay dates (I6-payroll-268)", () => {
+test("Bescheinigungszeitraum comes from the relationship, never pay dates", () => {
   // Employed all year: full year even when pay starts later.
   assert.deepEqual(bescheinigungszeitraum("2025-06-01", null, 2026, "Maria Muster"), {
     von: "2026-01-01",

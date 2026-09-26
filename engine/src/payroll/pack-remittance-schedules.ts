@@ -1,4 +1,4 @@
-/** Statutory remittance declarations and schedules. Split from packs.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Statutory remittance declarations and schedules. Split from packs.ts (pure moves only). */
 import { type PayrollCountryPack, type PayrollRemittanceFrequencyBand, type PayrollRemittanceSchedule, type StatutoryRemittanceDeclaration } from "./pack-types"
 import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
 import { declaredJurisdictions, payrollJurisdictionDeclared } from "./pack-jurisdictions"

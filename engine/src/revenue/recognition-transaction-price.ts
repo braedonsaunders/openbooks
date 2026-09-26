@@ -1,4 +1,4 @@
-/** Transaction price: errors, feature flag, variable consideration, financing, pricing. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Transaction price: errors, feature flag, variable consideration, financing, pricing. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";

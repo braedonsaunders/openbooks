@@ -1,4 +1,4 @@
-/** Tracked migration apply, preflight gate, upgrade check, and the payment-link seal. Split from scripts/bootstrap.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Tracked migration apply, preflight gate, upgrade check, and the payment-link seal. Split from scripts/bootstrap.ts (pure moves only). */
 import { repoRoot, migrationsDir, sha256 } from "../bootstrap-paths"
 import { applyRowLevelSecurity } from "./database-roles"
 import { ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME, executeOrderQuantityProgressMigration } from "./governed-views"

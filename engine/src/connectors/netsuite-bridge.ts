@@ -370,7 +370,7 @@ export class NetSuiteBridgeClient {
               cleanupSafe = false;
               throw error;
             }
-            // I5-platform-45/-47: the listing is per-job, but the writer is
+            // The listing is per-job, but the writer is
             // the task — break only once the task itself is terminal, so a
             // completed listing with a still-writing task is not cleaned up.
             if (state.status !== "running") {

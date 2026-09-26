@@ -1,4 +1,4 @@
-/** The country-pack registry and its derived lookups. Split from packs.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** The country-pack registry and its derived lookups. Split from packs.ts (pure moves only). */
 import { type PayrollStatutoryReportingCode, type PayrollStatutoryComponent, type PayrollCountry, type PayrollCountryPack } from "./pack-types"
 import { CA_PAYROLL_PACK } from "./canada/pack.ts"
 import { US_PAYROLL_PACK } from "./us/pack.ts"

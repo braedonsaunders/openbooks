@@ -23,7 +23,7 @@ function assertContiguous(rates: readonly EffectiveTaxRate[]): void {
   }
 }
 
-test("third-wave maintained country packs are directly provisionable", () => {
+test("maintained country packs in this group are directly provisionable", () => {
   const countries = new Map(supportedTaxCountries().map((entry) => [entry.country, entry]));
   for (const country of maintainedCountries) {
     const definition = pack(country);
@@ -101,7 +101,7 @@ test("Japan preserves all combined standard-rate eras while leaving reduced-rate
   ]);
 });
 
-test("third-wave evidence remains restricted to official government and tax-authority hosts", () => {
+test("evidence in this group remains restricted to official government and tax-authority hosts", () => {
   const officialHosts = new Set([
     "cbic-gst.gov.in",
     "tutorial.gst.gov.in",

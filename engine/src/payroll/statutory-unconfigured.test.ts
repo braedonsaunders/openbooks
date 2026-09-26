@@ -165,7 +165,7 @@ test("QC HSF unconfigured refuses; ON refuses on its own EHT instead", () => {
     ),
     /Jean Tremblay: no Health services fund is configured for QC in 2026 — nothing is being accrued for it/,
   );
-  // ON's own levy is the EHT now (refuse per I6-payroll-235), so bare-ON names it.
+  // ON's own levy is the EHT now, so bare-ON names it.
   assert.throws(
     () => assertConfiguredStatutoryRates(
       resolution, { region: "ON", filingAccountId: null }, "Ontario Worker",
@@ -175,7 +175,7 @@ test("QC HSF unconfigured refuses; ON refuses on its own EHT instead", () => {
 });
 
 test("EHT in Ontario unconfigured refuses — unknown liability, not zero", () => {
-  // I6-payroll-235, RSO 1990 c E.11: the rate turns on the employer's own
+  // Per RSO 1990 c E.11, the rate turns on the employer's own
   // Ontario remuneration, which no pack can know — explicit zero excepted.
   const resolution = buildResolution({
     country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [], legacy: [],

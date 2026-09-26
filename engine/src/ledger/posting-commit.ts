@@ -220,7 +220,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         contributorKind: unionLines[i]?.contributorKind ?? null,
         contributorRef: unionLines[i]?.contributorRef ?? null,
       })),
-      // Allocation-kernel script contributions (A6): same entry, stamped so
+      // Allocation-kernel script contributions: same entry, stamped so
       // the GL impact view can lock standard lines and show these separately.
       // No lineage rows — lineage is not required for scripts.
       ...scriptLines.map((l, i) => ({
@@ -316,7 +316,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
 
     // -- allocation lineage + secondary-book entries (same transaction) ----
     // Kernel lines keep numbers 1..N with rule contributions following in
-    // rule order; script lines come last and write no lineage (A6).
+    // rule order; script lines come last and write no lineage.
     const kernelLineIds = insertedLines
       .slice(0, kernelLines.length)
       .map((r) => r.id);

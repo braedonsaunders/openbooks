@@ -1,8 +1,7 @@
 import type { FlowExecCtx } from "./types.ts";
 
 /**
- * Document effects port for flow posting and void completion
- * (ARCH-MODULE-CYCLE C14).
+ * Document effects port for flow posting and void completion.
  *
  * GL posting (postDocument, postPaymentWithApplications) and requested-void
  * completion live in ledger/payments — layers the flows orchestrator cannot

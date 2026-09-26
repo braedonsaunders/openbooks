@@ -2457,7 +2457,7 @@ export async function runSync(
     // the controller has to look. This is not a verification failure — the
     // financial gates above already passed, the cursor advances, and the next
     // run retries the failed rows — only the reported status changes.
-    // Raw SQL (not the drizzle model): fleet worktrees resolve
+    // Raw SQL (not the drizzle model): downstream checkouts resolve
     // @openbooks/schema from main until this commit is picked, and the
     // widened status union ships in this same commit.
     const entityFailures = Object.values(entityStats ?? {}).reduce(

@@ -1,4 +1,4 @@
-/** Reconcilable-account loading plus scope/lock helpers. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Reconcilable-account loading plus scope/lock helpers. Split from banking.ts (pure moves only). */
 import { BankingError } from "./banking-core"
 export type BankingSqlExecutor = SqlExecutor;
 import { assertRealDate } from "./statement-parsers/shared"

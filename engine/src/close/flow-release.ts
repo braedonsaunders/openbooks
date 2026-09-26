@@ -1,5 +1,5 @@
 /**
- * Engine-owned close-run approval release (ARCH-MODULE-CYCLE C13).
+ * Engine-owned close-run approval release.
  * Moved verbatim from flows/close-runs-adapter.ts releaseApproval; the
  * adapter now delegates through the registered releaseFlowApproval seam.
  * Runs inside decideGate's serialized org transaction.

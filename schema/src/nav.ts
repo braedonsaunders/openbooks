@@ -19,4 +19,4 @@ export const orgNavConfigs = pgTable(
   (t) => [uniqueIndex("org_nav_configs_org").on(t.orgId)],
 );
 
-// FKs (integrator): alter table org_nav_configs add foreign key (org_id) references orgs(id);
+// FKs (generated migration): alter table org_nav_configs add foreign key (org_id) references orgs(id);

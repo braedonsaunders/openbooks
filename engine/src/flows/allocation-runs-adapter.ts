@@ -8,7 +8,7 @@ import { releaseFlowApproval } from "./approval-release-hook.ts";
 export const ALLOCATION_RUN_SUBJECT_KIND = "allocation_run";
 
 /**
- * Allocation runs as a flow subject (fleet A14).
+ * Allocation runs as a flow subject.
  *
  * The subject is an `allocation_runs` row for a period-mode rule whose
  * version names an `approval_flow_id`: posting waits in `pending_approval`

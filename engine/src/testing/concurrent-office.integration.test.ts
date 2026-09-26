@@ -94,7 +94,7 @@ test("two replicas racing one recurring occurrence post exactly one invoice", { 
     // Scratch orgs live entirely inside July 2026 (org.date is fixed at
     // 2026-07-15), so the occurrence sits on 2026-07-10: covered by the open
     // period, but a date no other org can share — the org-spanning tick scan
-    // only takes schedules due at the given asOf, so sibling fleet workers'
+    // only takes schedules due at the given asOf, so sibling workers'
     // 07-15 schedules are never touched by these children.
     const scheduleId = randomUUID();
     await db.execute(sql`

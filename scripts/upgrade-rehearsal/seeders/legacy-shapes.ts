@@ -278,7 +278,7 @@ async function seedLegacy(client: pg.Client, orgId: string, subsidiaryId: string
   )).rows[0]!.id;
   // The unbound fixture tests the missing EXTERNAL binding (0291 legacy: the
   // schedule predates the binding column), so its native account must be
-  // tick-eligible on the candidate: the I5-platform-23 claim refuses a tick
+  // tick-eligible on the candidate: the claim refuses a tick
   // whose native account is not a live reconcilable account before the run
   // ever reaches the identity gate, and schedule creation refuses such
   // accounts the same way. The binding stays NULL.

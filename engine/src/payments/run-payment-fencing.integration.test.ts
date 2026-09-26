@@ -77,7 +77,7 @@ test("editing a payment claimed by an open run refuses; a closed run releases it
         return true;
       },
     );
-    // I1-refix-130: deleting the same claimed draft refuses with the run's
+    // Deleting the same claimed draft refuses with the run's
     // identity and the release remedy instead of surfacing the deferred FK
     // as a late 500; the draft remains.
     const { deleteDocument } = await import("../ledger/document-delete.ts");

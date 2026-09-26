@@ -1,5 +1,5 @@
 /**
- * Concurrent-office child driver (wave 3). Each invocation runs ONE
+ * Concurrent-office child driver. Each invocation runs ONE
  * scheduler entry point in a FRESH operating-system process with its own
  * connection pool — the closest faithful simulation of two replicas
  * claiming the same work at once. The parent test seeds everything, forks

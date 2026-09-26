@@ -122,7 +122,7 @@ export const customRecords = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass — referential-integrity.sql):
+FOREIGN KEYS (added by the generated migration — referential-integrity.sql):
   custom_record_types.org_id                 → orgs.id
   custom_record_types.created_by/updated_by  → users.id
   custom_records.org_id                      → orgs.id

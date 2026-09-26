@@ -218,8 +218,8 @@ export const US_STATES = [
 ] as const;
 
 /**
- * States with no wage withholding on regular earnings — the coverage of the
- * US pack's first wave. Employees in any other state fail calculation with a
+ * States with no wage withholding on regular earnings — the initial US pack
+ * coverage. Employees in any other state fail calculation with a
  * clear per-employee error rather than producing silently-wrong stubs.
  */
 export const NO_WITHHOLDING_STATES: ReadonlySet<string> = new Set([

@@ -363,7 +363,7 @@ export function assertVacationPlanResolved(
 }
 
 /**
- * The statutory alternate-day-off bank (0413, I6-payroll-262): hours,
+ * The statutory alternate-day-off bank (0413): hours,
  * manual, accrue-only, bound to `stat_holiday_alternate`, seeded once per org
  * and adopted (not duplicated) when a tenant already carries the binding.
  *

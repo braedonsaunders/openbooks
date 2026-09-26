@@ -7,8 +7,8 @@ import {
   registerScriptJournalWriter,
 } from "./journal-writer.ts";
 
-// Unit tests for the installed script-journal writer seam (ARCH-MODULE-CYCLE
-// C12). The production runner and real QuickJS realm, no database: the
+// Unit tests for the installed script-journal writer seam. The production
+// runner and real QuickJS realm, no database: the
 // missing-writer refusal fires before any authorization I/O, and the fake
 // writer below stands in for the ledger without touching it.
 

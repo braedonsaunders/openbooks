@@ -338,7 +338,7 @@ async function createPaymentRunWithinTransaction(
 
   const runNumber = await nextNumber(opts.orgId, "payment_run", "RUN-");
 
-  // Authoritative profile lock (I1-refix-128): lock and recheck the profile
+  // Authoritative profile lock: lock and recheck the profile
   // and bank account in the creation transaction, and verify scope before
   // using them. This sits after numbering so a creation parked on the
   // sequence holds no profile row lock. Refuse when the selection fields

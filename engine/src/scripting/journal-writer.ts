@@ -5,7 +5,7 @@ import type {
 } from "../journal/script-journal-contract.ts";
 
 /**
- * Installed script-journal writer (ARCH-MODULE-CYCLE C12).
+ * Installed script-journal writer.
  *
  * scripting sits below the ledger orchestrator, so it cannot import
  * createScriptJournal directly. The composition root installs the ledger's

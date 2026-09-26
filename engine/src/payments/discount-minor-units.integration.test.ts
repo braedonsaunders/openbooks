@@ -15,7 +15,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * WAVE 6 — the payment-run early-payment discount rounded to whole CENTS no
+ * The payment-run early-payment discount rounds to whole CENTS no
  * matter the bill currency: a JPY bill could post a sub-yen discount leg and
  * a KWD bill a sub-fils leg, dust no settlement rail can express. The discount
  * must round to the bill currency's own minor units (whole yen, whole fils),

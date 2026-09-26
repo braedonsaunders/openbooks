@@ -1,4 +1,4 @@
-/** Pure schedule math: methods, inputs, conventions, formulas. Split from assets/depreciation.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Pure schedule math: methods, inputs, conventions, formulas. Split from assets/depreciation.ts (pure moves only). */
 import { depreciationPeriodCount } from "./depreciation-limits.ts";
 import { cmp, fromUnits, mulRatio, toUnits } from "../money/money.ts";
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";

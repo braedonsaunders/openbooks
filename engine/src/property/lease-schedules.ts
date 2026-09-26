@@ -1,4 +1,4 @@
-/** Schedule generation, lease lifecycle, escalations. Split from property/management.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Schedule generation, lease lifecycle, escalations. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";

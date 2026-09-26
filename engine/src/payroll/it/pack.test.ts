@@ -329,7 +329,7 @@ test("missing declared rates refuse naming the scope point", async () => {
 });
 
 test("monthly adapter prices the surtax advance instead of refusing without balances", async () => {
-  // I6-payroll-50: the statutory saldo/advance schedule needs assessed
+  // The statutory saldo/advance schedule needs assessed
   // balances and withholding history no adapter channel carries, so an
   // adapter-level refusal would refuse every configured run permanently.
   // Rated runs price the 1/12 advance the December conguaglio reconciles.

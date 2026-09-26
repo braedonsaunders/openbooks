@@ -106,7 +106,7 @@ export const formResponses = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass):
+FOREIGN KEYS (added by the generated migration):
   form_templates.org_id                → orgs.id
   form_templates.created_by/updated_by → users.id
   form_template_versions.org_id        → orgs.id

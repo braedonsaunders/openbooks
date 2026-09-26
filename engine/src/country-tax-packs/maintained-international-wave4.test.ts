@@ -32,7 +32,7 @@ function assertContiguous(rates: readonly EffectiveTaxRate[], code: string): voi
   }
 }
 
-test("fourth-wave maintained country packs are directly provisionable", () => {
+test("maintained country packs in this group are directly provisionable", () => {
   const countries = new Map(supportedTaxCountries().map((entry) => [entry.country, entry]));
   for (const country of maintainedCountries) {
     const definition = pack(country);
@@ -47,7 +47,7 @@ test("fourth-wave maintained country packs are directly provisionable", () => {
   }
 });
 
-test("fourth-wave code sets declare exactly the parent return with contiguous, sourced schedules", () => {
+test("code sets in this group declare exactly the parent return with contiguous, sourced schedules", () => {
   for (const country of maintainedCountries) {
     const definition = pack(country);
     const parent = parentReturn(country);
@@ -65,7 +65,7 @@ test("fourth-wave code sets declare exactly the parent return with contiguous, s
   }
 });
 
-test("fourth-wave primary code is the standard band, not a reduced one", () => {
+test("primary code in this group is the standard band, not a reduced one", () => {
   for (const country of maintainedCountries) {
     const definition = pack(country);
     const parent = parentReturn(country);
@@ -84,7 +84,7 @@ test("fourth-wave primary code is the standard band, not a reduced one", () => {
   }
 });
 
-test("fourth-wave evidence is https with an asOf on every source", () => {
+test("evidence in this group is https with an asOf on every source", () => {
   for (const country of maintainedCountries) {
     const definition = pack(country);
     const sourceIds = new Set(definition.sources.map((source) => source.id));
@@ -96,7 +96,7 @@ test("fourth-wave evidence is https with an asOf on every source", () => {
   }
 });
 
-test("fourth-wave evidence remains restricted to official government and tax-authority hosts", () => {
+test("evidence in this group remains restricted to official government and tax-authority hosts", () => {
   const officialHosts = new Set([
     "www.estv.admin.ch",
     "www.bazg.admin.ch",

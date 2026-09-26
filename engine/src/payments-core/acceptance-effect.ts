@@ -1,7 +1,7 @@
 /**
  * Payment acceptance posting effect: close the provider attempt after its
- * receipt posts. Moved verbatim from payments/acceptance.ts
- * (ARCH-MODULE-CYCLE C06 E5) — it touches only payment_attempts,
+ * receipt posts. Moved verbatim from payments/acceptance.ts — it touches
+ * only payment_attempts,
  * payment_links and audit_log through db plus money.cmp, so the posting
  * orchestrator runs it as a post-commit effect without importing payments.
  * Runs inside the posting_effects claim; moved verbatim.

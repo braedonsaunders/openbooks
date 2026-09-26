@@ -36,8 +36,8 @@ function arCockpitHref(): string | undefined {
  * open_balance <> 0, overdue aged on due_date against the org business day.
  *
  * Every finding proposes nothing executable: no record-send tool exists, so
- * the overdue finding lists the reminder drafts inline (the shard's stated
- * fallback) and the findings set ordered by materiality IS the priority call
+ * the overdue finding lists the reminder drafts inline (the stated fallback)
+ * and the findings set ordered by materiality IS the priority call
  * list. The pack never writes.
  */
 

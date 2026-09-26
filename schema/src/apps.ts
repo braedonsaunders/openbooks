@@ -220,7 +220,7 @@ export const appListings = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass — referential-integrity.sql):
+FOREIGN KEYS (added by the generated migration — referential-integrity.sql):
   apps.org_id                         → orgs.id
   apps.active_version_id              → app_versions.id ON DELETE SET NULL
   apps.created_by/updated_by          → users.id

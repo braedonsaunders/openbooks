@@ -23,7 +23,7 @@ function assertContiguous(rates: readonly EffectiveTaxRate[]): void {
   }
 }
 
-test("second-wave maintained country packs are directly provisionable", () => {
+test("maintained country packs in this group are directly provisionable", () => {
   const countries = new Map(supportedTaxCountries().map((entry) => [entry.country, entry]));
   for (const country of maintainedCountries) {
     const definition = pack(country);
@@ -121,7 +121,7 @@ test("Singapore preserves every GST rate era and the fifteen current core F5 box
   ]);
 });
 
-test("second-wave maintained sources remain restricted to official government and tax-authority hosts", () => {
+test("maintained sources in this group remain restricted to official government and tax-authority hosts", () => {
   const officialHosts = new Set([
     "sede.agenciatributaria.gob.es",
     "www.gazzettaufficiale.it",

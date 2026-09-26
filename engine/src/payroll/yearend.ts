@@ -1886,7 +1886,7 @@ export interface GbYearStatement {
 
 /**
  * One GB employee-year of committed stubs, before the P60/P45 eligibility
- * split. GB has no opening-YTD columns (no migration shard has carried one —
+ * split. GB has no opening-YTD columns (no migration carries one —
  * see compute-statutory.ts), so there is no carry-in to fold: the statement
  * is the committed subledger, whole.
  */

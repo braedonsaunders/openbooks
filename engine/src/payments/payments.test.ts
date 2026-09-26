@@ -352,7 +352,7 @@ test("the NACHA sequence derivation is the legacy fallback, not same-day safety"
   assert.equal(nachaFileIdModifierForSequence(37), "A");
   assert.equal(nachaFileIdModifierForRunNumber("PR-0001"), "A");
   assert.equal(nachaFileIdModifierForRunNumber("PR-0002"), "B");
-  // I2-money-06's defect: run numbers advance across methods and wrap mod
+  // Run numbers advance across methods and wrap mod
   // 36, so same-day runs can share a letter (RUN-41 reuses RUN-5's).
   // Generation allocates per-day instead; this mapping is legacy fallback.
   assert.equal(nachaFileIdModifierForRunNumber("RUN-41"), nachaFileIdModifierForRunNumber("RUN-5"));

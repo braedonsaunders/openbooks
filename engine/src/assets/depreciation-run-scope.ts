@@ -1,4 +1,4 @@
-/** Shared run/confirm/preview scope: fingerprint rows, claim shapes, confirm gate. Split from assets/depreciation.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Shared run/confirm/preview scope: fingerprint rows, claim shapes, confirm gate. Split from assets/depreciation.ts (pure moves only). */
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";

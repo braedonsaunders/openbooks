@@ -210,9 +210,9 @@ test('workforce entities refuse without their gate and their own read permission
     // rides hrmCertificationAlerts. Exact key matches: the old
     // startsWith('hrm_comp_') swept hrm_comp_class_split (construction)
     // into compensation, and the trailing 'hrm' default contradicted the
-    // HR-13/HR-16 switches in HRM_FEATURES — both pre-existing reds on
-    // the stacked base, repaired here. Anything not classified here
-    // defers to that shard's declared switch (pinned exactly above).
+    // HR-13/HR-16 switches in HRM_FEATURES — both pre-existing failures,
+    // repaired here. Anything not classified here defers to that area's
+    // declared switch (pinned exactly above).
     const expectedFeature =
       key === 'hrm_pay_bands' || key === 'hrm_comp_cycle_lines' || key === 'hrm_headcount_plan_lines' || key === 'hrm_pay_gap_snapshots'
         ? 'hrmCompensation'

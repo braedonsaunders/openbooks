@@ -61,7 +61,8 @@ function requireBypassDatabaseUrl(): string {
 /**
  * Pool size per process. Ten connections suits one web replica behind the
  * swarm; a single process serving many concurrent operators over a slow link
- * (a UI fleet against a remote cluster) exhausts ten and surfaces as
+ * (many concurrent UI sessions against a remote cluster) exhausts ten and
+ * surfaces as
  * "timeout exceeded when trying to connect" 500s. Operators raise it with
  * OPENBOOKS_DB_POOL_MAX; the read pool follows unless OPENBOOKS_DB_READ_POOL_MAX
  * is set. Bounded so a typo cannot open hundreds of sessions.

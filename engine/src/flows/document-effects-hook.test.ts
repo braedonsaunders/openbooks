@@ -6,7 +6,7 @@ import {
   registerFlowDocumentEffects,
 } from "./document-effects-hook.ts";
 
-// Unit tests for the document-effects port (ARCH-MODULE-CYCLE C14). The
+// Unit tests for the document-effects port. The
 // executor and the documents adapter resolve postings and void completions
 // here instead of importing ledger/payments; a missing port must throw by
 // name (naming installEngineSeams) rather than report posted/voided while

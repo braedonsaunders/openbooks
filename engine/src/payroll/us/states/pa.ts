@@ -16,7 +16,7 @@
  *   pa.gov/agencies/dli — the PA UC EMPLOYEE withholding rate.
  *
  * ---------------------------------------------------------------------------
- * Why Pennsylvania is in this wave
+ * Why Pennsylvania is in this group
  * ---------------------------------------------------------------------------
  * It proves a different table shape from California and New York: there is no
  * table at all. Withholding is `compensation × 0.0307`. The interesting parts
@@ -243,7 +243,7 @@ export function philadelphiaRateFor(
 /**
  * The Philadelphia wage tax.
  *
- * Two properties that no other levy in this wave has, both from DCED's Act 32
+ * Two properties that no other levy in this group has, both from DCED's Act 32
  * FAQ:
  *
  *   - A Philadelphia RESIDENT pays the resident rate no matter where in

@@ -19,7 +19,7 @@
  * expressions did not, so matching runs over both individual lines (for
  * precise locations) and the whole file (for reads split across lines).
  *
- * Frozen history and shard-owned legacies above the cutoff are allowlisted
+ * Frozen history and team-owned legacies above the cutoff are allowlisted
  * by basename with the reason each may keep its read; the list may only
  * shrink. A stale entry (a path that no longer reads the GUC) fails the
  * gate, so a rework that removes the read must also remove the entry.

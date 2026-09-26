@@ -1,7 +1,7 @@
 /**
  * Germany — Programmablaufplan für den Lohnsteuerabzug 2026 (PAP 2026).
  *
- * STEP 1 (shard payroll-de-pap): the PAP is OBTAINABLE from the BMF's own
+ * STEP 1: the PAP is OBTAINABLE from the BMF's own
  * host. Availability answer, committed first as 4c39df2b3:
  *
  * - Exact URL (Anlage 1, the machine-calculation PAP itself):

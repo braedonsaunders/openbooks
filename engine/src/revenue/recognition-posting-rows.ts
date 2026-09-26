@@ -1,4 +1,4 @@
-/** Shared posting-row projection breaking the preview/run cycle. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Shared posting-row projection breaking the preview/run cycle. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { measureCreditExposure, type CreditExposure } from "./deferred-credit-pool.ts";

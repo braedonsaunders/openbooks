@@ -549,7 +549,7 @@ export async function copyClonedFileObjects(opts: {
   } catch (err) {
     // Compensating cleanup during unwind: best-effort on purpose — a cleanup
     // failure here must never mask the original copy error being rethrown.
-    // I5-platform-41: durable intents first so the worker retries what the
+    // Durable intents first so the worker retries what the
     // inline delete below cannot confirm; the inline attempt stays.
     for (const sandboxVersionId of copied) {
       await enqueueStorageCleanupStandalone({

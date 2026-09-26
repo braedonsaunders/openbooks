@@ -22,7 +22,7 @@ import {
   updateRule,
 } from "./rules.ts";
 
-const AUDIT = { actorId: null, reason: "fleet test" };
+const AUDIT = { actorId: null, reason: "allocation rules test" };
 const REVISION_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 async function org(): Promise<{ orgId: string; bookId: string; subsidiaryId: string }> {

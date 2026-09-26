@@ -383,7 +383,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     );
   }
 
-  // -- allocation kernel: post-mode RULE contributions (A5) ----------------
+  // -- allocation kernel: post-mode RULE contributions --------------------
   // Rules in effect on the posting date contribute dimensional-attribution /
   // reclass legs to the transaction's own entry. Each contributor's set must
   // balance per subsidiary on its own; the union then flows through
@@ -432,7 +432,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     ...primaryContrib.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
   ];
 
-  // -- allocation kernel: custom_gl_lines user scripts (A6) -----------------
+  // -- allocation kernel: custom_gl_lines user scripts ---------------------
   // Scripts observe the kernel read-only (kernel lines plus the rule
   // contributions above) and return extra balanced lines. A refusal throws
   // inside the posting transaction, so a refused script set rolls every

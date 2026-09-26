@@ -65,7 +65,7 @@ async function seedCrewWorld(orgId: string, subA: string): Promise<CrewWorld> {
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${subB}, ${orgId}, ${subA}, 'Entity B', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
   // Worker parties carry their legal entity: the line-employee scope
-  // check (I1-refix-153) fails a null (shared) party closed for
+  // check fails a null (shared) party closed for
   // restricted callers, which would refuse even the happy path below.
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id)
@@ -106,7 +106,7 @@ test("foreman B cannot edit, submit, or withdraw foreman A's batch", { skip: !DB
         projectId: w.projectA, workedOn: "2026-09-14",
         canManageAll: false, allowedSubsidiaryIds: scopeA,
       }));
-    // I1-refix-153 made missing and out-of-scope line workers refuse
+    // Missing and out-of-scope line workers refuse
     // identically as employee_unknown (matching the project check), so the
     // B worker on A's batch no longer surfaces the employment-scope code.
     assert.equal(await refusesCode(() => setBatchLines({

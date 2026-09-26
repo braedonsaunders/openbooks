@@ -898,7 +898,7 @@ export async function computePlStatutory(
   // Uneven pay breaks the level-pay annualisation below: a bonus folded into
   // this month's base is multiplied into every prior month, collapsing the
   // 282 600 zł ZUS room and pushing PIT to 32 % on fabricated YTD
-  // (I6-payroll-25). January has no priors, so it prices exactly; any later
+  // January has no priors, so it prices exactly; any later
   // month with a non-periodic component refuses by name — committed
   // same-payer YTD (updof art. 32 ust. 2; ZUS art. 19) rides no pack channel
   // (see PL_REFUSALS_2026).

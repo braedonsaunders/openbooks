@@ -1,4 +1,4 @@
-/** Schedule persistence: locks, progress, legacy rebuild, build paths. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Schedule persistence: locks, progress, legacy rebuild, build paths. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";

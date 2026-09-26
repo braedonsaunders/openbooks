@@ -129,7 +129,7 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
   await stub(feb, employeeB, "2026-03-05", "3000.00", "600.00", "510.00", "7.50");
   await stub(mar, employeeA, "2026-04-05", "4500.00", "900.00", "765.00", "11.25");
 
-  // Next-year-paid bonus for A (I6-payroll-292): entitled 2026, paid January 2027.
+  // Next-year-paid bonus for A: entitled 2026, paid January 2027.
   const jan27 = await run("2027-01-31", "2027-02-05", "committed", 2027);
   await stub(jan27, employeeA, "2027-02-05", "1200.00", "0.00", "0.00", "0.00", 2027);
 
@@ -210,7 +210,7 @@ test(
       // The builder agrees with the declaration: same rows, same figures.
       const slips = await ir8aSlips(fx.orgId, 2026);
       assert.equal(slips.length, 2);
-      // I6-payroll-292: the January-2027 bonus never vanishes from the 2026
+      // The January-2027 bonus never vanishes from the 2026
       // return — it surfaces on the slip's next-year-paid review pool.
       assert.equal(
         cmp(

@@ -507,7 +507,7 @@ async function persistFile(input: {
   const hash = createHash("sha256").update(input.bytes).digest("hex");
   const filename = safeFilename(input.source.name, input.source.id);
   const sourceModifiedAtIso = input.sourceModifiedAt?.toISOString() ?? null;
-  // I5-platform-41: the S3 object staged inside the row transaction cannot
+  // The S3 object staged inside the row transaction cannot
   // roll back with it. Track the staged key so a later failure records a
   // durable cleanup intent instead of stranding the blob.
   let stagedVersionId: string | null = null;

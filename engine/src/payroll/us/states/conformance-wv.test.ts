@@ -160,7 +160,7 @@ test("WV IT-104NR reciprocal exemption requires an eligible residence and wage-o
   assert.equal(reciprocal.tax, money("0"));
 
   // Ordinary nonresident withholding prices verified West Virginia-source
-  // wages (I6-payroll-131): the full $800 paycheck is WV-source here.
+  // wages: the full $800 paycheck is WV-source here.
   const wvSourceWages = [{ region: "WV", subRegion: null, workShare: "1", source: "adequate_records", sourceWagesCurrentPeriod: "800.00" }];
   const ordinaryWithholding = WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",

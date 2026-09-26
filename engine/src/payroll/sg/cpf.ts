@@ -162,7 +162,7 @@ export interface SgStatutoryResult {
   /** SDL for the month, cents (floored — never rounded up). */
   sdlCents: bigint;
   /**
-   * Exact SDL levy in 1/40000-dollar units (I6-payroll-28): the summand for
+   * Exact SDL levy in 1/40000-dollar units: the summand for
    * floorEmployerSdlTotal. Retained because cent-rounding each line before
    * the employer aggregation overstates the floored total.
    */
@@ -351,7 +351,7 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
 }
 
 /**
- * Monthly employer SDL total (I6-payroll-28): add each employee's exact
+ * Monthly employer SDL total: add each employee's exact
  * calculated levy and round the TOTAL down to the nearest dollar (CPF
  * Board, Skills Development Levy). Takes the `sdlExact40000` figures from
  * calculateSgStatutory — one per employee for the month — and returns whole
@@ -374,7 +374,7 @@ export function floorEmployerSdlTotal(exact40000: readonly bigint[]): bigint {
  * SG pack statutory pass (CPF Table 1, 2026).
  *
  * Declared inputs arrive on the certificate and the line set — no
- * generic-layer channel carries them, so no FLEET-PROPOSE is needed:
+ * generic-layer channel carries them, so no new channel is needed:
  *
  * - the `sg_cpf_status` certificate (`cpf_status`, `age_band`; absent form
  *   means CPF status unknown and the run is refused, never guessed);
@@ -422,7 +422,7 @@ export async function computeSgStatutory(
   const ageBand = (certificate.answers["age_band"] ?? "") as SgAgeBand;
   const permitType = (certificate.answers["permit_type"] ?? null) as SgPermitType | null;
 
-  // IR21 tax-clearance hold (I6-payroll-220): cessation of a non-citizen's
+  // IR21 tax-clearance hold: cessation of a non-citizen's
   // employment withholds ALL monies due — the monthly engine must not settle
   // a final payment it would then have to recover. Only citizens are exempt
   // (IRAS, Tax Clearance for Foreign & SPR Employees (IR21)); every other

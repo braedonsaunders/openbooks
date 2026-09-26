@@ -88,7 +88,7 @@ export function applyReciprocity(
 }
 
 /**
- * Exact decimal comparison for rate bases. Decision (ARCH-MONEY-BRAND):
+ * Exact decimal comparison for rate bases. Decision:
  * this used to truncate fractions past 4dp silently, so 0.33333 and 0.3333
  * compared equal and the higher_of rule could price the wrong schedule.
  * It now compares exactly at any scale through the money kernel and

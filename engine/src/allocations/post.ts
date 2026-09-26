@@ -542,7 +542,7 @@ function buildContributedLines(args: {
       const accountId = target.targetAccountId ?? kernelLine.accountId;
       if (version.impact === "net_zero_pair" && target.targetAccountId != null) {
         // Invariant §5.5: a statistical pair must never move an account
-        // balance. The publish guard (A1) owns this; posting refuses loudly.
+        // balance. The rule-publish guard owns this; posting refuses loudly.
         throw new PostAllocationError(
           `rule ${rule.rule.key} is net_zero_pair but names a target account`,
         );
@@ -737,7 +737,7 @@ export async function collectPostContributions(
 
 /**
  * Preload account-group membership for the dimensions post rules actually
- * reference, so A4's matcher can resolve account_group scopes synchronously.
+ * reference, so the entry matcher can resolve account_group scopes synchronously.
  * Rules without group scopes need no preload and matchers run without one.
  */
 async function makeAccountGroupResolver(

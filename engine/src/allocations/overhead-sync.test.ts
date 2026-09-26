@@ -77,8 +77,8 @@ test("the derived definition is a post-mode net-zero pair no document matcher ca
   assert.equal(derived.definition.basisKind, "driver");
   assert.equal(derived.definition.targetKind, "dynamic");
   assert.deepEqual(derived.definition.dynamicTarget, { dimension: "project" });
-  // The event pseudo-kind never appears on a real document, so A5's post
-  // seam and A4's entry matcher can never select the system rule.
+  // The event pseudo-kind never appears on a real document, so the post
+  // seam and the entry matcher can never select the system rule.
   assert.deepEqual(derived.definition.documentKinds, [OVERHEAD_EVENT_DOCUMENT_KIND]);
   assert.deepEqual(derived.definition.accountScope, { kind: "accounts", accountIds: [POLICY.accountId] });
 });

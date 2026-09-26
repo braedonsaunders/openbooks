@@ -5,8 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { analyze, importsOf, stripComments, stronglyConnected } from "./check-engine-boundaries.mjs";
 
-// A synthetic engine: two low modules, one orchestrator. Acyclic since C15
-// retired the "cycles" pin: any cycle is refused.
+// A synthetic engine: two low modules, one orchestrator. Acyclic with the
+// "cycles" pin retired: any cycle is refused.
 function scaffold(manifest, files) {
   const root = mkdtempSync(join(tmpdir(), "engine-boundaries-"));
   mkdirSync(join(root, "engine/src"), { recursive: true });

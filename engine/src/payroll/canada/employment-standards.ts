@@ -470,7 +470,7 @@ const NS_HOLIDAY_PAY: PayrollHolidayPayRule = {
 
 /**
  * Nova Scotia Remembrance Day, RSNS 1989 c 396 — the work-triggered,
- * 15-of-30 qualifying alternate paid day (I6-payroll-262).
+ * 15-of-30 qualifying alternate paid day.
  *
  * This is a SEPARATE statute from the Labour Standards Code transcribed
  * above, with an inverted trigger: an employee who does NOT work November 11

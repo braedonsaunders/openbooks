@@ -57,7 +57,7 @@ async function makeFixture(): Promise<Fixture> {
   });
 }
 
-/** The invocation fence (I5-platform-170) matches the invoked version
+/** The invocation fence matches the invoked version
  * against the app's active version: publish and activate it, or the call
  * is refused. Versions are real app_versions rows (the FK requires it);
  * the label is the shared release line, the row id the per-app install. */

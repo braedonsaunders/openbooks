@@ -1,8 +1,8 @@
 /**
  * Scheduler-outbox ENQUEUE half: the fail-closed constructors that persist
  * transactional email and approval-escalation rows through the caller's own
- * transaction. Moved verbatim from scheduling/outbox.ts (ARCH-MODULE-CYCLE
- * C08); the drain half (claim/run/fail/replay/deliverFlowEmail/runOutboxWork)
+ * transaction. Moved verbatim from scheduling/outbox.ts; the drain half
+ * (claim/run/fail/replay/deliverFlowEmail/runOutboxWork)
  * stays in scheduling and imports these back. Depends only on db,
  * @openbooks/emails and @openbooks/jobs types, so flows, receivables and
  * automations can enqueue without importing the scheduling orchestrator.

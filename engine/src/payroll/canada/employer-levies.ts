@@ -42,8 +42,8 @@ function assertNeverStatus(status: never): never {
 export type QuebecHsfSector = "other" | "primary_manufacturing" | "public" | "exempt_2026";
 
 /**
- * The statutory HSF rate for the employer's year-to-date total payroll
- * (I6-payroll-243): 2026 formulae per Revenu Québec's "Total Payroll
+ * The statutory HSF rate for the employer's year-to-date total payroll:
+ * 2026 formulae per Revenu Québec's "Total Payroll
  * Threshold and Health Services Fund Contribution Rate" table — other-sector
  * 1.65% at or under $1M rising by 1.2662 + (0.3838 × payroll ÷ $1M) to
  * 4.26% past $7.8M; primary-and-manufacturing 1.25% rising by
@@ -299,7 +299,7 @@ export async function applyCaEmployerLevies(
   // no cap. QC-gated twice: the region check below, and the ca_hsf slot
   // which refuses a rate row for any other province at the write boundary.
   // The statutory formula prices the employer's year-to-date rate and each
-  // stub books the cumulative true-up (I6-payroll-243): crossing $1M mid-year
+  // Stub books the cumulative true-up: crossing $1M mid-year
   // reprices prior remuneration, which a flat per-stub rate can never do. No
   // fallback — without a sector class the run refuses instead of mispricing.
   if (region === "QC") {

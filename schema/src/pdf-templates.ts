@@ -54,7 +54,7 @@ export const pdfTemplates = pgTable(
 );
 
 /*
-FOREIGN KEYS (added by the integrator's migration pass):
+FOREIGN KEYS (added by the generated migration):
   pdf_templates.org_id               → orgs.id
   pdf_templates.created_by/updated_by → users.id
 */

@@ -120,7 +120,7 @@ export async function settleStagedAttachmentsAfterEnqueueError(input: {
   const remove =
     input.removeStagedAttachments ??
     (async (attachments: EmailAttachment[] | undefined): Promise<void> => {
-      // I5-platform-57: durable cleanup intents first so the worker duty
+      // Durable cleanup intents first so the worker duty
       // retries what the inline delete below cannot confirm; the inline
       // attempt stays.
       for (const attachment of attachments ?? []) {

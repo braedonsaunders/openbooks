@@ -15,7 +15,7 @@ import {
 import type { PayrollSubsidiaryScope } from "../scope.ts";
 
 /**
- * The assessed-saldo carry-in save (migration 0393, I6-payroll-50): one row
+ * The assessed-saldo carry-in save (migration 0393): one row
  * per (org, employee, tax year) in it_addizionali_opening_balances holding
  * the prior-year assessment the year's installments withhold.
  *

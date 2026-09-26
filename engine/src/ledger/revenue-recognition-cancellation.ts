@@ -1,7 +1,7 @@
 /**
  * Invoice revenue-recognition cancellation: reverse recognition journals,
  * then route the invoice through the controlled void — in one transaction.
- * Moved verbatim from revenue/recognition.ts (ARCH-MODULE-CYCLE C10); the
+ * Moved verbatim from revenue/recognition.ts; the
  * document-void import is static here because the caller now lives in ledger.
  */
 import { sql } from "drizzle-orm";

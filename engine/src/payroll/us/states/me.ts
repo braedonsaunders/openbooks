@@ -8,7 +8,7 @@
  *     — Percentage Method Steps 1–6; $5,300 per allowance; withholding
  *       standard deduction $12,850 / $28,550 with the printed phase-out;
  *       2026 rate schedules; 2% surcharge above $1,000,000 single /
- *       $1,500,000 married annualized income (I6-payroll-97); official
+ *       $1,500,000 married annualized income; official
  *       Examples 1–3 ($0 / $32 / $256); invalid or missing W-4ME → single,
  *       zero allowances; daily × 260. The August revision supersedes the
  *       December 2025 booklet's $12,450 / $27,750 deductions.
@@ -58,7 +58,7 @@ export interface MeYearRates {
   marriedPhaseSpan: string;
   supplementalRate: string;
   /** August 2026 revision: additional 2% on annualized withholding income
-   * above the filing-status threshold (I6-payroll-97). */
+   * above the filing-status threshold. */
   singleSurchargeThreshold: string;
   marriedSurchargeThreshold: string;
   surchargeRate: string;
@@ -176,7 +176,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const taxable = max0(annualWages - personal - standard);
   trace("ME_TAXABLE", taxable);
 
-  // August 2026 surcharge (I6-payroll-97): 2% of annualized withholding
+  // August 2026 surcharge: 2% of annualized withholding
   // income above the filing-status threshold, added to the annual tax
   // before de-annualizing and rounding — one rounded annual figure.
   const surchargeThreshold = U(married ? rates.marriedSurchargeThreshold : rates.singleSurchargeThreshold);

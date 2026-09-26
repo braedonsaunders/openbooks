@@ -522,9 +522,9 @@ interface SeedTarget {
 }
 
 /**
- * Seed a period rule the way the A1 service does (draft, targets, publish)
- * with a fixed definition hash fixture — the hash content is A1's property
- * to test, so cases only need it stamped, never recomputed.
+ * Seed a period rule the way the rules service does (draft, targets, publish)
+ * with a fixed definition hash fixture — the hash content is the rules
+ * module's property to test, so cases only need it stamped, never recomputed.
  */
 async function seedPeriodRule(
   ctx: CaseContext,

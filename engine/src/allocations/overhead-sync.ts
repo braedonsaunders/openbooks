@@ -7,7 +7,7 @@ import type { AllocationRuleVersion, RuleInEffect } from "./types.ts";
 import { definitionHash, validateRuleVersion } from "./validate.ts";
 
 /**
- * Overhead fold (shard A11) — the provisioning/sync service that derives the
+ * Overhead fold — the provisioning/sync service that derives the
  * system-owned post rule from the overhead policy + rate card.
  *
  * The legacy writer (overhead-apply.ts) posts DR overhead account [project] /
@@ -27,7 +27,7 @@ import { definitionHash, validateRuleVersion } from "./validate.ts";
  * no-op, so publish paths can sync unconditionally.
  *
  * Event binding: the version's documentKinds carries a pseudo-kind no real
- * document bears (OVERHEAD_EVENT_DOCUMENT_KIND), so A4's matchLine / A5's
+ * document bears (OVERHEAD_EVENT_DOCUMENT_KIND), so the entry matchLine /
  * post seam can never select the system rule for a document line — it fires
  * only on the time-approval event through overhead-apply.ts, which resolves
  * it by key and worked day.

@@ -1,4 +1,4 @@
-/** BAI2 statement parsing. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** BAI2 statement parsing. Split from banking.ts (pure moves only). */
 import { BankingError, type ParsedStatementLine, type ParsedStatement, type StatementSourceContent } from "../banking-core"
 import { decodeStatementSourceText } from "../statement-encoding"
 import { assertRealDate, expandTwoDigitYear } from "./shared"

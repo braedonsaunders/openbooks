@@ -1,4 +1,4 @@
-/** Auto/manual matching. Split from banking.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Auto/manual matching. Split from banking.ts (pure moves only). */
 import { BankingError, type BankingContext, subsidiaryScopeSql } from "./banking-core"
 import { requireSessionRowInScope, requireBankAccountInScope, lockBankAccountInScope, requireStatementLineAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
 import { type ReconciliationRow, firstReconciliationCarry, type ReconciliationTotals, type BankingTransaction, reconciliationBookId, refreshStatus } from "./reconciliation"

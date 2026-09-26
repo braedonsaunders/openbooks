@@ -1,4 +1,4 @@
-/** Governed document_lines view snapshot/restore plus the order-quantity progress migration. Split from scripts/bootstrap.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Governed document_lines view snapshot/restore plus the order-quantity progress migration. Split from scripts/bootstrap.ts (pure moves only). */
 import pg from "pg"
 
 export type MigrationLedgerClient = Pick<pg.PoolClient, "query">;

@@ -375,7 +375,7 @@ test("Worksheet 1A and statutory constants are the published figures", () => {
   assert.equal(RATES_2026.futa.grossRate, "0.06"); // IRC §3301
 });
 
-test("wave-1 state coverage list is exactly the nine no-withholding states", () => {
+test("state coverage list is exactly the nine no-withholding states", () => {
   assert.deepEqual(
     [...NO_WITHHOLDING_STATES].sort(),
     ["AK", "FL", "NH", "NV", "SD", "TN", "TX", "WA", "WY"],

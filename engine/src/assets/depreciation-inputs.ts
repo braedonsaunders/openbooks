@@ -1,4 +1,4 @@
-/** Manual/usage depreciation input recording. Split from assets/depreciation.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Manual/usage depreciation input recording. Split from assets/depreciation.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";

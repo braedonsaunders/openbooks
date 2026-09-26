@@ -40,8 +40,8 @@ import {
 } from "./report-window.ts";
 
 /**
- * Engine-side `ReportDriverRunner` for `report_definition` drivers (A5
- * composition over A2's resolver contract).
+ * Engine-side `ReportDriverRunner` for `report_definition` drivers
+ * (composition over the driver-resolver contract).
  *
  * It runs a saved entity-query definition exactly the way the report routes
  * do — same compiler, same org/subsidiary/book scoping, same fiscal bins —

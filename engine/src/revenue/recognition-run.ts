@@ -1,4 +1,4 @@
-/** Recognition run: due-period posting through the kernel. Split from revenue/recognition.ts (ARCH-FILE-SPLIT; pure moves only). */
+/** Recognition run: due-period posting through the kernel. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "../platform/db.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";

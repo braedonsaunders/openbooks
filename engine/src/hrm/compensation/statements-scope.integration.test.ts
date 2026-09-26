@@ -351,7 +351,7 @@ async function revokePartyLinkWhileOperationWaits(
   return result;
 }
 
-test("I1-refix-152 statement generation holds the employment lock through payload and insert", { skip: !DB }, async () => {
+test("statement generation holds the employment lock through payload and insert", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const before = await countRows(h.org.orgId, "hrm_comp_statements");
     await assertEmploymentLockHeld(h.org.orgId, h.empA.employmentId, () => generateStatement({
@@ -362,7 +362,7 @@ test("I1-refix-152 statement generation holds the employment lock through payloa
   });
 });
 
-test("I1-refix-151/152 self-service statement surfaces recheck identity after a link change", { skip: !DB }, async () => {
+test("self-service statement surfaces recheck identity after a link change", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const surfaces: Array<{ name: string; run: () => Promise<unknown> }> = [
       {
@@ -558,7 +558,7 @@ test("F13 unrestricted HR keeps full cross-subsidiary access", { skip: !DB }, as
   });
 });
 
-test("I1-refix-151 statement rendering holds the employment lock through PDF generation", { skip: !DB }, async () => {
+test("statement rendering holds the employment lock through PDF generation", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     await assertEmploymentLockHeld(h.org.orgId, h.empA.employmentId, () => renderStatementPdf({
       orgId: h.org.orgId, actorId: h.readerAId, statementId: h.statementAId, orgName: "Scratch",
