@@ -236,7 +236,7 @@
     }
   },
   "create": {
-    "subsidiary": "Filiale",
+    "subsidiary": "Filiale propriétaire",
     "selectSubsidiary": "Choisir une filiale…"
   }
 }
