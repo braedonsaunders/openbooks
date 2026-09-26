@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import * as React from 'react'
 import type { SessionUser } from './auth'
+import { stubModules } from '../testing/stub-modules.ts'
 
 // Live-Postgres regression for the tax / compliance SERVER PAGES, which used to
 // drop the subsidiary scope their REST twins pass:
@@ -21,16 +22,10 @@ import type { SessionUser } from './auth'
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __taxPageScope: state, React })
+stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(k)=>k;t.has=()=>false;t.raw=(k)=>k;return t};export async function getLocale(){return "en"};export async function getFormatter(){return {dateTime:(d)=>d.toISOString()}}', authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(
-          'export async function getTranslations(){const t=(k)=>k;t.has=()=>false;t.raw=(k)=>k;return t};export async function getLocale(){return "en"};export async function getFormatter(){return {dateTime:(d)=>d.toISOString()}}',
-        ),
-      }
-    }
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__taxPageScope.user}' }
     }

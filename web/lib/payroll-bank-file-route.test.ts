@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+import { stubModules } from '../testing/stub-modules.ts'
 
 /**
  * Bank-file boundary: generating a file moves money, so POST demands
@@ -105,14 +106,10 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/payroll/bank-file-artifact.ts', mockUrl('bank-file-artifact')],
 ])
 
+stubModules({ navigation: false, authz: false, features: false });
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function getTranslations() { return (key) => key }',
-      }
-    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

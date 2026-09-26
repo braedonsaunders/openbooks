@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 // F5-2: ApplicationCommandCard rendered ~10 hardcoded English strings while
 // sibling cards translate through the assistant namespace. A non-en user
@@ -7,30 +8,14 @@ import test from "node:test";
 // prompt, the review chrome and the outcome in their own locale.
 // Only the network and the confirm modal are doubled. React, next-intl and
 // the REAL French catalog run, so English copy fails every assertion below.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/assistant",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-
 declare global {
   var __accConfirmSeen: { message: unknown }[] | undefined;
   var __accAutoConfirm: boolean | undefined;
 }
 
 const { registerHooks } = await import("node:module");
+await bootJsdomEnvironment({ url: "http://localhost:4800/assistant", matchMediaMatches: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@/lib/confirm" || specifier.endsWith("/lib/confirm")) {
@@ -43,7 +28,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

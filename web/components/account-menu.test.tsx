@@ -1,47 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/dashboard",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard" });
+
 window.HTMLElement.prototype.getBoundingClientRect = function () {
   return { top: 8, left: 8, bottom: 40, right: 128, width: 120, height: 32, x: 8, y: 8, toJSON() { return {}; } };
 };
-if (typeof globals.ResizeObserver !== "function") {
-  globals.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-}
-if (typeof dom.window.requestAnimationFrame !== "function") {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  dom.window.cancelAnimationFrame = ((id: number) =>
-    clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame;
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame;
-}
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const { registerHooks } = await import("node:module");
+stubModules({ navigation: { pathname: '/dashboard' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return {push(){},refresh(){},replace(){}}}export function usePathname(){return '/dashboard'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -64,7 +38,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

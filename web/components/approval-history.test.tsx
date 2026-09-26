@@ -1,15 +1,9 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { approvalTabBody } from './approval-history'
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
@@ -18,11 +12,12 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../messages/en')).default
 Object.assign(globalThis, { __approvalHistoryRouter: { push() {}, refresh() {}, replace() {}, back() {}, prefetch() {} } })
 const { registerHooks } = await import('node:module')
+await bootJsdomEnvironment({ html: "<!doctype html><html><body></body></html>", url: "http://localhost/" });
+
+stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__approvalHistoryRouter}' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return globalThis.__approvalHistoryRouter}' }
-    }
     if (specifier === 'sonner') {
       return { shortCircuit: true, url: 'data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}' }
     }

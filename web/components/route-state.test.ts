@@ -1,20 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/missing-route' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: true, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
-if (typeof globals.ResizeObserver !== 'function') {
-  globals.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+await bootJsdomEnvironment({ html: "<!doctype html><html><body></body></html>", url: "http://localhost:4800/missing-route" });
 
 const React = await import('react')
 Object.assign(globalThis, { React })
@@ -29,7 +17,7 @@ test('a route refusal shows its title and explanation once beside the recovery a
   t.after(async () => {
     await act(async () => root.unmount())
     host.remove()
-    dom.window.close()
+    window.close()
   })
 
   await act(async () => {

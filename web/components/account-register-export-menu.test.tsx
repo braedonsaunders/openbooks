@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // (register half): the account register export menu was the same bare
 // `<a href>` shape as ExportMenu — silent on success, an error-body download
@@ -8,29 +9,13 @@ import test, { type TestContext } from 'node:test'
 // a named 422 refusal, and a generic 500 failure.
 
 // jsdom first: Popover/Button read browser globals at render.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/accounts/11111111-1111-4111-8111-111111111111',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-
 declare global {
   var __registerExportToasts: { kind: string; message: string }[] | undefined
 }
 
 const { registerHooks } = await import('node:module')
+await bootJsdomEnvironment({ url: "http://localhost:4800/accounts/11111111-1111-4111-8111-111111111111" });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
@@ -43,7 +28,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

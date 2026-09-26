@@ -3,20 +3,16 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import pg from 'pg'
+import { stubModules } from '../testing/stub-modules.ts'
 
 // The three production surfaces under test import the real authz layer (cookie
 // sessions) and `server-only`. Swap those two boundaries for a scratch-org
 // identity and keep EVERYTHING else — routes, transactions, advisory fences,
 // PostgreSQL — exactly as production runs them.
+stubModules({ navigation: {}, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next/navigation') {
-      return {
-        url: 'data:text/javascript,export function redirect(){throw new Error("redirect")}',
-        format: 'module',
-        shortCircuit: true,
-      }
-    }
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', format: 'module', shortCircuit: true }
     return nextResolve(specifier, context)
   },

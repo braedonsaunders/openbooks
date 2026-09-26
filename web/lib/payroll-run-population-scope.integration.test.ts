@@ -7,6 +7,7 @@ import test from "node:test";
 import * as React from "react";
 import type { ListViewConfig } from "@openbooks/customization";
 import type { Authz } from "./authz";
+import { stubModules } from '../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + '/').href;
 // The tsx runner compiles these RSC sources with the CLASSIC JSX transform,
@@ -16,10 +17,11 @@ const root = pathToFileURL(process.cwd() + '/').href;
 Object.assign(globalThis, { React });
 const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-run-population-scope")] = state;
+stubModules({ navigation: false, intl: 'export async function getTranslations(){return key=>key};export async function getLocale(){return \'en\'};export async function getFormatter(){return {dateTime:date=>date.toISOString()}}', authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
   const parent = decodeURIComponent(context.parentURL ?? "");
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
-  if (specifier === "next-intl/server") return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'};export async function getFormatter(){return {dateTime:date=>date.toISOString()}}");
   if (specifier.endsWith("/lib/feature-gates") && parent.endsWith("/api/payroll/runs/route.ts")) return virtual(
     "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-run-population-scope')].gate}");
   // A page is its `page.tsx` AND its `view.ts`: the loader these stubs were

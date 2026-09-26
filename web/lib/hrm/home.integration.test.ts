@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { resolveAppModule } from '../test-module-hooks'
 import type { SessionUser } from '../auth'
+import { stubModules } from '../../testing/stub-modules.ts'
 
 // Live-Postgres regression for the HRM overview LOADER. alpha.19 shipped a
 // cockpit whose every test read the source as text, and its 30-day window
@@ -13,16 +14,10 @@ import type { SessionUser } from '../auth'
 // database can catch that class, so this test does exactly that.
 
 const root = pathToFileURL(process.cwd() + '/').href
+stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(k)=>k;t.has=()=>false;t.raw=(k)=>k;return t};export async function getLocale(){return "en"}', authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(
-          'export async function getTranslations(){const t=(k)=>k;t.has=()=>false;t.raw=(k)=>k;return t};export async function getLocale(){return "en"}',
-        ),
-      }
-    }
     const app = resolveAppModule(specifier, context, next, root)
     if (app) return app
     return next(specifier, context)

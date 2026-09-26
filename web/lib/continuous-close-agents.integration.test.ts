@@ -5,6 +5,7 @@ import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from './auth';
+import { stubModules } from '../testing/stub-modules.ts'
 
 // Agent-pack visibility (b06): continuous_close_findings narrows to the
 // caller's readable packs and never leaks across orgs. Fixture mirrors
@@ -15,8 +16,9 @@ import type { SessionUser } from './auth';
 const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06AgentsScope: state });
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__b06AgentsScope.user}' };
   return next(specifier, context);
 } });

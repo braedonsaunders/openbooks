@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import type { Authz } from "./authz";
+import { stubModules } from '../testing/stub-modules.ts'
 
 const state: { gate: Authz | null; reportResolutions: number } = { gate: null, reportResolutions: 0 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-stub-outputs-scope")] = state;
@@ -48,8 +49,9 @@ const reportRunMock = "data:text/javascript," + encodeURIComponent(`
 `);
 const nextIntlMock = "data:text/javascript," + encodeURIComponent(
   "export async function getTranslations(){return ((key) => key)}");
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "next-intl/server") return { shortCircuit: true, url: nextIntlMock };
   if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
   const parent = decodeURIComponent(context.parentURL ?? "");
   if (specifier === "./report-run" && parent.endsWith("/web/lib/payroll-evidence.ts")) {

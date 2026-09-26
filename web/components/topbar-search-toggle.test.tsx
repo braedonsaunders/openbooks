@@ -1,33 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // in topbar nav mode the header search is hidden below lg with
 // no trigger, so global search is unreachable on mobile. A toggle button
 // must exist below lg and open the search.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/dashboard",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard" });
 
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/dashboard'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
-    return next(specifier, context);
-  },
-});
+stubModules({ navigation: { pathname: '/dashboard' }, intl: false, authz: false, features: false });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

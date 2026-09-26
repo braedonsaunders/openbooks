@@ -1,23 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/admin/setup/allocations',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 const { registerHooks } = await import('node:module')
 const { existsSync } = await import('node:fs')
@@ -25,6 +8,8 @@ const { join } = await import('node:path')
 const { pathToFileURL } = await import('node:url')
 const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
 const webRoot = join(process.cwd(), 'web')
+await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/allocations", matchMediaMatches: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '@openbooks/ui') return { shortCircuit: true, url: worktreeUi }
@@ -38,7 +23,6 @@ registerHooks({
   },
 })
 
-globals.IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { act } = await import('react')
@@ -62,7 +46,7 @@ const provider = (children: React.ReactElement) => (
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
 test('the allocation driver empty state opens a manual driver with its guidance', async () => {
-  globals.fetch = async (url: unknown) => ({
+  ;(globalThis as Record<string, unknown>).fetch = async (url: unknown) => ({
     ok: true,
     json: async () => String(url).includes('/drivers')
       ? { drivers: [] }
@@ -93,7 +77,7 @@ test('the allocation driver empty state opens a manual driver with its guidance'
 })
 
 test('allocation lineage explains an empty result in the active locale', async () => {
-  globals.fetch = async () => ({
+  ;(globalThis as Record<string, unknown>).fetch = async () => ({
     ok: true,
     json: async () => ({ rows: [], total: 0, truncated: false }),
   })

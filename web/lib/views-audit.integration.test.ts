@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
+import { stubModules } from '../testing/stub-modules.ts'
 
 // Saved-view edits and deletes mutated rows with no audit evidence while
 // create audited; an owner sharing a view with roles excluding their own
@@ -14,14 +15,12 @@ const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __viewsAuditState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
+    '../../../../lib/authz': '\n      export async function guardPermission() {\n        const s = globalThis.__viewsAuditState;\n        return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set([\'reports.create\', \'reports.read\']) };\n      }\n    ',
+  } });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz') return virtual(`
-      export async function guardPermission() {
-        const s = globalThis.__viewsAuditState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['reports.create', 'reports.read']) };
-      }
-    `)
     if (specifier === '../../../../lib/report-authz') return virtual(`
       export async function canRunReportEntity() { return true }
       export async function guardReportEntity() { return null }

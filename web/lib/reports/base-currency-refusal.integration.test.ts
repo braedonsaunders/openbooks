@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../auth'
+import { stubModules } from '../../testing/stub-modules.ts'
 
 /**
  * Base-currency refusal contract (F1T-11).
@@ -26,11 +27,12 @@ const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __baseCurrencyRefusalUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+stubModules({ navigation: false, authz: false, features: false, extra: {
+    '../../../../lib/feature-gates': 'export async function requireFeatureEnabled(){}',
+  } });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
-      return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
-    }
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && (context.parentURL?.endsWith('/web/lib/authz.ts') || context.parentURL?.endsWith('/web/lib/consolidation.ts'))) {
       return virtual('export async function currentUser(){return globalThis.__baseCurrencyRefusalUser.user}')
     }
@@ -38,9 +40,6 @@ registerHooks({
     // them and is independent of their verdict.
     if (specifier === '../../../../lib/projects-gate') {
       return virtual('export async function requireProjectsFeature(){}')
-    }
-    if (specifier === '../../../../lib/feature-gates') {
-      return virtual('export async function requireFeatureEnabled(){}')
     }
     // The refused condition itself: the org row carries no base currency.
     // Nothing else in these chains reads lib/data before the refusal

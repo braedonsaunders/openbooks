@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // The control surface for settling a credit without cash. The engine is proven
 // against a real database in credit-settlement.integration.test.ts and the
@@ -8,25 +9,8 @@ import test from "node:test";
 // bodies those endpoints validate.
 // Only the network is doubled. React, next-intl, the real English catalog and
 // the real money formatter all run.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/ar/invoices",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "HTMLInputElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 void React;
 const { createRoot } = await import("react-dom/client");
@@ -50,7 +34,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
  * Both the setter and the event must come from JSDOM's own window — Node
  * supplies a global `Event` that this document will not dispatch as its own.
  */
-const win = dom.window as unknown as Window & typeof globalThis;
+const win = window as unknown as Window & typeof globalThis;
 function nativeSetValue(input: HTMLInputElement, value: string): void {
   Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, "value")!.set!.call(input, value);
   input.dispatchEvent(new win.Event("input", { bubbles: true }));

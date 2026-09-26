@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { stubModules } from '../testing/stub-modules.ts'
 
 // The backups page loader normalizes raw SQL timestamps to ISO strings
 // before serialization, so no Date object crosses into client props. Only
 // the page gate and the translation framework are seammed; the loader, the
 // timestamp normalization, and the database are real.
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith("/lib/authz")) {
       return { shortCircuit: true, url: "mock:backups-gate" };
-    }
-    if (specifier === "next-intl/server") {
-      return { shortCircuit: true, url: "mock:backups-intl" };
     }
     if (specifier === "@openbooks/jobs") {
       return { shortCircuit: true, url: "mock:backups-jobs" };
@@ -27,13 +27,6 @@ registerHooks({
         shortCircuit: true,
         source: `const key = Symbol.for('openbooks.backups-gate')
           export async function requirePermission() { return globalThis[key] }`,
-      };
-    }
-    if (url === "mock:backups-intl") {
-      return {
-        format: "module",
-        shortCircuit: true,
-      source: `export async function getTranslations(namespace) { return (key) => namespace + '.' + key }`,
       };
     }
     if (url === "mock:backups-jobs") {

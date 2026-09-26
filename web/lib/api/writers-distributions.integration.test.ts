@@ -1,23 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
+import { stubModules } from '../../testing/stub-modules.ts'
 
 // The generic record writer funnels document writes through the same
 // createDocumentDraft + applyDocumentEdit path the drawer uses (including
 // the create-path totals preflight), so a distributionKey on an API line
 // must explode exactly like an interactive save.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}",
-      };
-    }
-    return nextResolve(specifier, context);
-  },
-});
+stubModules({ navigation: false, authz: false, features: false });
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");

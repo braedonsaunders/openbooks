@@ -3,21 +3,15 @@ import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
+import { stubModules } from '../testing/stub-modules.ts'
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
 const state: { user: import('./auth').SessionUser | null } = { user: null }
 Object.assign(globalThis, { __reviewState: state })
+stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;return t;}', authz: false, features: false });
+
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'next-intl/server')
-      return {
-        shortCircuit: true,
-        url:
-          'data:text/javascript,' +
-          encodeURIComponent(
-            'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;return t;}',
-          ),
-      }
     if (
       (s === './auth' || s.endsWith('/lib/auth')) &&
       c.parentURL?.includes('/web/')

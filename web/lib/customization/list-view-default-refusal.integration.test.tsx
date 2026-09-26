@@ -3,26 +3,21 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
+import { stubModules } from '../../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + '/').href
+stubModules({ navigation: false, authz: false, features: false, extra: {
+    '../../../lib/authz': 'export async function requirePermission(){return globalThis.__listDefaultAuthz}export function can(){return true}',
+  } });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
-      return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key)=>key}export async function getLocale(){return 'en'}" }
-    }
     // Authentication is the request boundary here; list resolution and its DB
     // data remain real. The property loader only needs the resolved principal.
-    if (specifier === '../../../lib/authz') {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export async function requirePermission(){return globalThis.__listDefaultAuthz}export function can(){return true}",
-      }
-    }
     return next(specifier, context)
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { renderToStaticMarkup } = await import('react-dom/server')

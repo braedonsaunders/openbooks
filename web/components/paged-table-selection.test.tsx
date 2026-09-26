@@ -2,37 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ReactElement } from "react";
 import type { PagedColumn, PagedSelection } from "./paged-table";
-
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/assets",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof dom.window.requestAnimationFrame !== "function") {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  dom.window.cancelAnimationFrame = ((id: number) =>
-    clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame;
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame;
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -41,6 +11,8 @@ const { pathToFileURL } = await import("node:url");
 const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
+await bootJsdomEnvironment({ url: "http://localhost:4800/assets", matchMediaMatches: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/ui") {
@@ -50,7 +22,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");
@@ -232,7 +203,7 @@ test("paged-table: select-all after a search covers only the matching rows", asy
     )?.set;
     nativeSetter?.call(search, "Asset 1");
     const DomEvent = (
-      dom.window as unknown as { Event: new (type: string, init?: EventInit) => Event }
+      window as unknown as { Event: new (type: string, init?: EventInit) => Event }
     ).Event;
     search.dispatchEvent(new DomEvent("input", { bubbles: true }));
   });

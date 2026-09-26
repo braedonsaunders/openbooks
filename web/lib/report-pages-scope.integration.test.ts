@@ -6,6 +6,7 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import * as React from 'react'
 import ExcelJS from 'exceljs'
+import { stubModules } from '../testing/stub-modules.ts'
 
 /**
  * Legal-entity scope on the report SCREENS and their supporting routes.
@@ -29,16 +30,10 @@ const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
 const state: { user: import('./auth').SessionUser | null } = { user: null }
 Object.assign(globalThis, { __reportPagesState: state, React })
+stubModules({ navigation: false, intl: 'export async function getFormatter(){return{number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}};export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t;};export async function getLocale(){return "en"}', authz: false, features: false });
+
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(
-          'export async function getFormatter(){return{number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}};export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t;};export async function getLocale(){return "en"}',
-        ),
-      }
-    }
     if ((s === './auth' || s.endsWith('/lib/auth')) && c.parentURL?.includes('/web/') && !c.parentURL.includes('/web/lib/auth.ts')) {
       // Session identity comes from the test principal; every other auth
       // export (cookie names, token helpers used by locale/report-pdf) is the

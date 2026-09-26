@@ -4,6 +4,7 @@ import { registerHooks } from "node:module";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { stubModules } from '../testing/stub-modules.ts'
 
 // Consolidated shared behavior for every "exists but gated" refusal; each
 // case below pins its explanation page. A gated route names its feature or
@@ -50,11 +51,10 @@ const FEATURES_MOCK = `
   export async function isFeatureEnabled(_orgId, key) { return globalThis.__gateFeatures[key] !== false }
 `;
 
+stubModules({ navigation: {}, intl: false, authz: false, features: false });
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "next/navigation") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(NAV_MOCK) };
-    }
     if (
       (specifier === "./auth" || specifier === "./subsidiaries") &&
       context.parentURL?.includes("lib/authz.ts")

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { stubModules } from '../../testing/stub-modules.ts'
 
 // Route-level proof for the provider-FX observation id on payment posting:
 // the real POST handler must refuse a junk settlementFxRateId with the field
@@ -9,24 +10,15 @@ import test from "node:test";
 // body parsing and reaching the document lookup). Only the auth boundary is
 // stubbed, in the real Authz shape with an unrestricted scope; parsing, the
 // document lookup, and the database are real.
+stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
+    '../../../../lib/authz': 'const key = Symbol.for(\'openbooks.posting-fx-gate\')\n          export async function getAuthz() { return globalThis[key] ?? null }\n          export function can() { return true }\n          export function guardSubsidiaryScope() { return null }',
+  } });
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz") {
-      return { shortCircuit: true, url: "mock:posting-gate" };
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:posting-gate") {
-      return {
-        format: "module",
-        shortCircuit: true,
-        source: `const key = Symbol.for('openbooks.posting-fx-gate')
-          export async function getAuthz() { return globalThis[key] ?? null }
-          export function can() { return true }
-          export function guardSubsidiaryScope() { return null }`,
-      };
-    }
     return nextLoad(url, context);
   },
 });

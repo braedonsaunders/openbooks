@@ -5,12 +5,14 @@ import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url';
 import type { SessionUser } from './auth';
 import * as React from 'react';
+import { stubModules } from '../testing/stub-modules.ts'
 Object.assign(globalThis, { React });
 const root = pathToFileURL(process.cwd() + "/").href;
 const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __forecastSnapshotSession: session });
+stubModules({ navigation: false, intl: 'export async function getTranslations(){return key=>key};export async function getLocale(){return \'en\'};export async function getFormatter(){return {dateTime:date=>date.toISOString()}}', authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'};export async function getFormatter(){return {dateTime:date=>date.toISOString()}}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__forecastSnapshotSession.user}' };
   const app = resolveAppModule(specifier, context, next, root);
   if (app) return app;

@@ -3,28 +3,17 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import type { ReportCustomQuery, ReportRuleGroup } from "@openbooks/reports";
+import { stubModules } from '../testing/stub-modules.ts'
+
+stubModules({ navigation: { source: 'export function redirect(){throw new Error("redirect")};export function useRouter(){throw new Error("no router")}' }, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export function redirect(){throw new Error(\"redirect\")};export function useRouter(){throw new Error(\"no router\")}",
-      };
-    }
     if (specifier === "next/headers") {
       return {
         shortCircuit: true,
         format: "module",
         url: "data:text/javascript,export async function headers(){throw new Error(\"no headers\")};export async function cookies(){throw new Error(\"no cookies\")}",
-      };
-    }
-    if (specifier === "next-intl/server") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en'}",
       };
     }
     return next(specifier, context);

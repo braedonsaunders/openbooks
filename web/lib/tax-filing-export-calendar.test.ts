@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
+import { stubModules } from '../testing/stub-modules.ts'
 
 /**
  * Frozen-filing export stamping: the PDF generation stamp and the workbook
@@ -100,14 +101,10 @@ const mockUrls = new Map<string, string>([
   ['../../../../../../lib/report-pdf', mockUrl('report-pdf')],
 ])
 
+stubModules({ navigation: false, authz: false, features: false });
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function getTranslations() { return (key) => key }',
-      }
-    }
     if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
       return {
         shortCircuit: true,

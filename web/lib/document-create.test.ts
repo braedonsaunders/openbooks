@@ -1,33 +1,18 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import {
   documentCreateHref,
   isDocumentCreateKind,
 } from './document-kinds'
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-const dom = new (await import('jsdom')).JSDOM('<!doctype html><html><body></body></html>', {
-  url: 'http://localhost/ar/invoices',
-})
-const domWindow = dom.window as unknown as Record<string, unknown>
-const globals = globalThis as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
+stubModules({ navigation: { source: 'export function useRouter(){return {push(href){globalThis.__documentCreateNavigations.push(href)}}}' }, intl: false, authz: false, features: false });
+
+await bootJsdomEnvironment({ html: '<!doctype html><html><body></body></html>', url: 'http://localhost/ar/invoices' });
 ;(globalThis as typeof globalThis & { __documentCreateNavigations?: string[] }).__documentCreateNavigations = []
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {push(href){globalThis.__documentCreateNavigations.push(href)}}}',
-      }
-    }
-    return nextResolve(specifier, context)
-  },
-})
 const React = await import('react')
-Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true })
+Object.assign(globalThis, { React })
 const { act } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { NewDocumentButton } = await import('../components/new-document-button.tsx')

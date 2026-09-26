@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // (overlay path): the /entities + /parties loaders supply the
 // vendor Compliance tab inputs, but the shell-level related-party overlay
@@ -8,32 +10,6 @@ import test, { type TestContext } from 'node:test'
 // compliance props — so the tab never appeared no matter the feature state.
 // The host must forward the drawer's compliance fields, and relatedPartyTab
 // must admit 'compliance' like partyTab does.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/ap/bills?relatedParty=019f0000-0000-4000-8000-000000000003&relatedPartyRole=vendor',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-
 Object.assign(globalThis, {
   __hostTestRouter: {
     push() {},
@@ -45,14 +21,12 @@ Object.assign(globalThis, {
   __hostTestQuery: 'relatedParty=019f0000-0000-4000-8000-000000000003&relatedPartyRole=vendor',
 })
 const { registerHooks } = await import('node:module')
+await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills?relatedParty=019f0000-0000-4000-8000-000000000003&relatedPartyRole=vendor", matchMediaMatches: false });
+
+stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__hostTestRouter}export function usePathname(){return "/ap/bills"}export function useSearchParams(){return new URLSearchParams(globalThis.__hostTestQuery ?? "")}' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__hostTestRouter}export function usePathname(){return "/ap/bills"}export function useSearchParams(){return new URLSearchParams(globalThis.__hostTestQuery ?? "")}',
-      }
-    }
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,
@@ -63,7 +37,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

@@ -1,20 +1,9 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../testing/stub-modules.ts'
 
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export async function getTranslations() { return (key) => key }',
-      }
-    }
-    return nextResolve(specifier, context)
-  },
-})
+stubModules({ navigation: false, authz: false, features: false });
 
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')

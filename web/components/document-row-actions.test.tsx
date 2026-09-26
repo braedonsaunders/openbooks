@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 declare global {
   var __docRowRouter: { push(): void; refresh(): void } | undefined;
@@ -8,33 +10,13 @@ declare global {
 }
 
 // jsdom first: the row actions read browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/ap/bills",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof dom.window.requestAnimationFrame !== "function") {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame;
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame;
-}
-
 const { registerHooks } = await import("node:module");
+await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills" });
+
+stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__docRowRouter}' }, intl: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return globalThis.__docRowRouter}",
-      };
-    }
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -51,7 +33,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 /**
  * App placement: installing an app must not implicitly place it in
@@ -31,6 +33,12 @@ function sqlText(query: unknown): string {
     .join('')
 }
 
+await bootJsdomEnvironment({ url: "http://localhost:4800/", matchMediaMatches: false });
+
+stubModules({ navigation: {}, authz: false, features: false, extra: {
+    'next-intl': 'export function useTranslations() { const t = (key) => key; t.has = () => true; return t }',
+  } });
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@openbooks/engine/src/extensions/projections.ts') {
@@ -56,18 +64,6 @@ const hooks = registerHooks({
         `)}`,
       }
     }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter() { return { refresh() {} } }',
-      }
-    }
-    if (specifier === 'next-intl') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useTranslations() { const t = (key) => key; t.has = () => true; return t }',
-      }
-    }
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,
@@ -83,40 +79,20 @@ const { defaultNavConfig } = await import('./registry.ts')
 
 // --- NavEditor removal (jsdom + the real component and design system) ---
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost:4800/' })
-const editorGlobals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (editorGlobals[key] === undefined) editorGlobals[key] = domWindow[key]
-}
-if (typeof (dom.window as unknown as { matchMedia?: unknown }).matchMedia !== 'function') {
-  ;(dom.window as unknown as Record<string, unknown>).matchMedia = () => ({
-    matches: false,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {
-      return false
-    },
-  })
-}
 {
   const calls: Array<{ url: string; init: RequestInit }> = []
-  ;(editorGlobals as Record<symbol, unknown>)[Symbol.for('openbooks.nav-editor-fetch-calls')] = calls
-  editorGlobals.fetch = (async (url: string, init: RequestInit) => {
+  ;(globalThis as Record<symbol, unknown>)[Symbol.for('openbooks.nav-editor-fetch-calls')] = calls
+  ;(globalThis as Record<string, unknown>).fetch = (async (url: string, init: RequestInit) => {
     calls.push({ url: String(url), init })
     return { ok: true, json: async () => ({}) }
   }) as typeof fetch
 }
 function fetchCalls(): Array<{ url: string; init: RequestInit }> {
-  return (editorGlobals as Record<symbol, unknown>)[
+  return (globalThis as Record<symbol, unknown>)[
     Symbol.for('openbooks.nav-editor-fetch-calls')
   ] as Array<{ url: string; init: RequestInit }>
 }
 
-;(editorGlobals as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
@@ -201,7 +177,7 @@ function appRow(host: HTMLElement): boolean {
 
 async function click(el: Element) {
   await act(async () => {
-    el.dispatchEvent(new (dom.window as unknown as { MouseEvent: typeof MouseEvent }).MouseEvent('click', { bubbles: true }))
+    el.dispatchEvent(new (window as unknown as { MouseEvent: typeof MouseEvent }).MouseEvent('click', { bubbles: true }))
     await tick()
   })
   await tick()

@@ -5,6 +5,7 @@ import test from 'node:test'
 import * as React from 'react'
 import { resolveAppModule } from './test-module-hooks'
 import type { SessionUser } from './auth'
+import { stubModules } from '../testing/stub-modules.ts'
 
 /**
  * `/close` has two branches behind one route, and one of them was blank.
@@ -28,11 +29,10 @@ const state: { user: SessionUser | null } = { user: null }
 // The tsx runner compiles these RSC sources with the CLASSIC JSX transform.
 Object.assign(globalThis, { __closeRunBranch: state, React })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+stubModules({ navigation: false, intl: 'export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}; export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}}', authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
-      return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}; export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}}')
-    }
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__closeRunBranch.user}')
     }

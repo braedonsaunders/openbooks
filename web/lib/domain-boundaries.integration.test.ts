@@ -4,6 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from './auth'
+import { stubModules } from '../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
@@ -12,12 +13,10 @@ const virtual = (source: string) => ({
   shortCircuit: true as const,
   url: 'data:text/javascript,' + encodeURIComponent(source),
 })
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server')
-      return virtual(
-        'export async function getTranslations(){ return (key)=>key }; export async function getLocale(){return "en"}',
-      )
     if (
       (specifier === './auth' || specifier.endsWith('/lib/auth')) &&
       context.parentURL?.endsWith('/web/lib/authz.ts')

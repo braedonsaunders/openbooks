@@ -5,6 +5,7 @@ import {
   INVENTORY_ACTION_PERMISSIONS,
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
 } from '@openbooks/engine/src/organization/permissions.ts'
+import { stubModules } from '../testing/stub-modules.ts'
 import {
   BUILT_IN_ROLES,
   PERMISSION_CATALOGUE,
@@ -130,6 +131,8 @@ const mockSources = new Map<string, string>([
     `,
   ],
 ])
+
+stubModules({ navigation: {}, intl: false, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -339,13 +342,6 @@ const provisionPostSources = new Map<string, string>([
 
 const provisionPostHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export function redirect(){throw new Error("redirect")}',
-      }
-    }
     if (specifier === '@openbooks/engine/src/platform/db.ts' || (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/organization/extension-permission-availability.ts'))) {
       return { url: 'mock:provision-post-db', shortCircuit: true }
     }

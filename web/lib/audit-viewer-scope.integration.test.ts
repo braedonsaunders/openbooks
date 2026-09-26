@@ -6,14 +6,16 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import * as React from "react";
 import type { SessionUser } from "./auth";
+import { stubModules } from '../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + "/").href;
 const session: { user: SessionUser | null } = { user: null };
 // The plain tsx runner uses classic JSX for this RSC source; Next supplies
 // the automatic JSX runtime in production.
 Object.assign(globalThis, { __auditViewerSession: session, React });
+stubModules({ navigation: false, intl: 'export async function getTranslations(){return key=>key};export async function getLocale(){return \'en\'};export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat(\'en\',typeof f===\'object\'?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat(\'en\',typeof f===\'object\'?f:o).format(v instanceof Date?v:new Date(String(v)))}}', authz: false, features: false });
+
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'};export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat('en',typeof f==='object'?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat('en',typeof f==='object'?f:o).format(v instanceof Date?v:new Date(String(v)))}}" };
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__auditViewerSession.user}" };
   const app = resolveAppModule(specifier, context, next, root);
   if (app) return app;

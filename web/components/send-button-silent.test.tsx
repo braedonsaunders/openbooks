@@ -1,40 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // Actions > Send on a payable invoice silently failed — the dialog
 // closed with no toast on the 422 (email delivery not configured). The send
 // dialog must stay open and surface the server error.
 
 // jsdom first: Popover/Button read browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/ar/invoices",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of [
-  "window",
-  "document",
-  "navigator",
-  "Node",
-  "Element",
-  "HTMLElement",
-  "Event",
-  "self",
-]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
 declare global {
   var __sendToasts: { kind: string; message: string }[] | undefined;
@@ -53,7 +26,6 @@ registerHooks({
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

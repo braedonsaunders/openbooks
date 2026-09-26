@@ -5,19 +5,19 @@ import { inflateSync } from "node:zlib";
 import test from "node:test";
 import ExcelJS from "exceljs";
 import { sql } from "drizzle-orm";
+import { stubModules } from '../testing/stub-modules.ts'
 
 // Account-register exports stamp the org business day: the xlsx workbook's
 // created/modified properties and the PDF bytes carry it, and the download
 // filename names it. The route, the register query, the business-day clock,
 // and both exporters are real; only the access boundary (auth gate,
 // translations) is seammed.
+stubModules({ navigation: false, authz: false, features: false });
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith("/lib/authz")) {
       return { shortCircuit: true, url: "mock:register-export-gate" };
-    }
-    if (specifier === "next-intl/server") {
-      return { shortCircuit: true, url: "mock:register-export-intl" };
     }
     return nextResolve(specifier, context);
   },
@@ -30,13 +30,6 @@ registerHooks({
           const key = Symbol.for('openbooks.register-export-gate')
           export async function getAuthz() { return globalThis[key] }
           export function can(authz, perm) { return permissionSetCovers(authz.permissions, perm) }`,
-      };
-    }
-    if (url === "mock:register-export-intl") {
-      return {
-        format: "module",
-        shortCircuit: true,
-        source: `export async function getTranslations() { return (key) => key }`,
       };
     }
     return nextLoad(url, context);

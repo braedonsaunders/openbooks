@@ -1,26 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost:4800/' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 const { registerHooks } = await import('node:module')
 const { join } = await import('node:path')
 const { pathToFileURL } = await import('node:url')
 const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
+await bootJsdomEnvironment({ url: "http://localhost:4800/", matchMediaMatches: false });
+
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '@openbooks/ui') return { shortCircuit: true, url: worktreeUi }
@@ -28,7 +15,6 @@ registerHooks({
   },
 })
 
-globals.IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { act } = await import('react')
