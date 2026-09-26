@@ -161,7 +161,7 @@ export async function POST(req: Request) {
       }
       const row = (await tx.execute<Created>(sql`
         insert into sftp_servers (org_id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, created_by, updated_by)
-        values (${user.orgId}, ${String(body.name).trim()}, ${username}, ${encryptSecret(password)}, ${authorizedKeys},
+        values (${user.orgId}, ${String(body.name).trim()}, ${username}, ${encryptSecret(password, user.orgId)}, ${authorizedKeys},
                 ${backend}, ${bucket}, ${rootPrefix}, ${user.id}, ${user.id})
         on conflict (username) do nothing
         returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by

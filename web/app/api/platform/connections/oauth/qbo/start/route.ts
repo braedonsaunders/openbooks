@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     throw e
   })
   if (!conn || conn.source !== 'qbo') return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const secret = unsealJson<{ clientId?: string }>(conn.secrets)
+  const secret = conn.secrets == null ? null : unsealJson<{ clientId?: string }>(conn.secrets, { orgId: gate.user.orgId, purpose: "connection.secrets" })
   if (!secret?.clientId) {
     return NextResponse.json({ error: 'connection has no Client ID — save the app credentials first' }, { status: 400 })
   }

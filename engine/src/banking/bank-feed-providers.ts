@@ -482,7 +482,13 @@ export async function testBankFeedConnection(
   const adapter = getBankFeedAdapter(conn.provider);
   if (!adapter) return { ok: false, detail: "provider is not an API feed" };
   const sealedCredentials = credentialSnapshot === undefined ? conn.credentials : credentialSnapshot;
-  const creds = unsealJson<Record<string, string>>(sealedCredentials) ?? {};
+  const creds =
+    sealedCredentials == null
+      ? {}
+      : (unsealJson<Record<string, string>>(sealedCredentials, {
+          orgId: ctx.orgId,
+          purpose: "bankfeed.credentials",
+        }) ?? {});
   return adapter.test(creds);
 }
 
@@ -569,7 +575,13 @@ async function syncOne(
 ): Promise<FeedSyncOutcome> {
   const adapter = getBankFeedAdapter(row.provider);
   if (!adapter) return { connectionId: row.id, imported: 0, duplicates: 0, error: "not an API provider" };
-  const creds = unsealJson<Record<string, string>>(row.credentials) ?? {};
+  const creds =
+    row.credentials == null
+      ? {}
+      : (unsealJson<Record<string, string>>(row.credentials, {
+          orgId: row.orgId,
+          purpose: "bankfeed.credentials",
+        }) ?? {});
   const until = await businessToday(row.orgId);
   // A misconfigured overlap refuses here and surfaces as the outcome's
   // error (callers catch into it) — never a silently narrowed window.
@@ -815,6 +827,6 @@ export async function syncBankFeedNow(
 }
 
 /** Helper the API layer uses to seal a credentials object before storing. */
-export function sealCredentials(creds: Record<string, string>): string {
-  return sealJson(creds);
+export function sealCredentials(orgId: string, creds: Record<string, string>): string {
+  return sealJson(creds, { orgId, purpose: "bankfeed.credentials" });
 }

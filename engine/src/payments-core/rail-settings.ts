@@ -80,7 +80,8 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
   `));
-  const eft = unsealJson<Partial<EftSettings>>(r.rows[0]?.originator_secrets_encrypted) ?? {};
+  const sealed = r.rows[0]?.originator_secrets_encrypted;
+  const eft = sealed == null ? {} : unsealJson<Partial<EftSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" });
   return validateEftSettings(eft);
 }
 
@@ -89,14 +90,19 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
 // ---------------------------------------------------------------------------
 
 /** Encrypt a payee bank account number for party_bank_accounts.account_number_encrypted. */
-export function encryptAccountNumber(plain: string): string {
-  return sealSecret(plain);
+export function encryptAccountNumber(plain: string, scope: { orgId: string }): string {
+  return sealSecret(plain, { orgId: scope.orgId, purpose: "payment.counterparty.account" });
 }
 
-export function decryptAccountNumber(stored: string): string {
-  const plain = unsealSecret(stored);
-  if (plain === null) throw new PaymentError("stored bank account number is malformed or could not be decrypted");
-  return plain;
+export function decryptAccountNumber(stored: string, scope: { orgId: string }): string {
+  try {
+    return unsealSecret(stored, { orgId: scope.orgId, purpose: "payment.counterparty.account" });
+  } catch (error) {
+    throw new PaymentError(
+      "stored bank account number cannot be decrypted — re-enter it on the payee bank account before paying",
+      { cause: error },
+    );
+  }
 }
 
 /** ISO 13616 IBAN validation, including the mandatory mod-97 check. */

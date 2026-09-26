@@ -49,7 +49,8 @@ export async function loadNachaSettings(orgId: string, runId?: string) {
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
   `));
-  return validateNachaSettings(unsealJson<Partial<NachaSettings>>(r.rows[0]?.originator_secrets_encrypted));
+  const sealed = r.rows[0]?.originator_secrets_encrypted;
+  return validateNachaSettings(sealed == null ? null : unsealJson<Partial<NachaSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" }));
 }
 
 export interface NachaEntry {

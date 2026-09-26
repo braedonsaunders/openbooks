@@ -75,7 +75,7 @@ test("dispatched report mail carries attachment references, never file bytes", {
     assert.ok(ref.filename.endsWith(".pdf"));
 
     // The worker materializes the same bytes at send time.
-    const loaded = await loadEmailAttachments(attachments);
+    const loaded = await loadEmailAttachments(org.orgId, attachments);
     assert.equal(loaded.length, 1);
     assert.equal(loaded[0]!.filename, ref.filename);
     assert.deepEqual(Buffer.from(loaded[0]!.content, "base64"), pdf);

@@ -111,6 +111,7 @@ type BankDetailRow = {
  */
 function resolveRailBankDetail(
   method: RailBankMethod,
+  orgId: string,
   row: BankDetailRow,
 ): RailBankDetail {
   if (!row.approved_at) return { ok: false, reason: "bank account is not approved" };
@@ -125,7 +126,7 @@ function resolveRailBankDetail(
   if (!row.account_number_encrypted) {
     return { ok: false, reason: "missing account number" };
   }
-  const accountNumber = decryptAccountNumber(row.account_number_encrypted);
+  const accountNumber = decryptAccountNumber(row.account_number_encrypted, { orgId });
   const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
   const iban = (routing.iban ?? accountNumber).replace(/\s/g, "");
   if (
@@ -255,7 +256,7 @@ export async function lockRunBankEvidence(
       }
       // The CPA-005 currency control keys off the INSTRUCTION's currency — the
       // currency the run actually pays in.
-      const detail = resolveRailBankDetail(method, {
+      const detail = resolveRailBankDetail(method, orgId, {
         approved_at: bank.approvedAt,
         is_active: bank.isActive,
         currency: r.currency,
@@ -393,7 +394,7 @@ export async function paymentRunReadiness(
     // method (and any custom value) is gated elsewhere or not at all.
     // `direct_debit` collection runs resolve through their rail above.
     if (!bankMethod) continue;
-    const detail = resolveRailBankDetail(bankMethod, r);
+    const detail = resolveRailBankDetail(bankMethod, orgId, r);
     if (!detail.ok) {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: detail.reason });
     }

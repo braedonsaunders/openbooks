@@ -64,7 +64,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const before = await currentRow(tx, id, user.orgId)
       if (!before) { notFound = true; return null }
       const after = (await tx.execute<SftpServerAuditRow & { id: string; username: string }>(sql`
-        update sftp_servers set password_encrypted = ${encryptSecret(password)}, updated_at = now(), updated_by = ${user.id}
+        update sftp_servers set password_encrypted = ${encryptSecret(password, user.orgId)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
         returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
       `)).rows[0]!

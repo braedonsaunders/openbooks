@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     throw e
   })
   if (!conn || conn.source !== 'qbo') return connectionOauthBounce('notfound')
-  const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
+  const secret = conn.secrets == null ? null : unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets, { orgId: st.orgId, purpose: "connection.secrets" })
   if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
 
   const environment = (conn.config as { environment?: string }).environment === 'production' ? 'production' : 'sandbox'
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
       ? `${info[0].CompanyName} (${realmId})`
       : conn.displayName
 
-    const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
+    const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens }, { orgId: st.orgId, purpose: "connection.secrets" })
     const connected = await db.transaction(async (tx) => {
       await lockActorPermission(tx, gate, 'admin.setup.manage', { requireUnrestrictedScope: true })
       const [current] = await tx

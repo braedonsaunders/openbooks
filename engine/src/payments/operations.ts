@@ -216,7 +216,9 @@ export async function createPaymentBankProfile(
       paymentFormatId: input.paymentFormatId,
       currency: input.currency,
       country: input.country ?? null,
-      originatorSecretsEncrypted: input.originatorSecrets ? sealJson(input.originatorSecrets) : null,
+      originatorSecretsEncrypted: input.originatorSecrets
+        ? sealJson(input.originatorSecrets, { orgId, purpose: "payment.originator.secrets" })
+        : null,
       settings: input.settings ?? {},
       sftpServerId: input.sftpServerId ?? null,
       sftpFolder: input.sftpFolder ?? null,
@@ -259,14 +261,21 @@ export async function updatePaymentBankProfile(
     if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
     const current = existing.rows[0];
     const rotating = input.originatorSecrets !== undefined;
+    const storedOriginatorSecrets =
+      current.originator_secrets_encrypted == null
+        ? null
+        : unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted, {
+            orgId,
+            purpose: "payment.originator.secrets",
+          });
     const originatorSecrets = rotating
       ? input.originatorSecrets === null
         ? null
         : {
-            ...(unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted) ?? {}),
+            ...(storedOriginatorSecrets ?? {}),
             ...input.originatorSecrets,
           }
-      : unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted);
+      : storedOriginatorSecrets;
     await validatePaymentBankProfileRefs(orgId, {
       bankAccountId: input.bankAccountId ?? current.bank_account_id,
       subsidiaryId: input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId,
@@ -289,7 +298,7 @@ export async function updatePaymentBankProfile(
     const secret = rotating
       ? input.originatorSecrets === null
         ? null
-        : sealJson(originatorSecrets ?? {})
+        : sealJson(originatorSecrets ?? {}, { orgId, purpose: "payment.originator.secrets" })
       : current.originator_secrets_encrypted;
     const write = await tx.execute<{ id: string }>(sql`
       update payment_bank_profiles set
@@ -535,7 +544,13 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
       id: row.payment_bank_profile_id,
       name: row.profile_name,
       settings: row.profile_settings ?? {},
-      secrets: unsealJson<Record<string, unknown>>(row.originator_secrets_encrypted) ?? {},
+      secrets:
+        row.originator_secrets_encrypted == null
+          ? {}
+          : unsealJson<Record<string, unknown>>(row.originator_secrets_encrypted, {
+              orgId,
+              purpose: "payment.originator.secrets",
+            }),
     },
     format: {
       id: row.format_id,
@@ -551,7 +566,7 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
       currency: p.currency,
       partyId: p.payee_party_id,
       partyName: p.display_name,
-      accountNumber: p.account_number_encrypted ? decryptAccountNumber(p.account_number_encrypted) : "",
+      accountNumber: p.account_number_encrypted ? decryptAccountNumber(p.account_number_encrypted, { orgId }) : "",
       routing: p.routing ?? {},
       reference: p.reference,
       mandateReference: p.mandate_reference,

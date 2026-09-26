@@ -76,7 +76,7 @@ test("payment links refuse an out-of-scope invoice on list, mint, and void", { s
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
-              ${sealJson({ apiKey: "sk_test_scope", webhookSecret: "whsec_scope" })}, ${userId}, ${userId})`);
+              ${sealJson({ apiKey: "sk_test_scope", webhookSecret: "whsec_scope" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
     const scopeA = new Set([org.subsidiaryId]);
     await assert.rejects(
       listPaymentLinks(org.orgId, invoiceId, scopeA),

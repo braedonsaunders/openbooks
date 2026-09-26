@@ -407,7 +407,10 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
     if (typeof sealed !== "string" || sealed === "") {
       throw new Error("Connection was removed or its credentials are unavailable during token refresh");
     }
-    const current = unsealJson<Record<string, unknown>>(sealed);
+    const current = unsealJson<Record<string, unknown>>(sealed, {
+      orgId: connection.orgId,
+      purpose: "connection.secrets",
+    });
     const currentTokens = {
       accessToken: current?.accessToken,
       refreshToken: current?.refreshToken,
@@ -430,12 +433,15 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
     }
 
     const next = await refresh(currentTokens.refreshToken);
-    const updatedSecrets = sealJson({
-      ...current,
-      accessToken: next.accessToken,
-      refreshToken: next.refreshToken,
-      expiresAt: next.expiresAt,
-    });
+    const updatedSecrets = sealJson(
+      {
+        ...current,
+        accessToken: next.accessToken,
+        refreshToken: next.refreshToken,
+        expiresAt: next.expiresAt,
+      },
+      { orgId: connection.orgId, purpose: "connection.secrets" },
+    );
     const updated = await db.execute<{ id: string }>(sql`
       update connections
          set secrets = ${updatedSecrets}, updated_at = now()
@@ -471,7 +477,10 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     });
   }
   if (conn.source === "netsuite") {
-    const secret = unsealJson<Partial<NetSuiteCreds>>(conn.secrets);
+    const secret =
+      conn.secrets == null
+        ? null
+        : unsealJson<Partial<NetSuiteCreds>>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
     const cfg = conn.config as {
       account?: string;
       host?: string;
@@ -539,7 +548,10 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
 
   if (conn.source === "odoo") {
     const cfg = conn.config as { url?: string; database?: string; username?: string; baseCurrency?: string };
-    const secret = unsealJson<{ apiKey?: string }>(conn.secrets);
+    const secret =
+      conn.secrets == null
+        ? null
+        : unsealJson<{ apiKey?: string }>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
     if (!cfg.url || !cfg.database || !cfg.username || !secret?.apiKey) {
       throw new Error("Odoo connection is missing its URL, database, user or API key");
     }
@@ -561,7 +573,13 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
 
   if (conn.source === "erpnext") {
     const cfg = conn.config as { url?: string; baseCurrency?: string };
-    const secret = unsealJson<{ apiKey?: string; apiSecret?: string }>(conn.secrets);
+    const secret =
+      conn.secrets == null
+        ? null
+        : unsealJson<{ apiKey?: string; apiSecret?: string }>(conn.secrets, {
+            orgId: conn.orgId,
+            purpose: "connection.secrets",
+          });
     if (!cfg.url || !secret?.apiKey || !secret?.apiSecret) {
       throw new Error("ERPNext connection is missing its URL, API key or API secret");
     }
@@ -578,7 +596,10 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
 
   if (conn.source === "qbo") {
     const cfg = conn.config as { realmId?: string; environment?: string; baseCurrency?: string };
-    const secret = unsealJson<QboSecrets>(conn.secrets);
+    const secret =
+      conn.secrets == null
+        ? null
+        : unsealJson<QboSecrets>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
     if (!secret?.clientId || !secret?.clientSecret) {
       throw new Error("QuickBooks connection is missing its app credentials (Client ID / Secret)");
     }
@@ -610,7 +631,10 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
 
   if (conn.source === "xero") {
     const cfg = conn.config as { tenantId?: string; baseCurrency?: string };
-    const secret = unsealJson<XeroSecrets>(conn.secrets);
+    const secret =
+      conn.secrets == null
+        ? null
+        : unsealJson<XeroSecrets>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
     if (!secret?.clientId || !secret?.clientSecret) {
       throw new Error("Xero connection is missing its app credentials (Client ID / Secret)");
     }
@@ -638,7 +662,10 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
 
   if (conn.source === "dynamics") {
     const cfg = conn.config as { aadTenantId?: string; environment?: string; companyId?: string; baseCurrency?: string };
-    const secret = unsealJson<DynamicsSecrets>(conn.secrets);
+    const secret =
+      conn.secrets == null
+        ? null
+        : unsealJson<DynamicsSecrets>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
     if (!secret?.clientId || !secret?.clientSecret) {
       throw new Error("Dynamics connection is missing its app credentials (Client ID / Secret)");
     }

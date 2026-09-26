@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   if (scoped) return scoped;
 
   const isApi = API_PROVIDERS.has(body.provider);
-  const sealed = isApi && body.credentials ? sealCredentials(body.credentials) : null;
+  const sealed = isApi && body.credentials ? sealCredentials(authz.user.orgId, body.credentials) : null;
   const status = isApi ? "pending" : "connected";
   const cadence = isApi ? (body.syncCadence ?? "daily") : "manual";
 

@@ -26,7 +26,7 @@ test("Web Connector password guessing is bounded per connection", { skip: !DB },
         authKind: "token",
         status: "active",
         config: { historyStartDate: "2026-01-01", region: "CA", baseCurrency: "CAD" },
-        secrets: sealJson({ webConnectorPassword: password }),
+        secrets: sealJson({ webConnectorPassword: password }, { orgId: org.orgId, purpose: "connection.secrets" }),
       }).returning({ id: schema.connections.id });
       assert.ok(connection);
       connectionIds.push(connection.id);
@@ -72,7 +72,7 @@ test("an expired guess window stops refusing the correct password", { skip: !DB 
       authKind: "token",
       status: "active",
       config: { historyStartDate: "2026-01-01", region: "CA", baseCurrency: "CAD" },
-      secrets: sealJson({ webConnectorPassword: password }),
+      secrets: sealJson({ webConnectorPassword: password }, { orgId: org.orgId, purpose: "connection.secrets" }),
     }).returning({ id: schema.connections.id });
     assert.ok(connection);
     connectionId = connection.id;

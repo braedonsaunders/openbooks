@@ -64,7 +64,7 @@ function backupLines(orgId: string): string[] {
       orgId,
       createdAt: "2026-08-04T12:00:00.000Z",
       schemaSha256: "a".repeat(64),
-      dataKeyCheck: sealSecret(BACKUP_DATA_KEY_CHECK_PLAINTEXT),
+      dataKeyCheck: sealSecret(BACKUP_DATA_KEY_CHECK_PLAINTEXT, { orgId: "system", purpose: "backup.data-key-check" }),
     }),
     `{"t":"orgs","r":{"id":"${orgId}","name":"Round Trip"}}`,
     `{"t":"journal_lines","r":{"id":"${randomUUID()}","org_id":"${orgId}","amount":${amount}}}`,
@@ -115,7 +115,7 @@ test("encrypted backup bytes are opaque and carry a versioned envelope", async (
     assert.equal(envelope?.version, BACKUP_FORMAT_VERSION);
     assert.equal(envelope?.keyId, BACKUP_KEY_ID);
     assert.ok(envelope!.nonce.length > 0);
-    assert.ok(envelope!.wrappedKey.startsWith("enc:v1:"));
+    assert.ok(envelope!.wrappedKey.startsWith("enc:v2:"));
     // No gzip member survives: the file is not readable by zcat.
     assert.throws(() => gunzipSync(readFileSync(archive)));
     const kind = await peekBackupArchiveKind(archive);

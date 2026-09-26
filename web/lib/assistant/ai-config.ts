@@ -165,6 +165,7 @@ export async function getOrgAiSettings(orgId: string): Promise<OrgAiSettings> {
 }
 
 function normalizeDocumentCaptureInput(
+  orgId: string,
   input: DocumentCaptureSettingsInput,
   previous: StoredDocumentCapture | undefined,
 ): StoredDocumentCapture {
@@ -186,7 +187,9 @@ function normalizeDocumentCaptureInput(
     autoCreatePoMatchedDrafts: input.autoCreatePoMatchedDrafts,
     keyEncrypted: previous?.keyEncrypted,
   };
-  if (input.apiKey?.trim()) next.keyEncrypted = sealSecret(input.apiKey.trim());
+  if (input.apiKey?.trim()) {
+    next.keyEncrypted = sealSecret(input.apiKey.trim(), { orgId, purpose: "payables.ap-capture.key" });
+  }
   if (input.enabled && (!endpoint || !next.keyEncrypted)) {
     throw new Error("document capture requires an endpoint and API key");
   }
@@ -233,13 +236,17 @@ export function normalizeAgentSettingInput(
 
 /**
  * Runtime config (decrypted key) for AI calls — the single resolver every
- * consumer uses. Null when disabled, keyless, or the key fails to unseal.
- * The org name always travels with the resolved config for prompt grounding.
+ * consumer uses. Null when disabled or keyless; a present-but-unsealable key
+ * throws, never silently disables. The org name always travels with the
+ * resolved config for prompt grounding.
  */
 export async function getOrgAiConfig(orgId: string): Promise<AiConfig | null> {
   const { ai, orgName } = await readAi(orgId);
   if (ai.enabled === false) return null;
-  const apiKey = unsealSecret(ai.keyEncrypted);
+  const apiKey =
+    ai.keyEncrypted == null
+      ? null
+      : unsealSecret(ai.keyEncrypted, { orgId, purpose: "assistant.ai.key" });
   if (!apiKey) return null;
   return {
     provider: normProvider(ai.provider),
@@ -321,10 +328,10 @@ export async function saveOrgAiSettings(
       modelSmart: input.modelSmart || undefined,
       baseUrl: baseUrl || undefined,
       keyEncrypted: prev.keyEncrypted,
-      documentCapture: normalizeDocumentCaptureInput(input.documentCapture, prev.documentCapture),
+      documentCapture: normalizeDocumentCaptureInput(orgId, input.documentCapture, prev.documentCapture),
     };
     if (input.apiKey && input.apiKey.trim()) {
-      next.keyEncrypted = sealSecret(input.apiKey.trim());
+      next.keyEncrypted = sealSecret(input.apiKey.trim(), { orgId, purpose: "assistant.ai.key" });
     }
     await tx.execute(sql`
       update orgs

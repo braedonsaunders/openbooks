@@ -87,16 +87,14 @@ test("provider configuration writes carry attributable redacted before/after aud
     // The evidence must not disclose the credential in any form.
     const evidenceText = JSON.stringify(created.changes);
     assert.equal(evidenceText.includes("sk_live_email_secret_one"), false, "no plaintext secret in the audit evidence");
-    assert.equal(evidenceText.includes("keyCiphertext"), false, "no sealed material in the audit evidence");
-    assert.equal(evidenceText.includes("keyNonce"), false, "no seal nonce in the audit evidence");
+    assert.equal(evidenceText.includes("keySealed"), false, "no sealed material in the audit evidence");
 
     // The stored config keeps the sealed secret; the view exposes only its existence.
     const stored = await storedEmail(org.orgId);
-    assert.ok(stored?.keyCiphertext && stored.keyCiphertext !== "sk_live_email_secret_one");
+    assert.ok(stored?.keySealed && stored.keySealed !== "sk_live_email_secret_one");
     const view = await readOrgEmailConfigView(org.orgId);
     assert.equal(view.hasSecret, true);
-    assert.equal("keyCiphertext" in view, false);
-    assert.equal("keyNonce" in view, false);
+    assert.equal("keySealed" in view, false);
     assert.ok(view.updatedAt, "the view exposes the revision token");
 
     // The org metadata is stamped with the acting user.
@@ -337,7 +335,7 @@ test("concurrent configuration edits serialize on the org row and cannot lose di
     const merged = await storedEmail(org.orgId);
     assert.equal(merged?.fromEmail, "first-admin@example.test", "the first admin's edit survived");
     assert.equal(merged?.replyTo, "second-admin@example.test", "the second admin's edit survived");
-    assert.ok(merged?.keyCiphertext && merged.keyCiphertext !== "sk_live_rotated_by_second");
+    assert.ok(merged?.keySealed && merged.keySealed !== "sk_live_rotated_by_second");
     assert.ok(result, "the parked save completed after the lock holder committed");
 
     // The loser's audit evidence is authoritative: its BEFORE side shows the

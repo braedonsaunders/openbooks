@@ -142,7 +142,7 @@ test(
       for (const [employeeId, pesel] of employeesWithPesel) {
         await db.execute(sql`
           update employee_payroll_profiles
-             set sin_encrypted = ${sealSecret(pesel)}, sin_last3 = ${pesel.slice(-3)}
+             set sin_encrypted = ${sealSecret(pesel, { orgId: org.orgId, purpose: "payroll.employee.sin" })}, sin_last3 = ${pesel.slice(-3)}
            where org_id = ${org.orgId} and employee_party_id = ${employeeId}`);
       }
 
@@ -280,7 +280,7 @@ test(
       // Filing must still refuse that record rather than transmit a bad PESEL.
       await db.execute(sql`
         update employee_payroll_profiles
-           set sin_encrypted = ${sealSecret("44051401350")}
+           set sin_encrypted = ${sealSecret("44051401350", { orgId: org.orgId, purpose: "payroll.employee.sin" })}
          where org_id = ${org.orgId} and employee_party_id = ${anna}`);
       await assert.rejects(
         () => pit11Slip(org.orgId, 2026, anna),

@@ -258,7 +258,10 @@ export async function authenticateWebConnector(connectionId: string, username: s
   // Refuse before comparing once the window is exhausted — the same failure
   // shape, so tripping is not observable beyond the refusal itself.
   if (await qbwcGuessesTripped(connectionId)) return { ticket: "", companyFile: "nvu" };
-  const secret = unsealJson<QbdSecrets>(conn.secrets);
+  const secret =
+    conn.secrets == null
+      ? null
+      : unsealJson<QbdSecrets>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
   const expectedUser = `qbd:${connectionId}`;
   if (!secret?.webConnectorPassword || !secureEqual(username, expectedUser) || !secureEqual(password, secret.webConnectorPassword)) {
     await recordQbwcGuessFailure(connectionId);
@@ -292,7 +295,10 @@ export async function authenticateWebConnector(connectionId: string, username: s
           from connections where id = ${connectionId} and source = 'qbd' limit 1 for update`));
       const current = fresh.rows[0] ?? null;
       if (!current || current.status === "paused") return "stale" as const;
-      const secret = unsealJson<QbdSecrets>(current.secrets);
+      const secret =
+        current.secrets == null
+          ? null
+          : unsealJson<QbdSecrets>(current.secrets, { orgId: current.orgId, purpose: "connection.secrets" });
       if (!secret?.webConnectorPassword || !secureEqual(password, secret.webConnectorPassword)) {
         return "rotated" as const;
       }

@@ -178,7 +178,7 @@ async function seedFeedFixture(): Promise<FeedFixture> {
       (id, org_id, name, provider, account_id, status, credentials, external_account_id,
        sync_cadence, next_sync_at, is_active, created_by)
     values (${connectionId}, ${org.orgId}, 'Scratch feed', 'plaid', ${org.accounts.bank}, 'pending',
-            ${sealCredentials({ clientId: "client-id", secret: "provider-secret", accessToken: "access-token", env: "sandbox" })},
+            ${sealCredentials(org.orgId, { clientId: "client-id", secret: "provider-secret", accessToken: "access-token", env: "sandbox" })},
             'plaid-external-1', 'hourly', null, true, ${userId})
   `);
   return { orgId: org.orgId, userId, connectionId, accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId };

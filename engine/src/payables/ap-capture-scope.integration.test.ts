@@ -174,7 +174,7 @@ test("auto-materialize leaves an out-of-scope purchase-order match in review", {
           enabled: true,
           documentCapture: {
             enabled: true, endpoint, model: "prebuilt-invoice", confidenceThreshold: "0.9000",
-            autoCreatePoMatchedDrafts: true, keyEncrypted: sealSecret("db-proof-key"),
+            autoCreatePoMatchedDrafts: true, keyEncrypted: sealSecret("db-proof-key", { orgId: org.orgId, purpose: "payables.ap-capture.key" }),
           },
         })}::jsonb)
        where id = ${org.orgId}`);

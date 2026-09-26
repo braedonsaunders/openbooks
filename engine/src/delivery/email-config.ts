@@ -37,14 +37,14 @@ export async function readOrgEmailConfig(orgId: string): Promise<RawEmailConfig 
 }
 
 /** What the settings UI and audit evidence may see — never the sealed secret, only whether one is set. */
-export type RedactedEmailConfig = Omit<RawEmailConfig, "keyCiphertext" | "keyNonce"> & {
+export type RedactedEmailConfig = Omit<RawEmailConfig, "keySealed" | "keyCiphertext" | "keyNonce"> & {
   hasSecret: boolean;
 };
 
 /** Strip the sealed secret material, keeping only whether a credential exists. */
 export function redactEmailConfig(raw: RawEmailConfig | null | undefined): RedactedEmailConfig {
-  const { keyCiphertext, keyNonce, ...rest } = raw ?? {};
-  return { ...rest, hasSecret: Boolean(keyCiphertext && keyNonce) };
+  const { keySealed, keyCiphertext, keyNonce, ...rest } = raw ?? {};
+  return { ...rest, hasSecret: Boolean(keySealed ?? (keyCiphertext && keyNonce)) };
 }
 
 /** What the settings UI may see, plus the exact org revision token for the CAS fence. */
@@ -65,7 +65,7 @@ export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailCon
 }
 
 export type SaveOrgEmailInput = Omit<RawEmailConfig,
-  "keyCiphertext" | "keyNonce" | "provider" | "fromName" | "fromEmail" | "replyTo" |
+  "keySealed" | "keyCiphertext" | "keyNonce" | "provider" | "fromName" | "fromEmail" | "replyTo" |
   "mailgunDomain" | "mailgunRegion" | "smtpHost" | "smtpPort" | "smtpSecure" | "smtpUsername"
 > & {
   /** undefined keeps; null removes this setting from the stored config. */
@@ -182,12 +182,13 @@ export async function saveOrgEmailConfig(
       else if (value !== undefined) Object.assign(next, { [key]: value });
     }
     if (secret === null) {
+      delete next.keySealed;
       delete next.keyCiphertext;
       delete next.keyNonce;
     } else if (typeof secret === "string" && secret.trim()) {
-      const sealed = sealSecret(secret.trim());
-      next.keyCiphertext = sealed.ciphertext;
-      next.keyNonce = sealed.nonce;
+      next.keySealed = sealSecret(secret.trim(), orgId);
+      delete next.keyCiphertext;
+      delete next.keyNonce;
     }
 
     // A selected provider is staged to send even while disabled, so its
@@ -235,16 +236,16 @@ export async function saveOrgEmailConfig(
 
 /** Resolve an org's sendable transport (secret unsealed), or null if unconfigured. */
 export async function resolveOrgEmailTransport(orgId: string): Promise<EmailTransport | null> {
-  return resolveEmailTransport(await readOrgEmailConfig(orgId));
+  return resolveEmailTransport(await readOrgEmailConfig(orgId), orgId);
 }
 
 /**
  * Resolve an org's transport naming why it cannot send. `unusable`
- * (rotated session secret, corrupt credential) must fail and retry — never
+ * (rotated data key, corrupt credential) must fail and retry — never
  * ack as "not configured", which would drop every mail forever.
  */
 export async function resolveOrgEmailTransportDetailed(orgId: string): Promise<EmailTransportResolution> {
-  return resolveEmailTransportDetailed(await readOrgEmailConfig(orgId));
+  return resolveEmailTransportDetailed(await readOrgEmailConfig(orgId), orgId);
 }
 
 // --- email_log ---------------------------------------------------------------

@@ -21,20 +21,26 @@ test("concurrent token refreshes use the newest generation and preserve current 
   try {
     await db.execute(sql`
       insert into connections (id, org_id, source, display_name, status, auth_kind, secrets)
-      values (${id}, ${org.orgId}, 'xero', 'refresh-race', 'active', 'oauth2', ${sealJson({
-        clientId: "client-before-admin-rotation",
-        clientSecret: "secret-before-admin-rotation",
-        ...consumed,
-      })})`);
+      values (${id}, ${org.orgId}, 'xero', 'refresh-race', 'active', 'oauth2', ${sealJson(
+        {
+          clientId: "client-before-admin-rotation",
+          clientSecret: "secret-before-admin-rotation",
+          ...consumed,
+        },
+        { orgId: org.orgId, purpose: "connection.secrets" },
+      )})`);
     // Simulate an administrator rotating app credentials after this worker
     // built its client, but before its expired-token callback begins.
     await db.execute(sql`
-      update connections set secrets = ${sealJson({
-        clientId: "current-client-id",
-        clientSecret: "current-client-secret",
-        tenantId: "current-tenant",
-        ...consumed,
-      })}
+      update connections set secrets = ${sealJson(
+        {
+          clientId: "current-client-id",
+          clientSecret: "current-client-secret",
+          tenantId: "current-tenant",
+          ...consumed,
+        },
+        { orgId: org.orgId, purpose: "connection.secrets" },
+      )}
        where id = ${id} and org_id = ${org.orgId}`);
 
     let refreshCalls = 0;
@@ -58,7 +64,7 @@ test("concurrent token refreshes use the newest generation and preserve current 
     assert.deepEqual(second, first, "the waiting worker adopts the committed token generation");
     const loaded = await db.execute<{ secrets: string | null }>(sql`
       select secrets from connections where id = ${id} and org_id = ${org.orgId}`);
-    const stored = unsealJson<Record<string, unknown>>(String(loaded.rows[0]?.secrets));
+    const stored = unsealJson<Record<string, unknown>>(String(loaded.rows[0]?.secrets), { orgId: org.orgId, purpose: "connection.secrets" });
     assert.ok(stored, "the latest sealed credentials remain readable");
     assert.equal(stored.clientId, "current-client-id");
     assert.equal(stored.clientSecret, "current-client-secret");

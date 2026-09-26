@@ -517,7 +517,7 @@ async function bacsProfileOrg(secrets: Record<string, unknown>) {
                                        country, originator_secrets_encrypted, settings, is_active,
                                        created_by, updated_by)
     values (${profileId}, ${org.orgId}, 'Payroll direct deposit (Bacs)', ${bankAccountId}, ${formatId},
-            'GBP', 'GB', ${sealJson(secrets)}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
+            'GBP', 'GB', ${sealJson(secrets, { orgId: org.orgId, purpose: "payment.originator.secrets" })}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, profileId };
 }
 

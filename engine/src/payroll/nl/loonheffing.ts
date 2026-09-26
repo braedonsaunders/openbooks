@@ -677,7 +677,8 @@ async function nlProfileBsn(args: Pick<
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId} and prof.employee_party_id = ${employeePartyId}
   `);
-  return unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
+  const sealed = rows.rows[0]?.sin_encrypted ?? null;
+  return sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
 }
 
 /** ISO date plus whole calendar months, clamping the day to the target month's length. */

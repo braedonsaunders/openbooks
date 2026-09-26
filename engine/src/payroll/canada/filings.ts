@@ -425,7 +425,8 @@ async function t4ConfidentialFields(
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
   `));
-  const sin = unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
+  const sealed = rows.rows[0]?.sin_encrypted ?? null;
+  const sin = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   return [{
     label: "Social insurance number",
     fingerprint: sin ? keyedFingerprint("ca.sin", sin) : "",

@@ -135,7 +135,10 @@ async function main(): Promise<void> {
   if (!connection || connection.source !== "netsuite") {
     throw new Error("the selected tenant connection is not NetSuite");
   }
-  const secret = unsealJson<Partial<NetSuiteCreds>>(connection.secrets);
+  const secret =
+    connection.secrets == null
+      ? null
+      : unsealJson<Partial<NetSuiteCreds>>(connection.secrets, { orgId, purpose: "connection.secrets" });
   const account = String(connection.config.account ?? "");
   const host = String(connection.config.host ?? "");
   if (

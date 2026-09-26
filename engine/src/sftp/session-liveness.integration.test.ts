@@ -27,7 +27,7 @@ async function seed(): Promise<Fixture> {
         (id, org_id, name, username, password_encrypted, backend, root_prefix)
       values
         (${serverId}, ${org.orgId}, 'Revocation Probe', ${username},
-         ${encryptSecret("first-password")}, 'local', ${`sftp/${org.orgId}/probe`})`);
+         ${encryptSecret("first-password", org.orgId)}, 'local', ${`sftp/${org.orgId}/probe`})`);
     return { orgId: org.orgId, serverId, username };
   });
 }
@@ -42,7 +42,7 @@ async function setActive(fixture: Fixture, active: boolean): Promise<void> {
 async function rotatePassword(fixture: Fixture, password: string): Promise<void> {
   await withBypassContext(() =>
     db.execute(sql`
-      update sftp_servers set password_encrypted = ${encryptSecret(password)}, updated_at = now()
+      update sftp_servers set password_encrypted = ${encryptSecret(password, fixture.orgId)}, updated_at = now()
        where id = ${fixture.serverId} and org_id = ${fixture.orgId}`));
 }
 

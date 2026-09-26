@@ -162,7 +162,7 @@ export async function buildRoeXml(
       continue;
     }
     const sealed = sinByEmployee.get(issue.employeePartyId);
-    const sin = sealed ? unsealSecret(sealed) : null;
+    const sin = sealed ? unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" }) : null;
     if (!sin || !isCanadianSin(sin)) {
       missingSins.push(record.employeeName);
       continue;

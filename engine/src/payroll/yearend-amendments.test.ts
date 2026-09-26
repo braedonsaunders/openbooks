@@ -775,7 +775,7 @@ async function seedT4Year(): Promise<T4Fixture> {
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            sin_encrypted, sin_last3, is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, '4', 'accrue',
-            ${sealSecret("046454286")}, '286', true, ${actorId}, ${actorId})`);
+            ${sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" })}, '286', true, ${actorId}, ${actorId})`);
 
   const documentId = randomUUID();
   await db.execute(sql`
@@ -1344,7 +1344,7 @@ test(
       });
       await db.execute(sql`
         update employee_payroll_profiles
-           set sin_encrypted = ${sealSecret("130692544")}, sin_last3 = '544'
+           set sin_encrypted = ${sealSecret("130692544", { orgId: fx.orgId, purpose: "payroll.employee.sin" })}, sin_last3 = '544'
          where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`);
 
       const lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);

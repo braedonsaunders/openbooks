@@ -57,7 +57,7 @@ test("a nonzero ledger row without a TxnID refuses the sync before deletion infe
     authKind: "token",
     status: "active",
     config: { historyStartDate: "2024-01-01", region: "CA", baseCurrency: "CAD" },
-    secrets: sealJson({ webConnectorPassword: "txnid-test-password-123" }),
+    secrets: sealJson({ webConnectorPassword: "txnid-test-password-123" }, { orgId: org.orgId, purpose: "connection.secrets" }),
   }).returning({ id: schema.connections.id });
   assert.ok(connection);
   try {

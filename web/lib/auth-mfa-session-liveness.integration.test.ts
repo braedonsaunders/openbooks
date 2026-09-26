@@ -29,7 +29,7 @@ async function seedMfaUser(orgId: string, password: string) {
       values (${id},${userId},${randomBytes(32).toString("hex")},'password',${new Date(Date.now() + 86_400_000)})`);
     const hashes = codes.map((code) => hashRecoveryCode(userId, normalizeRecoveryCode(code)!));
     await db.execute(sql`insert into auth_mfa_factors(user_id,secret_encrypted,recovery_code_hashes,enabled_at)
-      values (${userId},${sealSecret(secret)},${JSON.stringify(hashes)}::jsonb,now())`);
+      values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},${JSON.stringify(hashes)}::jsonb,now())`);
     return { userId, sessionId, otherSessionId };
   });
   return { ...setup, codes };

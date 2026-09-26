@@ -15,7 +15,7 @@ function dynamicsRow(secrets: Record<string, unknown>): ConnectionRow {
     authKind: "oauth2",
     status: "active",
     config: { aadTenantId: "aad-1", environment: "Production", companyId: "co-1" },
-    secrets: sealJson(secrets),
+    secrets: sealJson(secrets, { orgId: "org-1", purpose: "connection.secrets" }),
     mirrorEnabled: false,
     mirrorSchedule: "",
     postedChangePolicy: "review_required",

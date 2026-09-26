@@ -12,7 +12,7 @@ interface CallbackState {
   connection: Record<string, unknown>;
   updated: Record<string, unknown> | null;
 }
-const secrets = sealJson({ clientId: "dyn-client", clientSecret: "dyn-secret" });
+const secrets = sealJson({ clientId: "dyn-client", clientSecret: "dyn-secret" }, { orgId: "org-1", purpose: "connection.secrets" });
 const state: CallbackState = {
   companies: [
     { id: "first-co", name: "First" },
@@ -158,7 +158,7 @@ test("Dynamics callback bounce uses appBaseUrl, not the request Host", async () 
 test("a reusable sealed org/connection pair without the cookie nonce is badstate", async () => {
   reset();
   const res = await callback({
-    state: sealJson({ orgId: "org-1", connectionId: "conn-1" }),
+    state: sealJson({ orgId: "org-1", connectionId: "conn-1" }, { orgId: "system", purpose: "connection.oauth.state" }),
     cookie: "unrelated-nonce",
   });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=badstate");

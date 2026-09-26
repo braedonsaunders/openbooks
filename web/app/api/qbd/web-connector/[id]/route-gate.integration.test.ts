@@ -32,7 +32,7 @@ test("a legitimate large receiveResponseXML with a valid ticket still works", as
     authKind: "token",
     status: "active",
     config: { historyStartDate: "2024-01-01", region: "CA", baseCurrency: "CAD" },
-    secrets: sealJson({ webConnectorPassword: password }),
+    secrets: sealJson({ webConnectorPassword: password }, { orgId: org.orgId, purpose: "connection.secrets" }),
   }).returning({ id: schema.connections.id });
   assert.ok(connection);
   try {

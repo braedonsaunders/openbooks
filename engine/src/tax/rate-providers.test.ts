@@ -1051,7 +1051,7 @@ test(
       assert.equal(view!.hasSecret, true);
       assert.equal("secrets" in view!, false);
       assert.equal(view!.updatedAt, row2.updatedAt);
-      const sealed = unsealJson<Record<string, string>>(row2.secrets);
+      const sealed = unsealJson<Record<string, string>>(row2.secrets!, { orgId, purpose: "tax.provider.secrets" });
       assert.deepEqual(Object.keys(sealed!).sort(), ["accountId", "apiKey", "licenseKey"]);
 
       // Clearing one credential is atomic: the rest survive in the same commit,
@@ -1063,7 +1063,7 @@ test(
         { expectedUpdatedAt: row2.updatedAt, reason: "drop stray key" },
       );
       const cleared = (await committedConfig(orgId))!;
-      assert.deepEqual(Object.keys(unsealJson<Record<string, string>>(cleared.secrets)!).sort(), [
+      assert.deepEqual(Object.keys(unsealJson<Record<string, string>>(cleared.secrets!, { orgId, purpose: "tax.provider.secrets" })!).sort(), [
         "accountId",
         "licenseKey",
       ]);
@@ -1126,7 +1126,7 @@ test(
       // Zero partial write: the row is exactly what the concurrent save committed.
       const after = (await committedConfig(orgId))!;
       assert.deepEqual(after.settings, current.settings);
-      assert.deepEqual(Object.keys(unsealJson<Record<string, string>>(after.secrets)!), ["accountId"]);
+      assert.deepEqual(Object.keys(unsealJson<Record<string, string>>(after.secrets!, { orgId, purpose: "tax.provider.secrets" })!), ["accountId"]);
       assert.equal(after.isEnabled, true);
       assert.equal(after.provider, "manual");
       assert.equal(after.updatedAt, current.updatedAt);
@@ -1185,7 +1185,7 @@ test(
       const admin3 = randomUUID();
       await editor.query(
         "update tax_rate_provider_configs set secrets = $2, updated_at = now(), updated_by = $3 where org_id = $1",
-        [orgId, sealJson({ accountId: "EDITOR-ACCT" }), admin3],
+        [orgId, sealJson({ accountId: "EDITOR-ACCT" }, { orgId, purpose: "tax.provider.secrets" }), admin3],
       );
       await editor.query("commit");
 
@@ -1193,7 +1193,7 @@ test(
       await racingSave;
 
       const final = (await committedConfig(orgId))!;
-      const secrets = unsealJson<Record<string, string>>(final.secrets);
+      const secrets = unsealJson<Record<string, string>>(final.secrets!, { orgId, purpose: "tax.provider.secrets" });
       assert.ok(secrets);
       // NEITHER side's credential was lost to the other.
       assert.deepEqual(Object.keys(secrets).sort(), ["accountId", "apiKey"]);
@@ -1283,7 +1283,7 @@ test(
       // revision are exactly what the last committed save left behind.
       const after = (await committedConfig(orgId))!;
       assert.deepEqual(after, prior);
-      assert.equal(unsealJson<Record<string, string>>(after.secrets)!.apiKey, "KEEP-KEY-VALUE");
+      assert.equal(unsealJson<Record<string, string>>(after.secrets!, { orgId, purpose: "tax.provider.secrets" })!.apiKey, "KEEP-KEY-VALUE");
       assert.equal(after.updatedBy, admin1);
       // No audit row leaked from the rolled-back attempt either.
       assert.equal((await configAuditRows(orgId)).length, 1);

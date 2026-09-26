@@ -140,7 +140,9 @@ async function credentials(orgId: string, connectionId?: string): Promise<NetSui
     order by status='active' desc, created_at desc limit 1`))
   const connection = row.rows[0]
   if (!connection) throw new Error('No tenant NetSuite connection exists')
-  const secret = unsealJson<Partial<NetSuiteCreds>>(connection.secrets)
+  const secret = connection.secrets == null
+    ? null
+    : unsealJson<Partial<NetSuiteCreds>>(connection.secrets, { orgId, purpose: 'connection.secrets' })
   if (!secret?.consumerKey || !secret.consumerSecret || !secret.tokenKey || !secret.tokenSecret || !connection.config.account || !connection.config.host) {
     throw new Error('The tenant NetSuite connection is missing credentials')
   }

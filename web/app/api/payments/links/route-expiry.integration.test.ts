@@ -87,7 +87,7 @@ async function fixture() {
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
     values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
-            ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_expiry" })}, ${actorId}, ${actorId})`);
+            ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_expiry" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${actorId}, ${actorId})`);
     const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
       authz: { user: { orgId: string; id: string } } | null;
     };

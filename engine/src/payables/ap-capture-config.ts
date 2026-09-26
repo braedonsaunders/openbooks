@@ -71,7 +71,12 @@ export async function getDocumentCaptureTestConfig(
   const settings = normalizeStoredDocumentCapture(capture);
   const endpoint = override.endpoint?.trim() || settings.endpoint;
   const model = override.model?.trim() || settings.model;
-  const apiKey = override.apiKey?.trim() || unsealSecret(capture.keyEncrypted) || "";
+  const apiKey =
+    override.apiKey?.trim() ||
+    (capture.keyEncrypted == null
+      ? ""
+      : unsealSecret(capture.keyEncrypted, { orgId, purpose: "payables.ap-capture.key" })) ||
+    "";
   if (!endpoint || !apiKey) return null;
   return { endpoint, model, apiKey };
 }
@@ -88,7 +93,10 @@ export async function getDocumentCaptureRuntimeConfig(orgId: string, lookup?: Ad
   if (!globalEnabled || !settings.enabled) return null;
   if (!settings.endpoint) return null;
   await verifyAzureDocumentEndpoint(settings.endpoint, lookup);
-  const apiKey = unsealSecret(capture.keyEncrypted);
+  const apiKey =
+    capture.keyEncrypted == null
+      ? null
+      : unsealSecret(capture.keyEncrypted, { orgId, purpose: "payables.ap-capture.key" });
   if (!apiKey) return null;
   return { ...settings, apiKey };
 }

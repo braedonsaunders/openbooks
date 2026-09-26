@@ -58,7 +58,7 @@ export function emailStagingKey(seed: string | undefined, index: number, filenam
 
 export async function storeEmailAttachments(
   attachments: EmailAttachmentPayload[] | undefined,
-  opts: { storageKeySeed?: string; orgId?: string } = {},
+  opts: { storageKeySeed?: string; orgId: string },
 ): Promise<EmailAttachmentRef[]> {
   if (!attachments || attachments.length === 0) return [];
   assertValidEmailAttachmentPayloads(attachments);
@@ -74,7 +74,11 @@ export async function storeEmailAttachments(
         writtenStorageKeys.push(id);
         stored.push({ filename: attachment.filename, contentType: attachment.contentType, storageKey: id });
       } else {
-        stored.push({ filename: attachment.filename, contentType: attachment.contentType, sealed: sealSecret(attachment.content) });
+        stored.push({
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          sealed: sealSecret(attachment.content, { orgId: opts.orgId, purpose: "email.attachment" }),
+        });
       }
     }
   } catch (error) {
@@ -102,6 +106,7 @@ export async function storeEmailAttachments(
 
 /** Materialize queue attachments to transmittable bytes (fetched, unsealed, or passed through while draining). */
 export async function loadEmailAttachments(
+  orgId: string,
   attachments: EmailAttachment[] | undefined,
 ): Promise<EmailAttachmentPayload[]> {
   if (!attachments || attachments.length === 0) return [];
@@ -121,8 +126,10 @@ export async function loadEmailAttachments(
       loaded.push({ filename: attachment.filename, contentType: attachment.contentType, content: bytes.toString("base64") });
       continue;
     }
-    const content = unsealSecret(attachment.sealed);
-    if (!content) {
+    let content: string;
+    try {
+      content = unsealSecret(attachment.sealed, { orgId, purpose: "email.attachment" });
+    } catch {
       throw new Error(
         `email attachment ${attachment.filename} cannot be unsealed; refusing to send a truncated message`,
       );

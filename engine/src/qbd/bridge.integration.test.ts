@@ -30,7 +30,7 @@ test("Web Connector bridge authenticates, atomically claims, hashes, and release
     authKind: "token",
     status: "active",
     config: { historyStartDate: new Date().toISOString().slice(0, 8) + "01", region: "CA", baseCurrency: "CAD" },
-    secrets: sealJson({ webConnectorPassword: password }),
+    secrets: sealJson({ webConnectorPassword: password }, { orgId, purpose: "connection.secrets" }),
   }).returning({ id: schema.connections.id });
   assert.ok(connection);
 
@@ -80,7 +80,7 @@ async function createQbdTestConnection(orgId: string): Promise<{ id: string; pas
     authKind: "token",
     status: "active",
     config: { historyStartDate: new Date().toISOString().slice(0, 8) + "01", region: "CA", baseCurrency: "CAD" },
-    secrets: sealJson({ webConnectorPassword: password }),
+    secrets: sealJson({ webConnectorPassword: password }, { orgId, purpose: "connection.secrets" }),
   }).returning({ id: schema.connections.id });
   assert.ok(connection);
   return { id: connection.id, password };

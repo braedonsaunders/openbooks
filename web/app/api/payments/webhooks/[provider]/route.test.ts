@@ -90,7 +90,7 @@ test("the route acknowledges a signed adyen delivery after isolating its malform
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'adyen', 'Adyen', true, true,
-              ${org.accounts.bank}, ${sealJson({ webhookSecret })}, ${userId}, ${userId})
+              ${org.accounts.bank}, ${sealJson({ webhookSecret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})
     `);
 
     const keyBytes = Buffer.from(webhookSecret, "base64");
@@ -255,7 +255,7 @@ test("the route returns 500 after isolating a poison event and committing its la
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'gocardless', 'GoCardless', true, true,
-              ${org.accounts.bank}, ${sealJson({ webhookSecret: secret })}, ${userId}, ${userId})
+              ${org.accounts.bank}, ${sealJson({ webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})
     `);
     await db.execute(sql`
       insert into payment_links

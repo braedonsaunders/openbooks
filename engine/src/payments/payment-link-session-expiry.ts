@@ -68,7 +68,10 @@ export async function expireStalePaymentLinkSessions(
 
   const config = await loadStripeSessionConfig(orgId);
   const apiBase = config ? stripeApiBase(config.settings ?? {}) : null;
-  const apiKey = config?.secrets ? unsealJson<{ apiKey?: string }>(config.secrets)?.apiKey : undefined;
+  const apiKey =
+    config?.secrets == null
+      ? undefined
+      : unsealJson<{ apiKey?: string }>(config.secrets, { orgId, purpose: "payment.provider.secrets" }).apiKey;
   if (!config) return;
   for (const attempt of attempts.rows) {
     let expired = false;

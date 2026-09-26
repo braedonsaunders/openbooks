@@ -56,7 +56,7 @@ async function seedTwoTenants(): Promise<LoginSeed> {
   await withBypass(async () => {
     await db.execute(sql`
       insert into sftp_servers (id, org_id, name, username, password_encrypted, backend, bucket, root_prefix, is_active)
-      values (${serverA}, ${orgA.orgId}, 'M42 F1 password login', ${usernameA}, ${encryptSecret(passwordA)}, 'local', null, ${`sftp/${orgA.orgId}/m42-f1`}, true)
+      values (${serverA}, ${orgA.orgId}, 'M42 F1 password login', ${usernameA}, ${encryptSecret(passwordA, orgA.orgId)}, 'local', null, ${`sftp/${orgA.orgId}/m42-f1`}, true)
     `);
     await db.execute(sql`
       insert into sftp_servers (id, org_id, name, username, authorized_keys, backend, bucket, root_prefix, is_active)

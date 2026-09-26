@@ -60,7 +60,11 @@ export interface BackupEnvelope {
   keyId: string;
   /** Base64 12-byte GCM nonce for the per-backup content key. */
   nonce: string;
-  /** The content key sealed by OPENBOOKS_DATA_KEY (`enc:v1:` wire format). */
+  /**
+   * The content key sealed by OPENBOOKS_DATA_KEY. New archives carry the
+   * v2 scope-bound seal; v1 (no scope binding) still decodes for the
+   * rotation window, the same way the header canary accepts both.
+   */
   wrappedKey: string;
 }
 
@@ -92,7 +96,7 @@ export function decodeBackupEnvelopeLine(line: string): BackupEnvelope | null {
     typeof record.nonce !== "string" ||
     record.nonce.length === 0 ||
     typeof record.wrappedKey !== "string" ||
-    !record.wrappedKey.startsWith("enc:v1:")
+    (!record.wrappedKey.startsWith("enc:v1:") && !record.wrappedKey.startsWith("enc:v2:"))
   ) {
     throw new Error(
       "backup encryption envelope is malformed; the archive is neither a supported encrypted backup nor a legacy plaintext backup",

@@ -361,7 +361,8 @@ async function loadValidPesel(orgId: string, employeePartyId: string): Promise<s
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
   `);
-  const pesel = unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
+  const sealed = rows.rows[0]?.sin_encrypted ?? null;
+  const pesel = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   if (!pesel || !isValidPesel(pesel)) {
     throw new PayrollError(
       `cannot issue or amend this employee's PIT-11 because the PESEL is ${pesel ? "invalid" : "missing"} — `

@@ -12,7 +12,7 @@
 // `uncertain` instead of throwing — recording it as a failure would invite a
 // blind BullMQ retry that duplicates a possibly-accepted message (#52).
 
-import { resolvePublicHost, unsealSecret } from './crypto'
+import { resolvePublicHost, unsealLegacyEmailSecret, unsealSecret } from './crypto'
 import { isEmailProvider, type EmailProvider } from './providers'
 import {
   isEmailAttachmentRef,
@@ -46,11 +46,15 @@ export type RawEmailConfig = {
   smtpPort?: number
   smtpSecure?: boolean
   smtpUsername?: string
+  /** Data-key seal (`enc:v2:…`, purpose `email.provider.secret`). Written by new saves. */
+  keySealed?: string
+  /** Legacy SESSION_SECRET-derived seal. Read during the rotation window, never written. */
   keyCiphertext?: string
+  /** Legacy SESSION_SECRET-derived seal. Read during the rotation window, never written. */
   keyNonce?: string
 }
 
-type PlainEmailConfig = Omit<RawEmailConfig, 'keyCiphertext' | 'keyNonce'> & { secret?: string }
+type PlainEmailConfig = Omit<RawEmailConfig, 'keySealed' | 'keyCiphertext' | 'keyNonce'> & { secret?: string }
 
 const MAILGUN_DOMAIN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i
 const SMTP_HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i
@@ -94,21 +98,26 @@ function validateEmailConfigFields(raw: PlainEmailConfig | RawEmailConfig, requi
 export function validateStoredEmailConfig(raw: RawEmailConfig, options: { requireComplete?: boolean } = {}): void {
   const requireComplete = options.requireComplete ?? raw.enabled === true
   validateEmailConfigFields(raw, requireComplete)
+  const hasSealed = Boolean(raw.keySealed?.trim())
   const hasCiphertext = Boolean(raw.keyCiphertext?.trim())
   const hasNonce = Boolean(raw.keyNonce?.trim())
   if (hasCiphertext !== hasNonce) throw new Error('The stored provider credential is incomplete; replace it before enabling email.')
-  if ((raw.keyCiphertext && raw.keyCiphertext.length > MAX_SEALED_SECRET_LENGTH) || (raw.keyNonce && raw.keyNonce.length > MAX_SEALED_SECRET_LENGTH)) {
+  if (
+    (raw.keySealed && raw.keySealed.length > MAX_SEALED_SECRET_LENGTH) ||
+    (raw.keyCiphertext && raw.keyCiphertext.length > MAX_SEALED_SECRET_LENGTH) ||
+    (raw.keyNonce && raw.keyNonce.length > MAX_SEALED_SECRET_LENGTH)
+  ) {
     throw new Error('The stored provider credential is invalid; replace it before enabling email.')
   }
   // The credential is required only at enable time: clearing it while
   // disabling (offboarding) or staging a credential-less draft must keep
   // working — enabling and test-sending still refuse loudly without one.
-  if (raw.enabled === true && raw.provider !== 'smtp' && !(hasCiphertext && hasNonce)) {
+  if (raw.enabled === true && raw.provider !== 'smtp' && !hasSealed && !(hasCiphertext && hasNonce)) {
     throw new Error("Enter this provider's credential before enabling email delivery.")
   }
   if (raw.provider === 'smtp') {
     const hasUsername = Boolean(raw.smtpUsername?.trim())
-    const hasPassword = hasCiphertext && hasNonce
+    const hasPassword = hasSealed || (hasCiphertext && hasNonce)
     if (hasUsername !== hasPassword) {
       throw new Error('SMTP username and password must both be provided, or both omitted for an unauthenticated relay.')
     }
@@ -182,7 +191,10 @@ export type EmailTransportResolution =
   | { state: 'ready'; transport: EmailTransport }
 
 /** Unseal a stored config and build its transport, naming why it cannot send. */
-export function resolveEmailTransportDetailed(raw: RawEmailConfig | null | undefined): EmailTransportResolution {
+export function resolveEmailTransportDetailed(
+  raw: RawEmailConfig | null | undefined,
+  orgId: string,
+): EmailTransportResolution {
   if (!raw || !raw.provider || raw.enabled !== true) return { state: 'unconfigured' }
   try {
     validateStoredEmailConfig(raw, { requireComplete: true })
@@ -193,8 +205,19 @@ export function resolveEmailTransportDetailed(raw: RawEmailConfig | null | undef
     }
   }
   let secret: string | undefined
-  if (raw.keyCiphertext && raw.keyNonce) {
-    const unsealed = unsealSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce })
+  if (raw.keySealed) {
+    try {
+      secret = unsealSecret(raw.keySealed, orgId)
+    } catch {
+      return {
+        state: 'unusable',
+        reason:
+          'the stored provider credential could not be unsealed with the current data key ' +
+          '(it was rotated, moved, or is corrupt); re-enter the credential under Settings → Email before mail can send',
+      }
+    }
+  } else if (raw.keyCiphertext && raw.keyNonce) {
+    const unsealed = unsealLegacyEmailSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce })
     if (unsealed === null) {
       return {
         state: 'unusable',
@@ -218,8 +241,8 @@ export function resolveEmailTransportDetailed(raw: RawEmailConfig | null | undef
 }
 
 /** Unseal a stored config and build its transport, or null when not configured. */
-export function resolveEmailTransport(raw: RawEmailConfig | null | undefined): EmailTransport | null {
-  const resolved = resolveEmailTransportDetailed(raw)
+export function resolveEmailTransport(raw: RawEmailConfig | null | undefined, orgId: string): EmailTransport | null {
+  const resolved = resolveEmailTransportDetailed(raw, orgId)
   return resolved.state === 'ready' ? resolved.transport : null
 }
 

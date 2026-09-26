@@ -48,7 +48,7 @@ const priorSecret = process.env.SESSION_SECRET;
               values (${sessionId},${userId},${createHash("sha256").update(rawToken).digest("hex")},'password',${sessionExpiry})`);
             if (method === "confirm MFA") await db.execute(sql`
               insert into auth_mfa_factors(user_id,secret_encrypted,setup_session_id,setup_expires_at)
-              values (${userId},${sealSecret(secret)},${sessionId},${new Date(Date.now()+30*60_000)})`);
+              values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},${sessionId},${new Date(Date.now()+30*60_000)})`);
           } else {
             await db.execute(sql`insert into auth_password_resets(user_id,token_hash,expires_at)
               values (${userId},${createHash("sha256").update(rawToken).digest("hex")},clock_timestamp()+${duration}::interval)`);

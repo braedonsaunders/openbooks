@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     throw e
   })
   if (!conn || conn.source !== 'dynamics') return connectionOauthBounce('notfound')
-  const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
+  const secret = conn.secrets == null ? null : unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets, { orgId: st.orgId, purpose: "connection.secrets" })
   const cfg = conn.config as { aadTenantId?: string; environment?: string; companyId?: string }
   if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
   if (!cfg.aadTenantId || !cfg.environment) return connectionOauthBounce('nocreds')
@@ -67,7 +67,7 @@ export async function GET(req: Request) {
     const company = pinned.item
     if (!(await connectionOauthActorStillAuthorized(st.orgId, gate.user.id))) return connectionOauthBounce('error')
 
-    const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
+    const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens }, { orgId: st.orgId, purpose: "connection.secrets" })
     const displayName = `${company.displayName ?? company.name} (Business Central)`
     const connected = await db.transaction(async (tx) => {
       await lockActorPermission(tx, gate, 'admin.setup.manage', { requireUnrestrictedScope: true })

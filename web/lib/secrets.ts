@@ -1,52 +1,23 @@
 import "server-only";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 /**
- * Server-only secret sealing (AES-256-GCM), keyed on the same
- * OPENBOOKS_DATA_KEY and `enc:v1:` wire format the
- * payments engine already uses for payee bank account numbers
- * (engine/src/payments/payments.ts), so one data key protects everything at rest.
- * Nothing secret ever lives in the environment beyond that key itself.
+ * Server-only secret sealing for web-side use. The implementation lives in
+ * the engine so the web app (sealing on a tenant's save) and the background
+ * worker (unsealing at run time) share one wire format, one key ring, and
+ * one refusal shape — see engine/src/platform/secrets.ts.
  */
-
-const ENC_PREFIX = "enc:v1:";
-
-function dataKey(): Buffer {
-  // Live read: engine db.ts snapshots the environment at module evaluation,
-  // so a snapshot read misses OPENBOOKS_DATA_KEY assigned after that import.
-  const raw = process.env.OPENBOOKS_DATA_KEY;
-  if (!raw) {
-    throw new Error(
-      "OPENBOOKS_DATA_KEY is not set in .env — required to encrypt stored secrets (32-byte key, hex or base64)",
-    );
-  }
-  const buf = /^[0-9a-fA-F]{64}$/.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
-  if (buf.length !== 32) {
-    throw new Error("OPENBOOKS_DATA_KEY must decode to exactly 32 bytes (hex or base64)");
-  }
-  return buf;
-}
-
-export function sealSecret(plain: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", dataKey(), iv);
-  const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
-  return `${ENC_PREFIX}${iv.toString("base64")}:${ct.toString("base64")}:${cipher.getAuthTag().toString("base64")}`;
-}
-
-/** Null on any malformed/tampered input — callers treat that as "no secret". */
-export function unsealSecret(stored: string | null | undefined): string | null {
-  if (!stored || !stored.startsWith(ENC_PREFIX)) return null;
-  const [ivB64, ctB64, tagB64] = stored.slice(ENC_PREFIX.length).split(":");
-  if (!ivB64 || !ctB64 || !tagB64) return null;
-  try {
-    const decipher = createDecipheriv("aes-256-gcm", dataKey(), Buffer.from(ivB64, "base64"));
-    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-    return Buffer.concat([
-      decipher.update(Buffer.from(ctB64, "base64")),
-      decipher.final(),
-    ]).toString("utf8");
-  } catch {
-    return null;
-  }
-}
+export {
+  describeSealedBlob,
+  isNamedNonProductionEnvironment,
+  keyedFingerprint,
+  loadDataKeyRing,
+  requireDataKey,
+  sealJson,
+  sealSecret,
+  SEALED_V1_PREFIX,
+  SEALED_V2_PREFIX,
+  SecretIntegrityError,
+  unsealJson,
+  unsealSecret,
+  type SecretScope,
+} from "@openbooks/engine/src/platform/secrets.ts";

@@ -48,22 +48,21 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     const subject = `subject-${randomUUID()}`;
     const mfaSecret = "JBSWY3DPEHPK3PXP";
     const emailCredential = `restore-email-${randomUUID()}`;
-    const sealedEmailCredential = sealEmailSecret(emailCredential);
+    const sealedEmailCredential = sealEmailSecret(emailCredential, source.orgId);
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{email}', ${JSON.stringify({
            enabled: true,
            provider: "resend",
            fromEmail: "restore@scratch.test",
-           keyCiphertext: sealedEmailCredential.ciphertext,
-           keyNonce: sealedEmailCredential.nonce,
+           keySealed: sealedEmailCredential,
          })}::jsonb)
        where id = ${source.orgId}`);
     await db.execute(sql`
       insert into auth_mfa_factors
         (id, user_id, secret_encrypted, recovery_code_hashes, enabled_at)
       values
-        (${factorId}, ${authUserId}, ${sealSecret(mfaSecret)},
+        (${factorId}, ${authUserId}, ${sealSecret(mfaSecret, { orgId: authUserId, purpose: "auth.mfa.secret" })},
          ${JSON.stringify([`s1:${"a".repeat(32)}:${"b".repeat(64)}`])}::jsonb, now())`);
     await db.execute(sql`
       insert into auth_oidc_identities
@@ -184,7 +183,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
 
     const restored = (await db.execute<{
         name: string;
-        email: { keyCiphertext: string; keyNonce: string };
+        email: { keySealed: string };
         account_count: number;
         party_count: number;
       }>(sql`
@@ -200,10 +199,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
       select applies_employer_subsidiary_id from hrm_process_templates where org_id = ${source.orgId} and id = ${processTemplateId}`)).rows[0];
     assert.equal(restoredTemplate?.applies_employer_subsidiary_id, source.subsidiaryId, "generated projection recomputed on restore");
     assert.equal(
-      unsealEmailSecret({
-        ciphertext: restored.rows[0]!.email.keyCiphertext,
-        nonce: restored.rows[0]!.email.keyNonce,
-      }),
+      unsealEmailSecret(restored.rows[0]!.email.keySealed, source.orgId),
       emailCredential,
     );
 
@@ -224,7 +220,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     `));
     const authRow = restoredAuth.rows[0]!;
     assert.equal(authRow.mfa_count, 1);
-    assert.equal(unsealSecret(authRow.mfa_ciphertext), mfaSecret);
+    assert.equal(unsealSecret(authRow.mfa_ciphertext, { orgId: authUserId, purpose: "auth.mfa.secret" }), mfaSecret);
     assert.equal(authRow.oidc_count, 1);
     assert.equal(authRow.session_count, 0);
     assert.equal(authRow.login_state_count, 0);

@@ -105,7 +105,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
          approved_at, approved_by, submitted_by, submitted_at, created_by)
       values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${country},
               ${body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
-              ${encryptAccountNumber(accountNumber)}, ${accountNumber.slice(-4)},
+              ${encryptAccountNumber(accountNumber, { orgId: user.orgId })}, ${accountNumber.slice(-4)},
               'pending', false, null, null, ${user.id}, now(), ${user.id})
       returning id
     `))
@@ -212,7 +212,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         country = ${body.country !== undefined ? country : sql`country`},
         currency = ${body.currency !== undefined ? body.currency?.trim().toUpperCase() || null : sql`currency`},
         routing = ${body.routing !== undefined ? sql`${JSON.stringify(body.routing)}::jsonb` : sql`routing`},
-        account_number_encrypted = ${accountNumber ? encryptAccountNumber(accountNumber) : sql`account_number_encrypted`},
+        account_number_encrypted = ${accountNumber ? encryptAccountNumber(accountNumber, { orgId: user.orgId }) : sql`account_number_encrypted`},
         account_last_four = ${accountNumber ? accountNumber.slice(-4) : sql`account_last_four`},
         approval_status = 'pending', is_active = false, approved_at = null, approved_by = null,
         submitted_by = ${user.id}, submitted_at = now(),

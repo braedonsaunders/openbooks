@@ -58,7 +58,7 @@ async function seedSinYear(sin: string, province: "ON" | "QC"): Promise<{ orgId:
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            sin_encrypted, sin_last3, is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, ${province}, 'hourly', 'CA',
-            1, 1, '4', 'accrue', ${sealSecret(sin)}, ${sin.slice(-3)}, true, ${actorId}, ${actorId})`);
+            1, 1, '4', 'accrue', ${sealSecret(sin, { orgId: org.orgId, purpose: "payroll.employee.sin" })}, ${sin.slice(-3)}, true, ${actorId}, ${actorId})`);
 
   const earningId = randomUUID();
   await db.execute(sql`

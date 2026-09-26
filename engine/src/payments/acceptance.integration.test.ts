@@ -96,7 +96,7 @@ async function seedAcceptance(org: Awaited<ReturnType<typeof createScratchOrg>>,
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
     values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
-            ${sealJson({ apiKey: "sk_test_itest", webhookSecret: `whsec_${memo}` })}, ${userId}, ${userId})`);
+            ${sealJson({ apiKey: "sk_test_itest", webhookSecret: `whsec_${memo}` }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
   await db.execute(sql`
     insert into payment_surcharge_rules
       (org_id, name, calculation, percent, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
@@ -146,7 +146,7 @@ test("a poison webhook event rolls back without starving its later batch sibling
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'gocardless', 'GoCardless', true, true,
-              ${org.accounts.bank}, ${sealJson({ webhookSecret: secret })}, ${userId}, ${userId})
+              ${org.accounts.bank}, ${sealJson({ webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})
     `);
     await db.execute(sql`
       insert into payment_links
@@ -294,7 +294,7 @@ test("an authenticated adyen delivery quarantines an un-normalizable item and pr
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'adyen', 'Adyen', true, true,
-              ${org.accounts.bank}, ${sealJson({ webhookSecret })}, ${userId}, ${userId})
+              ${org.accounts.bank}, ${sealJson({ webhookSecret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})
     `);
 
     const keyBytes = Buffer.from(webhookSecret, "base64");
@@ -449,7 +449,7 @@ test("payment link settles a signed webhook into an applied receipt with a surch
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
-              ${sealJson({ apiKey: "sk_test_itest", webhookSecret })}, ${userId}, ${userId})`);
+              ${sealJson({ apiKey: "sk_test_itest", webhookSecret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
     // 3% surcharge rule → fee income to revenue account.
     await db.execute(sql`
       insert into payment_surcharge_rules
@@ -574,7 +574,7 @@ test("the pay-link bearer token never rests in plaintext", { skip: !DB }, async 
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
-              ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_itest" })}, ${userId}, ${userId})`);
+              ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_itest" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
     const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" }, null);
 
     // The row on disk: no plaintext token anywhere.
@@ -627,7 +627,7 @@ test("a provider outage answering HTML surfaces as the named refusal, never a pa
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
-              ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_itest" })}, ${userId}, ${userId})`);
+              ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_itest" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
     const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" }, null);
     await assert.rejects(
       () =>
@@ -1411,9 +1411,9 @@ test("surcharge resolution honors the payment method across card and bank-debit 
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
       values
         (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
-         ${sealJson({ apiKey: "sk_test_method", webhookSecret: "whsec_card" })}, ${userId}, ${userId}),
+         ${sealJson({ apiKey: "sk_test_method", webhookSecret: "whsec_card" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId}),
         (${org.orgId}, 'gocardless', 'GoCardless', true, true, ${org.accounts.bank},
-         ${sealJson({ apiKey: "gc_test_method", webhookSecret: "whsec_debit" })}, ${userId}, ${userId})
+         ${sealJson({ apiKey: "gc_test_method", webhookSecret: "whsec_debit" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})
     `);
 
     // Global rules on each side of the method dimension.

@@ -62,7 +62,7 @@ async function createConnection(orgId: string): Promise<string> {
     authKind: "token",
     status: "active",
     config: { historyStartDate: "2024-01-01", region: "CA", baseCurrency: "CAD" },
-    secrets: sealJson({ webConnectorPassword: "unmapped-test-password-123" }),
+    secrets: sealJson({ webConnectorPassword: "unmapped-test-password-123" }, { orgId, purpose: "connection.secrets" }),
   }).returning({ id: schema.connections.id });
   assert.ok(connection);
   return connection.id;

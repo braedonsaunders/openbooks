@@ -211,7 +211,7 @@ async function seedPendingAccount(orgId: string, partyId: string, manager: strin
          approval_status, is_active, approved_at, approved_by,
          submitted_by, submitted_at, created_by, updated_by)
       values (${accountId}, ${orgId}, ${partyId}, ${bankName}, 'CA', 'CAD', '{}'::jsonb,
-              ${encryptAccountNumber('123456789')}, '6789',
+              ${encryptAccountNumber('123456789', { orgId })}, '6789',
               'pending', false, null, null,
               ${manager}, now(), ${manager}, ${manager})`)
   })
