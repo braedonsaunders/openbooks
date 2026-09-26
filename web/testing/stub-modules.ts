@@ -20,6 +20,14 @@ import { registerHooks } from "node:module";
  * stand-in, a per-test router script) stays in the test through `extra` or
  * its own hook.
  *
+ * Every source here, `extra` included, is served as a `data:` URL module.
+ * A `data:` URL has no base path, so an `extra` source must be
+ * self-contained: `node:` builtins resolve, but a bare package import (a
+ * stub that itself imports from `next-intl`, for example) fails with
+ * `ERR_UNSUPPORTED_RESOLVE_REQUEST`, as does any relative import. A stub
+ * that must import another package keeps its own hook with a resolvable
+ * base instead of going through `extra`.
+ *
  * Call this before importing the module under test: module resolution hooks
  * only affect imports that happen after they are registered.
  */
@@ -57,7 +65,10 @@ export interface StubModulesOptions {
   intl?: boolean | string;
   authz?: boolean | string | AuthzStubOptions;
   features?: boolean | string | FeaturesStubOptions;
-  /** Additional exact-specifier to module-source stubs, same hook. */
+  /**
+   * Additional exact-specifier to module-source stubs, same hook. Sources
+   * must be self-contained (see above): no bare-package or relative imports.
+   */
   extra?: Record<string, string>;
 }
 
