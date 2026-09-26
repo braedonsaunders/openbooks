@@ -19,6 +19,10 @@
  * - the derived index test fails if ANY public table carrying org_id lacks
  *   a usable index led by org_id: every RLS predicate compares org_id to
  *   the current tenant, so a table without one scans on every tenant read;
+ * - the org-less catalog test fails if ANY public table WITHOUT org_id is
+ *   neither on the reviewed global allowlist below (one reason each) nor
+ *   carrying FORCEd RLS with a policy that references a parent table's
+ *   org_id (the file_versions / file_blobs / tax_group_members shape);
  * - the negative control proves that test fires, by creating an unwired
  *   org-scoped table inside a rolled-back transaction and showing the same
  *   query names it;
@@ -48,6 +52,82 @@ type EngineDb = typeof import("../engine/src/platform/db.ts");
  * at least one policy.
  */
 const RLS_EXEMPT: Record<string, string> = {};
+
+/**
+ * Public base tables without org_id that are deliberately global: no tenant
+ * rows exist, so an org_isolation policy could never match. The bar matches
+ * RLS_EXEMPT — each entry names the structural fact that keeps tenant data
+ * apart, never just "shared". Exact names only, so a new org-less table
+ * fails closed until it is listed here with a reason or carries a
+ * parent-scoped policy. Child tables that isolate through a parent (EXISTS
+ * (SELECT 1 FROM parent WHERE parent.org_id = ...)) are NOT listed here;
+ * the query below accepts them by reading their policy definition.
+ */
+const GLOBAL_ALLOWLIST: Record<string, string> = {
+  _applied_migrations:
+    "migration-runner ledger of filenames and hashes; no tenant data, read before any tenant scope exists",
+  app_listings:
+    "marketplace catalog read across orgs by design with no org filter; publisher tracked via publisher_org_id, not org_id",
+  auth_login_challenges:
+    "pre-authentication login state keyed by user_id, reached before app.current_org is set so no org policy could match",
+  auth_login_events:
+    "pre-authentication login audit keyed by user_id, reached before app.current_org is set so no org policy could match",
+  auth_login_state:
+    "pre-authentication login state keyed by user_id, reached before app.current_org is set so no org policy could match",
+  auth_mfa_factors:
+    "pre-authentication MFA state keyed by user_id, reached before app.current_org is set so no org policy could match",
+  auth_oidc_identities:
+    "pre-authentication identity links keyed by user_id, reached before app.current_org is set so no org policy could match",
+  auth_password_resets:
+    "pre-authentication reset state keyed by user_id, reached before app.current_org is set so no org policy could match",
+  auth_rate_limit_buckets:
+    "pre-authentication throttling counters keyed by bucket key, reached before app.current_org is set so no org policy could match",
+  auth_sessions:
+    "pre-authentication session state keyed by user_id, reached before app.current_org is set so no org policy could match",
+  currencies:
+    "shared ISO reference data identical for every org; no tenant rows",
+  orgs: "the root tenant table itself; isolated by org_root_isolation matching id/sandbox_of to the session org",
+  platform_settings:
+    "installation-owned singleton with bypass-only RLS, deliberately org-less so per-org backup, clone, and teardown skip it",
+  sftp_daemon:
+    "installation-owned daemon config (port, host key); per-tenant SFTP servers live in the org-scoped sftp_servers table",
+};
+
+/**
+ * Every public base table without an org_id column, minus the global
+ * allowlist above, must carry ENABLEd + FORCEd RLS with at least one policy
+ * whose definition references a parent table's org_id. Anything returned is
+ * a table whose rows no tenant boundary constrains.
+ */
+async function orgLessViolations(db: EngineDb["db"]): Promise<string[]> {
+  const rows = (await db.execute<{ tbl: string }>(sql`
+    with base as (
+      select c.relname as tbl, c.relrowsecurity as rls,
+             c.relforcerowsecurity as force
+        from pg_class c
+        join pg_namespace nsp on nsp.oid = c.relnamespace
+       where nsp.nspname = 'public' and c.relkind = 'r'
+         and not exists (
+           select 1 from pg_attribute a
+            where a.attrelid = c.oid
+              and a.attname = 'org_id'
+              and not a.attisdropped
+         )
+    )
+    select tbl from base
+     where not (
+       rls and force and exists (
+         select 1 from pg_policies p
+          where p.schemaname = 'public'
+            and p.tablename = base.tbl
+            and (coalesce(p.qual, '') ilike '%org_id%'
+              or coalesce(p.with_check, '') ilike '%org_id%')
+       )
+     )
+     order by 1
+  `)).rows;
+  return rows.map((row) => row.tbl).filter((tbl) => !(tbl in GLOBAL_ALLOWLIST));
+}
 
 async function catalogViolations(db: EngineDb["db"]): Promise<string[]> {
   const rows = (await db.execute<{ tbl: string }>(sql`
@@ -141,6 +221,50 @@ test("every org_id table is tenant-isolated at the catalog level", { skip: !DB }
     [],
     `org-scoped tables without ENABLEd + FORCEd RLS and a policy (add RLS or document the platform reason in RLS_EXEMPT): ${violations.join(", ")}`,
   );
+});
+
+test("every org-less table is globally justified or parent-isolated", { skip: !DB }, async () => {
+  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const violations = await orgLessViolations(db);
+  assert.deepEqual(
+    violations,
+    [],
+    `tables without org_id that are neither allowlisted nor parent-isolated (add ENABLEd + FORCEd RLS with a policy referencing a parent table's org_id, or document the global reason in GLOBAL_ALLOWLIST): ${violations.join(", ")}`,
+  );
+});
+
+test("the org-less test fires on an unwired table without org_id", { skip: !DB }, async () => {
+  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const table = `t18_rls_orgless_probe_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
+  await db.execute(sql`create table public.${sql.raw(table)} (id uuid)`);
+  try {
+    const violations = await orgLessViolations(db);
+    assert.ok(
+      violations.includes(table),
+      `a table without org_id and without RLS must be reported, got: ${violations.join(", ")}`,
+    );
+  } finally {
+    await db.execute(sql`drop table public.${sql.raw(table)}`);
+  }
+});
+
+test("the org-less test passes a parent-scoped child table", { skip: !DB }, async () => {
+  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const table = `t18_rls_child_probe_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
+  await db.execute(sql`create table public.${sql.raw(table)} (id uuid, owner_id uuid)`);
+  try {
+    await db.execute(sql`alter table public.${sql.raw(table)} enable row level security`);
+    await db.execute(sql`alter table only public.${sql.raw(table)} force row level security`);
+    const scope = sql`exists (select 1 from users u where u.id = public.${sql.raw(table)}.owner_id and (u.org_id)::text = current_setting('app.current_org'::text, true))`;
+    await db.execute(sql`create policy child_isolation on public.${sql.raw(table)} using (${scope}) with check (${scope})`);
+    const violations = await orgLessViolations(db);
+    assert.ok(
+      !violations.includes(table),
+      `a child table with FORCEd RLS and a parent org_id policy must pass, got: ${violations.join(", ")}`,
+    );
+  } finally {
+    await db.execute(sql`drop table public.${sql.raw(table)}`);
+  }
 });
 
 test("the catalog test fires on an unwired org-scoped table", { skip: !DB }, async () => {
