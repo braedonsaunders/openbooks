@@ -118,38 +118,6 @@ export const paymentSchedules = pgTable(
   ],
 );
 
-/**
- * Durable per-occurrence ledger for scheduled payment runs: one row per due
- * fire time of one schedule. The occurrence claim and its run link commit
- * atomically with the run's creation transaction, so a crashed tick can never
- * lose an occurrence or leave an unlinked draft run. A retried or concurrent
- * tick resolves the same occurrence key to the same run instead of duplicating
- * instructions, and submission state (`awaiting_submit` → `submitted` /
- * `submit_failed` → `failed`) is recoverable from this row alone.
- */
-export const paymentScheduleOccurrences = pgTable(
-  "payment_schedule_occurrences",
-  {
-    id: id(),
-    orgId: orgRef(),
-    scheduleId: uuid("schedule_id").notNull(),
-    /** The scheduled fire time this row claims (the schedule's due next_run_at). */
-    occurrenceAt: timestamp("occurrence_at", { withTimezone: true }).notNull(),
-    /** The run this occurrence created; null only for `completed` (no selection). */
-    paymentRunId: uuid("payment_run_id"),
-    status: text("status", {
-      enum: ["draft_created", "awaiting_submit", "submit_failed", "submitted", "completed", "failed"],
-    }).notNull(),
-    attemptCount: integer("attempt_count").notNull().default(0),
-    result: jsonb("result").$type<Record<string, unknown>>(),
-    ...auditColumns,
-  },
-  (t) => [
-    uniqueIndex("payment_schedule_occurrences_once").on(t.orgId, t.scheduleId, t.occurrenceAt),
-    index("payment_schedule_occurrences_pending").on(t.status, t.occurrenceAt),
-  ],
-);
-
 /** Exact source composition of a run, including discounts and credits. */
 export const paymentRunItems = pgTable(
   "payment_run_items",
@@ -268,49 +236,6 @@ export const paymentMandates = pgTable(
     uniqueIndex("payment_mandates_org_reference").on(t.orgId, t.mandateReference),
     index("payment_mandates_party_status").on(t.partyId, t.status),
   ],
-);
-
-/** Bank outcome for one instruction. Returns link to the correcting document. */
-export const paymentSettlements = pgTable(
-  "payment_settlements",
-  {
-    id: id(),
-    orgId: orgRef(),
-    paymentInstructionId: uuid("payment_instruction_id").notNull(),
-    bankStatementLineId: uuid("bank_statement_line_id"),
-    status: text("status", { enum: ["pending", "settled", "returned", "rejected"] }).notNull().default("pending"),
-    amount: money("amount").notNull(),
-    currency: currencyCode("currency").notNull(),
-    effectiveOn: date("effective_on"),
-    bankReference: text("bank_reference"),
-    returnCode: text("return_code"),
-    returnReason: text("return_reason"),
-    reversalDocumentId: uuid("reversal_document_id"),
-    reversalEntryId: uuid("reversal_entry_id"),
-    ...auditColumns,
-  },
-  (t) => [
-    uniqueIndex("payment_settlements_instruction").on(t.paymentInstructionId),
-    index("payment_settlements_status").on(t.orgId, t.status),
-  ],
-);
-
-export const paymentRemittances = pgTable(
-  "payment_remittances",
-  {
-    id: id(),
-    orgId: orgRef(),
-    paymentInstructionId: uuid("payment_instruction_id").notNull(),
-    recipients: jsonb("recipients").$type<string[]>().notNull().default([]),
-    fileId: uuid("file_id"),
-    status: text("status", { enum: ["pending", "sent", "failed", "cancelled"] }).notNull().default("pending"),
-    attemptCount: integer("attempt_count").notNull().default(0),
-    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
-    sentAt: timestamp("sent_at", { withTimezone: true }),
-    error: text("error"),
-    ...auditColumns,
-  },
-  (t) => [index("payment_remittances_instruction").on(t.paymentInstructionId, t.createdAt)],
 );
 
 /** Append-only operational audit trail for runs, files, and instructions. */

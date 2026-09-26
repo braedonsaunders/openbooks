@@ -19,8 +19,6 @@ import { files } from "./file-cabinet";
 import { auditColumns, id, orgRef } from "./helpers";
 import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
-import { hrmEmploymentChangeRequests } from "./hrm-change-requests";
-import { workerEmployments } from "./hrm";
 import { positions } from "./hrm-positions";
 
 /**
@@ -100,65 +98,6 @@ export const OFFER_STATUSES = ["draft", "sent", "accepted", "declined", "withdra
 
 export const COMPENSATION_BASES = ["hourly", "annual"] as const;
 
-/** The org's own funnel: one ordered pipeline per name, a single default. */
-export const pipelineTemplates = pgTable(
-  "hrm_pipeline_templates",
-  {
-    id: id(),
-    orgId: orgRef(),
-    name: text("name").notNull(),
-    isDefault: boolean("is_default").notNull().default(false),
-    isActive: boolean("is_active").notNull().default(true),
-    ...auditColumns,
-  },
-  (t) => [
-    foreignKey({
-      name: "hrm_pipeline_templates_org_id_fkey",
-      columns: [t.orgId],
-      foreignColumns: [orgs.id],
-    }).onDelete("cascade"),
-    uniqueIndex("hrm_pipeline_templates_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("hrm_pipeline_templates_org_name").on(t.orgId, t.name),
-    index("hrm_pipeline_templates_org").on(t.orgId),
-    check("hrm_pipeline_templates_name", sql`char_length(btrim(${t.name})) > 0`),
-  ],
-);
-
-/** Ordered funnel rows: stable key plus kind; terminality derives from kind. */
-export const pipelineStages = pgTable(
-  "hrm_pipeline_stages",
-  {
-    id: id(),
-    orgId: orgRef(),
-    templateId: uuid("template_id").notNull(),
-    position: integer("position").notNull(),
-    key: text("key").notNull(),
-    name: text("name").notNull(),
-    statusKind: text("kind", { enum: PIPELINE_STAGE_KINDS }).notNull(),
-    isTerminal: boolean("is_terminal").notNull().default(false),
-    ...auditColumns,
-  },
-  (t) => [
-    foreignKey({
-      name: "hrm_pipeline_stages_org_id_fkey",
-      columns: [t.orgId],
-      foreignColumns: [orgs.id],
-    }).onDelete("cascade"),
-    foreignKey({
-      name: "hrm_pipeline_stages_template_tenant_fkey",
-      columns: [t.orgId, t.templateId],
-      foreignColumns: [pipelineTemplates.orgId, pipelineTemplates.id],
-    }).onDelete("cascade"),
-    uniqueIndex("hrm_pipeline_stages_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("hrm_pipeline_stages_org_template_position").on(t.orgId, t.templateId, t.position),
-    uniqueIndex("hrm_pipeline_stages_org_template_key").on(t.orgId, t.templateId, t.key),
-    index("hrm_pipeline_stages_template").on(t.orgId, t.templateId, t.position),
-    check("hrm_pipeline_stages_position", sql`${t.position} >= 0`),
-    check("hrm_pipeline_stages_key", sql`char_length(btrim(${t.key})) > 0`),
-    check("hrm_pipeline_stages_name", sql`char_length(btrim(${t.name})) > 0`),
-  ],
-);
-
 /** The vacancy to fill: org-sequence number, headcount versus filled_count. */
 export const requisitions = pgTable(
   "hrm_requisitions",
@@ -221,11 +160,7 @@ export const requisitions = pgTable(
       columns: [t.orgId, t.hiringManagerPartyId],
       foreignColumns: [parties.orgId, parties.id],
     }),
-    foreignKey({
-      name: "hrm_requisitions_template_tenant_fkey",
-      columns: [t.orgId, t.pipelineTemplateId],
-      foreignColumns: [pipelineTemplates.orgId, pipelineTemplates.id],
-    }),
+
     uniqueIndex("hrm_requisitions_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("hrm_requisitions_org_number").on(t.orgId, t.requisitionNumber),
     index("hrm_requisitions_status").on(t.orgId, t.status),
@@ -284,64 +219,6 @@ export const candidates = pgTable(
   ],
 );
 
-/** One candidacy per (requisition, candidate) with the current funnel stage. */
-export const applications = pgTable(
-  "hrm_applications",
-  {
-    id: id(),
-    orgId: orgRef(),
-    requisitionId: uuid("requisition_id").notNull(),
-    candidateId: uuid("candidate_id").notNull(),
-    stageId: uuid("stage_id").notNull(),
-    status: text("status", { enum: APPLICATION_STATUSES }).notNull().default("active"),
-    appliedOn: date("applied_on").notNull(),
-    rejectedReason: text("rejected_reason"),
-    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
-    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
-    hiredEmploymentId: uuid("hired_employment_id"),
-    // HR-18 begin: the public posting this candidacy applied through (0229).
-    sourcePostingId: uuid("source_posting_id"),
-    // HR-18 end
-    ...auditColumns,
-  },
-  (t) => [
-    foreignKey({
-      name: "hrm_applications_org_id_fkey",
-      columns: [t.orgId],
-      foreignColumns: [orgs.id],
-    }).onDelete("cascade"),
-    foreignKey({
-      name: "hrm_applications_requisition_tenant_fkey",
-      columns: [t.orgId, t.requisitionId],
-      foreignColumns: [requisitions.orgId, requisitions.id],
-    }),
-    foreignKey({
-      name: "hrm_applications_candidate_tenant_fkey",
-      columns: [t.orgId, t.candidateId],
-      foreignColumns: [candidates.orgId, candidates.id],
-    }),
-    foreignKey({
-      name: "hrm_applications_stage_tenant_fkey",
-      columns: [t.orgId, t.stageId],
-      foreignColumns: [pipelineStages.orgId, pipelineStages.id],
-    }),
-    foreignKey({
-      name: "hrm_applications_hired_employment_tenant_fkey",
-      columns: [t.orgId, t.hiredEmploymentId],
-      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
-    }),
-    uniqueIndex("hrm_applications_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("hrm_applications_org_requisition_candidate").on(
-      t.orgId,
-      t.requisitionId,
-      t.candidateId,
-    ),
-    index("hrm_applications_requisition").on(t.orgId, t.requisitionId, t.status),
-    index("hrm_applications_candidate").on(t.orgId, t.candidateId),
-    index("hrm_applications_stage").on(t.orgId, t.stageId),
-  ],
-);
-
 /**
  * The append-only funnel evidence ledger. Every transition appends an event
  * in the same transaction as the state write; updates and deletes are
@@ -366,11 +243,7 @@ export const applicationEvents = pgTable(
       columns: [t.orgId],
       foreignColumns: [orgs.id],
     }).onDelete("cascade"),
-    foreignKey({
-      name: "hrm_application_events_application_tenant_fkey",
-      columns: [t.orgId, t.applicationId],
-      foreignColumns: [applications.orgId, applications.id],
-    }),
+
     uniqueIndex("hrm_application_events_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_application_events_application").on(t.orgId, t.applicationId, t.recordedAt),
   ],
@@ -403,11 +276,7 @@ export const interviews = pgTable(
       columns: [t.orgId],
       foreignColumns: [orgs.id],
     }).onDelete("cascade"),
-    foreignKey({
-      name: "hrm_interviews_application_tenant_fkey",
-      columns: [t.orgId, t.applicationId],
-      foreignColumns: [applications.orgId, applications.id],
-    }),
+
     uniqueIndex("hrm_interviews_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_interviews_application").on(t.orgId, t.applicationId, t.scheduledAt),
     index("hrm_interviews_upcoming").on(t.orgId, t.status, t.scheduledAt),
@@ -497,11 +366,7 @@ export const offers = pgTable(
       columns: [t.orgId],
       foreignColumns: [orgs.id],
     }).onDelete("cascade"),
-    foreignKey({
-      name: "hrm_offers_application_tenant_fkey",
-      columns: [t.orgId, t.applicationId],
-      foreignColumns: [applications.orgId, applications.id],
-    }),
+
     foreignKey({
       name: "hrm_offers_position_tenant_fkey",
       columns: [t.orgId, t.positionId],
@@ -517,11 +382,7 @@ export const offers = pgTable(
       columns: [t.orgId, t.departmentId],
       foreignColumns: [departments.orgId, departments.id],
     }),
-    foreignKey({
-      name: "hrm_offers_approved_change_tenant_fkey",
-      columns: [t.orgId, t.approvedChangeId],
-      foreignColumns: [hrmEmploymentChangeRequests.orgId, hrmEmploymentChangeRequests.id],
-    }),
+
     uniqueIndex("hrm_offers_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_offers_application").on(t.orgId, t.applicationId, t.status),
     index("hrm_offers_expiry").on(t.orgId, t.status, t.expiresOn),

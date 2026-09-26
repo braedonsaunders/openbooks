@@ -5,11 +5,10 @@ import {
   date,
   index,
   integer,
-  numeric,
   pgTable,
   text,
   uniqueIndex,
-  uuid,
+  uuid
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -147,39 +146,3 @@ export const workSchedules = pgTable(
     ),
   ],
 );
-
-/**
- * One position in a schedule's cycle, and the hours normally worked on it.
- *
- * A child TABLE rather than a JSON array on the parent: the hours of a working
- * day are queryable, constrainable and reportable data, and the editor renders
- * them as real number inputs. A blob would make the UI a JSON textarea, which
- * this product does not do.
- *
- * A position with no row means no scheduled hours — the same as an explicit
- * zero — so a Monday-to-Friday week may be stored as five rows or as seven.
- */
-export const workScheduleDays = pgTable(
-  "work_schedule_days",
-  {
-    id: id(),
-    orgId: orgRef(),
-    scheduleId: uuid("schedule_id").notNull(),
-    /** 0 … cycle_days − 1. For a weekly cycle anchored on a Sunday this is the
-     *  weekday, 0 = Sunday, matching PayrollHolidayRule and JavaScript. */
-    dayIndex: integer("day_index").notNull(),
-    /** Hours normally worked on this position. Zero is a scheduled day off. */
-    hours: numeric("hours", { precision: 9, scale: 4 }).notNull().default("0"),
-    ...auditColumns,
-  },
-  (t) => [
-    index("work_schedule_days_schedule").on(t.orgId, t.scheduleId, t.dayIndex),
-    uniqueIndex("work_schedule_days_position").on(t.scheduleId, t.dayIndex),
-    check("work_schedule_days_index", sql`${t.dayIndex} >= 0 and ${t.dayIndex} < 366`),
-    // 24 is the ceiling a day can physically hold; a 30 is a typo, and a typo
-    // in scheduled hours is a typo in a day's holiday pay.
-    check("work_schedule_days_hours", sql`${t.hours} >= 0 and ${t.hours} <= 24`),
-  ],
-);
-
-// Foreign keys are maintained in schema/migrations/referential-integrity.sql.

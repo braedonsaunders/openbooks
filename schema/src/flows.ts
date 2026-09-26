@@ -2,13 +2,12 @@ import {
   boolean,
   foreignKey,
   index,
-  integer,
   jsonb,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
-  uuid,
+  uuid
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -53,13 +52,6 @@ export const FLOW_GATE_STATUSES = [
 ] as const;
 
 export const FLOW_GATE_QUORUMS = ["any", "all"] as const;
-
-export const FLOW_SCHEDULED_OCCURRENCE_STATUSES = [
-  "open",
-  "firing",
-  "fired",
-  "lost",
-] as const;
 
 export const flows = pgTable(
   "flows",
@@ -335,71 +327,3 @@ export const notifications = pgTable(
     index("notifications_user_created").on(t.userId, t.createdAt),
   ],
 );
-
-/**
- * Per-occurrence durability ledger for scheduled flows (one row per flow ×
- * scheduled trigger node × cron occurrence). The claim commits atomically
- * WITH the last_scheduled_run_at cursor advance, so a crash between claiming
- * and firing leaves the occurrence recoverable instead of lost:
- *
- *   CLAIM   — INSERT … ON CONFLICT DO NOTHING alongside the cursor CTE; only
- *             rows the scanner itself inserted are fired.
- *   FIRE    — a bounded-attempt attempt takes the open claim ('open' →
- *             'firing'), runs the fan-out, and closes 'fired' inside the
- *             same tenant transaction as the runs/effects/outbox emails it
- *             produced — delivery and completion commit or roll back together.
- *   RECOVER — claims stuck 'firing' past the stale window resume by
- *             occurrence key (same flow_runs rows → no double-send), with a
- *             visible terminal 'lost' after the retry budget is spent.
- */
-export const flowScheduledOccurrences = pgTable(
-  "flow_scheduled_occurrences",
-  {
-    id: id(),
-    orgId: orgRef(),
-    flowId: uuid("flow_id").notNull(),
-    /** The scheduled trigger node in the flow's graph this claim names. */
-    nodeId: text("node_id").notNull(),
-    /** The cron occurrence this firing covers (the cursor value it claimed). */
-    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    status: text("status", { enum: FLOW_SCHEDULED_OCCURRENCE_STATUSES })
-      .notNull()
-      .default("open"),
-    /** Number of firings started against this claim (initial + recovery retries). */
-    attemptCount: integer("attempt_count").notNull().default(0),
-    result: jsonb("result").$type<Record<string, unknown> | null>(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("flow_scheduled_occurrences_once").on(t.flowId, t.nodeId, t.occurredAt),
-    index("flow_scheduled_occurrences_recovery").on(t.status, t.updatedAt),
-  ],
-);
-
-/*
-FOREIGN KEYS (added by the generated migration to
-schema/migrations/referential-integrity.sql):
-  flow_scheduled_occurrences.org_id → orgs.id (on delete cascade)
-  flow_scheduled_occurrences.flow_id → flows.id
-  flow_scheduled_occurrences.run_id → flow_runs.id
-  flows.org_id                  → orgs.id (on delete cascade)
-  flow_runs.org_id              → orgs.id (on delete cascade)
-  flow_runs.(org_id, flow_id)   → flows(org_id, id) (on delete cascade; 0213)
-  flow_run_effects.org_id       → orgs.id (on delete cascade)
-  flow_run_effects.(org_id, run_id) → flow_runs(org_id, id) (on delete cascade; 0216)
-  flow_gates.org_id             → orgs.id (on delete cascade)
-  flow_gates.(org_id, flow_id)  → flows(org_id, id) (on delete cascade; 0214)
-  flow_gates.(org_id, run_id)   → flow_runs(org_id, id) (on delete cascade; 0214)
-  flow_gates.assignee_user_id   → users.id
-  flow_gates.decided_by         → users.id
-  approval_delegations.org_id       → orgs.id (on delete cascade)
-  approval_delegations.from_user_id → users.id
-  approval_delegations.to_user_id   → users.id
-  flow_locks.org_id             → orgs.id (on delete cascade)
-  flow_locks.(org_id, flow_id)  → flows(org_id, id) (on delete cascade; 0215)
-  notifications.org_id          → orgs.id (on delete cascade)
-  notifications.user_id         → users.id (on delete cascade)
-  flow_scheduled_occurrences.org_id  → orgs.id
-  flow_scheduled_occurrences.flow_id → flows.id (on delete cascade)
-*/

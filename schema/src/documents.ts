@@ -32,7 +32,6 @@ import { journalEntries } from "./ledger";
 import { taxCodes, taxGroups } from "./tax";
 import { stockLocations } from "./inventory";
 import { equipmentUnits } from "./assets";
-import { itemRateVersions } from "./item-rates";
 import { timeEntries } from "./time";
 import { fieldTickets } from "./field-tickets";
 
@@ -528,11 +527,7 @@ export const documentLines = pgTable(
       foreignColumns: [equipmentUnits.orgId, equipmentUnits.id],
       name: "document_lines_equipment_unit_id_fkey",
     }),
-    foreignKey({
-      columns: [t.orgId, t.rateVersionId],
-      foreignColumns: [itemRateVersions.orgId, itemRateVersions.id],
-      name: "document_lines_rate_version_id_fkey",
-    }),
+
     foreignKey({
       columns: [t.orgId, t.recoveryAccountId],
       foreignColumns: [accounts.orgId, accounts.id],

@@ -8,15 +8,13 @@ import {
   integer,
   jsonb,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
-  uuid,
+  uuid
 } from "drizzle-orm/pg-core";
 import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
-import { accounts } from "./coa";
 import { paymentSchedules } from "./payment-operations";
 
 /**
@@ -175,32 +173,6 @@ export const reconciliations = pgTable(
 );
 
 /**
- * Source-system reconciliation state mirrored as evidence (0158): per
- * reconcilable account, the connector key, the last reconciled-through date
- * the mirror derived from cleared markers, and the source statement balance
- * where the source states one. The mirror upserts it; sign-off reads it.
- */
-export const sourceReconciliationState = pgTable(
-  "source_reconciliation_state",
-  {
-    orgId: orgRef(),
-    accountId: uuid("account_id").notNull(),
-    /** Stable connector key (the connection source key). */
-    connector: text("connector").notNull(),
-    reconciledThrough: date("reconciled_through").notNull(),
-    sourceBalance: money("source_balance"),
-    observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.orgId, t.accountId] }),
-    check(
-      "source_reconciliation_state_connector_chk",
-      sql`length(btrim(${t.connector})) > 0`,
-    ),
-  ],
-);
-
-/**
  * Match units: one statement line ↔ N journal lines (or vice versa via
  * grouping id). Auto-matcher writes `matchedBy = 'auto'` with a confidence;
  * humans confirm or override.
@@ -221,33 +193,6 @@ export const reconciliationMatches = pgTable(
     index("recon_matches_stmt_line").on(t.statementLineId),
     index("recon_matches_journal_line").on(t.journalLineId),
     uniqueIndex("recon_matches_one_journal_claim").on(t.journalLineId),
-  ],
-);
-
-/** Rules that auto-categorize unmatched bank lines (create + match a doc). */
-export const bankMatchRules = pgTable(
-  "bank_match_rules",
-  {
-    id: id(),
-    orgId: orgRef(),
-    name: text("name").notNull(),
-    /** Versioned nested condition tree plus optional account scope. */
-    criteria: jsonb("criteria").notNull(),
-    /** Exclude, or categorized split lines with an explicit execution mode. */
-    outcome: jsonb("outcome").notNull(),
-    priority: integer("priority").notNull().default(100),
-    isActive: boolean("is_active").notNull().default(true),
-    ...auditColumns,
-  },
-  (t) => [
-    check(
-      "bank_match_rules_criteria_shape",
-      sql`openbooks_bank_rule_criteria_is_valid(${t.criteria})`,
-    ),
-    check(
-      "bank_match_rules_outcome_shape",
-      sql`openbooks_bank_rule_outcome_is_valid(${t.outcome})`,
-    ),
   ],
 );
 
@@ -314,24 +259,6 @@ export const paymentRuns = pgTable(
 );
 
 /**
- * SFTP daemon runtime config — a single global row (the deployment hosts one
- * ssh2 listener that all tenants share, routed by username). Everything the
- * daemon needs lives here in the DB, never in env: the auto-generated host key,
- * the listen port, and the hostname advertised to users in the UI. A platform
- * admin edits it in the UI; there are no SFTP_* environment variables.
- */
-export const sftpDaemon = pgTable("sftp_daemon", {
-  id: text("id").primaryKey().default("default"),
-  enabled: boolean("enabled").notNull().default(false),
-  port: integer("port").notNull().default(2222),
-  /** Auto-generated ed25519 host key PEM (stable fingerprint across restarts). */
-  hostKey: text("host_key").notNull(),
-  /** Hostname shown in the UI's connection details (defaults to the app host). */
-  advertisedHost: text("advertised_host"),
-  ...auditColumns,
-});
-
-/**
  * Virtual SFTP servers: each is a login (username + password / authorized keys)
  * whose filesystem is a MinIO bucket/prefix (or a local folder in dev). One
  * ssh2 daemon hosts them all; banks and partners drop statement files or fetch
@@ -381,51 +308,6 @@ export const sftpServers = pgTable(
       "sftp_servers_root_prefix_safe",
       sql`${t.rootPrefix} ~ '^[^/%]+(/[^/%]+)*$' and ${t.rootPrefix} !~ '\\\\' and ${t.rootPrefix} !~ '(^|/)\\.\\.?(/|$)'`,
     ),
-  ],
-);
-
-/**
- * Scheduled SFTP import: watch a folder on an SFTP server, and on each tick
- * parse + import any new statement files into a bank account, then move them to
- * a `processed/` subfolder. The inbound half of the bank-feed loop.
- */
-export const sftpImportSchedules = pgTable(
-  "sftp_import_schedules",
-  {
-    id: id(),
-    orgId: orgRef(),
-    sftpServerId: uuid("sftp_server_id").notNull(),
-    accountId: uuid("account_id").notNull(), // reconcilable bank/card account
-    format: text("format", { enum: ["auto", "ofx", "csv", "camt053", "bai2", "mt940"] }).notNull().default("auto"),
-    folder: text("folder").notNull().default("inbound"),
-    /** CSV column mapping when format='csv' (date/amount/description column indexes). */
-    csvMapping: jsonb("csv_mapping"),
-    isActive: boolean("is_active").notNull().default(true),
-    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
-    lastResult: jsonb("last_result"),
-    /** Durable visibility/recovery marker for the session-locked active scan. */
-    runClaimToken: uuid("run_claim_token"),
-    runClaimedAt: timestamp("run_claimed_at", { withTimezone: true }),
-    ...auditColumns,
-  },
-  (t): PgTableExtraConfigValue[] => [
-    index("sftp_import_schedules_active").on(t.orgId, t.isActive),
-    // Tenant-coherent parents (0242): the schedule list and the import scan
-    // join both parents by (org_id, id), so a plain REFERENCES (id) would
-    // let one organization cite another's server or account — saved with
-    // 200, invisible in GET, unrunnable. The composite pair makes that
-    // unrepresentable. DEFERRABLE matches the 0195/0241 party edges; NO
-    // ACTION keeps a server that still feeds schedules refusing deletion.
-    foreignKey({
-      name: "sftp_import_schedules_sftp_server_id_tenant_fkey",
-      columns: [t.orgId, t.sftpServerId],
-      foreignColumns: [sftpServers.orgId, sftpServers.id],
-    }),
-    foreignKey({
-      name: "sftp_import_schedules_account_id_tenant_fkey",
-      columns: [t.orgId, t.accountId],
-      foreignColumns: [accounts.orgId, accounts.id],
-    }),
   ],
 );
 
