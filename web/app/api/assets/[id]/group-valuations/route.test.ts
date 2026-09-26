@@ -48,7 +48,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export async function proposeAssetGroupValuation(...args){const s=globalThis[Symbol.for('asset-group-valuation-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return 'change'}`,
+        source: `class AssetValidationError extends Error{};export async function proposeAssetGroupValuation(...args){const s=globalThis[Symbol.for('asset-group-valuation-route')];s.calls.push(args);if(s.refusal)throw new AssetValidationError(s.refusal);return 'change'}`,
       };
     return next(url, context);
   },

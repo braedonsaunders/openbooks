@@ -1,4 +1,5 @@
 import { assetGroupHistory } from "../organization/asset-group-history.ts";
+import { AssetValidationError } from "./validation-error.ts";
 import { sql } from "drizzle-orm";
 import {
   db,
@@ -71,7 +72,7 @@ function exact(value: string, label: string) {
     toUnits(result) < 0n ||
     result.split(".")[0]!.replace(/^0+/, "").length > 15
   )
-    throw new Error(`${label} must be a non-negative exact amount`);
+    throw new AssetValidationError(`${label} must be a non-negative exact amount`);
   return add(result, "0");
 }
 async function subject(
@@ -97,14 +98,14 @@ async function subject(
     )
   ).rows[0];
   if (!row)
-    throw new Error("select an unreversed posted valuation of this asset");
+    throw new AssetValidationError("select an unreversed posted valuation of this asset");
   const transfer = (
     await tx.execute<Transfer>(
       sql`select * from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and book_id=${row.book_id} and reversed_by_change_id is null for share`,
     )
   ).rows[0];
   if (!transfer)
-    throw new Error(
+    throw new AssetValidationError(
       "the asset has no active group transfer basis in this book",
     );
   const required = [row.subsidiary_id, transfer.elimination_subsidiary_id];
@@ -132,9 +133,9 @@ async function snapshot(
   input: AssetGroupValuationInput,
 ) {
   if (!isIsoCalendarDate(input.effectiveOn))
-    throw new Error("enter the source valuation date");
+    throw new AssetValidationError("enter the source valuation date");
   if (input.assessment.trim().length < 8)
-    throw new Error(
+    throw new AssetValidationError(
       "document the group recoverability and remaining-service assessment",
     );
   const carrying = exact(input.carryingValue, "group carrying value");
@@ -142,17 +143,17 @@ async function snapshot(
     canonicalDecimal(input.buyerToGroupRate, 10) === null ||
     BigInt(input.buyerToGroupRate.replace(".", "")) <= 0n
   )
-    throw new Error("supply a positive exact buyer-to-group rate");
+    throw new AssetValidationError("supply a positive exact buyer-to-group rate");
   const s = await subject(tx, orgId, assetId, actorId, input);
   if (input.effectiveOn !== s.row.occurred_on)
-    throw new Error(
+    throw new AssetValidationError(
       "the group valuation must use the legal-book valuation date",
     );
   if (
     s.row.currency === s.transfer.group_currency &&
     cmp(input.buyerToGroupRate, "1") !== 0
   )
-    throw new Error("same-currency group valuation rate must be one");
+    throw new AssetValidationError("same-currency group valuation rate must be one");
   const calendar = await assetDepreciationCalendar(
     tx,
     orgId,
@@ -168,7 +169,7 @@ async function snapshot(
     (p) => p.starts_on <= input.effectiveOn && p.ends_on >= input.effectiveOn,
   );
   if (!period)
-    throw new Error(
+    throw new AssetValidationError(
       "create the accounting period covering the source valuation date",
     );
   await assertAssetPeriodOpen(tx, {
@@ -183,7 +184,7 @@ async function snapshot(
     )
   ).rows;
   if (later.length)
-    throw new Error(
+    throw new AssetValidationError(
       "correct later asset or consolidation postings before changing this earlier group valuation",
     );
   const changes = (
@@ -193,14 +194,14 @@ async function snapshot(
   ).rows[0]!;
   const held = add(s.row.acquisition_cost, changes.cost);
   if (cmp(held, "0") <= 0)
-    throw new Error("a disposed asset has no remaining group valuation");
+    throw new AssetValidationError("a disposed asset has no remaining group valuation");
   const earlierMissing = (
     await tx.execute(
       sql`select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${s.row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and v.occurred_on<${input.effectiveOn} and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) and not exists(select 1 from asset_transfer_measurements m where m.org_id=v.org_id and m.source_event_id=v.id) limit 1`,
     )
   ).rows;
   if (earlierMissing.length)
-    throw new Error(
+    throw new AssetValidationError(
       "approve the earlier source valuation group assessment first; group service history must be measured in order",
     );
   const valuations = await assetGroupHistory(
@@ -250,7 +251,7 @@ async function snapshot(
     s.transfer.basis.buyerToGroupRate,
   );
   if (cmp(normalized, salvage) < 0 || cmp(normalized, cost) > 0)
-    throw new Error(
+    throw new AssetValidationError(
       "group carrying value must lie between the retained residual value and historical group cost",
     );
   const delta = add(normalized, neg(before));
@@ -272,11 +273,11 @@ async function snapshot(
   const netImpairment = cmp(before, ceiling) < 0;
   if (cmp(delta, "0") > 0 && netImpairment) {
     if (framework === "us_gaap")
-      throw new Error(
+      throw new AssetValidationError(
         "US GAAP prohibits restoring a held-and-used group impairment",
       );
     if (cmp(normalized, ceiling) > 0)
-      throw new Error(
+      throw new AssetValidationError(
         `group impairment reversal exceeds the unimpaired carrying amount ${mulRate(divRate(ceiling, s.transfer.basis.buyerToGroupRate), input.buyerToGroupRate)}`,
       );
   }
@@ -285,14 +286,14 @@ async function snapshot(
   const fullPlan = input.remainingPlan.map((line) => {
     const p = periods.find((p) => p.ends_on === line.date);
     if (!p || line.date < serviceFrom || line.date < previous)
-      throw new Error(
+      throw new AssetValidationError(
         "group service plan must list distinct accounting period ends after the valuation",
       );
     const amount = exact(line.amount, "group remaining depreciation");
     total = add(total, amount);
     const startsOn = p.starts_on < serviceFrom ? serviceFrom : p.starts_on;
     if (startsOn < previous)
-      throw new Error("group depreciation intervals overlap");
+      throw new AssetValidationError("group depreciation intervals overlap");
     previous = new Date(Date.parse(line.date + "T00:00:00Z") + 86400000)
       .toISOString()
       .slice(0, 10);
@@ -314,7 +315,7 @@ async function snapshot(
     input.buyerToGroupRate,
   );
   if (cmp(total, add(carrying, neg(residualCurrent))) !== 0)
-    throw new Error(
+    throw new AssetValidationError(
       "remaining group depreciation must exactly allocate carrying value less residual value",
     );
   // Last line carries normalization residue so the plan conserves the approved basis.

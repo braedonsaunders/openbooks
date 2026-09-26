@@ -1,4 +1,5 @@
 import { assetGroupHistory } from "../organization/asset-group-history.ts";
+import { AssetValidationError } from "./validation-error.ts";
 import {
   measureGroupComponent,
   transferGroupComponent,
@@ -152,14 +153,14 @@ function exact(value: string, label: string): string {
     n.replace(/^-/, "").split(".")[0]!.replace(/^0+/, "").length > 15 ||
     toUnits(n) < 0n
   )
-    throw new Error(`${label} must be a non-negative exact ledger amount`);
+    throw new AssetValidationError(`${label} must be a non-negative exact ledger amount`);
   return fromUnits(toUnits(n));
 }
 function validate(input: AssetChangeInput) {
   if (!isIsoCalendarDate(input.effectiveOn))
-    throw new Error("effective date must be a calendar date");
+    throw new AssetValidationError("effective date must be a calendar date");
   if (input.assessment.trim().length < 8)
-    throw new Error(
+    throw new AssetValidationError(
       "document the component identification and carrying-value assessment",
     );
   exact(input.proceeds, "proceeds");
@@ -168,16 +169,16 @@ function validate(input: AssetChangeInput) {
     new Set(input.portion.books.map((b) => b.bookId)).size !==
       input.portion.books.length
   )
-    throw new Error("supply one component measurement per accounting book");
+    throw new AssetValidationError("supply one component measurement per accounting book");
   if (
     input.transfer?.groupPlans &&
     new Set(input.transfer.groupPlans.map((b) => b.bookId)).size !==
       input.transfer.groupPlans.length
   )
-    throw new Error("supply one group depreciation plan per accounting book");
+    throw new AssetValidationError("supply one group depreciation plan per accounting book");
   if (input.operation === "intercompany_transfer") {
     const t = input.transfer;
-    if (!t) throw new Error("record the receiving entity and asset terms");
+    if (!t) throw new AssetValidationError("record the receiving entity and asset terms");
     exact(t.buyerAmount, "buyer acquisition cost");
     exact(t.buyerSalvage, "buyer residual value");
     if (
@@ -187,7 +188,7 @@ function validate(input: AssetChangeInput) {
         "0",
       ) <= 0
     )
-      throw new Error("receiving production capacity must be positive");
+      throw new AssetValidationError("receiving production capacity must be positive");
     for (const [label, value] of [
       ["seller-to-group rate", t.sellerToGroupRate],
       ["buyer-to-group rate", t.buyerToGroupRate],
@@ -197,11 +198,11 @@ function validate(input: AssetChangeInput) {
         canonicalDecimal(value, 10) === null ||
         BigInt(value!.replace(".", "")) <= 0n
       )
-        throw new Error(`${label} must be an exact positive exchange rate`);
+        throw new AssetValidationError(`${label} must be an exact positive exchange rate`);
     if (toUnits(exact(t.taxRatePercent, "deferred-tax rate")) > toUnits("100"))
-      throw new Error("deferred-tax rate cannot exceed 100 percent");
+      throw new AssetValidationError("deferred-tax rate cannot exceed 100 percent");
     if (cmp(mulRate(input.proceeds, t.sellerToBuyerRate), t.buyerAmount) !== 0)
-      throw new Error(
+      throw new AssetValidationError(
         "seller-to-buyer rate must exactly price the agreed buyer consideration",
       );
     if (
@@ -209,7 +210,7 @@ function validate(input: AssetChangeInput) {
       cmp(t.buyerAmount, "0") <= 0 ||
       cmp(input.proceeds, "0") <= 0
     )
-      throw new Error(
+      throw new AssetValidationError(
         "an intercompany sale requires positive consideration and a residual value no greater than buyer cost",
       );
     if (
@@ -217,7 +218,7 @@ function validate(input: AssetChangeInput) {
       t.lifeMonths < 1 ||
       t.lifeMonths > 1200
     )
-      throw new Error(
+      throw new AssetValidationError(
         "receiving useful life must be between 1 and 1,200 months",
       );
     if (
@@ -226,11 +227,11 @@ function validate(input: AssetChangeInput) {
       t.exchangeRateEvidence.trim().length < 8 ||
       t.groupAssessment.trim().length < 8
     )
-      throw new Error(
+      throw new AssetValidationError(
         "record the receiving asset identity, exchange-rate evidence and group accounting assessment",
       );
   } else if (input.transfer)
-    throw new Error("receiving terms belong to an intercompany transfer");
+    throw new AssetValidationError("receiving terms belong to an intercompany transfer");
 }
 async function access(
   tx: SqlExecutor,
@@ -288,14 +289,14 @@ async function snapshot(
     seller.is_elimination ||
     !["in_service", "fully_depreciated"].includes(asset.status)
   )
-    throw new Error(
+    throw new AssetValidationError(
       "the disposing asset must be in service in an active operating entity",
     );
   if (
     input.transfer &&
     (!buyer?.is_active || buyer.is_elimination || buyer.id === seller.id)
   )
-    throw new Error("select another active operating entity as the buyer");
+    throw new AssetValidationError("select another active operating entity as the buyer");
   const elimination = input.transfer
     ? entities.find((s) => s.id === input.transfer!.eliminationSubsidiaryId)
     : undefined;
@@ -303,7 +304,7 @@ async function snapshot(
     input.transfer &&
     (!elimination?.is_active || !elimination.is_elimination)
   )
-    throw new Error("select the active group elimination entity");
+    throw new AssetValidationError("select the active group elimination entity");
   const groupScope = (
     await tx.execute<{ elimination_subsidiary_id: string }>(
       sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`,
@@ -344,7 +345,7 @@ async function snapshot(
     },
   );
   if (!category.gain_loss_account_id)
-    throw new Error(
+    throw new AssetValidationError(
       "configure the asset category gain/loss account before proposing a disposal",
     );
   const books = (
@@ -355,18 +356,18 @@ async function snapshot(
   if (
     books.filter((b) => b.is_primary && b.is_active && b.posts_gl).length !== 1
   )
-    throw new Error("configure one active primary posting book");
+    throw new AssetValidationError("configure one active primary posting book");
   if (
     "books" in input.portion &&
     input.portion.books.some((p) => !books.some((b) => b.id === p.bookId))
   )
-    throw new Error("component measurements name a book outside this asset");
+    throw new AssetValidationError("component measurements name a book outside this asset");
   if (
     input.transfer?.groupPlans?.some(
       (p) => !books.some((b) => b.id === p.bookId),
     )
   )
-    throw new Error("group depreciation plan names a book outside this asset");
+    throw new AssetValidationError("group depreciation plan names a book outside this asset");
   const schedules = (
     await tx.execute<{
       id: string;
@@ -407,11 +408,11 @@ async function snapshot(
   const previews: AssetChangePreview[] = [];
   for (const book of books) {
     if (!book.is_active)
-      throw new Error(
+      throw new AssetValidationError(
         `activate accounting book ${book.name} before changing the asset basis in every book`,
       );
     if (!schedules.some((s) => s.book_id === book.id))
-      throw new Error(
+      throw new AssetValidationError(
         `build the asset depreciation schedule for ${book.name} before proposing this change`,
       );
     await assertAssetPostingDate(
@@ -437,21 +438,21 @@ async function snapshot(
       (l) => l.posted_amount === null && l.ends_on < input.effectiveOn,
     );
     if (overdue)
-      throw new Error(
+      throw new AssetValidationError(
         `run depreciation for ${book.name} through ${overdue.ends_on} before proposing this change`,
       );
     const futurePosted = bookLines.find(
       (l) => l.posted_amount !== null && l.ends_on >= input.effectiveOn,
     );
     if (futurePosted)
-      throw new Error(
+      throw new AssetValidationError(
         `depreciation in ${book.name} already includes service through ${futurePosted.ends_on}; use an effective date after that retained history`,
       );
     const futureInputs = bookLines.find(
       (l) => l.posted_amount === null && l.source !== "formula",
     );
     if (futureInputs)
-      throw new Error(
+      throw new AssetValidationError(
         `post or replace the recorded ${futureInputs.source} depreciation input in ${book.name} before changing its basis`,
       );
     const values = (
@@ -498,7 +499,7 @@ async function snapshot(
         ? input.portion
         : input.portion.books.find((p) => p.bookId === book.id);
     if (!portion)
-      throw new Error(
+      throw new AssetValidationError(
         `supply the identified component carrying amounts for ${book.name}`,
       );
     const measurement = measurePartialDisposal({
@@ -540,12 +541,12 @@ async function snapshot(
       let priorDate = "";
       for (const l of suppliedPlan.lines) {
         if (l.date <= priorDate)
-          throw new Error(
+          throw new AssetValidationError(
             "group depreciation plan must list distinct accounting period ends in order",
           );
         priorDate = l.date;
         if (!isIsoCalendarDate(l.date) || l.date < input.effectiveOn)
-          throw new Error(
+          throw new AssetValidationError(
             "group depreciation dates must be on or after transfer",
           );
         exact(l.amount, "group depreciation");
@@ -553,7 +554,7 @@ async function snapshot(
       future = suppliedPlan.lines.map((l) => {
         const period = bookPeriods.find((p) => p.ends_on === l.date);
         if (!period)
-          throw new Error(
+          throw new AssetValidationError(
             "group depreciation must name the configured book period end",
           );
         return {
@@ -579,7 +580,7 @@ async function snapshot(
             ),
       ) !== 0
     )
-      throw new Error(
+      throw new AssetValidationError(
         `build the complete remaining depreciation plan in ${book.name} before transferring depreciable carrying value`,
       );
     let allocated = "0";
@@ -606,12 +607,12 @@ async function snapshot(
       ).rows[0]!.amount;
       const total = basis.unitsRemaining ?? schedule.units_total;
       if (total === null)
-        throw new Error(
+        throw new AssetValidationError(
           `configure expected production capacity for ${book.name}`,
         );
       unitsBefore = add(total, neg(used));
       if (cmp(unitsBefore, "0") < 0)
-        throw new Error("recorded production exceeds the asset capacity");
+        throw new AssetValidationError("recorded production exceeds the asset capacity");
       unitsRemaining = measurement.full
         ? "0"
         : "percent" in input.portion
@@ -628,14 +629,14 @@ async function snapshot(
               )
             : null;
       if (unitsRemaining === null)
-        throw new Error(
+        throw new AssetValidationError(
           `supply the identified component's remaining production capacity for ${book.name}`,
         );
       if (
         cmp(unitsRemaining, unitsBefore) > 0 ||
         (!measurement.full && cmp(unitsRemaining, "0") <= 0)
       )
-        throw new Error(
+        throw new AssetValidationError(
           "partial disposal must retain positive production capacity no greater than the pre-disposal remainder",
         );
     }
@@ -665,7 +666,7 @@ async function snapshot(
     });
   }
   if (previews.some((p) => p.full !== previews[0]!.full))
-    throw new Error(
+    throw new AssetValidationError(
       "all books must identify the same physical portion as fully or partially disposed",
     );
   let buyerCategory: Category | null = null;
@@ -680,7 +681,7 @@ async function snapshot(
           ),
       ) !== 10000000000n
     )
-      throw new Error("same-currency seller-to-group rate must be one");
+      throw new AssetValidationError("same-currency seller-to-group rate must be one");
     if (
       buyer.base_currency === elimination!.base_currency &&
       BigInt(
@@ -688,14 +689,14 @@ async function snapshot(
           (input.transfer.buyerToGroupRate.split(".")[1] ?? "").padEnd(10, "0"),
       ) !== 10000000000n
     )
-      throw new Error("same-currency buyer-to-group rate must be one");
+      throw new AssetValidationError("same-currency buyer-to-group rate must be one");
     if (
       cmp(
         mulRate(input.proceeds, input.transfer.sellerToGroupRate),
         mulRate(input.transfer.buyerAmount, input.transfer.buyerToGroupRate),
       ) !== 0
     )
-      throw new Error(
+      throw new AssetValidationError(
         "approved exchange rates must translate both sides of the transfer consideration to the same group amount",
       );
     await assertLifecyclePostingPolicy(
@@ -724,12 +725,12 @@ async function snapshot(
         )
       ).rows[0] ?? null;
     if (!buyerCategory?.is_active)
-      throw new Error("select an active receiving asset category");
+      throw new AssetValidationError("select an active receiving asset category");
     if (
       buyerCategory.default_method === "units_of_production" &&
       !input.transfer.buyerProductionUnits
     )
-      throw new Error(
+      throw new AssetValidationError(
         "supply the receiving asset production capacity for its units-of-production category",
       );
     // The existing intercompany pair is authoritative; transaction fields are
@@ -767,14 +768,14 @@ async function snapshot(
       pairLegs.find((l) => l.subsidiaryId === buyer.id)?.accountId !==
         input.transfer.payableAccountId
     )
-      throw new Error(
+      throw new AssetValidationError(
         "use the intercompany accounts configured for these entities under Setup → Subsidiaries",
       );
     if (
       seller.base_currency === buyer.base_currency &&
       cmp(input.proceeds, input.transfer.buyerAmount) !== 0
     )
-      throw new Error(
+      throw new AssetValidationError(
         "same-currency seller proceeds and buyer cost must agree",
       );
     const duplicate = (
@@ -783,7 +784,7 @@ async function snapshot(
       )
     ).rows[0];
     if (duplicate)
-      throw new Error(
+      throw new AssetValidationError(
         "the receiving asset number is already in use; choose an unused asset number",
       );
     await assertLifecyclePostingPolicy(
@@ -817,7 +818,7 @@ async function snapshot(
       node = entities.find((e) => e.id === node!.parent_id);
     }
     if (input.transfer && !node)
-      throw new Error(
+      throw new AssetValidationError(
         "both asset owners must belong to the selected consolidation group",
       );
     return ids;
@@ -839,7 +840,7 @@ async function snapshot(
       ).rows.filter((p) => pathIds.includes(p.subsidiary_id))
     : [];
   if (ownership.some((p) => p.method !== "full"))
-    throw new Error(
+    throw new AssetValidationError(
       "the transfer requires full control throughout both ownership paths; an associate or joint venture uses its separate-book disposal and acquisition plus ownership-method consolidation",
     );
   if (
@@ -850,7 +851,7 @@ async function snapshot(
       )
     ).rows.length
   )
-    throw new Error(
+    throw new AssetValidationError(
       "an asset owner is outside the controlled group after its disposal; this is not an internal group transfer",
     );
   const nci: {
@@ -865,7 +866,7 @@ async function snapshot(
     const percent = policy?.ownership_percent ?? "100";
     if (cmp(percent, "100") < 0) {
       if (!policy?.nci_equity_account_id || !policy.nci_income_account_id)
-        throw new Error(
+        throw new AssetValidationError(
           "configure non-controlling equity and income accounts throughout the selling ownership path",
         );
       nci.push({
@@ -905,7 +906,7 @@ async function snapshot(
       )
     ).rows;
     if (unresolved.length)
-      throw new Error(
+      throw new AssetValidationError(
         "record and approve the receiving asset Group valuation before disposing or transferring its changed group basis",
       );
     predecessorValuations[predecessor.book_id] = await assetGroupHistory(
@@ -920,7 +921,7 @@ async function snapshot(
         ? input.portion.books.find((b) => b.bookId === predecessor.book_id)
         : undefined;
     if (identified && !identified.group)
-      throw new Error(
+      throw new AssetValidationError(
         "record the identified component's group cost, accumulated depreciation, residual value and retained service in the asset change's Group component section",
       );
     const periods = (
@@ -946,7 +947,7 @@ async function snapshot(
       (b) => b.group && !predecessors.some((p) => p.book_id === b.bookId),
     )
   )
-    throw new Error(
+    throw new AssetValidationError(
       "group component evidence requires a received intercompany asset in that accounting book",
     );
   return {
@@ -984,7 +985,7 @@ export async function proposeAssetChange(
           sql`select subsidiary_id from fixed_assets where org_id=${orgId} and id=${assetId}`,
         )
       ).rows[0];
-      if (!identity) throw new Error("asset not found");
+      if (!identity) throw new AssetValidationError("asset not found");
       const groupScope = (
         await tx.execute<{ elimination_subsidiary_id: string }>(
           sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`,

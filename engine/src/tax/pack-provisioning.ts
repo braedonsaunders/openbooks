@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { TaxRequestValidationError } from "./request-validation.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { installTaxReturnPacks, taxReturnPack, TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
@@ -19,11 +20,11 @@ import type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxPackDefin
 /** Persist a pack JSON rate through exact decimal then ledger money — never as an IEEE-754 number. */
 function persistPackRatePercent(ratePercent: string): string {
   const exact = canonicalDecimal(ratePercent, 4);
-  if (exact === null) throw new Error("rate percent must be an exact decimal");
+  if (exact === null) throw new TaxRequestValidationError("rate percent must be an exact decimal");
   try {
     return normalizeMoney(exact);
   } catch {
-    throw new Error("rate percent must be an exact decimal");
+    throw new TaxRequestValidationError("rate percent must be an exact decimal");
   }
 }
 
@@ -155,7 +156,7 @@ async function assertTaxCodeMatchesPack(
     && actual.appliesTo === "both"
     && actual.isActive;
   if (!metadataMatches || JSON.stringify(actualRates) !== JSON.stringify(expectedRates)) {
-    throw new Error(
+    throw new TaxRequestValidationError(
       `tax code ${args.definition.code} conflicts with the versioned country pack; rename or retire the existing code before installation`,
     );
   }
@@ -312,10 +313,10 @@ async function assertCountryPackVersionIntegrity(
     `));
     const row = existing.rows[0];
     if (row && row.contentHash !== countryPackHash(pack)) {
-      throw new Error(`country pack ${pack.code} version ${pack.version} changed after installation; publish a new version`);
+      throw new TaxRequestValidationError(`country pack ${pack.code} version ${pack.version} changed after installation; publish a new version`);
     }
     if (row?.status === "superseded") {
-      throw new Error(
+      throw new TaxRequestValidationError(
         `country pack ${pack.code} version ${pack.version} is superseded by a newer installation and cannot be reactivated; ` +
           `publish a new pack version and re-run tax provisioning`,
       );
@@ -341,7 +342,7 @@ async function recordCountryPackInstallations(
       `));
       if (active.rows[0]?.version === pack.version) {
         if (active.rows[0].contentHash !== hash) {
-          throw new Error(
+          throw new TaxRequestValidationError(
             `country pack ${pack.code} version ${pack.version} installed content does not match the repository declaration for that version; ` +
               `publish a new pack version instead of editing the declared one, then re-run tax provisioning`,
           );
@@ -610,7 +611,7 @@ async function provisionTaxPacksInTenant(
 ): Promise<ProvisionResult> {
   const requestedCodes = [...new Set(packCodes)];
   if (requestedCodes.some((code) => !isTaxProvisionSelection(code))) {
-    throw new Error("unknown or incomplete tax setup selection");
+    throw new TaxRequestValidationError("unknown or incomplete tax setup selection");
   }
   const requiredParentReturnPacks = requestedCodes.flatMap((code) => {
     const subdivision = taxSubdivisionSelection(code);
@@ -626,7 +627,7 @@ async function provisionTaxPacksInTenant(
   const packs = codes.map((c) => taxReturnPack(c)).filter((p) => p !== undefined);
   const subdivisions = codes.map((c) => taxSubdivisionSelection(c)).filter((s) => s !== undefined);
   if (packs.length + subdivisions.length !== codes.length) {
-    throw new Error("unknown tax setup selection");
+    throw new TaxRequestValidationError("unknown tax setup selection");
   }
 
   let jurisdictionsCreated = 0;

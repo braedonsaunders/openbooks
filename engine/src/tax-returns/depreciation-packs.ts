@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { AssetValidationError } from "../assets/validation-error.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db } from "../platform/db.ts";
 import { normalizeDecimal, normalizeMoney } from "../money/money.ts";
@@ -7,22 +8,22 @@ import { TAX_DEPRECIATION_REGIMES } from "./depreciation-pool.ts";
 /** Persist a pack JSON rate through exact decimal at numeric(19,10). Fail closed. */
 function persistPackFxRate(rate: string | number): string {
   const exact = canonicalDecimal(rate, 10);
-  if (exact === null) throw new Error("pack rate must be an exact decimal");
+  if (exact === null) throw new AssetValidationError("pack rate must be an exact decimal");
   try {
     return normalizeDecimal(exact, 10);
   } catch {
-    throw new Error("pack rate must be an exact decimal");
+    throw new AssetValidationError("pack rate must be an exact decimal");
   }
 }
 
 /** Persist a pack JSON cost cap through exact decimal then ledger money. Fail closed. */
 function persistPackCostCap(value: string | number): string {
   const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new Error("cost cap must be an exact decimal");
+  if (exact === null) throw new AssetValidationError("cost cap must be an exact decimal");
   try {
     return normalizeMoney(exact);
   } catch {
-    throw new Error("cost cap must be an exact decimal");
+    throw new AssetValidationError("cost cap must be an exact decimal");
   }
 }
 
@@ -50,7 +51,7 @@ export function taxDepreciationPacks(): TaxDepreciationPack[] {
  * overrides are preserved; installing a pack never silently replaces them. */
 export async function installTaxDepreciationPack(orgId: string, code: string, actorId: string | null): Promise<{ regimesCreated: number; classesCreated: number }> {
   const regime = TAX_DEPRECIATION_REGIMES[code];
-  if (!regime) throw new Error(`unknown tax depreciation pack "${code}"`);
+  if (!regime) throw new AssetValidationError(`unknown tax depreciation pack "${code}"`);
 
   return db.transaction(async (tx) => {
     const insertedRegime = (await tx.execute<{ id: string }>(sql`

@@ -1,5 +1,4 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { invalidInput } from '../../../../lib/application/errors'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { installTaxDepreciationPack, taxDepreciationPacks } from '@openbooks/engine/src/tax-returns/depreciation-packs.ts'
@@ -28,11 +27,6 @@ export async function POST(req: Request) {
   try {
     return NextResponse.json(await installTaxDepreciationPack(gate.user.orgId, body.code, gate.user.id))
   } catch (error) {
-    // installTaxDepreciationPack signals request-state validation (exact
-    // decimals, known pack codes) with bare Errors carrying curated operator
-    // text; only those travel as 422s with their message, everything named
-    // sanitizes.
-    if (error instanceof Error && error.constructor === Error) return apiErrorResponse(invalidInput(error.message))
     return apiErrorResponse(error, { safeStatus: 422 })
   }
 }
