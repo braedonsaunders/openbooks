@@ -100,6 +100,7 @@ function call(
 }
 
 test("name-bearing routes refuse a non-string name with the field path", async () => {
+  assert.equal(routes.length, 8, "every name-bearing route faces the boundary; an empty registry would vacate the loop");
   const scratch = await withBypass(() => createScratchOrg());
   try {
     (globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = {
@@ -182,6 +183,7 @@ test("name-bearing routes refuse a non-string name with the field path", async (
 });
 
 test("name-bearing routes pass a valid name through the shared boundary", async () => {
+  assert.equal(routes.length, 8, "every name-bearing route faces the boundary; an empty registry would vacate the loop");
   const scratch = await withBypass(() => createScratchOrg());
   try {
     (globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = {

@@ -69,10 +69,6 @@ test('users list pages in sort order with a stable total', async () => {
     assert.equal(first.rows.length, PAGE_SIZE, 'page one holds one page, not the directory')
     assert.equal(first.total, USERS, 'the total is stable across pages')
     assert.equal(second.total, USERS, 'the total is stable across pages')
-    const firstNames = new Set(first.rows.map((row) => row.name))
-    for (const row of second.rows) {
-      assert.ok(!firstNames.has(row.name), `page two repeats a page-one row (${row.name})`)
-    }
     assert.deepEqual(
       [...first.rows, ...second.rows].map((row) => row.name),
       full.rows.map((row) => row.name),

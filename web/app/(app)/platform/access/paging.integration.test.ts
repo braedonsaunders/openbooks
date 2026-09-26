@@ -88,10 +88,6 @@ test('access list pages in sort order with a stable total', async () => {
     assert.equal(first.rows.length, PAGE_SIZE, 'page one holds one page, not every grant')
     assert.equal(first.total, GRANTS, 'the total is stable across pages')
     assert.equal(second.total, GRANTS, 'the total is stable across pages')
-    const firstIds = new Set(first.rows.map((row) => row.id))
-    for (const row of second.rows) {
-      assert.ok(!firstIds.has(row.id), `page two repeats a page-one grant (${row.id})`)
-    }
     assert.deepEqual(
       [...first.rows, ...second.rows].map((row) => row.id),
       full.rows.map((row) => row.id),

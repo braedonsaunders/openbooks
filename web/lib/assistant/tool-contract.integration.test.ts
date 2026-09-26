@@ -395,6 +395,7 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
       };
 
       const readTools = ASSISTANT_TOOLS.filter((tool) => tool.category !== "write");
+      assert.ok(readTools.length > 0, "the contract harness covers the read tools; an empty selection would vacate every tool check");
       for (const tool of readTools) {
         const args = inputs[tool.name] ?? {};
         await t.test(`${tool.name} honours the tool contract`, async () => {

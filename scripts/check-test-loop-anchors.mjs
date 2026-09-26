@@ -198,7 +198,9 @@ export function anchored(body, collection) {
   for (const name of derivations(body, collection)) {
     const expression = esc(name);
     if (new RegExp(`\\b${expression}\\s*\\.\\s*(length|size)\\b`).test(body)) return true;
-    if (new RegExp(`\\b${expression}\\s*\\.\\s*(includes|indexOf|find|some|every)\\s*\\(`).test(body)) return true;
+    // `has` is the Set membership probe, the same non-vacuity evidence as
+    // `includes` on an array: it fails when the collection is empty.
+    if (new RegExp(`\\b${expression}\\s*\\.\\s*(has|includes|indexOf|find|some|every)\\s*\\(`).test(body)) return true;
     if (new RegExp(`\\b${expression}\\s*\\[\\s*0\\s*\\]`).test(body)) return true;
     // A deepEqual of the collection (or its map) against a non-empty literal
     // fails on empty: `deepEqual(rows.map(r => r.id), [..])`. A comparand

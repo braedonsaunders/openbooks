@@ -37,6 +37,11 @@ test("deepEqual against a non-empty literal", async () => {
   assert.deepEqual(rows.map((row) => row.id), ["a", "b"]);
   for (const row of rows) assert.ok(row.id);
 });
+test("set membership probe", async () => {
+  const seen = new Set((await db.execute(sql\`select id\`)).rows.map((row) => row.id));
+  assert.ok(seen.has("stuck-id"));
+  for (const id of seen) assert.equal(typeof id, "string");
+});
 test("as-const tuple and deepEqual literal", async () => {
   for (const [set, entry] of [[["a"], "e1"], [["b"], "e2"]] as const) {
     assert.deepEqual(set.map((id) => id), ["a"]);

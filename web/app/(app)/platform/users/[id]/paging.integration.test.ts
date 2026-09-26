@@ -114,10 +114,6 @@ test('user detail grants page in order with a stable total', async () => {
     assert.equal(first?.grants.length, PAGE_SIZE, 'page one holds one page, not every grant')
     assert.equal(first?.totalGrants, GRANTS, 'the total is stable across pages')
     assert.equal(second?.totalGrants, GRANTS, 'the total is stable across pages')
-    const firstIds = new Set(first?.grants.map((grant) => grant.id))
-    for (const grant of second?.grants ?? []) {
-      assert.ok(!firstIds.has(grant.id), `page two repeats a page-one grant (${grant.id})`)
-    }
     assert.deepEqual(
       [...(first?.grants ?? []), ...(second?.grants ?? [])].map((grant) => grant.id),
       full.grants.map((grant) => grant.id),
