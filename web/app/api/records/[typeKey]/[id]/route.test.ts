@@ -194,7 +194,6 @@ const mockSources = new Map<string, string>([
       export function recordSubsidiaryScopeAllows() { return true }
       export function recordVisibleInSubsidiaryFence() { return true }
       export function retainStoredSubsidiaryId(_sections, _stored, next) { return next }
-      export function hasSubsidiaryField() { return false }
       export async function buildSearchText(_orgId, _sections, data, number) { return number.toLowerCase() + ' ' + JSON.stringify(data).toLowerCase() }
     `,
   ],
@@ -205,6 +204,7 @@ const mockSources = new Map<string, string>([
       export function stripUnknownData(_sections, data) { return data }
       export function withComputedFormulas(_sections, data) { return data }
       export function validateRecordData() { return [] }
+      export const recordDataValidationBody = (stage, errors) => ({ error: stage === 'submit' && errors.some((e) => e.message === 'Required') ? 'Fill every required field before activating' : errors[0]?.message, errors, issues: errors.map((e) => ({ path: e.fieldId, message: e.message })) })
       export function findUnknownDataKeys(sections, data) {
         const ids = new Set(sections.filter((s) => !s.repeating).flatMap((s) => s.fields.map((f) => f.id)))
         const repeating = new Map(sections.filter((s) => s.repeating).map((s) => [s.id, new Set(s.fields.map((f) => f.id))]))

@@ -7,6 +7,7 @@ import { db, pool } from '@openbooks/engine/src/platform/db.ts'
 import {
   REPORT_ENTITY_MAP,
   customQueryReferencesBook,
+  ReportQueryValidationError,
   resolvePeriodPresetLeaves,
   runCustomQuery,
   validateCustomQuery,
@@ -714,7 +715,7 @@ export async function resolveCustomReportBookScope(
      where org_id = ${orgId} and is_primary and is_active
   `)
   if (rows.length !== 1) {
-    throw new Error(
+    throw new ReportQueryValidationError(
       'This report needs exactly one active primary accounting book. Choose a book filter to run it against a specific book instead.',
     )
   }
@@ -729,10 +730,10 @@ async function prepareReportExecution(
   const authz = await requireReportAuthz(orgId)
   const entityMap = await reportEntityCatalog(authz)
   query = validateCatalogReportQuery(query, entityMap)
-  if (!(await canRunReportEntity(authz, query))) throw new Error('Report access denied')
+  if (!(await canRunReportEntity(authz, query))) throw new ReportQueryValidationError('Report access denied')
   const featureKey = reportEntityFeatureKey(query)
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
-    throw new Error(`${featureKey} feature is disabled`)
+    throw new ReportQueryValidationError(`${featureKey} feature is disabled`)
   }
   const [resolved, startMonth, asOf, runLabels, allowedBookIds] = await Promise.all([
     resolvePeriodPresets(query, orgId),

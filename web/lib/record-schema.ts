@@ -329,6 +329,39 @@ export function validateRecordData(
 }
 
 /**
+ * 422 body for record DATA validation failures. The issues are our own
+ * linter output (safe by construction); mapping them here keeps `.message`
+ * text out of API route bodies. The client branches on `code`/status and
+ * renders `issues`, never on message text.
+ */
+export function recordDataValidationBody(
+  stage: 'draft' | 'submit',
+  errors: ValidationError[],
+): { error: string; errors: ValidationError[]; issues: { path: string; message: string }[] } {
+  return {
+    error:
+      stage === 'submit' && errors.some((e) => e.message === 'Required')
+        ? 'Fill every required field before activating'
+        : errors[0]!.message,
+    errors,
+    issues: errors.map((e) => ({ path: e.fieldId, message: e.message })),
+  }
+}
+
+/**
+ * 422 body for record TYPE definition failures (designer-side lint).
+ * Same reasoning as above: the mapping lives here, not in a route body.
+ */
+export function recordTypeLintBody(
+  issues: SchemaIssue[],
+): { error: string; issues: SchemaIssue[] } {
+  return {
+    error: `Invalid fields: ${issues.slice(0, 3).map((i) => i.message).join('; ')}`,
+    issues,
+  }
+}
+
+/**
  * Recompute every formula field and persist the results alongside the inputs
  * (lists and reports read stored values, never re-evaluate trees). Row-level
  * formulas are computed per row first (each row sees its own fields shadowing

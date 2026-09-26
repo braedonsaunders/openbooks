@@ -26,12 +26,13 @@ const MAX_SORT_LEVELS = 3
 const MAX_LABEL_LEN = 80
 
 /**
- * A custom report query the sanitizer can type-refuse: every message below
- * is operator-actionable validation feedback (bad entity, column, operator,
- * filter shape) carrying no internals, so routes answer it at 422 intact
- * while unexpected faults sanitize to a generic 500.
+ * Custom-report validation refusals are user-actionable (the message names
+ * the malformed field, filter, or breakout) and answer 422. A named class
+ * keeps them intact through the API error sanitizer; unexpected failures
+ * stay anonymous 500s.
  */
 export class ReportQueryValidationError extends Error {
+  readonly status = 422
   constructor(message: string) {
     super(message)
     this.name = 'ReportQueryValidationError'
