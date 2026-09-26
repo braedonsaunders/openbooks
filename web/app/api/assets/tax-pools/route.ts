@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -143,6 +144,6 @@ export async function POST(req: Request) {
     })
     return NextResponse.json(result)
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'run failed' }, { status: 422 })
+    return apiErrorResponse(e, { safeStatus: 422 })
   }
 }

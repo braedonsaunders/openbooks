@@ -1,3 +1,5 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { invalidInput } from '../../../../../lib/application/errors'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -173,12 +175,10 @@ export async function POST(
       ),
     });
   } catch (e) {
-    return NextResponse.json(
-      {
-        error:
-          e instanceof Error ? e.message : "asset change could not be proposed",
-      },
-      { status: 422 },
-    );
+    // proposeAssetChange signals request-state validation with bare Errors
+    // carrying curated operator text (pinned by route tests); only those
+    // travel as 422s with their message, everything named sanitizes.
+    if (e instanceof Error && e.constructor === Error) return apiErrorResponse(invalidInput(e.message))
+    return apiErrorResponse(e, { safeStatus: 422 });
   }
 }

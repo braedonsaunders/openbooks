@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { remeasureAsset } from '@openbooks/engine/src/assets/asset-lifecycle.ts'
@@ -40,6 +41,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(result)
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'remeasurement failed' }, { status: 422 })
+    return apiErrorResponse(e, { safeStatus: 422 })
   }
 }

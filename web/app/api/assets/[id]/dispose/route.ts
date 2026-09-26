@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { disposeAsset } from "@openbooks/engine/src/assets/asset-lifecycle.ts";
@@ -91,9 +92,6 @@ export async function POST(
     });
     return NextResponse.json(result);
   } catch (e: unknown) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "disposal failed" },
-      { status: 422 },
-    );
+    return apiErrorResponse(e, { safeStatus: 422 });
   }
 }
