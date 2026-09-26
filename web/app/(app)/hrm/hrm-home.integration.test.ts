@@ -182,8 +182,8 @@ test('scoped legs hide another organization entirely', async (t) => {
       'the change aggregate must stay org-predicated',
     );
   } finally {
-    await dropScratchOrg(orgA.orgId).catch(() => {});
-    await dropScratchOrg(orgB.orgId).catch(() => {});
+    await dropScratchOrg(orgA.orgId);
+    await dropScratchOrg(orgB.orgId);
   }
 });
 
@@ -217,7 +217,7 @@ test('the subsidiary lens narrows the version window', async (t) => {
       'a lens naming no visible subsidiary hides the end',
     );
   } finally {
-    await dropScratchOrg(org.orgId).catch(() => {});
+    await dropScratchOrg(org.orgId);
   }
 });
 
@@ -244,7 +244,7 @@ test('panels resolve null without their grants, never gated links', async (t) =>
     assert.equal(data.benefitsHasActivity, false);
     assert.equal(data.recruitingHasActivity, false);
   } finally {
-    await dropScratchOrg(org.orgId).catch(() => {});
+    await dropScratchOrg(org.orgId);
   }
 });
 
@@ -315,7 +315,7 @@ test('the strip offers the jobs with grant, rewrite, and feature exclusions', as
     const onList = await hrefs(STRIP_GRANTS, '/entities/employees');
     assert.ok(onList.includes('/hrm'), 'the employee list resolves the HRM strip');
   } finally {
-    await dropScratchOrg(org.orgId).catch(() => {});
+    await dropScratchOrg(org.orgId);
   }
 });
 
@@ -360,7 +360,7 @@ test('nested surfaces stay findable as viewTabs', async (t) => {
     assert.ok(rewardHrefs.includes('/hrm/compensation'), 'Rewards viewTabs include Compensation');
     assert.ok(rewardHrefs.includes('/hrm/benefits'), 'Rewards viewTabs include Benefits');
   } finally {
-    await dropScratchOrg(org.orgId).catch(() => {});
+    await dropScratchOrg(org.orgId);
   }
 });
 
@@ -386,6 +386,6 @@ test('a restricted queue excludes out-of-scope requests', async (t) => {
     assert.deepEqual(data.pending, [], 'out-of-scope requests stay hidden');
     assert.equal(data.pendingRefusal, null);
   } finally {
-    await dropScratchOrg(org.orgId).catch(() => {});
+    await dropScratchOrg(org.orgId);
   }
 });
