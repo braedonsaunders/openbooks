@@ -455,6 +455,13 @@ export async function postEntry(
 
   // The draft -> posted flip only lands on the draft just created; zero rows
   // is a failure (a concurrent flip or a vanished entry), never success.
+  if (replayEvidence) {
+    // Transaction-local grant pointer the je_guard closed-period branch
+    // re-validates at write time: the authorization row this replay was
+    // admitted against. It dies with the transaction, so nothing is cleared.
+    await executor.execute(sql`
+      select set_config('openbooks.connector_replay_authorization', ${replayEvidence.authorizationId}, true)`);
+  }
   const flipped = (await executor.execute<{ id: string }>(sql`
     update journal_entries
        set status = 'posted', posted_by = ${input.actorId ?? null}, updated_by = ${input.actorId ?? null}
