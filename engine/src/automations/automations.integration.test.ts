@@ -638,9 +638,9 @@ test("correct defaults to a pre-filled reapproval request; direct when allowed",
     `)).rows[0]!;
     assert.equal(verb.verb, "correct");
     assert.equal(verb.corrected, target.changeId);
-    // I3-people-21: the manage grant without subsidiary scope cannot directly correct.
     const scopedId = await createScratchUser(h.org.orgId, "Scoped corrector", "scoped_corrector");
     await grant(h.org.orgId, scopedId, ["hrm.employment.manage"]);
+    await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id = ${h.org.orgId} and key = 'scoped_corrector'`); // I3-people-21: no subsidiary visible, so the scope gate refuses before the dependency gate
     await assert.rejects(
       correctEmploymentChange({
         orgId: h.org.orgId,
