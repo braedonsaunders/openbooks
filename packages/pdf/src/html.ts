@@ -19,7 +19,7 @@
 
 import { type Page } from 'puppeteer-core'
 import { sharedPdfPool } from './browser-pool'
-import { isAllowedPdfRequest, sanitizeTokenizedFragment } from './template'
+import { PdfTemplateValidationError, isAllowedPdfRequest, sanitizeTokenizedFragment } from './template'
 import { PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, PDF_PAPER_SIZES, type PdfPaperSize } from './types'
 
 export { isAllowedPdfRequest }
@@ -63,17 +63,17 @@ export function preparePdfChromeHtml(html: string): string {
  */
 export function assertPrintablePage(paperSize: unknown, marginMm: unknown): asserts paperSize is PdfPaperSize {
   if (!PDF_PAPER_SIZES.includes(paperSize as never)) {
-    throw new Error(
+    throw new PdfTemplateValidationError(
       `Unknown paper size "${String(paperSize)}" — use one of ${PDF_PAPER_SIZES.join(', ')}.`,
     )
   }
   if (typeof marginMm !== 'number' || !Number.isFinite(marginMm)) {
-    throw new Error(
+    throw new PdfTemplateValidationError(
       `Margin must be a number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${String(marginMm)}.`,
     )
   }
   if (marginMm < PDF_MARGIN_MM_MIN || marginMm > PDF_MARGIN_MM_MAX) {
-    throw new Error(
+    throw new PdfTemplateValidationError(
       `Margin ${String(marginMm)} mm is outside the printable ${PDF_MARGIN_MM_MIN}–${PDF_MARGIN_MM_MAX} mm range.`,
     )
   }

@@ -25,6 +25,19 @@
 
 import DOMPurify from 'isomorphic-dompurify'
 
+/**
+ * Header/footer fragment and print-setup validation the sanitizer can
+ * type-refuse: every message is operator-actionable setup feedback carrying
+ * no internals, so template routes answer it at 400 intact while unexpected
+ * faults sanitize to a generic 500.
+ */
+export class PdfTemplateValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PdfTemplateValidationError'
+  }
+}
+
 /** Hard resource ceilings for the synchronous render path. */
 export const TEMPLATE_RENDER_LIMITS = {
   templateChars: 1_000_000,
@@ -1468,7 +1481,7 @@ function assertTemplateTokensAreTextOnly(html: string): void {
     const start = html.indexOf('<', cursor)
     const textEnd = start === -1 ? html.length : start
     if (inStyle && html.slice(cursor, textEnd).includes('{{')) {
-      throw new Error('Template tokens are only allowed in visible body text.')
+      throw new PdfTemplateValidationError('Template tokens are only allowed in visible body text.')
     }
     if (start === -1) break
 
@@ -1479,7 +1492,7 @@ function assertTemplateTokensAreTextOnly(html: string): void {
     }
     const rawTag = html.slice(start, tag.end)
     if (rawTag.includes('{{')) {
-      throw new Error('Template tokens are only allowed in visible body text.')
+      throw new PdfTemplateValidationError('Template tokens are only allowed in visible body text.')
     }
     if (tag.name === 'style') inStyle = !tag.closing && !tag.selfClosing
     cursor = tag.end

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
     header = body.headerHtml ? sanitizeTokenizedFragment(body.headerHtml) : "";
     footer = body.footerHtml ? sanitizeTokenizedFragment(body.footerHtml) : "";
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    return apiErrorResponse(e, { safeStatus: 400 });
   }
 
   const scope = gate.allowedSubsidiaryIds ?? null
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
   try {
     assertPrintablePage(paperSizeInput, marginMmInput);
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    return apiErrorResponse(e, { safeStatus: 400 });
   }
   if (body.orientation !== undefined && body.orientation !== "landscape" && body.orientation !== "portrait") {
     return NextResponse.json({ error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` }, { status: 400 });

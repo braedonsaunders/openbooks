@@ -24,6 +24,7 @@ export {
   sanitizeRenderedHtml,
   sanitizeTemplateFragment,
   sanitizeTokenizedFragment,
+  PdfTemplateValidationError,
   compileTemplateHtml,
   escapeTemplateHtml,
   htmlToPlainText,
