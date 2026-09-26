@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -440,9 +441,6 @@ export async function POST(req: Request) {
     if (e instanceof InventoryNotFoundError) return recordNotFoundResponse();
     // One shared mapping keeps real ownership refusals at 403, key reuse at
     // 409, hidden records at 404, and validation refusals at 422.
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e) },
-      { status: inventoryErrorStatus(e) },
-    );
+    return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) });
   }
 }

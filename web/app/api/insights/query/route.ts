@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
     allowedBookIds = await resolveInsightBookScope(gate.user.orgId, query)
   } catch (e) {
     if (e instanceof InsightBookScopeError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
     throw e
   }
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
       // A computed money-basis refusal: it names its remedy (group by the
       // denomination or filter to one) and must reach the operator verbatim,
       // never as a generic failure.
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
     if (e instanceof InsightCompileError) {
       return NextResponse.json({ error: await insightCompileErrorMessage(e) }, { status: 422 })

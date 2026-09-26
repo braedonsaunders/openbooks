@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
@@ -45,9 +46,9 @@ const stockCountBody = z.looseObject({
   lines: z.array(countLineBody).optional(),
 })
 
-function refusal(e: unknown) {
-  if (e instanceof InventoryNotFoundError) return recordNotFoundResponse()
-  return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryErrorStatus(e) })
+function refusal(e: unknown): Promise<NextResponse> {
+  if (e instanceof InventoryNotFoundError) return Promise.resolve(recordNotFoundResponse())
+  return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) })
 }
 
 /**
