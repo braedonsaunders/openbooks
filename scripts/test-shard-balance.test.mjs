@@ -12,6 +12,12 @@ test('shards are a deterministic round robin in repository order', () => {
   }
 })
 
+test('a heavy file sorts first into the lightest shard', () => {
+  const buckets = balancedShards(files, 4, files.map((_, index) => (index === 3 ? 10 : 1)))
+  assert.equal(buckets[0][0], files[3])
+  assert.deepEqual(buckets.flat().sort(), files.slice().sort())
+})
+
 test('shardFiles keeps rejecting malformed and over-wide shards', () => {
   assert.throws(() => shardFiles(files, '0/4'), /index\/count/)
   assert.throws(() => shardFiles(files, 'half'), /index\/count/)

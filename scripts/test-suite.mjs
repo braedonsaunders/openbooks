@@ -148,19 +148,63 @@ export function testManifest() {
   return { all, unit, integration, restore }
 }
 
+// A test that spawns the migration runner pays a full migrate-and-provision
+// cycle per spawn on top of its own cases: the heaviest replay suite in the
+// tree measures about thirty average files, so packing by count alone piles a
+// full companion set onto the spawner's shard and that shard nears its job
+// timeout while still passing. The reference is quoted because every spawner
+// passes the entrypoint as a process argument; unquoted mentions such as the
+// history notes in the migration-ordinal tests do not match.
+const MIGRATION_RUNNER_PATTERN = /["'`]scripts\/bootstrap\.ts["'`]/
+const MIGRATION_RUNNER_WEIGHT = 30
+
+const fileWeightCache = new Map()
+
+export function fileWeight(file) {
+  const cached = fileWeightCache.get(file)
+  if (cached !== undefined) return cached
+  let weight = 1
+  try {
+    if (MIGRATION_RUNNER_PATTERN.test(readFileSync(resolve(ROOT, file), 'utf8'))) {
+      weight += MIGRATION_RUNNER_WEIGHT
+    }
+  } catch {
+    weight = 1
+  }
+  fileWeightCache.set(file, weight)
+  return weight
+}
+
 /**
- * Split files into `count` buckets round-robin, in repository order.
+ * Deal files into `count` buckets, heaviest first, each into the currently
+ * lightest bucket (ties keep repository order and the lowest bucket index).
  *
  * Deterministic and total by construction: the CI "Verify every test file ran
  * exactly once" gate re-derives this partition and compares it to what each
- * runner actually executed. Shards were once packed by measured per-file cost
- * from a committed timing record. That record was machine-generated data in
- * the repository, so it was removed; if a shard nears its timeout, widen the
- * matrix rather than reintroduce committed measurements.
+ * runner actually executed. Weights are derived from the tree on every run —
+ * no hand list of files — and committed timing records stay out of the
+ * repository: a quoted migration-runner reference marks the spawner class
+ * and everything else weighs one file, which degrades exactly to the
+ * historical round robin. An explicit weight table exists for tests only, so
+ * the packing pins without coupling to tree contents.
  */
-export function balancedShards(files, count) {
+export function balancedShards(files, count, weights) {
   const buckets = Array.from({ length: count }, () => [])
-  files.forEach((file, position) => buckets[position % count].push(file))
+  const totals = new Array(count).fill(0)
+  const order = files
+    .map((_, index) => index)
+    .sort((left, right) => {
+      const difference = (weights?.[right] ?? fileWeight(files[right])) - (weights?.[left] ?? fileWeight(files[left]))
+      return difference === 0 ? left - right : difference
+    })
+  for (const index of order) {
+    let best = 0
+    for (let bucket = 1; bucket < count; bucket += 1) {
+      if (totals[bucket] < totals[best]) best = bucket
+    }
+    buckets[best].push(files[index])
+    totals[best] += weights?.[index] ?? fileWeight(files[index])
+  }
   return buckets
 }
 

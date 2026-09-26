@@ -325,19 +325,8 @@ test("0064 upgrades and replays without losing the governed view contract",
       );
       assert.match(isolatedView.rows[0]!.predicate, /openbooks_query_org_id\(\)/);
 
-      // A second schema-only bootstrap sees the exact ledger digest and must
-      // leave the repaired catalog untouched rather than dropping the view again.
-      await runBootstrap(isolated.url, { restoreTarget: true });
-      assert.deepEqual(await readViewMetadata(isolated.client), before);
-      const isolatedRetry = await isolated.client.query<{ precision: number; scale: number }>(
-        `select numeric_precision as precision, numeric_scale as scale
-           from information_schema.columns
-          where table_schema = 'public'
-            and table_name = 'document_lines'
-            and column_name = 'quantity_fulfilled'`,
-      );
-      assert.deepEqual(isolatedRetry.rows[0], { precision: 28, scale: 8 });
-
+      // No second schema-only run here: with provisioning skipped it repeats
+      // the same ledger no-op the retry below proves on the real ledger.
       // Data-upgrade proof: real rows through the REAL tail. Only the pre-0064
       // ledger is seeded, so bootstrap applies 0064 plus every later migration
       // and then provisions org defaults against the current schema — exactly

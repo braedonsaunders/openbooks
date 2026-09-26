@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { createServer } from 'node:net'
 import test from 'node:test'
-import { testManifest, stopFixtureOwner, literalTestPath, shardFiles } from './test-suite.mjs'
+import { testManifest, stopFixtureOwner, literalTestPath, shardFiles, fileWeight } from './test-suite.mjs'
 
 test('every tracked supported test belongs to exactly one canonical suite', () => {
   const manifest = testManifest()
@@ -73,8 +73,10 @@ for (const [suite, count] of [['unit', 4], ['integration', 16]]) test(`${suite} 
   assert.deepEqual(shards.flat().sort(), [...files].sort())
   assert.equal(new Set(shards.flat()).size, files.length)
   assert.ok(shards.every((shard) => shard.length > 0))
-  // Round robin: file counts differ by at most one.
-  assert.ok(Math.max(...shards.map((shard) => shard.length)) - Math.min(...shards.map((shard) => shard.length)) <= 1)
+  // Weighted packing: shard weights differ by at most one spawner. Counts
+  // alone no longer balance because one spawner weighs thirty average files.
+  const weights = shards.map((shard) => shard.reduce((sum, file) => sum + fileWeight(file), 0))
+  assert.ok(Math.max(...weights) - Math.min(...weights) <= 31)
   for (const invalid of ['0/8', '9/8', '1/0', '1/99999', '1/8junk', '1.5/8']) {
     assert.throws(() => shardFiles(files, invalid))
   }
