@@ -104,13 +104,13 @@ test(
            set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
          where id = ${org.orgId}
       `);
-      const scriptId = randomUUID();
-      const dueAt = new Date(Date.now() - 60_000);
+      const scriptId = randomUUID(), startedAt = Date.now(), jan1 = Date.UTC(new Date(startedAt).getUTCFullYear(), 0, 1);
+      const dueAt = new Date(jan1 + 120_000); // yearly grid: exactly one tick is due, the next a year out, so no wall-clock boundary can add a second claim mid-test
       await db.execute(sql`
         insert into user_scripts
           (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
         values (${scriptId}, ${org.orgId}, ${`Scratch web tick ${scriptId.slice(0, 8)}`}, 'scheduled',
-                'function main(ctx) { return "unused"; }', '*/5 * * * *', ${dueAt}, 2000, true)
+                'function main(ctx) { return "unused"; }', '0 0 1 1 *', ${dueAt}, 2000, true)
       `);
       const occurrenceState = () =>
         db.execute<{ occurrences: number; nextRunAt: Date | string | null }>(sql`

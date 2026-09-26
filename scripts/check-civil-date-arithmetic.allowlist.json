@@ -159,5 +159,12 @@
     "test": "accounting journal tiles read the primary book only",
     "arg": "year",
     "reason": "test-only month end; year derives from the org's contemporary businessToday, never below year 100"
+  },
+  {
+    "path": "engine/src/worker/scheduler.integration.test.ts",
+    "fn": "(top-level)",
+    "test": "a web replica whose tick claim is held elsewhere skips every global scan",
+    "arg": "new Date(startedAt).getUTCFullYear()",
+    "reason": "test-only yearly-grid seed; year derives from Date.now() wall-clock, never below year 100, and a remap would fail loudly (no due tick) rather than corrupt financial math"
   }
 ]
