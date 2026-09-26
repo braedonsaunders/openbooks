@@ -86,6 +86,8 @@ const GLOBAL_ALLOWLIST: Record<string, string> = {
     "pre-authentication session state keyed by user_id, reached before app.current_org is set so no org policy could match",
   currencies:
     "shared ISO reference data identical for every org; no tenant rows",
+  openbooks_testdb_meta:
+    "local test-database stamp written by scripts/testdb.sh (schema fingerprint, copy time); present only in developer test databases, never in an installation",
   orgs: "the root tenant table itself; isolated by org_root_isolation matching id/sandbox_of to the session org",
   platform_settings:
     "installation-owned singleton with bypass-only RLS, deliberately org-less so per-org backup, clone, and teardown skip it",
