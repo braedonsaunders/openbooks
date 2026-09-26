@@ -69,7 +69,7 @@ test("clearing the provider still unconfigures delivery", { skip: !DB }, async (
       { enabled: false, provider: "smtp", fromEmail: "billing@example.test", smtpHost: "smtp.example.test" },
       actor,
     );
-    const cleared = await saveOrgEmailConfig(orgId, { enabled: false, provider: undefined }, actor);
+    const cleared = await saveOrgEmailConfig(orgId, { enabled: false, provider: null }, actor);
     assert.equal(cleared.provider, undefined);
   } finally {
     await withBypassContext(() => dropScratchOrgReporting(orgId));
