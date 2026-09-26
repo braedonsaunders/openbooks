@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-t04-013: the check From-account picker never persisted — pick a
+// The check From-account picker never persisted — pick a
 // reconcilable bank, save clean, reopen shows '—'. The drawer sends
 // custom.controlAccountId, but applyDocumentEdit rebuilds the custom bag
 // from validateCustomValues' cleaned output (registered defs only), so the
@@ -133,7 +133,7 @@ async function cardFixture(): Promise<{ orgId: string; chargeId: string; cardId:
   return { orgId: org.orgId, chargeId, cardId, bankId, cleanup: () => dropScratchOrg(org.orgId) }
 }
 
-// F-t05-020: with no card instruments on file the drawer offers the
+// With no card instruments on file the drawer offers the
 // reconcilable card-liability account, saved as the controlAccountId
 // override the engine cardRule already reads first. The guard must carry
 // it exactly like the funding-bank override — and refuse the wrong

@@ -20,7 +20,7 @@ const { randomUUID } = await import('node:crypto')
 const { PATCH, GET } = await import('./route')
 
 /**
- * F-t12-007/F-t12-008: a new lead/prospect first save 422d with "a reason
+ * A new lead/prospect first save 422d with "a reason
  * between 5 and 500 characters is required for status and hold changes"
  * because the drawer sent isActive:true against the is_active=false draft.
  * The create path must send no status/hold change: naming a placeholder

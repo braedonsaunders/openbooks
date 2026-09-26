@@ -32,7 +32,7 @@ async function okJson(res: Response, action: string): Promise<Record<string, str
 }
 
 /**
- * F-t04-002: a change-order-created SOV line carries retainage_percent NULL
+ * A change-order-created SOV line carries retainage_percent NULL
  * ("default"), so it bills at the application default (10%) and demands a
  * Retainage Receivable control account — which has no slot in Company control
  * accounts and is silently dropped by the settings writer. Billing the draw

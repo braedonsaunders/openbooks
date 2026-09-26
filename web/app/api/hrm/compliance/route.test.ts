@@ -4,7 +4,7 @@ import nodeTest from "node:test";
 import { NextResponse } from "next/server";
 
 /**
- * Compliance-findings route gates (HR-13): the feature-off 404 fires
+ * Compliance-findings route gates: the feature-off 404 fires
  * before the service runs, an unauthenticated caller never reaches it,
  * and engine refusals map with their message intact. Module doubles
  * follow the positions route-test pattern; the zod bodies and JSON

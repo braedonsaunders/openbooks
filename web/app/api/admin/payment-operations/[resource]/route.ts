@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
     // Profiles expose bank account number/name, subsidiary, and SFTP
     // server/folder: filter them like mandates, on both the profile's own
     // subsidiary and the bank account's, so an A-only admin never reads B's
-    // payment credentials surface (I1-refix-225).
+    // payment credentials surface.
     const rows = await db.execute(sql`
       select p.id, p.name, p.bank_account_id, p.subsidiary_id, p.payment_format_id,
              p.currency, p.country, p.settings, p.sftp_server_id, p.sftp_folder,
@@ -56,7 +56,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
   if (resource === 'schedules') {
     // Schedules inherit their profile's visibility: the same two predicates
     // as the profiles arm, or a hidden profile's cadence leaks through its
-    // schedule rows (I1-refix-225).
+    // schedule rows.
     const rows = await db.execute(sql`
       select s.*, p.name as profile_name
         from payment_schedules s join payment_bank_profiles p on p.id = s.payment_bank_profile_id and p.org_id = s.org_id

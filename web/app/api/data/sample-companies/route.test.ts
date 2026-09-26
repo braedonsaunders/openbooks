@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// OM-14: when provisioning fails mid-pipeline, POST /api/data/sample-companies
+// When provisioning fails mid-pipeline, POST /api/data/sample-companies
 // must return the NAMED stage refusal (stable code + operator-facing message)
 // — never a generic 500, and never SQL text or internal detail in the body.
 

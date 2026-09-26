@@ -83,7 +83,7 @@ export async function POST(req: Request) {
           })
           // A party-less AR/AP-control leg posts legitimately but sits
           // outside every subledger: report it on the response instead of
-          // accepting the journal silently (F-t08-007). The drawer pins the
+          // accepting the journal silently. The drawer pins the
           // warning on the record; the aging carries the balance explicitly.
           const partyless = await partylessControlLines(gate.user.orgId, entryId)
           const warnings = partyless.length > 0

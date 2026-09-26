@@ -40,7 +40,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
-    // I3-people-21: uniform HRM mapping first — the permission regex below
+    // Uniform HRM mapping first — the permission regex below
     // must not swallow scope denials into the request-error shape.
     if (e instanceof HrmAuthorizationError) return hrmAuthorizationResponse(e);
     if (e instanceof Error && /requires the .* permission/.test(e.message)) {

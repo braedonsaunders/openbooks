@@ -50,7 +50,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const role = requestedRole === 'customer' || requestedRole === 'vendor' || requestedRole === 'employee'
     ? requestedRole
     : payload.customer ? 'customer' : payload.vendor ? 'vendor' : 'employee'
-  // F-t04-003: the shell overlay vendor drawer needs the same Compliance tab
+  // The shell overlay vendor drawer needs the same Compliance tab
   // inputs the /parties and /entities loaders supply — drawer-open vendors
   // only, so the class list never loads for customers, employees, or a
   // feature-off org.

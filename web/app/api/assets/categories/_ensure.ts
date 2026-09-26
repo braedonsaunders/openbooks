@@ -54,7 +54,7 @@ export async function ensureDefaultCategory(
       sql`and name ilike '%depreciation%' and type in ('expense', 'cogs', 'other_expense')`,
     );
 
-    // I2-money-42: never seed the default category with arbitrary accounts. A
+    // Never seed the default category with arbitrary accounts. A
     // shared or mistyped fallback here would let drafts reach in-service and
     // posting flows against cash, liability, or one shared account. Unless the
     // chart supplies all three posting roles, store an explicitly unconfigured

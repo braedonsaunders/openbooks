@@ -737,12 +737,12 @@ test('revocation keeps the stored fingerprint stable while destroying the creden
   assert.equal(
     update!.includes('key_prefix'),
     false,
-    'the stored prefix is kept — the masked display stays stable across revoke (F-t01-011)',
+    'the stored prefix is kept — the masked display stays stable across revoke',
   )
   assert.equal(
     update!.includes('key_preview'),
     false,
-    'the stored preview is kept — the masked display stays stable across revoke (F-t01-011)',
+    'the stored preview is kept — the masked display stays stable across revoke',
   )
   const audit = state.committed.find((t) => t.includes('insert into audit_log'))
   assert.ok(audit, 'the revocation evidence committed in the same unit')

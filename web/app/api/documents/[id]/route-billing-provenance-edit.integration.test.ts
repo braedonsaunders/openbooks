@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-t04-003: a draft invoice generated from a T&M billing request carries
+// A draft invoice generated from a T&M billing request carries
 // billed-time provenance (time_entries.invoiced_by_line_id -> its lines).
 // The generic editor replaces lines by delete-and-reinsert, so saving the
 // draft — e.g. after pricing its $0 lines — died on the provenance FK as a

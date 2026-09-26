@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, models });
   } catch (e) {
     // Never forward the raw upstream body (a `401 … — {…}` JSON blob): the
-    // form renders a localized message from the code instead (F-t11-004).
+    // form renders a localized message from the code instead.
     const classified = classifyModelsError(e);
     return NextResponse.json({ ok: false, models: [], ...classified });
   }

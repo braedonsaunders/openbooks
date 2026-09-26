@@ -10,7 +10,7 @@ import test from "node:test";
  * ACTIVATED an archived type with a 200 instead of failing closed; and
  * neither POST nor PATCH validated sortOrder, so a non-numeric value rode
  * Number() into the integer column and surfaced as a storage error instead
- * of a field error. Same boolean-flag class the fleet closed on
+ * of a field error. Same boolean-flag class already fixed on
  * form-layouts/pdf-templates/list-views/projects PATCH.
  */
 const root = pathToFileURL(process.cwd() + "/").href;

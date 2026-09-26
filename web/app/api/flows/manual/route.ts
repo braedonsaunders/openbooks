@@ -169,7 +169,7 @@ export async function POST(req: Request) {
 
   // The request's subsidiary scope travels into the dispatch: the
   // availability check above is a precheck, and the engine re-verifies it
-  // under lock before any effect lands (I1-refix-108) — otherwise a party
+  // under lock before any effect lands — otherwise a party
   // rehome between check and effect runs a permitted button on a record
   // that just left the caller's legal entity.
   const result = await withOrgContext(authz.user.orgId, () =>

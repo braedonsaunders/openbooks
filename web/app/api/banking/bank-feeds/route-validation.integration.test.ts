@@ -103,7 +103,7 @@ test('bank-feed routes reject malformed ids as client errors', { skip: !enabled 
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
 
-// F-t11-005: the picker and the API must agree on what a feed can attach
+// The picker and the API must agree on what a feed can attach
 // to — a reconcilable BANK account. A reconcilable non-bank account (or an
 // inactive one) used to sail through POST and strand statements where no
 // banking surface can reconcile them.

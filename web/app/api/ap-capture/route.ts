@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       })
       created.push(captureItemId!)
     } catch {
-      // I5-platform-41 addendum: deleteFile only marks the file inactive, so
+      // deleteFile only marks the file inactive, so
       // the committed S3 blobs would strand. Record durable cleanup intents
       // for every staged version, then keep the existing failure handling.
       if (storedId) {

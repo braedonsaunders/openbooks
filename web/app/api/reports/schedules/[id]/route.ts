@@ -143,7 +143,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   // DELETE historically accepted an empty body. req.body is still a (possibly
   // empty) stream for a bodiless browser DELETE, so the old `if (req.body)`
   // check invoked the strict JSON boundary on zero bytes and every UI delete
-  // failed closed with 400 (F-t07-006). Judge presence by content instead: an
+  // failed closed with 400. Judge presence by content instead: an
   // empty body deletes with the default reason, while non-empty content must
   // still pass the shared JSON boundary so malformed payloads stay a 400.
   const raw = await req.text().catch(() => '')

@@ -254,7 +254,7 @@ test("entity totalPaid refuses when a payment leg has no exchange rate", async (
   assert.equal(body.error, "no spot rate for CAD→USD on or before 2026-08-12");
 });
 
-// F-t03-010: the drill's own live aggregate joined reversed entries without
+// The drill's own live aggregate joined reversed entries without
 // the current posting projection, so an append-only correction (reversed
 // original + re-post of the same bill) listed the same bill twice and inflated
 // the dialog total past the dashboard. The drill reads the shared reader's

@@ -155,7 +155,7 @@ export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds:
              -- Document open balances are stored unsigned per document (the
              -- recompute sums abs() line amounts minus applications); the kind
              -- carries the sign. An unapplied credit or payment reduces what
-             -- the party owes, so it nets instead of adding (F-t02-005).
+             -- the party owes, so it nets instead of adding.
              coalesce(sum(case
                when kind in ('customer_credit', 'customer_payment', 'vendor_credit', 'vendor_payment')
                then -abs(open_balance) else abs(open_balance) end), 0)::text as open_balance

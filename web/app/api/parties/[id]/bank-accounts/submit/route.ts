@@ -21,8 +21,7 @@ class BankAccountSubmitError extends Error {}
 export const runtime = 'nodejs'
 
 /**
- * Submit stale-pending bank details into the current approval flow
- * (F-t04-004 residual).
+ * Submit stale-pending bank details into the current approval flow.
  *
  * How a bank record strands with no run: rows are born `pending` at create
  * (and re-enter it on material edit) while the approval flow is OPTIONAL —

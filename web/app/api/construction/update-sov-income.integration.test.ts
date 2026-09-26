@@ -24,7 +24,7 @@ const post = (handler: (req: Request) => Promise<Response>, orgId: string, body:
   withOrgContext(orgId, () => handler(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify(body) })))
 
 /**
- * F-t03-002: once billing begins, SOV value fields are change-order
+ * Once billing begins, SOV value fields are change-order
  * controlled — but the income account is posting metadata, not a contract
  * term. An approved application whose lines predate the income-account
  * requirement can never reach invoicing unless a locked line still accepts

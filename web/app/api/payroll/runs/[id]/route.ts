@@ -643,10 +643,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // truth, two consumers — render and refuse.)
       await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
       await assertPayRunApprovalReleased(gate.user.orgId, id)
-      // HR-21: open block-severity anomaly flags refuse the finalize while
+      // Open block-severity anomaly flags refuse the finalize while
       // the hrmPayrollAnomalies capability is on. Skipped entirely while
       // the capability is off (the hook is not registered); the engine
-      // commit below stays the payroll shard's untouched source of truth —
+      // commit below stays the untouched source of truth —
       // this boundary only refuses before calling it, never re-implements it.
       if (await isFeatureEnabled(gate.user.orgId, 'hrmPayrollAnomalies')) {
         const period = (await db.execute<{ periodStart: string; periodEnd: string }>(sql`

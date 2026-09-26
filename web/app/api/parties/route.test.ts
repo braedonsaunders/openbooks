@@ -322,8 +322,8 @@ test("payroll-gated and currency-gated writes fail closed when the switch is off
   assert.equal(currencyOff.status, 404);
 });
 
-test("a role kind without its role is refused by name before any write (OM-16)", async () => {
-  // OM-16: kind "vendor" with no vendor role strands a "Kind: Vendor" no
+test("a role kind without its role is refused by name before any write", async () => {
+  // Kind "vendor" with no vendor role strands a "Kind: Vendor" no
   // read can back — the Compliance tab vanishes while the drawer still
   // claims Vendor. The create must refuse the unbacked kind, naming the
   // remedy, instead of persisting it.
@@ -347,7 +347,7 @@ test("a role kind without its role is refused by name before any write (OM-16)",
   }
 });
 
-test("a role kind with its role enabled creates both rows atomically (OM-16)", async () => {
+test("a role kind with its role enabled creates both rows atomically", async () => {
   reset();
   const response = await post("00000000-0000-4000-8000-00000000b014", {
     displayName: "Acme Industrial Supply",

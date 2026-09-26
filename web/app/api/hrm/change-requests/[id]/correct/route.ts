@@ -41,7 +41,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
-    // I3-people-21: employer-scope denials stay uniform not-visible, missing
+    // Employer-scope denials stay uniform not-visible, missing
     // grants stay named 403s — never the automations 500.
     if (e instanceof HrmAuthorizationError) return hrmAuthorizationResponse(e);
     return automationErrorResponse(e);

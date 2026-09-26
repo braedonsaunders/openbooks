@@ -22,7 +22,7 @@ export const runtime = 'nodejs'
  * A path segment that is not a uuid (e.g. /api/expenses/reports, which is
  * not a route) must resolve through the typed not-found contract. Without
  * this the id binds straight into a uuid comparison and PostgreSQL throws
- * 22P02, surfacing as an empty-body 500 (F-t04-015).
+ * 22P02, surfacing as an empty-body 500.
  */
 function malformedId(id: string): NextResponse | null {
   return isUuid(id) ? null : NextResponse.json({ error: 'not found' }, { status: 404 })

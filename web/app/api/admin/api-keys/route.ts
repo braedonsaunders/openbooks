@@ -533,7 +533,7 @@ export async function DELETE(req: Request) {
     // refuses reactivation of revoked keys). The stored prefix/preview are
     // deliberately kept: they were already visible while the key was
     // active, and keeping them keeps the masked display stable across
-    // revoke (F-t01-011).
+    // revoke.
     const destroyed = generateApiKey();
     await db.execute(sql`
       update api_keys

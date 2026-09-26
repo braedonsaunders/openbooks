@@ -277,11 +277,11 @@ test('valid hired-on dates reach the employee upsert', async () => {
   assert.ok(call.values.includes('2026-02-28'), 'the valid hired-on date is stored')
 })
 
-test('edits echoing a backed role kind persist instead of 422ing (F-t05-002, OM-16)', async () => {
-  // F-t05-002: parties store customer/employee/vendor kinds (the drawer
+test('edits echoing a backed role kind persist instead of 422ing', async () => {
+  // Parties store customer/employee/vendor kinds (the drawer
   // echoes the stored kind back), but PATCH only accepted company|person —
   // so EVERY save of an employee-kind party failed while the UI reported
-  // success. OM-16 narrows the round-trip: a role kind persists only while
+  // success. Only backed kinds round-trip: a role kind persists only while
   // its role row backs it — the echo of a backed kind must still succeed.
   for (const kind of ['customer', 'vendor', 'employee']) {
     reset({
@@ -301,8 +301,8 @@ test('edits echoing a backed role kind persist instead of 422ing (F-t05-002, OM-
   }
 })
 
-test('an unbacked role kind is refused by name before any write (OM-16)', async () => {
-  // OM-16: storing kind "vendor" with no vendor role strands a "Kind:
+test('an unbacked role kind is refused by name before any write', async () => {
+  // Storing kind "vendor" with no vendor role strands a "Kind:
   // Vendor" no read can back. Naming the kind without enabling (or holding)
   // the role must refuse, with the remedy in the message.
   for (const kind of ['customer', 'vendor', 'employee']) {
@@ -320,7 +320,7 @@ test('an unbacked role kind is refused by name before any write (OM-16)', async 
   }
 })
 
-test('enabling the role alongside the kind heals the claim atomically (OM-16)', async () => {
+test('enabling the role alongside the kind heals the claim atomically', async () => {
   // The role-scoped drawer forces its role on every save, so opening a
   // kind-vendor party with ?role=vendor and saving must create the missing
   // role rather than refuse.
@@ -335,7 +335,7 @@ test('enabling the role alongside the kind heals the claim atomically (OM-16)', 
   )
 })
 
-test('dropping the role a stored kind names is refused until the kind is renamed (OM-16)', async () => {
+test('dropping the role a stored kind names is refused until the kind is renamed', async () => {
   reset({ kind: 'vendor', has_vendor_role: true })
 
   const refused = await patch({ roles: { vendor: { enabled: false } } })

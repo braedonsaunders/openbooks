@@ -130,7 +130,7 @@ test(
 test(
   "accounts POST/PATCH let the reconcilable base currency through when Multi-currency is off",
   async () => {
-    // F-t05-003: single-currency orgs (scratch orgs are CAD, feature off)
+    // Single-currency orgs (scratch orgs are CAD, feature off)
     // have no other currency to settle in, so the reconcilable invariant can
     // only ever mean the base currency. Anything else stays refused.
     const org = await withBypassContext(() => (createScratchOrg()));

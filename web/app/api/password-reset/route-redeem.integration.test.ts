@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
-// F-t01-013 activation block: redeeming a live set-password link from a
+// Redeeming a live set-password link from a
 // browser on 127.0.0.1 answered 403 while localhost passed — the origin
 // gates treated loopback literals as different origins. This redeems a
 // minted token through the REAL route with a cross-loopback Origin header:
@@ -77,7 +77,7 @@ test("a live token redeems through the route from a cross-loopback Origin", asyn
         }),
       );
 
-    // The fleet's failing shape: page on 127.0.0.1, app link on localhost.
+    // The failing shape: page on 127.0.0.1, app link on localhost.
     const crossLoopback = await put("http://127.0.0.1:4780", issuance.raw);
     assert.equal(crossLoopback.status, 200);
     assert.deepEqual(await crossLoopback.json(), { ok: true });

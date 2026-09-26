@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 // A mistyped isActive: "false" (or 0, or "yes") therefore ACTIVATES the row
 // with a 200 instead of failing closed — a live automation or reporting
 // package the admin tried to switch off keeps running. Same boolean-flag
-// class the fleet closed on project-types PATCH (w13) and
+// class already fixed on project-types PATCH and
 // form-layouts/pdf-templates/list-views/projects PATCH.
 
 const state = { user: { orgId: "", id: "" } };

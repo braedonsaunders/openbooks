@@ -9,7 +9,7 @@ interface RouteState {
   };
   subjectSubsidiaryId: string | null;
   status: string | null;
-  // I1-refix-107: scope is decided by the locking resolver (mock:lib), not
+  // Scope is decided by the locking resolver (mock:lib), not
   // the old check-then-read guard seam. The lock stub records every subject
   // subsidiary it evaluates here.
   lockChecks: Array<string | null>;
@@ -204,7 +204,7 @@ test("the no-read denial is identical to the missing-record denial", async () =>
   assert.deepEqual(denied, missing);
 });
 
-/** F-t04-004: a latest failed run surfaces for the row retry affordance. */
+/** A latest failed run surfaces for the row retry affordance. */
 test("a failed latest run surfaces as failedRun with the retry capability", async () => {
   reset(new Set(["sub-hidden"]));
   routeState.canRetry = true;
@@ -234,7 +234,7 @@ test("a failed latest run surfaces as failedRun with the retry capability", asyn
   assert.equal(body.canRetry, true);
 });
 
-/** F-t04-004 residual: a record the engine never saw (no run, no live gate)
+/** A record the engine never saw (no run, no live gate)
  * must say so, so the drawer can offer to submit it into the current flow
  * instead of claiming no approvals are required. */
 test("a pending record with no run at all surfaces as neverSubmitted", async () => {

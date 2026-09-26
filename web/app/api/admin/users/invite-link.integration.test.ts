@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
-// Invite follow-up (F-t01-013): when email delivery is not configured the
+// When email delivery is not configured the
 // invite must still hand the admin a copyable set-password link (one-time,
 // same token the email would carry), and a pending invite must be
 // re-issuable through a Resend action. The link must NEVER be exposed when

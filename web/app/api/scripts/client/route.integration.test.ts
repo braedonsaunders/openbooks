@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registerHooks } from "node:module";
 
-// F-t05-007: saving a banking draft logged a console 404 for
+// Saving a banking draft logged a console 404 for
 // /api/scripts/client on every doctype. The route 404d whenever the
 // scripts feature was off — but the client loader calls it on every save,
 // and browsers log failed fetches however they are handled. Feature-off is

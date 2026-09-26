@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
- * F-t04-003 (overlay path): /entities + /parties loaders supply the vendor
+ * Overlay path: /entities + /parties loaders supply the vendor
  * Compliance tab inputs, but GET /api/parties/[id]/drawer — the shell
  * overlay's payload — answered no compliance fields, so the overlay vendor
  * drawer could never offer the tab. The route must return complianceEnabled,
@@ -63,7 +63,7 @@ const get = (partyId: string, role?: string) =>
     ),
   );
 
-test("the overlay drawer payload carries the Compliance tab inputs (F-t04-003)", async () => {
+test("the overlay drawer payload carries the Compliance tab inputs", async () => {
   const { orgId, partyId } = await fixture(true);
   try {
     const res = await get(partyId, "vendor");
@@ -83,7 +83,7 @@ test("the overlay drawer payload carries the Compliance tab inputs (F-t04-003)",
   }
 });
 
-test("the overlay drawer payload omits compliance when the feature is off (F-t04-003)", async () => {
+test("the overlay drawer payload omits compliance when the feature is off", async () => {
   const { orgId, partyId } = await fixture(false);
   try {
     const res = await get(partyId, "vendor");

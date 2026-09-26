@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // Audited native Admin Users -> linked person (POST set-party + GET search).
-// Covers the coordinator-owned contract: attestation + reason required,
+// Covers the audited link contract: attestation + reason required,
 // same-org active party, self-change refused even for superadmin, stale
 // expected 409 with no mutation, exact before/after audit with kind/role
 // signals, concurrent writers only one wins, audit failure rolls back, and

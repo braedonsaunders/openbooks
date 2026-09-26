@@ -58,7 +58,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.hrm-changerequest-id-test')]
       export async function isFeatureEnabled(orgId, key) {
-        // The submit route consults hrmActionReasons (HR-16) as well as
+        // The submit route consults hrmActionReasons as well as
         // the module switch. The mock refuses an UNDECLARED key on
         // purpose -- that is what caught this -- so a route that starts
         // reading a new feature must say so here.

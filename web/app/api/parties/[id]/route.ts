@@ -22,7 +22,7 @@ class PartyLifecycleError extends Error {}
 // that kind by construction, and the drawer echoes the stored kind back on
 // every save — so PATCH must accept every kind the column actually holds.
 // Narrowing this to company|person 422'd every edit of a role-kind party
-// (F-t05-002) while the UI reported success.
+// while the UI reported success.
 const PARTY_KINDS = ['company', 'person', 'customer', 'vendor', 'employee'] as const
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
 const CURRENCY_RE = /^[A-Za-z]{3}$/
@@ -322,7 +322,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // A customer/vendor/employee kind is a claim about the role rows: the
   // lists, the drawer tabs, and compliance all resolve the role, never the
   // kind column. Refuse an unbacked claim by name instead of storing a Kind
-  // no read can observe (OM-16) — and refuse to strand one by dropping the
+  // no read can observe — and refuse to strand one by dropping the
   // role the stored kind names without renaming the kind alongside it.
   const roleKindOf = (kind: unknown): 'customer' | 'vendor' | 'employee' | null =>
     kind === 'customer' || kind === 'vendor' || kind === 'employee' ? kind : null

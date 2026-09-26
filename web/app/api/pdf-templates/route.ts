@@ -154,7 +154,7 @@ export async function POST(req: Request) {
   } catch (e) {
     // Drizzle wraps driver failures (message "Failed query: <sql>", driver
     // error in `cause`), so match the SQLSTATE — the wrapper message never
-    // contains "unique", and must never reach the client (F-t13-001).
+    // contains "unique", and must never reach the client.
     if (pgErrorCode(e) === "23505")
       return NextResponse.json({ error: "A template with that name already exists" }, { status: 409 });
     return NextResponse.json({ error: describeDbError(e) }, { status: 500 });

@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-t02-001: moving a lead to Prospect from the account drawer must persist.
+// Moving a lead to Prospect from the account drawer must persist.
 // The drawer sends the whole form, including the now-stale lead status id,
 // alongside the new stage. The stage write must survive that payload (and a
 // missing status), while genuinely unknown statuses still fail closed.

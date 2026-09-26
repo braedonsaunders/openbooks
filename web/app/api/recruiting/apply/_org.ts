@@ -4,7 +4,7 @@ import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts"
 import { applyViaPosting } from "@openbooks/engine/src/hrm/recruiting/postings.ts";
 
 /**
- * Public-apply org resolution (HR-18). The posting id is public (it rides
+ * Public-apply org resolution. The posting id is public (it rides
  * the career page), so the org resolves through the posting row under
  * bypass (the email-action route precedent) — the token-free counterpart
  * to the signed book/offer/feed links. Everything else runs inside the

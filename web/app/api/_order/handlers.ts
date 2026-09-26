@@ -459,7 +459,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       const valid: OrderLineInput[] = selected.valid
       // Line warehouses resolve here, before totals: an explicit choice must
       // name an active warehouse of this org, while a blank stocked line
-      // silently takes the org's only active location (F-t07-003 pickers).
+      // silently takes the org's only active location.
       if (valid.length > 0) {
         const scope = {
           active: await activeStockLocations(user.orgId),
