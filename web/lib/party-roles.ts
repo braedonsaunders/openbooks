@@ -19,10 +19,6 @@ export function partyRoleKindOf(kind: unknown): PartyRoleKind | null {
   return kind === 'customer' || kind === 'vendor' || kind === 'employee' ? kind : null
 }
 
-export function partyRoleTable(kind: PartyRoleKind): 'customer_roles' | 'vendor_roles' | 'employee_roles' {
-  return PARTY_ROLE_TABLES[kind]
-}
-
 /**
  * Keep a role-kind party backed by its canonical role row.
  *

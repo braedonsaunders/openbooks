@@ -557,20 +557,6 @@ export async function loadAiDraftButton(orgId: string): Promise<string | null> {
   return t('aiDraft.button');
 }
 
-/** Open flags for one employment — timesheet approval chips and inbox subtitles. */
-export async function loadOpenFlagsForEmployment(
-  authz: Authz,
-  employmentId: string,
-): Promise<{ kind: string; severity: string; explanation: string }[]> {
-  const flags = await listFlags(db, {
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    employmentId,
-    status: 'open',
-  });
-  return flags.map((f) => ({ kind: f.kind, severity: f.severity, explanation: f.explanation }));
-}
-
 export interface WeekFlagChip {
   kind: string;
   kindLabel: string;

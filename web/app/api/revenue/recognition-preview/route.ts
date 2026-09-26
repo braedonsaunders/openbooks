@@ -29,8 +29,6 @@ const previewBody = z.object({
   periodId: z.string().optional().nullable(),
 })
 
-export type RecognitionPreviewRequest = z.input<typeof previewBody>
-
 function bad(error: string, field?: string, status = 422) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })
 }

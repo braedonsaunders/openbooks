@@ -30,10 +30,6 @@ export function getUserRoleTier(authz: Authz): RoleTier {
   return inferRoleTier(authz.user.roles.map(({ key }) => key))
 }
 
-export function dashboardSourceKeyForTier(tier: RoleTier): string {
-  return `tier:${tier}`
-}
-
 export function dashboardSourceKeyForRole(roleKey: string): string {
   return `role:${roleKey}`
 }

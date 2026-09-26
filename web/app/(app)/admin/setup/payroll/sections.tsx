@@ -22,7 +22,6 @@ import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
 import { can, getAuthz } from '../../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
-import { PAY_DERIVED_RULES_ENTITY } from '../../../../../lib/setup/payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from '../../../../../lib/setup/payroll-holidays'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
 import { DerivedRulePreviewSection } from './DerivedRulePreviewSection'
@@ -375,53 +374,3 @@ export async function HolidayCalendarTabSlot({
   return <HolidayCalendarSection orgId={authz.user.orgId} searchParams={sp} />
 }
 
-/** Derived-rules tab: an ordinary registry entity not yet spread into SETUP_ENTITIES. */
-export async function DerivedTabSlot({
-  sp,
-  basePath,
-}: {
-  sp: Record<string, string | string[] | undefined>
-  basePath: string
-}) {
-  const authz = await getAuthz()
-  if (!authz) return null
-  // Prefer the registered descriptor the moment it exists so there is never
-  // a second copy of the entity's shape in play.
-  const entity = SETUP_ENTITY_BY_KEY.get(PAY_DERIVED_RULES_ENTITY.key) ?? PAY_DERIVED_RULES_ENTITY
-  return (
-    <SetupEntitySection
-      entity={entity}
-      orgId={authz.user.orgId}
-      searchParams={sp}
-      basePath={basePath}
-      canManage={can(authz, 'admin.setup.manage')}
-      allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-    />
-  )
-}
-
-/** Registry-entity tabs (filing, schedules, components, union, entitlements…). */
-export async function EntityTabSlot({
-  entityKey,
-  sp,
-  basePath,
-}: {
-  entityKey: string
-  sp: Record<string, string | string[] | undefined>
-  basePath: string
-}) {
-  const authz = await getAuthz()
-  if (!authz) return null
-  const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!entity) return null
-  return (
-    <SetupEntitySection
-      entity={entity}
-      orgId={authz.user.orgId}
-      searchParams={sp}
-      basePath={basePath}
-      canManage={can(authz, 'admin.setup.manage')}
-      allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-    />
-  )
-}

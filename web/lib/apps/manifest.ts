@@ -203,7 +203,6 @@ export const appToolSpecSchema = z.object({
   requiredPermissions: z.array(z.string().min(1).max(80)).max(20).default([]),
 })
 
-export type AppToolConfirmation = z.infer<typeof appToolConfirmationSchema>
 /**
  * Install-time app-tool contract beyond parseManifest: every tool's
  * requiredPermissions must sit inside the ADMIN-GRANTED set (the admin may

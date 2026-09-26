@@ -49,22 +49,6 @@ export function v1ListRecords(
   }));
 }
 
-/** POST collection — same application create as /api/v1/records/{typeKey}. */
-export function v1CreateRecord(
-  request: Request,
-  typeKey: string,
-  label = `api/v1/${typeKey}`,
-): Promise<NextResponse> {
-  return withV1Request(request, label, async (_auth, context) => {
-    const outcome = await createApplicationRecord(context, {
-      typeKey,
-      body: await readV1JsonObject(request),
-      idempotencyKey: requireV1IdempotencyKey(request),
-    });
-    return { status: outcome.status, body: outcome.result, replayed: outcome.replayed };
-  });
-}
-
 /** GET item — same application read as /api/v1/records/{typeKey}/{id}. */
 export function v1GetRecord(
   request: Request,
@@ -76,41 +60,6 @@ export function v1GetRecord(
     status: 200,
     body: await getRecord(context, { typeKey, id }),
   }));
-}
-
-/** PATCH item — same application update as /api/v1/records/{typeKey}/{id}. */
-export function v1UpdateRecord(
-  request: Request,
-  typeKey: string,
-  id: string,
-  label = `api/v1/${typeKey}/:id`,
-): Promise<NextResponse> {
-  return withV1Request(request, label, async (_auth, context) => {
-    const outcome = await updateApplicationRecord(context, {
-      typeKey,
-      id,
-      body: await readV1JsonObject(request),
-      idempotencyKey: requireV1IdempotencyKey(request),
-    });
-    return { status: outcome.status, body: outcome.result, replayed: outcome.replayed };
-  });
-}
-
-/** DELETE item — same application delete as /api/v1/records/{typeKey}/{id}. */
-export function v1DeleteRecord(
-  request: Request,
-  typeKey: string,
-  id: string,
-  label = `api/v1/${typeKey}/:id`,
-): Promise<NextResponse> {
-  return withV1Request(request, label, async (_auth, context) => {
-    const outcome = await deleteApplicationRecord(context, {
-      typeKey,
-      id,
-      idempotencyKey: requireV1IdempotencyKey(request),
-    });
-    return { status: outcome.status, body: outcome.result, replayed: outcome.replayed };
-  });
 }
 
 /** First-class alias of /api/v1/records/{typeKey} — refuses reserved static folders. */

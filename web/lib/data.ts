@@ -114,22 +114,6 @@ export async function accountsWithBalances(
   }[];
 }
 
-export async function journalPage(orgId: string, offset: number, limit = 50) {
-  const r = (await db.execute(sql`
-    select e.id, e.entry_number, e.posting_date, e.memo, e.status, e.origin,
-           count(l.id) as line_count,
-           sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
-      from journal_entries e
-      join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
-     where e.org_id = ${orgId}
-     group by e.id
-     order by e.posting_date desc, e.entry_number desc
-     limit ${limit} offset ${offset}
-  `));
-  const c = (await db.execute<{ n: string }>(sql`select count(*) as n from journal_entries where org_id = ${orgId}`));
-  return { entries: r.rows, total: Number(c.rows[0]?.n ?? 0) };
-}
-
 interface JournalEntryDetailRow extends Record<string, unknown> {
   id: string;
   entry_number: string;

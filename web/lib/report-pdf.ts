@@ -50,7 +50,7 @@ export type Translator = (key: string, values?: Record<string, string | number>)
 
 /** PdfTableGroup plus per-column currency markers: flagged columns hold exact
  *  ledger decimal strings that must reach print without an IEEE-754 round-trip. */
-export type ExportTableGroup = PdfTableGroup & { money?: boolean[] }
+type ExportTableGroup = PdfTableGroup & { money?: boolean[] }
 
 export type ExportData = {
   title: string
@@ -100,7 +100,7 @@ export function resolveLayout(layout?: Partial<ReportLayoutConfig> | null): {
 // --- shared converters ------------------------------------------------------
 
 /** Format a number for the PDF: counts stay clean, money gets 2 decimals. */
-export function pdfNum(v: number, locale = 'en'): string {
+function pdfNum(v: number, locale = 'en'): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 }).format(v)
 }
 
@@ -265,65 +265,6 @@ function statementGroup(
     rows,
     align: MONEY_ALIGN,
     money: [false, false, true],
-  }
-}
-
-export function pnlExportData(
-  pl: { items: StatementRow[]; revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; netIncome: ExactDecimal },
-  from: string,
-  to: string,
-  t: Translator,
-): ExportData {
-  const revenueTitle = t('pnl.revenue')
-  const cogsTitle = t('pnl.costOfGoodsSold')
-  const expensesTitle = t('pnl.expenses')
-  return {
-    title: t('pnl.title'),
-    dateRangeLabel: t('pnl.dateRange', { from, to }),
-    summary: [
-      { label: revenueTitle, value: pl.revenue, money: true },
-      { label: t('pnl.grossProfit'), value: pl.grossProfit, money: true },
-      { label: t('pnl.netIncome'), value: pl.netIncome, money: true },
-    ],
-    groups: [
-      statementGroup(t, revenueTitle, pl.items, ['income', 'income_other'], pl.revenue),
-      statementGroup(t, cogsTitle, pl.items, ['cogs'], pl.cogs),
-      statementGroup(t, expensesTitle, pl.items, ['expense', 'expense_other', 'expense_deferred'], pl.expenses),
-      {
-        kind: 'summary',
-        title: t('pnl.netIncome'),
-        columns: [t('export.columns.accountName'), t('export.columns.amount')],
-        rows: [[t('pnl.netIncome'), pl.netIncome]],
-        align: ['left', 'right'],
-        money: [false, true],
-      },
-    ],
-  }
-}
-
-export function balanceSheetExportData(
-  bs: { assets: StatementRow[]; liabilities: StatementRow[]; equity: StatementRow[]; totalAssets: ExactDecimal; totalLiabilities: ExactDecimal; totalEquity: ExactDecimal },
-  asOf: string,
-  t: Translator,
-): ExportData {
-  const assetsTitle = t('balanceSheet.assets')
-  const liabTitle = t('balanceSheet.liabilities')
-  const equityTitle = t('balanceSheet.equity')
-  const groupFor = (title: string, items: StatementRow[], total: ExactDecimal) =>
-    statementGroup(t, title, items, items.map((i) => i.type), total)
-  return {
-    title: t('balanceSheet.title'),
-    dateRangeLabel: t('balanceSheet.asOf', { date: asOf }),
-    summary: [
-      { label: assetsTitle, value: bs.totalAssets, money: true },
-      { label: liabTitle, value: bs.totalLiabilities, money: true },
-      { label: equityTitle, value: bs.totalEquity, money: true },
-    ],
-    groups: [
-      groupFor(assetsTitle, bs.assets, bs.totalAssets),
-      groupFor(liabTitle, bs.liabilities, bs.totalLiabilities),
-      groupFor(equityTitle, bs.equity, bs.totalEquity),
-    ],
   }
 }
 

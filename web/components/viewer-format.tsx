@@ -12,14 +12,3 @@ export function ViewerDateTime({
   const { dateTime } = useViewerFormat()
   return <>{dateTime(value instanceof Date ? value : new Date(value), options)}</>
 }
-
-export function ViewerNumber({
-  value,
-  options,
-}: {
-  value: number
-  options?: Intl.NumberFormatOptions
-}) {
-  const { number } = useViewerFormat()
-  return <>{number(value, options)}</>
-}

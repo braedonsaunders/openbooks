@@ -14,12 +14,10 @@ import {
 import {
   listPoolMembers,
   listTalentPools,
-  rediscoverForRequisition,
 } from '@openbooks/engine/src/hrm/recruiting/pools.ts'
 import {
   listKitAttributes,
   listKitQuestions,
-  listKits,
   loadKit,
 } from '@openbooks/engine/src/hrm/recruiting/kits.ts'
 import {
@@ -574,26 +572,6 @@ export async function loadPoolDrawer(authz: Authz, t: T, poolId: string): Promis
   }
 }
 
-export async function matchPoolToOpening(
-  authz: Authz,
-  poolId: string,
-  requisitionId: string,
-  requisitionTags: string[],
-): Promise<{ candidateId: string; displayName: string; matchedTags: readonly string[] }[]> {
-  const matches = await rediscoverForRequisition({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    poolId,
-    requisitionId,
-    requisitionTags,
-  })
-  return matches.map((match) => ({
-    candidateId: match.candidateId,
-    displayName: match.displayName,
-    matchedTags: match.matchedTags,
-  }))
-}
-
 export interface ConsentStatus {
   consents: { purpose: string; grantedAt: string; expiresAt: string | null; withdrawnAt: string | null; source: string }[]
   earliestExpiry: string | null
@@ -622,16 +600,3 @@ export async function loadConsentStatus(authz: Authz, t: T, candidateId: string)
   }
 }
 
-export interface KitOption {
-  value: string
-  label: string
-}
-
-export async function loadKitOptions(authz: Authz): Promise<KitOption[]> {
-  try {
-    const kits = await listKits({ orgId: authz.user.orgId, actorId: authz.user.id })
-    return kits.filter((kit) => kit.isActive).map((kit) => ({ value: kit.id, label: kit.name }))
-  } catch {
-    return []
-  }
-}

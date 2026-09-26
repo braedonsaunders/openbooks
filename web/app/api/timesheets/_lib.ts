@@ -258,21 +258,6 @@ export interface WeekPayload {
 }
 
 /**
- * Aggregate the week's entries into a single status: any approved-and-nothing-
- * looser reads "approved"; any submitted reads "submitted"; any rejected reads
- * "rejected"; else "draft"; no entries → "empty". Mirrors the spec's aggregate
- * rule (all approved → approved; any submitted → submitted; else draft) with
- * rejected surfaced so the user sees a bounce-back.
- */
-export function aggregateStatus(statuses: string[]): WeekStatus {
-  if (statuses.length === 0) return 'empty'
-  if (statuses.every((s) => s === 'approved')) return 'approved'
-  if (statuses.some((s) => s === 'submitted')) return 'submitted'
-  if (statuses.some((s) => s === 'rejected')) return 'rejected'
-  return 'draft'
-}
-
-/**
  * Load one employee's week as grid rows. Groups the flat entries by the time
  * key (project+item+timeType+department+memo+billable) and spreads each entry's
  * hours into the matching day column.

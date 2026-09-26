@@ -19,8 +19,7 @@ import {
   TerminalSquare,
   Trash2,
 } from 'lucide-react'
-import { Badge, Button, Input, Select, cn } from '@openbooks/ui'
-import { useHydrated } from '@/lib/use-hydrated'
+import { Badge, Button, Input, Select, cn, useHydrated } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { exportCsv } from '../analytics/_ui/exportCsv'
 import { ResultsGrid, resultToCsv, type QueryResult } from './ResultsGrid'

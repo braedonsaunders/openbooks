@@ -1,4 +1,4 @@
-import { Building2, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import { Badge, Button } from '@openbooks/ui'
 import { enterOrganizationAction } from '../actions'
 
@@ -66,5 +66,3 @@ export function OrgOpenCell({ orgId }: { orgId: string }) {
     </form>
   )
 }
-
-export const ORG_EMPTY_ICON = <Building2 />

@@ -116,14 +116,6 @@ export const proposeLineBody = z.object({
   reason: z.string().trim().max(2000).nullable().optional(),
 });
 
-export const decideLineBody = z.object({
-  reason: z.string().trim().min(1).max(2000).nullable().optional(),
-});
-
-export const reopenLineBody = z.object({
-  reason: z.string().trim().min(1).max(2000),
-});
-
 export const createStatementBody = z.object({
   employmentId: uuid,
   cycleId: uuid.nullable().optional(),
