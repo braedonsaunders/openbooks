@@ -162,7 +162,7 @@ function DecimalCell<Row extends Record<string, unknown>>({
 }
 
 /**
- * Entry-mode distribution affordances for one grid (shard A9). The grid owns
+ * Entry-mode distribution affordances for one grid. The grid owns
  * pixels only: group headers, the per-row distribution cell (applied-rule /
  * staged / suggest / Split…), and the Split… ContextMenu. The owning drawer
  * supplies the data closures, which it builds on

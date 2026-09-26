@@ -41,7 +41,7 @@ export function DocumentRowActions({
   const postBlockedLabel = tCommon('actions.postRequiresPermission', { permission: requiredPostPermission })
   const [busy, setBusy] = useState(false)
   // A refused submit/post that only fires a transient toast reads as
-  // "nothing happened" once it dismisses (the F-t06-018 precedent): the
+  // "nothing happened" once it dismisses: the
   // typed refusal also persists row-inline, cleared on the next action.
   const [refusal, setRefusal] = useState<string | null>(null)
   const router = useRouter()

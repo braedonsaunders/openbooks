@@ -18,7 +18,7 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   // Persistent failure text inside the composer: the error toast
-  // auto-dismisses, and a missed toast reads as a silent send (F-t02-004).
+  // auto-dismisses, and a missed toast reads as a silent send.
   const [error, setError] = useState<string | null>(null)
 
   // Endpoints that speak the record-pdf send contract (GET { to }, POST

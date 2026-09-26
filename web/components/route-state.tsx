@@ -30,7 +30,7 @@ export function RouteStateView({
   state?: 'error' | 'not-found' | 'forbidden' | 'feature-disabled'
 }) {
   // One heading + one message: the PageHeader owns the copy; the body keeps
-  // icon + recovery action so the boundary never reads twice (F-t05-005).
+  // icon + recovery action so the boundary never reads twice.
   return (
     <ListPageLayout header={<PageHeader title={title} description={description} />}>
       <div data-route-state={state}>

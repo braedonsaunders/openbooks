@@ -34,7 +34,7 @@ interface TransactionDrawerProps {
    * showing, instead of unmounting the record body.
    *
    * For a record whose body holds unsaved local state — the party flyout's
-   * employee compensation panels (F-t08-003) — unmounting discards those
+   * employee compensation panels — unmounting discards those
    * edits silently. That was survivable while Attachments sat on a separate
    * strip most users never touched mid-edit; once it is a peer tab on the
    * one rail, it is one click away from any field.
