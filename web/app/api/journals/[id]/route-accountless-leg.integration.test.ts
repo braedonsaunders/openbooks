@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// OM-09b: journals PATCH must refuse a contentful leg without an account
+// Journals PATCH must refuse a contentful leg without an account
 // with a 422 naming the line — and write nothing. The zod boundary used to
 // reject a blank accountId with an anonymous uuid failure (and the drawers
 // dropped the leg before it ever arrived); the handler now names the line.

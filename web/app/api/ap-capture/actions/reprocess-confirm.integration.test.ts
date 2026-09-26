@@ -102,7 +102,7 @@ test('reprocessing an uncorrected capture needs no confirmation', async () => {
   } finally { await f.close() }
 })
 
-// I1-refix-28: the reprocess enqueue must freeze the operator's subsidiary
+// The reprocess enqueue must freeze the operator's subsidiary
 // scope on the job — the worker re-derives scope from the actor when the
 // job carries none, so an omitted field would let a later expansion widen
 // what the reprocess may auto-materialize.

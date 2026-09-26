@@ -11,9 +11,9 @@ import { isUuid } from '../../../../../../lib/list-params'
 export const runtime = 'nodejs'
 
 /**
- * Re-drive a FAILED flow run after its failure cause is fixed (F-t04-004: a
- * gate that resolved to zero assignees strands its subject with no path
- * forward). Retrying re-plans the stored trigger against the current graph
+ * Re-drive a FAILED flow run after its failure cause is fixed — a gate that
+ * resolved to zero assignees strands its subject with no path forward.
+ * Retrying re-plans the stored trigger against the current graph
  * and current subject values on the same run row. Refusals are request
  * state (FlowRetryError → 4xx), never 500s.
  *
@@ -42,7 +42,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (subsidiaryDenied) return subsidiaryDenied
 
   try {
-    // Same scope-in-dispatch contract as the manual route (I1-refix-108):
+    // Same scope-in-dispatch contract as the manual route:
     // the subject-scope gate above is a precheck; the engine re-verifies
     // under lock before re-driving the run.
     const result = await retryFlowRun(id, {

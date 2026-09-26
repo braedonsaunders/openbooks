@@ -225,7 +225,7 @@ test('SOV values and change-order amounts wider than numeric(19,4) fail closed',
 })
 
 /**
- * F-t03-002 residual: an unallocated change order must carry its pinned
+ * An unallocated change order must carry its pinned
  * income account onto the SOV line its approval creates, so the line bills
  * without a manual edit. A malformed account id fails closed as a domain
  * error, mirroring the SOV pin above.

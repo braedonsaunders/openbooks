@@ -7,7 +7,7 @@ import type { SessionUser } from '../../../../lib/auth';
 import * as React from 'react';
 Object.assign(globalThis, { React });
 
-// F-t02-002: a snapshot must preserve the scope of the summary it was taken
+// A snapshot must preserve the scope of the summary it was taken
 // from. Saving from the unfiltered (org-wide) forecasts page stored a personal
 // snapshot instead, so Closed disagreed with the summary by the whole book of
 // other owners' invoices. Both surfaces read calculateForecast; the snapshot

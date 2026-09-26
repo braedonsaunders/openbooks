@@ -9,7 +9,7 @@ const test: TestFn = isVitest
   ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
   : nodeTest;
 
-// HR-18: the public apply route — honeypot, per-IP sliding window, and the
+// The public apply route — honeypot, per-IP sliding window, and the
 // service write path. The rate limiter runs before any database work, so
 // the 429 proof needs no database: five attempts reach the service (whatever
 // they return), the sixth is refused as too many with the remedy intact.

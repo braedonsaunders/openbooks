@@ -8,7 +8,7 @@ import test from "node:test";
  * with `!== false` and PATCH with `Boolean()`, so isActive: "false" (or 0)
  * silently ACTIVATED the policy with a 2xx — an admin who switched a
  * collections ladder off keeps chasing debtors. Same boolean-flag class as
- * the project-types/close fixes (w13): refuse non-booleans, default
+ * the project-types/close fixes: refuse non-booleans, default
  * omission to active.
  */
 const root = pathToFileURL(process.cwd() + "/").href;

@@ -221,7 +221,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     for (let i = 0; i < submitted.length; i++) {
       const l = submitted[i]!
       // Every submitted leg must name its account: the drawers send every
-      // contentful row (OM-09b), so an account-less row arrives here rather
+      // contentful row, so an account-less row arrives here rather
       // than vanishing client-side — name its line instead of booking
       // without it. Malformed ids get the same line-numbered treatment the
       // boundary's anonymous uuid failure never gave them.

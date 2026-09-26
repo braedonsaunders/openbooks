@@ -6,7 +6,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 
-// F-t13-001: POST /api/pdf-templates with a taken name must answer 409 with
+// POST /api/pdf-templates with a taken name must answer 409 with
 // the friendly "already exists" message — never a 500 echoing the raw INSERT.
 // Drizzle wraps driver failures ("Failed query: <sql>", driver error in
 // `cause`), so matching on the wrapper message misclassifies every unique

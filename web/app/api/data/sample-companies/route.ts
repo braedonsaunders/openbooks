@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
-    // OM-14: a staged provisioning failure is a named, actionable refusal —
+    // A staged provisioning failure is a named, actionable refusal —
     // the fixed per-stage code and message reach the operator while the full
     // cause stays in the server log. Anything else keeps the previous shape:
     // known validation refusals stay 409, unknown failures stay a generic

@@ -82,7 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (outOfScope.length > 0) throw outOfScopeScenarioError(outOfScope)
       }
 
-      // F-t07-003: the maker's submit and the checker's decision. Direct
+      // The maker's submit and the checker's decision. Direct
       // status transitions (no tenant-authored flow graph required) so the
       // Pending approval / Approved states the list already offers are
       // reachable out of the box. approved_by/submitted_by provenance mirrors
@@ -92,7 +92,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // The scenario-guard trigger refuses line-less submits with a raw
         // Postgres raise (a 500 with no code). Refuse first with the typed
         // message the drawer pins, using the trigger's exact predicate so
-        // the two can never disagree (F-t13-006).
+        // the two can never disagree.
         const linePresent = (await tx.execute(sql`
           select 1 from budget_lines
            where org_id = ${user.orgId} and scenario_id = ${id} and amount <> 0 limit 1

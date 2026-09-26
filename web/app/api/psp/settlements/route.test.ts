@@ -269,7 +269,7 @@ test("GET hides batches and provider configs from other subsidiaries", async () 
   assert.deepEqual(payload.configs, []);
 });
 
-// F-t06-004: the import form asks for the posting subsidiary up front, so
+// The import form asks for the posting subsidiary up front, so
 // GET carries the picker's options under the same scope as the batches.
 test("GET lists in-scope subsidiaries for the import picker", async () => {
   routeState.allowedSubsidiaryIds = new Set(["sub-a"]);

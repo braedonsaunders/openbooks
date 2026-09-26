@@ -10,9 +10,9 @@ import { allocationRuleVisible } from "@openbooks/engine/src/organization/alloca
 const scopeVisibleKey = Symbol.for("openbooks.entry-candidates-scope-visible");
 (globalThis as typeof globalThis & Record<symbol, unknown>)[scopeVisibleKey] = allocationRuleVisible;
 
-// Boundary contract for GET /api/allocations/entry-candidates (shard A9):
+// Boundary contract for GET /api/allocations/entry-candidates:
 // feature + permission gates, query validation, subsidiary scope, and the
-// candidate DTO shaped from A4's matcher. Real matching semantics live in
+// candidate DTO shaped from the engine matcher. Real matching semantics live in
 // engine/src/allocations/match.test.ts; here the engine module is a test
 // double driven by markers on canned versions so this file pins only the
 // route's own layer.

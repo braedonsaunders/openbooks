@@ -33,7 +33,7 @@ async function setup() {
 }
 
 /**
- * F-t02-010: statements go out from the customer/vendor drawer. The send
+ * Statements go out from the customer/vendor drawer. The send
  * endpoint must prefill the party email, fail closed with a readable reason
  * when no transport is configured (never a 500, never a silent send), and
  * reject an explicitly invalid address before any render work.

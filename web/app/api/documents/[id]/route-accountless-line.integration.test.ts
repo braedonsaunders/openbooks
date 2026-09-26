@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// OM-09: a PATCH whose lines contain a contentful row without an account
+// A PATCH whose lines contain a contentful row without an account
 // (Sara's OPS-W01 x2 @100 line) must fail closed with a 422 naming the
 // line — and must change nothing: the invoice total and its stored lines
 // stay exactly as they were. Only the session gate is stubbed; handler,

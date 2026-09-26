@@ -136,7 +136,7 @@ test("DELETE /api/v1/setup/[entityKey]/[id] deletes through the Setup command", 
   assert.deepEqual(await response.json(), { deleted: true });
   assert.equal(response.headers.get("idempotency-replayed"), "false");
   assert.deepEqual(routeState.deleted, {
-    // I1-refix-09 threads actor scope into the Setup command; null is the unrestricted admin modeled here.
+    // Actor scope is threaded into the Setup command; null is the unrestricted admin modeled here.
     actor: { orgId: "org-1", id: "user-1", permissions: ["admin.setup.manage"], allowedSubsidiaryIds: null },
     entityKey: "tax-codes",
     id: "row-1",

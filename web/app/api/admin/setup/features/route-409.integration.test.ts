@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
-// F-t01-015: disabling REST API while MCP access depends on it answers 409
+// Disabling REST API while MCP access depends on it answers 409
 // with no user-visible feedback. Capture the REAL refusal body first so the
 // client mapping is hardened against what the server actually sends — not
 // against what the code appears to send.

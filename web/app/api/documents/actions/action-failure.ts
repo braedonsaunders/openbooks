@@ -3,7 +3,7 @@ import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 
 /**
- * Map an action failure to its response (F-t06-002). Typed kernel, control-
+ * Map an action failure to its response. Typed kernel, control-
  * account, payroll, and invoice-backup refusals keep their message (422) —
  * the operator can act on them. Anything else is a server defect: the detail
  * goes to the server log and the client gets a stable code, never driver

@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { SessionUser } from '../../../lib/auth'
 
-// OM-16c: an existing party whose kind outlived its role row (a legacy
+// An existing party whose kind outlived its role row (a legacy
 // orphan) is repaired by saving the role-bearing kind WITH its role enabled
 // in one audited PATCH — the same upsert the drawer sends. The kind↔role
 // guard stays enforced: the 200s below come from satisfying it, never from

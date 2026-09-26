@@ -243,7 +243,7 @@ async function subsidiaryProblem(orgId: string, subsidiaryId: string): Promise<s
 }
 
 /** Storage refusals past validation must never leak driver text — the raw
- * failure embeds the full statement with bound org/actor ids (F-t05-001's
+ * failure embeds the full statement with bound org/actor ids (a past
  * 422 did exactly that). Overlap refusals carry a stable code the UI pins
  * to its own catalog copy; anything else is a generic safe refusal. */
 function rateStorageRefusal(error: unknown): { error: string; errorCode: string } {

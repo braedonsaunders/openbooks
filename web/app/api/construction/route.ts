@@ -84,8 +84,8 @@ export async function GET(req: Request) {
       `));
       const retainageAccountId = retAcct.rows[0]?.acct ?? null;
 
-      // The org project-revenue default backing the CO income picker (F-t03-002
-      // residual); resolved alongside the page reads, not inside a write tx.
+      // The org project-revenue default backing the CO income picker,
+      // resolved alongside the page reads, not inside a write tx.
       const defaultIncomeAccount = await projectDefaultIncomeAccount(db, orgId);
       const sov = await db.execute(sql`
         select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
@@ -154,7 +154,7 @@ async function pinIncomeAccount(exec: SqlExecutor, orgId: string, accountId: unk
 }
 
 /**
- * The org's project-revenue control account (F-t03-002 residual): the
+ * The org's project-revenue control account: the
  * project/type default income account for owner-change-order schedule
  * lines — the same default project billing falls back to
  * (web/lib/billing.ts `defaultIncomeId`). Validated like a pinned account;
@@ -450,8 +450,8 @@ export async function POST(req: Request) {
         if (targetSovLineId && !isUuid(targetSovLineId)) {
           throw new ConstructionBillingError("The target schedule line id must be a valid UUID");
         }
-        // The income account the approval lands on the created SOV line
-        // (F-t03-002 residual). Targeted orders reprice the line's own
+        // The income account the approval lands on the created SOV line.
+        // Targeted orders reprice the line's own
         // account, so the writer only reads this for untargeted ones;
         // pinned like a hand-added SOV line either way.
         const incomeAccountId = await pinIncomeAccount(db, orgId, body.incomeAccountId);

@@ -129,7 +129,7 @@ export async function POST(request: Request) {
   // A customer/vendor/employee kind is a claim about the role rows: the
   // lists, the drawer tabs, and compliance all resolve the role, never the
   // kind column. Storing the kind without the role strands a "Kind: Vendor"
-  // no read can back (OM-16), so refuse it by name instead of persisting it.
+  // no read can back, so refuse it by name instead of persisting it.
   if (kind === 'customer' || kind === 'vendor' || kind === 'employee') {
     const roleInput = asRecord(asRecord(body.roles)[kind])
     if (roleInput.enabled !== true) {

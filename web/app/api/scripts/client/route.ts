@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   if (!(await isFeatureEnabled(authz.user.orgId, 'scripts'))) {
     // Feature-off is a normal empty state, not "not found": the client
     // loader calls this endpoint on every save, and browsers log failed
-    // fetches to the console however they are handled (F-t05-007).
+    // fetches to the console however they are handled.
     return NextResponse.json({ scripts: [] })
   }
 

@@ -231,7 +231,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
     return NextResponse.json({ ok: true })
   } catch (error) {
     // ScopeNotFoundError carries status 404, so the shared boundary preserves
-    // this route's uniform 404 for hidden parties (I1-refix-121).
+    // this route's uniform 404 for hidden parties.
     return apiErrorResponse(error)
   }
 }

@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-t03-014 residual: SIM OPP-00002 (titled, Closed-lost, no account, no
+// SIM OPP-00002 (titled, Closed-lost, no account, no
 // subsidiary) was invisible under Status=All with every facet at 0 while its
 // drawer saved 200s. Read-only diagnosis on the cluster proved subsidiary
 // scoping innocent — the SIM tester resolves to an unscoped (null) allowed
@@ -13,7 +13,7 @@ import test from 'node:test'
 // re-saved). This pins the exact SIM shape end to end: a drawer-shaped PATCH
 // (no isActive flag) closing an account-less, subsidiary-less titled
 // opportunity activates it into the Status=All list, while a
-// placeholder-titled stub stays hidden. Fails on pre-49f9046cd code, which
+// placeholder-titled stub stays hidden. Fails on pre-fix code, which
 // required an account for every activation.
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }

@@ -35,7 +35,7 @@ export async function GET() {
       : sql` and false`
     : sql``;
   // The import form's subsidiary picker reads the same scope the batches do:
-  // multi-subsidiary orgs pick the posting entity up front (F-t06-004), while
+  // multi-subsidiary orgs pick the posting entity up front, while
   // single-entity orgs get no options and post to the root like every other
   // document. Restricted callers see only their own entities.
   const subsidiaryIdFilter = gate.allowedSubsidiaryIds

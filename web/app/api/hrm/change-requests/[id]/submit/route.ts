@@ -22,7 +22,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
   try {
-    // HR-16: when hrmActionReasons is on, submit requires both action and
+    // When hrmActionReasons is on, submit requires both action and
     // an active reason code; when off, classification is ignored entirely.
     const { validateSubmitActionReason } = await import(
       "@openbooks/engine/src/automations/action-reasons.ts"

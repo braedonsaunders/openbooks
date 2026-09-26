@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   try {
     if (sp.get("count") === "1") {
       // A failing notice source names itself in notices while the healthy
-      // legs still count (OM-10) — the badge renders a degraded state
+      // legs still count — the badge renders a degraded state
       // beside the partial count instead of a silently low number.
       const notices: InboxSourceNotice[] = [];
       const [union, unread] = await Promise.all([
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     const kinds: InboxKind[] | undefined =
       filter === "all" || filter === "overdue" ? undefined : INBOX_FILTER_KINDS[filter];
     // One failing source names itself in notices while the healthy legs
-    // still list (OM-10) — the page renders them beside the surviving rows.
+    // still list — the page renders them beside the surviving rows.
     const notices: InboxSourceNotice[] = [];
     const items = await listInbox(ctx, { ...(kinds ? { kinds } : {}), ...(page ? { page } : {}), notices });
     return NextResponse.json({

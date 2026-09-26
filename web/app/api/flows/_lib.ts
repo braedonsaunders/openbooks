@@ -177,7 +177,7 @@ export async function lockFlowSubjectScope(
     return;
   }
   if (subjectKind === "allocation_run") {
-    // I1-refix-148's visibility predicate, evaluated under the run row lock
+    // The visibility predicate, evaluated under the run row lock
     // so a concurrent computation rewrite cannot slip between check and read.
     const run = (
       await db.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`

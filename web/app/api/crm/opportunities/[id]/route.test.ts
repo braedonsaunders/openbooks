@@ -514,7 +514,7 @@ test('deactivated account, team, and source references fail closed on the locked
 })
 
 /**
- * F-t03-014: a titled opportunity saved without an account stayed inactive
+ * A titled opportunity saved without an account stayed inactive
  * forever — invisible in the list under Status=All (and zeroing every facet
  * count) while its drawer saved 200s, because activation required an
  * account. Activation now means "a real record, not a creation stub".

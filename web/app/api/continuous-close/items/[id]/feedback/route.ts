@@ -28,7 +28,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const rating = body.rating === "helpful" || body.rating === "not_helpful" ? body.rating : null;
   if (!rating) return NextResponse.json({ error: "invalid_rating" }, { status: 422 });
   const comment = typeof body.comment === "string" ? body.comment.trim().slice(0, 500) || null : null;
-  // I1-refix-72: resolve agent and scope inside the same row-locked
+  // Resolve agent and scope inside the same row-locked
   // transaction as the insert. Feedback confirms the finding exists, so an
   // out-of-scope subject must answer like a missing item — a pre-check
   // followed by a later insert lets a rehome turn the rating into an

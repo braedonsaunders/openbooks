@@ -266,7 +266,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 /**
- * Discard an untouched draft (F-t04-005). New ticket persists an empty
+ * Discard an untouched draft. New ticket persists an empty
  * server-side draft on click; this is its way back out. Anything with
  * content, signatures, links, or status refuses with the blocker named.
  */

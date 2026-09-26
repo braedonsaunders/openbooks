@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// F-t04-005: New ticket persists an empty server-side draft on click, Cancel
+// New ticket persists an empty server-side draft on click, Cancel
 // orphans it, DELETE answers 405, and nothing can remove it. An empty draft
 // must be discardable: DELETE removes the untouched shell (and only the
 // untouched shell), anything with content or status refuses with a reason.

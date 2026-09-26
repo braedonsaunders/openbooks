@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// OM-09b: POST /api/journals must refuse a contentful leg without an
+// POST /api/journals must refuse a contentful leg without an
 // account with a 422 naming the line — and write nothing (no document, no
 // burned JE number). createManualJournal names the line before the
 // ownership lookup. Only the session gate is stubbed; handler and storage

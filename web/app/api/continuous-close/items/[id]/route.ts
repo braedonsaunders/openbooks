@@ -117,7 +117,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "reason_required" }, { status: 422 });
   }
   const status = ACTION_STATUS[action as keyof typeof ACTION_STATUS];
-  // I1-refix-72: re-resolve agent, scope, and lifecycle inside the same
+  // Re-resolve agent, scope, and lifecycle inside the same
   // row-locked transaction as the write — the pre-check above still guards
   // the assign/note path, but a rehome between a pre-check and this write
   // would move another entity's finding under it.

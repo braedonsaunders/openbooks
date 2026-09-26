@@ -46,7 +46,7 @@ export async function POST(req: Request) {
   }
   // The production driver composition (report runner included), so
   // report_definition rules preview the same numbers a run would post.
-  // Fail-closed computation errors answer 404/422 with the message (F-t06-017)
+  // Fail-closed computation errors answer 404/422 with the message
   // instead of an untyped 500 the drawer cannot render.
   try {
     const run = await previewAllocationRun(

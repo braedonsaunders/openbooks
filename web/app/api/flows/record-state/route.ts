@@ -74,15 +74,15 @@ export interface RecordApprovalState {
   };
   history: ApprovalHistoryEntry[];
   /**
-   * The latest run when it failed (F-t04-004): a run that died (e.g. its
+   * The latest run when it failed: a run that died (e.g. its
    * gate resolved to zero assignees) strands the record with no live gate
    * and no path forward. Surfaces the run id + engine error so the row can
    * offer a retry; null when the latest run did not fail.
    */
   failedRun: { id: string; error: string | null; at: string } | null;
   /**
-   * No flow run ever fired for this subject and no gate is live
-   * (F-t04-004 residual): a record born pending before its flow existed.
+   * No flow run ever fired for this subject and no gate is live:
+   * a record born pending before its flow existed.
    * The engine never saw it, so it can never appear in the approvals
    * centre — the drawer must offer to submit it into the current flow
    * instead of claiming no approvals are required.

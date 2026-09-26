@@ -177,7 +177,7 @@ function post(id: string) {
   );
 }
 
-/** F-t04-004: the retry route refuses a non-uuid run id without touching the engine. */
+/** The retry route refuses a non-uuid run id without touching the engine. */
 test("retry refuses a malformed run id", async () => {
   reset(null);
   const res = await post("nope");
@@ -221,7 +221,7 @@ test("an unresolved subject subsidiary is refused for a restricted caller", asyn
   assert.deepEqual(retryState.calls, []);
 });
 
-/** F-t04-004: engine retry refusals surface as typed 4xx bodies, never 500s. */
+/** Engine retry refusals surface as typed 4xx bodies, never 500s. */
 test("retry maps a retry refusal to 422", async () => {
   reset(new Set([SUBJECT_SUBSIDIARY]));
   retryState.mode = { kind: "fail", message: "only a failed run can be retried" };

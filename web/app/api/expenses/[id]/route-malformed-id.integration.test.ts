@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-t04-015: GET /api/expenses/reports answers an empty-body 500 — the
+// GET /api/expenses/reports answers an empty-body 500 — the
 // [id] route binds the id straight into a uuid comparison and PostgreSQL
 // throws 22P02. A non-uuid id must resolve through the same typed
 // not-found contract as an unknown id, on every method of the route.

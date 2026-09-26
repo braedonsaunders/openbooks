@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-t07-003 pickers: the sales-order draft writer persists a validated line
+// The sales-order draft writer persists a validated line
 // warehouse and stamps the silent single-location default. Only the session
 // gate is stubbed; handler, service, and storage are real.
 const root = pathToFileURL(process.cwd() + '/').href

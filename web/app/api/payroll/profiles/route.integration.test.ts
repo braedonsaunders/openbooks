@@ -214,7 +214,7 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
     assert.equal(us.subdivisionLabel, 'state')
     assert.ok(us.subdivisions.includes('CA') && us.subdivisions.includes('NY'))
     assert.ok(us.subdivisions.includes('DC'), 'DC is a declared US subdivision')
-    // The fleet is complete: every declared US subdivision is supported.
+    // Coverage is complete: every declared US subdivision is supported.
     // DC was the last wage-tax gap; it left unimplementedUsStates() by
     // gaining an engine, not by the supported list being weakened. The
     // previous `<` asserted that absence; it is no longer a fact. Pin

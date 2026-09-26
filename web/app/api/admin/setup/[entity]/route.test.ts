@@ -606,7 +606,7 @@ test("storage decides two-session create/create races for every authoritative se
   }
 });
 
-test("duplicate FX rates answer a typed conflict with a human message, not a bare code (F-t06-019)", { skip: !DB }, async () => {
+test("duplicate FX rates answer a typed conflict with a human message, not a bare code", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "FX Setup Admin", "admin");
   try {
@@ -637,7 +637,7 @@ test("duplicate FX rates answer a typed conflict with a human message, not a bar
   }
 });
 
-test("intercompany pairs missing elimination flags answer a typed message, never silence (F-t06-023)", { skip: !DB }, async () => {
+test("intercompany pairs missing elimination flags answer a typed message, never silence", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "IC Setup Admin", "admin");
   try {

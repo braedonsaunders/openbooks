@@ -6,7 +6,7 @@ import test from 'node:test'
 import type { SessionUser } from '../../../../../../lib/auth'
 
 /**
- * F-t04-004 residual: vendor bank accounts that have NO flow run at all —
+ * Vendor bank accounts that have NO flow run at all —
  * created before the 'Vendor bank details' flow existed — sit at
  * 'Pending approval' forever. The engine never saw them (no run, no gate),
  * so they never appear in the approvals centre; the Approvals dialog claims

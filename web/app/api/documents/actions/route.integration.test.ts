@@ -132,7 +132,7 @@ test('documents/actions double submit: one winner, one 422, never a 500', async 
 })
 
 /**
- * F-t02-005: the audit trail showed only Created+Updated for a document the
+ * The audit trail showed only Created+Updated for a document the
  * server had submitted and auto-approved, because neither the auto-release
  * nor a gated submission wrote a documents row to audit_log. The route now
  * records the lifecycle transition itself, so the trail evidences submit

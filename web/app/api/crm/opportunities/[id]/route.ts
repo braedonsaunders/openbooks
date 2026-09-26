@@ -442,7 +442,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!title) throw new OpportunityValidationError('title is required')
     // Activation means "a real record, not a creation stub" — the drawer has
     // no active toggle, so this computation is the only path to list
-    // visibility (F-t03-014: a titled Closed-lost record saved without an
+    // visibility (a titled Closed-lost record saved without an
     // account stayed inactive forever, invisible under Status=All while its
     // drawer saved 200s). A titled opportunity activates with an account, on
     // reaching a closed status (terminal records are complete), or while it

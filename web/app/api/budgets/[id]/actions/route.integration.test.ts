@@ -6,7 +6,7 @@ import test from 'node:test'
 import type { SessionUser } from '../../../../../lib/auth'
 
 /**
- * F-t07-003: a draft budget has no submit-for-approval path, so the
+ * A draft budget has no submit-for-approval path, so the
  * Pending approval / Approved states the list filter already offers are
  * unreachable. The actions route must move draft → pending_approval
  * (submit, budgets.manage), pending_approval → approved (approve,
@@ -133,7 +133,7 @@ test('budget approval lifecycle: submit, approve, reject', async () => {
 })
 
 /**
- * F-t13-006: submitting a draft with no lines must be refused with a typed
+ * Submitting a draft with no lines must be refused with a typed
  * message, not a silent 500 from the scenario-guard trigger. The drawer
  * keys its pinned refusal off this code.
  */

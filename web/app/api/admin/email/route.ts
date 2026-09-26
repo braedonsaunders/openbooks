@@ -70,7 +70,7 @@ export async function PUT(req: Request) {
       smtpPort: body.smtpPort === undefined ? undefined : typeof body.smtpPort === 'number' ? body.smtpPort : body.smtpPort ? Number(body.smtpPort) : null,
       // Omission keeps the saved value (validated boolean above when
       // present); coercing to === true here would silently turn TLS off on
-      // a partial update (I5-platform-16 follow-up).
+      // a partial update.
       smtpSecure: smtpSecure === undefined ? undefined : smtpSecure === true,
       smtpUsername: clearableStr(body.smtpUsername),
       // secret: non-empty string ⇒ seal; null ⇒ clear; blank/omitted ⇒ keep.

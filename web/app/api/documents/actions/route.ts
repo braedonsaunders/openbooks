@@ -273,8 +273,8 @@ export async function POST(req: Request) {
     // Typed refusals (kernel rules, unconfigured control accounts, payroll
     // domain) keep their message (422) — the operator can act on them.
     // Anything else is a server defect: never echo driver text, bind params,
-    // or internal ids to the user (F-t06-002 pasted a raw INSERT into the
-    // page). The detail stays in the server log; the client renders its own
+    // or internal ids to the user (a past defect pasted a raw INSERT into
+    // the page). The detail stays in the server log; the client renders its own
     // localized fallback and pins it beside the record.
     // A refused approval routing already rolled back inside the transaction;
     // its message names the failed flow and the remedy, so it keeps it.

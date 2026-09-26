@@ -157,7 +157,7 @@ export async function PATCH(req: Request, { params }: Params) {
     if (outcome === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    // Same Drizzle-wrapper caveat as the collection POST (F-t13-001): match
+    // Same Drizzle-wrapper caveat as the collection POST: match
     // the SQLSTATE, never the wrapper message.
     if (pgErrorCode(e) === "23505")
       return NextResponse.json({ error: "A template with that name already exists" }, { status: 409 });

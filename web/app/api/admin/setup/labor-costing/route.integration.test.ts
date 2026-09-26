@@ -125,7 +125,7 @@ const hooks = registerHooks({
       return { url: "mock:authz", shortCircuit: true };
     }
     // The route's own db import is wrapped, and so is the canonical
-    // wage writer's (HR-12 extracted save-rate into
+    // wage writer's (save-rate lives in
     // engine/src/projects/labor-cost-rates.ts): the fault seam follows
     // the writer, so mid-transaction failures still surface inside the
     // same unit. Every other engine module keeps the real module.
@@ -312,7 +312,7 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
       select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
     assert.equal(afterAudit, beforeAudit);
 
-    // I1-refix-89: a department-anchored rate ends for its own restricted setup actor.
+    // A department-anchored rate ends for its own restricted setup actor.
     const departmentId = (await db.execute<{ id: string }>(sql`
       insert into departments (org_id, name, is_active, subsidiary_id)
       values (${f.orgId}, 'Field crew', true, ${f.subsidiaryId}) returning id`)).rows[0]!.id;
@@ -1100,8 +1100,8 @@ test("reconcile rejects an impossible calendar date with a 422, never a 500", as
   }
 });
 
-test("a backdated save-rate persists mid-timeline, capped the day before its successor (F-t05-001)", async () => {
-  // F-t05-001: adding a rate effective BEFORE the current start (2026-09-05
+test("a backdated save-rate persists mid-timeline, capped the day before its successor", async () => {
+  // Adding a rate effective BEFORE the current start (2026-09-05
   // against a 2026-09-17 start) 422'd on the overlap exclusion and the UI
   // toasted a generic failure — a silent no-op. Backdating is legitimate by
   // design (the retro finder names backdated wages over paid periods as a
@@ -1182,7 +1182,7 @@ test("a same-start correction keeps the row's window instead of reopening past i
 });
 
 test("a storage refusal past validation never leaks driver text to the client", async () => {
-  // F-t05-001's 422 carried the full INSERT statement with bound org/actor
+  // A past 422 carried the full INSERT statement with bound org/actor
   // ids. Refusals map to a stable code + safe message instead.
   const f = await seed();
   try {

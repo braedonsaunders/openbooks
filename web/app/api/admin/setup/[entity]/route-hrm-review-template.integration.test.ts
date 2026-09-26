@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// OM-17: the hrm-review-templates New drawer crashed before it could save,
+// The hrm-review-templates New drawer crashed before it could save,
 // so the whole create path for rating-scale labels went unexercised. This
 // proves the setup writer persists a review template created with
 // rating-scale labels and reads the folded scale back — create, read,
@@ -149,7 +149,7 @@ test("a review template created with rating-scale labels persists and reads back
 });
 
 test("string scale bounds from the drawer save as numbers; garbage is refused by name", async () => {
-  // OM-17: the drawer's integer inputs keep STRING values. The input
+  // The drawer's integer inputs keep STRING values. The input
   // boundary coerces decimal strings to JSON numbers so the storage
   // CHECK (numbers only) never sees them; an unparseable bound is
   // refused by field name instead of reaching the write.
@@ -194,7 +194,7 @@ test("string scale bounds from the drawer save as numbers; garbage is refused by
 });
 
 test("inverted and over-wide scales are refused by name, never raw CHECK text", async () => {
-  // OM-17: bounds that parse as numbers but violate the scale shape must
+  // Bounds that parse as numbers but violate the scale shape must
   // fail in the engine's own words (validateEntityIntegrity runs
   // parseRatingScale before the write) — the raw Postgres CHECK text must
   // never reach the dialog.
@@ -237,7 +237,7 @@ test("inverted and over-wide scales are refused by name, never raw CHECK text", 
 });
 
 test("a template created with drawer string bounds appears in the cycle picker", async () => {
-  // OM-17: the /hrm/performance?cycle=new template picker lists
+  // The /hrm/performance?cycle=new template picker lists
   // hrm_review_templates through listReviewTemplates — a template saved
   // from the drawer (string bounds folded to numbers) must be pickable.
   const org = await createScratchOrg();

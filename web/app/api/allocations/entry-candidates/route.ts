@@ -46,7 +46,7 @@ function toCandidate(candidate: RuleInEffect, recommended: boolean): {
 
 /**
  * GET /api/allocations/entry-candidates — entry-mode rules in effect for the
- * universal transaction editor (shard A9; matching owned by A4).
+ * universal transaction editor.
  *
  * Query: documentKind, accountId, departmentId, locationId, classId,
  * projectId, subsidiaryId, documentDate (YYYY-MM-DD, default the org's

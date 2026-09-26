@@ -89,7 +89,7 @@ function post(id: string) {
   );
 }
 
-/** F-t05-018 (typed-body side): the unmatched-lines refusal must answer a
+/** The unmatched-lines refusal must answer a
  * typed 422 carrying the engine message the workspace now surfaces. */
 test("a refused sign-off answers a typed 422 with the engine reason", async () => {
   signOffState.calls = [];

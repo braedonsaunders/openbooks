@@ -60,11 +60,11 @@ test('impossible hired-on dates are refused with 422 and store nothing', async (
   }
 })
 
-test('an edit echoing a backed role kind persists instead of 422ing (F-t05-002, OM-16)', async () => {
-  // F-t05-002: the drawer echoes the stored kind back on every save, but
+test('an edit echoing a backed role kind persists instead of 422ing', async () => {
+  // The drawer echoes the stored kind back on every save, but
   // PATCH only accepted company|person — so every edit of an employee-kind
-  // party failed while the UI reported success. OM-16 narrows the round-trip
-  // to backed kinds, so the fixture carries the employee role. Real route,
+  // party failed while the UI reported success. Only backed kinds round-trip,
+  // so the fixture carries the employee role. Real route,
   // real rows.
   const { org } = await fixture()
   try {
@@ -87,8 +87,8 @@ test('an edit echoing a backed role kind persists instead of 422ing (F-t05-002, 
   }
 })
 
-test('an edit claiming an unbacked role kind is refused by name (OM-16)', async () => {
-  // OM-16: kind "vendor" with no vendor_roles row strands a "Kind: Vendor"
+test('an edit claiming an unbacked role kind is refused by name', async () => {
+  // Kind "vendor" with no vendor_roles row strands a "Kind: Vendor"
   // the Compliance tab cannot back. The save must refuse, naming the role,
   // and store nothing.
   const { org } = await fixture()

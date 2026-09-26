@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// OM-09b: expenses PATCH must refuse a contentful line without an account
+// Expenses PATCH must refuse a contentful line without an account
 // with a 422 naming the line — and write nothing. prepareExpenseEdit runs
 // every submitted line through validateEditableDocumentLines, which names
 // the line; the drawer used to drop the row before it ever arrived. Only

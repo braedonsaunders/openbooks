@@ -90,7 +90,7 @@ export async function GET(req: Request) {
       group by pe.source_document_id, coalesce(psub.base_currency, o.base_currency), pe.posting_date
     `)),
     // Open items with days-overdue — off the shared cash-engine reader, not
-    // a bespoke aggregate (F-t03-010). The old query joined reversed entries
+    // a bespoke aggregate. The old query joined reversed entries
     // without the document's current posting projection, so an append-only
     // correction (reversed original + re-post of the same bill) listed the
     // same bill twice under two dates and inflated the dialog total past the

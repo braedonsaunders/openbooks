@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// F-t07-003 pickers: the generic document edit writer persists an explicit
+// The generic document edit writer persists an explicit
 // line warehouse and stamps the silent single-location default on blank
 // stocked lines. Only the session gate is stubbed; handler, service, and
 // storage are real.

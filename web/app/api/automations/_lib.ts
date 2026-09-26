@@ -7,7 +7,7 @@ import { ActionReasonError } from "@openbooks/engine/src/automations/action-reas
 import { EventVerbError } from "@openbooks/engine/src/automations/event-verbs.ts";
 
 /**
- * Shared error mapping for /api/automations/* and the HR-16 HRM verb
+ * Shared error mapping for /api/automations/* and the HRM verb
  * routes. Engine refusals reach the caller with their message intact
  * (the remedy lives in the message) — never a success, never a bare
  * 'internal error' for a computed refusal.
