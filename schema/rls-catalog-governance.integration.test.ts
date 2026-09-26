@@ -16,6 +16,9 @@
  * - the derived catalog test fails if ANY public table carrying org_id
  *   lacks ENABLEd + FORCEd RLS or carries no policy, unless it is on the
  *   reviewed exemption list below (platform tables, one reason each);
+ * - the derived index test fails if ANY public table carrying org_id lacks
+ *   a usable index led by org_id: every RLS predicate compares org_id to
+ *   the current tenant, so a table without one scans on every tenant read;
  * - the negative control proves that test fires, by creating an unwired
  *   org-scoped table inside a rolled-back transaction and showing the same
  *   query names it;
@@ -64,6 +67,71 @@ async function catalogViolations(db: EngineDb["db"]): Promise<string[]> {
   `)).rows;
   return rows.map((row) => row.tbl).filter((tbl) => !(tbl in RLS_EXEMPT));
 }
+
+/**
+ * Org-scoped tables with no usable index led by org_id. An index counts
+ * only when its first key column IS org_id and it is valid: a UNIQUE or
+ * composite index starting with org_id serves the RLS equality probe, but
+ * an INVALID one left behind by a failed CONCURRENTLY build answers no
+ * query, so it must not satisfy this test.
+ */
+async function leadingOrgIndexViolations(db: EngineDb["db"]): Promise<string[]> {
+  const rows = (await db.execute<{ tbl: string }>(sql`
+    with org_tables as (
+      select c.oid, c.relname as tbl,
+             (select a.attnum
+                from pg_attribute a
+               where a.attrelid = c.oid
+                 and a.attname = 'org_id'
+                 and not a.attisdropped) as org_attnum
+        from pg_class c
+        join pg_namespace nsp on nsp.oid = c.relnamespace
+       where nsp.nspname = 'public' and c.relkind = 'r'
+    )
+    select tbl from org_tables o
+     where o.org_attnum is not null
+       and not exists (
+         select 1 from pg_index i
+          where i.indrelid = o.oid
+            and i.indisvalid
+            and i.indkey[0] = o.org_attnum
+       )
+     order by 1
+  `)).rows;
+  return rows.map((row) => row.tbl);
+}
+
+test("every org_id table carries a usable index led by org_id", { skip: !DB }, async () => {
+  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const violations = await leadingOrgIndexViolations(db);
+  assert.deepEqual(
+    violations,
+    [],
+    `org-scoped tables with no usable index led by org_id (add one per table: create index concurrently if not exists <table>_org_id_idx on <table> (org_id)): ${violations.join(", ")}`,
+  );
+});
+
+test("the leading-index test fires and clears with the index", { skip: !DB }, async () => {
+  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const table = `org_idx_probe_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
+  await db.execute(sql`create table public.${sql.raw(table)} (id uuid, org_id uuid)`);
+  try {
+    await db.execute(sql`create index on public.${sql.raw(table)} (id)`);
+    const flagged = await leadingOrgIndexViolations(db);
+    assert.ok(
+      flagged.includes(table),
+      `an org_id table whose only index starts elsewhere must be reported, got: ${flagged.join(", ")}`,
+    );
+    await db.execute(sql`create index on public.${sql.raw(table)} (org_id)`);
+    const cleared = await leadingOrgIndexViolations(db);
+    assert.ok(
+      !cleared.includes(table),
+      `an org_id table with a leading org_id index must clear, still reported: ${cleared.join(", ")}`,
+    );
+  } finally {
+    await db.execute(sql`drop table public.${sql.raw(table)}`);
+  }
+});
 
 test("every org_id table is tenant-isolated at the catalog level", { skip: !DB }, async () => {
   const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
