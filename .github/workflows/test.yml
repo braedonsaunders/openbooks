@@ -165,7 +165,10 @@ jobs:
     # making progress. Raised rather than re-sharded because shard membership
     # is derived from the file list, so changing the count moves every file
     # and invalidates the per-shard receipts this campaign was verified on.
-    timeout-minutes: 25
+    # 25 then held until the shard carrying the migration-replay proof
+    # reached the limit while still passing, so the ceiling moved again
+    # rather than reshuffling every shard just before a release.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
