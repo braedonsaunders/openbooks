@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -346,15 +347,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         // itself a control failure: surface it rather than swallow it.
         console.error('[items/costing] failed to record the refused costing-policy change', auditError)
       }
-      return NextResponse.json({ error: e.message }, { status: 409 })
+      return apiErrorResponse(e, { safeStatus: 409 })
     }
     // FK violation → an account id doesn't belong to this org / isn't postable.
     if ((e as { code?: string })?.code === '23503') {
       return NextResponse.json({ error: 'Choose posting accounts from this organization' }, { status: 400 })
     }
     if (e instanceof InventoryError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+    return apiErrorResponse(e)
   }
 }
