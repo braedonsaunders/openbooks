@@ -5,17 +5,16 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
 import { payRunStaleness } from "./readiness.ts";
-import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import type { PayrollEmployerAggregateLevy } from "./packs.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
 import { saveEmployerLevyOpening, saveOpeningBalances } from "./opening-balances.ts";
-import { setPackSlotAccount } from "./packs.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /** Integration wiring for synthetic CA-pack employer-aggregate declarations. */
 
@@ -108,7 +107,7 @@ async function makeSchedule(orgId: string, actorId: string, name = "Biweekly"): 
 }
 
 async function makeEmployee(
-  orgId: string, actorId: string, scheduleId: string, name: string, hourlyRate: string,
+  orgId: string, subsidiaryId: string, actorId: string, scheduleId: string, name: string, hourlyRate: string,
 ): Promise<string> {
   const employeeId = randomUUID();
   await db.execute(sql`
@@ -118,11 +117,12 @@ async function makeEmployee(
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                   is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, 'CAD', ${hourlyRate}, 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+  // Stub calculation refuses employees without an HRM employment (NOT NULL since 0374), so the hire carries one.
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            is_active, created_by, updated_by)
-    values (${orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+    values (${orgId}, ${employeeId}, ${await seedWorkerEmployment(orgId, employeeId, subsidiaryId)}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
   return employeeId;
 }
@@ -156,8 +156,8 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, actorId, scheduleId, "Amy Aggregate", "50");
-      const empB = await makeEmployee(org.orgId, actorId, scheduleId, "Bob Base", "50");
+      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empB = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Bob Base", "50");
       // $1,000 each: the first stub prices nothing (allowance 1,000), the
       // second prices the 1,000 above it at 10%.
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
@@ -218,8 +218,8 @@ test(
       await seedHarness(org.orgId, actorId);
       const scheduleA = await makeSchedule(org.orgId, actorId, "Biweekly A");
       const scheduleB = await makeSchedule(org.orgId, actorId, "Biweekly B");
-      const empA = await makeEmployee(org.orgId, actorId, scheduleA, "Amy Aggregate", "40");
-      const empB = await makeEmployee(org.orgId, actorId, scheduleB, "Bob Base", "40");
+      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleA, "Amy Aggregate", "40");
+      const empB = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleB, "Bob Base", "40");
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       await postHours(org.orgId, actorId, empB, "2026-07-06", "20");
       await withDeclarations([thresholdLevy()], async () => {
@@ -275,7 +275,7 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
       await postHours(org.orgId, actorId, empA, "2026-07-06", "10");
       await withDeclarations([thresholdLevy()], async () => {
         // A carry-in for a levy nobody declares is refused, not shelved.
@@ -336,7 +336,7 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       const capLevy = thresholdLevy({
         key: "synth_cap",
@@ -384,7 +384,7 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       await postHours(org.orgId, actorId, empA, "2026-07-20", "20");
       await postHours(org.orgId, actorId, empA, "2026-08-03", "20");
@@ -488,7 +488,7 @@ test(
     try {
       await seedHarness(org.orgId, actorId);
       const scheduleId = await makeSchedule(org.orgId, actorId);
-      const empA = await makeEmployee(org.orgId, actorId, scheduleId, "Amy Aggregate", "50");
+      const empA = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Aggregate", "50");
       await postHours(org.orgId, actorId, empA, "2026-07-06", "20");
       await withDeclarations([thresholdLevy({
         key: "synth_annual",
