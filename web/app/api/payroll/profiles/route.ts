@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -565,6 +566,19 @@ export async function GET(req: Request) {
   })
 }
 
+/**
+ * The pack identifier verdict travels as data, not a thrown error, so the
+ * sanitizer cannot type-refuse it: carry the pack's curated format message
+ * in a named 422 refusal.
+ */
+class IdentifierRefusal extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'IdentifierRefusal'
+  }
+  readonly status = 422
+}
+
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
@@ -917,7 +931,7 @@ export async function POST(req: Request) {
     if ('sin' in body) {
       const verdict = validatePackEmployeeIdentifier(country, body.sin)
       if (!verdict.valid) {
-        return NextResponse.json({ error: verdict.message }, { status: 422 })
+        return apiErrorResponse(new IdentifierRefusal(verdict.message ?? 'invalid identifier'))
       }
       suppliedIdentifier = verdict.saved
       if (verdict.saved === null) {

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
@@ -46,7 +47,7 @@ export async function GET(req: Request) {
     const groups = await payrollRemittanceSummary(gate.user.orgId, { from, to }, gate.allowedSubsidiaryIds)
     return NextResponse.json({ groups })
   } catch (error) {
-    if (error instanceof PayrollError) return NextResponse.json({ error: error.message }, { status: 422 })
+    if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
     throw error
   }
 }
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true, ...bill })
   } catch (e) {
-    if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
     throw e
   }
 }

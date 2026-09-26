@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { sql } from 'drizzle-orm'
@@ -165,7 +166,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       })
     })
   } catch (error) {
-    if (error instanceof PayrollError) return NextResponse.json({ error: error.message }, { status: 422 })
+    if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
     throw error
   }
 }
@@ -333,7 +334,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true, filed })
     })
   } catch (error) {
-    if (error instanceof PayrollError) return NextResponse.json({ error: error.message }, { status: 422 })
+    if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
     throw error
   }
 }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -132,10 +133,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ artifact }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof PayrollError || error instanceof SandboxEgressError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 409, headers: { 'Cache-Control': 'no-store' } },
-      )
+      const refusal = await apiErrorResponse(error, { safeStatus: 409 })
+      refusal.headers.set('Cache-Control', 'no-store')
+      return refusal
     }
     throw error
   }

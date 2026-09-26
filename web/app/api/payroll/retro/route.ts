@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -212,7 +213,7 @@ export async function POST(req: Request) {
     // overpayment recovery, a period in another statutory year. It reaches the
     // operator as its own sentence, never as a 500.
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }

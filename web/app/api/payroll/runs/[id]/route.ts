@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/src/payroll/scope.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -664,7 +665,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true, ...result })
     }
   } catch (e) {
-    if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
     throw e
   }
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })
@@ -699,8 +700,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     if (e instanceof PayrollError) {
-      const status = e.message === 'pay run not found' ? 404 : 422
-      return NextResponse.json({ error: e.message }, { status })
+      // A missing run reads 404; every other payroll refusal stays 422.
+      // The engine raises both as PayrollError, so the route keeps the
+      // historical message match to select the status.
+      return apiErrorResponse(e, e.message === 'pay run not found' ? { safeStatus: 404 } : { safeStatus: 422 })
     }
     throw e
   }

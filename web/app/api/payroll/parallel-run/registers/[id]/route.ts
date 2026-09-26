@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -66,10 +67,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     await deletePriorRegister(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds)
   } catch (error) {
     if (error instanceof PriorRegisterNotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 })
+      return apiErrorResponse(error, { safeStatus: 404 })
     }
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }

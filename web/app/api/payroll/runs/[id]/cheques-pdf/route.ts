@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
@@ -42,7 +43,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`))
   } catch (error) {
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 409 })
+      return apiErrorResponse(error, { safeStatus: 409 })
     }
     const rendererRefusal = rendererUnavailableResponse(error)
     if (rendererRefusal) return rendererRefusal

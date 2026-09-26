@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -109,8 +110,8 @@ export async function GET(req: Request) {
     })
   } catch (e) {
     if (e instanceof FilingScopeDenied) return e.response
-    if (e instanceof PayrollPackError) return NextResponse.json({ error: e.message }, { status: 404 })
-    if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
+    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
     throw e
   }
 }
@@ -224,8 +225,8 @@ export async function POST(req: Request) {
     })
   } catch (e) {
     if (e instanceof FilingScopeDenied) return e.response
-    if (e instanceof PayrollPackError) return NextResponse.json({ error: e.message }, { status: 404 })
-    if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
+    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
     throw e
   }
 }

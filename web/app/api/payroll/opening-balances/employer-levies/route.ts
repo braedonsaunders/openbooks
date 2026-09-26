@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
   try {
     year = assertTaxYear(await parseYear(gate.user.orgId, new URL(req.url).searchParams.get('year')))
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid request' }, { status: 422 })
+    return apiErrorResponse(error, { safeStatus: 422 })
   }
   // Employer carry-ins are organization-wide facts, so only unrestricted
   // callers reach the unscoped reader.
@@ -104,13 +105,13 @@ export async function POST(req: Request) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof EmployerLevyOpeningSaveError) {
-      return NextResponse.json(
-        { error: error.message, errors: error.result.errors, created: 0, updated: 0, deleted: 0 },
-        { status: 409 },
-      )
+      return apiErrorResponse(error, {
+        safeStatus: 409,
+        details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0 },
+      })
     }
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }

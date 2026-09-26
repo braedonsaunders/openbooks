@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -309,19 +310,19 @@ export async function POST(req: Request) {
     // whole-workforce load rejected for one transposed column must say which
     // employee, and nothing was written.
     if (error instanceof OpeningBalanceSaveError) {
-      return NextResponse.json(
-        { error: error.message, errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
-        { status: 409 },
-      )
+      return apiErrorResponse(error, {
+        safeStatus: 409,
+        details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
+      })
     }
     if (error instanceof SurtaxSaldoSaveError) {
-      return NextResponse.json(
-        { error: error.message, errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
-        { status: 409 },
-      )
+      return apiErrorResponse(error, {
+        safeStatus: 409,
+        details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
+      })
     }
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     throw error
   }
